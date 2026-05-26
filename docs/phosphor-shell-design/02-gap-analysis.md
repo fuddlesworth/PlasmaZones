@@ -106,11 +106,13 @@ This doc is a prioritized roadmap. Each row tells you: what's missing, why it ma
 
 | Gap                                | Reference                                                                       | Notes                                                                                              | Effort | Priority |
 |------------------------------------|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|--------|----------|
-| Matugen integration                | DMS `dms` Go CLI shells out to matugen; Noctalia own impl                       | Spawn matugen on wallpaper change; consume its JSON output. Don't reimplement.                     | M      | **P0**   |
-| Template fan-out                   | DMS `quickshell/matugen/templates/` (~30 templates)                             | Mirror DMS's template set: phosphor-theme JSON, qt6ct, gtk-css, kitty/foot/ghostty/alacritty/wezterm, firefox/zen userchrome, vesktop, vscode, neovim, emacs, zed. | M | **P1** |
-| Wallpaper picker UI                | DMS gallery + cycling, Noctalia Wallhaven search                                | We have `WallpaperService` (C++) — needs the QML face.                                            | M      | **P1**   |
-| Theme browser                      | DMS `ThemeBrowser.qml` + stock JSON themes + custom JSON                        | Community themes shareable as JSON files.                                                          | M      | **P1**   |
-| Light/dark switch                  | DMS `Theme.setLightMode()` w/ screen-wipe; Noctalia `DarkModeService` sunrise   | Use `KSunPath` or local sunrise calc; transition via existing shader.                              | S      | **P2**   |
+| Matugen integration                | DMS `dms` Go CLI shells out to matugen; Noctalia own impl                       | **(shipped, PR #534)** `MatugenRunner` in `libs/phosphor-theme` wraps the subprocess, handles v3 + v4+ JSON shapes, always passes `--prefer`. `phosphor-theme-cli set-wallpaper` and the demo's wallpaper button drive it end-to-end. | M | ~~**P0**~~ |
+| Token store + design-token QML module | DMS `Common/Theme.qml`                                                       | **(shipped, PR #534)** `PaletteStore` + `Phosphor.Theme` singletons (`Theme` / `Tokens` / `Motion` / `StateLayer`). Hot-reloads from disk, bindings track `palette[...]` for live retint. | M | ~~**P0**~~ |
+| Template engine                    | DMS uses `mustache`                                                             | **(shipped, PR #534)** `TemplateEngine` renders `{{token[.field]}}` with hex / hexa / r / g / b / alpha / rgb / rgba variants. Drive via `phosphor-theme-cli render-template`. Templates themselves still pending — see next row. | S | ~~**P0**~~ |
+| Template fan-out                   | DMS `quickshell/matugen/templates/` (~30 templates)                             | Engine is in place; **templates still pending** — Phase 5 work. Mirror DMS's set: phosphor-theme JSON, qt6ct, gtk-css, kitty/foot/ghostty/alacritty/wezterm, firefox/zen userchrome, vesktop, vscode, neovim, emacs, zed. | M | **P1** |
+| Wallpaper picker UI                | DMS gallery + cycling, Noctalia Wallhaven search                                | We have `WallpaperService` (C++) — needs the QML face. Phase 4.7 in the plan.                     | M      | **P1**   |
+| Theme browser                      | DMS `ThemeBrowser.qml` + stock JSON themes + custom JSON                        | Community themes shareable as JSON files. Phase 4.8.                                              | M      | **P1**   |
+| Light/dark switch                  | DMS `Theme.setLightMode()` w/ screen-wipe; Noctalia `DarkModeService` sunrise   | Use `KSunPath` or local sunrise calc; transition via existing shader. `MatugenRunner.mode` already exposes the toggle at the data layer. | S | **P2** |
 | Wallpaper transitions              | Noctalia 6 fragment shaders (disc/fade/honeycomb/pixelate/stripes/wipe)        | Trivial given `phosphor-shaders`.                                                                  | S      | **P3**   |
 
 ### Plugin model
@@ -155,6 +157,8 @@ Network / Bluetooth / Audio / Brightness / Idle / Polkit services. Control Cente
 
 ### M4 — Theming pipeline (the headline differentiator)
 Matugen integration + ~30 templates. Wallpaper picker UI. Theme browser. **Visible win: drop a wallpaper → every themed surface — Phosphor shell, GTK apps, Qt6 apps, terminals, editors — retints in a second.**
+
+*Partial progress as of 2026-05-26: the token store, matugen runner, template engine, and demo are shipped (PR #534). Wallpaper picker UI, theme browser, and the ~30 templates themselves remain.*
 
 ### M5 — Lockscreen + dashboard + polish
 Lockscreen via ext-session-lock. DankDash-style multi-tab dashboard. Color picker, screenshot, clipboard manager.

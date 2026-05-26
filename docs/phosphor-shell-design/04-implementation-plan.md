@@ -54,23 +54,25 @@ If anything in `02` conflicts with this doc, this doc wins (newer + execution-or
 
 **Order (if solo):** 1.1 → 1.2 || 1.3 → 1.4 → 1.5
 
-### 1.1 — `phosphor-theme`
+### 1.1 — `phosphor-theme` *(shipped — 2026-05-26, PR #534)*
 
 Token store, matugen runner, template engine.
 
-| Deliverable                                                    | Notes                                                                                                            |
-|----------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
-| `libs/phosphor-theme/` (C++)                                   | `IThemeService`, `PaletteStore`, `MatugenRunner` (QProcess), `TemplateEngine` (mustache). Loads JSON via `FileView`. |
-| `qml/Phosphor/Theme/{Theme,Tokens,Motion,StateLayer}.qml`      | Singletons. Default values = canonical Phosphor palette ([[project-phosphor-default-palette]]).                  |
-| `examples/phosphor-theme-demo/`                                | QML "swatch sheet" — renders every M3 token as a labeled card. Hot-reloads when `~/.local/share/phosphor/palettes/current.json` changes. |
-| `examples/phosphor-theme-cli/`                                 | `theme-cli set-wallpaper foo.jpg` runs matugen, writes one template (a debug `.toml`), prints the new palette.   |
+| Deliverable                                                    | Status | Notes                                                                                                            |
+|----------------------------------------------------------------|--------|------------------------------------------------------------------------------------------------------------------|
+| `libs/phosphor-theme/` (C++)                                   | ✓ shipped | `IThemeService`, `PaletteStore` (QML_SINGLETON with `QFileSystemWatcher` hot-reload), `MatugenRunner` (QProcess, handles v3 + v4+ JSON shapes, always passes `--prefer`), `TemplateEngine` (`{{token[.field]}}`). |
+| `qml/Phosphor/Theme/{Theme,Tokens,Motion,StateLayer}.qml`      | ✓ shipped | Singletons. Default values = canonical Phosphor palette ([[project-phosphor-default-palette]]). Theme accessors index `palette[...]` so QML bindings re-evaluate on `paletteChanged`. |
+| `examples/phosphor-theme-demo/`                                | ✓ shipped | Swatch sheet with responsive GridLayout, preset switcher (`dark / light / sunset / forest`), and a wallpaper button that drives `MatugenRunner` → `applyTokens` end-to-end. Brand-gradient stops synthesised from M3 accents on each matugen run. `PresetPalettes` lives here, not in the library. |
+| `examples/phosphor-theme-cli/`                                 | ✓ shipped | `set-wallpaper` / `dump` / `render-template` / `cycle <dir>` subcommands. Atomic-rename safe writes; matches the same parse path the demo's watcher uses. |
+| `libs/phosphor-theme/tests/`                                   | ✓ shipped | 25 cases across `test_palettestore`, `test_templateengine`, `test_matugenrunner`. ctest-integrated; offscreen QPA so they run headless. |
+| `libs/phosphor-theme/README.md`                                | ✓ shipped | Canonical phosphor-* library README style: responsibility, key types table, typical-use blocks, design notes (binding-tracking rule, merge semantics, matugen schema variants), dependencies. |
 
 **Acceptance:**
-- Modifying the palette JSON updates the demo in <100 ms
-- All M3 tokens + ANSI 16 + brand-gradient extensions are exposed
-- Matugen output round-trips through `PaletteStore` correctly
+- [x] Modifying the palette JSON updates the demo in <100 ms (`QFileSystemWatcher` + atomic-rename re-arm; verified)
+- [x] All M3 tokens + ANSI 16 + brand-gradient extensions are exposed (33 tokens via `TokenNames` + default palette)
+- [x] Matugen output round-trips through `PaletteStore` correctly (verified end-to-end against a real wallpaper after the matugen-v4+ parser landed)
 
-**Effort:** M (~2 weeks)
+**Effort:** M (estimated ~2 weeks; actual ~1 session)
 
 ### 1.2 — `phosphor-popout`
 
@@ -135,6 +137,18 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 **Effort:** S (~3 days)
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
+
+**Phase 1 progress (as of 2026-05-26):** 1 / 5 libs shipped.
+
+| Lib                   | Status                                                  |
+|-----------------------|---------------------------------------------------------|
+| `phosphor-theme`      | ✓ shipped (PR #534)                                     |
+| `phosphor-popout`     | not started                                             |
+| `phosphor-registry`   | not started                                             |
+| `phosphor-ipc`        | not started                                             |
+| `PerScreen` helper    | not started                                             |
+
+The `phosphor-foundations-0.1` tag is gated on all five — do not cut it until 1.2–1.5 land.
 
 ---
 
