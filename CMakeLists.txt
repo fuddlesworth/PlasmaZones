@@ -367,8 +367,13 @@ add_subdirectory(libs/phosphor-animation)   # unified animation library: motion 
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
+# Foundation theme library. Built unconditionally so downstream libs and
+# tooling can consume it without the BUILD_PHOSPHOR_SHELL gate. Examples
+# are plugins and third-party shells. The lib has zero shell-side
+# dependencies and is a leaf module. Gating it would hide it from users
+# who don't ship the bundled shell. The shell binary itself stays gated.
+add_subdirectory(libs/phosphor-theme)       # M3 color-token store + Phosphor.Theme QML singletons
 if(BUILD_PHOSPHOR_SHELL)
-    add_subdirectory(libs/phosphor-theme)   # M3 color-token store + Phosphor.Theme QML singletons
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
 add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (INTERFACE)
@@ -510,8 +515,8 @@ install(DIRECTORY data/curves/
 # `plasmazones/profiles` subdirectory - never to a directory we don't
 # own - so an accidental wide install prefix can't cascade.
 # Use KDE_INSTALL_FULL_DATADIR (already prefix-resolved by ECM) so we
-# don't manually concatenate CMAKE_INSTALL_PREFIX with KDE_INSTALL_DATADIR
-#, that join produces `/usr//absolute/...` when ECM hands us an absolute
+# don't manually concatenate CMAKE_INSTALL_PREFIX with KDE_INSTALL_DATADIR:
+# that join produces `/usr//absolute/...` when ECM hands us an absolute
 # KDE_INSTALL_DATADIR (some distros override it that way).
 install(CODE "
     set(_pz_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
@@ -572,7 +577,7 @@ install(PROGRAMS scripts/plasmazones-report.sh
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes).
-# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL , 
+# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL:
 # no point shipping the icon if the binary isn't built.
 set(_plasmazones_dark_icons
     icons/hicolor/scalable/apps/plasmazones.svg
@@ -615,7 +620,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-theme-cli)
 
     # Install the example phosphor-shell QML/shaders so users can copy
-    # them into their config dir and edit. Same source as the qrc above , 
+    # them into their config dir and edit. Same source as the qrc above:
     # qrc is the build-time frozen copy used as final fallback, this is
     # the user-editable copy. ShellLoader::resolve() probes
     # GenericConfigLocation (~/.config) → GenericDataLocation (this
@@ -658,7 +663,7 @@ feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CPack, source tarball generation (`cpack --config CPackSourceConfig.cmake`
+# CPack: source tarball generation (`cpack --config CPackSourceConfig.cmake`
 # or `make package_source`). Distro builds in release.yml still hand-roll
 # tarballs for filename-control reasons; this exists so a release engineer
 # can also bootstrap a tarball locally without the workflow.

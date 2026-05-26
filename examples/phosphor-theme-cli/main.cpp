@@ -43,16 +43,21 @@ QString defaultPalettePath()
 // Serialise a token map back to the on-disk JSON shape PaletteStore reads.
 // Uses the wrapped `{ "tokens": { ... } }` form so future metadata
 // (source wallpaper path, generation timestamp) has a place to live
-// without breaking the parser.
+// without breaking the parser. Tokens with non-opaque alpha serialize
+// in `#AARRGGBB` form so round-trip preserves transparency. Opaque
+// tokens stay in the shorter `#RRGGBB` form for readability.
 QByteArray serialisePalette(const QVariantMap& tokens)
 {
     QJsonObject jtokens;
     for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
         const QColor c = it.value().value<QColor>();
         if (!c.isValid()) {
+            std::cerr << "phosphor-theme-cli: dropping non-color token '" << it.key().toStdString()
+                      << "' from serialised palette\n";
             continue;
         }
-        jtokens.insert(it.key(), c.name(QColor::HexRgb).toUpper());
+        const QString hex = c.alpha() == 255 ? c.name(QColor::HexRgb).toUpper() : c.name(QColor::HexArgb).toUpper();
+        jtokens.insert(it.key(), hex);
     }
     QJsonObject root;
     root.insert(QLatin1String("tokens"), jtokens);
@@ -89,10 +94,16 @@ int runSetWallpaper(const QStringList& args)
     p.addPositionalArgument(QStringLiteral("wallpaper"), QStringLiteral("Image path"));
     QCommandLineOption modeOpt({QStringLiteral("m"), QStringLiteral("mode")}, QStringLiteral("dark|light"),
                                QStringLiteral("mode"), QStringLiteral("dark"));
+    QCommandLineOption preferOpt(
+        QStringLiteral("prefer"),
+        QStringLiteral("matugen candidate-color preference (default 'saturation'). One of "
+                       "darkness|lightness|saturation|less-saturation|value|closest-to-fallback"),
+        QStringLiteral("strategy"), QStringLiteral("saturation"));
     QCommandLineOption applyOpt(QStringLiteral("apply"), QStringLiteral("Write the result to current.json"));
     QCommandLineOption outOpt(QStringLiteral("out"), QStringLiteral("Write the result to a specific path"),
                               QStringLiteral("path"));
     p.addOption(modeOpt);
+    p.addOption(preferOpt);
     p.addOption(applyOpt);
     p.addOption(outOpt);
     p.process(args);
@@ -115,6 +126,7 @@ int runSetWallpaper(const QStringList& args)
 
     PhosphorTheme::MatugenRunner runner;
     runner.setMode(mode);
+    runner.setPrefer(p.value(preferOpt));
 
     int exitCode = 0;
     QObject::connect(&runner, &PhosphorTheme::MatugenRunner::paletteReady,
@@ -164,7 +176,10 @@ int runDump(const QStringList& args)
             return 1;
         }
     } else if (QFile::exists(defaultPalettePath())) {
-        store.loadFromFile(defaultPalettePath());
+        if (!store.loadFromFile(defaultPalettePath())) {
+            std::cerr << "phosphor-theme-cli: " << defaultPalettePath().toStdString()
+                      << " is unreadable or malformed; falling back to built-in defaults\n";
+        }
     }
     // else: built-in defaults are already loaded.
 
@@ -198,7 +213,10 @@ int runRenderTemplate(const QStringList& args)
             return 1;
         }
     } else if (QFile::exists(defaultPalettePath())) {
-        store.loadFromFile(defaultPalettePath());
+        if (!store.loadFromFile(defaultPalettePath())) {
+            std::cerr << "phosphor-theme-cli: " << defaultPalettePath().toStdString()
+                      << " is unreadable or malformed; rendering against built-in defaults\n";
+        }
     }
 
     if (!PhosphorTheme::TemplateEngine::renderFile(templatePath, outPath, store.palette())) {
@@ -257,7 +275,12 @@ int runCycle(const QStringList& args)
         return 2;
     }
 
-    const QString outPath = p.isSet(outOpt) ? p.value(outOpt) : p.isSet(applyOpt) ? defaultPalettePath() : QString();
+    QString outPath;
+    if (p.isSet(outOpt)) {
+        outPath = p.value(outOpt);
+    } else if (p.isSet(applyOpt)) {
+        outPath = defaultPalettePath();
+    }
     const bool runOnce = p.isSet(onceOpt);
 
     // Require an output destination unless the user asked for a single
@@ -274,7 +297,7 @@ int runCycle(const QStringList& args)
     QTimer loopTimer;
     loopTimer.setInterval(interval);
 
-    auto applyNext = [entries, outPath, runOnce, &idx]() {
+    auto applyNext = [entries, outPath, runOnce, &idx, &loopTimer]() {
         const auto& entry = entries.at(idx % entries.size());
         // Validate by loading through PaletteStore. A broken JSON file
         // logs an error and skips to the next tick rather than crashing
@@ -289,6 +312,7 @@ int runCycle(const QStringList& args)
             if (!outPath.isEmpty()) {
                 if (!writeAtomic(outPath, serialisePalette(store.palette()))) {
                     std::cerr << "phosphor-theme-cli: write failed; aborting cycle\n";
+                    loopTimer.stop();
                     QCoreApplication::exit(1);
                     return;
                 }
@@ -296,6 +320,11 @@ int runCycle(const QStringList& args)
         }
         ++idx;
         if (runOnce && idx >= entries.size()) {
+            // Stop the timer before quitting. Otherwise a queued timeout
+            // re-enters applyNext after the QCoreApplication::quit()
+            // event is posted. That tick would land first and apply
+            // the first file a second time.
+            loopTimer.stop();
             QCoreApplication::quit();
         }
     };
@@ -311,23 +340,25 @@ int runCycle(const QStringList& args)
 
 void printUsage()
 {
-    std::cerr << R"(phosphor-theme-cli, drive the PhosphorTheme library headlessly.
-
-USAGE
-  phosphor-theme-cli set-wallpaper <image> [--mode dark|light] [--apply | --out <path>]
-  phosphor-theme-cli dump [--source <palette.json>]
-  phosphor-theme-cli render-template <template> <out> [--palette <palette.json>]
-  phosphor-theme-cli cycle <dir> [--interval ms] [--once] [--apply | --out <path>]
-
-Without --apply or --out, set-wallpaper prints the new palette JSON to stdout.
-cycle iterates *.json files in <dir> alphabetically; without --apply or
---out it just logs each file. Pair it with --apply (or --out <path>) to
-drive a running phosphor-theme-demo and watch the whole window retint
-every <interval> ms.
-
-dump and render-template default to the canonical built-in palette
-(plus any active current.json under ~/.local/share/phosphor/palettes/).
-)";
+    // Compute the active palette directory at runtime so the help text
+    // matches what dump/render-template actually consult. Hardcoding the
+    // path drifts whenever QStandardPaths resolves differently for the
+    // current org/app names.
+    const auto palettePathHint = defaultPalettePath();
+    std::cerr << "phosphor-theme-cli, drive the PhosphorTheme library headlessly.\n\n"
+              << "USAGE\n"
+              << "  phosphor-theme-cli set-wallpaper <image> [--mode dark|light] [--prefer <strategy>] "
+                 "[--apply | --out <path>]\n"
+              << "  phosphor-theme-cli dump [--source <palette.json>]\n"
+              << "  phosphor-theme-cli render-template <template> <out> [--palette <palette.json>]\n"
+              << "  phosphor-theme-cli cycle <dir> [--interval ms] [--once] [--apply | --out <path>]\n\n"
+              << "Without --apply or --out, set-wallpaper prints the new palette JSON to stdout.\n"
+              << "cycle iterates *.json files in <dir> alphabetically; without --apply or\n"
+              << "--out it just logs each file. Pair it with --apply (or --out <path>) to\n"
+              << "drive a running phosphor-theme-demo and watch the whole window retint\n"
+              << "every <interval> ms.\n\n"
+              << "dump and render-template default to the canonical built-in palette\n"
+              << "(plus any active current.json under " << palettePathHint.toStdString() << ").\n";
 }
 
 } // namespace

@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# 03, Phosphor Shell Component Map
+# 03: Phosphor Shell Component Map
 
 The proposed architecture, justified by the patterns in `01-feature-inventory.md` and the gaps in `02-gap-analysis.md`. Written so each section can drive a discrete PR or set of PRs.
 
@@ -115,11 +115,15 @@ bin/
 
 ## The theme token system
 
-We adopt **upstream Material 3 token names verbatim**, with state aliases layered on top (not baked into the names, that was a DMS mistake). The **built-in default values come from the canonical Phosphor palette** at https://phosphor-works.github.io/palette/ (source: `data/palettes/phosphor.toml`, M3 + ANSI 16, CC-BY-SA 4.0). Matugen replaces these at runtime from any wallpaper; the names stay stable.
+We adopt **upstream Material 3 token names verbatim**, with state aliases layered on top (not baked into the names, that was a DMS mistake). The **built-in default values come from the canonical Phosphor palette** at https://phosphor-works.github.io/palette/ (M3 + ANSI 16, CC-BY-SA 4.0). Matugen replaces these at runtime from any wallpaper; the names stay stable.
+
+**Shipped (PR #534).** The lib at `libs/phosphor-theme` ships the MVP subset of the token set sketched below. That subset is the surface ramp, primary/secondary/tertiary accents, error, outline, status ramp from ANSI 16, and the four brand-gradient stops. The full M3 ramp is aspirational. Missing tokens include `surfaceContainerLowest/Highest`, the `inverse*` triad, `on_secondary_container`, and the explicit ANSI 16 namespace. Future tokens land via the same `TokenNames` contract. Snake_case is the wire format because it matches the matugen JSON keys. Examples are `on_surface` and `surface_container_high`. The camelCase forms below are sketch shorthand only.
 
 ```qml
-// qml/Phosphor/Theme/Theme.qml, pragma Singleton
-// Default values shown are the canonical Phosphor dark theme.
+// libs/phosphor-theme/qml/Phosphor/Theme/Theme.qml, pragma Singleton
+// Tokens are reached via `palette["<snake_case_key>"]` against the
+// tracked QVariantMap from the C++ PaletteStore. The camelCase form
+// here is a sketch alias for readability.
 QtObject {
     // Core M3 palette (every token matugen emits)
     property color primary:                  "#3B82F6"   // blue-500
@@ -190,7 +194,7 @@ QtObject {
     property color brandVoid:                "#050916"
 
     // State layers (M3 spec opacities)
-    function stateLayer(base, state) { ... }   // hover 0.08, focus 0.10, pressed 0.10, drag 0.16
+    function stateLayer(base, state) { ... }   // hover 0.08, focus 0.12, pressed 0.12, drag 0.16
 }
 
 // qml/Phosphor/Theme/Tokens.qml, pragma Singleton
@@ -261,21 +265,18 @@ QtObject {
 }
 ```
 
-C++ backing in `phosphor-theme`:
+C++ backing in `phosphor-theme` is sketched below. The shipped interface lives at `libs/phosphor-theme/include/PhosphorTheme/IThemeService.h` and is narrower than this sketch. It is pure-virtual with no QObject base. It returns `QVariantMap` instead of `QJsonObject`. Load splits into `loadFromJson(QByteArray)` and `loadFromFile(QString)`. The wallpaper trigger lives in a separate `MatugenRunner` rather than on `IThemeService`.
 
 ```cpp
-namespace PlasmaZones {
+namespace PhosphorTheme {
 
-class IThemeService : public QObject {
-    Q_OBJECT
+class IThemeService {
 public:
     virtual ~IThemeService() = default;
     virtual QJsonObject currentPalette() const = 0;
     virtual void setMode(ThemeMode mode) = 0;             // Light / Dark / Auto
     virtual void loadFromJson(const QString& path) = 0;
     virtual void loadFromWallpaper(const QString& path) = 0;   // triggers matugen
-Q_SIGNALS:
-    void paletteChanged();
 };
 
 class MatugenRunner;        // QProcess wrapper
@@ -291,7 +292,7 @@ Lifted from DMS, structured for C++ ownership and QML attachment.
 
 ```cpp
 // libs/phosphor-popout/include/PhosphorPopout/IPopoutService.h
-namespace PlasmaZones {
+namespace PhosphorPopout {
 
 class IPopoutService : public QObject {
     Q_OBJECT
@@ -340,7 +341,7 @@ One pattern, applied to every UI seam where we want plugins.
 
 ```cpp
 // libs/phosphor-registry/include/PhosphorRegistry/IBarWidgetFactory.h
-namespace PlasmaZones {
+namespace PhosphorRegistry {
 
 class IBarWidgetFactory {
 public:
@@ -435,7 +436,7 @@ The CLI talks to a single UNIX socket (`$XDG_RUNTIME_DIR/phosphor.sock`); the ro
 
 ```cpp
 // libs/phosphor-compositor/include/PhosphorCompositor/ICompositorBackend.h
-namespace PlasmaZones {
+namespace PhosphorCompositor {
 
 class ICompositorBackend : public QObject {
     Q_OBJECT

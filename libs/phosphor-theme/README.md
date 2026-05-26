@@ -53,6 +53,7 @@ external sources (matugen output, user-edited JSON, in-process producers).
 using namespace PhosphorTheme;
 
 PaletteStore store;                              // built-in dark defaults active
+const QString palettePath = "/path/to/palette.json";
 store.loadFromFile(palettePath);                 // arms QFileSystemWatcher
 
 QObject::connect(&store, &PaletteStore::paletteChanged, [&]() {

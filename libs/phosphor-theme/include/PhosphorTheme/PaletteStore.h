@@ -14,6 +14,7 @@
 #include <memory>
 
 class QFileSystemWatcher;
+class QTimer;
 
 namespace PhosphorTheme {
 
@@ -49,6 +50,12 @@ public:
     explicit PaletteStore(QObject* parent = nullptr);
     ~PaletteStore() override;
 
+    // The canonical built-in dark palette. Static accessor for callers
+    // that need the defaults without paying for a PaletteStore instance
+    // (which arms a QFileSystemWatcher + holds an inotify fd). Use this
+    // for preset palettes, snapshot tests, and any read-only consumer.
+    [[nodiscard]] static QVariantMap defaultPalette();
+
     // IThemeService.
     [[nodiscard]] QVariantMap palette() const override;
     [[nodiscard]] Q_INVOKABLE QColor token(const QString& name) const override;
@@ -75,6 +82,7 @@ private:
     QVariantMap m_palette;
     QString m_sourcePath;
     std::unique_ptr<QFileSystemWatcher> m_watcher;
+    std::unique_ptr<QTimer> m_reloadDebounce;
 };
 
 } // namespace PhosphorTheme

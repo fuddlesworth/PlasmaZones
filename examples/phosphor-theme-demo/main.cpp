@@ -18,7 +18,6 @@
 #include <QQuickStyle>
 #include <QStandardPaths>
 #include <QString>
-#include <QStringLiteral>
 
 namespace {
 
@@ -52,10 +51,10 @@ int main(int argc, char* argv[])
     QQmlApplicationEngine engine;
 
     // Touch the singleton through the engine so Theme.qml resolves
-    // PaletteStore correctly. This also surfaces load errors at boot
-    //, if the user has a palette JSON but it's malformed, the
-    // demo's status bar shows the error rather than silently falling
-    // back to defaults.
+    // PaletteStore correctly. This also surfaces load errors at boot.
+    // If the user has a palette JSON but it's malformed, the demo's
+    // status bar shows the error. The alternative would be silently
+    // falling back to defaults.
     auto* store = engine.singletonInstance<PhosphorTheme::PaletteStore*>(QStringLiteral("Phosphor.Theme"),
                                                                          QStringLiteral("PaletteStore"));
     if (store) {
@@ -63,7 +62,7 @@ int main(int argc, char* argv[])
         if (QFile::exists(path)) {
             store->loadFromFile(path);
         }
-        QObject::connect(store, &PhosphorTheme::PaletteStore::loadError,
+        QObject::connect(store, &PhosphorTheme::PaletteStore::loadError, &app,
                          [](const QString& path, const QString& reason) {
                              qWarning().noquote() << "phosphor-theme: failed to load" << path << ", " << reason;
                          });
@@ -71,7 +70,7 @@ int main(int argc, char* argv[])
 
     engine.loadFromModule("Phosphor.ThemeDemo", "Main");
     if (engine.rootObjects().isEmpty()) {
-        return -1;
+        return 1;
     }
     return app.exec();
 }

@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# 02, Gap Analysis (Phosphor vs. Reference Shells)
+# 02: Gap Analysis (Phosphor vs. Reference Shells)
 
 This doc is a prioritized roadmap. Each row tells you: what's missing, why it matters, what the reference shells call it, what we'd build, rough effort, and which surface(s) it unlocks.
 
@@ -140,33 +140,33 @@ This doc is a prioritized roadmap. Each row tells you: what's missing, why it ma
 | Process list                     | DMS `Modules/ProcessList`                         | Goes alongside System Monitor card.                         | M      | **P3**   |
 | Keybinds cheatsheet              | end-4                                              | Overlay listing the Phosphor compositor's registered global shortcuts. | S      | **P2**   |
 | Greeter                          | DMS `DMSGreeter.qml`                              | Separate process; reuses lockscreen primitives.             | L      | **P3**   |
-| CUPS printer manager             | DMS `CupsService.qml`                              | Out of scope for shell, leave to standalone CUPS UI.       |,      | **, **    |
+| CUPS printer manager             | DMS `CupsService.qml`                              | Out of scope for shell, leave to standalone CUPS UI.       | n/a    | n/a       |
 
 ## Proposed milestones
 
 Ordered for value delivery, not architectural purity. Each milestone is independently testable / shippable.
 
-### M0, Foundations (foundational gaps #1-#5)
+### M0: Foundations (foundational gaps #1-#5)
 Theme tokens, PopoutService, widget registries, IPC + `phosphorctl`, `PerScreen` helper. **No new user-visible surfaces**, but everything after gets built on these. ~4-6 weeks.
 
-### M1, Bar parity
+### M1: Bar parity
 Connected-corner bar canvas, widget catalog (workspaces / focused-app / clock / metrics / battery / tray / media), `IBarWidgetFactory` working end-to-end. Migrates the current TopPanel to the new model. **Visible win: bar feels alive and distinct from any existing Wayland shell.**
 
-### M2, Launcher + notifications
+### M2: Launcher + notifications
 Spotlight-style launcher with provider plugins (apps / calc / windows). Freedesktop notification daemon + toasts + history popout. **Visible win: usable as a daily driver shell.**
 
-### M3, Control center + OSDs + service layer
+### M3: Control center + OSDs + service layer
 Network / Bluetooth / Audio / Brightness / Idle / Polkit services. Control Center popout with tiles. OSDs for volume/mic/brightness/caps. **Visible win: delivers a complete daily-driver desktop on top of the Phosphor compositor, no external shell, network UI, or audio panel required.**
 
-### M4, Theming pipeline (the headline differentiator)
+### M4: Theming pipeline (the headline differentiator)
 Matugen integration + ~30 templates. Wallpaper picker UI. Theme browser. **Visible win: drop a wallpaper → every themed surface, Phosphor shell, GTK apps, Qt6 apps, terminals, editors, retints in a second.**
 
 *Partial progress as of 2026-05-26: the token store, matugen runner, template engine, and demo are shipped (PR #534). Wallpaper picker UI, theme browser, and the ~30 templates themselves remain.*
 
-### M5, Lockscreen + dashboard + polish
+### M5: Lockscreen + dashboard + polish
 Lockscreen via ext-session-lock. DankDash-style multi-tab dashboard. Color picker, screenshot, clipboard manager.
 
-### M6+, Plugin browser, dock, novelty widgets
+### M6+: Plugin browser, dock, novelty widgets
 Once the plugin ABI is stable.
 
 ## What we *won't* copy

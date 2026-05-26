@@ -3,8 +3,6 @@
 
 #include <PhosphorTheme/MatugenRunner.h>
 
-#include <PhosphorTheme/IThemeService.h>
-
 #include <QColor>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -13,7 +11,6 @@
 #include <QLatin1String>
 #include <QProcess>
 #include <QString>
-#include <QStringLiteral>
 
 // Token-mapping policy: matugen emits Material 3 token names, most of
 // which align with Phosphor's snake_case palette directly. Tokens we
@@ -195,15 +192,25 @@ void MatugenRunner::run(const QString& wallpaperPath)
         return;
     }
 
+    // Normalise to an absolute path before handing to matugen. A relative
+    // path like "-weird.jpg" would otherwise be parsed by clap as a flag.
+    // QFileInfo::absoluteFilePath always returns a `/`-prefixed string for
+    // any existing local file, so flag injection at the subprocess
+    // boundary is structurally impossible. We don't use canonicalFilePath
+    // because symlink resolution would surprise users who deliberately
+    // pass a symlinked wallpaper.
+    const QString absolutePath = QFileInfo(wallpaperPath).absoluteFilePath();
+
     // Drop any in-flight run before starting a new one. Wallpaper
-    // changes can arrive faster than matugen finishes (e.g. user
-    // mashes the cycle button), and we always want the most recent
-    // request to win.
-    if (isRunning()) {
-        cancel();
+    // changes can arrive faster than matugen finishes. The most recent
+    // request always wins. cancelInflight() does the disconnect-and-kill
+    // without blocking the GUI thread. The orphaned QProcess gets reaped
+    // by deleteLater once Qt sees the OS finish notification.
+    if (m_process) {
+        cancelInflight();
     }
 
-    m_pendingWallpaper = wallpaperPath;
+    m_pendingWallpaper = absolutePath;
     m_process = std::make_unique<QProcess>(this);
 
     // `matugen image <wp> --json hex` writes the full color map to stdout.
@@ -214,27 +221,27 @@ void MatugenRunner::run(const QString& wallpaperPath)
     // the run fails with a clear stderr message which is better than
     // silently falling back to an undocumented schema.
     QStringList args;
-    args << QStringLiteral("image") << wallpaperPath << QStringLiteral("--json") << QStringLiteral("hex");
+    args << QStringLiteral("image") << absolutePath << QStringLiteral("--json") << QStringLiteral("hex");
     if (!m_prefer.isEmpty()) {
         args << QStringLiteral("--prefer") << m_prefer;
     }
 
     QProcess* proc = m_process.get();
 
-    connect(proc, &QProcess::errorOccurred, this, [this, proc, wallpaperPath](QProcess::ProcessError err) {
+    connect(proc, &QProcess::errorOccurred, this, [this, proc, absolutePath](QProcess::ProcessError err) {
         // The error may arrive before or after `finished`; guard
         // against double-emit when both fire (FailedToStart only
         // emits errorOccurred, but Crashed emits both).
         if (m_process.get() != proc) {
             return;
         }
-        Q_EMIT failed(wallpaperPath, QStringLiteral("matugen %1").arg(processErrorString(err)));
+        Q_EMIT failed(absolutePath, QStringLiteral("matugen %1").arg(processErrorString(err)));
         disposeProcess();
         Q_EMIT runningChanged();
     });
 
     connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-            [this, proc, wallpaperPath](int exitCode, QProcess::ExitStatus status) {
+            [this, proc, absolutePath](int exitCode, QProcess::ExitStatus status) {
                 // A concurrent cancel() may have replaced or reset m_process
                 // between the queued `finished` signal being posted and us
                 // running. Compare identity rather than truthiness.
@@ -248,22 +255,31 @@ void MatugenRunner::run(const QString& wallpaperPath)
                 disposeProcess();
 
                 if (status != QProcess::NormalExit || exitCode != 0) {
-                    Q_EMIT failed(wallpaperPath, QStringLiteral("matugen exited %1: %2").arg(exitCode).arg(stderrTail));
+                    Q_EMIT failed(absolutePath, QStringLiteral("matugen exited %1: %2").arg(exitCode).arg(stderrTail));
                     Q_EMIT runningChanged();
                     return;
                 }
                 const auto tokens = parseMatugenJson(stdoutBytes, m_mode);
                 if (tokens.isEmpty()) {
-                    Q_EMIT failed(wallpaperPath, QStringLiteral("matugen output had no usable colors"));
+                    Q_EMIT failed(absolutePath, QStringLiteral("matugen output had no usable colors"));
                     Q_EMIT runningChanged();
                     return;
                 }
-                Q_EMIT paletteReady(tokens, wallpaperPath);
+                Q_EMIT paletteReady(tokens, absolutePath);
                 Q_EMIT runningChanged();
             });
 
     proc->start(m_matugenBinary, args);
-    Q_EMIT runningChanged();
+
+    // FailedToStart fires synchronously inside start() on Linux. That
+    // path runs the errorOccurred lambda above. The lambda already
+    // called disposeProcess() and emitted runningChanged. Skip the
+    // trailing emit in that case so listeners don't see a redundant
+    // false-to-false edge. CLAUDE.md says only emit when the value
+    // actually changes.
+    if (m_process) {
+        Q_EMIT runningChanged();
+    }
 }
 
 void MatugenRunner::cancel()
@@ -271,7 +287,7 @@ void MatugenRunner::cancel()
     if (!m_process) {
         return;
     }
-    teardownProcess();
+    cancelInflight();
     Q_EMIT runningChanged();
 }
 
@@ -334,6 +350,10 @@ QVariantMap MatugenRunner::parseMatugenJson(const QByteArray& json, const QStrin
 
 void MatugenRunner::teardownProcess()
 {
+    // Destructor-only path. We MUST block here. deleteLater would miss
+    // the upcoming event loop teardown. Qt would then warn and possibly
+    // leak the QProcess if the child were still running when *this
+    // died. GUI-thread callers use cancelInflight() instead.
     if (!m_process) {
         return;
     }
@@ -343,6 +363,25 @@ void MatugenRunner::teardownProcess()
             m_process->kill();
             m_process->waitForFinished(500);
         }
+    }
+    disposeProcess();
+}
+
+void MatugenRunner::cancelInflight()
+{
+    // Async cancel for the GUI hot path. waitForFinished() on the GUI
+    // thread blocks the event loop for up to 1s per pending process,
+    // freezing the UI when a user rapidly cycles wallpapers. Instead we:
+    //   1. disconnect this from the QProcess so its lingering signals
+    //      become no-ops in the lambdas (proc-identity guard),
+    //   2. terminate the child so the OS reaps it on its own schedule,
+    //   3. hand the QProcess to deleteLater so it gets destroyed once
+    //      Qt has processed the final stateChanged from the OS.
+    if (!m_process) {
+        return;
+    }
+    if (m_process->state() != QProcess::NotRunning) {
+        m_process->terminate();
     }
     disposeProcess();
 }

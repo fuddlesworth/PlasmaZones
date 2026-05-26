@@ -112,6 +112,7 @@ Q_SIGNALS:
 
 private:
     void teardownProcess();
+    void cancelInflight();
     void disposeProcess();
 
     QString m_matugenBinary;

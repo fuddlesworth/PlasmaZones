@@ -14,7 +14,7 @@
 #include <QJsonValue>
 #include <QLatin1String>
 #include <QString>
-#include <QStringLiteral>
+#include <QTimer>
 
 namespace PhosphorTheme {
 
@@ -22,7 +22,20 @@ PaletteStore::PaletteStore(QObject* parent)
     : QObject(parent)
     , m_palette(detail::defaultDarkPalette())
     , m_watcher(std::make_unique<QFileSystemWatcher>(this))
+    , m_reloadDebounce(std::make_unique<QTimer>(this))
 {
+    // Hot-reload debounce. In-place editors issue truncate-then-write.
+    // The truncate phase fires fileChanged before the body lands. A
+    // naive immediate reload then sees an empty or partial file. That
+    // reload emits loadError and the user is greeted by a false-positive
+    // error flash. Coalescing all events inside a short window collapses
+    // the truncate-plus-write pair into one reload of the final content.
+    // 80 ms is long enough to cover a typical editor write. It is also
+    // short enough that hot-reload still feels live.
+    m_reloadDebounce->setSingleShot(true);
+    m_reloadDebounce->setInterval(80);
+    connect(m_reloadDebounce.get(), &QTimer::timeout, this, &PaletteStore::reloadFromCurrentPath);
+
     // Two events drive a reload:
     //
     //   fileChanged       Editor writes in place (truncate + rewrite). The
@@ -41,10 +54,10 @@ PaletteStore::PaletteStore(QObject* parent)
     // Watching just the file path is therefore not sufficient on its own;
     // we always pair it with a parent-directory watch.
     connect(m_watcher.get(), &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
-        reloadFromCurrentPath();
         if (QFileInfo::exists(path) && !m_watcher->files().contains(path)) {
             m_watcher->addPath(path);
         }
+        m_reloadDebounce->start();
     });
     connect(m_watcher.get(), &QFileSystemWatcher::directoryChanged, this, [this](const QString&) {
         if (m_sourcePath.isEmpty()) {
@@ -54,12 +67,17 @@ PaletteStore::PaletteStore(QObject* parent)
             if (!m_watcher->files().contains(m_sourcePath)) {
                 m_watcher->addPath(m_sourcePath);
             }
-            reloadFromCurrentPath();
+            m_reloadDebounce->start();
         }
     });
 }
 
 PaletteStore::~PaletteStore() = default;
+
+QVariantMap PaletteStore::defaultPalette()
+{
+    return detail::defaultDarkPalette();
+}
 
 QVariantMap PaletteStore::palette() const
 {
@@ -170,9 +188,17 @@ void PaletteStore::applyTokens(const QVariantMap& tokens)
 
 void PaletteStore::resetToDefaults()
 {
+    // The header contract is "stops any active filesystem watch". That
+    // covers both the file watch and its paired parent-directory watch.
+    // Leaking the directory watch would hold an inotify slot forever
+    // even after the user dropped back to defaults.
     if (!m_watcher->files().isEmpty()) {
         m_watcher->removePaths(m_watcher->files());
     }
+    if (!m_watcher->directories().isEmpty()) {
+        m_watcher->removePaths(m_watcher->directories());
+    }
+    m_reloadDebounce->stop();
     if (!m_sourcePath.isEmpty()) {
         m_sourcePath.clear();
         Q_EMIT sourcePathChanged();

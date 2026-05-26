@@ -41,19 +41,11 @@ PresetPalettes::PresetPalettes(QObject* parent)
 
 QVariantMap PresetPalettes::dark() const
 {
-    // The canonical Phosphor dark is the built-in default; a freshly
-    // constructed PaletteStore already holds it. Read it back once and
-    // cache so we never duplicate the hex values across the lib's
-    // defaults and the demo's preset row (the palette is owned by
-    // phosphor-theme), and so the preset-row's hot path doesn't allocate
-    // a QFileSystemWatcher + inotify fd on every click. The static lives
-    // in function scope so its lifetime is bounded by program lifetime
-    // and the PaletteStore destructor runs cleanly during atexit.
-    static const QVariantMap kDark = []() {
-        PhosphorTheme::PaletteStore store;
-        return store.palette();
-    }();
-    return kDark;
+    // The canonical Phosphor dark is the built-in default. Read it from
+    // the lib's stateless accessor so we never duplicate the hex values
+    // here, and so this getter stays free of QFileSystemWatcher / inotify
+    // allocations (which a full PaletteStore would incur on every call).
+    return PhosphorTheme::PaletteStore::defaultPalette();
 }
 
 QVariantMap PresetPalettes::light() const

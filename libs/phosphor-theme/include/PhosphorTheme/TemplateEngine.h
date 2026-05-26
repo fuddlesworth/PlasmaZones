@@ -28,6 +28,14 @@ namespace PhosphorTheme {
 // Unknown tokens are left untouched as `{{token}}` in the output and emit
 // a warning on stderr, silent omission would hide rename mistakes.
 //
+// Unknown FIELDS behave differently. A typo'd suffix on a known token,
+// say `{{primary.hax}}`, degrades to the default hex form and logs a
+// warning. The asymmetry is intentional. A missing color is a structural
+// failure that needs to surface visibly in the rendered file. A typo'd
+// field on a valid color is recoverable with a sensible fallback. The
+// fallback also avoids leaking a literal `{{primary.hax}}` into config
+// files that downstream parsers like CSS or GTK treat as a hard error.
+//
 // This is NOT full mustache: no sections, partials, or escape handling.
 // Phosphor fan-out templates do simple substitution; sections / loops
 // would complicate the renderer and the templates without buying clarity.

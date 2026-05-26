@@ -12,8 +12,9 @@
 namespace PhosphorTheme {
 
 // The set of token names a service must publish. Snake_case mirrors the
-// canonical Phosphor palette (data/palettes/phosphor.toml) and matugen's
-// JSON output, so token strings round-trip without alias translation.
+// canonical Phosphor palette (published at
+// https://phosphor-works.github.io/palette/) and matugen's JSON output,
+// so token strings round-trip without alias translation.
 //
 // This is the contract, shells, examples, and tests reference token names
 // from here, not raw strings. New tokens go here first; QML / matugen
@@ -61,7 +62,8 @@ struct PHOSPHORTHEME_EXPORT TokenNames
 
     // Brand-gradient stops, drive the connected-corner / accent gradients
     // throughout the shell. These are not Material 3 standard tokens; they
-    // come from data/palettes/phosphor.toml's [extensions.brand].
+    // come from the [extensions.brand] block of the canonical Phosphor
+    // palette (https://phosphor-works.github.io/palette/).
     static constexpr auto BrandStop0 = "brand_stop_0";
     static constexpr auto BrandStop1 = "brand_stop_1";
     static constexpr auto BrandStop2 = "brand_stop_2";

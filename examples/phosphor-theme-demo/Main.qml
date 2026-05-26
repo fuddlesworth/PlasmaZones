@@ -196,7 +196,7 @@ ApplicationWindow {
                     readonly property bool isHovered: hover.containsMouse
 
                     Layout.preferredWidth: label.implicitWidth + Tokens.spacing_l * 2
-                    Layout.preferredHeight: 32
+                    Layout.preferredHeight: Tokens.spacing_xxl
                     radius: Tokens.radius_full
                     color: isActive ? Theme.primary : isHovered ? Theme.surface_container_high : Theme.surface_container
                     border.color: isActive ? Theme.primary : Theme.outline_variant
@@ -242,7 +242,7 @@ ApplicationWindow {
                 readonly property string pillLabel: matugen.running ? qsTr("running…") : qsTr("wallpaper…")
 
                 Layout.preferredWidth: wallpaperLabel.implicitWidth + Tokens.spacing_l * 2
-                Layout.preferredHeight: 32
+                Layout.preferredHeight: Tokens.spacing_xxl
                 radius: Tokens.radius_full
                 opacity: matugen.running ? 0.6 : 1
                 color: isActive ? Theme.tertiary : isHovered ? Theme.surface_container_high : Theme.surface_container
@@ -360,7 +360,7 @@ ApplicationWindow {
         // ─── Status bar ──────────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
+            Layout.preferredHeight: Tokens.spacing_xxl
             visible: root.lastError.length > 0
             color: Theme.error_container
             radius: Tokens.radius_s

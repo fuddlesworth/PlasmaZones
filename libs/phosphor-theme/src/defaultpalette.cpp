@@ -3,9 +3,8 @@
 //
 // Canonical Phosphor default palette, dark variant.
 //
-// Source: data/palettes/phosphor.toml (CC-BY-SA 4.0), published at
-// https://phosphor-works.github.io/palette/. Material 3 + ANSI 16 +
-// brand-gradient extensions on deep navy.
+// Source: https://phosphor-works.github.io/palette/ (CC-BY-SA 4.0).
+// Material 3 + ANSI 16 + brand-gradient extensions on deep navy.
 //
 // This must compile without runtime dependencies, it's the bootstrap
 // the shell falls back to when no palette JSON is on disk.

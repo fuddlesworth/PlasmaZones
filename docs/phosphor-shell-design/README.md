@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Phosphor Shell, Design Studies
+# Phosphor Shell: Design Studies
 
 Synthesis of research on **Noctalia**, **Quickshell**, the **Hyprland ricer ecosystem** (HyprPanel, end-4 illogical-impulse, ML4W), and **DankMaterialShell** (DMS), aimed at giving Phosphor a concrete shell target beyond the current proof of concept.
 
@@ -47,7 +47,7 @@ These are defended in detail in the per-doc sections below.
 
 ## Conventions for the mockups
 
-- Aesthetic baseline = **the canonical Phosphor built‑in theme** at https://phosphor-works.github.io/palette/ (M3 + ANSI 16, source `data/palettes/phosphor.toml`, CC‑BY‑SA 4.0). Dark variant: background `#050916` (void), surface `#0B1730` (navy), surface_container `#070F22` (abyss), surface_variant `#1E293B`, on_surface `#E6EDFF`, on_surface_variant `#94A3B8`. Accents: primary `#3B82F6` (blue), secondary `#A855F7` (purple), tertiary `#22D3EE` (cyan), error `#F43F5E` (rose). Status from ANSI 16: success `#10B981`, warning `#FBBF24`, info `#67E8F9`. See [[project-phosphor-default-palette]] for the full token list.
+- Aesthetic baseline = **the canonical Phosphor built‑in theme** at https://phosphor-works.github.io/palette/ (M3 + ANSI 16, CC‑BY‑SA 4.0). Dark variant: background `#050916` (void), surface `#0B1730` (navy), surface_container `#070F22` (abyss), surface_variant `#1E293B`, on_surface `#E6EDFF`, on_surface_variant `#94A3B8`. Accents: primary `#3B82F6` (blue), secondary `#A855F7` (purple), tertiary `#22D3EE` (cyan), error `#F43F5E` (rose). Status from ANSI 16: success `#10B981`, warning `#FBBF24`, info `#67E8F9`. See [[project-phosphor-default-palette]] for the full token list.
 - Color **tokens** drive everything; the mockups render the *default* theme, but matugen replaces it at runtime from any wallpaper. The token names (primary, on_primary, surface_container_high, etc.) stay stable; values change.
 - M3 elevation, large rounding (16-24px), generous spacing.
 - **Mockups are animated** (SMIL `<animate>` / `<animateTransform>`): tasteful 2-6s loops demonstrating real shell interactions. Open the SVGs in a browser, VS Code preview, or any SVG viewer that supports SMIL (Firefox / Chromium / WebKit all do). Animations include:

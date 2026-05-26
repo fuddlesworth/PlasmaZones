@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# 04, Implementation Plan
+# 04: Implementation Plan
 
 This is the **execution playbook** for the gaps inventoried in `02-gap-analysis.md` and the architecture defined in `03-component-map.md`. It refines the M0-M6 milestone sketch from `02` into a slower, library-first roll-out: every new library ships with at least one runnable example before any polished UI is attempted.
 
@@ -51,13 +51,13 @@ If anything in `02` conflicts with this doc, this doc wins (newer + execution-or
 
 ---
 
-## Phase 1, Foundations
+## Phase 1: Foundations
 
 **Goal:** ship the four new libraries the rest of the work depends on. Each ends in an example that can be run by hand without launching the shell.
 
 **Order (if solo):** 1.1 → 1.2 || 1.3 → 1.4 → 1.5
 
-### 1.1, `phosphor-theme` *(shipped, 2026-05-26, PR #534)*
+### 1.1: `phosphor-theme` *(shipped, 2026-05-26, PR #534)*
 
 Token store, matugen runner, template engine.
 
@@ -77,7 +77,7 @@ Token store, matugen runner, template engine.
 
 **Effort:** M (estimated ~2 weeks; actual ~1 session)
 
-### 1.2, `phosphor-popout`
+### 1.2: `phosphor-popout`
 
 Centralized popout coordinator (DMS pattern, lifted into C++).
 
@@ -95,7 +95,7 @@ Centralized popout coordinator (DMS pattern, lifted into C++).
 
 **Effort:** M (~2 weeks)
 
-### 1.3, `phosphor-registry`
+### 1.3: `phosphor-registry`
 
 Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
@@ -112,7 +112,7 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Effort:** M (~2 weeks)
 
-### 1.4, `phosphor-ipc` + `phosphorctl`
+### 1.4: `phosphor-ipc` + `phosphorctl`
 
 | Deliverable                                                       | Notes                                                                                |
 |-------------------------------------------------------------------|--------------------------------------------------------------------------------------|
@@ -128,7 +128,7 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Effort:** M (~2 weeks; CLI in 2-3 days, library is the bulk)
 
-### 1.5, `PerScreen` QML helper
+### 1.5: `PerScreen` QML helper
 
 | Deliverable                                       | Notes                                                                            |
 |---------------------------------------------------|----------------------------------------------------------------------------------|
@@ -155,7 +155,7 @@ The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.2
 
 ---
 
-## Phase 2, Service libraries
+## Phase 2: Service libraries
 
 **Goal:** in-process C++ services for every desktop integration, each with a CLI demo that proves the contract. **No shell UI yet**, just data, exposed via QML facades + `phosphorctl`.
 
@@ -171,7 +171,7 @@ Each service follows the same shape:
 - `examples/phosphor-<domain>-cli/`, small binary that reads + controls the service
 - `phosphorctl` namespace (e.g. `phosphorctl call network.scan`)
 
-### 2.0, Extract existing `phosphor-services` tenants
+### 2.0: Extract existing `phosphor-services` tenants
 
 The umbrella already houses four tenants. Before adding new ones, extract these to follow the pattern (small, mostly-mechanical moves; update consumers in the same PRs):
 
@@ -212,11 +212,11 @@ Naming notes:
 
 ---
 
-## Phase 3, UI primitives + first visible examples
+## Phase 3: UI primitives + first visible examples
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
 
-### 3.1, `Pz*` atom library
+### 3.1: `Pz*` atom library
 
 | Deliverable                                                                  | Notes                                                                            |
 |------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
@@ -227,7 +227,7 @@ Naming notes:
 
 **Effort:** M (~2 weeks)
 
-### 3.2, `ConnectedCorner` / `ConnectedShape` / `BarCanvas`
+### 3.2: `ConnectedCorner` / `ConnectedShape` / `BarCanvas`
 
 The connected-corner geometry primitive, central to the visual identity.
 
@@ -240,7 +240,7 @@ The connected-corner geometry primitive, central to the visual identity.
 
 **Effort:** L (~3 weeks, the geometry math is the bulk)
 
-### 3.3, OSD framework + first OSDs
+### 3.3: OSD framework + first OSDs
 
 | Deliverable                                                  | Notes                                                                                       |
 |--------------------------------------------------------------|---------------------------------------------------------------------------------------------|
@@ -252,7 +252,7 @@ The connected-corner geometry primitive, central to the visual identity.
 
 **Effort:** M (~2 weeks)
 
-### 3.4, Toast framework
+### 3.4: Toast framework
 
 | Deliverable                                                  | Notes                                                                                            |
 |--------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
@@ -267,13 +267,13 @@ The connected-corner geometry primitive, central to the visual identity.
 
 ---
 
-## Phase 4, Surface implementations
+## Phase 4: Surface implementations
 
 **Goal:** the actual shell. Each surface is a discrete release.
 
 Order is rough, each surface is independent enough to slip. Recommended sequence below.
 
-### 4.1, Bar (M1 from gap-analysis)
+### 4.1: Bar (M1 from gap-analysis)
 
 | Deliverable                                                  | Effort                                                                              |
 |--------------------------------------------------------------|-------------------------------------------------------------------------------------|
@@ -283,7 +283,7 @@ Order is rough, each surface is independent enough to slip. Recommended sequence
 
 Visible win: bar feels alive and distinct.
 
-### 4.2, Launcher (M2)
+### 4.2: Launcher (M2)
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
@@ -291,7 +291,7 @@ Visible win: bar feels alive and distinct.
 | Providers: `AppsProvider` (.desktop), `CalculatorProvider`, `WindowsProvider` (foreign-toplevel from `phosphor-compositor`), `CommandProvider`, `EmojiProvider`, `ClipboardProvider` (Phase 2.10) | L |
 | Fuzzy match, port `fzf` scoring to C++                                                   | S       |
 
-### 4.3, Notification center (M2)
+### 4.3: Notification center (M2)
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
@@ -299,7 +299,7 @@ Visible win: bar feels alive and distinct.
 | Rich text (`markdown2html` port)                                                           | S       |
 | Per-app rules editor                                                                       | S       |
 
-### 4.4, Control center (M3)
+### 4.4: Control center (M3)
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
@@ -307,28 +307,28 @@ Visible win: bar feels alive and distinct.
 | Tile catalog: Network / Bluetooth / Audio / Brightness / NightMode / DarkMode / Airplane / Idle / PowerProfile / Wallpaper (each ~1-2 days, depend on Phase 2 services) | L |
 | Card components (Calendar, Weather, SystemMonitor, Media, Shortcuts), reusable in Dashboard | M |
 
-### 4.5, Lockscreen (M5)
+### 4.5: Lockscreen (M5)
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Lock/{LockSurface,LockClock,LockAuthField,LockMediaCard}.qml`               | L       |
 | Wired to `phosphor-lock` (Phase 2.9) + ext-session-lock-v1 from compositor                | M       |
 
-### 4.6, Power menu
+### 4.6: Power menu
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Power/PowerMenu.qml` (replaces today's `MenuContent.qml` stub)              | S       |
 | Wired to `phosphor-session` (Phase 2.10)                                                   | S       |
 
-### 4.7, Wallpaper picker UI
+### 4.7: Wallpaper picker UI
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Wallpaper/WallpaperPicker.qml` (gallery + per-monitor + cycling schedule)   | M       |
 | Wallpaper transition shaders (port 6 from Noctalia or write 2-3 of our own)               | S       |
 
-### 4.8, Theme browser
+### 4.8: Theme browser
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
@@ -341,7 +341,7 @@ Visible win: bar feels alive and distinct.
 
 ---
 
-## Phase 5, Polish + ecosystem
+## Phase 5: Polish + ecosystem
 
 Lower priority, deferred until 4 ships. Open scope.
 
