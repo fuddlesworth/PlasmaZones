@@ -70,10 +70,14 @@ WindowRuleController::WindowRuleController(QObject* parent)
     // diagnosable rather than a silent miss — the deferred reload below still
     // fetches the initial state, but without this subscription the page would
     // never re-sync on subsequent daemon-side writes.
-    const bool subscribed = QDBusConnection::sessionBus().connect(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
-        SLOT(reload()));
+    // Subscribe to daemon-side rule mutations. The connect() and the
+    // disconnect() in the dtor must use IDENTICAL (service, path,
+    // interface, signal, slot) tuples — otherwise the bus keeps a
+    // dangling slot binding referencing a destroyed object. Routing
+    // both through `rulesChangedSubscriptionArgs()` makes that
+    // symmetry mechanical: a future rename of the signal touches the
+    // tuple in one place and connect+disconnect track each other.
+    const bool subscribed = subscribeRulesChanged();
     if (!subscribed) {
         qCWarning(lcConfig) << "WindowRuleController: failed to subscribe to org.plasmazones.WindowRules.rulesChanged "
                                "— page will not refresh on daemon-side writes";
@@ -87,12 +91,21 @@ WindowRuleController::WindowRuleController(QObject* parent)
 
 WindowRuleController::~WindowRuleController()
 {
-    // Mirror the `connect()` from the constructor so the bus doesn't keep
-    // a slot binding referencing this destroyed instance. Settings-app
-    // lifetime is process-wide today, but the symmetric disconnect makes
-    // the controller safe to instantiate from a transient owner (tests,
-    // future KCM page where the controller is rebuilt on demand) without
-    // leaking dangling slot dispatches.
+    // Mirror the `connect()` from the constructor — see subscribe
+    // helper docstring above.
+    unsubscribeRulesChanged();
+}
+
+bool WindowRuleController::subscribeRulesChanged()
+{
+    return QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                                 QString(PhosphorProtocol::Service::ObjectPath),
+                                                 QString(PhosphorProtocol::Service::Interface::WindowRules),
+                                                 QStringLiteral("rulesChanged"), this, SLOT(reload()));
+}
+
+void WindowRuleController::unsubscribeRulesChanged()
+{
     QDBusConnection::sessionBus().disconnect(QString(PhosphorProtocol::Service::Name),
                                              QString(PhosphorProtocol::Service::ObjectPath),
                                              QString(PhosphorProtocol::Service::Interface::WindowRules),

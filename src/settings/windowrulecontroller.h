@@ -313,6 +313,17 @@ private:
     void setDaemonReachable(bool reachable);
     void setDaemonChangedWhileDirty(bool changed);
 
+    /// Subscribe / unsubscribe the rulesChanged → reload() D-Bus
+    /// pipe. Routed through these private helpers (rather than
+    /// inlining the QDBusConnection calls in the ctor/dtor) so the
+    /// (service, path, interface, signal, slot) tuple is captured in
+    /// exactly one place. Without this, a rename of the signal name
+    /// must touch BOTH ends of the connect+disconnect pair or the
+    /// dtor leaks a dangling slot binding referencing the destroyed
+    /// controller.
+    bool subscribeRulesChanged();
+    void unsubscribeRulesChanged();
+
     /// Re-fetch the rule set from the daemon and load it into the model. The
     /// fetch is asynchronous — the function returns immediately and the model
     /// is repopulated on the D-Bus reply. On success the dirty +

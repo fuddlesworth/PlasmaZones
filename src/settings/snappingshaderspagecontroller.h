@@ -107,6 +107,14 @@ Q_SIGNALS:
     /// Emitted when a layout's `shaderId` changes — the browser's
     /// "Used in:" chips re-resolve on this tick. Forwarded from every
     /// `PhosphorZones::Layout::shaderIdChanged` signal in the registry.
+    ///
+    /// @p path carries the layout's UUID-with-braces when the emit
+    /// originates from a per-layout signal (the canonical case).
+    /// The fan-out path that fires on `ILayoutSourceRegistry::contentsChanged`
+    /// emits with an EMPTY path — QML treats that as "any layout may
+    /// have changed, re-resolve everything." Consumers that key off
+    /// `path` MUST guard for the empty case and treat it as a full
+    /// refresh trigger, not a no-op.
     void shaderProfileChanged(const QString& path);
 
 private Q_SLOTS:
