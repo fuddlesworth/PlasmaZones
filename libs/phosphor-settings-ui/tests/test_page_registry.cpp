@@ -133,6 +133,70 @@ private Q_SLOTS:
 
         QVERIFY(reg.allPages().isEmpty());
     }
+
+    void rejectsSelfParent()
+    {
+        PageRegistry reg;
+        auto* page = new StubPage(QStringLiteral("self"), &reg);
+        // parentId == id is a cycle of depth 0 — the registry checks
+        // that parentId, if non-empty, already exists. At this point
+        // "self" doesn't yet, so registration rejects it.
+        reg.registerPage({QStringLiteral("self"), QStringLiteral("self"), QStringLiteral("Self"), {}, QUrl(), page});
+
+        QVERIFY(!reg.hasPage(QStringLiteral("self")));
+    }
+
+    void rejectsNullController()
+    {
+        PageRegistry reg;
+        QSignalSpy spy(&reg, &PageRegistry::pageRegistered);
+        reg.registerPage({QStringLiteral("nullctrl"), {}, QStringLiteral("Null"), {}, QUrl(), nullptr});
+
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(!reg.hasPage(QStringLiteral("nullctrl")));
+    }
+
+    void hasDividerAfterRoundTrips()
+    {
+        PageRegistry reg;
+        auto* page = new StubPage(QStringLiteral("p1"), &reg);
+        PageRegistry::Entry entry{QStringLiteral("p1"), {}, QStringLiteral("P1"), {}, QUrl(), page};
+        entry.hasDividerAfter = true;
+        reg.registerPage(std::move(entry));
+
+        // Round-trip through both the C++ Entry accessor and the
+        // QML-facing QVariantMap. Both must surface the flag —
+        // Sidebar.qml reads via pageData() / childPagesData().
+        QVERIFY(reg.entry(QStringLiteral("p1")).hasDividerAfter);
+        QCOMPARE(reg.pageData(QStringLiteral("p1")).value(QStringLiteral("hasDividerAfter")).toBool(), true);
+    }
+
+    void qmlAccessorsCoverEverything()
+    {
+        // topLevelPagesData / childPagesData / pageData are the three
+        // Q_INVOKABLE accessors Sidebar.qml + Breadcrumbs.qml drive
+        // their Repeaters from. They must surface every entry field.
+        PageRegistry reg;
+        auto* p = new StubPage(QStringLiteral("p"), &reg);
+        auto* c = new StubPage(QStringLiteral("p.c"), &reg);
+        reg.registerPage({QStringLiteral("p"), {}, QStringLiteral("P"), QStringLiteral("monitor"), QUrl(), p});
+        PageRegistry::Entry childEntry{
+            QStringLiteral("p.c"), QStringLiteral("p"), QStringLiteral("C"), {}, QUrl(QStringLiteral("qrc:/c.qml")), c};
+        childEntry.isCollapsible = true;
+        childEntry.hasDividerAfter = true;
+        reg.registerPage(std::move(childEntry));
+
+        const auto top = reg.topLevelPagesData();
+        QCOMPARE(top.size(), 1);
+        const auto child = reg.childPagesData(QStringLiteral("p"));
+        QCOMPARE(child.size(), 1);
+        const auto leaf = reg.pageData(QStringLiteral("p.c"));
+        QCOMPARE(leaf.value(QStringLiteral("id")).toString(), QStringLiteral("p.c"));
+        QCOMPARE(leaf.value(QStringLiteral("parentId")).toString(), QStringLiteral("p"));
+        QCOMPARE(leaf.value(QStringLiteral("isCollapsible")).toBool(), true);
+        QCOMPARE(leaf.value(QStringLiteral("hasDividerAfter")).toBool(), true);
+        QCOMPARE(leaf.value(QStringLiteral("hasQmlSource")).toBool(), true);
+    }
 };
 
 QTEST_MAIN(TestPageRegistry)

@@ -292,6 +292,65 @@ private Q_SLOTS:
         const QVariantMap catData = app.registry()->pageData(QStringLiteral("cat"));
         QCOMPARE(catData.value(QStringLiteral("isCollapsible")).toBool(), true);
     }
+
+    void hasDividerAfterFlowsThroughRegistry()
+    {
+        ApplicationController app;
+        auto* divPage = new StubPage(QStringLiteral("div"));
+        app.registerPage(divPage, {}, QStringLiteral("Div"), QUrl(), QStringLiteral(""), /*isCollapsible=*/false,
+                         /*hasDividerAfter=*/true);
+
+        const auto entry = app.registry()->entry(QStringLiteral("div"));
+        QVERIFY(entry.hasDividerAfter);
+
+        const QVariantMap data = app.registry()->pageData(QStringLiteral("div"));
+        QCOMPARE(data.value(QStringLiteral("hasDividerAfter")).toBool(), true);
+    }
+
+    void headlessDomainParticipatesInDirty()
+    {
+        // Regression test: the headless-domain path (registerDomain
+        // vs registerPage) must contribute to the global dirty flag
+        // exactly the same way as page-backed StagingDomains. Earlier
+        // tests only exercised the page path for dirty aggregation.
+        ApplicationController app;
+        auto* page = new StubPage(QStringLiteral("p"));
+        auto* headless = new StubHeadlessDomain();
+        app.registerPage(page, {}, QStringLiteral("P"), QUrl());
+        app.registerDomain(headless);
+
+        QSignalSpy spy(&app, &ApplicationController::dirtyChanged);
+        QVERIFY(!app.isDirty());
+
+        // Toggle dirty ONLY via the headless domain — the page stays
+        // clean. Global dirty must still flip.
+        headless->setDirty(true);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(app.isDirty());
+
+        headless->setDirty(false);
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(!app.isDirty());
+    }
+
+    void duplicateDomainRegistrationIsDeduped()
+    {
+        ApplicationController app;
+        auto* page = new StubPage(QStringLiteral("p"));
+        app.registerPage(page, {}, QStringLiteral("P"), QUrl());
+        // Same domain through registerDomain after registerPage —
+        // the controller already tracks it via the page registration.
+        // This call should warn + no-op rather than connect
+        // dirtyChanged a second time.
+        app.registerDomain(page);
+
+        QSignalSpy spy(&app, &ApplicationController::dirtyChanged);
+        page->setDirty(true);
+        // If the dedupe failed, dirtyChanged would fire twice per
+        // toggle (one per duplicate dirtyChanged → recomputeDirty
+        // edge). We require exactly one.
+        QCOMPARE(spy.count(), 1);
+    }
 };
 
 QTEST_MAIN(TestApplicationController)
