@@ -74,6 +74,14 @@ Kirigami.ApplicationWindow {
                 Layout.fillHeight: true
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 14
                 Layout.minimumWidth: Kirigami.Units.gridUnit * 10
+                // Layout.maximumWidth caps the Sidebar so an inflated
+                // implicitWidth from any inner child (the daemon Pane
+                // in the footer slot, a long row title, the ListView
+                // delegates) can't push the sidebar past its preferred
+                // size. Without this, ColumnLayout's max-child-implicit
+                // sizing fights the parent RowLayout's preferredWidth
+                // and the sidebar grows to fill the window.
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 18
                 controller: root.controller
             }
 

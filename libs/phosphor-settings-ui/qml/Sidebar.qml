@@ -152,15 +152,15 @@ ColumnLayout {
                 const label = (breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title);
                 if (label.toLowerCase().indexOf(needle) >= 0)
                     matches.push({
-                        "id": child.id,
-                        "title": label,
-                        "iconSource": child.iconSource,
-                        "hasQmlSource": true,
-                        "_depth": 0,
-                        "_isCollapsibleHeader": false,
-                        "_isDrillParent": false,
-                        "_isExpanded": false
-                    });
+                    "id": child.id,
+                    "title": label,
+                    "iconSource": child.iconSource,
+                    "hasQmlSource": true,
+                    "_depth": 0,
+                    "_isCollapsibleHeader": false,
+                    "_isDrillParent": false,
+                    "_isExpanded": false
+                });
 
             }
         };
@@ -442,6 +442,13 @@ ColumnLayout {
         id: footerLoader
 
         Layout.fillWidth: true
+        // Layout.preferredWidth: 0 stops the loaded item's
+        // implicitWidth (a Pane wrapping a RowLayout of dot + label +
+        // Switch can be wide) from cascading up through the Sidebar's
+        // ColumnLayout and inflating the whole sidebar past its
+        // preferredWidth. fillWidth still sizes us to the column's
+        // assigned width.
+        Layout.preferredWidth: 0
         Layout.preferredHeight: item ? item.implicitHeight : 0
         active: root.footerContent !== null
         visible: active
@@ -449,8 +456,8 @@ ColumnLayout {
         onLoaded: {
             if (item)
                 item.width = Qt.binding(() => {
-                    return footerLoader.width;
-                });
+                return footerLoader.width;
+            });
 
         }
     }
