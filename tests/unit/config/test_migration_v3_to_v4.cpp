@@ -990,6 +990,9 @@ private Q_SLOTS:
         // Shader rule shape.
         QCOMPARE(matchLeafValueByOp(shaderRule, QStringLiteral("windowClass"), QStringLiteral("contains")),
                  QStringLiteral("firefox"));
+        QCOMPARE(shaderRule.value(QStringLiteral("enabled")).toBool(), true);
+        QVERIFY2(shaderRule.value(QStringLiteral("priority")).toInt() > 0,
+                 "animation rules must sit strictly above the provider-default catch-all band (priority 0)");
         const QJsonObject shaderAction = animationAction(shaderRule);
         QCOMPARE(shaderAction.value(QStringLiteral("event")).toString(), QStringLiteral("window.open"));
         QCOMPARE(shaderAction.value(QStringLiteral("effectId")).toString(), QStringLiteral("dissolve"));
@@ -999,6 +1002,8 @@ private Q_SLOTS:
         // Timing rule shape.
         QCOMPARE(matchLeafValueByOp(timingRule, QStringLiteral("windowClass"), QStringLiteral("contains")),
                  QStringLiteral("Code"));
+        QCOMPARE(timingRule.value(QStringLiteral("enabled")).toBool(), true);
+        QVERIFY(timingRule.value(QStringLiteral("priority")).toInt() > 0);
         const QJsonObject timingAction = animationAction(timingRule);
         QCOMPARE(timingAction.value(QStringLiteral("event")).toString(), QStringLiteral("window.close"));
         QCOMPARE(timingAction.value(QStringLiteral("curve")).toString(), QStringLiteral("0.2,0.0,0.2,1.0"));
@@ -1098,6 +1103,22 @@ private Q_SLOTS:
         src.append(unknownKind);
         // Non-object entry → dropped (the source array element isn't an object).
         src.append(QJsonValue(QStringLiteral("not-an-object")));
+        // Fully empty {} entry → all required keys missing → dropped at the
+        // classPattern/eventPath emptiness gate.
+        src.append(QJsonObject{});
+        // classPattern is a number (non-string) → toString() returns ""
+        // → dropped at the emptiness gate.
+        QJsonObject nonStringPattern;
+        nonStringPattern.insert(QStringLiteral("classPattern"), 42);
+        nonStringPattern.insert(QStringLiteral("eventPath"), QStringLiteral("window.open"));
+        nonStringPattern.insert(QStringLiteral("kind"), QStringLiteral("shader"));
+        nonStringPattern.insert(QStringLiteral("effectId"), QStringLiteral("x"));
+        src.append(nonStringPattern);
+        // kind is missing entirely → unknown-kind branch → dropped.
+        QJsonObject missingKind;
+        missingKind.insert(QStringLiteral("classPattern"), QStringLiteral("inkscape"));
+        missingKind.insert(QStringLiteral("eventPath"), QStringLiteral("window.open"));
+        src.append(missingKind);
         // One valid entry survives.
         src.append(makeShaderRule(QStringLiteral("survivor"), QStringLiteral("window.open"), QStringLiteral("pop")));
         writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithAnimationRules(src));
@@ -1183,6 +1204,19 @@ private Q_SLOTS:
         const QString firstId = animationRulesFromWindowRules().first().value(QStringLiteral("id")).toString();
         QVERIFY(!firstId.isEmpty());
 
+        // Golden assertion: re-derive the expected id inline against the
+        // SPEC of the namespace UUID + length-prefixed segment encoding.
+        // The migration owns both ends of the v5-UUID derivation, so the
+        // idempotency check above (same inputs → same id) cannot catch a
+        // namespace-UUID or encoder change — both sides of that compare
+        // drift together. Duplicating the namespace literal and the
+        // segment-encoding format here means a deliberate change to either
+        // forces a deliberate update to this test.
+        const QUuid kExpectedNamespace(QStringLiteral("{b3f2c1a0-7d4e-5f6a-8b9c-0d1e2f3a4b5c}"));
+        const QString kExpectedKey = QStringLiteral("5:kitty11:window.open6:shader"); // <len>:<segment> × 3
+        const QString expectedId = QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString();
+        QCOMPARE(firstId, expectedId);
+
         // Wipe windowrules.json (force the rebuild path on next call) and
         // re-stage the same v3 inputs.
         QFile::remove(ConfigDefaults::windowRulesFilePath());
@@ -1192,6 +1226,77 @@ private Q_SLOTS:
 
         const QString secondId = animationRulesFromWindowRules().first().value(QStringLiteral("id")).toString();
         QCOMPARE(secondId, firstId);
+    }
+
+    void testAnimationAppRules_cleanupOnlyBranchStripsStashes()
+    {
+        // The cleanup-only branch of finalizeV4Conversion runs when
+        // windowrules.json already exists as a valid v4 rule set but the
+        // previous run failed before stripping config.json's scratch keys.
+        // A regression that stops stripping the stash on the cleanup retry
+        // would leave inert _v4*Stash keys on disk forever — the rebuild
+        // path is gated off (windowrules.json exists), so the main path
+        // tested by other cases never re-runs to clean up.
+        //
+        // Fixture: a v4-stamped config.json that carries both stash keys,
+        // plus an existing v4 windowrules.json (so windowRulesAlreadyConverted
+        // returns true). ensureJsonConfig must take the cleanup-only branch,
+        // strip both stashes, and leave windowrules.json byte-identical.
+        IsolatedConfigGuard guard;
+
+        QJsonObject cfg;
+        cfg.insert(QStringLiteral("_version"), 4);
+        // Plausible stash content for both keys — content is irrelevant to
+        // the stripping logic; presence is what the predicate keys off.
+        QJsonObject disableStash;
+        disableStash.insert(QStringLiteral("snappingMonitors"), QStringLiteral("DP-1"));
+        cfg.insert(QStringLiteral("_v4DisableStash"), disableStash);
+        QJsonArray animStash;
+        animStash.append(
+            makeShaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
+        cfg.insert(QStringLiteral("_v4AnimationRulesStash"), animStash);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        // Pre-existing windowrules.json: produced via the production save
+        // path so the file shape always matches what `loadFromFile` expects
+        // (hand-written JSON would silently drift if the library tightens
+        // its load contract, flipping windowRulesAlreadyConverted to false
+        // and silently rebuilding instead of taking the cleanup branch).
+        PhosphorWindowRule::WindowRuleSet emptySet;
+        QDir().mkpath(QFileInfo(ConfigDefaults::windowRulesFilePath()).absolutePath());
+        QVERIFY(emptySet.saveToFile(ConfigDefaults::windowRulesFilePath()));
+        const QByteArray windowRulesBefore = [&] {
+            QFile f(ConfigDefaults::windowRulesFilePath());
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        }();
+        QVERIFY(!windowRulesBefore.isEmpty());
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // Both stash keys gone from config.json.
+        const QJsonObject cfgAfter = readJson(ConfigDefaults::configFilePath());
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4DisableStash")),
+                 "cleanup-only branch must strip _v4DisableStash");
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationRulesStash")),
+                 "cleanup-only branch must strip _v4AnimationRulesStash");
+
+        // windowrules.json is byte-identical — the cleanup branch must NOT
+        // rebuild and overwrite user-edited rules.
+        const QByteArray windowRulesAfter = [&] {
+            QFile f(ConfigDefaults::windowRulesFilePath());
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        }();
+        QCOMPARE(windowRulesAfter, windowRulesBefore);
+
+        // Probe that the CLEANUP-ONLY branch was actually taken (not just
+        // that the post-conditions happen to hold). The rebuild path writes
+        // or quarantines assignments.json; the cleanup branch never touches
+        // it. With no assignments.json staged in the fixture, the absence
+        // of any assignments artifact after migration distinguishes the two
+        // branches.
+        QVERIFY2(!QFile::exists(assignmentsPath()), "cleanup-only branch must not recreate assignments.json");
+        QVERIFY2(!QFile::exists(assignmentsPath() + QStringLiteral(".migrated")),
+                 "cleanup-only branch must not produce an assignments.json.migrated artifact");
     }
 
 private:

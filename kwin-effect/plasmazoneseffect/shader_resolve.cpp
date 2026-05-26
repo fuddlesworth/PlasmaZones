@@ -72,9 +72,12 @@ resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator
 {
     // Empty-input short-circuit — mirrors the standalone resolver's header
     // contract for both an empty windowClass and an empty eventPath. An empty
-    // eventPath also maps to no slot (the bridge drops such rules), so the
-    // lookup below would fall through anyway; the explicit guard keeps the
-    // documented behaviour pinned independent of the bridge.
+    // eventPath also maps to no slot — the v3→v4 migration in
+    // configmigration.cpp::animationAppRuleToWindowRule drops rules with empty
+    // event paths, and live rules authored via the settings UI must carry one
+    // through the OverrideAnimation* action validators — so the lookup below
+    // would fall through anyway; the explicit guard keeps the documented
+    // short-circuit pinned independent of any upstream invariant drift.
     if (!windowClass.isEmpty() && !eventPath.isEmpty()) {
         const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolve(animationQuery(windowClass));
         const auto action = resolved.slot(shaderSlotFor(eventPath));

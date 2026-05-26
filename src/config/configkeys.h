@@ -601,6 +601,13 @@ public:
     // it lives here so the migration is the sole remaining reader of the v4
     // wire format — the live ConfigDefaults accessors for the key and its
     // default value have been removed.
+    //
+    // `v4AnimationsGroup` deliberately duplicates the live `animationsGroup()`
+    // accessor's literal ("Animations") rather than aliasing it. The migration
+    // reads from the FROZEN v4 on-disk name; a future rename of
+    // `animationsGroup()` (v5+ runtime) MUST NOT silently retarget the v4
+    // migration to a path that never existed on disk in v4-and-earlier
+    // configs. Do not consolidate these two accessors.
     // ───────────────────────────────────────────────────────────────────────────
     PZ_CONFIG_GROUP(v4AnimationsGroup, "Animations")
     PZ_CONFIG_KEY(v4AnimationAppRulesKey, "AnimationAppRules")

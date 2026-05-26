@@ -1346,9 +1346,10 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // an empty tree (D-Bus race / fresh user) must not silently
     // collapse every event to the library default (150 ms). The
     // resolved value is then handed to the combined resolver as its
-    // `defaultDurationMs`, so the per-window-class App Rule timing
-    // cascade still layers on top (rule wins → per-event base →
-    // global), matching the resolver's documented contract.
+    // `defaultDurationMs`, so the per-window-class WindowRule timing
+    // cascade (`OverrideAnimationTiming`) still layers on top (rule
+    // wins → per-event base → global), matching the resolver's
+    // documented contract.
     int baseDurationMs = durationMs;
     {
         const auto& motionTree = m_shaderManager.motionProfileTree();

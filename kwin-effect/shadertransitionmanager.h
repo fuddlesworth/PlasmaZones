@@ -100,7 +100,8 @@ public:
     void setWindowRuleAnimationRules(QList<PhosphorWindowRule::WindowRule> rules);
 
     /// The evaluator bound to the animation rule set. Resolution of the
-    /// animation App Rule cascade routes through this.
+    /// per-window animation override cascade (WindowRules carrying any
+    /// `OverrideAnimation*` action) routes through this evaluator.
     const PhosphorWindowRule::RuleEvaluator& animationRuleEvaluator() const
     {
         return m_animationRuleEvaluator;
@@ -115,8 +116,9 @@ public:
     /// Per-event motion-profile tree mirrored from the daemon's
     /// PhosphorProfileRegistry over D-Bus (`motionProfileTree`). Holds
     /// the per-event base durations (window.open, window.close, …) that
-    /// `tryBeginShaderForEvent` resolves before applying the App Rule
-    /// timing cascade. Refreshed on the dedicated `motionProfileTreeChanged`
+    /// `tryBeginShaderForEvent` resolves before applying the per-window
+    /// animation rule timing cascade (the `OverrideAnimationTiming` slot in
+    /// `m_animationRuleSet`). Refreshed on the dedicated `motionProfileTreeChanged`
     /// D-Bus signal (live per-event edits) and on `settingsChanged` via
     /// `loadCachedSettings()`.
     PhosphorAnimation::ProfileTree& motionProfileTree()
