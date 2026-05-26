@@ -196,9 +196,11 @@ shows a placeholder instead of raw UUIDs.
 
 ## 7. Sidebar.qml extraction (B9 — LOW)
 
-**Finding:** `libs/phosphor-settings-ui/qml/Sidebar.qml` is at 714 lines,
-close to the 800-line cap. The ItemDelegate `delegate: ...` block
-(lines 429-681, ~252 lines) is a natural extraction point.
+**Finding:** `libs/phosphor-settings-ui/qml/Sidebar.qml` is at 778 lines
+(was 714 at original audit), even closer to the 800-line cap. The
+ItemDelegate `delegate: ...` block (~250 lines) is a natural extraction
+point. Reference symbols rather than line numbers to avoid further
+drift — find via `grep -n "delegate:" Sidebar.qml`.
 
 **Suggested approach:**
 
@@ -214,9 +216,11 @@ Worth doing before the next visual-tweak pass pushes the file past 800.
 
 ## 8. Loader.onLoaded width-binding idiom (B10 — LOW)
 
-**Finding:** `AboutPageShell.qml:108-115` and `Sidebar.qml:705-711` both
-do the same 4-line "bind item.width to loader width" pattern. Two copies
-of subtle layout snippets is where silent visual regressions hide.
+**Finding:** `AboutPageShell.qml` (around `topLoader.onLoaded`) and
+`Sidebar.qml` (around `footerLoader.onLoaded`) both do the same 4-line
+"bind item.width to loader width" pattern. Two copies of subtle layout
+snippets is where silent visual regressions hide. References are by
+symbol — line numbers drift each rebase.
 
 **Suggested approach:** Extract a tiny helper into a shared QML JS file
 (e.g. `internal/LoaderHelpers.js`) and call it from both `onLoaded`
@@ -285,4 +289,7 @@ These items should be filed as GitHub issues with the `phosphor-settings-ui`
 label once PR #533 merges. Each maps to one or more audit findings (audit
 codes preserved above so reviewers can cross-reference the original report).
 
-Last updated: 2026-05-26 (post-Pass 1v).
+Last updated: 2026-05-26 (post-Pass 2g — broader re-audit applied
+correctness fixes that were not in the original deferral set; the
+architectural items above remain explicitly out of scope for the
+PR-#533 merge).

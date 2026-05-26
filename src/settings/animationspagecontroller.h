@@ -414,6 +414,10 @@ private:
     /// m_shaderTreeDirty true) from external reloads (which should
     /// clear it).
     bool m_mutatingShaderTree = false;
+    /// Memoised eventSections() result — taxonomy is static for the
+    /// process lifetime so subsequent QML rebinds reuse the same list.
+    /// Populated lazily on first call.
+    mutable QVariantList m_eventSectionsCache;
 };
 
 } // namespace PlasmaZones

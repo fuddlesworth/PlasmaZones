@@ -418,6 +418,16 @@ QStringList AnimationsPageController::parentChain(const QString& path) const
 QVariantList AnimationsPageController::eventSections() const
 {
     using namespace PhosphorAnimation;
+    // The event taxonomy is static for the process lifetime; cache the
+    // materialised QVariantList in a mutable member so QML rebindings
+    // skip the O(n) rebuild after the first call. Computed lazily on
+    // first read rather than at construction because the helpers it
+    // calls (sectionForPath, eventLabel) are const member functions
+    // that need `this`.
+    if (!m_eventSectionsCache.isEmpty()) {
+        return m_eventSectionsCache;
+    }
+
     const QStringList paths = ProfilePaths::allBuiltInPaths();
 
     // Pre-compute the set of paths that are some other path's parent —
@@ -463,7 +473,8 @@ QVariantList AnimationsPageController::eventSections() const
         sectionEntry.insert(QStringLiteral("paths"), sectionPaths.value(section));
         result.append(sectionEntry);
     }
-    return result;
+    m_eventSectionsCache = result;
+    return m_eventSectionsCache;
 }
 
 // ─── Override CRUD ─────────────────────────────────────────────────────
