@@ -218,20 +218,40 @@ SettingsController::SettingsController(QObject* parent)
 
     m_scriptLoader->scanAndRegister();
 
+    // D-Bus subscription helper. QDBusConnection::connect's API is
+    // fundamentally string-based (signal name + SLOT() signature) —
+    // it can't use the modern member-function-pointer connect syntax
+    // because D-Bus signals are dynamically named. The lambda just
+    // factors the repeated `service + objectPath` tuple out of every
+    // call site so each subscription is one line, and centralises
+    // failure logging in one place.
+    //
+    // The const-char* SLOT signature is normalised through
+    // QMetaObject::normalizedSignature inside QDBusConnection, so
+    // spacing variations between call sites are harmless — but the
+    // helper takes the un-normalised string so call sites can be
+    // grep'd consistently.
+    const auto subscribeDaemonSignal = [this](const QString& interfaceName, const QString& signalName,
+                                              const char* slot) {
+        const bool ok = QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
+                                                              QString(PhosphorProtocol::Service::ObjectPath),
+                                                              interfaceName, signalName, this, slot);
+        if (!ok) {
+            qCWarning(PlasmaZones::lcCore)
+                << "SettingsController: failed to connect D-Bus signal" << signalName << "on" << interfaceName;
+        }
+    };
+
     // Listen for external settings changes from the daemon
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::Settings),
-                                          QStringLiteral("settingsChanged"), this, SLOT(onExternalSettingsChanged()));
+    const QString settingsIface = QString(PhosphorProtocol::Service::Interface::Settings);
+    subscribeDaemonSignal(settingsIface, QStringLiteral("settingsChanged"), SLOT(onExternalSettingsChanged()));
 
     // Async window picker reply channel. Emitted by SettingsAdaptor whenever
     // the KWin effect answers a runningWindowsRequested call via
     // provideRunningWindows(). The signal carries the JSON payload directly
     // so clients don't need a follow-up blocking fetch.
-    QDBusConnection::sessionBus().connect(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("runningWindowsAvailable"), this,
-        SLOT(onRunningWindowsAvailable(QString)));
+    subscribeDaemonSignal(settingsIface, QStringLiteral("runningWindowsAvailable"),
+                          SLOT(onRunningWindowsAvailable(QString)));
 
     // Client-side timeout for the async window picker. If the daemon
     // never fans out a runningWindowsAvailable signal (KWin effect
@@ -257,14 +277,21 @@ SettingsController::SettingsController(QObject* parent)
         }
     });
 
-    // Mark needsSave when any Settings property changes (from QML edits)
-    // Use a meta-object connection to catch all NOTIFY signals
+    // Mark needsSave when any Settings property changes (from QML edits).
+    // Use a meta-object connection to catch all NOTIFY signals. The slot
+    // lookup is cached + asserted up front so a future rename of
+    // `onSettingsPropertyChanged()` doesn't silently turn this loop into
+    // a no-op (indexOfSlot returns -1 on miss and `method(-1)` is an
+    // invalid QMetaMethod that the connect() call ignores).
+    const int settingsChangedSlotIdx = metaObject()->indexOfSlot("onSettingsPropertyChanged()");
+    Q_ASSERT_X(settingsChangedSlotIdx >= 0, "SettingsController::ctor",
+               "onSettingsPropertyChanged() slot not found — was it renamed?");
+    const QMetaMethod settingsChangedSlot = metaObject()->method(settingsChangedSlotIdx);
     const QMetaObject* mo = m_settings.metaObject();
     for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i) {
         QMetaProperty prop = mo->property(i);
         if (prop.hasNotifySignal()) {
-            connect(&m_settings, prop.notifySignal(), this,
-                    metaObject()->method(metaObject()->indexOfSlot("onSettingsPropertyChanged()")));
+            connect(&m_settings, prop.notifySignal(), this, settingsChangedSlot);
         }
     }
 
@@ -498,60 +525,29 @@ SettingsController::SettingsController(QObject* parent)
     // tweak → layoutPropertyChanged + layoutListChanged) coalesces into
     // one loadLayoutsAsync() call instead of recomputing the full preview
     // list + D-Bus round-trip for every hit.
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                          QStringLiteral("layoutCreated"), this, SLOT(scheduleLayoutLoad()));
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                          QStringLiteral("layoutDeleted"), this, SLOT(scheduleLayoutLoad()));
+    const QString layoutIface = QString(PhosphorProtocol::Service::Interface::LayoutRegistry);
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutCreated"), SLOT(scheduleLayoutLoad()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutDeleted"), SLOT(scheduleLayoutLoad()));
     // layoutChanged fires when a layout is modified (editor saves, zone changes, rename)
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                          QStringLiteral("layoutChanged"), this, SLOT(scheduleLayoutLoad()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutChanged"), SLOT(scheduleLayoutLoad()));
     // layoutPropertyChanged fires on compact property mutations (hidden, autoAssign,
     // aspectRatioClass) — Phase 4 of refactor/dbus-performance. The settings UI still
     // triggers a full reload so the layout list view refreshes, but the daemon side
     // saved a full JSON serialization per mutation by not emitting layoutChanged.
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                          QStringLiteral("layoutPropertyChanged"), this, SLOT(scheduleLayoutLoad()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutPropertyChanged"), SLOT(scheduleLayoutLoad()));
     // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                          QStringLiteral("layoutListChanged"), this, SLOT(scheduleLayoutLoad()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutListChanged"), SLOT(scheduleLayoutLoad()));
     // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
-    QDBusConnection::sessionBus().connect(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("screenLayoutChanged"), this,
-        SLOT(onScreenLayoutChanged(QString, QString, int)));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("screenLayoutChanged"),
+                          SLOT(onScreenLayoutChanged(QString, QString, int)));
     // quickLayoutSlotsChanged fires when quick layout slots are modified externally
-    QDBusConnection::sessionBus().connect(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("quickLayoutSlotsChanged"), this,
-        SIGNAL(quickLayoutSlotsChanged()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("quickLayoutSlotsChanged"), SIGNAL(quickLayoutSlotsChanged()));
 
     // Connect virtual desktop / activity D-Bus signals for reactive updates
-    QDBusConnection::sessionBus().connect(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("virtualDesktopCountChanged"),
-        this, SLOT(onVirtualDesktopsChanged()));
-    QDBusConnection::sessionBus().connect(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("virtualDesktopNamesChanged"),
-        this, SLOT(onVirtualDesktopsChanged()));
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                          QStringLiteral("activitiesChanged"), this, SLOT(onActivitiesChanged()));
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                          QStringLiteral("currentActivityChanged"), this, SLOT(onActivitiesChanged()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("virtualDesktopCountChanged"), SLOT(onVirtualDesktopsChanged()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("virtualDesktopNamesChanged"), SLOT(onVirtualDesktopsChanged()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("activitiesChanged"), SLOT(onActivitiesChanged()));
+    subscribeDaemonSignal(layoutIface, QStringLiteral("currentActivityChanged"), SLOT(onActivitiesChanged()));
 
     // (Editor NOTIFY signals are forwarded to QML by EditorPageController
     // itself — see its constructor — so no SettingsController-side plumbing
