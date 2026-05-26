@@ -9,13 +9,13 @@ import org.phosphor.animation
 
 ApplicationWindow {
     // Cached breadcrumb segment list for the current navigation
-    // state. Rendered as `[top-parent] › [intermediate] › … ›
-    // [current page]` with every non-leaf segment navigable; current-
-    // mode segment is not clickable since it's where the user already
-    // is. For 2-level navigation the chain has two entries (parent +
-    // page); for the 3-level Animations layout it has three (top-parent
-    // + intermediate-parent + page). In main mode the chain collapses
-    // to just the current page name.
+    // state. Rendered as `[sub-mode] › [category]? › [current page]`
+    // with every non-leaf segment navigable; the sub-mode segment is
+    // not clickable since it's where the user already is. The
+    // category segment is spliced in only when the active page lives
+    // inside an inline collapsible category (e.g. Animations /
+    // Surfaces / Windows). In main mode the chain collapses to just
+    // the current page name.
 
     id: window
 
@@ -30,11 +30,12 @@ ApplicationWindow {
     property bool _closeConfirmed: false
     // ── Drill-down sidebar state ─────────────────────────────────────
     // "main" = top-level list; any other value names the currently-
-    // displayed parent. Top-level parents (e.g. "snapping", "tiling",
-    // "animations") and mid-level virtual parents registered in
-    // `_parentMode` (e.g. "animations-surfaces", "animations-library")
-    // are both valid values; `_drillOut` walks the lineage one level
-    // at a time using `_parentMode`.
+    // displayed sub-sidebar parent (e.g. "snapping", "tiling",
+    // "animations"). Sub-modes drill back to "main" via `_drillOut`.
+    // Inline collapsible categories ("display", "rules",
+    // "animations-surfaces", "animations-library", and the snapping/
+    // tiling `*-cat` buckets) are NOT sidebar modes — they expand
+    // inline under their host mode and never enter `_sidebarMode`.
     property string _sidebarMode: "main"
     // Suppression flag for the sidebar ListView's accordion add/remove
     // transitions. Set true while `sidebarTransition` is rebuilding the
@@ -362,11 +363,11 @@ ApplicationWindow {
         }
         return out;
     }
-    // Hard depth ceiling for any walk through `_parentMode` /
-    // `_childItems` — guards against a malformed map (cyclic lineage,
-    // self-referencing parent) producing an infinite loop. Today's
-    // tree never exceeds 2 hops; 16 is an order of magnitude headroom
-    // for any plausible future structure.
+    // Hard depth ceiling for recursive walks through `_childItems` —
+    // guards against a malformed map (cyclic lineage, self-referencing
+    // parent) producing an infinite loop in `_firstLeafOf` and
+    // `_collectMatchingDescendants`. Today's tree never exceeds 2
+    // hops; 16 is an order of magnitude headroom.
     readonly property int _maxNavDepth: 16
     // Cached as a `readonly property var` so the Repeater's `model`
     // and per-delegate separator-visibility binding share a single
@@ -460,7 +461,13 @@ ApplicationWindow {
     // the query (e.g. searching "surfaces"), every leaf under it is
     // included unfiltered — otherwise typing a category name would yield
     // empty results because the parent itself is a virtual non-leaf.
-    function _collectMatchingDescendants(parentName, searchText) {
+    // @p depth is the recursion guard — short-circuits at
+    // `_maxNavDepth` so a cyclic `_childItems` map can't stack-overflow.
+    function _collectMatchingDescendants(parentName, searchText, depth) {
+        const nextDepth = depth === undefined ? 0 : depth;
+        if (nextDepth >= _maxNavDepth)
+            return [];
+
         let out = [];
         let children = _childItems[parentName] || [];
         for (let j = 0; j < children.length; j++) {
@@ -468,7 +475,7 @@ ApplicationWindow {
             if (child.hasChildren) {
                 let intermediateMatches = child.label.toLowerCase().indexOf(searchText) >= 0;
                 let nestedQuery = intermediateMatches ? "" : searchText;
-                let nested = _collectMatchingDescendants(child.name, nestedQuery);
+                let nested = _collectMatchingDescendants(child.name, nestedQuery, nextDepth + 1);
                 for (let k = 0; k < nested.length; k++) {
                     out.push({
                         "name": nested[k].name,
@@ -953,16 +960,25 @@ ApplicationWindow {
         }
         // Inline collapsible category inside any sub-sidebar — find its
         // parent mode by scanning `_childItems` for the bucket that
-        // contains this name as a collapsible entry, then drill into it.
+        // contains this name as a collapsible entry. If we're already
+        // in that mode (the common case — the breadcrumb only renders
+        // the category splice for the *active* page's category, which
+        // by definition is in the current mode), expand in place
+        // without restarting the fade. The cross-fade would otherwise
+        // run with no visible structural change.
         const parentMode = _parentModeForCategory(name);
         if (parentMode.length > 0) {
             let next = Object.assign({
             }, _expandedCategories);
             next[name] = true;
             _expandedCategories = next;
-            sidebarTransition.pendingMode = parentMode;
-            sidebarTransition.pendingPage = "";
-            sidebarTransition.restart();
+            if (parentMode === _sidebarMode) {
+                _applyCategoryExpansion(name, true);
+            } else {
+                sidebarTransition.pendingMode = parentMode;
+                sidebarTransition.pendingPage = "";
+                sidebarTransition.restart();
+            }
             return ;
         }
         // Drill-down sub-mode (Snapping / Tiling / Animations top-level).
@@ -1109,6 +1125,11 @@ ApplicationWindow {
             let children = _childItems[parents[p]];
             for (let c = 0; c < children.length; c++) {
                 if (children[c].name === page && !children[c].hasChildren) {
+                    // Page lives in a top-level main-mode collapsible
+                    // (a category whose host bucket isn't in any
+                    // sub-sidebar) — stay in main mode and let the
+                    // expanded category render the leaf inline.
+
                     // If the owning parent is an inline collapsible
                     // category, drill into its host mode (so the
                     // sub-sidebar opens) — except for top-level main-mode
@@ -1120,7 +1141,7 @@ ApplicationWindow {
                     const subMode = cat.length > 0 ? _parentModeForCategory(cat) : "";
                     if (subMode.length > 0)
                         _sidebarMode = subMode;
-                    else if (cat === "display" || cat === "rules")
+                    else if (cat.length > 0)
                         _sidebarMode = "main";
                     else
                         _sidebarMode = parents[p];
