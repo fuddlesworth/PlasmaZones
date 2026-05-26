@@ -3,7 +3,17 @@
 #
 # PlasmaZones Unit Tests
 
-# Helper macro for simple tests (Qt6::Test + Qt6::Core + plasmazones_core)
+# Helper macro for simple tests (Qt6::Test + Qt6::Core + plasmazones_core).
+#
+# IMPORTANT: This macro hands you Qt6::Test + Qt6::Core ONLY. If your test
+# source includes a D-Bus header, a Wayland-client header, or any other Qt
+# component not in that minimal pair, use a hand-rolled `add_executable` +
+# `target_link_libraries` with an explicit `target_link_libraries(... PRIVATE
+# Qt6::DBus ...)` instead. The macro will SEEM to work because plasmazones_core's
+# INTERFACE_LINK_LIBRARIES pulls Qt6::DBus transitively today — but that's
+# coincidental, not contractual. A future refactor that drops Qt6::DBus from
+# plasmazones_core's interface link would silently break every test that
+# relied on the transitive pull.
 macro(pz_add_test _name _src)
     add_executable(${_name} ${_src})
     target_link_libraries(${_name} PRIVATE Qt6::Test Qt6::Core plasmazones_core)
@@ -706,6 +716,11 @@ add_test(NAME test_autotile_state COMMAND test_autotile_state)
 # Apply QT_QPA_PLATFORM=offscreen to every test in this directory so new tests
 # added above automatically inherit it - a hand-maintained list rotted and left
 # tests aborting in CI when the author forgot to append.
+#
+# IMPORTANT: get_property(... PROPERTY TESTS) reads the test list at CMake
+# configure time, which means tests added BELOW this line are NOT covered.
+# Always add new test targets ABOVE this block — never after it.
 # ═══════════════════════════════════════════════════════════════════════════════
 get_property(_all_tests DIRECTORY . PROPERTY TESTS)
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+# ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───
