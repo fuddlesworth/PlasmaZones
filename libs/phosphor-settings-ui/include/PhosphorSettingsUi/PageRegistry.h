@@ -62,8 +62,13 @@ public:
     explicit PageRegistry(QObject* parent = nullptr);
     ~PageRegistry() override;
 
-    /** Register a page. Asserts that id is unique and that parentId, if
-     *  non-empty, refers to a previously-registered page. */
+    /** Register a page. Emits `pageRegistered(id)` on success. Warns
+     *  and silently skips the entry on any of: empty id, duplicate id,
+     *  unknown parentId, null controller. The intent is to surface
+     *  programmer errors in the log without aborting startup; the
+     *  PageRegistry's tree just won't contain the misconfigured
+     *  entry — downstream Sidebar / Breadcrumbs / page-router lookups
+     *  for it will return empty. */
     void registerPage(Entry entry);
 
     Q_INVOKABLE bool hasPage(const QString& id) const;
