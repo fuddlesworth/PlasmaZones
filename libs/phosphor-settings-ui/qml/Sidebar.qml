@@ -257,7 +257,7 @@ ColumnLayout {
 
         Layout.fillWidth: true
         Layout.margins: Kirigami.Units.smallSpacing
-        placeholderText: qsTr("Search settings…")
+        placeholderText: qsTr("Search...")
     }
 
     Kirigami.Separator {
@@ -279,9 +279,42 @@ ColumnLayout {
             spacing: 0
 
             QQC2.ItemDelegate {
+                id: backButton
+
                 visible: root.currentParentId !== "" && root.searchText.length === 0
                 Layout.fillWidth: true
+                // Match legacy row height for the back button (slightly
+                // taller than nav rows so it reads as a header).
+                implicitHeight: Kirigami.Units.gridUnit * 2.6
+                leftPadding: Kirigami.Units.smallSpacing
+                rightPadding: Kirigami.Units.smallSpacing
                 onClicked: root.drillOut()
+
+                background: Rectangle {
+                    color: backButton.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
+                    radius: Kirigami.Units.smallSpacing
+
+                    // Legacy back-button bottom separator — a 1-dp line
+                    // tucked inside the row's bottom edge so the rail
+                    // reads as "you're inside a sub-section".
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.leftMargin: Kirigami.Units.smallSpacing
+                        anchors.rightMargin: Kirigami.Units.smallSpacing
+                        height: Math.round(Kirigami.Units.devicePixelRatio)
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                    }
+
+                    Behavior on color {
+                        PhosphorMotionAnimation {
+                            profile: "widget.tint.fast"
+                        }
+
+                    }
+
+                }
 
                 contentItem: RowLayout {
                     spacing: Kirigami.Units.smallSpacing
@@ -290,11 +323,17 @@ ColumnLayout {
                         source: "go-previous-symbolic"
                         Layout.preferredWidth: Kirigami.Units.iconSizes.small
                         Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                        opacity: 0.7
                     }
 
                     QQC2.Label {
                         Layout.fillWidth: true
                         text: qsTr("Back")
+                        // Legacy back-button label uses demi-bold @
+                        // 0.8 opacity — reads as a section header
+                        // rather than another nav row.
+                        font.weight: Font.DemiBold
+                        opacity: 0.8
                     }
 
                 }
@@ -370,11 +409,22 @@ ColumnLayout {
                         "_isDrillParent": _isDrillParent,
                         "_isExpanded": _isExpanded
                     })
+                    // `isCurrent` drives the highlight background + left
+                    // accent + label/icon font-weight/opacity. Only true
+                    // for navigable leaves on the active page id; never
+                    // true for collapsible-category headers (those
+                    // expand/collapse rather than navigate) or drill-
+                    // parents (those swap the sidebar scope).
                     readonly property bool isCurrent: !_isCollapsibleHeader && hasQmlSource && root.controller.currentPageId === id
 
                     width: ListView.view.width
-                    highlighted: isCurrent
+                    // Legacy row height — explicit so the rail's
+                    // vertical rhythm is stable regardless of label
+                    // metrics. `highlighted` is intentionally NOT used
+                    // because we paint the background ourselves below.
+                    implicitHeight: Kirigami.Units.gridUnit * 2.2
                     leftPadding: Kirigami.Units.smallSpacing + (_depth * Kirigami.Units.gridUnit)
+                    rightPadding: Kirigami.Units.smallSpacing
                     onClicked: {
                         if (_isCollapsibleHeader)
                             root.toggleCategory(id);
@@ -384,22 +434,75 @@ ColumnLayout {
                             root.controller.currentPageId = id;
                     }
 
+                    background: Rectangle {
+                        // Active row: highlight tinted at 12% — same
+                        // tint legacy used so the visual weight matches
+                        // KCM modules. Hover: 6% textColor for a
+                        // subtle "interactive" cue. Both transitions
+                        // run through `widget.tint.fast` so they feel
+                        // snappy without flicker.
+                        color: {
+                            if (itemDelegate.isCurrent)
+                                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12);
+
+                            if (itemDelegate.hovered)
+                                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06);
+
+                            return "transparent";
+                        }
+                        radius: Kirigami.Units.smallSpacing
+
+                        // Left accent bar — 2.5dp wide, half the
+                        // row's height, rounded ends, highlightColor.
+                        // Only visible on the active leaf so the user's
+                        // location reads at a glance even when the
+                        // background tint is subtle.
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.round(Kirigami.Units.devicePixelRatio * 2.5)
+                            height: parent.height * 0.5
+                            radius: width / 2
+                            color: Kirigami.Theme.highlightColor
+                            visible: itemDelegate.isCurrent
+                        }
+
+                        Behavior on color {
+                            PhosphorMotionAnimation {
+                                profile: "widget.tint.fast"
+                            }
+
+                        }
+
+                    }
+
                     contentItem: RowLayout {
                         spacing: Kirigami.Units.smallSpacing
 
-                        Kirigami.Icon {
-                            visible: itemDelegate._isCollapsibleHeader
-                            source: itemDelegate._isExpanded ? "go-down-symbolic" : "go-next-symbolic"
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                            opacity: 0.7
-                        }
-
+                        // Per-row icon. Collapsible-category headers
+                        // don't have their own icon (the rotating
+                        // chevron at the end of the row does that
+                        // duty) — they show no leading icon in legacy.
                         Kirigami.Icon {
                             visible: !itemDelegate._isCollapsibleHeader && itemDelegate.iconSource !== ""
                             source: itemDelegate.iconSource
                             Layout.preferredWidth: Kirigami.Units.iconSizes.small
                             Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            // Legacy opacity model: active rows go to
+                            // 1.0, everything else sits at 0.7. The
+                            // 120-ms `widget.hover` transition matches
+                            // the label below so the row's accent
+                            // changes feel synchronous.
+                            opacity: itemDelegate.isCurrent ? 1 : 0.7
+
+                            Behavior on opacity {
+                                PhosphorMotionAnimation {
+                                    profile: "widget.hover"
+                                    durationOverride: 120
+                                }
+
+                            }
+
                         }
 
                         QQC2.Label {
@@ -407,7 +510,21 @@ ColumnLayout {
                             Layout.preferredWidth: 0
                             elide: Text.ElideRight
                             text: itemDelegate.title
-                            font.weight: itemDelegate._isCollapsibleHeader ? Font.DemiBold : Font.Normal
+                            // Demi-bold on active rows AND collapsible
+                            // category headers — both read as
+                            // "anchored" surfaces. Other leaves get
+                            // Normal so the active row pops.
+                            font.weight: (itemDelegate.isCurrent || itemDelegate._isCollapsibleHeader) ? Font.DemiBold : Font.Normal
+                            opacity: itemDelegate.isCurrent ? 1 : 0.7
+
+                            Behavior on opacity {
+                                PhosphorMotionAnimation {
+                                    profile: "widget.hover"
+                                    durationOverride: 120
+                                }
+
+                            }
+
                         }
 
                         Loader {
@@ -420,11 +537,28 @@ ColumnLayout {
                             Layout.alignment: Qt.AlignVCenter
                         }
 
+                        // Right chevron — single icon, rotated 90°
+                        // when an inline category is expanded. Shown
+                        // for drill-parents AND collapsible category
+                        // headers; not shown for leaves. Reduced
+                        // opacity so it reads as ornament, not action.
                         Kirigami.Icon {
-                            visible: itemDelegate._isDrillParent
-                            source: "go-next-symbolic"
+                            visible: itemDelegate._isDrillParent || itemDelegate._isCollapsibleHeader
+                            source: "go-next"
                             Layout.preferredWidth: Kirigami.Units.iconSizes.small
                             Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                            Layout.alignment: Qt.AlignVCenter
+                            opacity: 0.3
+                            rotation: itemDelegate._isCollapsibleHeader && itemDelegate._isExpanded ? 90 : 0
+
+                            Behavior on rotation {
+                                PhosphorMotionAnimation {
+                                    profile: "widget.hover"
+                                    durationOverride: 150
+                                }
+
+                            }
+
                         }
 
                     }
