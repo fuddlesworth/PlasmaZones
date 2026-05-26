@@ -365,6 +365,24 @@ SettingsController::SettingsController(QObject* parent)
         setNeedsSave(true);
         endExternalEdit();
     });
+    // A user-driven Discard fires WindowRuleController::revert() inside our
+    // load() under m_loading=true, which suppresses the dirtyChanged → dirty
+    // pages plumbing for the duration of the call. The async re-fetch lands
+    // AFTER load() has already done `setNeedsSave(false)` (which blanket-
+    // clears m_dirtyPages). If the re-fetch *fails*, the controller's m_dirty
+    // stays true per its documented contract — but its dirtyChanged signal
+    // never fires (value didn't change) and the cleared dirty-page entry is
+    // never re-added. Listen to revertFinished here so a failed revert can
+    // re-mark the page dirty.
+    connect(m_windowRulesPage, &WindowRuleController::revertFinished, this, [this](bool success) {
+        if (success || !m_windowRulesPage->isDirty()) {
+            return;
+        }
+        // m_loading is already false by the time this async reply lands.
+        beginExternalEdit(QStringLiteral("window-rules"));
+        setNeedsSave(true);
+        endExternalEdit();
+    });
 
     // Wire screen / activity / layout label resolvers so the rule model and
     // monitor-overview render friendly names instead of raw connector strings,

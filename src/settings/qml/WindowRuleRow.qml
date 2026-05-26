@@ -376,6 +376,7 @@ ItemDelegate {
                     })
                     controller: row.controller
                     matchFieldOptions: row.matchFieldOptions
+                    appSettings: row.appSettings
                 }
 
                 Label {

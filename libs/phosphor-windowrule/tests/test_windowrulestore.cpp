@@ -194,6 +194,11 @@ private Q_SLOTS:
         // A genuinely different list does emit.
         QVERIFY(store.setAllRules(QList<WindowRule>{makeRule(QStringLiteral("HDMI-1"))}));
         QCOMPARE(spy.count(), 1);
+        // The emit carries `persisted=true` on a successful save. Pinning the
+        // bool here protects the Pass-1 signal-signature change — consumers
+        // (the effect's debounce) key off it to distinguish a confirmed save
+        // from an in-memory-only mutation.
+        QCOMPARE(spy.takeFirst().at(0).toBool(), true);
     }
 
     void testSetAllRules_noOpLeavesFileUntouched()
@@ -276,6 +281,9 @@ private Q_SLOTS:
             QSKIP("filesystem ignores read-only directory permissions");
         }
 
+        QSignalSpy spy(&store, &WindowRuleStore::rulesChanged);
+        QVERIFY(spy.isValid());
+
         const bool ok = store.setAllRules(QList<WindowRule>{makeRule(QStringLiteral("DP-1"))});
 
         // Restore permissions — also required for QTemporaryDir cleanup.
@@ -284,6 +292,14 @@ private Q_SLOTS:
 
         QVERIFY2(!ok, "setAllRules must return false when the persist fails");
         QCOMPARE(store.count(), 1);
+        // The save-failure emission carries `persisted=false`. This is the
+        // signal-channel contract for the Pass-1 refactor: the in-memory set
+        // changed (so the signal fires) but the on-disk state did NOT, so
+        // consumers must not trust the broadcast as a "persisted state moved"
+        // notification. Pinning the false here documents and protects the
+        // partial-failure semantic.
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.takeFirst().at(0).toBool(), false);
     }
 };
 

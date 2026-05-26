@@ -82,6 +82,7 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, 0, QString(), layoutId);
+    m_changedScreenIds.insert(resolvedId);
 
     // Update global active layout when assigning to the primary screen (manual layouts only)
     if (layout) {
@@ -96,7 +97,9 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
 void LayoutAdaptor::clearAssignment(const QString& screenId)
 {
-    m_layoutManager->clearAssignment(Phosphor::Screens::ScreenIdentity::idForName(screenId));
+    QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    m_layoutManager->clearAssignment(resolvedId);
+    m_changedScreenIds.insert(resolvedId);
 }
 
 void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
@@ -111,7 +114,9 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
                 continue;
             }
         }
-        parsedAssignments[Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)] = layoutId;
+        const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
+        parsedAssignments[resolvedId] = layoutId;
+        m_changedScreenIds.insert(resolvedId);
     }
 
     m_layoutManager->setAllScreenAssignments(parsedAssignments);
@@ -238,6 +243,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 
     QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, QString(), layoutId);
+    m_changedScreenIds.insert(resolvedId);
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "(id:" << resolvedId
                          << ") on desktop" << virtualDesktop;
 
@@ -247,7 +253,9 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 
 void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
-    m_layoutManager->clearAssignment(Phosphor::Screens::ScreenIdentity::idForName(screenId), virtualDesktop, QString());
+    const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    m_layoutManager->clearAssignment(resolvedId, virtualDesktop, QString());
+    m_changedScreenIds.insert(resolvedId);
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "on desktop" << virtualDesktop;
 }
 
@@ -375,8 +383,9 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
                 continue;
             }
         }
-        parsedAssignments[qMakePair(Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName), virtualDesktop)] =
-            layoutId;
+        const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
+        parsedAssignments[qMakePair(resolvedId, virtualDesktop)] = layoutId;
+        m_changedScreenIds.insert(resolvedId);
     }
 
     m_layoutManager->setAllDesktopAssignments(parsedAssignments);
@@ -498,7 +507,9 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
         }
     }
 
-    m_layoutManager->assignLayoutById(Phosphor::Screens::ScreenIdentity::idForName(screenId), 0, activityId, layoutId);
+    const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    m_layoutManager->assignLayoutById(resolvedId, 0, activityId, layoutId);
+    m_changedScreenIds.insert(resolvedId);
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "for activity" << activityId;
 
@@ -508,7 +519,9 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
 
 void LayoutAdaptor::clearAssignmentForScreenActivity(const QString& screenId, const QString& activityId)
 {
-    m_layoutManager->clearAssignment(Phosphor::Screens::ScreenIdentity::idForName(screenId), 0, activityId);
+    const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    m_layoutManager->clearAssignment(resolvedId, 0, activityId);
+    m_changedScreenIds.insert(resolvedId);
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "activity" << activityId;
 }
 
@@ -553,8 +566,9 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
                 continue;
             }
         }
-        parsedAssignments[qMakePair(Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName), activityId)] =
-            layoutId;
+        const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
+        parsedAssignments[qMakePair(resolvedId, activityId)] = layoutId;
+        m_changedScreenIds.insert(resolvedId);
     }
 
     m_layoutManager->setAllActivityAssignments(parsedAssignments);
@@ -589,8 +603,9 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
         }
     }
 
-    m_layoutManager->assignLayoutById(Phosphor::Screens::ScreenIdentity::idForName(screenId), virtualDesktop,
-                                      activityId, layoutId);
+    const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, activityId, layoutId);
+    m_changedScreenIds.insert(resolvedId);
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "desktop" << virtualDesktop
                          << "activity" << activityId;

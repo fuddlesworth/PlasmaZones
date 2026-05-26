@@ -242,6 +242,25 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
         });
     }
 
+    // One-shot WindowRules subscription. The daemon emits rulesChanged per
+    // per-rule mutation; slotWindowRulesChanged debounces via a 50ms timer to
+    // collapse batch edits into a single full-ruleset refetch. Subscribed here
+    // (not in loadCachedSettings) because loadCachedSettings re-runs on every
+    // settingsChanged broadcast, and QDBusConnection::connect accepts duplicate
+    // subscriptions silently — re-subscribing on each broadcast would grow the
+    // connection set unbounded across the effect's lifetime.
+    if (!m_windowRulesSubscribed) {
+        const bool ok = QDBusConnection::sessionBus().connect(
+            QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+            QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
+            SLOT(slotWindowRulesChanged()));
+        if (ok) {
+            m_windowRulesSubscribed = true;
+        } else {
+            qCWarning(lcEffect) << "Failed to subscribe to WindowRules.rulesChanged — will retry on next bringup";
+        }
+    }
+
     // These already use QDBusMessage::createMethodCall (no QDBusInterface)
     loadCachedSettings();
     // Note: connectNavigationSignals() is NOT called here — it's already called
@@ -582,14 +601,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     // refreshes whenever the daemon broadcasts `rulesChanged`, so an edit
     // in the settings UI lands without restarting the effect.
     loadWindowRuleAnimationsFromDbus();
-    // Subscribe via the debounce slot — the daemon emits one rulesChanged per
-    // per-rule mutation, and the slot just re-arms a single-shot 50ms timer
-    // whose timeout fires the actual loadWindowRuleAnimationsFromDbus refetch.
-    // Without this, a batch edit fires N back-to-back full-ruleset fetches.
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                          QStringLiteral("rulesChanged"), this, SLOT(slotWindowRulesChanged()));
+    // Subscription to the daemon's rulesChanged broadcast is installed once from
+    // continueDaemonReadySetup() — installing it here would re-subscribe on every
+    // slotSettingsChanged callback (QDBusConnection::connect silently accepts
+    // duplicates, so the connection set would grow unbounded over the effect's
+    // lifetime).
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();
     });

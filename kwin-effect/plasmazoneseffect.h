@@ -891,6 +891,12 @@ private:
     /// resolveEffectiveScreenId tagging windows with dead "physId/vs:N" ids.
     QHash<QString, uint64_t> m_vsFetchSeqPerPhysId;
     bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState
+    /// One-shot guard for the WindowRules rulesChanged D-Bus subscription.
+    /// QDBusConnection::connect silently accepts duplicate subscriptions, so without
+    /// this flag the subscription set would grow unbounded across every
+    /// slotSettingsChanged broadcast (which re-runs loadCachedSettings()). Set true
+    /// after the first successful connect from continueDaemonReadySetup().
+    bool m_windowRulesSubscribed = false;
 
     // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
     // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).

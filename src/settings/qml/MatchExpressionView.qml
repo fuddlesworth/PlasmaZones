@@ -38,6 +38,13 @@ ColumnLayout {
     /// `{ all | any | none: [...] }`. Re-assigning this rebuilds the
     /// backing model and re-expands the tree.
     required property var matchJson
+    /// Composite app-settings surface (screens + activities), threaded down
+    /// from `WindowRulesPage`. Used by `_valueLabel` to resolve screen-id /
+    /// activity-uuid leaves to the same friendly labels the leaf editor
+    /// shows. Optional — when null, screen/activity leaves fall back to the
+    /// raw wire value (still better than nothing, mirrors the editor's own
+    /// dangling-pin fallback).
+    property var appSettings: null
 
     /// Wire→label resolver for a field. Returns the wire string unchanged
     /// when the field is unknown (e.g. a forward-compat rule referencing a
@@ -75,6 +82,59 @@ ColumnLayout {
 
         }
         return opWire;
+    }
+
+    /// Wire→valueKind helper for `_valueLabel`. Returns the controller-side
+    /// kind string ("string" / "number" / "bool" / "screen" / "activity") or
+    /// "string" for unknown fields — the safest default since `String(value)`
+    /// is what a plain-string render would do anyway.
+    function _valueKind(wire) {
+        for (var i = 0; i < root.matchFieldOptions.length; ++i) {
+            if (root.matchFieldOptions[i].wire === wire)
+                return root.matchFieldOptions[i].valueKind || "string";
+
+        }
+        return "string";
+    }
+
+    /// Localize a leaf's value for display, mirroring `MatchLeafEditor`'s
+    /// per-kind editors so the read-only preview agrees with the editor:
+    ///   - bool → "True" / "False" (i18n'd)
+    ///   - screen → `appSettings.screens.displayLabel` for the matching name
+    ///   - activity → `appSettings.activities.name` for the matching id
+    ///   - everything else (string, number) → `String(value)`
+    /// Falls back to the raw wire value when a lookup misses (e.g. the
+    /// rule references an unplugged monitor or removed activity), matching
+    /// the editor's dangling-pin fallback.
+    function _valueLabel(value, fieldWire) {
+        if (value === undefined || value === null)
+            return "";
+
+        var kind = root._valueKind(fieldWire);
+        if (kind === "bool")
+            return value === true || value === "true" ? i18n("True") : i18n("False");
+
+        if (kind === "screen" && root.appSettings) {
+            var screens = root.appSettings.screens;
+            if (screens) {
+                for (var i = 0; i < screens.length; ++i) {
+                    if (screens[i].name === value)
+                        return screens[i].displayLabel || String(value);
+
+                }
+            }
+        }
+        if (kind === "activity" && root.appSettings) {
+            var activities = root.appSettings.activities;
+            if (activities) {
+                for (var j = 0; j < activities.length; ++j) {
+                    if (activities[j].id === value)
+                        return activities[j].name || String(value);
+
+                }
+            }
+        }
+        return String(value);
     }
 
     spacing: 0
@@ -455,7 +515,7 @@ ColumnLayout {
                             id: valueLabel
 
                             anchors.centerIn: parent
-                            text: delegate.value !== undefined ? String(delegate.value) : ""
+                            text: root._valueLabel(delegate.value, delegate.fieldWire)
                             font.family: Kirigami.Theme.smallFont.family
                         }
 

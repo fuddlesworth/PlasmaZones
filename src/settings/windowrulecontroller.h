@@ -64,8 +64,11 @@ public:
     /// Wire the screen-id / activity-uuid / layout-id → display-name lookups
     /// used by the model's `matchSummary` and by the controller's own
     /// `monitorOverview` summary. The lookups capture the SettingsController
-    /// snapshot lists by reference; the parent re-invokes these setters when
-    /// the underlying data changes so the resolved strings stay fresh.
+    /// snapshot lists by reference, so they resolve against the live snapshot
+    /// every call. Install-once: when the underlying snapshot lists update,
+    /// the parent calls `WindowRuleModel::refreshLabels()` on the model to
+    /// invalidate the cached label cells — re-installing the lookups would
+    /// just churn the closures without changing behaviour.
     void setScreenLookup(WindowRuleModel::LabelLookup fn);
     void setActivityLookup(WindowRuleModel::LabelLookup fn);
     void setLayoutLookup(WindowRuleModel::LabelLookup fn);
@@ -282,6 +285,14 @@ Q_SIGNALS:
     /// QML observers know when the initial load (or a daemon-broadcast
     /// reload) has completed.
     void rulesLoaded();
+    /// Emitted on the async reply path that resolves a user-driven `revert()`
+    /// call (Discard). `success` is true iff the re-fetch landed and the
+    /// staged edits were dropped; false on a D-Bus / daemon error, in which
+    /// case the staged edits are intentionally preserved (the page stays
+    /// dirty). `SettingsController::load()` listens once so it can re-add the
+    /// "window-rules" entry to its dirty-pages set when revert failed during
+    /// the `setNeedsSave(false)` blanket-clear it does for every other page.
+    void revertFinished(bool success);
 
 private:
     void setDirty(bool dirty);
@@ -312,6 +323,14 @@ private:
     bool m_dirty = false;
     bool m_daemonReachable = false;
     bool m_daemonChangedWhileDirty = false;
+    /// Counts in-flight `fetchAndLoad()` calls that originated from a
+    /// `revert()` (Discard). Tracked separately from the initial / broadcast
+    /// fetch flow so the reply handler can emit `revertFinished(success)` only
+    /// when the caller is actually a revert — a stray daemon broadcast that
+    /// arrives concurrently with a revert must not spoof the signal. Counter
+    /// (not a bool) tolerates user-mashing Discard repeatedly: every revert
+    /// reply emits exactly once.
+    int m_pendingRevertFetches = 0;
     /// Resolves a layoutId to the layout's display name. Used by
     /// `monitorOverview` to turn the raw UUID in `SetSnappingLayout` /
     /// `SetTilingAlgorithm` params into the friendly layout/algorithm name.

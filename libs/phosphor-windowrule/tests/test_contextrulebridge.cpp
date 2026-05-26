@@ -344,6 +344,96 @@ private Q_SLOTS:
         rule.actions.first().params.insert(QLatin1String("mode"), QLatin1String("bogus"));
         QVERIFY(!CRB::disableRuleAutotileMode(rule).has_value());
     }
+
+    // ─── assignmentRuleIdFor / disableRuleIdFor ───────────────────────────
+
+    /// Pins the deterministic id contract: the id `assignmentRuleIdFor` /
+    /// `disableRuleIdFor` derive must agree byte-for-byte with the id the
+    /// `make*Rule` factories stamp into a freshly-built rule. Callers that
+    /// look up the existing rule by tuple via these helpers depend on the
+    /// equality holding across catch-all, exact-pin, and the disable-engine
+    /// variant — break it and `WindowRuleSet::ruleById` silently misses on
+    /// known-existing rules.
+    void testAssignmentAndDisableRuleIdsMatchFactoryIds()
+    {
+        // makeAssignmentRule's id IS assignmentRuleIdFor's id — every tuple
+        // axis covered (Monitor, Combined) so a regression in the id helper
+        // can't slip in on a single-dimension lookup. The provider default is
+        // a separate family ("provider-default"), so it intentionally is NOT
+        // included here — that's covered by makeProviderDefaultRule_isCatchAllAtZero.
+        const WindowRule monitorOnly =
+            CRB::makeAssignmentRule(QStringLiteral("Monitor"), QStringLiteral("DP-1"), 0, QString(),
+                                    /*autotile=*/false, QStringLiteral("layout-a"), QString());
+        QCOMPARE(monitorOnly.id, CRB::assignmentRuleIdFor(QStringLiteral("DP-1"), 0, QString()));
+
+        const WindowRule exact =
+            CRB::makeAssignmentRule(QStringLiteral("Exact"), QStringLiteral("DP-1"), 2, QStringLiteral("act-x"),
+                                    /*autotile=*/true, QString(), QStringLiteral("algo-b"));
+        QCOMPARE(exact.id, CRB::assignmentRuleIdFor(QStringLiteral("DP-1"), 2, QStringLiteral("act-x")));
+
+        // Disable rule — the helper must carry the autotileMode bit so the
+        // snapping- and autotile-disable rules for the same tuple stay distinct.
+        const WindowRule disable =
+            CRB::makeDisableRule(QStringLiteral("D"), QStringLiteral("DP-1"), 2, QString(), /*autotile=*/true);
+        QCOMPARE(disable.id, CRB::disableRuleIdFor(QStringLiteral("DP-1"), 2, QString(), /*autotileMode=*/true));
+        // And the snapping-disable for the same tuple is a different id —
+        // documents the autotileMode contribution to the v5 key.
+        QVERIFY(CRB::disableRuleIdFor(QStringLiteral("DP-1"), 2, QString(), true)
+                != CRB::disableRuleIdFor(QStringLiteral("DP-1"), 2, QString(), false));
+    }
+
+    // ─── contextAxisOf ────────────────────────────────────────────────────
+
+    /// The tuple-classifier branches end-to-end. Mirrors `contextPriority`'s
+    /// pinned-dimensions formula — a missed branch here would let the daemon
+    /// route a desktop-pinned rule into the activity band (or vice versa).
+    void testContextAxisOf_allBranches()
+    {
+        QCOMPARE(CRB::contextAxisOf(QString(), 0, QString()), CRB::ContextAxis::CatchAll);
+        // Empty screen id collapses everything to CatchAll regardless of
+        // other dimensions — documents the empty-screenId pre-empt at the
+        // top of the function.
+        QCOMPARE(CRB::contextAxisOf(QString(), 5, QStringLiteral("a")), CRB::ContextAxis::CatchAll);
+
+        QCOMPARE(CRB::contextAxisOf(QStringLiteral("DP-1"), 0, QString()), CRB::ContextAxis::Monitor);
+        QCOMPARE(CRB::contextAxisOf(QStringLiteral("DP-1"), 3, QString()), CRB::ContextAxis::Desktop);
+        QCOMPARE(CRB::contextAxisOf(QStringLiteral("DP-1"), 0, QStringLiteral("act-x")), CRB::ContextAxis::Activity);
+        QCOMPARE(CRB::contextAxisOf(QStringLiteral("DP-1"), 3, QStringLiteral("act-x")), CRB::ContextAxis::Combined);
+    }
+
+    // ─── matchIsExactContext* predicates ──────────────────────────────────
+
+    /// Per-axis classifiers — one positive and one negative per predicate.
+    /// The negatives use the *adjacent* axis (Desktop vs Monitor, Activity vs
+    /// Desktop, Combined vs Activity) so a regression that off-by-one's the
+    /// switch is caught instead of falling into a "wrong axis but still
+    /// kinda close" bucket.
+    void testMatchIsExactContextPredicates()
+    {
+        // matchIsExactContextBase — screen-only ⇒ true; screen+desktop ⇒ false.
+        const MatchExpression monitor = CRB::makeContextMatch(QStringLiteral("DP-1"), 0, QString());
+        const MatchExpression desktop = CRB::makeContextMatch(QStringLiteral("DP-1"), 3, QString());
+        QVERIFY(CRB::matchIsExactContextBase(monitor));
+        QVERIFY(!CRB::matchIsExactContextBase(desktop));
+
+        // matchIsExactContextDesktop — screen+desktop ⇒ true; monitor ⇒ false.
+        QVERIFY(CRB::matchIsExactContextDesktop(desktop));
+        QVERIFY(!CRB::matchIsExactContextDesktop(monitor));
+
+        // matchIsExactContextActivity — Activity AND Combined both ⇒ true.
+        // The historical per-activity family deliberately includes the exact-pin
+        // shape, so test BOTH axes positive.
+        const MatchExpression activity = CRB::makeContextMatch(QStringLiteral("DP-1"), 0, QStringLiteral("act-x"));
+        const MatchExpression combined = CRB::makeContextMatch(QStringLiteral("DP-1"), 3, QStringLiteral("act-x"));
+        QVERIFY(CRB::matchIsExactContextActivity(activity));
+        QVERIFY(CRB::matchIsExactContextActivity(combined));
+        QVERIFY(!CRB::matchIsExactContextActivity(desktop));
+
+        // matchIsExactContext (parametric) — positive on the exact tuple,
+        // negative on a mismatched desktop number.
+        QVERIFY(CRB::matchIsExactContext(combined, QStringLiteral("DP-1"), 3, QStringLiteral("act-x")));
+        QVERIFY(!CRB::matchIsExactContext(combined, QStringLiteral("DP-1"), 4, QStringLiteral("act-x")));
+    }
 };
 
 QTEST_MAIN(TestContextRuleBridge)

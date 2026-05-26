@@ -478,9 +478,12 @@ Advanced, summaries), `test_window_rule_controller.cpp` (CRUD by **UUID**, `move
 
 - **Phase 1** ships the engine's unit suite *and* the cascade-fidelity oracle test up front.
 - Existing suites (`test_animationapprule*`, `test_layoutmanager_assignment`,
-  `test_settings_disable_per_mode`, `test_animations_app_rules`) are retained and become
-  **integration tests** / **parity proofs** over the new path — a legacy test still passing
-  is the parity guarantee.
+  `test_settings_disable_per_mode`) are retained and become **integration tests** /
+  **parity proofs** over the new path — a legacy test still passing is the parity
+  guarantee. `test_animations_app_rules` was retired during the refactor and replaced
+  by `test_window_rule_controller` + `test_window_rule_model` (the settings page now
+  owns rule authoring through the unified controller, so the legacy bridge test was
+  superseded).
 - Every phase adds its own unit tests; net-new coverage where none existed (effect window
   filtering, the rule evaluator, the migration).
 - `ctest` must be green and the build must succeed before each phase is committed

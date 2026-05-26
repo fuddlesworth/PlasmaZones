@@ -183,6 +183,13 @@ void WindowRuleController::fetchAndLoad()
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         QDBusPendingReply<QString> reply = *w;
+        // Tag this reply as resolving a pending revert (or not). Decremented
+        // *before* emitting so a chained revert→revertFinished→commit handler
+        // sees the counter at the correct value.
+        const bool fromRevert = m_pendingRevertFetches > 0;
+        if (fromRevert) {
+            --m_pendingRevertFetches;
+        }
         if (reply.isError()) {
             // Daemon unreachable or method missing — leave the model and the
             // dirty bit untouched so a staged-but-unsavable edit isn't silently
@@ -191,6 +198,9 @@ void WindowRuleController::fetchAndLoad()
             qCWarning(lcConfig) << "WindowRuleController::fetchAndLoad: getAllRules failed —"
                                 << reply.error().message();
             setDaemonReachable(false);
+            if (fromRevert) {
+                Q_EMIT revertFinished(false);
+            }
             return;
         }
         setDaemonReachable(true);
@@ -210,6 +220,9 @@ void WindowRuleController::fetchAndLoad()
         setDirty(false);
         setDaemonChangedWhileDirty(false);
         Q_EMIT rulesLoaded();
+        if (fromRevert) {
+            Q_EMIT revertFinished(true);
+        }
     });
 }
 
@@ -261,6 +274,12 @@ void WindowRuleController::revert()
     // handler clears the dirty bit only on success. A failed re-fetch keeps
     // the page dirty (and `daemonReachable` false) rather than silently
     // dropping the staged edits.
+    //
+    // Tag this fetch so the reply handler can emit `revertFinished(success)`.
+    // SettingsController::load() listens once so it can re-add the
+    // "window-rules" entry to the dirty-pages set on a failed revert (its
+    // surrounding setNeedsSave(false) blanket-clears every page unconditionally).
+    ++m_pendingRevertFetches;
     fetchAndLoad();
 }
 

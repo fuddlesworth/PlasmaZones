@@ -284,17 +284,24 @@ private Q_SLOTS:
 
         QVERIFY(store.addRule(makeRule(QStringLiteral("DP-1"))));
         QCOMPARE(spy.count(), 1);
+        // Successful mutations emit rulesChanged(persisted=true). Catching the
+        // bool here pins the Pass-1 signal-signature change so a future
+        // regression that drops the argument doesn't silently break the
+        // effect's persistence-aware refetch debounce.
+        QCOMPARE(spy.takeFirst().at(0).toBool(), true);
 
         const QUuid firstId = store.ruleSet().rules().first().id;
         QVERIFY(store.setRuleEnabled(firstId, false));
-        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.takeFirst().at(0).toBool(), true);
 
         // No-op enabled change does not emit.
         QVERIFY(store.setRuleEnabled(firstId, false));
-        QCOMPARE(spy.count(), 2);
+        QCOMPARE(spy.count(), 0);
 
         QVERIFY(store.removeRule(firstId));
-        QCOMPARE(spy.count(), 3);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.takeFirst().at(0).toBool(), true);
     }
 };
 

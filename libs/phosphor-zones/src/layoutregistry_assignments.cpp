@@ -126,6 +126,12 @@ const PhosphorWindowRule::WindowRule* LayoutRegistry::findExactContextRule(const
     // old scan called matchIsExactContext on EVERY rule's match expression;
     // this scan compares ids first and only evaluates the context-shape
     // predicate on the unique candidate.
+    //
+    // O(N) intentional: a hash lookup would need WindowRuleSet to expose a
+    // pointer-returning accessor into its in-set storage with a documented
+    // dangle-on-setRules contract — too sharp an edge for the win at the
+    // rule counts we care about (<= ~1000 rules per profile). Revisit only
+    // if rule counts grow well into the thousands.
     const QUuid candidateId = PWR::ContextRuleBridge::assignmentRuleIdFor(screenId, virtualDesktop, activity);
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
         if (rule.id != candidateId) {

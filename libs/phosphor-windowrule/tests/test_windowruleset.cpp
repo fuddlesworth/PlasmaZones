@@ -70,6 +70,28 @@ private Q_SLOTS:
         QCOMPARE(set.revision(), rev);
     }
 
+    /// setRules() is intentionally pessimistic: a setRules(currentList) call
+    /// that produces a structurally identical post-validation list still
+    /// bumps the revision. The cache-invalidation pessimization is the
+    /// header-documented contract — the round-trip
+    /// `addRule(X)` → `setRules(originalList)` would otherwise let a stale
+    /// downstream cache survive a real edit. Pinning the bump here protects
+    /// the contract from a future "optimization" that skips the bump on
+    /// equality.
+    void testSetRulesAlwaysBumpsEvenOnIdenticalList()
+    {
+        WindowRuleSet set;
+        const WindowRule r = simpleRule(QStringLiteral("a"));
+        QVERIFY(set.addRule(r));
+        const quint64 rev = set.revision();
+
+        // setRules with the exact same list still bumps.
+        const QList<WindowRule> snapshot = set.rules();
+        const int accepted = set.setRules(snapshot);
+        QCOMPARE(accepted, 1);
+        QVERIFY2(set.revision() > rev, "setRules must bump even when the post-validation list is identical");
+    }
+
     // ── CRUD ──
 
     void testAddAndQuery()

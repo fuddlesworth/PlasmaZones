@@ -391,10 +391,13 @@ public:
     /// Current entry count in the @ref resolveAssignmentEntry hot-path cache.
     /// Used by tests to verify the cache populates and invalidates against
     /// rule-set revision bumps. Not for production callers — the value
-    /// drifts as cursor-move resolves come in.
-    [[nodiscard]] qsizetype contextResolveCacheSize() const
+    /// drifts as cursor-move resolves come in. Return type is `int` because
+    /// the cache is bounded at 256 entries (kContextResolveCacheLimit), well
+    /// within `int` range — keeps test assertions free of the `qsizetype`
+    /// `int` widening dance.
+    [[nodiscard]] int contextResolveCacheSize() const
     {
-        return m_contextResolveCache.size();
+        return static_cast<int>(m_contextResolveCache.size());
     }
 
 Q_SIGNALS:

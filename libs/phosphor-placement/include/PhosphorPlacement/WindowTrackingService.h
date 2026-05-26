@@ -87,21 +87,11 @@ public:
                                    IGeometryResolver* geometryResolver = nullptr, PlacementConfig config = {},
                                    QObject* parent = nullptr);
 
-    /// Set the placement config. Contract: this is called exactly ONCE at
-    /// wiring time and never afterwards. Consumers that observe
-    /// `m_config` directly (no notify signal) rely on the assumption that
-    /// the config is frozen post-wiring; reassigning it later would
-    /// silently desynchronise their cached values. A debug-build assert
-    /// catches a re-set in tests; release-build re-sets are silently
-    /// allowed but discouraged.
-    void setConfig(const PlacementConfig& config)
-    {
-        Q_ASSERT_X(!m_configFrozen, "WindowTrackingService::setConfig",
-                   "setConfig is contractually a once-only wiring-time call; "
-                   "re-assigning silently desynchronises observers that cache m_config");
-        m_config = config;
-        m_configFrozen = true;
-    }
+    /// The placement config installed at construction. Read-only after wiring:
+    /// the constructor is the sole entry point. Consumers that observe
+    /// `m_config` directly (no notify signal) rely on it being frozen
+    /// post-construction; reassigning it later would silently desynchronise
+    /// their cached values, which is why no setter is exposed.
     const PlacementConfig& config() const
     {
         return m_config;
@@ -976,9 +966,6 @@ private:
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;
-    /// Latches once @ref setConfig is called. The setter's debug-build
-    /// assert reads this — see the setter docs for the contract rationale.
-    bool m_configFrozen = false;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     // Shared registry for current-class queries and canonical key translation.
     // Not owned. Null in unit tests.

@@ -80,7 +80,8 @@ public:
     /// cache survive a real edit. Returns the accepted count.
     int setRules(const QList<WindowRule>& rules);
 
-    /// Drop every rule. Bumps the revision.
+    /// Drop every rule. Bumps the revision iff the set was non-empty (a no-op
+    /// clear does not bump).
     void clear();
 
     // ── Serialization ──
