@@ -1,16 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTheme/MatugenRunner.h>
 
 #include <QColor>
+#include <QSignalSpy>
 #include <QTest>
 #include <QVariantMap>
 
 using namespace PhosphorTheme;
 
 // Matugen integration is exercised via parseMatugenJson with prebaked
-// JSON fixtures. We do NOT spawn matugen in tests — that would either
+// JSON fixtures. We do NOT spawn matugen in tests, that would either
 // require matugen on PATH (CI flake) or a mock binary (more code than
 // the parser itself).
 
@@ -26,6 +27,9 @@ private Q_SLOTS:
     void parse_ignoresNonStringValues();
     void parse_handlesV4PerTokenNesting();
     void parse_v4FallsBackToDefaultWhenModeMissing();
+    void run_emitsFailedOnMissingWallpaper();
+    void cancel_onIdleRunnerIsNoOp();
+    void setters_onlyEmitOnChange();
 };
 
 void TestMatugenRunner::parse_handlesWrappedDarkLight()
@@ -121,6 +125,53 @@ void TestMatugenRunner::parse_v4FallsBackToDefaultWhenModeMissing()
     })";
     const auto m = r.parseMatugenJson(payload, QStringLiteral("dark"));
     QCOMPARE(m.value(QStringLiteral("primary")).value<QColor>(), QColor("#445566"));
+}
+
+void TestMatugenRunner::run_emitsFailedOnMissingWallpaper()
+{
+    // Path-validation runs synchronously before spawning matugen, so
+    // this test doesn't depend on the binary being installed.
+    MatugenRunner r;
+    QSignalSpy failedSpy(&r, &MatugenRunner::failed);
+    r.run(QStringLiteral("/definitely/does/not/exist.jpg"));
+    QCOMPARE(failedSpy.count(), 1);
+    QCOMPARE(failedSpy.first().at(0).toString(), QStringLiteral("/definitely/does/not/exist.jpg"));
+    QVERIFY(!r.isRunning());
+}
+
+void TestMatugenRunner::cancel_onIdleRunnerIsNoOp()
+{
+    // cancel() on an idle runner must not spuriously emit
+    // runningChanged. Spurious signals would invalidate UI busy
+    // indicators bound to the property.
+    MatugenRunner r;
+    QSignalSpy runSpy(&r, &MatugenRunner::runningChanged);
+    r.cancel();
+    QCOMPARE(runSpy.count(), 0);
+}
+
+void TestMatugenRunner::setters_onlyEmitOnChange()
+{
+    MatugenRunner r;
+    QSignalSpy binSpy(&r, &MatugenRunner::matugenBinaryChanged);
+    QSignalSpy modeSpy(&r, &MatugenRunner::modeChanged);
+    QSignalSpy prefSpy(&r, &MatugenRunner::preferChanged);
+
+    // Same value is a no-op (CLAUDE.md "only emit signals when value
+    // actually changes").
+    r.setMatugenBinary(r.matugenBinary());
+    r.setMode(r.mode());
+    r.setPrefer(r.prefer());
+    QCOMPARE(binSpy.count(), 0);
+    QCOMPARE(modeSpy.count(), 0);
+    QCOMPARE(prefSpy.count(), 0);
+
+    r.setMatugenBinary(QStringLiteral("/usr/local/bin/matugen"));
+    r.setMode(QStringLiteral("light"));
+    r.setPrefer(QStringLiteral("darkness"));
+    QCOMPARE(binSpy.count(), 1);
+    QCOMPARE(modeSpy.count(), 1);
+    QCOMPARE(prefSpy.count(), 1);
 }
 
 QTEST_MAIN(TestMatugenRunner)

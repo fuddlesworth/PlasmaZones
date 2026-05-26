@@ -23,18 +23,38 @@ PaletteStore::PaletteStore(QObject* parent)
     , m_palette(detail::defaultDarkPalette())
     , m_watcher(std::make_unique<QFileSystemWatcher>(this))
 {
-    // Some editors (vim/emacs default save flow) atomically replace the
-    // file: write to a temp + rename, which fires `fileChanged` once and
-    // then the watch is gone because the inode it tracked has been
-    // unlinked. Re-arm via the directory watch as a fallback so the next
-    // save still hot-reloads.
+    // Two events drive a reload:
+    //
+    //   fileChanged       Editor writes in place (truncate + rewrite). The
+    //                     watch survives because the inode is the same;
+    //                     just re-read.
+    //
+    //   directoryChanged  Editor atomically replaces the file via
+    //                     temp-file + rename (vim's default, emacs's
+    //                     backup-by-rename, our own writeAtomic via
+    //                     QSaveFile). The unlink + create cycle drops the
+    //                     fileChanged watch silently because its tracked
+    //                     inode is gone. The directory watch fires AFTER
+    //                     the new inode appears, at which point we can
+    //                     re-arm the file watch and reload.
+    //
+    // Watching just the file path is therefore not sufficient on its own;
+    // we always pair it with a parent-directory watch.
     connect(m_watcher.get(), &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
         reloadFromCurrentPath();
-        // Re-add the path — after atomic-rename saves the watch
-        // pointed at a now-deleted inode. QFileSystemWatcher
-        // silently drops it; addPath rebinds to the new inode.
         if (QFileInfo::exists(path) && !m_watcher->files().contains(path)) {
             m_watcher->addPath(path);
+        }
+    });
+    connect(m_watcher.get(), &QFileSystemWatcher::directoryChanged, this, [this](const QString&) {
+        if (m_sourcePath.isEmpty()) {
+            return;
+        }
+        if (QFileInfo::exists(m_sourcePath)) {
+            if (!m_watcher->files().contains(m_sourcePath)) {
+                m_watcher->addPath(m_sourcePath);
+            }
+            reloadFromCurrentPath();
         }
     });
 }
@@ -65,9 +85,9 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
     const auto root = doc.object();
 
     // Two accepted layouts:
-    //   1. `{ "tokens": { "primary": "#RRGGBB", ... } }` — full document with
+    //   1. `{ "tokens": { "primary": "#RRGGBB", ... } }`, full document with
     //      room for metadata alongside the tokens (matugen-style output).
-    //   2. `{ "primary": "#RRGGBB", ... }` — flat top-level map (hand-edited
+    //   2. `{ "primary": "#RRGGBB", ... }`, flat top-level map (hand-edited
     //      palette files where the wrapper feels like noise).
     // Layout 1 takes precedence if `tokens` is present.
     QJsonObject tokens;
@@ -116,8 +136,11 @@ bool PaletteStore::loadFromFile(const QString& path)
         return false;
     }
 
-    // Bind the watcher to this file. Replacing any previous watch means
-    // the store never accumulates stale paths across `loadFromFile` calls.
+    // Replace any previous watch so the store never accumulates stale
+    // paths across `loadFromFile` calls. Pair the file watch with a
+    // parent-directory watch so atomic-rename saves still trigger a
+    // reload after the unlink + create cycle drops the file watch
+    // (see the constructor's directoryChanged handler).
     if (!m_watcher->files().isEmpty()) {
         m_watcher->removePaths(m_watcher->files());
     }
@@ -125,6 +148,10 @@ bool PaletteStore::loadFromFile(const QString& path)
         m_watcher->removePaths(m_watcher->directories());
     }
     m_watcher->addPath(path);
+    const QString parentDir = QFileInfo(path).absolutePath();
+    if (!parentDir.isEmpty()) {
+        m_watcher->addPath(parentDir);
+    }
 
     if (m_sourcePath != path) {
         m_sourcePath = path;
@@ -160,16 +187,33 @@ QString PaletteStore::sourcePath() const
 
 void PaletteStore::applyPalette(const QVariantMap& tokens)
 {
-    // Merge over the current palette — tokens absent from the new payload
+    // Merge over the current palette: tokens absent from the new payload
     // keep their previous value. This is the documented behaviour from
     // IThemeService::loadFromJson: missing tokens don't fall back to the
     // built-in default, because mid-session theme edits should preserve
     // any manual overrides the user had layered on top.
+    //
+    // Normalise every incoming value to a QColor before storing. QML and
+    // matugen callers may hand us QString hex codes or QVariant(QColor);
+    // collapsing both into a single QColor representation means token()
+    // and palette[name] reads can rely on a uniform type. Values that
+    // don't convert are dropped: a non-color in the palette would corrupt
+    // downstream bindings worse than its absence.
     bool changed = false;
     for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
+        QColor c;
+        if (it.value().userType() == QMetaType::QColor) {
+            c = it.value().value<QColor>();
+        } else if (it.value().canConvert<QString>()) {
+            c = QColor(it.value().toString());
+        }
+        if (!c.isValid()) {
+            continue;
+        }
+        const QVariant normalised = QVariant::fromValue(c);
         const auto existing = m_palette.constFind(it.key());
-        if (existing == m_palette.constEnd() || existing.value() != it.value()) {
-            m_palette.insert(it.key(), it.value());
+        if (existing == m_palette.constEnd() || existing.value() != normalised) {
+            m_palette.insert(it.key(), normalised);
             changed = true;
         }
     }

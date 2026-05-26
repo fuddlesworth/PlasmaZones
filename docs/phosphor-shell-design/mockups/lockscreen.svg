@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
   <defs>
     <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
@@ -145,7 +147,7 @@
     <g transform="translate(980 80)">
       <rect width="260" height="76" rx="8" fill="#070F22" stroke="#3B82F6" opacity=".94"/>
       <text x="14" y="22" font-weight="600" fill="#3B82F6">PAM auth</text>
-      <text x="14" y="38" fill="#94A3B8">phosphor‑service‑lock owns the</text>
+      <text x="14" y="38" fill="#94A3B8">phosphor‑lock owns the</text>
       <text x="14" y="52" fill="#94A3B8">PAM context; LockAuthField is a</text>
       <text x="14" y="66" fill="#94A3B8">pure view binding to it.</text>
     </g>

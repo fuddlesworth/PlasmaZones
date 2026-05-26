@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
-// One token card — color swatch + token name + hex.
+// One token card, color swatch + token name + hex.
 
 import Phosphor.Theme
 import QtQuick
@@ -12,7 +12,7 @@ Rectangle {
     required property string tokenName
     required property color tokenColor
 
-    // implicit, not fixed — the parent GridLayout stretches us with
+    // implicit, not fixed, the parent GridLayout stretches us with
     // Layout.fillWidth so columns share the row evenly. 220 is the
     // intrinsic minimum that still fits the longest token name without
     // eliding.

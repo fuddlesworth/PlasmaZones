@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTheme/PaletteStore.h>
 
@@ -25,13 +25,16 @@ private Q_SLOTS:
     void loadFromFile_persistsSourcePath();
     void loadFromFile_emitsErrorOnMissingFile();
     void applyTokens_emptyIsNoOp();
+    void applyTokens_normalisesStringHexToColor();
     void resetToDefaults_clearsSourcePath();
+    void hotReload_picksUpInPlaceEdit();
+    void hotReload_picksUpAtomicRename();
 };
 
 void TestPaletteStore::defaults_loadsCanonicalPhosphorTokens()
 {
     PaletteStore s;
-    // Spot-check the canonical defaults — these are the load-bearing
+    // Spot-check the canonical defaults, these are the load-bearing
     // values the rest of the shell will reference until matugen runs.
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
     QCOMPARE(s.token(QStringLiteral("background")), QColor("#050916"));
@@ -121,6 +124,27 @@ void TestPaletteStore::applyTokens_emptyIsNoOp()
     QCOMPARE(spy.count(), 0);
 }
 
+void TestPaletteStore::applyTokens_normalisesStringHexToColor()
+{
+    // QML and matugen callers may hand us hex strings rather than QColor
+    // values. applyPalette must normalise so token() returns a usable
+    // QColor regardless of the original variant type.
+    PaletteStore s;
+    QVariantMap tokens;
+    tokens.insert(QStringLiteral("primary"), QStringLiteral("#112233"));
+    s.applyTokens(tokens);
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
+
+    // Non-color, non-convertible values are dropped rather than
+    // corrupting the palette.
+    QVariantMap junk;
+    junk.insert(QStringLiteral("on_primary"), QVariant::fromValue(42));
+    QSignalSpy spy(&s, &PaletteStore::paletteChanged);
+    s.applyTokens(junk);
+    QCOMPARE(spy.count(), 0);
+    QCOMPARE(s.token(QStringLiteral("on_primary")), QColor("#F0F9FF")); // default unchanged
+}
+
 void TestPaletteStore::resetToDefaults_clearsSourcePath()
 {
     QTemporaryDir tmp;
@@ -139,10 +163,74 @@ void TestPaletteStore::resetToDefaults_clearsSourcePath()
     s.resetToDefaults();
     QCOMPARE(s.sourcePath(), QString());
     QCOMPARE(pathSpy.count(), 1);
-    // The defaults differ from the just-loaded palette, so paletteChanged
-    // fires once for the reset.
-    QVERIFY(palSpy.count() >= 1);
+    QCOMPARE(palSpy.count(), 1);
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
+}
+
+void TestPaletteStore::hotReload_picksUpInPlaceEdit()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath(QStringLiteral("p.json"));
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": {"primary": "#112233"}})");
+    }
+
+    PaletteStore s;
+    QVERIFY(s.loadFromFile(path));
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
+
+    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
+
+    // Edit in place (truncate + rewrite, the same syscall pattern most
+    // editors use when configured for in-place save).
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(R"({"tokens": {"primary": "#445566"}})");
+    }
+
+    // QFileSystemWatcher is asynchronous: pump the event loop until it
+    // fires or the deadline expires. 5s ceiling matches sibling tests.
+    QVERIFY(palSpy.wait(5000));
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#445566"));
+}
+
+void TestPaletteStore::hotReload_picksUpAtomicRename()
+{
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath(QStringLiteral("p.json"));
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": {"primary": "#112233"}})");
+    }
+
+    PaletteStore s;
+    QVERIFY(s.loadFromFile(path));
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
+
+    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
+
+    // Simulate vim's default save flow: write to a temp file, then
+    // rename(2) over the destination. This unlinks the watched inode
+    // and creates a new one, which drops QFileSystemWatcher's file
+    // watch silently. The parent-directory watch armed in the ctor
+    // is what catches the rename and re-arms the file watch.
+    const QString tmpFile = path + QStringLiteral(".tmp");
+    {
+        QFile f(tmpFile);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": {"primary": "#445566"}})");
+    }
+    QVERIFY(QFile::remove(path));
+    QVERIFY(QFile::rename(tmpFile, path));
+
+    QVERIFY(palSpy.wait(5000));
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#445566"));
 }
 
 QTEST_MAIN(TestPaletteStore)

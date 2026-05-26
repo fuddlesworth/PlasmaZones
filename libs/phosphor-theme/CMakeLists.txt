@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorTheme — design-token store + QML theme module for Phosphor shells.
+# PhosphorTheme, design-token store + QML theme module for Phosphor shells.
 #
 # Holds the active M3 token palette, watches the on-disk JSON palette for
 # hot-reload, and exposes everything to QML as a `Phosphor.Theme` import
@@ -29,8 +29,10 @@ include(GenerateExportHeader)
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
 # Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
-# module resource prefix.
-if(POLICY CMP0090 OR COMMAND qt_policy)
+# module resource prefix. The `qt_policy` command is what we actually
+# need; it's available on every Qt CMake build new enough to publish
+# the QTP0001 policy.
+if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
 endif()
 
@@ -75,11 +77,6 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
 endif()
 
-if(NOT DEFINED KDE_INSTALL_QMLDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_QMLDIR ${CMAKE_INSTALL_LIBDIR}/qt6/qml)
-endif()
-
 target_include_directories(PhosphorTheme
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -115,14 +112,14 @@ set_target_properties(PhosphorTheme PROPERTIES
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# QML module — STATIC (in-tree linkable)
+# QML module, STATIC (in-tree linkable)
 # ═══════════════════════════════════════════════════════════════════════════════
 #
 # C++ side: PaletteStore is registered as a QML singleton so QML files can
 # `import Phosphor.Theme` and reference it. The four QML-file singletons
 # (Theme / Tokens / Motion / StateLayer) live alongside.
 #
-# QML singletons are *not* process-global statics — Qt instantiates one per
+# QML singletons are *not* process-global statics, Qt instantiates one per
 # QQmlEngine. Each shell process gets exactly one engine, so there's one
 # PaletteStore per shell, which is what we want. The `IThemeService` interface
 # in the header is the seam for tests and alternate implementations to swap
@@ -137,7 +134,7 @@ set(_phosphor_theme_qml_singletons
 
 # qt_add_qml_module's default resource layout nests each QML_FILES entry
 # under the module's URI path, then UNDER the file's source-relative
-# path — so `qml/Phosphor/Theme/Theme.qml` becomes
+# path, so `qml/Phosphor/Theme/Theme.qml` becomes
 # `qrc:/qt/qml/Phosphor/Theme/qml/Phosphor/Theme/Theme.qml`. The doubled
 # path causes the engine to fail to resolve singletons declared in the
 # same module ("PaletteStore is not defined" inside Theme.qml). Pin

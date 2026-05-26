@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
   <defs>
     <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
@@ -117,8 +119,8 @@
     <g transform="translate(980 240)">
       <rect width="260" height="76" rx="8" fill="#070F22" stroke="#22D3EE" opacity=".96"/>
       <text x="14" y="22" font-weight="600" fill="#22D3EE">Backed by logind</text>
-      <text x="14" y="38" fill="#94A3B8">phosphor‑service‑session wraps</text>
-      <text x="14" y="52" fill="#94A3B8">org.freedesktop.login1 — no shelling</text>
+      <text x="14" y="38" fill="#94A3B8">phosphor‑session wraps</text>
+      <text x="14" y="52" fill="#94A3B8">org.freedesktop.login1, no shelling</text>
       <text x="14" y="66" fill="#94A3B8">out to systemctl.</text>
     </g>
     <g transform="translate(980 340)">
@@ -131,7 +133,7 @@
   </g>
 
   <text x="640" y="680" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
-    Phosphor — Power / session menu (default theme)
+    Phosphor, Power / session menu (default theme)
   </text>
   <text x="640" y="698" text-anchor="middle" fill="#94A3B8" font-size="9" opacity=".7">
     Theme: phosphor‑works.github.io/palette

@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Canonical Phosphor default palette — dark variant.
+// Canonical Phosphor default palette, dark variant.
 //
 // Source: data/palettes/phosphor.toml (CC-BY-SA 4.0), published at
 // https://phosphor-works.github.io/palette/. Material 3 + ANSI 16 +
 // brand-gradient extensions on deep navy.
 //
-// This must compile without runtime dependencies — it's the bootstrap
+// This must compile without runtime dependencies, it's the bootstrap
 // the shell falls back to when no palette JSON is on disk.
 
 #include "defaultpalette.h"
@@ -23,7 +23,7 @@ QVariantMap defaultDarkPalette()
 {
     QVariantMap p;
 
-    // Surfaces — void → navy → abyss → variants. on_surface_variant is the
+    // Surfaces, void → navy → abyss → variants. on_surface_variant is the
     // muted text color used for chrome that shouldn't compete with content.
     p.insert(QLatin1String(TokenNames::Background), QColor(QLatin1String("#050916")));
     p.insert(QLatin1String(TokenNames::Surface), QColor(QLatin1String("#0B1730")));
@@ -54,12 +54,12 @@ QVariantMap defaultDarkPalette()
     p.insert(QLatin1String(TokenNames::OnError), QColor(QLatin1String("#FFF1F2")));
     p.insert(QLatin1String(TokenNames::ErrorContainer), QColor(QLatin1String("#881337")));
 
-    // Outline — blue against navy for active focus rings, dimmer
+    // Outline, blue against navy for active focus rings, dimmer
     // primary_container for inactive separators.
     p.insert(QLatin1String(TokenNames::Outline), QColor(QLatin1String("#3B82F6")));
     p.insert(QLatin1String(TokenNames::OutlineVariant), QColor(QLatin1String("#1E3A8A")));
 
-    // Status — ANSI 16 standard + bright variants.
+    // Status, ANSI 16 standard + bright variants.
     p.insert(QLatin1String(TokenNames::Success), QColor(QLatin1String("#10B981")));
     p.insert(QLatin1String(TokenNames::SuccessBright), QColor(QLatin1String("#34D399")));
     p.insert(QLatin1String(TokenNames::Warning), QColor(QLatin1String("#FBBF24")));
@@ -68,7 +68,7 @@ QVariantMap defaultDarkPalette()
     p.insert(QLatin1String(TokenNames::Info), QColor(QLatin1String("#22D3EE")));
     p.insert(QLatin1String(TokenNames::InfoBright), QColor(QLatin1String("#67E8F9")));
 
-    // Brand-gradient stops — cyan → blue → purple → rose, the signature
+    // Brand-gradient stops, cyan → blue → purple → rose, the signature
     // four-color sweep used on connected-corner accents and shader
     // backgrounds.
     p.insert(QLatin1String(TokenNames::BrandStop0), QColor(QLatin1String("#22D3EE")));

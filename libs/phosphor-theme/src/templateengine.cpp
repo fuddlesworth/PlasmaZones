@@ -21,24 +21,30 @@ namespace {
 // rendered string. Field defaults to "hex" (the most common case for
 // CSS / config files).
 //
-// Returned `ok` is false only when the token is unknown — in which case
+// Returned `ok` is false only when the token is unknown, in which case
 // the caller leaves the original `{{...}}` placeholder in place. An
 // unknown FIELD on a known token renders the default form rather than
 // failing loudly: a typo in a field name is less critical than a
 // missing color, and we don't want a renderer crash to break a save.
 QString renderToken(const QString& name, const QString& field, const QVariantMap& tokens, bool& ok)
 {
+    ok = false;
     const auto it = tokens.constFind(name);
     if (it == tokens.constEnd()) {
-        ok = false;
         return {};
     }
-    ok = true;
 
     const QColor c = it.value().value<QColor>();
     if (!c.isValid()) {
+        // Token is in the palette but its value isn't a valid color
+        // (PaletteStore::applyPalette normally normalises to QColor; if
+        // we still get here a custom IThemeService stored something
+        // odd). Leave the placeholder in place via ok=false so the
+        // template surfaces the problem instead of injecting an empty
+        // string the user has to debug.
         return {};
     }
+    ok = true;
 
     if (field.isEmpty() || field == QLatin1String("hex")) {
         return c.name(QColor::HexRgb).toUpper();
@@ -69,11 +75,11 @@ QString renderToken(const QString& name, const QString& field, const QVariantMap
             .arg(QString::number(c.alphaF(), 'f', 3));
     }
 
-    // Unknown field — degrade to the default hex form. Logged so the
+    // Unknown field: degrade to the default hex form. Logged so the
     // template author can spot the typo without the substitution
     // disappearing silently.
     qWarning().noquote() << "phosphor-theme: unknown template field" << field << "on token" << name
-                         << "— falling back to hex";
+                         << ", falling back to hex";
     return c.name(QColor::HexRgb).toUpper();
 }
 
@@ -105,7 +111,7 @@ QString TemplateEngine::render(const QString& templateSource, const QVariantMap&
         if (ok) {
             result.append(rendered);
         } else {
-            // Unknown token — keep the placeholder so the failure is
+            // Unknown token, keep the placeholder so the failure is
             // visible in the rendered output. Loud warning to stderr so
             // the user can spot rename mistakes.
             qWarning().noquote() << "phosphor-theme: unknown token in template:" << name;
@@ -121,7 +127,7 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
 {
     QFile in(templatePath);
     if (!in.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning().noquote() << "phosphor-theme: cannot open template" << templatePath << "—" << in.errorString();
+        qWarning().noquote() << "phosphor-theme: cannot open template" << templatePath << ", " << in.errorString();
         return false;
     }
     const auto src = QString::fromUtf8(in.readAll());
@@ -131,7 +137,7 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
 
     QFile out(outPath);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
-        qWarning().noquote() << "phosphor-theme: cannot write rendered output" << outPath << "—" << out.errorString();
+        qWarning().noquote() << "phosphor-theme: cannot write rendered output" << outPath << ", " << out.errorString();
         return false;
     }
     out.write(rendered.toUtf8());

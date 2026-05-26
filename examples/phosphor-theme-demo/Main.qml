@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
-// phosphor-theme-demo — swatch sheet.
+// phosphor-theme-demo, swatch sheet.
 // Renders every M3 token in the active palette as a labelled card.
 // The window background, text, and outline all bind through the Theme
-// singleton — so when PaletteStore reloads from disk, this whole
+// singleton, so when PaletteStore reloads from disk, this whole
 // view retints live without any manual refresh path.
 
 import Phosphor.Theme
@@ -29,20 +29,39 @@ ApplicationWindow {
     // Stays set across re-runs so the header shows what the active
     // matugen palette was derived from.
     property string wallpaperPath: ""
+    // Snapshot of the palette's sorted key list. Recomputing this on
+    // every paletteChanged would tear down and rebuild every Swatch
+    // delegate (the Repeater rebinds when model changes), destroying
+    // hover state and burning frames. The key set only changes when
+    // tokens are added/removed (rare, matugen never removes tokens
+    // thanks to PaletteStore's merge semantics), so a JSON-stringify
+    // comparison cheaply gates the assignment.
+    property var swatchKeys: []
 
+    function refreshSwatchKeys() {
+        const next = Object.keys(Theme.palette).sort();
+        if (JSON.stringify(next) !== JSON.stringify(swatchKeys))
+            swatchKeys = next;
+
+    }
+
+    Component.onCompleted: refreshSwatchKeys()
     width: 960
     height: 720
     visible: true
-    title: qsTr("Phosphor Theme — Swatch Sheet")
+    title: qsTr("Phosphor Theme, Swatch Sheet")
     color: Theme.background
 
     Connections {
         function onLoadError(path, reason) {
-            root.lastError = path + " — " + reason;
+            root.lastError = path + ": " + reason;
         }
 
         function onPaletteChanged() {
             root.lastError = "";
+            // Re-sync the swatch key list only if the set of keys
+            // actually changed (refreshSwatchKeys gates the assignment).
+            root.refreshSwatchKeys();
         }
 
         target: Theme.paletteStore
@@ -64,7 +83,7 @@ ApplicationWindow {
             // is technically correct (preserves user overrides) but
             // visibly wrong for a "use this wallpaper" UX: the gradient
             // strip would stay on the old colors. Synthesize the brand
-            // stops from M3 accents in display order — cyan ish → blue
+            // stops from M3 accents in display order, cyan ish → blue
             // → purple → rose, matching the canonical Phosphor stop
             // assignment in the default palette.
             const augmented = Object.assign({
@@ -87,7 +106,7 @@ ApplicationWindow {
             root.lastError = "";
         }
         onFailed: function(wp, reason) {
-            root.lastError = qsTr("matugen: %1 — %2").arg(wp).arg(reason);
+            root.lastError = qsTr("matugen: %1, %2").arg(wp).arg(reason);
         }
     }
 
@@ -98,17 +117,20 @@ ApplicationWindow {
         nameFilters: [qsTr("Images (*.png *.jpg *.jpeg *.webp *.bmp)"), qsTr("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
-            // QtQuick.Dialogs hands back a file:// QUrl. MatugenRunner.run
-            // wants a plain filesystem path.
-            const path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/"));
-            matugen.run(path);
+            // selectedFile is a QUrl. MatugenRunner.run has a QUrl
+            // overload that calls QUrl::toLocalFile internally so every
+            // legal file URL form resolves correctly (file:/path,
+            // file:///path, percent-encoded, etc.) and non-file URLs
+            // get rejected with a structured error instead of being
+            // string-munged with a brittle regex.
+            matugen.run(selectedFile);
         }
     }
 
     ColumnLayout {
         // ─── Swatch grid ─────────────────────────────────────────────────
         // Drives a Repeater off `Theme.palette` so adding tokens to the
-        // C++ default palette automatically expands the demo — no QML
+        // C++ default palette automatically expands the demo, no QML
         // changes needed when phosphor-theme gains a new token.
 
         anchors.fill: parent
@@ -259,7 +281,7 @@ ApplicationWindow {
         }
 
         // ─── Brand gradient strip ────────────────────────────────────────
-        // cyan → blue → purple → rose — the signature accent sweep. Sits
+        // cyan → blue → purple → rose, the signature accent sweep. Sits
         // above the grid so the canonical four stops are visible at a
         // glance.
         Rectangle {
@@ -316,9 +338,10 @@ ApplicationWindow {
                 columns: Math.max(1, Math.floor((width + columnSpacing) / (220 + columnSpacing)))
 
                 Repeater {
-                    // QVariantMap iteration order is alphabetical by key,
-                    // which is good enough for a flat reference card.
-                    model: Object.keys(Theme.palette).sort()
+                    // Bind to the cached key list (see root.swatchKeys)
+                    // so a wallpaper-driven retint changes swatch colors
+                    // in place rather than rebuilding the Repeater.
+                    model: root.swatchKeys
 
                     Swatch {
                         required property string modelData

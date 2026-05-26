@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// phosphor-theme-demo — entry point.
+// phosphor-theme-demo, entry point.
 //
 // Boots a QGuiApplication + QQmlApplicationEngine, points the
 // PaletteStore singleton at the default palette JSON path (if one
@@ -23,7 +23,7 @@
 namespace {
 
 // XDG-conformant default. Edit this file (or copy a matugen output to
-// it) and the demo retints in <100 ms — that's the acceptance test for
+// it) and the demo retints in <100 ms, that's the acceptance test for
 // Phase 1.1 hot-reload.
 QString defaultPalettePath()
 {
@@ -43,8 +43,8 @@ int main(int argc, char* argv[])
     // Breeze QtQuick.Controls style ships an `ApplicationWindow` /
     // `ScrollView` chrome path that null-derefs on `palette` access in
     // some Qt6 versions ("qrc:/qt/qml/org/kde/breeze/impl/ButtonBackground.qml
-    // TypeError"). The demo doesn't theme through QtQuick.Controls — every
-    // colored surface binds to Theme.* directly — so an unstyled "Basic"
+    // TypeError"). The demo doesn't theme through QtQuick.Controls, every
+    // colored surface binds to Theme.* directly, so an unstyled "Basic"
     // base both silences the Breeze noise and keeps the chrome out of
     // our token-driven retint path.
     QQuickStyle::setStyle(QStringLiteral("Basic"));
@@ -53,7 +53,7 @@ int main(int argc, char* argv[])
 
     // Touch the singleton through the engine so Theme.qml resolves
     // PaletteStore correctly. This also surfaces load errors at boot
-    // — if the user has a palette JSON but it's malformed, the
+    //, if the user has a palette JSON but it's malformed, the
     // demo's status bar shows the error rather than silently falling
     // back to defaults.
     auto* store = engine.singletonInstance<PhosphorTheme::PaletteStore*>(QStringLiteral("Phosphor.Theme"),
@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
         }
         QObject::connect(store, &PhosphorTheme::PaletteStore::loadError,
                          [](const QString& path, const QString& reason) {
-                             qWarning().noquote() << "phosphor-theme: failed to load" << path << "—" << reason;
+                             qWarning().noquote() << "phosphor-theme: failed to load" << path << ", " << reason;
                          });
     }
 

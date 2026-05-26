@@ -15,7 +15,7 @@ namespace PhosphorTheme {
 // canonical Phosphor palette (data/palettes/phosphor.toml) and matugen's
 // JSON output, so token strings round-trip without alias translation.
 //
-// This is the contract — shells, examples, and tests reference token names
+// This is the contract, shells, examples, and tests reference token names
 // from here, not raw strings. New tokens go here first; QML / matugen
 // templates / tests catch up afterwards.
 struct PHOSPHORTHEME_EXPORT TokenNames
@@ -59,7 +59,7 @@ struct PHOSPHORTHEME_EXPORT TokenNames
     static constexpr auto Info = "info";
     static constexpr auto InfoBright = "info_bright";
 
-    // Brand-gradient stops — drive the connected-corner / accent gradients
+    // Brand-gradient stops, drive the connected-corner / accent gradients
     // throughout the shell. These are not Material 3 standard tokens; they
     // come from data/palettes/phosphor.toml's [extensions.brand].
     static constexpr auto BrandStop0 = "brand_stop_0";
@@ -89,7 +89,7 @@ public:
     [[nodiscard]] virtual QVariantMap palette() const = 0;
 
     // Look up a single token by name (one of TokenNames::*). Returns an
-    // invalid color if the token isn't in the active palette — caller's
+    // invalid color if the token isn't in the active palette, caller's
     // problem to handle, since "token missing" is a programming error.
     [[nodiscard]] virtual QColor token(const QString& name) const = 0;
 
@@ -99,7 +99,7 @@ public:
     virtual bool loadFromJson(const QByteArray& json) = 0;
 
     // Apply a parsed token map directly. Same merge semantics as
-    // loadFromJson but skips the JSON round-trip — used by MatugenRunner
+    // loadFromJson but skips the JSON round-trip, used by MatugenRunner
     // and any other in-process source that already has QColor values.
     // Empty maps are a no-op.
     virtual void applyTokens(const QVariantMap& tokens) = 0;

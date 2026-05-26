@@ -1,14 +1,17 @@
-# 02 — Gap Analysis (Phosphor vs. Reference Shells)
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+# 02, Gap Analysis (Phosphor vs. Reference Shells)
 
 This doc is a prioritized roadmap. Each row tells you: what's missing, why it matters, what the reference shells call it, what we'd build, rough effort, and which surface(s) it unlocks.
 
 **Effort scale** (single agent, focused work):
 - **S** = days
-- **M** = 1–2 weeks
-- **L** = 3–6 weeks
+- **M** = 1-2 weeks
+- **L** = 3-6 weeks
 - **XL** = sprint-scale (6+ weeks)
 
-**Priority** reflects unlock value — what blocks the rest:
+**Priority** reflects unlock value, what blocks the rest:
 - **P0** = required for "not embarrassing"; nothing else lands without it
 - **P1** = required for "competitive"
 - **P2** = polish / differentiator
@@ -19,7 +22,7 @@ This doc is a prioritized roadmap. Each row tells you: what's missing, why it ma
 | Asset                                                   | Why it matters going forward                                                                                       |
 |---------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
 | `libs/phosphor-shell` (PanelWindow / PopupWindow / FloatingWindow / ShellEngine / ScreenModel / LazyLoader / PersistentProperties) | Core shell primitives in place; foundation is solid.                                                                |
-| `phosphor-config` (`ISettings`, `IConfigBackend`)       | Already DI-friendly per-domain — exactly the shape DMS's god-singleton lacks.                                       |
+| `phosphor-config` (`ISettings`, `IConfigBackend`)       | Already DI-friendly per-domain, exactly the shape DMS's god-singleton lacks.                                       |
 | `phosphor-layer` + our own layer-shell implementation   | Lockscreen, OSDs, overlays all built on this. We're the compositor; we expose the protocol rather than consume it.   |
 | `phosphor-shaders` + 4 GLSL primitives                  | Foundation for blur / shadow / wallpaper transitions; we don't need to rebuild what's already here.                 |
 | `phosphor-zones`, `phosphor-tile-engine`, `phosphor-snap-engine` | Tiling differentiator. None of the reference shells own this. Treat as a *win*, not a side-quest.            |
@@ -35,9 +38,9 @@ This doc is a prioritized roadmap. Each row tells you: what's missing, why it ma
 | 3 | **Widget / provider registries**     | `IBarWidgetFactory`, `IControlCenterTileFactory`, `ILauncherProviderFactory`, `IOSDFactory`, `IDesktopWidgetFactory` | Noctalia `BarWidgetRegistry` family                                  | Generalize `ILayoutSourceFactory` pattern from `phosphor-layout-api`. One header per seam; C++ register-by-name. | M      | **P0**   |
 | 4 | **Typed IPC + `phosphorctl` CLI**    | Compositor keybinds invoke shell actions by verb, not D-Bus introspection                                 | DMS `dms ipc call`, Noctalia `noctalia-shell ipc call`, QS `IpcHandler`         | `phosphor-ipc` lib: `IpcRouter`, `IpcTarget` (QML attached property), `IpcSchema` (typed). Ship `phosphorctl` Go binary. Wraps existing D-Bus adaptors. | M      | **P0**   |
 | 5 | **`PerScreen` declarative helper**   | Per-monitor surface lifecycle as a one-binding QML primitive (hotplug correctness for free)               | (Phosphor-native)                                                                | `phosphor-shell` adds `PerScreen.qml` QML helper backed by `ScreenModel`. One delegate instance per screen, lifecycle managed by `ScreenModel` add/remove signals. | S | **P0** |
-| 6 | **Service layer expansion**          | C++ services for NetworkManager, BlueZ, PipeWire, brightness, idle, polkit, notifications, MPRIS, tray host | DMS `Services/` (~55 singletons); Noctalia `Services/`                          | One `phosphor-service-<domain>` library per service. Native C++ against `libnm` / `libbluez` / `libpipewire` / DBus; brightness via `/sys/class/backlight`; freedesktop notification spec implemented in-process; SNI host in-process. Global shortcuts come from the Phosphor compositor's input layer, not an external daemon. | XL (split) | **P0** |
+| 6 | **Service layer expansion**          | C++ services for NetworkManager, BlueZ, PipeWire, brightness, idle, polkit, notifications, MPRIS, tray host | DMS `Services/` (~55 singletons); Noctalia `Services/`                          | One `phosphor-<domain>` library per service (per Phase 2 of `04-implementation-plan.md`). Native C++ against `libnm` / `libbluez` / `libpipewire` / DBus; brightness via `/sys/class/backlight`; freedesktop notification spec implemented in-process; SNI host in-process. Global shortcuts come from the Phosphor compositor's input layer, not an external daemon. | XL (split) | **P0** |
 
-## Surfaces — what we're missing
+## Surfaces, what we're missing
 
 ### Top bar
 
@@ -59,7 +62,7 @@ This doc is a prioritized roadmap. Each row tells you: what's missing, why it ma
 
 | Gap                          | Reference                                                                                              | Notes                                                                                            | Effort | Priority |
 |------------------------------|--------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|--------|----------|
-| Spotlight-style runner       | DMS `DankLauncherV2`, Noctalia `Modules/Panels/Launcher/`                                              | Three skins (centered, bar-connected, fullscreen) is DMS's pattern — worth copying.              | L      | **P0**   |
+| Spotlight-style runner       | DMS `DankLauncherV2`, Noctalia `Modules/Panels/Launcher/`                                              | Three skins (centered, bar-connected, fullscreen) is DMS's pattern, worth copying.              | L      | **P0**   |
 | Provider plugin model        | Noctalia `LauncherProviderRegistry` + `Providers/` (Apps/Calc/Clipboard/Command/Emoji/Session/Settings/Windows) | Use `ILauncherProviderFactory` seam.                                                  | M      | **P0**   |
 | Fuzzy match                  | both use bespoke `fzf.js` / `FuzzySort.qml`                                                            | Port `fzf` algorithm or use a small C++ port.                                                    | S      | **P1**   |
 | App index                    | freedesktop `.desktop` files                                                                            | Parse `.desktop` files directly in `phosphor-launcher-apps` lib. DMS shells out; we shouldn't. | S | **P0** |
@@ -89,7 +92,7 @@ This doc is a prioritized roadmap. Each row tells you: what's missing, why it ma
 
 | Gap                                | Reference                                              | Notes                                                                                                 | Effort | Priority |
 |------------------------------------|--------------------------------------------------------|-------------------------------------------------------------------------------------------------------|--------|----------|
-| Lock surface (ext-session-lock-v1) | DMS `Modules/Lock/`, Noctalia `Modules/LockScreen/`    | The Phosphor compositor implements `ext-session-lock-v1`. PAM auth via `pam_authenticate` in `phosphor-service-lock`. | L | **P0** |
+| Lock surface (ext-session-lock-v1) | DMS `Modules/Lock/`, Noctalia `Modules/LockScreen/`    | The Phosphor compositor implements `ext-session-lock-v1`. PAM auth via `pam_authenticate` in `phosphor-lock`. | L | **P0** |
 | Theming integration                | both                                                   | Same `Theme` tokens, blurred wallpaper, media card.                                                   | S      | **P1**   |
 | Video screensaver                  | DMS `VideoScreensaver.qml`                             | Plays during idle-but-not-yet-DPMS.                                                                   | S      | **P3**   |
 | On-screen keyboard (lock-only)     | DMS lockscreen OSK                                     | Touch convertibles only.                                                                              | M      | **P3**   |
@@ -108,9 +111,9 @@ This doc is a prioritized roadmap. Each row tells you: what's missing, why it ma
 |------------------------------------|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|--------|----------|
 | Matugen integration                | DMS `dms` Go CLI shells out to matugen; Noctalia own impl                       | **(shipped, PR #534)** `MatugenRunner` in `libs/phosphor-theme` wraps the subprocess, handles v3 + v4+ JSON shapes, always passes `--prefer`. `phosphor-theme-cli set-wallpaper` and the demo's wallpaper button drive it end-to-end. | M | ~~**P0**~~ |
 | Token store + design-token QML module | DMS `Common/Theme.qml`                                                       | **(shipped, PR #534)** `PaletteStore` + `Phosphor.Theme` singletons (`Theme` / `Tokens` / `Motion` / `StateLayer`). Hot-reloads from disk, bindings track `palette[...]` for live retint. | M | ~~**P0**~~ |
-| Template engine                    | DMS uses `mustache`                                                             | **(shipped, PR #534)** `TemplateEngine` renders `{{token[.field]}}` with hex / hexa / r / g / b / alpha / rgb / rgba variants. Drive via `phosphor-theme-cli render-template`. Templates themselves still pending — see next row. | S | ~~**P0**~~ |
-| Template fan-out                   | DMS `quickshell/matugen/templates/` (~30 templates)                             | Engine is in place; **templates still pending** — Phase 5 work. Mirror DMS's set: phosphor-theme JSON, qt6ct, gtk-css, kitty/foot/ghostty/alacritty/wezterm, firefox/zen userchrome, vesktop, vscode, neovim, emacs, zed. | M | **P1** |
-| Wallpaper picker UI                | DMS gallery + cycling, Noctalia Wallhaven search                                | We have `WallpaperService` (C++) — needs the QML face. Phase 4.7 in the plan.                     | M      | **P1**   |
+| Template engine                    | DMS uses `mustache`                                                             | **(shipped, PR #534)** `TemplateEngine` renders `{{token[.field]}}` with hex / hexa / r / g / b / alpha / rgb / rgba variants. Drive via `phosphor-theme-cli render-template`. Templates themselves still pending, see next row. | S | ~~**P0**~~ |
+| Template fan-out                   | DMS `quickshell/matugen/templates/` (~30 templates)                             | Engine is in place; **templates still pending**, Phase 5 work. Mirror DMS's set: phosphor-theme JSON, qt6ct, gtk-css, kitty/foot/ghostty/alacritty/wezterm, firefox/zen userchrome, vesktop, vscode, neovim, emacs, zed. | M | **P1** |
+| Wallpaper picker UI                | DMS gallery + cycling, Noctalia Wallhaven search                                | We have `WallpaperService` (C++), needs the QML face. Phase 4.7 in the plan.                     | M      | **P1**   |
 | Theme browser                      | DMS `ThemeBrowser.qml` + stock JSON themes + custom JSON                        | Community themes shareable as JSON files. Phase 4.8.                                              | M      | **P1**   |
 | Light/dark switch                  | DMS `Theme.setLightMode()` w/ screen-wipe; Noctalia `DarkModeService` sunrise   | Use `KSunPath` or local sunrise calc; transition via existing shader. `MatugenRunner.mode` already exposes the toggle at the data layer. | S | **P2** |
 | Wallpaper transitions              | Noctalia 6 fragment shaders (disc/fade/honeycomb/pixelate/stripes/wipe)        | Trivial given `phosphor-shaders`.                                                                  | S      | **P3**   |
@@ -137,41 +140,41 @@ This doc is a prioritized roadmap. Each row tells you: what's missing, why it ma
 | Process list                     | DMS `Modules/ProcessList`                         | Goes alongside System Monitor card.                         | M      | **P3**   |
 | Keybinds cheatsheet              | end-4                                              | Overlay listing the Phosphor compositor's registered global shortcuts. | S      | **P2**   |
 | Greeter                          | DMS `DMSGreeter.qml`                              | Separate process; reuses lockscreen primitives.             | L      | **P3**   |
-| CUPS printer manager             | DMS `CupsService.qml`                              | Out of scope for shell — leave to standalone CUPS UI.       | —      | **—**    |
+| CUPS printer manager             | DMS `CupsService.qml`                              | Out of scope for shell, leave to standalone CUPS UI.       |,      | **, **    |
 
 ## Proposed milestones
 
 Ordered for value delivery, not architectural purity. Each milestone is independently testable / shippable.
 
-### M0 — Foundations (foundational gaps #1–#5)
-Theme tokens, PopoutService, widget registries, IPC + `phosphorctl`, `PerScreen` helper. **No new user-visible surfaces**, but everything after gets built on these. ~4–6 weeks.
+### M0, Foundations (foundational gaps #1-#5)
+Theme tokens, PopoutService, widget registries, IPC + `phosphorctl`, `PerScreen` helper. **No new user-visible surfaces**, but everything after gets built on these. ~4-6 weeks.
 
-### M1 — Bar parity
+### M1, Bar parity
 Connected-corner bar canvas, widget catalog (workspaces / focused-app / clock / metrics / battery / tray / media), `IBarWidgetFactory` working end-to-end. Migrates the current TopPanel to the new model. **Visible win: bar feels alive and distinct from any existing Wayland shell.**
 
-### M2 — Launcher + notifications
+### M2, Launcher + notifications
 Spotlight-style launcher with provider plugins (apps / calc / windows). Freedesktop notification daemon + toasts + history popout. **Visible win: usable as a daily driver shell.**
 
-### M3 — Control center + OSDs + service layer
-Network / Bluetooth / Audio / Brightness / Idle / Polkit services. Control Center popout with tiles. OSDs for volume/mic/brightness/caps. **Visible win: delivers a complete daily-driver desktop on top of the Phosphor compositor — no external shell, network UI, or audio panel required.**
+### M3, Control center + OSDs + service layer
+Network / Bluetooth / Audio / Brightness / Idle / Polkit services. Control Center popout with tiles. OSDs for volume/mic/brightness/caps. **Visible win: delivers a complete daily-driver desktop on top of the Phosphor compositor, no external shell, network UI, or audio panel required.**
 
-### M4 — Theming pipeline (the headline differentiator)
-Matugen integration + ~30 templates. Wallpaper picker UI. Theme browser. **Visible win: drop a wallpaper → every themed surface — Phosphor shell, GTK apps, Qt6 apps, terminals, editors — retints in a second.**
+### M4, Theming pipeline (the headline differentiator)
+Matugen integration + ~30 templates. Wallpaper picker UI. Theme browser. **Visible win: drop a wallpaper → every themed surface, Phosphor shell, GTK apps, Qt6 apps, terminals, editors, retints in a second.**
 
 *Partial progress as of 2026-05-26: the token store, matugen runner, template engine, and demo are shipped (PR #534). Wallpaper picker UI, theme browser, and the ~30 templates themselves remain.*
 
-### M5 — Lockscreen + dashboard + polish
+### M5, Lockscreen + dashboard + polish
 Lockscreen via ext-session-lock. DankDash-style multi-tab dashboard. Color picker, screenshot, clipboard manager.
 
-### M6+ — Plugin browser, dock, novelty widgets
+### M6+, Plugin browser, dock, novelty widgets
 Once the plugin ABI is stable.
 
 ## What we *won't* copy
 
-- DMS's `Common/SettingsData.qml` god-singleton — we keep our per-domain `ISettings` split. (See `project_settings_page_controllers`.)
-- Noctalia's 40-step `Migration27..59.qml` chain — we keep one migration function per real schema bump per `CLAUDE.md` and `feedback_no_legacy_shims`.
-- Noctalia's `noctalia-qs` Quickshell fork — we're not Quickshell-based; the lesson is "don't fork your engine to ship features".
-- DMS's `Qt.createComponent()` plugin loader + remote registry without sandboxing — capability-scoped plugins from day one.
-- DMS's `onSurface_12` opacity-baked token names — use upstream M3 names verbatim, layer state aliases on top.
-- HyprPanel's GTK3-on-Wayland stack and AGS dependency chain — we're past this hurdle by being native Qt6.
-- end-4's AI chat / OCR sidebars — fun, but out of shell scope; ship as plugins instead.
+- DMS's `Common/SettingsData.qml` god-singleton, we keep our per-domain `ISettings` split. (See `project_settings_page_controllers`.)
+- Noctalia's 40-step `Migration27..59.qml` chain, we keep one migration function per real schema bump per `CLAUDE.md` and `feedback_no_legacy_shims`.
+- Noctalia's `noctalia-qs` Quickshell fork, we're not Quickshell-based; the lesson is "don't fork your engine to ship features".
+- DMS's `Qt.createComponent()` plugin loader + remote registry without sandboxing, capability-scoped plugins from day one.
+- DMS's `onSurface_12` opacity-baked token names, use upstream M3 names verbatim, layer state aliases on top.
+- HyprPanel's GTK3-on-Wayland stack and AGS dependency chain, we're past this hurdle by being native Qt6.
+- end-4's AI chat / OCR sidebars, fun, but out of shell scope; ship as plugins instead.

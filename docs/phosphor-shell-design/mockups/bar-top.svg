@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
   <!-- Phosphor default palette: phosphor-works.github.io/palette
        background #050916 · surface #0B1730 · surface_container #070F22 · surface_container_high #101A36
@@ -137,7 +139,7 @@
         Z" fill="#0B1730" stroke="#3B82F6" clip-path="inset(0 0 0 0)"/>
     </g>
 
-    <!-- "Closed bar" overlay — covers popout area, opacity animates to show open/close cycle -->
+    <!-- "Closed bar" overlay, covers popout area, opacity animates to show open/close cycle -->
     <g>
       <!-- Background-colored rect over popout area to "hide" the popout, then fade out to reveal -->
       <rect x="270" y="34" width="160" height="120" fill="url(#wp)">
@@ -183,7 +185,7 @@
       <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite"/>
     </circle>
     <text x="290" y="48" fill="#22D3EE" font-size="9">inverted (concave) corner</text>
-    <text x="290" y="60" fill="#94A3B8" font-size="9">SVG: A r r 0 0 0 — sweep=0</text>
+    <text x="290" y="60" fill="#94A3B8" font-size="9">SVG: A r r 0 0 0, sweep=0</text>
 
     <text x="200" y="170" text-anchor="middle" fill="#94A3B8" font-size="9">PopoutService pushes a "socket" → BarCanvas grows downward as one painted Shape</text>
   </g>
@@ -223,17 +225,17 @@
     <g transform="translate(880 510)">
       <rect width="320" height="80" rx="8" fill="#070F22" stroke="#3B82F6" opacity=".95"/>
       <text x="14" y="22" font-weight="600" fill="#3B82F6">Services (in‑process)</text>
-      <text x="14" y="40" fill="#94A3B8">phosphor‑service‑* libs: native C++</text>
-      <text x="14" y="54" fill="#94A3B8">against libnm, libbluez, libpipewire,</text>
-      <text x="14" y="68" fill="#94A3B8">DBus org.freedesktop.* — no shell‑outs.</text>
+      <text x="14" y="40" fill="#94A3B8">phosphor‑pipewire / network /</text>
+      <text x="14" y="54" fill="#94A3B8">bluetooth / etc: native C++ against</text>
+      <text x="14" y="68" fill="#94A3B8">libnm, libbluez, libpipewire, DBus.</text>
     </g>
   </g>
 
   <text x="640" y="670" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
-    Phosphor — Top Bar (default state · default theme)
+    Phosphor, Top Bar (default state · default theme)
   </text>
   <text x="640" y="688" text-anchor="middle" fill="#94A3B8" font-size="11">
-    Inset demonstrates the connected‑corner popout opening — bar grows downward as one painted Shape
+    Inset demonstrates the connected‑corner popout opening, bar grows downward as one painted Shape
   </text>
   <text x="640" y="706" text-anchor="middle" fill="#94A3B8" font-size="9" opacity=".7">
     Theme: phosphor‑works.github.io/palette · dark · primary #3B82F6 · secondary #A855F7 · tertiary #22D3EE

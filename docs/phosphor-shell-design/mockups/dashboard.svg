@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
   <defs>
     <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
@@ -36,7 +38,7 @@
       <circle cx="56" cy="7" r="4" fill="#101A36" stroke="#1E293B"/>
       <text x="80" y="11" font-size="12">kate · design.md</text>
     </g>
-    <!-- Active clock — pulses since it's the source -->
+    <!-- Active clock, pulses since it's the source -->
     <g transform="translate(640 46)" text-anchor="middle">
       <rect x="-60" y="-12" width="120" height="20" rx="10" fill="#3B82F6">
         <animate attributeName="opacity" values="1;0.78;1" dur="2.4s" repeatCount="indefinite"/>
@@ -219,7 +221,7 @@
       <text x="14" y="22" font-weight="600" fill="#A855F7">Optional surface</text>
       <text x="14" y="38" fill="#94A3B8">DMS ships both Dash + CC.</text>
       <text x="14" y="52" fill="#94A3B8">We recommend deferring this</text>
-      <text x="14" y="66" fill="#94A3B8">to M5 — start with one</text>
+      <text x="14" y="66" fill="#94A3B8">to M5, start with one</text>
       <text x="14" y="80" fill="#94A3B8">expanding Control Center.</text>
     </g>
 
@@ -227,20 +229,20 @@
       <rect width="200" height="76" rx="8" fill="#070F22" stroke="#22D3EE"/>
       <text x="14" y="22" font-weight="600" fill="#22D3EE">Tabbed view</text>
       <text x="14" y="38" fill="#94A3B8">Overview / Wallpaper / Weather</text>
-      <text x="14" y="52" fill="#94A3B8">/ Media — tabs share the same</text>
+      <text x="14" y="52" fill="#94A3B8">/ Media, tabs share the same</text>
       <text x="14" y="66" fill="#94A3B8">PopoutHost frame.</text>
     </g>
     <g transform="translate(1040 300)">
       <rect width="200" height="76" rx="8" fill="#070F22" stroke="#3B82F6"/>
       <text x="14" y="22" font-weight="600" fill="#3B82F6">Card widgets reused</text>
       <text x="14" y="38" fill="#94A3B8">Calendar / Weather / Media</text>
-      <text x="14" y="52" fill="#94A3B8">/ Metrics — same Card components</text>
+      <text x="14" y="52" fill="#94A3B8">/ Metrics, same Card components</text>
       <text x="14" y="66" fill="#94A3B8">live in Control Center too.</text>
     </g>
   </g>
 
   <text x="640" y="680" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
-    Phosphor — Dashboard (optional surface, M5 · default theme)
+    Phosphor, Dashboard (optional surface, M5 · default theme)
   </text>
   <text x="640" y="698" text-anchor="middle" fill="#94A3B8" font-size="11">
     Same connected‑corner pattern, summoned from the center clock pocket

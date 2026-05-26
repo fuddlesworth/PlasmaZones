@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// phosphor-theme-cli — headless driver for PhosphorTheme.
+// phosphor-theme-cli, headless driver for PhosphorTheme.
 //
 // Wraps MatugenRunner + PaletteStore + TemplateEngine so the matugen
 // round-trip and template renderer can be exercised without launching
@@ -17,14 +17,12 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLatin1String>
 #include <QObject>
+#include <QSaveFile>
 #include <QStandardPaths>
-#include <QStringLiteral>
-#include <QTextStream>
 #include <QTimer>
 
 #include <iostream>
@@ -63,26 +61,22 @@ QByteArray serialisePalette(const QVariantMap& tokens)
 
 bool writeAtomic(const QString& path, const QByteArray& data)
 {
-    // Write to a sibling temp file and rename — the watcher on the
-    // primary path sees one fileChanged event, not a half-written file
-    // followed by a truncate.
+    // QSaveFile writes to a sibling temp file and commits via rename(2)
+    // on POSIX, which atomically replaces the destination. A reader (or
+    // a QFileSystemWatcher) between commits sees either the old file or
+    // the new file, never an absent or half-written one, and the
+    // watcher fires exactly once per commit.
     QDir().mkpath(QFileInfo(path).absolutePath());
-    const QString tmp = path + QStringLiteral(".tmp");
-    QFile f(tmp);
+    QSaveFile f(path);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        std::cerr << "phosphor-theme-cli: cannot open " << tmp.toStdString()
+        std::cerr << "phosphor-theme-cli: cannot open " << path.toStdString()
                   << " for writing: " << f.errorString().toStdString() << '\n';
         return false;
     }
     f.write(data);
-    f.close();
-    // QFile::rename is atomic on POSIX when src and dst are on the same
-    // filesystem — they are, since both are under AppLocalDataLocation.
-    if (QFile::exists(path)) {
-        QFile::remove(path);
-    }
-    if (!QFile::rename(tmp, path)) {
-        std::cerr << "phosphor-theme-cli: cannot rename " << tmp.toStdString() << " to " << path.toStdString() << '\n';
+    if (!f.commit()) {
+        std::cerr << "phosphor-theme-cli: commit failed for " << path.toStdString() << ": "
+                  << f.errorString().toStdString() << '\n';
         return false;
     }
     return true;
@@ -113,8 +107,14 @@ int runSetWallpaper(const QStringList& args)
     }
     const auto wallpaper = positional.at(0);
 
+    const auto mode = p.value(modeOpt);
+    if (mode != QLatin1String("dark") && mode != QLatin1String("light")) {
+        std::cerr << "phosphor-theme-cli: --mode must be 'dark' or 'light' (got '" << mode.toStdString() << "')\n";
+        return 2;
+    }
+
     PhosphorTheme::MatugenRunner runner;
-    runner.setMode(p.value(modeOpt));
+    runner.setMode(mode);
 
     int exitCode = 0;
     QObject::connect(&runner, &PhosphorTheme::MatugenRunner::paletteReady,
@@ -213,7 +213,7 @@ int runCycle(const QStringList& args)
 {
     QCommandLineParser p;
     p.setApplicationDescription(
-        QStringLiteral("Rotate through palette JSON files in a directory — proves the hot-reload pipeline"));
+        QStringLiteral("Rotate through palette JSON files in a directory, proves the hot-reload pipeline"));
     p.addPositionalArgument(QStringLiteral("dir"), QStringLiteral("Directory of *.json palette files"));
     QCommandLineOption intervalOpt(QStringLiteral("interval"),
                                    QStringLiteral("Milliseconds between palettes (default 1500)"), QStringLiteral("ms"),
@@ -260,14 +260,25 @@ int runCycle(const QStringList& args)
     const QString outPath = p.isSet(outOpt) ? p.value(outOpt) : p.isSet(applyOpt) ? defaultPalettePath() : QString();
     const bool runOnce = p.isSet(onceOpt);
 
-    // Counter survives across timer ticks via lambda capture-by-ref.
-    auto* idx = new int(0);
+    // Require an output destination unless the user asked for a single
+    // pass. Without --apply / --out the loop would just print token
+    // counts forever and never drive a running demo, which is the only
+    // documented use case for the looping mode.
+    if (outPath.isEmpty() && !runOnce) {
+        std::cerr
+            << "phosphor-theme-cli: cycle in loop mode requires --apply or --out (or pass --once for a dry run)\n";
+        return 2;
+    }
 
-    auto applyNext = [entries, outPath, runOnce, idx]() {
-        const auto& entry = entries.at(*idx % entries.size());
-        // Validate by loading through PaletteStore — same parse path the
-        // demo's watcher uses. A broken JSON file logs an error and skips
-        // to the next tick rather than crashing the cycle.
+    int idx = 0;
+    QTimer loopTimer;
+    loopTimer.setInterval(interval);
+
+    auto applyNext = [entries, outPath, runOnce, &idx]() {
+        const auto& entry = entries.at(idx % entries.size());
+        // Validate by loading through PaletteStore. A broken JSON file
+        // logs an error and skips to the next tick rather than crashing
+        // the cycle.
         PhosphorTheme::PaletteStore store;
         if (!store.loadFromFile(entry.absoluteFilePath())) {
             std::cerr << "phosphor-theme-cli: skipping " << entry.fileName().toStdString()
@@ -283,30 +294,24 @@ int runCycle(const QStringList& args)
                 }
             }
         }
-        ++(*idx);
-        if (runOnce && *idx >= entries.size()) {
+        ++idx;
+        if (runOnce && idx >= entries.size()) {
             QCoreApplication::quit();
         }
     };
 
-    // Fire one immediately so the user sees retinting on tick zero rather
-    // than after a full interval of staring at the unchanged window.
+    QObject::connect(&loopTimer, &QTimer::timeout, applyNext);
+    // Fire one immediately so the user sees retinting on tick zero
+    // rather than after a full interval.
     QTimer::singleShot(0, applyNext);
+    loopTimer.start();
 
-    auto* loopTimer = new QTimer();
-    loopTimer->setInterval(interval);
-    QObject::connect(loopTimer, &QTimer::timeout, applyNext);
-    loopTimer->start();
-
-    const int rc = QCoreApplication::exec();
-    delete loopTimer;
-    delete idx;
-    return rc;
+    return QCoreApplication::exec();
 }
 
 void printUsage()
 {
-    std::cerr << R"(phosphor-theme-cli — drive the PhosphorTheme library headlessly.
+    std::cerr << R"(phosphor-theme-cli, drive the PhosphorTheme library headlessly.
 
 USAGE
   phosphor-theme-cli set-wallpaper <image> [--mode dark|light] [--apply | --out <path>]

@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
   <defs>
     <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
@@ -65,7 +67,7 @@
       </g>
     </g>
 
-    <!-- Results — selection ring animates between rows -->
+    <!-- Results, selection ring animates between rows -->
     <g transform="translate(20 140)" font-size="13">
       <!-- Animated selection ring (moves between rows: 0, 68, 124, 180) -->
       <rect width="560" height="60" rx="14" fill="#101A36" stroke="#3B82F6" stroke-width="2">
@@ -96,7 +98,7 @@
       </g>
       <g transform="translate(0 180)">
         <rect x="14" y="10" width="28" height="28" rx="8" fill="#F43F5E"/>
-        <text x="54" y="22" fill="#E6EDFF" font-size="12">«firefox» — shell command</text>
+        <text x="54" y="22" fill="#E6EDFF" font-size="12">«firefox», shell command</text>
         <text x="54" y="38" fill="#94A3B8" font-size="11">CommandProvider · run in terminal</text>
       </g>
     </g>
@@ -115,7 +117,7 @@
       <text x="14" y="22" font-weight="600" fill="#3B82F6">Three skins, one Controller</text>
       <text x="14" y="38" fill="#94A3B8">Spotlight (shown), Bar‑connected,</text>
       <text x="14" y="52" fill="#94A3B8">Fullscreen. Same LauncherContent.qml,</text>
-      <text x="14" y="66" fill="#94A3B8">switched at runtime — DMS pattern.</text>
+      <text x="14" y="66" fill="#94A3B8">switched at runtime, DMS pattern.</text>
       <text x="14" y="80" fill="#94A3B8">User picks default skin in settings.</text>
     </g>
 
@@ -147,7 +149,7 @@
   </g>
 
   <text x="640" y="640" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
-    Phosphor — App Launcher (Spotlight skin · default theme)
+    Phosphor, App Launcher (Spotlight skin · default theme)
   </text>
   <text x="640" y="658" text-anchor="middle" fill="#94A3B8" font-size="11">
     Selection ring animates between results · provider tabs · fzf fuzzy match

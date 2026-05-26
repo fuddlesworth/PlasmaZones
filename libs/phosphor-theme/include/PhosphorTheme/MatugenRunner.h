@@ -6,6 +6,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QUrl>
 #include <QVariantMap>
 #include <QtQmlIntegration/qqmlintegration.h>
 
@@ -42,12 +43,12 @@ class PHOSPHORTHEME_EXPORT MatugenRunner : public QObject
     // absolute path is given. Defaults to "matugen".
     Q_PROPERTY(QString matugenBinary READ matugenBinary WRITE setMatugenBinary NOTIFY matugenBinaryChanged)
 
-    // Dark / light variant selection — matugen emits both; we pick the
+    // Dark / light variant selection, matugen emits both; we pick the
     // requested one before exposing. Default: "dark".
     Q_PROPERTY(QString mode READ mode WRITE setMode NOTIFY modeChanged)
 
     // Candidate-color preference. When an image yields multiple source
-    // colors and matugen runs non-interactively (no TTY — always our
+    // colors and matugen runs non-interactively (no TTY, always our
     // case, we're a subprocess) it refuses to pick without this flag.
     // Default: "saturation" (picks the most saturated candidate, which
     // matches user expectation for a "vibrant" wallpaper-derived palette).
@@ -78,10 +79,17 @@ public:
     // flight cancels the previous run before starting.
     Q_INVOKABLE void run(const QString& wallpaperPath);
 
+    // QUrl overload for QML callers (e.g. FileDialog.selectedFile is a
+    // url, not a string). Converts via QUrl::toLocalFile so every legal
+    // file URL form resolves correctly. Non-file URLs are rejected via
+    // the `failed` signal so a passing-but-wrong call surfaces visibly
+    // instead of spawning matugen with a malformed argument.
+    Q_INVOKABLE void run(const QUrl& wallpaperUrl);
+
     // Cancel an in-flight run. Safe to call when nothing is running.
     Q_INVOKABLE void cancel();
 
-    // Parse a matugen JSON byte array directly — no subprocess. Exposed
+    // Parse a matugen JSON byte array directly, no subprocess. Exposed
     // for tests and for shells that drive matugen via a different
     // mechanism (e.g. an existing CLI pipeline). Returns the token map;
     // empty on parse failure (no signal fires).
@@ -98,12 +106,13 @@ Q_SIGNALS:
     // that don't round-trip have already been remapped.
     void paletteReady(const QVariantMap& tokens, const QString& wallpaperPath);
 
-    // Anything that prevented `paletteReady` from firing — missing
+    // Anything that prevented `paletteReady` from firing, missing
     // binary, non-zero exit, parse error. `reason` is human-readable.
     void failed(const QString& wallpaperPath, const QString& reason);
 
 private:
     void teardownProcess();
+    void disposeProcess();
 
     QString m_matugenBinary;
     QString m_mode;

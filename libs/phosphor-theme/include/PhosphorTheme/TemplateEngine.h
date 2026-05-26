@@ -26,7 +26,7 @@ namespace PhosphorTheme {
 //   {{primary.rgba}}       -> "R, G, B, A.AAA"
 //
 // Unknown tokens are left untouched as `{{token}}` in the output and emit
-// a warning on stderr — silent omission would hide rename mistakes.
+// a warning on stderr, silent omission would hide rename mistakes.
 //
 // This is NOT full mustache: no sections, partials, or escape handling.
 // Phosphor fan-out templates do simple substitution; sections / loops

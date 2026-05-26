@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Theme.Tokens — non-color design tokens.
+// Phosphor.Theme.Tokens, non-color design tokens.
 // Spacing, radius, elevation, and typography. These do NOT change per
-// wallpaper / matugen run — the canonical Phosphor palette page leaves
+// wallpaper / matugen run, the canonical Phosphor palette page leaves
 // them undefined, so we own the values. M3 defaults with adjustments
 // for the "large rounding, generous spacing" aesthetic agreed in the
 // mockup conventions.
@@ -12,7 +12,7 @@ pragma Singleton
 
 QtObject {
     // ─── Spacing scale ───────────────────────────────────────────────────
-    // M3 uses a 4 dp baseline. We follow that — every gap, padding, or
+    // M3 uses a 4 dp baseline. We follow that, every gap, padding, or
     // margin in shell QML is one of these values, not a one-off pixel
     // count.
     readonly property int spacing_xxs: 2
@@ -25,7 +25,7 @@ QtObject {
     readonly property int spacing_xxxl: 48
     // ─── Radius scale ────────────────────────────────────────────────────
     // M3 defines extra_small → extra_large + full pill. The shell biases
-    // toward 16–24 px on cards/popouts to match the mockup baseline.
+    // toward 16-24 px on cards/popouts to match the mockup baseline.
     readonly property int radius_none: 0
     readonly property int radius_xs: 4
     readonly property int radius_s: 8
@@ -36,7 +36,7 @@ QtObject {
     readonly property int radius_full: 9999
     // ─── Elevation (Y offset / blur radius pairs) ────────────────────────
     // Translates to ElevationShadow.qml drop-shadow parameters when that
-    // primitive lands in Phase 3.1. M3 levels 0–5 — most shell surfaces
+    // primitive lands in Phase 3.1. M3 levels 0-5, most shell surfaces
     // sit at 1 (bar), 2 (popouts), or 3 (modals).
     readonly property var elevation_0: ({
         "y": 0,
@@ -69,7 +69,7 @@ QtObject {
         "opacity": 0.3
     })
     // ─── Typography ──────────────────────────────────────────────────────
-    // Font-family is system default — the shell respects the user's
+    // Font-family is system default, the shell respects the user's
     // system font choice, not a hardcoded face. Size + weight are
     // tokenised so widgets bind these instead of opening every Text
     // delegate to tune sizes.

@@ -15,25 +15,43 @@
 #include <QString>
 #include <QStringLiteral>
 
+// Token-mapping policy: matugen emits Material 3 token names, most of
+// which align with Phosphor's snake_case palette directly. Tokens we
+// don't expose in TokenNames (surface_dim, scrim, inverse_*, etc.) pass
+// through unchanged; PaletteStore stores them, Theme.qml ignores them.
+// Phosphor extensions absent from matugen (brand_stop_0..3, the ANSI
+// status colors) keep their previous value thanks to PaletteStore's
+// merge semantics. No name remapping happens here; if matugen ever
+// diverges, add a lookup table at the top of `parse*ColorsObject`.
+
 namespace PhosphorTheme {
 
 namespace {
 
-// Matugen emits Material 3 token names. Most align with Phosphor's
-// snake_case palette already, but the M3 spec has tokens that don't
-// appear in our default set (surface_dim, surface_bright, inverse_*,
-// scrim, shadow, etc.). We pass those through unchanged — PaletteStore's
-// merge semantics ignore unknown tokens by adding them rather than
-// rejecting, which is fine for consumers that want the full M3 surface.
-//
-// The reverse case — Phosphor tokens absent from matugen output — is
-// also fine: PaletteStore preserves the prior (default) value for any
-// key not in the new map. That's how brand_stop_0..3 and the ANSI
-// status colors survive a matugen run.
-//
-// Returned key set is exactly what matugen emitted, no remapping yet.
-// Future hook: if matugen schema diverges, add the lookup table here.
-// Flat shape: `{ "primary": "#RRGGBB", "on_primary": "...", ... }`
+// Human-readable mapping for QProcess error codes. The raw enum integer
+// is opaque to end users ("matugen process error: 0" is meaningless);
+// this gives the status bar a string a maintainer can act on without
+// looking up the enum.
+QString processErrorString(QProcess::ProcessError err)
+{
+    switch (err) {
+    case QProcess::FailedToStart:
+        return QStringLiteral("failed to start (binary not on PATH or not executable)");
+    case QProcess::Crashed:
+        return QStringLiteral("crashed");
+    case QProcess::Timedout:
+        return QStringLiteral("timed out");
+    case QProcess::WriteError:
+        return QStringLiteral("write error");
+    case QProcess::ReadError:
+        return QStringLiteral("read error");
+    case QProcess::UnknownError:
+        return QStringLiteral("unknown error");
+    }
+    return QStringLiteral("error %1").arg(static_cast<int>(err));
+}
+
+// Flat shape: `{ "primary": "#RRGGBB", "on_primary": "...", ... }`.
 // Older matugen and any caller that already flattened the modes.
 QVariantMap parseFlatColorsObject(const QJsonObject& colors)
 {
@@ -161,6 +179,15 @@ bool MatugenRunner::isRunning() const
     return m_process && m_process->state() != QProcess::NotRunning;
 }
 
+void MatugenRunner::run(const QUrl& wallpaperUrl)
+{
+    if (!wallpaperUrl.isLocalFile()) {
+        Q_EMIT failed(wallpaperUrl.toString(), QStringLiteral("wallpaper URL is not a local file"));
+        return;
+    }
+    run(wallpaperUrl.toLocalFile());
+}
+
 void MatugenRunner::run(const QString& wallpaperPath)
 {
     if (!QFileInfo::exists(wallpaperPath)) {
@@ -179,54 +206,71 @@ void MatugenRunner::run(const QString& wallpaperPath)
     m_pendingWallpaper = wallpaperPath;
     m_process = std::make_unique<QProcess>(this);
 
-    // `matugen image <wallpaper> --json hex` writes the full color map
-    // to stdout in a stable schema. `--json hex` is the flag in modern
-    // matugen builds; older builds use `--json` alone. We don't probe
-    // the binary version — if `--json hex` is rejected the run fails
-    // with a clear stderr message, which is better than silently
-    // falling back to an undocumented schema.
     // `matugen image <wp> --json hex` writes the full color map to stdout.
     // `--prefer <strategy>` is required when matugen would otherwise prompt
-    // the user (multiple candidate source colors, non-TTY subprocess —
-    // always our situation). An empty prefer means caller opted out, so we
-    // skip the flag.
+    // the user (multiple candidate source colors, non-TTY subprocess: always
+    // our situation). An empty prefer means caller opted out so we skip the
+    // flag. We don't probe the binary version; if `--json hex` is rejected
+    // the run fails with a clear stderr message which is better than
+    // silently falling back to an undocumented schema.
     QStringList args;
     args << QStringLiteral("image") << wallpaperPath << QStringLiteral("--json") << QStringLiteral("hex");
     if (!m_prefer.isEmpty()) {
         args << QStringLiteral("--prefer") << m_prefer;
     }
 
-    connect(m_process.get(), &QProcess::errorOccurred, this, [this, wallpaperPath](QProcess::ProcessError err) {
-        Q_EMIT failed(wallpaperPath, QStringLiteral("matugen process error: %1").arg(static_cast<int>(err)));
+    QProcess* proc = m_process.get();
+
+    connect(proc, &QProcess::errorOccurred, this, [this, proc, wallpaperPath](QProcess::ProcessError err) {
+        // The error may arrive before or after `finished`; guard
+        // against double-emit when both fire (FailedToStart only
+        // emits errorOccurred, but Crashed emits both).
+        if (m_process.get() != proc) {
+            return;
+        }
+        Q_EMIT failed(wallpaperPath, QStringLiteral("matugen %1").arg(processErrorString(err)));
+        disposeProcess();
         Q_EMIT runningChanged();
     });
 
-    connect(m_process.get(), QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-            [this, wallpaperPath](int exitCode, QProcess::ExitStatus status) {
-                Q_EMIT runningChanged();
-                if (!m_process) {
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+            [this, proc, wallpaperPath](int exitCode, QProcess::ExitStatus status) {
+                // A concurrent cancel() may have replaced or reset m_process
+                // between the queued `finished` signal being posted and us
+                // running. Compare identity rather than truthiness.
+                if (m_process.get() != proc) {
                     return;
                 }
+                const auto stderrTail = QString::fromUtf8(proc->readAllStandardError()).trimmed().right(512);
+                const auto stdoutBytes = proc->readAllStandardOutput();
+                // Drop our owning reference first so isRunning() reads false
+                // by the time consumers react to the signals below.
+                disposeProcess();
+
                 if (status != QProcess::NormalExit || exitCode != 0) {
-                    const auto stderrTail = QString::fromUtf8(m_process->readAllStandardError()).trimmed().right(512);
                     Q_EMIT failed(wallpaperPath, QStringLiteral("matugen exited %1: %2").arg(exitCode).arg(stderrTail));
+                    Q_EMIT runningChanged();
                     return;
                 }
-                const auto stdoutBytes = m_process->readAllStandardOutput();
                 const auto tokens = parseMatugenJson(stdoutBytes, m_mode);
                 if (tokens.isEmpty()) {
                     Q_EMIT failed(wallpaperPath, QStringLiteral("matugen output had no usable colors"));
+                    Q_EMIT runningChanged();
                     return;
                 }
                 Q_EMIT paletteReady(tokens, wallpaperPath);
+                Q_EMIT runningChanged();
             });
 
-    m_process->start(m_matugenBinary, args);
+    proc->start(m_matugenBinary, args);
     Q_EMIT runningChanged();
 }
 
 void MatugenRunner::cancel()
 {
+    if (!m_process) {
+        return;
+    }
     teardownProcess();
     Q_EMIT runningChanged();
 }
@@ -264,7 +308,7 @@ QVariantMap MatugenRunner::parseMatugenJson(const QByteArray& json, const QStrin
     }
 
     // Probe the v3 mode-wrap first: `colors.<mode>` is a token-keyed
-    // hex map. If parsing it yields any tokens, that's the schema —
+    // hex map. If parsing it yields any tokens, that's the schema ,
     // pick that result. This intentionally takes precedence over v4+
     // nested parse so that the v3 fixture (which has a `dark` key at
     // this level) doesn't get misidentified as v4+ with a token literally
@@ -300,7 +344,24 @@ void MatugenRunner::teardownProcess()
             m_process->waitForFinished(500);
         }
     }
-    m_process.reset();
+    disposeProcess();
+}
+
+void MatugenRunner::disposeProcess()
+{
+    if (!m_process) {
+        return;
+    }
+    // Release ownership and disconnect this slot chain so a queued
+    // signal already in flight resolves to a no-op (the proc-identity
+    // check in the lambdas catches the case where m_process has been
+    // replaced). deleteLater defers destruction past any nested signal
+    // emit currently on the stack: an immediate reset() would delete
+    // the QProcess while one of our connected slots was mid-execution
+    // if cancel() were invoked from a slot driven by this same proc.
+    QProcess* released = m_process.release();
+    released->disconnect(this);
+    released->deleteLater();
 }
 
 } // namespace PhosphorTheme

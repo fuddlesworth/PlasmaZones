@@ -1,4 +1,7 @@
-# 03 — Phosphor Shell Component Map
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+# 03, Phosphor Shell Component Map
 
 The proposed architecture, justified by the patterns in `01-feature-inventory.md` and the gaps in `02-gap-analysis.md`. Written so each section can drive a discrete PR or set of PRs.
 
@@ -67,7 +70,7 @@ src/phosphor-shell/                        # The shell process (currently exampl
       Helpers/
         PerScreen.qml                      # Variants-style per-monitor helper
 
-libs/                                      # C++ libraries — every concern is its own lib (existing pattern)
+libs/                                      # C++ libraries, every concern is its own lib (existing pattern)
   phosphor-shell/                          # Already exists; extend
   phosphor-theme/                          # NEW: token store + matugen runner + template engine
   phosphor-popout/                         # NEW: PopoutService
@@ -89,14 +92,14 @@ libs/                                      # C++ libraries — every concern is 
   phosphor-session/                        # logind (DBus org.freedesktop.login1)
 
   # EXTRACTED from the existing phosphor-services umbrella (Phase 2.0 of plan).
-  # After extraction the umbrella is deleted — no compat shim.
+  # After extraction the umbrella is deleted, no compat shim.
   phosphor-sni/                            # StatusNotifierItem host + watcher + dbusmenu
   phosphor-mpris/                          # MPRIS controller
   phosphor-upower/                         # battery + power-supply readouts
   phosphor-icontheme/                      # icon-theme resolver + Qt image provider
-                                           #   (or folded into phosphor-rendering — decide at extraction time)
+                                           #   (or folded into phosphor-rendering, decide at extraction time)
 
-  # Existing libs — touched only where the surface work requires.
+  # Existing libs, touched only where the surface work requires.
   # Already follow the one-concern-per-lib pattern; this plan extends it consistently.
   (existing) phosphor-config, phosphor-layer, phosphor-shaders, phosphor-zones,
              phosphor-snap-engine, phosphor-tile-engine, phosphor-wayland,
@@ -112,10 +115,10 @@ bin/
 
 ## The theme token system
 
-We adopt **upstream Material 3 token names verbatim**, with state aliases layered on top (not baked into the names — that was a DMS mistake). The **built-in default values come from the canonical Phosphor palette** at https://phosphor-works.github.io/palette/ (source: `data/palettes/phosphor.toml`, M3 + ANSI 16, CC-BY-SA 4.0). Matugen replaces these at runtime from any wallpaper; the names stay stable.
+We adopt **upstream Material 3 token names verbatim**, with state aliases layered on top (not baked into the names, that was a DMS mistake). The **built-in default values come from the canonical Phosphor palette** at https://phosphor-works.github.io/palette/ (source: `data/palettes/phosphor.toml`, M3 + ANSI 16, CC-BY-SA 4.0). Matugen replaces these at runtime from any wallpaper; the names stay stable.
 
 ```qml
-// qml/Phosphor/Theme/Theme.qml — pragma Singleton
+// qml/Phosphor/Theme/Theme.qml, pragma Singleton
 // Default values shown are the canonical Phosphor dark theme.
 QtObject {
     // Core M3 palette (every token matugen emits)
@@ -190,7 +193,7 @@ QtObject {
     function stateLayer(base, state) { ... }   // hover 0.08, focus 0.10, pressed 0.10, drag 0.16
 }
 
-// qml/Phosphor/Theme/Tokens.qml — pragma Singleton
+// qml/Phosphor/Theme/Tokens.qml, pragma Singleton
 QtObject {
     readonly property QtObject radius: QtObject {
         property real xs: 4
@@ -238,7 +241,7 @@ QtObject {
     }
 }
 
-// qml/Phosphor/Theme/Motion.qml — pragma Singleton
+// qml/Phosphor/Theme/Motion.qml, pragma Singleton
 QtObject {
     // M3 motion spec
     readonly property QtObject duration: QtObject {
@@ -282,7 +285,7 @@ class PaletteStore;         // owns the current JSON, watches the file
 }
 ```
 
-## PopoutService — central popout coordinator
+## PopoutService, central popout coordinator
 
 Lifted from DMS, structured for C++ ownership and QML attachment.
 
@@ -329,7 +332,7 @@ Properties:
 - Single ownership of `xdg_popup` grabs (today we already have `PanelPopupHost` swap-in-place; promote it).
 - Per-screen popout placement via `ScreenManager`.
 - Modal popouts (`Lock`, `Polkit`) suppress all `Cooperative` popouts on the same screen.
-- Animation hooks via `Motion` tokens — uniform enter/exit transitions.
+- Animation hooks via `Motion` tokens, uniform enter/exit transitions.
 
 ## Widget / provider registries
 
@@ -383,7 +386,7 @@ The five seams to ship at M0:
 - `IOSDFactory`
 - `IDesktopWidgetFactory`
 
-Built-ins register the same way plugins do — proves the seam.
+Built-ins register the same way plugins do, proves the seam.
 
 ## Typed IPC + `phosphorctl`
 
@@ -426,7 +429,7 @@ phosphorctl list
 phosphorctl schema launcher
 ```
 
-The CLI talks to a single UNIX socket (`$XDG_RUNTIME_DIR/phosphor.sock`); the router is a thin wrapper around our existing D-Bus adaptors — we don't lose the D-Bus surface, we add a typed one on top.
+The CLI talks to a single UNIX socket (`$XDG_RUNTIME_DIR/phosphor.sock`); the router is a thin wrapper around our existing D-Bus adaptors, we don't lose the D-Bus surface, we add a typed one on top.
 
 ## Compositor adapter pattern
 
@@ -450,7 +453,7 @@ Q_SIGNALS:
 
 class PhosphorBackend : public ICompositorBackend { ... };   // canonical, in-process IPC to phosphor-compositor
 
-// Optional, plugin-distributed — for the "run Phosphor shell as guest on another compositor" mode:
+// Optional, plugin-distributed, for the "run Phosphor shell as guest on another compositor" mode:
 class HyprlandBackend  : public ICompositorBackend { ... };  // hyprland-ipc
 class NiriBackend      : public ICompositorBackend { ... };  // niri-ipc
 class SwayBackend      : public ICompositorBackend { ... };  // i3-ipc
@@ -463,7 +466,7 @@ class CompositorService : public ICompositorBackend {
 }
 ```
 
-`PhosphorBackend` is canonical and gets the deepest integration (we own the compositor — workspaces, toplevels, shortcuts route through in-process types, not external IPC). The guest-mode backends are optional plugins; they don't drive P0 architecture decisions, but the abstraction keeps the door open. Aligns with `project_plugin_based_compositor`.
+`PhosphorBackend` is canonical and gets the deepest integration (we own the compositor, workspaces, toplevels, shortcuts route through in-process types, not external IPC). The guest-mode backends are optional plugins; they don't drive P0 architecture decisions, but the abstraction keeps the door open. Aligns with `project_plugin_based_compositor`.
 
 ## Matugen + template fan-out
 
@@ -509,7 +512,7 @@ FileView ──► JsonAdapter ──► Theme singleton ──► QML binding f
 
 For the *editor* / settings app, layer `PersistentProperties` (already in `phosphor-shell`) on top so live edits don't lose in-progress state across reload.
 
-## Bar canvas — the connected-corner shape
+## Bar canvas, the connected-corner shape
 
 The differentiator. Sketch:
 
@@ -518,7 +521,7 @@ The differentiator. Sketch:
 Shape {
     id: canvas
 
-    property var sockets: []   // each = { x, width, depth } — a downward pocket for an attached popout
+    property var sockets: []   // each = { x, width, depth }, a downward pocket for an attached popout
     property real cornerRadius: Tokens.radius.xl
 
     ShapePath {
@@ -541,7 +544,7 @@ Shape {
 }
 ```
 
-`sockets` is driven by the `PopoutService`: when a popout opens anchored to the bar, it pushes a socket entry; `Behavior on sockets` runs the geometry animation. The popout itself is a sibling `PanelWindow` at the same layer level with a matching fill — the visual illusion is that the bar grew downward.
+`sockets` is driven by the `PopoutService`: when a popout opens anchored to the bar, it pushes a socket entry; `Behavior on sockets` runs the geometry animation. The popout itself is a sibling `PanelWindow` at the same layer level with a matching fill, the visual illusion is that the bar grew downward.
 
 We have the shader stack to round-shadow the resulting shape uniformly via `corners.glsl`.
 
@@ -557,16 +560,16 @@ We have the shader stack to round-shadow the resulting shape uniformly via `corn
 | `examples/phosphor-shell/MenuContent.qml`                 | `qml/Phosphor/Power/PowerMenu.qml` (via PopoutService)                               |
 | `examples/phosphor-shell/MprisWidget.qml` + `MprisContent.qml` + `MprisPlayerState.qml` | `qml/Phosphor/Bar/Widgets/Media.qml` + `Cards/MediaCard.qml`           |
 | `examples/phosphor-shell/TrayMenuPopup.qml`               | `qml/Phosphor/Bar/Widgets/Tray.qml` + popout via SNI host                            |
-| `examples/phosphor-shell/SettingsWindow.qml`              | `src/phosphor-settings/` (separate process, like the editor — keep it out of shell)  |
+| `examples/phosphor-shell/SettingsWindow.qml`              | `src/phosphor-settings/` (separate process, like the editor, keep it out of shell)  |
 | `examples/phosphor-shell/shaders/corners.glsl` …          | Move to `libs/phosphor-shaders/shaders/` so other surfaces share them                |
 
-Examples directory keeps a *minimal* working composition that imports the production modules — so we can dogfood the same code reviewers will read.
+Examples directory keeps a *minimal* working composition that imports the production modules, so we can dogfood the same code reviewers will read.
 
 ## Open questions (worth surfacing for the next planning round)
 
 1. **Settings app: stays separate or folds into shell?** DMS and Noctalia bundle. Our editor / settings separation has served us. Recommended: keep separate, give it `phosphorctl call settings.openSection <id>`.
 2. **C++ plugin ABI vs. QML-only plugins.** C++ buys us capabilities + sandboxing via a Phosphor-native loader (`QPluginLoader` + our metadata schema, or a stricter custom loader). QML-only is faster to write but the capability model has to be enforced at QML import time. Likely both, with QML-only plugins running in a restricted import context.
-3. **Greeter scope.** DMS ships one. We probably *shouldn't* — SDDM theming is a separate art form and the lockscreen reuse story is weaker than it sounds.
+3. **Greeter scope.** DMS ships one. We probably *shouldn't*, SDDM theming is a separate art form and the lockscreen reuse story is weaker than it sounds.
 4. **Dashboard vs. expanded Control Center.** DMS ships both surfaces (DankDash + ControlCenterPopout) and they overlap. Recommend one expandable Control Center as primary, with the dash as a deferred decision.
-5. **Wallpaper transition shaders — built-in catalog or plugin?** Noctalia's 6 shaders are tiny; ship as built-in, let plugins register more.
+5. **Wallpaper transition shaders, built-in catalog or plugin?** Noctalia's 6 shaders are tiny; ship as built-in, let plugins register more.
 6. **End-4-style novelty widgets (AI chat, OCR, anime sidebar).** Plugin-only.

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
-// Private — built into PhosphorTheme, not installed. The default palette
+// Private, built into PhosphorTheme, not installed. The default palette
 // is an implementation detail of PaletteStore::resetToDefaults.
 
 #include <QVariantMap>

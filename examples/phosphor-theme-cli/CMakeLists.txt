@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# phosphor-theme-cli — headless driver for the phosphor-theme library.
+# phosphor-theme-cli, headless driver for the phosphor-theme library.
 #
 # Subcommands:
 #   set-wallpaper <path> [--mode dark|light] [--apply]

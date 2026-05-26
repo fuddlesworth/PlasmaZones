@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Theme.Motion — duration and easing tokens (Material 3 motion).
+// Phosphor.Theme.Motion, duration and easing tokens (Material 3 motion).
 // Wire NumberAnimation / Behavior {} via these instead of one-off
 // durations and Easing.* picks: a single tuning here propagates across
 // every animated surface.
@@ -33,12 +33,12 @@ QtObject {
     readonly property int duration_extra_long_3: 900
     readonly property int duration_extra_long_4: 1000
     // Pass each one as the four-control-point cubic-bezier from M3:
-    //   [ x1, y1, x2, y2, 1, 1 ] — final pair pins the curve at (1,1).
+    //   [ x1, y1, x2, y2, 1, 1 ], final pair pins the curve at (1,1).
     readonly property var easing_standard: [0.2, 0, 0, 1, 1, 1]
     readonly property var easing_emphasized: [0.05, 0.7, 0.1, 1, 1, 1]
     readonly property var easing_decelerated: [0, 0, 0.2, 1, 1, 1]
     readonly property var easing_accelerated: [0.3, 0, 1, 1, 1, 1]
-    // Helpers — pre-built Easing{} factories. Use as
+    // Helpers, pre-built Easing{} factories. Use as
     //   Behavior on x { NumberAnimation { duration: Motion.duration_medium_2; easing: Motion.standard } }
     readonly property var standard: ({
         "type": Easing.BezierSpline,

@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# phosphor-theme-demo — swatch sheet for the PhosphorTheme tokens.
+# phosphor-theme-demo, swatch sheet for the PhosphorTheme tokens.
 #
 # Renders every M3 token as a labelled card. Hot-reloads when
 # ~/.local/share/phosphor/palettes/current.json changes. Acts as the
-# acceptance test for libs/phosphor-theme — if the demo doesn't update
+# acceptance test for libs/phosphor-theme, if the demo doesn't update
 # live, the library isn't wired right.
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
@@ -26,7 +26,7 @@ qt_add_qml_module(phosphor_theme_demo_qml
         Main.qml
         Swatch.qml
     # PresetPalettes ships as a QML_SINGLETON inside this demo's own
-    # module — hardcoded named palettes are demo decoration, not lib
+    # module, hardcoded named palettes are demo decoration, not lib
     # contract. Compiling header + .cpp into the QML module static lib
     # gives both the type registration and the implementation in one
     # place; AUTOMOC scans the header and qmltyperegistrar publishes
@@ -58,7 +58,7 @@ target_link_libraries(phosphor-theme-demo
         Qt6::QuickControls2
         # Static QML modules ship both a library (`*Qml`) and a plugin
         # registrar (`*Qmlplugin`). The registrar is what actually
-        # publishes the module to QQmlEngine at runtime — without it,
+        # publishes the module to QQmlEngine at runtime, without it,
         # `import Phosphor.Theme` fails at load time with "plugin
         # PhosphorThemeQmlplugin not found" even though the library
         # was linked. Link both targets here AND the demo's own

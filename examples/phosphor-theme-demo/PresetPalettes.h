@@ -15,7 +15,7 @@ namespace PhosphorThemeDemo {
 //
 // Each preset is a fully populated token map (all M3 + ANSI 16 + brand
 // stops) so applying one through `PaletteStore::applyTokens` retints
-// every bound surface in one shot — same code path the matugen runner
+// every bound surface in one shot, same code path the matugen runner
 // uses when a wallpaper changes.
 //
 // Demo-only. Not part of the phosphor-theme public API: real themes
@@ -31,19 +31,19 @@ class PresetPalettes : public QObject
 public:
     explicit PresetPalettes(QObject* parent = nullptr);
 
-    // Canonical Phosphor dark — same values as PaletteStore's built-in
+    // Canonical Phosphor dark, same values as PaletteStore's built-in
     // default. Exposed here too so the demo's "Dark" preset button has
     // somewhere to bind without round-tripping through resetToDefaults.
     [[nodiscard]] Q_INVOKABLE QVariantMap dark() const;
 
-    // Light variant — inverted surfaces, deeper accent colors for legible
+    // Light variant, inverted surfaces, deeper accent colors for legible
     // contrast on a white background.
     [[nodiscard]] Q_INVOKABLE QVariantMap light() const;
 
-    // Warm sunset palette — orange / coral / pink against a deep maroon.
+    // Warm sunset palette, orange / coral / pink against a deep maroon.
     [[nodiscard]] Q_INVOKABLE QVariantMap sunset() const;
 
-    // Cool forest palette — green / lime / cyan against deep moss.
+    // Cool forest palette, green / lime / cyan against deep moss.
     [[nodiscard]] Q_INVOKABLE QVariantMap forest() const;
 
     // Preset name list in display order. Use with `byName` to drive a

@@ -164,7 +164,7 @@ PhosphorTheme::TemplateEngine::renderFile(
 
 ## See also
 
-- `examples/phosphor-theme-demo/` — GUI swatch sheet that hot-reloads
+- `examples/phosphor-theme-demo/`, GUI swatch sheet that hot-reloads
   from disk and from in-memory pushes.
-- `examples/phosphor-theme-cli/` — headless driver
+- `examples/phosphor-theme-cli/`, headless driver
   (`set-wallpaper` / `dump` / `render-template` / `cycle`).

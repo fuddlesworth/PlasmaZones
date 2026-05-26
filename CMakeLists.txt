@@ -176,7 +176,7 @@ else()
 endif()
 
 # Wayland layer-shell support (direct zwlr_layer_shell_v1 protocol, no KDE
-# dependency). PlasmaZones is Wayland-only — Plasma 6 dropped X11 as a
+# dependency). PlasmaZones is Wayland-only, Plasma 6 dropped X11 as a
 # session target, and the layer-shell overlays we use have no X equivalent.
 find_package(Wayland 1.21 REQUIRED COMPONENTS Client)
 find_package(Qt6 6.6 REQUIRED COMPONENTS WaylandClient)
@@ -345,7 +345,7 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # following the same phosphor-<name> convention.
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-dbus)        # generic, service-agnostic D-Bus client utilities (Client, HasDBusStreaming)
-add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants — needed by phosphor-screens (Resolver endpoint defaults)
+add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants, needed by phosphor-screens (Resolver endpoint defaults)
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
@@ -383,7 +383,7 @@ add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 # Qt6::Quick, the cost model changes: every QObject in the engine gets a
 # JS scope, bindings cross language boundaries, and ownership becomes
 # implicit through QQmlEngine. That's the trajectory Noctalia couldn't
-# escape — their engines and config were both QML, so multi-day uptime
+# escape, their engines and config were both QML, so multi-day uptime
 # leaks (FD exhaustion, GC pauses, JSValue retention across reloads) had
 # nowhere to be fixed without a full rewrite.
 #
@@ -398,7 +398,7 @@ foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine Phosp
                 if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
                     message(FATAL_ERROR
                         "Engine library '${_pz_engine_lib}' links '${_pz_link}'. "
-                        "Engine libs must stay QML-free — see comment above this "
+                        "Engine libs must stay QML-free, see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
             endforeach()
@@ -409,7 +409,7 @@ foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine Phosp
                 if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
                     message(FATAL_ERROR
                         "Engine library '${_pz_engine_lib}' publicly links '${_pz_link}'. "
-                        "Engine libs must stay QML-free — see comment above this "
+                        "Engine libs must stay QML-free, see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
             endforeach()
@@ -451,7 +451,7 @@ if(BUILD_TESTING)
 endif()
 
 # Install D-Bus interface XMLs (one per interface). Keep in sync with
-# dbus/*.xml on disk — third-party clients (and qdbus-qt6 introspection)
+# dbus/*.xml on disk, third-party clients (and qdbus-qt6 introspection)
 # resolve interfaces against these files post-install.
 install(FILES
     dbus/org.plasmazones.Autotile.xml
@@ -511,7 +511,7 @@ install(DIRECTORY data/curves/
 # own - so an accidental wide install prefix can't cascade.
 # Use KDE_INSTALL_FULL_DATADIR (already prefix-resolved by ECM) so we
 # don't manually concatenate CMAKE_INSTALL_PREFIX with KDE_INSTALL_DATADIR
-# — that join produces `/usr//absolute/...` when ECM hands us an absolute
+#, that join produces `/usr//absolute/...` when ECM hands us an absolute
 # KDE_INSTALL_DATADIR (some distros override it that way).
 install(CODE "
     set(_pz_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
@@ -572,7 +572,7 @@ install(PROGRAMS scripts/plasmazones-report.sh
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes).
-# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL —
+# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL , 
 # no point shipping the icon if the binary isn't built.
 set(_plasmazones_dark_icons
     icons/hicolor/scalable/apps/plasmazones.svg
@@ -603,19 +603,19 @@ if(BUILD_PHOSPHOR_SHELL)
     # install (qrc fallback in ShellLoader::resolve()).
     add_subdirectory(examples/phosphor-shell)
 
-    # phosphor-theme-demo — Phase 1.1 acceptance test. Renders the active
+    # phosphor-theme-demo, Phase 1.1 acceptance test. Renders the active
     # PaletteStore as a swatch sheet; hot-reloads from
     # ~/.local/share/phosphor/palettes/current.json. Standalone exe so it
     # boots without the full shell.
     add_subdirectory(examples/phosphor-theme-demo)
 
-    # phosphor-theme-cli — headless driver for the matugen runner and
+    # phosphor-theme-cli, headless driver for the matugen runner and
     # template engine. Exercises the round-trip the demo skips:
     # wallpaper -> matugen -> palette JSON -> rendered template.
     add_subdirectory(examples/phosphor-theme-cli)
 
     # Install the example phosphor-shell QML/shaders so users can copy
-    # them into their config dir and edit. Same source as the qrc above —
+    # them into their config dir and edit. Same source as the qrc above , 
     # qrc is the build-time frozen copy used as final fallback, this is
     # the user-editable copy. ShellLoader::resolve() probes
     # GenericConfigLocation (~/.config) → GenericDataLocation (this
@@ -658,7 +658,7 @@ feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CPack — source tarball generation (`cpack --config CPackSourceConfig.cmake`
+# CPack, source tarball generation (`cpack --config CPackSourceConfig.cmake`
 # or `make package_source`). Distro builds in release.yml still hand-roll
 # tarballs for filename-control reasons; this exists so a release engineer
 # can also bootstrap a tarball locally without the workflow.

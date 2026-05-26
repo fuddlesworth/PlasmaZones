@@ -1,16 +1,19 @@
-# 04 — Implementation Plan
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-This is the **execution playbook** for the gaps inventoried in `02-gap-analysis.md` and the architecture defined in `03-component-map.md`. It refines the M0–M6 milestone sketch from `02` into a slower, library-first roll-out: every new library ships with at least one runnable example before any polished UI is attempted.
+# 04, Implementation Plan
+
+This is the **execution playbook** for the gaps inventoried in `02-gap-analysis.md` and the architecture defined in `03-component-map.md`. It refines the M0-M6 milestone sketch from `02` into a slower, library-first roll-out: every new library ships with at least one runnable example before any polished UI is attempted.
 
 ## Philosophy
 
-1. **Library-first.** Each capability lands as a focused `phosphor-*` library with a clear `IFoo` interface, NOT as a chunk of shell code. This is already how the existing `phosphor-*` tree is structured — extend the pattern.
-2. **Example-first.** Each library ships with an `examples/phosphor-<name>-demo/` (and a CLI demo where it makes sense). The example is the acceptance test — if you can't drive the library from a small standalone app, the API isn't right.
+1. **Library-first.** Each capability lands as a focused `phosphor-*` library with a clear `IFoo` interface, NOT as a chunk of shell code. This is already how the existing `phosphor-*` tree is structured, extend the pattern.
+2. **Example-first.** Each library ships with an `examples/phosphor-<name>-demo/` (and a CLI demo where it makes sense). The example is the acceptance test, if you can't drive the library from a small standalone app, the API isn't right.
 3. **Ship thin slices.** Each phase ends at a tagged release. No phase depends on the next; partial completion is shippable.
 4. **No premature UI polish.** The mockups in `mockups/` are the *destination*, not the starting point. We earn each surface by completing the libraries beneath it. The final shell UI work happens last, when every primitive is solid.
-5. **Run on the Phosphor compositor.** Per [[project-phosphor-standalone-stack]], we are the compositor. The shell binds to `phosphor-compositor` directly; we do not target other compositors as deployment surfaces. (Early Phase 1 / Phase 2 libraries that are pure data sources or DBus clients may happen to be testable under another Wayland compositor while `phosphor-compositor` matures in parallel — that's a tactical convenience, not a design goal.)
+5. **Run on the Phosphor compositor.** Per [[project-phosphor-standalone-stack]], we are the compositor. The shell binds to `phosphor-compositor` directly; we do not target other compositors as deployment surfaces. (Early Phase 1 / Phase 2 libraries that are pure data sources or DBus clients may happen to be testable under another Wayland compositor while `phosphor-compositor` matures in parallel, that's a tactical convenience, not a design goal.)
 
-## Where we are (Phase 0 — what already exists)
+## Where we are (Phase 0, what already exists)
 
 | Asset                                                                                     | State                                                                                                                       |
 |-------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
@@ -19,23 +22,23 @@ This is the **execution playbook** for the gaps inventoried in `02-gap-analysis.
 | `libs/phosphor-layer` (layer-shell helper) + `phosphor-overlay` (layer helper)            | ✓ exposed via our compositor; lockscreen / OSDs / overlays consume                                                          |
 | `libs/phosphor-shaders` (`corners`, `frosted_glass`, `gradient`, `shadow`)                | ✓ baseline                                                                                                                  |
 | `libs/phosphor-zones` / `phosphor-tile-engine` / `phosphor-snap-engine`                   | ✓ tiling differentiator; **none of the reference shells own this**                                                          |
-| `libs/phosphor-layout-api` (`ILayoutSourceFactory`)                                       | ✓ registry pattern already exists — generalize, don't reinvent                                                              |
+| `libs/phosphor-layout-api` (`ILayoutSourceFactory`)                                       | ✓ registry pattern already exists, generalize, don't reinvent                                                              |
 | Data sources (`Process`, `FileView`, `SystemClock`, `UPowerHost`, `WallpaperService`, `Toplevels`) | ✓ in place                                                                                                          |
-| `examples/phosphor-shell/` (POC bar + popups, ~2.6 KLOC QML)                              | ✓ proof of concept; do **not** evolve this directly — it's the reference, not the target                                    |
+| `examples/phosphor-shell/` (POC bar + popups, ~2.6 KLOC QML)                              | ✓ proof of concept; do **not** evolve this directly, it's the reference, not the target                                    |
 
 ## Plan overview
 
 | Phase | Goal                                          | Duration*  | Visible at end of phase                                                       |
 |-------|-----------------------------------------------|------------|-------------------------------------------------------------------------------|
-| 1     | Foundation libraries (no real UI)             | 4–6 weeks  | CLI tools, kitchen-sink demos. No shell users yet.                            |
-| 2     | Service libraries                             | 8–12 weeks | `phosphorctl` can drive audio/net/bt/brightness/idle/notifications/mpris/tray/polkit/clipboard. Headless. |
-| 3     | UI primitives + first visible examples        | 4–6 weeks  | Pz* widgets, bar canvas, OSD/toast frameworks, ConnectedCorner — all runnable in toy windows. |
-| 4     | Surface implementations                       | 12–20 weeks| Daily-drivable shell: bar, launcher, notifications, control center, lockscreen, power menu. |
+| 1     | Foundation libraries (no real UI)             | 4-6 weeks  | CLI tools, kitchen-sink demos. No shell users yet.                            |
+| 2     | Service libraries                             | 8-12 weeks | `phosphorctl` can drive audio/net/bt/brightness/idle/notifications/mpris/tray/polkit/clipboard. Headless. |
+| 3     | UI primitives + first visible examples        | 4-6 weeks  | Pz* widgets, bar canvas, OSD/toast frameworks, ConnectedCorner, all runnable in toy windows. |
+| 4     | Surface implementations                       | 12-20 weeks| Daily-drivable shell: bar, launcher, notifications, control center, lockscreen, power menu. |
 | 5     | Polish + ecosystem                            | open       | Matugen template fan-out, plugin browser, dashboard, dock, color picker, screenshot, clipboard manager, settings app. |
 
 *Single-engineer focused estimates. Phases 1 and 2 parallelize well; 4 partially.
 
-Cross-reference: this plan implements the same gaps as `02-gap-analysis.md` (`M0`–`M6`). The relationship:
+Cross-reference: this plan implements the same gaps as `02-gap-analysis.md` (`M0`-`M6`). The relationship:
 - 02's **M0 foundations** = this plan's **Phase 1**
 - 02's **M1 bar parity** = Phase 3 (BarCanvas primitive) + Phase 4.1 (real bar)
 - 02's **M2 launcher + notifications** = Phase 2 (notifications service) + Phase 4.2/4.3
@@ -48,13 +51,13 @@ If anything in `02` conflicts with this doc, this doc wins (newer + execution-or
 
 ---
 
-## Phase 1 — Foundations
+## Phase 1, Foundations
 
 **Goal:** ship the four new libraries the rest of the work depends on. Each ends in an example that can be run by hand without launching the shell.
 
 **Order (if solo):** 1.1 → 1.2 || 1.3 → 1.4 → 1.5
 
-### 1.1 — `phosphor-theme` *(shipped — 2026-05-26, PR #534)*
+### 1.1, `phosphor-theme` *(shipped, 2026-05-26, PR #534)*
 
 Token store, matugen runner, template engine.
 
@@ -64,7 +67,7 @@ Token store, matugen runner, template engine.
 | `qml/Phosphor/Theme/{Theme,Tokens,Motion,StateLayer}.qml`      | ✓ shipped | Singletons. Default values = canonical Phosphor palette ([[project-phosphor-default-palette]]). Theme accessors index `palette[...]` so QML bindings re-evaluate on `paletteChanged`. |
 | `examples/phosphor-theme-demo/`                                | ✓ shipped | Swatch sheet with responsive GridLayout, preset switcher (`dark / light / sunset / forest`), and a wallpaper button that drives `MatugenRunner` → `applyTokens` end-to-end. Brand-gradient stops synthesised from M3 accents on each matugen run. `PresetPalettes` lives here, not in the library. |
 | `examples/phosphor-theme-cli/`                                 | ✓ shipped | `set-wallpaper` / `dump` / `render-template` / `cycle <dir>` subcommands. Atomic-rename safe writes; matches the same parse path the demo's watcher uses. |
-| `libs/phosphor-theme/tests/`                                   | ✓ shipped | 25 cases across `test_palettestore`, `test_templateengine`, `test_matugenrunner`. ctest-integrated; offscreen QPA so they run headless. |
+| `libs/phosphor-theme/tests/`                                   | ✓ shipped | 33 cases across `test_palettestore` (12), `test_templateengine` (11), `test_matugenrunner` (10). Covers hot-reload via in-place edit and atomic-rename, matugen v3 + v4 JSON parsing, `renderFile` round-trip, applyTokens normalisation, and signal-change semantics. ctest-integrated; offscreen QPA so they run headless. |
 | `libs/phosphor-theme/README.md`                                | ✓ shipped | Canonical phosphor-* library README style: responsibility, key types table, typical-use blocks, design notes (binding-tracking rule, merge semantics, matugen schema variants), dependencies. |
 
 **Acceptance:**
@@ -74,7 +77,7 @@ Token store, matugen runner, template engine.
 
 **Effort:** M (estimated ~2 weeks; actual ~1 session)
 
-### 1.2 — `phosphor-popout`
+### 1.2, `phosphor-popout`
 
 Centralized popout coordinator (DMS pattern, lifted into C++).
 
@@ -92,7 +95,7 @@ Centralized popout coordinator (DMS pattern, lifted into C++).
 
 **Effort:** M (~2 weeks)
 
-### 1.3 — `phosphor-registry`
+### 1.3, `phosphor-registry`
 
 Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
@@ -100,7 +103,7 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 |-----------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
 | `libs/phosphor-registry/` (C++)                                             | `IBarWidgetFactory`, `IControlCenterTileFactory`, `ILauncherProviderFactory`, `IOSDFactory`, `IDesktopWidgetFactory` + a generic `Registry<T>` template. |
 | `examples/phosphor-registry-demo/`                                          | Window with a "bar" that renders widgets pulled from `IBarWidgetFactory`. Two built-in widgets (clock, color square). |
-| `examples/phosphor-registry-plugin-demo/`                                   | External `.so` + JSON manifest. The demo app loads it at startup and a third widget appears. Demonstrates the plugin ABI shape (no sandboxing yet — that's Phase 5). |
+| `examples/phosphor-registry-plugin-demo/`                                   | External `.so` + JSON manifest. The demo app loads it at startup and a third widget appears. Demonstrates the plugin ABI shape (no sandboxing yet, that's Phase 5). |
 
 **Acceptance:**
 - Registry enumerates factories; plugin loads from `~/.local/share/phosphor/plugins/<id>/`
@@ -109,7 +112,7 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Effort:** M (~2 weeks)
 
-### 1.4 — `phosphor-ipc` + `phosphorctl`
+### 1.4, `phosphor-ipc` + `phosphorctl`
 
 | Deliverable                                                       | Notes                                                                                |
 |-------------------------------------------------------------------|--------------------------------------------------------------------------------------|
@@ -123,9 +126,9 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 - Typed args validated client-side; errors are structured
 - Wraps (does not replace) existing D-Bus adaptors
 
-**Effort:** M (~2 weeks; CLI in 2–3 days, library is the bulk)
+**Effort:** M (~2 weeks; CLI in 2-3 days, library is the bulk)
 
-### 1.5 — `PerScreen` QML helper
+### 1.5, `PerScreen` QML helper
 
 | Deliverable                                       | Notes                                                                            |
 |---------------------------------------------------|----------------------------------------------------------------------------------|
@@ -148,13 +151,13 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 | `phosphor-ipc`        | not started                                             |
 | `PerScreen` helper    | not started                                             |
 
-The `phosphor-foundations-0.1` tag is gated on all five — do not cut it until 1.2–1.5 land.
+The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.2-1.5 land.
 
 ---
 
-## Phase 2 — Service libraries
+## Phase 2, Service libraries
 
-**Goal:** in-process C++ services for every desktop integration, each with a CLI demo that proves the contract. **No shell UI yet** — just data, exposed via QML facades + `phosphorctl`.
+**Goal:** in-process C++ services for every desktop integration, each with a CLI demo that proves the contract. **No shell UI yet**, just data, exposed via QML facades + `phosphorctl`.
 
 ### Naming, layout, and the existing umbrella
 
@@ -163,12 +166,12 @@ The existing `phosphor-services` library is an umbrella whose CMakeLists explici
 The shared "-common" already exists: **`phosphor-dbus`** is the service-agnostic DBus plumbing (`client.cpp`, error/cancel handling, custom-type marshalling). Every new service lib in this phase consumes `phosphor-dbus` instead of duplicating boilerplate.
 
 Each service follows the same shape:
-- `libs/phosphor-<domain>/` (C++) — focused, one concern, depends on `phosphor-dbus` if it talks DBus
+- `libs/phosphor-<domain>/` (C++), focused, one concern, depends on `phosphor-dbus` if it talks DBus
 - QML singleton `<Domain>.qml` (e.g. `Network`, `Bluetooth`)
-- `examples/phosphor-<domain>-cli/` — small binary that reads + controls the service
+- `examples/phosphor-<domain>-cli/`, small binary that reads + controls the service
 - `phosphorctl` namespace (e.g. `phosphorctl call network.scan`)
 
-### 2.0 — Extract existing `phosphor-services` tenants
+### 2.0, Extract existing `phosphor-services` tenants
 
 The umbrella already houses four tenants. Before adding new ones, extract these to follow the pattern (small, mostly-mechanical moves; update consumers in the same PRs):
 
@@ -177,16 +180,16 @@ The umbrella already houses four tenants. Before adding new ones, extract these 
 | `phosphor-services/src/statusnotifier/`            | `phosphor-sni/`                  | StatusNotifierItem host + watcher + dbusmenu. First-tenant historical context. |
 | `phosphor-services/src/mpris/`                     | `phosphor-mpris/`                | MPRIS client + player aggregation.                                              |
 | `phosphor-services/src/upower/`                    | `phosphor-upower/`               | Battery/power-supply readouts. (Already used by current `examples/phosphor-shell/`.) |
-| `phosphor-services/src/icontheme/` + `iconimageprovider.*` | `phosphor-icontheme/`    | Icon-theme resolution + Qt image provider. Possibly fold into `phosphor-rendering` if it's purely a Qt image provider — judgement call when extracting. |
+| `phosphor-services/src/icontheme/` + `iconimageprovider.*` | `phosphor-icontheme/`    | Icon-theme resolution + Qt image provider. Possibly fold into `phosphor-rendering` if it's purely a Qt image provider, judgement call when extracting. |
 | `libs/phosphor-services/` umbrella                 | **deleted**                      | Once empty. No backwards-compat shim, per `feedback_no_legacy_shims`.          |
 
-**Effort:** S–M total. Mechanical except for any cross-tenant helper code that needs to move into `phosphor-dbus` or a new tiny `phosphor-icontheme`. Per CLAUDE.md, every call site updates in the same PR.
+**Effort:** S-M total. Mechanical except for any cross-tenant helper code that needs to move into `phosphor-dbus` or a new tiny `phosphor-icontheme`. Per CLAUDE.md, every call site updates in the same PR.
 
-### 2.1–2.12 — New service libraries
+### 2.1-2.10, New service libraries
 
 Naming notes:
 - `phosphor-audio` is **already taken** by the cava-spectrum lib for audio-reactive shaders. The full PipeWire mixer goes into `phosphor-pipewire` to avoid collision.
-- `phosphor-shortcuts` already exists with a `kglobalaccel/portal/dbus` backend pattern — use the same pattern for any service with multiple possible backends.
+- `phosphor-shortcuts` already exists with a `kglobalaccel/portal/dbus` backend pattern, use the same pattern for any service with multiple possible backends.
 
 | #    | Library                              | Backend                                                                              | CLI demo capabilities                                          | Effort |
 |------|--------------------------------------|--------------------------------------------------------------------------------------|----------------------------------------------------------------|--------|
@@ -199,21 +202,21 @@ Naming notes:
 | 2.7  | `phosphor-idle`                      | `idle-inhibit-unstable-v1` client + timer state machine                              | inhibit toggle, timeout config, fired-at log                   | S      |
 | 2.8  | `phosphor-clipboard`                 | `wlr-data-control` + on-disk history (cliphist-style)                                | watch / list history / copy nth entry                          | M      |
 | 2.9  | `phosphor-lock`                      | PAM (`pam_authenticate`) + coordination with ext-session-lock-v1                     | CLI demo authenticates a user and prints success/failure       | M      |
-| 2.10 | `phosphor-session`                   | DBus `org.freedesktop.login1` (logind, via `phosphor-dbus`)                          | lock, suspend, hibernate, reboot, shutdown — read available capabilities first | S |
+| 2.10 | `phosphor-session`                   | DBus `org.freedesktop.login1` (logind, via `phosphor-dbus`)                          | lock, suspend, hibernate, reboot, shutdown, read available capabilities first | S |
 
-(Existing `phosphor-mpris`, `phosphor-sni`, `phosphor-upower` from 2.0 cover what would have been service rows 11–13 in the prior plan.)
+(Existing `phosphor-mpris`, `phosphor-sni`, `phosphor-upower` from 2.0 cover what would have been service rows 11-13 in the prior plan.)
 
-**Total effort:** L–XL (8–12 weeks solo, including 2.0 extractions). Parallelizes well across 2–3 engineers — `phosphor-dbus` is the only shared dep, and it's already there.
+**Total effort:** L-XL (8-12 weeks solo, including 2.0 extractions). Parallelizes well across 2-3 engineers, `phosphor-dbus` is the only shared dep, and it's already there.
 
 **Phase 2 gate:** each library has a passing CLI demo; `phosphor-services` umbrella is deleted; `phosphorctl call <ns>.<fn>` works for every service. Tag `phosphor-integrations-0.1`.
 
 ---
 
-## Phase 3 — UI primitives + first visible examples
+## Phase 3, UI primitives + first visible examples
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
 
-### 3.1 — `Pz*` atom library
+### 3.1, `Pz*` atom library
 
 | Deliverable                                                                  | Notes                                                                            |
 |------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
@@ -224,20 +227,20 @@ Naming notes:
 
 **Effort:** M (~2 weeks)
 
-### 3.2 — `ConnectedCorner` / `ConnectedShape` / `BarCanvas`
+### 3.2, `ConnectedCorner` / `ConnectedShape` / `BarCanvas`
 
-The connected-corner geometry primitive — central to the visual identity.
+The connected-corner geometry primitive, central to the visual identity.
 
 | Deliverable                                                                          | Notes                                                                                   |
 |--------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
 | `qml/Phosphor/Widgets/{ConnectedShape,ConnectedCorner,BarCanvas}.qml`               | QML `Shape` + JS geometry (`ConnectorGeometry.js`). Sockets are a binding; geometry recomputes on socket change with `Behavior on …` Motion easing. |
-| `examples/phosphor-bar-canvas-demo/`                                                 | A standalone bar with one button that opens a popout. The popout grows out of the bar with the inverted-corner join — exactly the animation from `mockups/control-center.svg`. |
+| `examples/phosphor-bar-canvas-demo/`                                                 | A standalone bar with one button that opens a popout. The popout grows out of the bar with the inverted-corner join, exactly the animation from `mockups/control-center.svg`. |
 
 **Acceptance:** opening/closing the popout morphs the shared Shape; one popout per bar; uses `PopoutService` from Phase 1.2.
 
-**Effort:** L (~3 weeks — the geometry math is the bulk)
+**Effort:** L (~3 weeks, the geometry math is the bulk)
 
-### 3.3 — OSD framework + first OSDs
+### 3.3, OSD framework + first OSDs
 
 | Deliverable                                                  | Notes                                                                                       |
 |--------------------------------------------------------------|---------------------------------------------------------------------------------------------|
@@ -249,46 +252,46 @@ The connected-corner geometry primitive — central to the visual identity.
 
 **Effort:** M (~2 weeks)
 
-### 3.4 — Toast framework
+### 3.4, Toast framework
 
 | Deliverable                                                  | Notes                                                                                            |
 |--------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
 | `qml/Phosphor/Notifications/ToastHost.qml` + `Toast.qml`     | Layer-shell surface per screen, stacks toasts top-right. Slide-in from edge, auto-dismiss, hover-to-pause. |
-| `examples/phosphor-toast-demo/`                              | Send a notification via `notify-send` → toast appears. Uses `phosphor-service-notifications` from Phase 2.5. |
+| `examples/phosphor-toast-demo/`                              | Send a notification via `notify-send` and a toast appears. Uses `phosphor-notifications` from Phase 2.5. |
 
 **Acceptance:** toasts queue, dismiss correctly; rich text + image support; respects per-app rules registered in settings (stub OK for now).
 
 **Effort:** M (~2 weeks)
 
-**Phase 3 gate:** All four examples runnable. The connected-corner bar demo is the headline — visually identical to the mockup. Tag `phosphor-ui-primitives-0.1`.
+**Phase 3 gate:** All four examples runnable. The connected-corner bar demo is the headline, visually identical to the mockup. Tag `phosphor-ui-primitives-0.1`.
 
 ---
 
-## Phase 4 — Surface implementations
+## Phase 4, Surface implementations
 
 **Goal:** the actual shell. Each surface is a discrete release.
 
-Order is rough — each surface is independent enough to slip. Recommended sequence below.
+Order is rough, each surface is independent enough to slip. Recommended sequence below.
 
-### 4.1 — Bar (M1 from gap-analysis)
+### 4.1, Bar (M1 from gap-analysis)
 
 | Deliverable                                                  | Effort                                                                              |
 |--------------------------------------------------------------|-------------------------------------------------------------------------------------|
 | `qml/Phosphor/Bar/{BarHost,Slot}.qml`                        | M                                                                                   |
-| `qml/Phosphor/Bar/Widgets/*` — 10 widgets: Clock, Workspaces, FocusedApp, SystemMetrics, Network, Bluetooth, Audio, Battery, Tray, Media, ControlCenterButton, NotificationButton, PowerButton, Spacer | L |
+| `qml/Phosphor/Bar/Widgets/*`, 10 widgets: Clock, Workspaces, FocusedApp, SystemMetrics, Network, Bluetooth, Audio, Battery, Tray, Media, ControlCenterButton, NotificationButton, PowerButton, Spacer | L |
 | Migrate `examples/phosphor-shell/TopPanel.qml` users to new bar | S                                                                                |
 
 Visible win: bar feels alive and distinct.
 
-### 4.2 — Launcher (M2)
+### 4.2, Launcher (M2)
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Launcher/Launcher.qml` (Spotlight skin first; Connected + Standalone later) | L       |
 | Providers: `AppsProvider` (.desktop), `CalculatorProvider`, `WindowsProvider` (foreign-toplevel from `phosphor-compositor`), `CommandProvider`, `EmojiProvider`, `ClipboardProvider` (Phase 2.10) | L |
-| Fuzzy match — port `fzf` scoring to C++                                                   | S       |
+| Fuzzy match, port `fzf` scoring to C++                                                   | S       |
 
-### 4.3 — Notification center (M2)
+### 4.3, Notification center (M2)
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
@@ -296,36 +299,36 @@ Visible win: bar feels alive and distinct.
 | Rich text (`markdown2html` port)                                                           | S       |
 | Per-app rules editor                                                                       | S       |
 
-### 4.4 — Control center (M3)
+### 4.4, Control center (M3)
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/ControlCenter/ControlCenter.qml` + `Tile.qml` + `DetailPanel.qml`           | M       |
-| Tile catalog: Network / Bluetooth / Audio / Brightness / NightMode / DarkMode / Airplane / Idle / PowerProfile / Wallpaper (each ~1–2 days, depend on Phase 2 services) | L |
-| Card components (Calendar, Weather, SystemMonitor, Media, Shortcuts) — reusable in Dashboard | M |
+| Tile catalog: Network / Bluetooth / Audio / Brightness / NightMode / DarkMode / Airplane / Idle / PowerProfile / Wallpaper (each ~1-2 days, depend on Phase 2 services) | L |
+| Card components (Calendar, Weather, SystemMonitor, Media, Shortcuts), reusable in Dashboard | M |
 
-### 4.5 — Lockscreen (M5)
+### 4.5, Lockscreen (M5)
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Lock/{LockSurface,LockClock,LockAuthField,LockMediaCard}.qml`               | L       |
-| Wired to `phosphor-service-lock` (Phase 2.11) + ext-session-lock-v1 from compositor       | M       |
+| Wired to `phosphor-lock` (Phase 2.9) + ext-session-lock-v1 from compositor                | M       |
 
-### 4.6 — Power menu
+### 4.6, Power menu
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Power/PowerMenu.qml` (replaces today's `MenuContent.qml` stub)              | S       |
-| Wired to `phosphor-service-session` (Phase 2.12)                                           | S       |
+| Wired to `phosphor-session` (Phase 2.10)                                                   | S       |
 
-### 4.7 — Wallpaper picker UI
+### 4.7, Wallpaper picker UI
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Wallpaper/WallpaperPicker.qml` (gallery + per-monitor + cycling schedule)   | M       |
 | Wallpaper transition shaders (port 6 from Noctalia or write 2-3 of our own)               | S       |
 
-### 4.8 — Theme browser
+### 4.8, Theme browser
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
@@ -334,11 +337,11 @@ Visible win: bar feels alive and distinct.
 
 **Phase 4 gate:** Phosphor is daily-drivable for one engineer (me, you). Tag `phosphor-shell-0.1`. Replace `examples/phosphor-shell/` with the production shell.
 
-**Total Phase 4 effort:** 12–20 weeks depending on parallelism.
+**Total Phase 4 effort:** 12-20 weeks depending on parallelism.
 
 ---
 
-## Phase 5 — Polish + ecosystem
+## Phase 5, Polish + ecosystem
 
 Lower priority, deferred until 4 ships. Open scope.
 
@@ -347,31 +350,31 @@ Lower priority, deferred until 4 ships. Open scope.
 | Matugen template fan-out (~30 templates)              | M      | Phosphor's theme already retints from matugen; templates extend reach to terminals/editors/external apps. Templates are mostly mustache files, batchable. |
 | Plugin browser UI + sandboxing                        | L      | Plugin ABI ships in Phase 1.3 unsandboxed; sandboxing needs capability runtime first   |
 | Settings app (separate process)                       | L      | Built on the existing settings-window pattern; not in shell scope                      |
-| Dashboard (DankDash-style multi-tab)                  | M      | Optional second surface — see `03-component-map.md` open questions                     |
+| Dashboard (DankDash-style multi-tab)                  | M      | Optional second surface, see `03-component-map.md` open questions                     |
 | Dock                                                  | M      | Optional                                                                               |
 | Color picker (Hyprpicker-style)                       | S      | Tool                                                                                   |
-| Screenshot tool                                       | M      | Tool — region/window/screen via screencopy                                             |
+| Screenshot tool                                       | M      | Tool, region/window/screen via screencopy                                             |
 | Clipboard manager UI                                  | M      | Service exists Phase 2.10; UI is the polish                                            |
 | Keybinds cheatsheet                                   | S      | Reads from compositor shortcut registry                                                |
 | Notepad widget                                        | S      |                                                                                        |
 | Process list                                          | M      |                                                                                        |
 | Cava visualizer widget                                | S      |                                                                                        |
 | Weather widget                                        | S      |                                                                                        |
-| Greeter                                               | L      | Separate process; reuses lockscreen primitives — see open questions in 03              |
+| Greeter                                               | L      | Separate process; reuses lockscreen primitives, see open questions in 03              |
 
 ---
 
 ## What we explicitly DON'T do during this period
 
-(Anti-goals — kept here so scope creep is obvious.)
+(Anti-goals, kept here so scope creep is obvious.)
 
-- **Don't port end-4's novelty widgets** (AI chat, OCR translator, anime sidebar) — out of shell scope; let them be plugins later.
-- **Don't ship a CUPS printer manager** — standalone tool, not shell concern.
-- **Don't reimplement matugen** — call the external binary like DMS does.
-- **Don't fork Qt or QtQuick.** We're not building on Quickshell or any other external shell framework — we are the framework, in `phosphor-*` libs. Engine-level fixes go through Qt upstream or land as a workaround inside the relevant `phosphor-*` lib. (Noctalia's `noctalia-qs` Quickshell fork is the cautionary tale, but it's a tale about a *different* project's stack; our analogous risk is forking Qt itself, which we likewise refuse.)
-- **Don't build a marketplace** for plugins — local discovery in Phase 5; remote registry deferred indefinitely (supply-chain risk per `01`-feature-inventory.md anti-patterns).
-- **Don't add backwards-compat shims** for the bar's TopPanel POC — replace cleanly when 4.1 lands (per `feedback_no_legacy_shims`).
-- **Don't introduce ad-hoc settings migrations** — only the one migration function per real schema bump (per CLAUDE.md "No Ad-Hoc Backwards Compatibility").
+- **Don't port end-4's novelty widgets** (AI chat, OCR translator, anime sidebar), out of shell scope; let them be plugins later.
+- **Don't ship a CUPS printer manager**, standalone tool, not shell concern.
+- **Don't reimplement matugen**, call the external binary like DMS does.
+- **Don't fork Qt or QtQuick.** We're not building on Quickshell or any other external shell framework, we are the framework, in `phosphor-*` libs. Engine-level fixes go through Qt upstream or land as a workaround inside the relevant `phosphor-*` lib. (Noctalia's `noctalia-qs` Quickshell fork is the cautionary tale, but it's a tale about a *different* project's stack; our analogous risk is forking Qt itself, which we likewise refuse.)
+- **Don't build a marketplace** for plugins, local discovery in Phase 5; remote registry deferred indefinitely (supply-chain risk per `01`-feature-inventory.md anti-patterns).
+- **Don't add backwards-compat shims** for the bar's TopPanel POC, replace cleanly when 4.1 lands (per `feedback_no_legacy_shims`).
+- **Don't introduce ad-hoc settings migrations**, only the one migration function per real schema bump (per CLAUDE.md "No Ad-Hoc Backwards Compatibility").
 - **Don't optimize before measuring.** No premature animation tuning, no premature shader compilation pipeline, no premature plugin sandboxing.
 
 ---
@@ -382,17 +385,17 @@ Lower priority, deferred until 4 ships. Open scope.
 - Each `examples/*` stays green forever. Build them in CI from day one.
 - When a Phase 4 surface lands, delete the relevant row from `02-gap-analysis.md` (or mark it `(shipped)`).
 - When a Phase 1 lib changes its public API, update `03-component-map.md` in the same PR. Don't let the design doc rot.
-- The mockups in `mockups/` are reference, not contract. If the lived design deviates, update them or note the deviation in the README — don't pretend they're current if they're not.
+- The mockups in `mockups/` are reference, not contract. If the lived design deviates, update them or note the deviation in the README, don't pretend they're current if they're not.
 - Re-read this plan every ~4 weeks. If a phase is taking 2× the estimate, ask whether the *phase* is wrong (not just the estimate).
 
 ---
 
 ## TL;DR
 
-- **Phase 1** (4–6 wks): theme, popout, registry, ipc, perscreen — all with example apps. **No shell users yet.**
-- **Phase 2** (8–12 wks): 12 service libs, each driven by a CLI demo via `phosphorctl`. **Still no shell UI.**
-- **Phase 3** (4–6 wks): Pz* atoms, BarCanvas, OSD, Toast — toy windows demonstrating each. **First visible Phosphor pixels.**
-- **Phase 4** (12–20 wks): the real shell — bar, launcher, notifications, control center, lockscreen, power menu, wallpaper, theme browser. **Daily-drivable.**
+- **Phase 1** (4-6 wks): theme, popout, registry, ipc, perscreen, all with example apps. **No shell users yet.**
+- **Phase 2** (8-12 wks): 10 new service libs (plus 4 extracted from the `phosphor-services` umbrella in 2.0), each driven by a CLI demo via `phosphorctl`. **Still no shell UI.**
+- **Phase 3** (4-6 wks): Pz* atoms, BarCanvas, OSD, Toast, toy windows demonstrating each. **First visible Phosphor pixels.**
+- **Phase 4** (12-20 wks): the real shell, bar, launcher, notifications, control center, lockscreen, power menu, wallpaper, theme browser. **Daily-drivable.**
 - **Phase 5** (open): matugen fan-out, plugin browser, dashboard, all the smaller surfaces.
 
 Earn each surface by completing its libraries first. Each library earns its place by being driveable from a 100-line example. Each example earns its place by being a runnable acceptance test, not a slideshow.

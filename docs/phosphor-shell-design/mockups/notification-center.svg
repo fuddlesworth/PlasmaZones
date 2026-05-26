@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
   <defs>
     <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
@@ -71,12 +73,12 @@
       </g>
       <g transform="translate(0 86)">
         <rect width="520" height="44" rx="14" fill="#070F22" stroke="#1E293B"/>
-        <text x="18" y="18" fill="#E6EDFF" font-size="12">marc — "saw your PR"</text>
+        <text x="18" y="18" fill="#E6EDFF" font-size="12">marc, "saw your PR"</text>
         <text x="18" y="34" fill="#94A3B8" font-size="11">#phosphor‑dev · 18m</text>
       </g>
       <g transform="translate(0 138)">
         <rect width="520" height="44" rx="14" fill="#070F22" stroke="#1E293B"/>
-        <text x="18" y="18" fill="#E6EDFF" font-size="12">jules — "tomorrow ok?"</text>
+        <text x="18" y="18" fill="#E6EDFF" font-size="12">jules, "tomorrow ok?"</text>
         <text x="18" y="34" fill="#94A3B8" font-size="11">DM · 1h</text>
       </g>
     </g>
@@ -104,12 +106,12 @@
       <text fill="#94A3B8" font-size="10">EARLIER TODAY · 5</text>
       <g transform="translate(0 14)" opacity=".7">
         <rect width="520" height="44" rx="14" fill="#070F22" stroke="#1E293B"/>
-        <text x="18" y="18" fill="#E6EDFF" font-size="12">Calendar — "Standup" started</text>
+        <text x="18" y="18" fill="#E6EDFF" font-size="12">Calendar, "Standup" started</text>
         <text x="18" y="34" fill="#94A3B8" font-size="11">10:00 · 3h ago</text>
       </g>
       <g transform="translate(0 66)" opacity=".5">
         <rect width="520" height="44" rx="14" fill="#070F22" stroke="#1E293B"/>
-        <text x="18" y="18" fill="#E6EDFF" font-size="12">Network — connected to Crow's Nest 5G</text>
+        <text x="18" y="18" fill="#E6EDFF" font-size="12">Network, connected to Crow's Nest 5G</text>
       </g>
       <g transform="translate(0 118)" opacity=".4">
         <rect width="520" height="32" rx="12" fill="#070F22" stroke="#1E293B"/>
@@ -145,7 +147,7 @@
       <rect width="360" height="68" rx="18" fill="#0B1730" stroke="#1E293B"/>
       <rect x="14" y="14" width="40" height="40" rx="10" fill="#A855F7"/>
       <text x="64" y="32" fill="#E6EDFF" font-weight="600">Spotify</text>
-      <text x="64" y="50" fill="#94A3B8">Now playing — Mount Kimbie</text>
+      <text x="64" y="50" fill="#94A3B8">Now playing, Mount Kimbie</text>
       <text x="344" y="24" text-anchor="end" fill="#94A3B8" font-size="11">✕</text>
     </g>
   </g>
@@ -160,7 +162,7 @@
     <g transform="translate(640 300)">
       <rect width="260" height="76" rx="8" fill="#070F22" stroke="#3B82F6"/>
       <text x="14" y="22" font-weight="600" fill="#3B82F6">org.freedesktop.Notifications</text>
-      <text x="14" y="38" fill="#94A3B8">phosphor‑service‑notifications</text>
+      <text x="14" y="38" fill="#94A3B8">phosphor‑notifications</text>
       <text x="14" y="52" fill="#94A3B8">implements the daemon in‑process.</text>
       <text x="14" y="66" fill="#94A3B8">Replaces mako / dunst / swaync.</text>
     </g>
@@ -181,7 +183,7 @@
   </g>
 
   <text x="640" y="690" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
-    Phosphor — Notifications (popout left · live toasts top‑right · default theme)
+    Phosphor, Notifications (popout left · live toasts top‑right · default theme)
   </text>
   <text x="640" y="708" text-anchor="middle" fill="#94A3B8" font-size="9" opacity=".7">
     Theme: phosphor‑works.github.io/palette

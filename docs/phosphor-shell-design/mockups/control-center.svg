@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
   <defs>
     <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
@@ -85,7 +87,7 @@
       <text fill="#E6EDFF" font-size="13" font-weight="600">14:32</text>
       <text x="56" fill="#94A3B8" font-size="11">Sun 24 May</text>
     </g>
-    <!-- Active CC button — pulses to indicate it's the source of the popout -->
+    <!-- Active CC button, pulses to indicate it's the source of the popout -->
     <g transform="translate(884 38)" color="#0B1730">
       <rect x="-2" y="-2" width="22" height="22" rx="6" fill="#3B82F6">
         <animate attributeName="opacity" values="1;0.78;1" dur="2.4s" repeatCount="indefinite"/>
@@ -217,7 +219,7 @@
       <rect width="240" height="60" rx="8" fill="#070F22" stroke="#22D3EE" opacity=".96"/>
       <text x="14" y="22" font-size="11" font-weight="600" fill="#22D3EE">Inverted (concave) corner</text>
       <text x="14" y="38" font-size="11" fill="#94A3B8">Bar bottom dips down to meet</text>
-      <text x="14" y="52" font-size="11" fill="#94A3B8">CC's left edge — one painted Shape.</text>
+      <text x="14" y="52" font-size="11" fill="#94A3B8">CC's left edge, one painted Shape.</text>
     </g>
   </g>
 
@@ -241,14 +243,14 @@
     <g transform="translate(80 520)">
       <rect width="240" height="76" rx="8" fill="#070F22" stroke="#22D3EE" opacity=".96"/>
       <text x="14" y="22" font-weight="600" fill="#22D3EE">Sliders → live services</text>
-      <text x="14" y="38" fill="#94A3B8">Volume → phosphor‑service‑audio</text>
+      <text x="14" y="38" fill="#94A3B8">Volume → phosphor‑pipewire</text>
       <text x="14" y="52" fill="#94A3B8">(libpipewire). Brightness →</text>
-      <text x="14" y="66" fill="#94A3B8">phosphor‑service‑brightness.</text>
+      <text x="14" y="66" fill="#94A3B8">phosphor‑brightness.</text>
     </g>
   </g>
 
   <text x="640" y="640" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
-    Phosphor — Control Center popping out of the bar (live animation · default theme)
+    Phosphor, Control Center popping out of the bar (live animation · default theme)
   </text>
   <text x="640" y="658" text-anchor="middle" fill="#94A3B8" font-size="11">
     6s cycle: bar dips → popout grows downward → 3s hold → contents fade → bar pulls back to a pill

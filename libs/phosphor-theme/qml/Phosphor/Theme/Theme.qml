@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
-// Phosphor.Theme.Theme — color-token singleton.
+// Phosphor.Theme.Theme, color-token singleton.
 // QML consumers write `Theme.primary` / `Theme.on_surface` / etc. instead
 // of poking at the underlying PaletteStore by string key. Names mirror
 // the canonical Phosphor palette tokens exactly (snake_case verbatim, per
 // project_phosphor_default_palette memory).
 // Binding-tracking note: every named accessor below indexes into the
 // `palette` QVariantMap rather than calling PaletteStore.token(). The
-// QML engine tracks property reads, not method calls — `palette` is a
+// QML engine tracks property reads, not method calls, `palette` is a
 // Q_PROPERTY with NOTIFY paletteChanged, so bindings on `Theme.primary`
 // re-evaluate every time the store reloads. Calling token() would NOT
 // retint live; the swatches would update (they read palette directly)
@@ -23,7 +23,7 @@ QtObject {
     // accessors below.
     readonly property var paletteStore: PaletteStore
     // The active token map (token name → QColor). Every accessor below
-    // routes through this — that's how change-tracking works (see the
+    // routes through this, that's how change-tracking works (see the
     // file-level comment above).
     readonly property var palette: PaletteStore.palette
     // ─── Surfaces ────────────────────────────────────────────────────────
