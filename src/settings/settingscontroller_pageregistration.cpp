@@ -294,9 +294,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     //
     // The "animations" entry is built at static-init by unioning the
     // virtual sub-buckets (`animations-surfaces`, `animations-library`)
-    // with the leaves that hang directly off `animations` (general,
-    // app-rules). Without this, a future leaf added to a virtual
-    // parent only would silently miss the top-level dirty propagation.
+    // with the leaf that hangs directly off `animations` (general).
+    // Without this, a future leaf added to a virtual parent only would
+    // silently miss the top-level dirty propagation.
     //
     // Keep the per-group leaf lists in sync with the matching
     // `_childItems` entries in src/settings/qml/Main.qml.

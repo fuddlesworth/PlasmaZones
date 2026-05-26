@@ -27,7 +27,11 @@
 
 #include <PhosphorProtocol/ClientHelpers.h>
 
+#include "../core/logging.h"
+
+#include <QCoreApplication>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
@@ -191,7 +195,15 @@ void SettingsController::defaults()
 
 void SettingsController::launchEditor()
 {
-    QProcess::startDetached(QStringLiteral("plasmazones-editor"), {});
+    // Prefer the editor next to our own executable (handles
+    // build-tree runs + non-PATH installs); fall back to a PATH
+    // lookup if not present. Logs the failure so a missing/broken
+    // editor doesn't silently produce a no-op click in the UI.
+    const QString colocated = QCoreApplication::applicationDirPath() + QLatin1String("/plasmazones-editor");
+    QString program = QFileInfo::exists(colocated) ? colocated : QStringLiteral("plasmazones-editor");
+    if (!QProcess::startDetached(program, {})) {
+        qCWarning(lcCore) << "launchEditor: failed to start" << program << "— editor binary missing or not executable?";
+    }
 }
 
 } // namespace PlasmaZones

@@ -84,6 +84,12 @@ QList<PageRegistry::Entry> PageRegistry::topLevelPages() const
 QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) const
 {
     QList<Entry> out;
+    // Conservative over-allocate matches topLevelPages — most parent
+    // ids have a small child count, but the reserve is cheap and the
+    // alternative (no reserve) appends one-at-a-time with N grow
+    // steps. Both behaviours were inconsistent across the two
+    // methods; standardise on reserve.
+    out.reserve(m_pages.size());
     for (const Entry& e : m_pages) {
         if (e.parentId == parentId) {
             out.append(e);

@@ -5,6 +5,8 @@
 
 #include "settingscontroller.h"
 
+#include <QDebug>
+
 namespace PlasmaZones {
 
 SettingsStagingDomain::SettingsStagingDomain(SettingsController* controller, QObject* parent)
@@ -12,6 +14,13 @@ SettingsStagingDomain::SettingsStagingDomain(SettingsController* controller, QOb
     , m_controller(controller)
 {
     if (!m_controller) {
+        // Programmer error — a SettingsStagingDomain without a
+        // controller stays permanently clean and apply/discard
+        // no-op. The framework would still happily register it and
+        // wire dirtyChanged through, just to a domain that can
+        // never transition. Warn loudly so the bug surfaces.
+        qWarning() << "PlasmaZones::SettingsStagingDomain: constructed with null SettingsController — "
+                   << "apply/discard/isDirty will be permanently no-op.";
         return;
     }
     // SettingsController emits dirtyPagesChanged whenever m_dirtyPages mutates;

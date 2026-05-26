@@ -542,8 +542,14 @@ PhosphorUi.SettingsAppWindow {
         id: whatsNewDialog
     }
 
+    // Brief delay before auto-popping the What's-New dialog on first
+    // launch after an update — lets the main window finish its
+    // first-paint motion before the modal steals focus. Kirigami's
+    // `veryLongDuration` is the canonical "noticeable but unhurried"
+    // timing token (currently 400 ms across themes), close enough to
+    // the legacy hand-picked 500 ms and theme-tracking.
     Timer {
-        interval: 500
+        interval: Kirigami.Units.veryLongDuration
         running: settingsController.hasUnseenWhatsNew
         onTriggered: whatsNewDialog.open()
     }
