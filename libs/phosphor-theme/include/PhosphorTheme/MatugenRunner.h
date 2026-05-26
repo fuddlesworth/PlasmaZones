@@ -46,6 +46,15 @@ class PHOSPHORTHEME_EXPORT MatugenRunner : public QObject
     // requested one before exposing. Default: "dark".
     Q_PROPERTY(QString mode READ mode WRITE setMode NOTIFY modeChanged)
 
+    // Candidate-color preference. When an image yields multiple source
+    // colors and matugen runs non-interactively (no TTY — always our
+    // case, we're a subprocess) it refuses to pick without this flag.
+    // Default: "saturation" (picks the most saturated candidate, which
+    // matches user expectation for a "vibrant" wallpaper-derived palette).
+    // Valid matugen values: "darkness", "lightness", "saturation",
+    // "less-saturation", "value", "closest-to-fallback".
+    Q_PROPERTY(QString prefer READ prefer WRITE setPrefer NOTIFY preferChanged)
+
     // True while a `run()` call is in flight. Bind UI busy indicators here.
     Q_PROPERTY(bool running READ isRunning NOTIFY runningChanged)
 
@@ -58,6 +67,9 @@ public:
 
     [[nodiscard]] QString mode() const;
     void setMode(const QString& mode);
+
+    [[nodiscard]] QString prefer() const;
+    void setPrefer(const QString& prefer);
 
     [[nodiscard]] bool isRunning() const;
 
@@ -78,6 +90,7 @@ public:
 Q_SIGNALS:
     void matugenBinaryChanged();
     void modeChanged();
+    void preferChanged();
     void runningChanged();
 
     // The matugen invocation completed and yielded a non-empty token map.
@@ -94,6 +107,7 @@ private:
 
     QString m_matugenBinary;
     QString m_mode;
+    QString m_prefer;
     QString m_pendingWallpaper;
     std::unique_ptr<QProcess> m_process;
 };

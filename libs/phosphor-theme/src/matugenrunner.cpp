@@ -33,7 +33,9 @@ namespace {
 //
 // Returned key set is exactly what matugen emitted, no remapping yet.
 // Future hook: if matugen schema diverges, add the lookup table here.
-QVariantMap parseColorsObject(const QJsonObject& colors)
+// Flat shape: `{ "primary": "#RRGGBB", "on_primary": "...", ... }`
+// Older matugen and any caller that already flattened the modes.
+QVariantMap parseFlatColorsObject(const QJsonObject& colors)
 {
     QVariantMap out;
     for (auto it = colors.constBegin(); it != colors.constEnd(); ++it) {
@@ -49,12 +51,59 @@ QVariantMap parseColorsObject(const QJsonObject& colors)
     return out;
 }
 
+// Nested per-token shape (matugen v4+):
+//   { "primary": { "dark":  { "color": "#RRGGBB" },
+//                  "light": { "color": "#RRGGBB" },
+//                  "default": { "color": "#RRGGBB" } },
+//     "on_primary": { ... },
+//     ... }
+// Each token has its own mode-keyed object. We pick `mode` (e.g. "dark");
+// if the requested mode isn't present we fall back to "default" then
+// "light". Tokens that don't follow the shape are silently skipped.
+QVariantMap parseNestedColorsObject(const QJsonObject& colors, const QString& mode)
+{
+    QVariantMap out;
+    for (auto it = colors.constBegin(); it != colors.constEnd(); ++it) {
+        if (!it.value().isObject()) {
+            continue;
+        }
+        const QJsonObject perToken = it.value().toObject();
+
+        // Prefer the requested mode; fall back so we don't drop the whole
+        // token on a slight schema mismatch.
+        QJsonValue modeVal;
+        for (const auto& candidate :
+             {mode, QStringLiteral("default"), QStringLiteral("dark"), QStringLiteral("light")}) {
+            if (perToken.contains(candidate) && perToken.value(candidate).isObject()) {
+                modeVal = perToken.value(candidate);
+                break;
+            }
+        }
+        if (!modeVal.isObject()) {
+            continue;
+        }
+
+        const QJsonObject modeObj = modeVal.toObject();
+        const auto colorVal = modeObj.value(QLatin1String("color"));
+        if (!colorVal.isString()) {
+            continue;
+        }
+        const QColor c(colorVal.toString());
+        if (!c.isValid()) {
+            continue;
+        }
+        out.insert(it.key(), c);
+    }
+    return out;
+}
+
 } // namespace
 
 MatugenRunner::MatugenRunner(QObject* parent)
     : QObject(parent)
     , m_matugenBinary(QStringLiteral("matugen"))
     , m_mode(QStringLiteral("dark"))
+    , m_prefer(QStringLiteral("saturation"))
 {
 }
 
@@ -93,6 +142,20 @@ void MatugenRunner::setMode(const QString& mode)
     Q_EMIT modeChanged();
 }
 
+QString MatugenRunner::prefer() const
+{
+    return m_prefer;
+}
+
+void MatugenRunner::setPrefer(const QString& prefer)
+{
+    if (prefer == m_prefer) {
+        return;
+    }
+    m_prefer = prefer;
+    Q_EMIT preferChanged();
+}
+
 bool MatugenRunner::isRunning() const
 {
     return m_process && m_process->state() != QProcess::NotRunning;
@@ -122,8 +185,16 @@ void MatugenRunner::run(const QString& wallpaperPath)
     // the binary version — if `--json hex` is rejected the run fails
     // with a clear stderr message, which is better than silently
     // falling back to an undocumented schema.
+    // `matugen image <wp> --json hex` writes the full color map to stdout.
+    // `--prefer <strategy>` is required when matugen would otherwise prompt
+    // the user (multiple candidate source colors, non-TTY subprocess —
+    // always our situation). An empty prefer means caller opted out, so we
+    // skip the flag.
     QStringList args;
     args << QStringLiteral("image") << wallpaperPath << QStringLiteral("--json") << QStringLiteral("hex");
+    if (!m_prefer.isEmpty()) {
+        args << QStringLiteral("--prefer") << m_prefer;
+    }
 
     connect(m_process.get(), &QProcess::errorOccurred, this, [this, wallpaperPath](QProcess::ProcessError err) {
         Q_EMIT failed(wallpaperPath, QStringLiteral("matugen process error: %1").arg(static_cast<int>(err)));
@@ -169,28 +240,52 @@ QVariantMap MatugenRunner::parseMatugenJson(const QByteArray& json, const QStrin
     }
     const auto root = doc.object();
 
-    // Matugen schema flavours seen in practice:
-    //   1. `{ "colors": { "dark": { ... }, "light": { ... } } }`     - newer
-    //   2. `{ "colors": { "primary": "...", "on_primary": "..." } }` - older / single-mode
-    //   3. `{ "dark": { ... }, "light": { ... } }`                   - bare top-level
-    // We try each in the order they're most likely, picking the
-    // requested `mode` when both variants are present.
-    QJsonObject colors;
+    // Matugen schema flavours seen in the wild:
+    //   1. v4+:           `{ "colors": { "<token>": { "dark": {"color":"#..."},
+    //                                                  "light": {...},
+    //                                                  "default": {...} },
+    //                                    ... } }`
+    //   2. v3:            `{ "colors": { "dark": { "<token>": "#..." },
+    //                                    "light": { ... } } }`
+    //   3. single-mode:   `{ "colors": { "<token>": "#..." } }`
+    //   4. bare top:      `{ "<mode>": { "<token>": "#..." } }`
+    //   5. bare flat:     `{ "<token>": "#..." }`
+    // Per-token nesting is detected by sniffing the first non-string value
+    // in `colors`; that's enough to discriminate v4+ from v3 reliably.
+    QJsonObject candidate;
     if (root.contains(QLatin1String("colors")) && root.value(QLatin1String("colors")).isObject()) {
-        const auto colorsObj = root.value(QLatin1String("colors")).toObject();
-        if (colorsObj.contains(mode) && colorsObj.value(mode).isObject()) {
-            colors = colorsObj.value(mode).toObject();
-        } else {
-            colors = colorsObj;
-        }
+        candidate = root.value(QLatin1String("colors")).toObject();
     } else if (root.contains(mode) && root.value(mode).isObject()) {
-        colors = root.value(mode).toObject();
+        // `<mode>` keys at root: v3 shape that's been pre-unwrapped.
+        return parseFlatColorsObject(root.value(mode).toObject());
     } else {
-        // Last resort: assume root *is* the color map.
-        colors = root;
+        // Last resort: assume root *is* the flat color map.
+        return parseFlatColorsObject(root);
     }
 
-    return parseColorsObject(colors);
+    // Probe the v3 mode-wrap first: `colors.<mode>` is a token-keyed
+    // hex map. If parsing it yields any tokens, that's the schema —
+    // pick that result. This intentionally takes precedence over v4+
+    // nested parse so that the v3 fixture (which has a `dark` key at
+    // this level) doesn't get misidentified as v4+ with a token literally
+    // named "dark".
+    if (candidate.contains(mode) && candidate.value(mode).isObject()) {
+        QVariantMap flat = parseFlatColorsObject(candidate.value(mode).toObject());
+        if (!flat.isEmpty()) {
+            return flat;
+        }
+    }
+
+    // v4+ per-token nesting: each token key holds an object with mode
+    // sub-keys, each containing `{ "color": "#..." }`.
+    QVariantMap nested = parseNestedColorsObject(candidate, mode);
+    if (!nested.isEmpty()) {
+        return nested;
+    }
+
+    // Last resort: treat `colors` itself as a flat token-keyed hex map
+    // (older single-mode matugen output).
+    return parseFlatColorsObject(candidate);
 }
 
 void MatugenRunner::teardownProcess()
