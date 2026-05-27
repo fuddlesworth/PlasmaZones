@@ -27,16 +27,16 @@ ColumnLayout {
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
 
-    // Qt's FileDialog returns selectedFile as a percent-encoded URL —
+    // Qt's FileDialog returns selectedFile as a percent-encoded QUrl —
     // a folder named "My Layouts" comes back as
-    // file:///home/user/My%20Layouts. We MUST decode after stripping the
-    // scheme prefix; otherwise downstream importLayout / exportLayout /
-    // importAlgorithm / importFromKZonesFile / exportAlgorithm callers
-    // receive a non-existent path. The native shaderpackinstaller path
-    // sidesteps this by using QUrl(...).toLocalFile() on the C++ side;
-    // here we mirror its effect at the QML boundary.
+    // file:///home/user/My%20Layouts. Delegate to the controller's
+    // urlToLocalFile() (which calls QUrl::toLocalFile()) so percent-
+    // decoding, embedded query/fragment, and non-trivial schemes are
+    // all handled by Qt's canonical path. Previously a regex-based
+    // strip was used here; that path silently mishandled URLs with
+    // query strings or unusual encoding.
     function filePathFromUrl(url) {
-        return decodeURIComponent(url.toString().replace(/^file:\/\/+/, "/"));
+        return settingsController.urlToLocalFile(url);
     }
 
     spacing: 0

@@ -46,35 +46,18 @@ void TilingBehaviorController::setAlwaysReinsertIntoStack(bool enabled)
     if (alwaysReinsertIntoStack() == enabled) {
         return;
     }
-    // Mirror SnappingBehaviorController::setAlwaysActivateOnDrag so a
-    // toggle-off does NOT silently wipe the user's customised non-sentinel
-    // triggers. The previous shape dropped straight to the factory default
-    // on every off-toggle, losing user data; only fall back to defaults
-    // when stripping the sentinel leaves the list empty.
-    const QVariantList nonSentinel = TriggerUtils::stripAlwaysActiveTrigger(m_settings->autotileDragInsertTriggers());
-    QVariantList next;
-    if (enabled) {
-        next = TriggerUtils::mergeAlwaysActiveTrigger(nonSentinel);
-    } else if (nonSentinel.isEmpty()) {
-        next = ConfigDefaults::autotileDragInsertTriggers();
-    } else {
-        next = nonSentinel;
-    }
+    // See SnappingBehaviorController::setAlwaysActivateOnDrag — both
+    // master-toggle setters share the helper to keep the sentinel-cap +
+    // empty-list-fallback semantics in lockstep.
+    const QVariantList next = TriggerUtils::applyAlwaysActiveToggle(m_settings->autotileDragInsertTriggers(), enabled,
+                                                                    ConfigDefaults::autotileDragInsertTriggers());
     m_settings->setAutotileDragInsertTriggers(next);
 }
 
 void TilingBehaviorController::setAutotileDragInsertTriggers(const QVariantList& triggers)
 {
-    // Mirror SnappingBehaviorController::setDragActivationTriggers: strip
-    // the sentinel from incoming QML edits (the widget shouldn't include
-    // it — sentinel ownership belongs to the master toggle), then re-merge
-    // if always-active is currently set so writeTriggerList's MAX cap
-    // doesn't truncate away the sentinel and silently flip the master
-    // toggle off.
-    const QVariantList nonSentinel =
-        TriggerUtils::stripAlwaysActiveTrigger(TriggerUtils::convertTriggersForStorage(triggers));
-    const QVariantList next =
-        alwaysReinsertIntoStack() ? TriggerUtils::mergeAlwaysActiveTrigger(nonSentinel) : nonSentinel;
+    // Same helper as SnappingBehaviorController::setDragActivationTriggers.
+    const QVariantList next = TriggerUtils::normaliseExplicitEdit(triggers, alwaysReinsertIntoStack());
     if (m_settings->autotileDragInsertTriggers() != next) {
         m_settings->setAutotileDragInsertTriggers(next);
     }

@@ -205,6 +205,14 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
                     QStringLiteral("setLayoutAspectRatioClass"), {newLayoutId, aspectRatioClass});
                 if (arReply.type() == QDBusMessage::ErrorMessage) {
                     qCWarning(lcCore) << "setLayoutAspectRatioClass failed:" << arReply.errorMessage();
+                    // Surface to QML — the layout was created but its aspect-ratio
+                    // class wasn't applied. Mirror the other layout-mutation
+                    // paths (setLayoutHidden / setLayoutAutoAssign / standalone
+                    // setLayoutAspectRatio) which all emit layoutOperationFailed
+                    // on partial failure.
+                    Q_EMIT layoutOperationFailed(PzI18n::tr("Layout created, but aspect-ratio class could not be "
+                                                            "applied: %1")
+                                                     .arg(arReply.errorMessage()));
                 }
             }
             if (openInEditor) {

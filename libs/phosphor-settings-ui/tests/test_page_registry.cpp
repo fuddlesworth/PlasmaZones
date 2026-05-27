@@ -156,6 +156,27 @@ private Q_SLOTS:
         QVERIFY(!reg.hasPage(QStringLiteral("nullctrl")));
     }
 
+    void rejectsDuplicateControllerUnderDifferentIds()
+    {
+        // Registering the same PageController* under two ids creates two
+        // sidebar rows that share one dirty bit (only the first
+        // registration ends up in ApplicationController::m_domains), a
+        // shape the UI cannot render coherently. The registry must
+        // refuse the second registration.
+        PageRegistry reg;
+        QSignalSpy spy(&reg, &PageRegistry::pageRegistered);
+        auto* page = new StubPage(QStringLiteral("first"), &reg);
+
+        QVERIFY(reg.registerPage({QStringLiteral("first"), {}, QStringLiteral("First"), {}, QUrl(), page}));
+        // Same controller, different id — must be rejected.
+        QVERIFY(!reg.registerPage({QStringLiteral("second"), {}, QStringLiteral("Second"), {}, QUrl(), page}));
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(reg.allPages().size(), 1);
+        QVERIFY(reg.hasPage(QStringLiteral("first")));
+        QVERIFY(!reg.hasPage(QStringLiteral("second")));
+    }
+
     void hasDividerAfterRoundTrips()
     {
         PageRegistry reg;

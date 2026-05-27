@@ -76,6 +76,19 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Path helpers exposed to QML
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString SettingsController::urlToLocalFile(const QUrl& url) const
+{
+    // QUrl::toLocalFile handles percent-decoding, embedded query/fragment,
+    // and uses the canonical scheme-strip path that QtDBus/QFile interop
+    // already relies on. Replaces the ad-hoc regex pattern previously
+    // duplicated in QML file-picker callbacks.
+    return url.toLocalFile();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Quick layout slots (D-Bus to daemon)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -224,7 +237,16 @@ void SettingsController::onVirtualDesktopsChanged()
     // dirty state attaches to the right tab regardless of where the user
     // is currently looking. Pattern mirrors the window-rules handler in
     // settingscontroller.cpp.
+    //
+    // Wrap the SETTER calls (not just the trailing setNeedsSave) so the
+    // synchronous NOTIFY emit from setDisabledDesktops() — which routes
+    // through onSettingsPropertyChanged → setNeedsSave — finds the
+    // external-edit page set to "overview" instead of whatever leaf the
+    // user is currently viewing. Without this wrap, the dirty bit
+    // attaches to the active page and the explicit beginExternalEdit
+    // below becomes a no-op.
     bool prunedAny = false;
+    beginExternalEdit(QStringLiteral("overview"));
     for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
         QStringList disabled = m_settings.disabledDesktops(mode);
         if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
@@ -233,10 +255,9 @@ void SettingsController::onVirtualDesktopsChanged()
         }
     }
     if (prunedAny) {
-        beginExternalEdit(QStringLiteral("overview"));
         setNeedsSave(true);
-        endExternalEdit();
     }
+    endExternalEdit();
 
     Q_EMIT virtualDesktopsChanged();
 }
@@ -247,8 +268,11 @@ void SettingsController::onActivitiesChanged()
 
     // Prune disabled-activity entries that reference removed activities.
     // External event (KDE activity change) — see onVirtualDesktopsChanged
-    // above for the beginExternalEdit rationale.
+    // above for the same wrap-the-setters rationale (the synchronous
+    // NOTIFY emit re-routes dirty bookkeeping through the meta-object
+    // loop, which needs m_externalEditPage already set to "overview").
     bool prunedAny = false;
+    beginExternalEdit(QStringLiteral("overview"));
     if (!m_activities.isEmpty()) {
         QSet<QString> validIds;
         for (const QVariant& v : std::as_const(m_activities)) {
@@ -267,10 +291,9 @@ void SettingsController::onActivitiesChanged()
         }
     }
     if (prunedAny) {
-        beginExternalEdit(QStringLiteral("overview"));
         setNeedsSave(true);
-        endExternalEdit();
     }
+    endExternalEdit();
 
     Q_EMIT activitiesChanged();
 }
@@ -332,6 +355,18 @@ void SettingsController::requestRunningWindows()
     // daemon fans out on runningWindowsAvailable — caught by our
     // onRunningWindowsAvailable slot. The UI thread never blocks.
     //
+    // If the daemon isn't running, dispatching the call would still go
+    // through D-Bus auto-start machinery (or fail outright) and the user
+    // would see an empty list for the full timeout window with no
+    // indication the request never made it out. Keep the cached list
+    // and surface the empty-reply via an immediate timeout so the QML
+    // page can render a sensible "daemon not running" state instead.
+    if (!m_daemonController.isRunning()) {
+        m_cachedRunningWindows.clear();
+        m_runningWindowsTimeout.stop();
+        Q_EMIT runningWindowsTimedOut();
+        return;
+    }
     // Start (or restart) the client-side timeout guard. Repeated calls
     // coalesce — the most recent deadline wins, matching the fire-and-
     // forget semantics on the daemon side.

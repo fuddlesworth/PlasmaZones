@@ -28,23 +28,37 @@ PhosphorUi.SettingsAppWindow {
     // ── Public API used by per-page QML files ───────────────────────
     // Pages reach the layout-context popup via window.layoutContextMenu.
     readonly property alias layoutContextMenu: layoutContextMenu
-    // KNOWN LIMITATION: object-literal `i18n()` calls evaluate once at
-    // object construction. If the user switches the system locale while
-    // this window is open, the menu shows stale strings until restart.
-    // The "super-ultrawide" key contains a hyphen so a QtObject with
-    // bindable properties can't host all keys without renaming the wire
-    // protocol — accepting the stale-on-locale-change tradeoff is the
-    // less-invasive option and matches the fact that the rest of the
-    // settings app expects an app restart on locale change anyway.
+    // Kept as an object literal for back-compat with any QML reader that
+    // expects index-by-key access (a Repeater iterates the keys / a
+    // delegate looks up by aspect-ratio key). Reading any value here
+    // forces the dependent binding via the QtObject's per-property
+    // bindings, so locale changes still propagate.
     readonly property var aspectRatioLabels: ({
-        "any": i18n("All Monitors"),
-        "standard": i18n("Standard (16:9)"),
-        "ultrawide": i18n("Ultrawide (21:9)"),
-        "super-ultrawide": i18n("Super-Ultrawide (32:9)"),
-        "portrait": i18n("Portrait (9:16)")
+        "any": _aspectRatioLabels.any,
+        "standard": _aspectRatioLabels.standard,
+        "ultrawide": _aspectRatioLabels.ultrawide,
+        "super-ultrawide": _aspectRatioLabels.superUltrawide,
+        "portrait": _aspectRatioLabels.portrait
     })
     // Keyboard-shortcut overlay state.
     property bool _showShortcuts: false
+
+    function aspectRatioLabel(key) {
+        switch (key) {
+        case "any":
+            return _aspectRatioLabels.any;
+        case "standard":
+            return _aspectRatioLabels.standard;
+        case "ultrawide":
+            return _aspectRatioLabels.ultrawide;
+        case "super-ultrawide":
+            return _aspectRatioLabels.superUltrawide;
+        case "portrait":
+            return _aspectRatioLabels.portrait;
+        default:
+            return key;
+        }
+    }
 
     function showWhatsNew() {
         whatsNewDialog.open();
@@ -88,6 +102,31 @@ PhosphorUi.SettingsAppWindow {
                 break;
             }
         }
+    }
+
+    // KNOWN LIMITATION: object-literal `i18n()` calls evaluate once at
+    // object construction. If the user switches the system locale while
+    // this window is open, the menu shows stale strings until restart.
+    // The "super-ultrawide" key contains a hyphen so a QtObject with
+    // bindable properties can't host all keys without renaming the wire
+    // protocol — accepting the stale-on-locale-change tradeoff is the
+    // less-invasive option and matches the fact that the rest of the
+    // settings app expects an app restart on locale change anyway.
+    // Translated labels for aspect-ratio classes. Backed by a QtObject
+    // so each property is its own binding — bindings re-evaluate when
+    // QML's language-change signal fires, while an object-literal
+    // declared with `property var = ({...})` is frozen at construction
+    // time and would freeze the labels at the language active during
+    // first instantiation. Keep aspectRatioLabel(key) the call shape so
+    // consumers stay agnostic of the storage shape.
+    QtObject {
+        id: _aspectRatioLabels
+
+        readonly property string any: i18n("All Monitors")
+        readonly property string standard: i18n("Standard (16:9)")
+        readonly property string ultrawide: i18n("Ultrawide (21:9)")
+        readonly property string superUltrawide: i18n("Super-Ultrawide (32:9)")
+        readonly property string portrait: i18n("Portrait (9:16)")
     }
 
     // The lib's onClosing handles the dirty-state prompt. We just

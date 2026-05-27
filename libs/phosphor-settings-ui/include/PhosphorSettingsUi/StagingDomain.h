@@ -36,7 +36,9 @@ public:
     explicit StagingDomain(QObject* parent = nullptr);
     ~StagingDomain() override;
 
-    virtual bool isDirty() const = 0;
+    // Q_INVOKABLE so QML can read isDirty() imperatively; apply/discard
+    // below are slots, so QML can call all three through the same shape.
+    Q_INVOKABLE virtual bool isDirty() const = 0;
 
 public Q_SLOTS:
     /** Persist staged changes to the backing store. ApplicationController

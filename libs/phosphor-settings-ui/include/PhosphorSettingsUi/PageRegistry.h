@@ -110,7 +110,10 @@ Q_SIGNALS:
 
 private:
     QList<Entry> m_pages;
-    QHash<QString, int> m_indexById;
+    // qsizetype matches QList::size()'s return type; avoids -Wnarrowing
+    // when stricter build flags land. Settings registries are never
+    // anywhere near 2^31 pages, but the narrowing is unnecessary.
+    QHash<QString, qsizetype> m_indexById;
 };
 
 } // namespace PhosphorSettingsUi

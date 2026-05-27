@@ -49,8 +49,17 @@ void LocalizedContext::setTranslationContext(const QString& ctx)
     if (m_context == ctx) {
         return;
     }
+    // Compare against the resolved (effective) value, not the explicit
+    // member: setting "MyApp" when applicationName() is also "MyApp"
+    // is a no-op for QML bindings even though m_context flips from
+    // empty to non-empty internally. Only emit when the resolved
+    // context actually changes.
+    const QString previousEffective = translationContext();
     m_context = ctx;
     m_effectiveContextValid = false;
+    if (translationContext() == previousEffective) {
+        return;
+    }
     Q_EMIT translationContextChanged();
 }
 

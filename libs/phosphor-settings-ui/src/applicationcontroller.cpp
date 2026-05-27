@@ -101,7 +101,13 @@ void ApplicationController::applyAll()
     // signalling (see PlasmaZones::SettingsStagingDomain for an example
     // that keeps `isDirty()` true on failure so the global dirty flag
     // remains set and the user can retry).
-    for (const auto& domain : m_domains) {
+    //
+    // Snapshot m_domains before iterating: each domain->apply() fires
+    // dirtyChanged synchronously, which routes through onDomainDirtyChanged
+    // into recomputeDirty(), which may erase null entries from m_domains.
+    // Iterating the live list would invalidate the outer iterators.
+    const QList<QPointer<StagingDomain>> snapshot = m_domains;
+    for (const auto& domain : snapshot) {
         if (domain && domain->isDirty()) {
             domain->apply();
         }
@@ -112,7 +118,9 @@ void ApplicationController::applyAll()
 void ApplicationController::discardAll()
 {
     // Same best-effort semantics as applyAll() — see above.
-    for (const auto& domain : m_domains) {
+    // Same iterator-invalidation rationale for the snapshot.
+    const QList<QPointer<StagingDomain>> snapshot = m_domains;
+    for (const auto& domain : snapshot) {
         if (domain && domain->isDirty()) {
             domain->discard();
         }

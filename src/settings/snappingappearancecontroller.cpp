@@ -78,18 +78,19 @@ void SnappingAppearanceController::loadColorsFromFile(const QString& filePath)
         Q_EMIT colorImportError(PzI18n::tr("Color import file does not exist: %1").arg(filePath));
         return;
     }
-    // Reject symlinks: a file picker selection that resolves through a
-    // symlink could point at an arbitrary readable file (e.g. /etc/...).
-    // Settings then JSON-parses the contents and any parse-error string
-    // would include surrounding text — surface as a clean rejection.
-    if (info.isSymLink()) {
-        Q_EMIT colorImportError(PzI18n::tr("Color import file must not be a symbolic link: %1").arg(filePath));
+    // A symlinked .json colors file (e.g. ~/.cache/wal/colors.json pointing
+    // into a versioned config repo, or a user's themed dotfile layout) is
+    // a legitimate selection — pywal itself ships symlink layouts. Validate
+    // the CANONICAL target instead: it must exist, be a regular file, and
+    // have a .json suffix on both the user-visible name and the resolved
+    // target. This catches the directory-traversal concern (the resolved
+    // target must be a real .json) without rejecting symlinked-colors-file
+    // layouts that loadColorsFromPywal() above silently accepts.
+    const QFileInfo canonInfo(info.canonicalFilePath());
+    if (canonInfo.canonicalFilePath().isEmpty() || !canonInfo.exists() || !canonInfo.isFile()) {
+        Q_EMIT colorImportError(PzI18n::tr("Color import file does not resolve to a regular file: %1").arg(filePath));
         return;
     }
-    // Re-check suffix on the canonical path — a `.json` user-visible name
-    // resolving (via earlier path normalisation or ancestor symlinks
-    // before the leaf check) to a non-json target is treated as garbage.
-    const QFileInfo canonInfo(info.canonicalFilePath());
     if (info.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) != 0
         || canonInfo.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) != 0) {
         Q_EMIT colorImportError(PzI18n::tr("Color import file must be a .json file: %1").arg(filePath));

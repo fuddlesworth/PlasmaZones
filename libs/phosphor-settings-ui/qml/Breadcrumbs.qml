@@ -91,14 +91,45 @@ RowLayout {
 
             spacing: Kirigami.Units.smallSpacing
 
-            QQC2.Label {
-                id: segmentLabel
+            // Wrap the label + mouse area in an Item that can take Tab
+            // focus and respond to Space/Enter — Label alone isn't
+            // focusable, so before this wrapper a screen reader / Tab
+            // user could land on the breadcrumb (because Accessible.role:
+            // Link declared it as actionable) but had no way to trigger
+            // the navigation. activeFocusOnTab is gated on `clickable`
+            // so the trailing (current-page) segment stays inert.
+            Item {
+                id: segmentItem
 
-                text: segmentRow.modelData.title
-                opacity: segmentRow.clickable && segmentMouse.containsMouse ? 0.8 : 0.5
-                font.underline: segmentRow.clickable && segmentMouse.containsMouse
-                Accessible.name: text
+                Layout.preferredWidth: segmentLabel.implicitWidth
+                Layout.preferredHeight: segmentLabel.implicitHeight
+                activeFocusOnTab: segmentRow.clickable
+                Accessible.name: segmentLabel.text
                 Accessible.role: segmentRow.clickable ? Accessible.Link : Accessible.StaticText
+                Keys.onReturnPressed: {
+                    if (segmentRow.clickable) {
+                        root.controller.currentPageId = segmentRow.modelData.id;
+                    }
+                }
+                Keys.onEnterPressed: {
+                    if (segmentRow.clickable) {
+                        root.controller.currentPageId = segmentRow.modelData.id;
+                    }
+                }
+                Keys.onSpacePressed: {
+                    if (segmentRow.clickable) {
+                        root.controller.currentPageId = segmentRow.modelData.id;
+                    }
+                }
+
+                QQC2.Label {
+                    id: segmentLabel
+
+                    anchors.fill: parent
+                    text: segmentRow.modelData.title
+                    opacity: segmentRow.clickable && (segmentMouse.containsMouse || segmentItem.activeFocus) ? 0.8 : 0.5
+                    font.underline: segmentRow.clickable && (segmentMouse.containsMouse || segmentItem.activeFocus)
+                }
 
                 MouseArea {
                     id: segmentMouse

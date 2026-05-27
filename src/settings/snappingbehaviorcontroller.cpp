@@ -78,24 +78,13 @@ void SnappingBehaviorController::setAlwaysActivateOnDrag(bool enabled)
     if (alwaysActivateOnDrag() == enabled) {
         return;
     }
-    // Add or remove the AlwaysActive sentinel from the existing list,
-    // preserving the user's non-sentinel triggers. In always-active mode
-    // those non-sentinel entries become deactivate-while-held triggers
-    // (resolveActivationActive inverts the active output when the
-    // AlwaysActive sentinel is present); on toggle off they revert to
-    // hold/toggle activation triggers. mergeAlwaysActiveTrigger prepends
-    // the sentinel so it survives the storage cap; if the resulting list
-    // would be empty on toggle off, fall back to the static default so the
-    // user keeps a working hold-to-activate trigger.
-    const QVariantList nonSentinel = TriggerUtils::stripAlwaysActiveTrigger(m_settings->dragActivationTriggers());
-    QVariantList next;
-    if (enabled) {
-        next = TriggerUtils::mergeAlwaysActiveTrigger(nonSentinel);
-    } else if (nonSentinel.isEmpty()) {
-        next = ConfigDefaults::dragActivationTriggers();
-    } else {
-        next = nonSentinel;
-    }
+    // Centralised in TriggerUtils::applyAlwaysActiveToggle so the
+    // sentinel-cap + empty-list fallback dance stays in lockstep with
+    // TilingBehaviorController::setAlwaysReinsertIntoStack. The factory
+    // default protects users from a toggle-off + already-empty list
+    // collapsing to a no-trigger state.
+    const QVariantList next = TriggerUtils::applyAlwaysActiveToggle(m_settings->dragActivationTriggers(), enabled,
+                                                                    ConfigDefaults::dragActivationTriggers());
     m_settings->setDragActivationTriggers(next);
     // Settings::dragActivationTriggersChanged drives both
     // dragActivationTriggersChanged and alwaysActivateOnDragChanged via
@@ -104,15 +93,10 @@ void SnappingBehaviorController::setAlwaysActivateOnDrag(bool enabled)
 
 void SnappingBehaviorController::setDragActivationTriggers(const QVariantList& triggers)
 {
-    // Strip first in case the QML side somehow sent the sentinel through
-    // (the widget shouldn't, but defensive: the sentinel is owned by the
-    // master toggle), then re-merge if always-active is currently set so
-    // mergeAlwaysActiveTrigger's cap-aware prepend protects it from
-    // truncation in writeTriggerList's .mid(0, MAX).
-    const QVariantList nonSentinel =
-        TriggerUtils::stripAlwaysActiveTrigger(TriggerUtils::convertTriggersForStorage(triggers));
-    const QVariantList next =
-        alwaysActivateOnDrag() ? TriggerUtils::mergeAlwaysActiveTrigger(nonSentinel) : nonSentinel;
+    // Centralised in TriggerUtils::normaliseExplicitEdit so the
+    // strip-then-conditional-remerge sequence stays in lockstep with
+    // the tiling controller's equivalent setter.
+    const QVariantList next = TriggerUtils::normaliseExplicitEdit(triggers, alwaysActivateOnDrag());
     if (m_settings->dragActivationTriggers() != next) {
         m_settings->setDragActivationTriggers(next);
     }

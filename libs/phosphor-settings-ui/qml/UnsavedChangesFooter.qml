@@ -108,7 +108,16 @@ ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
                 Kirigami.Icon {
-                    source: "dialog-information"
+                    // Symbolic variant + isMask: true. The plain
+                    // "dialog-information" icon ships in multi-color
+                    // form in most icon themes, and Kirigami.Icon's
+                    // color binding only applies to monochrome / mask
+                    // sources — otherwise the tint here is silently
+                    // ignored and the warning glyph keeps its theme's
+                    // built-in colour, mismatching the "Unsaved
+                    // changes" label beside it.
+                    source: "dialog-information-symbolic"
+                    isMask: true
                     Layout.preferredWidth: Kirigami.Units.iconSizes.small
                     Layout.preferredHeight: Kirigami.Units.iconSizes.small
                     color: Kirigami.Theme.neutralTextColor

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <QTest>
+#include <QThread>
 #include <QtDBus/QDBusMessage>
 
 #include "PhosphorSettingsUi/DBusBridge.h"
@@ -102,6 +103,53 @@ private Q_SLOTS:
         DBusBridge bridge(ep);
 
         const auto reply = bridge.call(QStringLiteral("anyMethod"));
+        QCOMPARE(reply.type(), QDBusMessage::ErrorMessage);
+    }
+
+    void asyncCallOnEmptyEndpointIsNoCrash()
+    {
+        // asyncCall / asyncCallOn return void so we can't QCOMPARE a reply.
+        // The contract is: validation rejects the call before any
+        // QDBusPendingCall is enqueued. Pin no-crash + no-watcher-leak
+        // behaviour — a regression that dropped validation in the async
+        // path would dispatch a malformed bus call, but here neither the
+        // ctor's empty-endpoint warning nor the bridge's normal flow
+        // can be observed deterministically across threads. The crash-
+        // free outcome of the call IS the verifiable behaviour.
+        DBusEndpoint ep;
+        ep.service = QString();
+        ep.objectPath = QStringLiteral("/Path");
+        ep.interfaceName = QStringLiteral("org.example.Iface");
+        DBusBridge bridge(ep);
+        bridge.asyncCall(QStringLiteral("anyMethod"));
+        bridge.asyncCallOn(QString(), QStringLiteral("m"));
+        bridge.asyncCall(QString());
+        QVERIFY(true); // no abort, no segfault
+    }
+
+    void rejectsCallOnFromForeignThread()
+    {
+        // QDBusConnection::sessionBus() returns a per-thread connection;
+        // a sync call from a non-owning thread silently fails with
+        // Disconnected. The bridge must refuse explicitly so the
+        // programmer error surfaces in the log. Symmetric with the
+        // asyncCallOn cross-thread guard.
+        DBusEndpoint ep;
+        ep.service = QStringLiteral("org.example.svc");
+        ep.objectPath = QStringLiteral("/Path");
+        ep.interfaceName = QStringLiteral("org.example.Iface");
+        DBusBridge bridge(ep);
+
+        QDBusMessage reply;
+        QThread worker;
+        QObject context;
+        context.moveToThread(&worker);
+        QObject::connect(&worker, &QThread::started, &context, [&]() {
+            reply = bridge.callOn(QStringLiteral("org.example.Other"), QStringLiteral("m"));
+            worker.quit();
+        });
+        worker.start();
+        QVERIFY(worker.wait(2000));
         QCOMPARE(reply.type(), QDBusMessage::ErrorMessage);
     }
 };

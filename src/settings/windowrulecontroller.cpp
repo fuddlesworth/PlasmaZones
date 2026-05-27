@@ -272,6 +272,23 @@ void WindowRuleController::fetchAndLoad()
             // through to the empty set so the page paints rather than holding
             // stale rules; the daemon log will carry the parse error.
         }
+        // If the user staged edits between dispatch and reply (e.g. an
+        // initial-load fetch that races a fast user action), do not stomp
+        // them on the non-revert path. Mirror reload()'s dirty-guard:
+        // flag daemonChangedWhileDirty so the page can warn before any
+        // commit() overwrites the daemon's newer set, and leave the staged
+        // model intact. The explicit revert path is allowed to clobber.
+        //
+        // Do NOT emit rulesLoaded here — we did not actually load anything,
+        // and downstream observers treat rulesLoaded as "the controller's
+        // model now matches the daemon's authoritative set" which would be
+        // false after this guard. Tests that synchronise on rulesLoaded
+        // would otherwise read isDirty() before the explicit revert's
+        // reply lands.
+        if (!fromRevert && m_dirty) {
+            setDaemonChangedWhileDirty(true);
+            return;
+        }
         m_model.setRules(set.rules());
         setDirty(false);
         setDaemonChangedWhileDirty(false);

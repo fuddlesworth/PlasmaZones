@@ -87,6 +87,16 @@ QDBusMessage DBusBridge::callOn(const QString& interfaceName, const QString& met
     if (!validateEndpoint(m_endpoint, interfaceName, method, "PhosphorSettingsUi::DBusBridge::callOn")) {
         return QDBusMessage::createError(QDBusError::InvalidArgs, QStringLiteral("DBusBridge: invalid call inputs"));
     }
+    // QDBusConnection::sessionBus() returns a per-thread connection. A sync
+    // call from a thread that didn't register one returns a Disconnected
+    // error message silently — reject loudly instead, symmetric with
+    // asyncCallOn below.
+    if (thread() != QThread::currentThread()) {
+        qWarning() << "PhosphorSettingsUi::DBusBridge::callOn: refused —"
+                      "called from a thread other than the bridge's owning thread";
+        return QDBusMessage::createError(QDBusError::Failed,
+                                         QStringLiteral("DBusBridge: sync call from non-owning thread"));
+    }
     QDBusMessage msg = QDBusMessage::createMethodCall(m_endpoint.service, m_endpoint.objectPath, interfaceName, method);
     if (!args.isEmpty()) {
         msg.setArguments(args);

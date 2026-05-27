@@ -74,6 +74,14 @@ function(_phosphorscreens_target_defaults _target)
         UNITY_BUILD OFF
         AUTOMOC ON
         POSITION_INDEPENDENT_CODE ON
+        # PhosphorScreens.so links PhosphorScreensCore.so via its public
+        # interface. On distros that don't add KDE_INSTALL_LIBDIR to the
+        # default loader search path (e.g. /usr/local/lib), runtime load
+        # of PhosphorScreens.so would fail with "PhosphorScreensCore.so:
+        # cannot open shared object file". $ORIGIN tells the dynamic
+        # linker to look beside the loading .so first, which is exactly
+        # where both shipped libs live.
+        INSTALL_RPATH "$ORIGIN"
     )
     target_compile_features(${_target} PUBLIC cxx_std_20)
 endfunction()

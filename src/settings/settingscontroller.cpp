@@ -100,7 +100,23 @@ void SettingsController::sortMergedLayoutList(QVariantList& list)
     });
 }
 
-SettingsController::~SettingsController() = default;
+SettingsController::~SettingsController()
+{
+    // Tear down the WindowRuleController's label lookups while the
+    // captured member containers (m_layouts, m_activities, m_screens,
+    // etc.) are still alive. Members destruct in reverse declaration
+    // order BEFORE ~QObject tears down child QObjects — so by the time
+    // ~WindowRuleController runs as part of the QObject teardown, those
+    // captured containers are already gone. Any model-signal slot that
+    // reaches a lookup during teardown would deref destroyed state.
+    // WindowRuleModel::leafLabel/actionLabel treat empty lookups as
+    // identity, so clearing here is the safe contract.
+    if (m_windowRulesPage) {
+        m_windowRulesPage->setScreenLookup({});
+        m_windowRulesPage->setActivityLookup({});
+        m_windowRulesPage->setLayoutLookup({});
+    }
+}
 
 // ensureScreenIdResolver() now lives in src/common/screenidresolver.{h,cpp}
 // so daemon/editor/settings share the same install-once helper instead of

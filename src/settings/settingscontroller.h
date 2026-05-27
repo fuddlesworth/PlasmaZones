@@ -48,6 +48,7 @@ class ShaderRegistry;
 #include <QSet>
 #include <QString>
 #include <QDBusConnection>
+#include <QUrl>
 #include <QVariantList>
 #include <QTimer>
 #include <memory>
@@ -322,6 +323,12 @@ public:
     Q_INVOKABLE QString getQuickLayoutShortcut(int slotNumber) const;
     Q_INVOKABLE QString getTilingQuickLayoutSlot(int slotNumber) const;
     Q_INVOKABLE void setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId);
+
+    /// Convert a file:// URL from Qt's FileDialog to a local filesystem
+    /// path. Replaces ad-hoc regex stripping in QML — QUrl::toLocalFile()
+    /// handles percent-decoding, embedded query/fragment, and non-trivial
+    /// schemes that the QML-side regex would silently mishandle.
+    Q_INVOKABLE QString urlToLocalFile(const QUrl& url) const;
 
     // ── Page sub-controllers ─────────────────────────────────────────────
     EditorPageController* editorPage() const

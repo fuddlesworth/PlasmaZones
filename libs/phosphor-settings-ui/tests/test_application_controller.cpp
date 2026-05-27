@@ -105,6 +105,24 @@ private:
     bool m_dirty = false;
 };
 
+/// Subclass for the apply-leaves-dirty contract test below — the lib's
+/// documented best-effort apply semantics say domains that fail to
+/// persist must keep isDirty() true so the global flag survives.
+class FailingHeadlessDomain : public StubHeadlessDomain
+{
+    Q_OBJECT
+public:
+    using StubHeadlessDomain::StubHeadlessDomain;
+
+    void apply() override
+    {
+        ++applyCount;
+        // Deliberately do not clear m_dirty — caller is on the hook to
+        // surface the failure to the user, but the framework must keep
+        // dirty set so a subsequent Apply retry hits this domain again.
+    }
+};
+
 } // namespace
 
 class TestApplicationController : public QObject
@@ -377,6 +395,67 @@ private Q_SLOTS:
         // not invoke resetToDefaults on any registered page.
         app.resetCurrentPage();
         QCOMPARE(page->resetCount, 0);
+    }
+
+    void applyAllSurvivesIteratorInvalidation()
+    {
+        // Pin the snapshot in applyAll/discardAll: domain->apply() fires
+        // dirtyChanged synchronously, which routes through
+        // onDomainDirtyChanged → recomputeDirty(), which may erase null
+        // QPointer entries from m_domains while the outer range-for is
+        // still iterating. Without the snapshot the outer iterators get
+        // invalidated mid-iteration. This test pins the no-crash + all-
+        // domains-applied contract by destroying a domain inline before
+        // applyAll runs — recomputeDirty's null-prune happens during
+        // the loop, and every still-live domain must still apply.
+        ApplicationController app;
+        auto* keepA = new StubPage(QStringLiteral("a"));
+        auto* doomed = new StubHeadlessDomain();
+        auto* keepB = new StubPage(QStringLiteral("b"));
+        app.registerPage(keepA, {}, QStringLiteral("A"), QUrl());
+        app.registerDomain(doomed);
+        app.registerPage(keepB, {}, QStringLiteral("B"), QUrl());
+
+        keepA->setDirty(true);
+        doomed->setDirty(true);
+        keepB->setDirty(true);
+
+        // Destroy doomed BEFORE applyAll so m_domains carries a null
+        // QPointer entry. recomputeDirty will compact it during apply
+        // dispatch — the snapshot guarantees the outer loop keeps
+        // walking the original list.
+        delete doomed;
+
+        app.applyAll();
+
+        QCOMPARE(keepA->applyCount, 1);
+        QCOMPARE(keepB->applyCount, 1);
+        QVERIFY(!app.isDirty());
+    }
+
+    void applyAllOnPartialFailureKeepsDirty()
+    {
+        // Pin the documented best-effort semantics: a domain whose
+        // apply() leaves itself dirty must keep the global dirty flag
+        // set so the user can retry. This is the contract
+        // PlasmaZones::SettingsStagingDomain relies on for the
+        // save-failed-keep-dirty UX path.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* failing = new FailingHeadlessDomain();
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl());
+        app.registerDomain(failing);
+
+        a->setDirty(true);
+        failing->setDirty(true);
+        QVERIFY(app.isDirty());
+
+        app.applyAll();
+        QCOMPARE(a->applyCount, 1);
+        QCOMPARE(failing->applyCount, 1);
+        // a applied → clean. failing kept itself dirty → global must
+        // still be dirty.
+        QVERIFY(app.isDirty());
     }
 };
 

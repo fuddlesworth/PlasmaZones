@@ -281,6 +281,20 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
         {QStringLiteral("rules"), QStringLiteral("window-rules")},
+        // The *-cat virtual headers (registered as collapsible category
+        // entries in buildApplicationController above) are real entries
+        // in the framework PageRegistry — without an explicit redirect,
+        // anything that drives setCurrentPageId("snapping-visual-cat")
+        // would land on a page id that isn't in validPageNames() and
+        // m_activePage would diverge from m_app->currentPageId(). Map
+        // each *-cat to its first leaf so the active-page state stays
+        // coherent regardless of how the id was reached.
+        {QStringLiteral("snapping-visual-cat"), QStringLiteral("snapping-appearance")},
+        {QStringLiteral("snapping-behavior-cat"), QStringLiteral("snapping-behavior")},
+        {QStringLiteral("snapping-config-cat"), QStringLiteral("snapping-ordering")},
+        {QStringLiteral("tiling-visual-cat"), QStringLiteral("tiling-appearance")},
+        {QStringLiteral("tiling-behavior-cat"), QStringLiteral("tiling-behavior")},
+        {QStringLiteral("tiling-config-cat"), QStringLiteral("tiling-ordering")},
     };
     return redirects;
 }

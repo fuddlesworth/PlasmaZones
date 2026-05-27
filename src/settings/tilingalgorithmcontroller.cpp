@@ -18,6 +18,29 @@
 
 namespace PlasmaZones {
 
+namespace {
+// Custom-param def schema field names — the wire contract between
+// PhosphorTiles::TilingAlgorithm::customParamDefList() and this
+// controller. Centralised here so a typo in one branch can't silently
+// fall through to the default-value path (which would look like a
+// "saved value didn't stick" UI bug at runtime).
+namespace ParamDefKeys {
+constexpr QLatin1String Name{"name"};
+constexpr QLatin1String Type{"type"};
+constexpr QLatin1String Value{"value"};
+constexpr QLatin1String DefaultValue{"defaultValue"};
+constexpr QLatin1String MinValue{"minValue"};
+constexpr QLatin1String MaxValue{"maxValue"};
+constexpr QLatin1String EnumOptions{"enumOptions"};
+} // namespace ParamDefKeys
+
+namespace ParamTypes {
+constexpr QLatin1String Number{"number"};
+constexpr QLatin1String Bool{"bool"};
+constexpr QLatin1String Enum{"enum"};
+} // namespace ParamTypes
+} // namespace
+
 TilingAlgorithmController::TilingAlgorithmController(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
                                                      QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("tiling-algorithm"), parent)
@@ -89,33 +112,40 @@ QVariantList TilingAlgorithmController::customParamsForAlgorithm(const QString& 
     QVariantList result;
     for (const auto& defVar : defs) {
         QVariantMap paramMap = defVar.toMap();
-        const QString name = paramMap.value(QLatin1String("name")).toString();
+        const QString name = paramMap.value(ParamDefKeys::Name).toString();
         // Current value: saved value if exists (clamped/validated against
         // the def so a stale on-disk value from an older bounds doesn't
         // crash the QML slider), else default.
         if (savedCustom.contains(name)) {
             const QVariant saved = savedCustom.value(name);
-            const QString type = paramMap.value(QLatin1String("type")).toString();
-            if (type == QLatin1String("number")) {
+            const QString type = paramMap.value(ParamDefKeys::Type).toString();
+            if (type == ParamTypes::Number) {
                 bool ok = false;
                 const qreal num = saved.toDouble(&ok);
                 if (!ok) {
-                    paramMap[QLatin1String("value")] = paramMap.value(QLatin1String("defaultValue"));
+                    paramMap[ParamDefKeys::Value] = paramMap.value(ParamDefKeys::DefaultValue);
                 } else {
-                    const qreal minVal = paramMap.value(QLatin1String("minValue")).toDouble();
-                    const qreal maxVal = paramMap.value(QLatin1String("maxValue")).toDouble();
-                    paramMap[QLatin1String("value")] = std::clamp(num, minVal, maxVal);
+                    // Defensive: a malformed schema entry without min/max
+                    // would collapse std::clamp(num, 0.0, 0.0) to 0. Skip
+                    // the clamp instead of silently zeroing the value.
+                    if (!paramMap.contains(ParamDefKeys::MinValue) || !paramMap.contains(ParamDefKeys::MaxValue)) {
+                        paramMap[ParamDefKeys::Value] = num;
+                    } else {
+                        const qreal minVal = paramMap.value(ParamDefKeys::MinValue).toDouble();
+                        const qreal maxVal = paramMap.value(ParamDefKeys::MaxValue).toDouble();
+                        paramMap[ParamDefKeys::Value] = std::clamp(num, minVal, maxVal);
+                    }
                 }
-            } else if (type == QLatin1String("enum")) {
+            } else if (type == ParamTypes::Enum) {
                 const QString str = saved.toString();
-                const QStringList options = paramMap.value(QLatin1String("enumOptions")).toStringList();
-                paramMap[QLatin1String("value")] =
-                    options.contains(str) ? QVariant(str) : paramMap.value(QLatin1String("defaultValue"));
+                const QStringList options = paramMap.value(ParamDefKeys::EnumOptions).toStringList();
+                paramMap[ParamDefKeys::Value] =
+                    options.contains(str) ? QVariant(str) : paramMap.value(ParamDefKeys::DefaultValue);
             } else {
-                paramMap[QLatin1String("value")] = saved;
+                paramMap[ParamDefKeys::Value] = saved;
             }
         } else {
-            paramMap[QLatin1String("value")] = paramMap.value(QLatin1String("defaultValue"));
+            paramMap[ParamDefKeys::Value] = paramMap.value(ParamDefKeys::DefaultValue);
         }
         result.append(paramMap);
     }
@@ -136,32 +166,36 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
     }
     const QVariantList defs = algo->customParamDefList();
     auto defIt = std::find_if(defs.cbegin(), defs.cend(), [&paramName](const QVariant& v) {
-        return v.toMap().value(QLatin1String("name")).toString() == paramName;
+        return v.toMap().value(ParamDefKeys::Name).toString() == paramName;
     });
     if (defIt == defs.cend()) {
         qCWarning(lcCore) << "setCustomParam: unknown param" << paramName << "for algorithm" << algorithmId;
         return;
     }
     const QVariantMap defMap = defIt->toMap();
-    const QString defType = defMap.value(QLatin1String("type")).toString();
+    const QString defType = defMap.value(ParamDefKeys::Type).toString();
 
     // Coerce value to the declared type so QML callers can't persist wrong types.
     QVariant coerced = value;
-    if (defType == QLatin1String("number")) {
+    if (defType == ParamTypes::Number) {
         bool ok = false;
         const qreal num = value.toDouble(&ok);
         if (!ok) {
             qCWarning(lcCore) << "setCustomParam: value" << value << "is not a valid number for" << paramName;
             return;
         }
-        const qreal minVal = defMap.value(QLatin1String("minValue")).toDouble();
-        const qreal maxVal = defMap.value(QLatin1String("maxValue")).toDouble();
-        coerced = std::clamp(num, minVal, maxVal);
-    } else if (defType == QLatin1String("bool")) {
+        if (!defMap.contains(ParamDefKeys::MinValue) || !defMap.contains(ParamDefKeys::MaxValue)) {
+            coerced = num;
+        } else {
+            const qreal minVal = defMap.value(ParamDefKeys::MinValue).toDouble();
+            const qreal maxVal = defMap.value(ParamDefKeys::MaxValue).toDouble();
+            coerced = std::clamp(num, minVal, maxVal);
+        }
+    } else if (defType == ParamTypes::Bool) {
         coerced = value.toBool();
-    } else if (defType == QLatin1String("enum")) {
+    } else if (defType == ParamTypes::Enum) {
         const QString str = value.toString();
-        const QStringList options = defMap.value(QLatin1String("enumOptions")).toStringList();
+        const QStringList options = defMap.value(ParamDefKeys::EnumOptions).toStringList();
         if (!options.contains(str)) {
             qCWarning(lcCore) << "setCustomParam: value" << str << "not in enum options for" << paramName
                               << "(valid:" << options << ")";
