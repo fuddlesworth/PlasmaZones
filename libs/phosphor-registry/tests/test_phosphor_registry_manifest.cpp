@@ -163,15 +163,16 @@ void TestManifest::parseObject_capabilitiesMissingDefaultsEmpty()
 
 void TestManifest::parseObject_rejectsNonIntAbi()
 {
-    // QJsonValue::toInt(-1) returns -1 for non-int abi (e.g. string
-    // or null); same code path as the missing-abi case but the
-    // rejection-string text reuses the "invalid 'abi'" branch — lock
-    // it so a future split between missing and malformed still fails.
+    // Manifest::parseObject now splits three distinct diagnostics:
+    // missing 'abi' field, 'abi' present but non-numeric type, and
+    // numeric-but-wrong-version mismatch. This test exercises the
+    // middle branch — a string-typed abi value must be rejected
+    // with the type-specific message, NOT the missing-field one.
     QJsonObject obj = makeValidManifestObject();
     obj.insert(QLatin1String("abi"), QStringLiteral("one"));
     const Manifest m = Manifest::parseObject(obj, QString());
     QVERIFY(!m.isValid);
-    QVERIFY(m.parseError.contains(QStringLiteral("'abi'")));
+    QVERIFY(m.parseError.contains(QStringLiteral("must be an integer")));
 }
 
 void TestManifest::parseObject_rejectsLeadingDotId()

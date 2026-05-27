@@ -289,8 +289,13 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
         delete p;
     });
     if (factory->id() != manifest.id) {
+        // Anchor the warning to the .so path so a triager scanning a
+        // log full of plugin failures can correlate factory-id
+        // mismatches with the offending file. The factory's own id
+        // string may be empty if the plugin author left it blank,
+        // making the libraryPath the only stable identifier.
         qWarning().noquote() << "PluginLoader: factory id" << factory->id() << "does not match manifest id"
-                             << manifest.id;
+                             << manifest.id << "from" << libraryPath;
         factory.reset(); // runs custom deleter before .so unmap
         library->unload();
         return;
