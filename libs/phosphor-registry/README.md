@@ -85,11 +85,81 @@ QObject::connect(barRegistry.notifier(), &RegistryNotifier::factoryRegistered,
                  [&](const QString& id) { qDebug() << "registered" << id; });
 ```
 
-**The bar QML** binds to a `QAbstractListModel` exposing the registry's ids;
-on each `factoryRegistered` / `factoryUnregistered` the model emits a row
-change and the bar layout refreshes. The model lives in the shell's
-glue layer (Phase 4.1), not in this library — the library stays
-QML-free so consumers own their own facade.
+**Glue layer**: the shell wraps the registry in a `QObject` controller
+that exposes the factory ids as a `Q_PROPERTY(QStringList)` and the
+widget construction as a `Q_INVOKABLE`. The library stays QML-free so
+consumers own their own facade; this controller pattern is what both
+phosphor-registry demos use.
+
+```cpp
+// barcontroller.h
+class BarController : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(QStringList factoryIds READ factoryIds NOTIFY factoryIdsChanged)
+public:
+    explicit BarController(QObject* parent = nullptr);
+    void setEngine(QQmlEngine* engine); // call once from main()
+    Q_INVOKABLE QQuickItem* createWidgetFor(const QString& id, QQuickItem* parent);
+    [[nodiscard]] QStringList factoryIds() const;
+Q_SIGNALS:
+    void factoryIdsChanged();
+private:
+    QPointer<QQmlEngine> m_engine;
+    PhosphorRegistry::Registry<PhosphorRegistry::IBarWidgetFactory> m_registry;
+};
+
+// barcontroller.cpp — forward the registry's signals as one factoryIdsChanged
+QObject::connect(m_registry.notifier(),
+                 &PhosphorRegistry::RegistryNotifier::factoryRegistered,
+                 this, &BarController::factoryIdsChanged);
+QObject::connect(m_registry.notifier(),
+                 &PhosphorRegistry::RegistryNotifier::factoryUnregistered,
+                 this, &BarController::factoryIdsChanged);
+
+QQuickItem* BarController::createWidgetFor(const QString& id, QQuickItem* parent)
+{
+    if (!m_engine) return nullptr;
+    auto factory = m_registry.factory(id);
+    if (!factory) return nullptr;
+    return factory->createWidget(m_engine.data(), parent);
+}
+```
+
+**Bar QML**: a `Repeater` drives `factoryIds` and parents each widget
+under its own delegate `Item`. Repeater destroys old delegates on
+model change; QObject's parent-cascade takes the C++-owned widgets
+with them — no manual `child.destroy()` (which fails on C++-owned
+QQuickItems with "indestructible object" errors).
+
+```qml
+Row {
+    spacing: 8
+
+    Repeater {
+        model: barController ? barController.factoryIds : []
+
+        delegate: Item {
+            id: slot
+            required property string modelData
+            property Item widget: null
+
+            implicitWidth: widget ? widget.implicitWidth : 0
+            implicitHeight: widget ? widget.implicitHeight : 0
+
+            Component.onCompleted: {
+                slot.widget = barController.createWidgetFor(slot.modelData, slot)
+            }
+        }
+    }
+}
+```
+
+The bar refreshes automatically when plugins load or unload because
+`factoryIdsChanged` re-evaluates the Repeater's `model` binding. See
+`examples/phosphor-registry-demo/` for the in-process variant and
+`examples/phosphor-registry-plugin-demo/` for the same pattern with a
+third widget loaded from a separate `.so`.
 
 **Plugin author side**: a plugin is a `.so` exporting one extern "C"
 entry point alongside a `manifest.json`.
