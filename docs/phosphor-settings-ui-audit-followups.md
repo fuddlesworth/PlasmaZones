@@ -85,7 +85,31 @@ first, then snapping pair, then tiling pair). For each:
 
 ---
 
-## 2. Sync → async D-Bus on save / discard (D8, D10 — MEDIUM)
+## 2. Sync → async D-Bus on save / discard (D8, D10 — MEDIUM, PARTIAL pass 23)
+
+**Pass-23 foundation:** `StagingDomain` gained optional
+`applyResult(ok, error)` and `discardResult(ok, error)` signals.
+The signals are inert until a domain emits them — a non-breaking
+widening that lets future async commits surface partial-failure
+state to the chrome.
+
+**Still open:**
+
+1. `WindowRuleController::commit()` to `QDBusPendingCallWatcher`
+   async with `applyResult` emit on `finished`.
+2. `AnimationsPageController::revertPending()` `QSaveFile` writes
+   moved off the GUI thread (QtConcurrent::run) with `discardResult`
+   on completion.
+3. Chrome footer in-flight state — pulse on the Apply/Discard
+   button while an async commit is open.
+4. `daemonChangedWhileDirty` refusal path threaded through the
+   async pipeline so the page's whole dirty-state machine survives
+   the timing change.
+
+Manual save-flow regression testing required because the save path
+isn't covered by automated tests today.
+
+## 2. Sync → async D-Bus on save / discard (D8, D10 — MEDIUM, original spec retained below)
 
 **Finding:**
 
@@ -137,16 +161,15 @@ testing but not by automated tests today.
 
 ---
 
-## 3. WindowRuleController commit() force-overwrite reachability (D4 — CLOSED in Pass 2d)
+## 3. WindowRuleController commit() force-overwrite reachability (D4 — CLOSED pass 17)
 
 **Resolution:** Pass 2d added `Q_INVOKABLE bool forceCommit()` on
-`WindowRuleController` (header line 126, implementation in
-`windowrulecontroller.cpp`). The escape hatch is now reachable from QML.
-
-**Remaining follow-up:** `WindowRulesPage.qml` still needs to wire a
-"Save anyway" button (or similar) that calls `controller.forceCommit()`
-when `daemonChangedWhileDirty` is true — only the C++ exposure landed
-in Pass 2d. Add a unit test once the QML side is wired.
+`WindowRuleController`. Pass 17 wired the consumer side:
+WindowRulesPage.qml's `daemonChangedWhileDirty` banner now exposes
+"Save anyway" + "Discard and reload" actions; "Save anyway" opens a
+PromptDialog explaining the overwrite, then calls `forceCommit()`.
+Pass 17 also added a unit test pinning the Q_INVOKABLE marker so a
+future refactor that drops it fails at the unit-test layer.
 
 ---
 
@@ -160,7 +183,17 @@ now does an O(new-layouts) walk on each `contentsChanged`, not O(N).
 
 ---
 
-## 5. WindowRuleController::duplicateRule single-emit (D12 — PARTIAL Pass 2d)
+## 5. WindowRuleController::duplicateRule single-emit (D12 — CLOSED pass 16)
+
+**Resolution:** Pass 16 added `WindowRuleModel::addRuleAt(rule,
+insertIndex)` with a single `beginInsertRows`/`endInsertRows` pair
+plus clamped index. `duplicateRule` now locates the source's index
+once and inserts directly at `sourceIndex + 1`, eliminating the
+prior addRule + 2 moveRule sequence (was up to 4 model signals per
+Duplicate click; now 1 + the existing renormalize dataChanged). New
+unit test pins the single-emit + index-clamp contract.
+
+## 5. WindowRuleController::duplicateRule single-emit (D12 — original spec retained below)
 
 **Partial Pass-2d fix:** Added `renormalizePriorities()` after the clone
 + reorder sequence — closes the priority-collision concern (clone no
@@ -182,7 +215,17 @@ emit). Worst case: four model signals per single user "Duplicate" click.
 
 ---
 
-## 6. monitorOverview identity-default for lookups (D13 — LOW)
+## 6. monitorOverview identity-default for lookups (D13 — CLOSED pass 15)
+
+**Resolution:** Pass 15 added `lookupsReady()` signal on
+`WindowRuleController` that fires exactly once after screen +
+activity + snapping-layout + tiling-algorithm resolvers are all
+wired. QML pages gate "show raw model" on this so the brief
+startup window where lookups would return raw UUIDs / wire tokens
+never becomes user-visible. Bit-mask tracking in the controller
+keeps the contract install-once.
+
+## 6. monitorOverview identity-default for lookups (D13 — original spec retained below)
 
 **Finding:** The reviewer flagged that `monitorOverview()` returns raw
 UUID-with-braces strings if `setScreenLookup` / `setActivityLookup` /
@@ -201,7 +244,20 @@ shows a placeholder instead of raw UUIDs.
 
 ---
 
-## 7. Sidebar.qml extraction (B9 — PARTIAL Pass 10)
+## 7. Sidebar.qml extraction (B9 — CLOSED pass 19)
+
+**Resolution:** Pass 19 extracted the ~270-line ListView delegate
+into `SidebarRow.qml`. The 9 row roles + 4 visual settings (compact,
+navRowHeight, accentBarWidth, trailingDelegate) are required
+properties; navigation intent flows back through three signals
+(`navigationRequested`, `categoryToggleRequested`,
+`drillIntoRequested`) so the row never reaches into Sidebar's
+internals. The model role formerly named `id` was renamed to
+`pageId` to fix a qmlformat 6.11 silent-fail bug where `id` shadowed
+the QML `id:` directive. Sidebar.qml is now ~480 lines, well under
+the 800-line cap.
+
+## 7. Sidebar.qml extraction (B9 — original spec retained below)
 
 **Partial Pass-10 fix:** The back-button block (~75 lines) was
 extracted to `SidebarBackButton.qml` to bring Sidebar.qml from 809
@@ -224,17 +280,12 @@ Worth doing before the next visual-tweak pass pushes the file past
 
 ---
 
-## 8. Loader.onLoaded width-binding idiom (B10 — LOW)
+## 8. Loader.onLoaded width-binding idiom (B10 — CLOSED passes 18 + 19)
 
-**Finding:** `AboutPageShell.qml` (around `topLoader.onLoaded`) and
-`Sidebar.qml` (around `footerLoader.onLoaded`) both do the same 4-line
-"bind item.width to loader width" pattern. Two copies of subtle layout
-snippets is where silent visual regressions hide. References are by
-symbol — line numbers drift each rebase.
-
-**Suggested approach:** Extract a tiny helper into a shared QML JS file
-(e.g. `internal/LoaderHelpers.js`) and call it from both `onLoaded`
-handlers.
+**Resolution:** Pass 18 created `libs/phosphor-settings-ui/qml/LoaderHelpers.js`
+with `bindItemWidthToLoader(loader)` and migrated AboutPageShell.qml.
+Pass 19 migrated Sidebar.qml's footerLoader (deferred from pass 18
+because of an unrelated qmlformat block that pass 19 unblocked).
 
 ---
 
@@ -275,7 +326,19 @@ on the wire is still a string), but localises the marshalling.
 
 ---
 
-## 12. PhosphorSettingsUiQml SHARED-variant install (Pass 10 — HIGH, partial)
+## 12. PhosphorSettingsUiQml SHARED-variant install (Pass 10 — CLOSED pass 20)
+
+**Resolution:** Pass 20 added the `PHOSPHOR_SETTINGS_UI_QML_INSTALL`
+option (default OFF). When enabled it builds a parallel
+`PhosphorSettingsUiQmlShared` target alongside the STATIC variant +
+installs the plugin .so / qmldir / qmltypes under
+`${KDE_INSTALL_QMLDIR}/org/phosphor/settings/ui/`. Mirrors the
+phosphor-animation pattern verbatim, including the `$ORIGIN`
+INSTALL_RPATH on the plugin so it finds the sibling shared lib at
+runtime. In-tree consumers keep linking the STATIC target — no
+behavioural change with the option off.
+
+## 12. PhosphorSettingsUiQml SHARED-variant install (Pass 10 — original spec retained below)
 
 **Finding:** The `PhosphorSettingsUiQml` STATIC target's namespaced
 alias `PhosphorSettingsUi::PhosphorSettingsUiQml` works for in-tree
@@ -298,7 +361,18 @@ Lands when the first out-of-tree consumer needs it.
 
 ---
 
-## 13. WindowRule monitorOverview layout-token lookup contract (Pass 10 — LOW)
+## 13. WindowRule monitorOverview layout-token lookup contract (Pass 10 — CLOSED pass 15)
+
+**Resolution:** Pass 15 split the WindowRuleController lookup into
+`setSnappingLayoutLookup` (UUIDs) + `setTilingAlgorithmLookup`
+(algorithm tokens). `monitorOverview` picks the appropriate one
+based on `rule.engineMode`. WindowRuleModel mirrors the split:
+`setSnappingLayoutLabelLookup` / `setTilingAlgorithmLabelLookup`;
+`actionLabel` takes both and picks per ActionType. The combined
+`setLayoutLookup` / `setLayoutLabelLookup` setters survive as
+back-compat shims that wire both targets to the same resolver.
+
+## 13. WindowRule monitorOverview layout-token lookup contract (Pass 10 — original spec retained below)
 
 **Finding:** `WindowRuleController::monitorOverview` resolves both
 snappingLayout (UUIDs) and tilingAlgorithm (algorithm tokens like
@@ -316,7 +390,17 @@ SettingsController's lookup setup as well.
 
 ---
 
-## 14. UnsavedChangesFooter applyAll silent-failure toast (Pass 10 — LOW)
+## 14. UnsavedChangesFooter applyAll silent-failure toast (Pass 10 — CLOSED pass 14)
+
+**Resolution:** Pass 14 added the `applyOnCloseFailed(dirtyPageIds)`
+signal to `SettingsAppWindow` plus a `collectDirtyPageIds()` helper
+that walks the registry via the new `PageRegistry::allPagesData()`
+Q_INVOKABLE. `DiscardChangesDialog`'s `onApplyConfirmed` now checks
+`controller.dirty` after `applyAll()` and emits the signal instead
+of silently re-prompting. PlasmaZones' Main.qml wires the signal to
+a toast that names the still-dirty page titles.
+
+## 14. UnsavedChangesFooter applyAll silent-failure toast (Pass 10 — original spec retained below)
 
 **Finding:** `SettingsAppWindow.qml`'s onApplyConfirmed calls
 `controller.applyAll()` then `Qt.callLater(root.close)`. If applyAll
@@ -331,22 +415,23 @@ refused the apply, rather than silently re-prompting.
 
 ---
 
-## 11. NIT items deferred for cosmetic reasons
+## 11. NIT items (statuses after passes 12-23)
 
-A handful of NIT findings remain explicitly unaddressed:
-
-- A15: `recomputeDirty` is O(N²) in domain count during a transaction.
-  Real cost is negligible for N < 20. If domain count grows past ~100,
-  block signals during the loop and emit a single recompute at the end.
-- A17: `pageRegistered` signal exists despite "registry is read-only after
-  startup" doc. Either remove or document the dynamic-registration use case.
-- A18: Mixed member-init style on `ApplicationController`. Pick one
-  (default-member-init for all PODs is the modern norm).
-- E27/E32: `aspectRatioLabels` / `_aspectRatioOptions` duplicated keys;
-  `Qt.rgba(theme, theme, theme, alpha)` copy-paste. Both extractable to
-  small QML helpers (`SettingsTheme.qml`).
-- E37: Document the `Qt.callLater` pattern around `layoutContextMenu` →
-  `aspectRatioSubMenu` reparenting (the SIGSEGV-avoidance reason).
+- A15: `recomputeDirty` O(N²) — still open (negligible cost N<20).
+- A17: `pageRegistered` signal — CLOSED. The PageRegistry header
+  docstring documents the dynamic-registration use case explicitly.
+- A18: Mixed member-init style — CLOSED in pass 13. ApplicationController
+  members all use default-member-init.
+- E27/E32: `aspectRatioLabels` locale binding + `Qt.rgba` copy-paste —
+  PARTIAL. Pass 12 moved aspectRatioLabels to a QtObject with per-property
+  bindings (locale-change-safe). The hyphen-keyed `aspectRatioLabels`
+  map survives for back-compat but sources its values from the QtObject;
+  pass 19 renamed the QtObject's `any` property to `allMonitors` and its
+  id to `aspectRatioLabelsObject` (qmlformat 6.11 bug on both names).
+  Qt.rgba copy-paste still open.
+- E37: `Qt.callLater` SIGSEGV-avoidance rationale — CLOSED in pass 13.
+  Both call sites in Main.qml now have inline comments explaining the
+  pattern.
 
 ---
 
@@ -356,7 +441,10 @@ These items should be filed as GitHub issues with the `phosphor-settings-ui`
 label once PR #533 merges. Each maps to one or more audit findings (audit
 codes preserved above so reviewers can cross-reference the original report).
 
-Last updated: 2026-05-26 (post-Pass 10 — added items #7 partial,
-#12 PhosphorSettingsUiQml SHARED-variant install, #13 monitorOverview
-lookup contract, #14 applyAll silent-failure toast; the architectural
-items above remain explicitly out of scope for the PR-#533 merge).
+Last updated: 2026-05-27 (after passes 12-23 from the senior PR review:
+closed #3, #5, #6, #7, #8, #12, #13, #14, A17, A18, E37; partial #1
+(1a/1b shipped, 1c-1f open), #2 (foundation signal in pass 23, behavioural
+async refactor open), #11 E27/E32 partial. The architectural items
+remaining are #1c..1f (ISettings* migration for editor / snapping-appearance
+/ tiling-{algorithm,appearance}) and #2b (sync→async commit() behavioural
+refactor with chrome state machine).
