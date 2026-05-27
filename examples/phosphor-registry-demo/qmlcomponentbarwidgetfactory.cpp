@@ -61,6 +61,12 @@ QQuickItem* QmlComponentBarWidgetFactory::createWidget(QQmlEngine* engine, QObje
     if (auto* parentItem = qobject_cast<QQuickItem*>(parent)) {
         item->setParentItem(parentItem);
     }
+    // JavaScript ownership lets a future QML caller .destroy() the
+    // widget. The Repeater-driven bar layout we ship today does not
+    // need this (delegate parent-cascade handles destruction), but
+    // surfaces / plugin authors copying the pattern shouldn't have
+    // to relearn the QObject ownership rule.
+    QQmlEngine::setObjectOwnership(item, QQmlEngine::JavaScriptOwnership);
     return item;
 }
 

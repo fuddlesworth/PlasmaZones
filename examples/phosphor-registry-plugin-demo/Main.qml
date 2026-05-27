@@ -58,6 +58,37 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.margins: Tokens.spacing_s
                 spacing: Tokens.spacing_m
+
+                // Repeater-driven widget instantiation. Each slot is
+                // a JS-owned Item delegate; the C++ factory parents
+                // a real widget under the slot in Component.onCompleted.
+                // When demoController.factoryIds changes (register /
+                // unregister / plugin hot-reload), the Repeater
+                // destroys the old delegates; QObject's parent-cascade
+                // takes the C++-owned widgets with them. This avoids
+                // the "destroy() on an indestructible object" error
+                // that a manual `child.destroy()` loop produces — JS
+                // can't destroy C++-owned QQuickItems directly, but
+                // it can destroy its own delegate Items.
+                Repeater {
+                    model: demoController ? demoController.factoryIds : []
+
+                    delegate: Item {
+                        id: slot
+
+                        required property string modelData
+                        property var widget: null
+
+                        implicitWidth: widget ? widget.implicitWidth : 0
+                        implicitHeight: widget ? widget.implicitHeight : 0
+
+                        Component.onCompleted: {
+                            if (demoController) {
+                                slot.widget = demoController.createWidgetFor(slot.modelData, slot);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -74,11 +105,7 @@ ApplicationWindow {
 
                 implicitWidth: reloadLabel.implicitWidth + Tokens.spacing_xl
                 implicitHeight: Tokens.spacing_xxl
-                color: reloadMouse.containsPress
-                    ? Qt.darker(Theme.primary, 1.15)
-                    : reloadMouse.containsMouse
-                        ? Qt.lighter(Theme.primary, 1.1)
-                        : Theme.primary
+                color: reloadMouse.containsPress ? Qt.darker(Theme.primary, 1.15) : reloadMouse.containsMouse ? Qt.lighter(Theme.primary, 1.1) : Theme.primary
                 radius: Tokens.radius_s
                 border.color: Theme.outline_variant
                 border.width: 1
@@ -130,30 +157,6 @@ ApplicationWindow {
 
         Item {
             Layout.fillHeight: true
-        }
-    }
-
-    function rebuildBar() {
-        if (!demoController) {
-            return;
-        }
-        for (let i = barRow.children.length - 1; i >= 0; --i) {
-            barRow.children[i].destroy();
-        }
-        const ids = demoController.factoryIds;
-        if (!ids) {
-            return;
-        }
-        for (let i = 0; i < ids.length; ++i) {
-            demoController.createWidgetFor(ids[i], barRow);
-        }
-    }
-
-    Component.onCompleted: rebuildBar()
-    Connections {
-        target: demoController
-        function onFactoryIdsChanged() {
-            rebuildBar();
         }
     }
 }

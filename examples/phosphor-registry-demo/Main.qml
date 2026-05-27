@@ -43,7 +43,12 @@ ApplicationWindow {
         }
 
         // The "bar". A Row that lays out one widget per registered
-        // factory id. The bar rebuilds on factoryIdsChanged.
+        // factory id, driven by a Repeater on demoController.factoryIds.
+        // Lets QML manage widget lifetime via delegate destruction:
+        // when the model changes, the Repeater destroys old delegates,
+        // QObject's parent-cascade takes the C++-owned widgets with
+        // them. Avoids the "destroy() on an indestructible object"
+        // error a manual `child.destroy()` loop would produce.
         Rectangle {
             id: bar
 
@@ -55,11 +60,29 @@ ApplicationWindow {
             border.width: 1
 
             Row {
-                id: barRow
-
                 anchors.fill: parent
                 anchors.margins: Tokens.spacing_s
                 spacing: Tokens.spacing_m
+
+                Repeater {
+                    model: demoController ? demoController.factoryIds : []
+
+                    delegate: Item {
+                        id: slot
+
+                        required property string modelData
+                        property var widget: null
+
+                        implicitWidth: widget ? widget.implicitWidth : 0
+                        implicitHeight: widget ? widget.implicitHeight : 0
+
+                        Component.onCompleted: {
+                            if (demoController) {
+                                slot.widget = demoController.createWidgetFor(slot.modelData, slot);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -77,35 +100,6 @@ ApplicationWindow {
 
         Item {
             Layout.fillHeight: true
-        }
-    }
-
-    function rebuildBar() {
-        // Tear down existing widget children of barRow before
-        // re-instantiating. The demo never re-registers in practice
-        // (built-ins are added once in main()), but the rebuild is
-        // the same code-path a real bar would use when the registry
-        // changes — keeps the wiring honest.
-        if (!demoController) {
-            return;
-        }
-        for (let i = barRow.children.length - 1; i >= 0; --i) {
-            barRow.children[i].destroy();
-        }
-        const ids = demoController.factoryIds;
-        if (!ids) {
-            return;
-        }
-        for (let i = 0; i < ids.length; ++i) {
-            demoController.createWidgetFor(ids[i], barRow);
-        }
-    }
-
-    Component.onCompleted: rebuildBar()
-    Connections {
-        target: demoController
-        function onFactoryIdsChanged() {
-            rebuildBar();
         }
     }
 }

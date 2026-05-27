@@ -56,6 +56,7 @@ QQuickItem* QmlComponentBarWidgetFactory::createWidget(QQmlEngine* engine, QObje
     if (auto* parentItem = qobject_cast<QQuickItem*>(parent)) {
         item->setParentItem(parentItem);
     }
+    QQmlEngine::setObjectOwnership(item, QQmlEngine::JavaScriptOwnership);
     return item;
 }
 

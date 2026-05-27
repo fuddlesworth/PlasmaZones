@@ -79,10 +79,21 @@ public:
         if (!engine) {
             return nullptr;
         }
-        QQmlComponent component(engine);
+        // Force synchronous compilation: QQmlComponent default mode
+        // can leave the component in Loading state after setData on
+        // certain Qt 6.x builds, which then makes create() warn
+        // "Component is not ready" and return nullptr. The QUrl-
+        // overload of the ctor accepts a CompilationMode arg; passing
+        // an empty QUrl plus PreferSynchronous gives synchronous
+        // compilation for setData calls.
+        QQmlComponent component(engine, QUrl(), QQmlComponent::PreferSynchronous);
         component.setData(QByteArray(kCpuMeterQml), QUrl(QStringLiteral("inline:cpu-meter")));
         if (component.isError()) {
             qWarning("CpuMeterFactory: component error %s", qPrintable(component.errorString()));
+            return nullptr;
+        }
+        if (!component.isReady()) {
+            qWarning("CpuMeterFactory: component status=%d (expected Ready)", static_cast<int>(component.status()));
             return nullptr;
         }
         QObject* obj = component.create(engine->rootContext());
@@ -97,6 +108,14 @@ public:
         if (auto* parentItem = qobject_cast<QQuickItem*>(parent)) {
             item->setParentItem(parentItem);
         }
+        // Flag as JavaScript-owned so a future call site that wants
+        // to destroy the widget from QML can do so without hitting
+        // "Invalid attempt to destroy() an indestructible object".
+        // The Repeater-driven bar layout we ship today does not
+        // need this (parent-cascade handles destruction), but plugin
+        // authors copying this pattern shouldn't have to relearn the
+        // ownership rule.
+        QQmlEngine::setObjectOwnership(item, QQmlEngine::JavaScriptOwnership);
         return item;
     }
 };
