@@ -492,15 +492,22 @@ bool SettingsController::importAllSettings(const QString& filePath)
     }
 
     if (!ok) {
-        // Restore backup on failure. `QFile::rename` is atomic on POSIX
-        // (the target is replaced via `rename(2)` which won't fail
-        // because the destination exists), so we don't need to
-        // `remove(configPath)` first — and skipping the remove means a
-        // pre-rename EACCES on configPath doesn't leave the user with
-        // NO config file. If the atomic rename itself fails, the backup
-        // stays put for manual recovery.
+        // Restore backup on failure. `QFile::rename` on Qt REFUSES to
+        // overwrite an existing destination (regardless of POSIX rename(2)
+        // atomicity at the syscall layer), so we must explicitly remove
+        // configPath first. In the open-fail / JSON-parse-fail paths above
+        // configPath was never touched, so it still exists — without this
+        // pre-remove the rename silently fails and the user is left with
+        // their original (pre-import) config plus a misleading "Failed to
+        // restore" warning while the actual restore-from-backup is
+        // unreachable. There's a one-syscall window between remove and
+        // rename where configPath doesn't exist; that's preferable to the
+        // silent-failure semantics of the previous form.
         if (QFile::exists(backupPath)) {
-            if (!QFile::rename(backupPath, configPath)) {
+            if (QFile::exists(configPath) && !QFile::remove(configPath)) {
+                qCWarning(PlasmaZones::lcCore)
+                    << "Failed to remove configPath before restore. Backup remains at:" << backupPath;
+            } else if (!QFile::rename(backupPath, configPath)) {
                 qCWarning(PlasmaZones::lcCore)
                     << "Failed to restore config from backup after failed import. Backup remains at:" << backupPath;
             }
