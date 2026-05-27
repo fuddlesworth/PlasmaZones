@@ -200,34 +200,41 @@ endif()
 #   make format-qml   (or ninja format-qml)
 # ---------------------------------------------------------------------------
 include(KDEClangFormat)
+# `**` is not a CMake glob primitive; it expands to the same regex as
+# `*` (anything except `/`). GLOB_RECURSE with a plain `*.cpp` pattern
+# already recurses into subdirectories, so the recursive form is what
+# we want; using `**/*.cpp` would require an intermediate path segment
+# and silently drop files directly under each root (e.g. src/pz_qml_i18n.cpp,
+# any top-level kwin-effect/.cpp).
 file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
-    ${CMAKE_SOURCE_DIR}/src/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/src/**/*.h
-    ${CMAKE_SOURCE_DIR}/src/**/*.hpp
-    ${CMAKE_SOURCE_DIR}/kcm/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/kcm/**/*.h
-    ${CMAKE_SOURCE_DIR}/kcm/**/*.hpp
-    ${CMAKE_SOURCE_DIR}/kwin-effect/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/kwin-effect/**/*.h
-    ${CMAKE_SOURCE_DIR}/kwin-effect/**/*.hpp
-    ${CMAKE_SOURCE_DIR}/tests/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/tests/**/*.h
-    ${CMAKE_SOURCE_DIR}/libs/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/libs/**/*.h
-    ${CMAKE_SOURCE_DIR}/libs/**/*.hpp
-    ${CMAKE_SOURCE_DIR}/examples/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/examples/**/*.h
-    ${CMAKE_SOURCE_DIR}/examples/**/*.hpp
+    ${CMAKE_SOURCE_DIR}/src/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/*.h
+    ${CMAKE_SOURCE_DIR}/src/*.hpp
+    ${CMAKE_SOURCE_DIR}/kcm/*.cpp
+    ${CMAKE_SOURCE_DIR}/kcm/*.h
+    ${CMAKE_SOURCE_DIR}/kcm/*.hpp
+    ${CMAKE_SOURCE_DIR}/kwin-effect/*.cpp
+    ${CMAKE_SOURCE_DIR}/kwin-effect/*.h
+    ${CMAKE_SOURCE_DIR}/kwin-effect/*.hpp
+    ${CMAKE_SOURCE_DIR}/tests/*.cpp
+    ${CMAKE_SOURCE_DIR}/tests/*.h
+    ${CMAKE_SOURCE_DIR}/libs/*.cpp
+    ${CMAKE_SOURCE_DIR}/libs/*.h
+    ${CMAKE_SOURCE_DIR}/libs/*.hpp
+    ${CMAKE_SOURCE_DIR}/examples/*.cpp
+    ${CMAKE_SOURCE_DIR}/examples/*.h
+    ${CMAKE_SOURCE_DIR}/examples/*.hpp
 )
 kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
 
 # QML: qmlformat (from qt6-tools, optional)
+# Same `**`-vs-recursion rationale as the clang-format glob above.
 find_program(QMLFORMAT qmlformat)
 file(GLOB_RECURSE ALL_QML_FILES
-    ${CMAKE_SOURCE_DIR}/src/**/*.qml
-    ${CMAKE_SOURCE_DIR}/kcm/**/*.qml
-    ${CMAKE_SOURCE_DIR}/libs/**/*.qml
-    ${CMAKE_SOURCE_DIR}/examples/**/*.qml
+    ${CMAKE_SOURCE_DIR}/src/*.qml
+    ${CMAKE_SOURCE_DIR}/kcm/*.qml
+    ${CMAKE_SOURCE_DIR}/libs/*.qml
+    ${CMAKE_SOURCE_DIR}/examples/*.qml
 )
 if(QMLFORMAT AND ALL_QML_FILES)
     # Run qmlformat via helper script; per-file failures are ignored (one bad QML won't fail target)

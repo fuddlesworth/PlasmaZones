@@ -129,11 +129,18 @@ void DemoController::closeAll()
 
 void DemoController::shutdown()
 {
+    // Snapshot modal-active state BEFORE disconnecting so we can
+    // emit the matching NOTIFY by hand after closeAll if the drain
+    // flipped modalActive false. Without this, a QML binding on
+    // modalActive that was true at shutdown would never see the
+    // transition (the forwarding lambda for modalActiveChanged was
+    // installed via &DemoController::modalActiveChanged and the
+    // disconnect below kills it).
+    const bool wasModalActive = m_controller ? m_controller->isModalActive() : false;
     // Disconnect this object's slots from the controller's signals
     // before draining so the close storm doesn't re-enter Q_PROPERTY
     // notify handlers that bind into QML objects the engine is about
-    // to destroy. After this point, openPopoutIds / modalActive stop
-    // emitting NOTIFY (reads still pass through until destruction).
+    // to destroy.
     if (m_controller) {
         m_controller->disconnect(this);
         m_controller->closeAll();
@@ -146,13 +153,29 @@ void DemoController::shutdown()
     if (m_transport) {
         m_transport->shutdown();
     }
+    // Drop the cached QQmlComponents while the engine is still alive.
+    // They are QObject children of `this`, but `this` outlives the
+    // engine (engine is declared after demoController in main.cpp).
+    // Letting the parent-cascade run them during ~DemoController
+    // would destruct QQmlComponents after their engine is gone;
+    // typically safe in Qt 6 but fragile. Resetting now is explicit.
+    delete m_calendarComponent;
+    m_calendarComponent = nullptr;
+    delete m_alertComponent;
+    m_alertComponent = nullptr;
+    delete m_noteComponent;
+    m_noteComponent = nullptr;
     // The popoutClosed handler that normally maintains m_openIds was
     // disconnected above; do the final-drain emit by hand so any
     // remaining QML bindings on openPopoutIds see the empty state
-    // before the engine tears down.
+    // before the engine tears down. Same pattern for modalActive
+    // when shutdown drained a previously-active modal.
     if (!m_openIds.isEmpty()) {
         m_openIds.clear();
         Q_EMIT openPopoutIdsChanged();
+    }
+    if (wasModalActive && m_controller && !m_controller->isModalActive()) {
+        Q_EMIT modalActiveChanged();
     }
 }
 

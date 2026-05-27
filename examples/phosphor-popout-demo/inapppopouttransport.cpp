@@ -20,32 +20,22 @@ InAppPopoutTransport::InAppPopoutTransport(QObject* parent)
 
 InAppPopoutTransport::~InAppPopoutTransport()
 {
-    // Tear down any surviving entries directly. The controller calls
-    // closeAll on shutdown via its own destructor sequence. This is
-    // a belt-and-suspenders cleanup for the case where the transport
-    // outlives the controller. Use synchronous delete rather than
-    // deleteLater because by the time this destructor runs the event
-    // loop may already have exited, in which case queued deleteLater
-    // events never fire and the items leak.
+    // shutdown() is the canonical drain path: it runs while the QML
+    // engine is still alive (wired from QGuiApplication::aboutToQuit
+    // via DemoController::shutdown). Reaching the destructor with
+    // entries still alive means shutdown was skipped (e.g., an early
+    // main() return before app.exec()), and the QML engine has
+    // already torn down by the time this dtor runs. Deleting QQuickItems
+    // synchronously at that point hits the pure-virtual-method-called
+    // failure mode that motivated shutdown() in the first place.
     //
-    // Snapshot the entry values into a local list and clear m_entries
-    // BEFORE deleting. Deleting a host fires its
-    // Component.onDestruction which emits dismissed; the snapshot
-    // plus disconnect-before-delete below stops that signal from
-    // re-entering onHostDismissed during teardown.
-    //
-    // contentItem is a QObject child of hostItem (PopoutHost.qml's
-    // contentFrame.rebindContentItem reparents it under the host),
-    // so deleting hostItem destroys contentItem too. Mirrors the
-    // shutdown() teardown shape; no second contentItem delete.
-    const auto victims = m_entries.values();
+    // Assert in debug to catch the contract violation; in release,
+    // leak the stranded entries — the process is exiting, and a leak
+    // is preferable to a SIGABRT in the dtor.
+    Q_ASSERT_X(m_entries.isEmpty(), "~InAppPopoutTransport",
+               "shutdown() must run before transport destruction; "
+               "stranded entries cannot be safely deleted after engine teardown");
     m_entries.clear();
-    for (const auto& entry : victims) {
-        if (entry.hostItem) {
-            QObject::disconnect(entry.hostItem.data(), nullptr, this, nullptr);
-            delete entry.hostItem.data();
-        }
-    }
 }
 
 void InAppPopoutTransport::setHostItem(QQuickItem* host)
