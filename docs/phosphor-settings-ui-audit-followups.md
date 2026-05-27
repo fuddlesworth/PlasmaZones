@@ -12,25 +12,20 @@ or design decisions the audit could not unilaterally make.
 
 ---
 
-## 1. ISettings* across all page controllers (D5 — HIGH, PARTIAL pass 21/22)
+## 1. ISettings* across all page controllers (D5 — CLOSED pass 21-25)
 
-**Resolved sub-passes:**
-- Pass 21 (F#1a): `GeneralPageController` switched to `ISettings&` —
-  only used `renderingBackend()` which ISettings already declared.
-- Pass 22 (F#1b): `SnappingBehaviorController` + `TilingBehaviorController`
-  switched to `ISettings*`. ISettings already declares the snapping
-  trigger surface through its `IZoneActivationSettings` /
-  `IZoneSelectorSettings` sub-interfaces.
-
-**Remaining sub-passes (each requires widening ISettings + adding
-StubSettings stubs before the controller migration):**
-
-- 1c: `EditorPageController` — ~11 editor* getter/setter pairs to add.
-- 1d: `SnappingAppearanceController` — `loadColorsFromFile()` plus a
-  handful of border/color accessors.
-- 1e: `TilingAlgorithmController` — `autotilePerAlgorithmSettings` +
-  its setter (the only methods the controller reads).
-- 1f: `TilingAppearanceController` — autotile border + radius surface.
+All seven settings-app page controllers migrated:
+- Pass 21 (F#1a): `GeneralPageController` → `ISettings&`.
+- Pass 22 (F#1b): `Snapping/TilingBehaviorController` → `ISettings*`.
+- Pass 24 (F#1e + F#1d + F#1f): `TilingAlgorithmController` +
+  `SnappingAppearanceController` → `ISettings*`. ISettings widened
+  with `autotilePerAlgorithmSettings` + `loadColorsFromFile`.
+  `TilingAppearanceController` was already parameter-less — closed
+  as no-op.
+- Pass 25 (F#1c): `EditorPageController` → `ISettings&`. ISettings
+  widened with 11 editor getter/setter pairs + 11 NOTIFY signals;
+  Settings's existing methods marked `override`; StubSettings grew
+  the matching round-trip stubs.
 
 ---
 
@@ -85,29 +80,34 @@ first, then snapping pair, then tiling pair). For each:
 
 ---
 
-## 2. Sync → async D-Bus on save / discard (D8, D10 — MEDIUM, PARTIAL pass 23)
+## 2. Sync → async D-Bus on save / discard (D8, D10 — MOSTLY CLOSED passes 23 + 27)
 
-**Pass-23 foundation:** `StagingDomain` gained optional
-`applyResult(ok, error)` and `discardResult(ok, error)` signals.
-The signals are inert until a domain emits them — a non-breaking
-widening that lets future async commits surface partial-failure
-state to the chrome.
+**Resolved:**
+- Pass 23 (F#2a): `StagingDomain::applyResult(ok, error)` +
+  `discardResult(ok, error)` signal foundation.
+- Pass 27 (F#2b): `WindowRuleController::asyncCommit()` Q_INVOKABLE
+  dispatches `setAllRules` via `QDBusPendingCallWatcher` and emits
+  `applyResult` on the reply. `pushToDaemonAsync()` mirrors the
+  client-side validation of the sync path. The sync `commit()` /
+  `forceCommit()` / `pushToDaemon()` stay callable for back-compat
+  until the chrome wires the async pipeline.
+- Pass 27 (F#2c): `AnimationsPageController::asyncRevertPending()`
+  runs the QSaveFile restore loop on a `QtConcurrent` worker; a
+  `QFutureWatcher` on the GUI thread installs the retained map +
+  emits `discardResult`.
 
-**Still open:**
-
-1. `WindowRuleController::commit()` to `QDBusPendingCallWatcher`
-   async with `applyResult` emit on `finished`.
-2. `AnimationsPageController::revertPending()` `QSaveFile` writes
-   moved off the GUI thread (QtConcurrent::run) with `discardResult`
-   on completion.
-3. Chrome footer in-flight state — pulse on the Apply/Discard
-   button while an async commit is open.
-4. `daemonChangedWhileDirty` refusal path threaded through the
-   async pipeline so the page's whole dirty-state machine survives
-   the timing change.
-
-Manual save-flow regression testing required because the save path
-isn't covered by automated tests today.
+**Still open (chrome wiring):**
+- Chrome footer should bind to the new applyResult/discardResult
+  signals and surface in-flight + failure state instead of relying
+  on the inherited `dirtyChanged` to imply completion.
+- `SettingsController::save()` and the inherited
+  `StagingDomain::apply()` slot still drive the sync path. Once the
+  chrome consumes the async signals, those callers can switch over
+  and the sync paths can become internal helpers.
+- Manual save-flow regression testing was the stated risk in the
+  original spec — the async siblings now exist but the cut-over
+  isn't done; the regression risk transfers to the future chrome
+  wiring PR.
 
 ## 2. Sync → async D-Bus on save / discard (D8, D10 — MEDIUM, original spec retained below)
 
@@ -415,20 +415,24 @@ refused the apply, rather than silently re-prompting.
 
 ---
 
-## 11. NIT items (statuses after passes 12-23)
+## 11. NIT items (statuses after passes 12-27)
 
-- A15: `recomputeDirty` O(N²) — still open (negligible cost N<20).
+- A15: `recomputeDirty` O(N²) — CLOSED in pass 26. ApplicationController
+  now holds an `m_inTransaction` flag set during applyAll/discardAll;
+  the inner onDomainDirtyChanged skips its per-edge walk and the
+  outer transaction emits a single recomputeDirty at the end. O(N²)
+  → O(N) for a batch touching N domains.
 - A17: `pageRegistered` signal — CLOSED. The PageRegistry header
   docstring documents the dynamic-registration use case explicitly.
 - A18: Mixed member-init style — CLOSED in pass 13. ApplicationController
   members all use default-member-init.
-- E27/E32: `aspectRatioLabels` locale binding + `Qt.rgba` copy-paste —
-  PARTIAL. Pass 12 moved aspectRatioLabels to a QtObject with per-property
-  bindings (locale-change-safe). The hyphen-keyed `aspectRatioLabels`
-  map survives for back-compat but sources its values from the QtObject;
-  pass 19 renamed the QtObject's `any` property to `allMonitors` and its
-  id to `aspectRatioLabelsObject` (qmlformat 6.11 bug on both names).
-  Qt.rgba copy-paste still open.
+- E27: aspectRatioLabels locale binding — CLOSED in pass 12. Backing
+  QtObject's per-property bindings re-evaluate on locale change.
+- E32: Qt.rgba theme-tint copy-paste — CLOSED in pass 26. New
+  `ThemeHelpers.js` with `withAlpha` / `activeTint` / `hoverTint`
+  helpers + named alpha constants. UnsavedChangesFooter,
+  SidebarBackButton, SidebarRow migrated; PlasmaZones consumer pages
+  can adopt incrementally.
 - E37: `Qt.callLater` SIGSEGV-avoidance rationale — CLOSED in pass 13.
   Both call sites in Main.qml now have inline comments explaining the
   pattern.
@@ -441,10 +445,12 @@ These items should be filed as GitHub issues with the `phosphor-settings-ui`
 label once PR #533 merges. Each maps to one or more audit findings (audit
 codes preserved above so reviewers can cross-reference the original report).
 
-Last updated: 2026-05-27 (after passes 12-23 from the senior PR review:
-closed #3, #5, #6, #7, #8, #12, #13, #14, A17, A18, E37; partial #1
-(1a/1b shipped, 1c-1f open), #2 (foundation signal in pass 23, behavioural
-async refactor open), #11 E27/E32 partial. The architectural items
-remaining are #1c..1f (ISettings* migration for editor / snapping-appearance
-/ tiling-{algorithm,appearance}) and #2b (sync→async commit() behavioural
-refactor with chrome state machine).
+Last updated: 2026-05-27 (after passes 12-27 from the senior PR review).
+
+Closed: #1 (all sub-passes 1a-1f), #3, #5, #6, #7, #8, #12, #13, #14,
+A15, A17, A18, E27, E32, E37. #2 (async D-Bus) is "mostly closed":
+the async siblings on WindowRuleController + AnimationsPageController
+exist (passes 23 + 27) and emit applyResult/discardResult; the
+remaining work is chrome wiring (footer in-flight state + cut-over
+from sync apply/discard) which carries its own manual save-flow
+regression-testing risk and is a separate UX surface PR.
