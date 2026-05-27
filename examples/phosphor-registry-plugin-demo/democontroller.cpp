@@ -28,6 +28,11 @@ DemoController::DemoController(QQmlEngine* engine, QString pluginRoot, QObject* 
     registerBuiltins();
 
     m_loader = std::make_unique<PluginLoader>(m_registry.get(), m_pluginRoot);
+    // PluginLoader resolves an empty input to the XDG default; mirror
+    // that into our own m_pluginRoot so the QML status footer shows
+    // the path actually being scanned rather than the original
+    // (possibly empty) constructor argument.
+    m_pluginRoot = m_loader->pluginRoot();
     m_loader->scanAndLoad();
     // Synchronous initial rescan so the bar's first paint has the
     // plugin set already populated. Without this the bar would

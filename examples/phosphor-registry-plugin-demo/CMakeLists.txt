@@ -58,6 +58,16 @@ target_link_libraries(phosphor-registry-plugin-demo
         PhosphorThemeQmlplugin
 )
 
+# Build-tree default plugin root. When the demo runs from ./bin/
+# without --plugin-root, main.cpp falls back to this path so the
+# CPU-meter plugin loads out of the box. CI / dev workflow only;
+# installed deployment still uses the XDG default
+# (${GenericDataLocation}/phosphor/plugins/).
+target_compile_definitions(phosphor-registry-plugin-demo
+    PRIVATE
+        PHOSPHOR_REGISTRY_PLUGIN_DEMO_DEFAULT_ROOT="${CMAKE_BINARY_DIR}/registry-plugin-demo-plugins"
+)
+
 # The CPU-meter plugin must be built before the demo runs (the demo
 # default plugin root won't have it, but CI / dev runs typically use
 # --plugin-root pointing at the build tree).

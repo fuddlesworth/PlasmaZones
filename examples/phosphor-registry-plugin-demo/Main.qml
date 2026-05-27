@@ -64,9 +64,44 @@ ApplicationWindow {
         RowLayout {
             spacing: Tokens.spacing_m
 
-            Button {
-                text: qsTr("Reload plugins")
-                onClicked: demoController.reloadPlugins()
+            // Inline themed button. The default QtQuick.Controls Basic
+            // Button renders as a flat grey rectangle that doesn't
+            // match the rest of the demo's Phosphor.Theme chrome.
+            // A real shell would use a shared PhosphorButton.qml;
+            // for the demo, inlining keeps the file count down.
+            Rectangle {
+                id: reloadButton
+
+                implicitWidth: reloadLabel.implicitWidth + Tokens.spacing_xl
+                implicitHeight: Tokens.spacing_xxl
+                color: reloadMouse.containsPress
+                    ? Qt.darker(Theme.primary, 1.15)
+                    : reloadMouse.containsMouse
+                        ? Qt.lighter(Theme.primary, 1.1)
+                        : Theme.primary
+                radius: Tokens.radius_s
+                border.color: Theme.outline_variant
+                border.width: 1
+
+                Text {
+                    id: reloadLabel
+
+                    anchors.centerIn: parent
+                    text: qsTr("Reload plugins")
+                    color: Theme.on_primary
+                    font.pixelSize: Tokens.font_size_body_m
+                    font.family: Tokens.font_family
+                    font.weight: Tokens.font_weight_medium
+                }
+
+                MouseArea {
+                    id: reloadMouse
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: demoController.reloadPlugins()
+                }
             }
 
             Text {

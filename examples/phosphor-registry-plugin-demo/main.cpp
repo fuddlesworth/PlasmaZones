@@ -41,7 +41,21 @@ int main(int argc, char* argv[])
 
     QQmlApplicationEngine engine;
 
-    const QString pluginRoot = parser.value(pluginRootOption);
+    // Resolve the plugin root in priority order:
+    //   1. --plugin-root from the CLI (CI + manual testing override)
+    //   2. PHOSPHOR_REGISTRY_PLUGIN_DEMO_DEFAULT_ROOT injected at
+    //      build time, pointing at ${CMAKE_BINARY_DIR}/registry-plugin-demo-plugins/.
+    //      Lets `./bin/phosphor-registry-plugin-demo` work out of the
+    //      build tree without arguments.
+    //   3. Empty string — PluginLoader then falls back to
+    //      ${GenericDataLocation}/phosphor/plugins/ (the installed-
+    //      deployment default).
+    QString pluginRoot = parser.value(pluginRootOption);
+#ifdef PHOSPHOR_REGISTRY_PLUGIN_DEMO_DEFAULT_ROOT
+    if (pluginRoot.isEmpty()) {
+        pluginRoot = QStringLiteral(PHOSPHOR_REGISTRY_PLUGIN_DEMO_DEFAULT_ROOT);
+    }
+#endif
     PhosphorRegistryPluginDemo::DemoController demoController(&engine, pluginRoot);
     engine.rootContext()->setContextProperty(QStringLiteral("demoController"), &demoController);
 
