@@ -64,10 +64,12 @@ ApplicationWindow {
         }
 
         // Status footer. Lists current registered ids so the
-        // demo's state is obvious without a debug console.
+        // demo's state is obvious without a debug console. Guarded
+        // with `?:` so the binding can never trip a null-deref
+        // TypeError even on early evaluation paths.
         Text {
             Layout.fillWidth: true
-            text: qsTr("Registered factories: %1").arg(demoController.factoryIds.join(", "))
+            text: qsTr("Registered factories: %1").arg(demoController && demoController.factoryIds ? demoController.factoryIds.join(", ") : "")
             color: Theme.on_surface_variant
             font.pixelSize: Tokens.font_size_body_s
             font.family: Tokens.font_family
@@ -84,10 +86,16 @@ ApplicationWindow {
         // (built-ins are added once in main()), but the rebuild is
         // the same code-path a real bar would use when the registry
         // changes — keeps the wiring honest.
+        if (!demoController) {
+            return;
+        }
         for (let i = barRow.children.length - 1; i >= 0; --i) {
             barRow.children[i].destroy();
         }
         const ids = demoController.factoryIds;
+        if (!ids) {
+            return;
+        }
         for (let i = 0; i < ids.length; ++i) {
             demoController.createWidgetFor(ids[i], barRow);
         }

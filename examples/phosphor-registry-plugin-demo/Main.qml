@@ -71,7 +71,13 @@ ApplicationWindow {
 
             Text {
                 Layout.fillWidth: true
-                text: qsTr("Plugin root: %1").arg(demoController.pluginRoot)
+                // demoController is a context property and may not be
+                // bound on every QML evaluation path (e.g., if a future
+                // refactor moves the binding into an inner component
+                // that evaluates before the root context is wired).
+                // Guard with `?:` so the binding can never trip a
+                // null-deref TypeError.
+                text: qsTr("Plugin root: %1").arg(demoController ? demoController.pluginRoot : "")
                 color: Theme.on_surface_variant
                 font.pixelSize: Tokens.font_size_body_s
                 font.family: Tokens.font_family
@@ -81,7 +87,7 @@ ApplicationWindow {
 
         Text {
             Layout.fillWidth: true
-            text: qsTr("Registered factories: %1").arg(demoController.factoryIds.join(", "))
+            text: qsTr("Registered factories: %1").arg(demoController && demoController.factoryIds ? demoController.factoryIds.join(", ") : "")
             color: Theme.on_surface_variant
             font.pixelSize: Tokens.font_size_body_s
             font.family: Tokens.font_family
@@ -93,10 +99,16 @@ ApplicationWindow {
     }
 
     function rebuildBar() {
+        if (!demoController) {
+            return;
+        }
         for (let i = barRow.children.length - 1; i >= 0; --i) {
             barRow.children[i].destroy();
         }
         const ids = demoController.factoryIds;
+        if (!ids) {
+            return;
+        }
         for (let i = 0; i < ids.length; ++i) {
             demoController.createWidgetFor(ids[i], barRow);
         }
