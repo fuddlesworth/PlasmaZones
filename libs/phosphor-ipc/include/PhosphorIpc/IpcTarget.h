@@ -44,6 +44,15 @@ public:
     [[nodiscard]] QString target() const;
     void setTarget(const QString& name);
 
+    // Push an event to every subscriber for (target, signalName).
+    // QML plugin authors call this whenever a wire-visible state
+    // transition happens — explicit per-transition, in contrast
+    // to an auto-introspected Qt-signal hook. The args list is
+    // serialised to JSON via the router's variant-to-JSON helper
+    // (the same one used for sync call return values), so any
+    // QVariantList-shaped payload works.
+    Q_INVOKABLE void emitEvent(const QString& signalName, const QVariantList& args = {});
+
     // QQmlParserStatus — register with the router after QML has
     // finished setting up the item (so the `target` property is
     // populated).

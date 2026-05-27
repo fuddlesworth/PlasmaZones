@@ -6,6 +6,8 @@
 #include <PhosphorIpc/IpcEngine.h>
 #include <PhosphorIpc/IpcRouter.h>
 
+#include <QJsonArray>
+#include <QJsonValue>
 #include <QQmlEngine>
 
 namespace PhosphorIpc {
@@ -48,6 +50,26 @@ void IpcTarget::classBegin()
 {
     // No-op: registration happens in componentComplete, after QML
     // has finished setting the target property.
+}
+
+void IpcTarget::emitEvent(const QString& signalName, const QVariantList& args)
+{
+    if (!m_router) {
+        qWarning("PhosphorIpc::IpcTarget::emitEvent: no router (target '%s' wasn't registered)", qPrintable(m_target));
+        return;
+    }
+    if (signalName.isEmpty()) {
+        qWarning("PhosphorIpc::IpcTarget::emitEvent: empty signalName ignored");
+        return;
+    }
+    // Serialise QVariantList → QJsonArray. We use QJsonArray's
+    // fromVariantList helper which mirrors the variantToJson rules
+    // in IpcRouter for the call-return path (modulo custom QMetaType
+    // fallbacks which would degrade to null here — for the call
+    // path they degrade to toString fallback. Symmetry is good
+    // enough for Phase 1.4; revisit if anyone hits a custom type
+    // on a subscription path).
+    m_router->broadcastEvent(m_target, signalName, QJsonArray::fromVariantList(args));
 }
 
 void IpcTarget::componentComplete()

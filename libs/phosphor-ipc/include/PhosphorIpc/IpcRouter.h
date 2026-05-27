@@ -5,6 +5,7 @@
 #include <PhosphorIpc/phosphoripc_export.h>
 
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
 #include <QObject>
@@ -95,23 +96,39 @@ public:
     // the message.
     QVariant invoke(const QString& target, const QString& fn, const QVariantList& args, QString* errorOut);
 
+    // Broadcast a JSON event to every connected subscriber that has
+    // subscribed to (target, signalName). The IpcTarget QML type's
+    // emitEvent() method is the canonical call site — plugin
+    // authors call emitEvent("countChanged", [value]) whenever a
+    // wire-visible state transition happens, which is more explicit
+    // than auto-introspecting QObject signals.
+    void broadcastEvent(const QString& target, const QString& signalName, const QJsonArray& args);
+
 Q_SIGNALS:
     void targetRegistered(const QString& name);
     void targetUnregistered(const QString& name);
 
 private:
+    // Internal subscription record. Subscribers store (socket,
+    // subscriptionId, target, signalName) tuples; events arrive
+    // via broadcastEvent() rather than auto-introspected Qt
+    // signal connections (which clashed with Q_OBJECT moc-generated
+    // qt_metacall — see the explicit-broadcast rationale in
+    // IpcTarget::emitEvent).
     struct Subscription
     {
         QPointer<QLocalSocket> socket;
         qint64 subscriptionId = 0;
         QString target;
-        int signalIndex = -1;
+        QString signalName;
     };
 
     void handleNewConnection();
     void handleClientReadyRead(QLocalSocket* socket);
     void handleClientDisconnected(QLocalSocket* socket);
     void dispatch(QLocalSocket* socket, const QByteArray& line);
+    void handleSubscribe(QLocalSocket* socket, qint64 id, const QString& targetName, const QString& signalName);
+    void handleUnsubscribe(QLocalSocket* socket, qint64 id, qint64 subscriptionId);
 
     std::unique_ptr<QLocalServer> m_server;
     QString m_socketPath;

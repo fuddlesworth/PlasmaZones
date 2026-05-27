@@ -20,6 +20,9 @@
 #include <QMetaType>
 #include <QProcessEnvironment>
 #include <QString>
+#include <QVariant>
+
+#include <functional>
 
 namespace PhosphorIpc {
 
@@ -119,6 +122,36 @@ QMetaMethod findInvokableMethod(const QMetaObject* meta, const QString& fnName)
             continue;
         }
         if (m.name() == needle) {
+            return m;
+        }
+    }
+    return {};
+}
+
+// Find a signal by name. Same shape as findInvokableMethod, but
+// filters to signals only. The subscribe path uses this to look
+// up the signal whose args we'll route.
+QMetaMethod findSignal(const QMetaObject* meta, const QString& signalName, int* outIndex)
+{
+    if (outIndex) {
+        *outIndex = -1;
+    }
+    if (!meta) {
+        return {};
+    }
+    const QByteArray needle = signalName.toUtf8();
+    // Search across the inheritance chain — Q_OBJECT-declared
+    // signals on a derived class start at methodOffset(), but a
+    // user might subscribe to a signal defined on a base class.
+    for (int i = 0; i < meta->methodCount(); ++i) {
+        const QMetaMethod m = meta->method(i);
+        if (m.methodType() != QMetaMethod::Signal) {
+            continue;
+        }
+        if (m.name() == needle) {
+            if (outIndex) {
+                *outIndex = i;
+            }
             return m;
         }
     }
@@ -372,6 +405,9 @@ void IpcRouter::handleClientDisconnected(QLocalSocket* socket)
     if (!socket) {
         return;
     }
+    // Drop the socket's subscription list — broadcastEvent skips
+    // disconnected sockets anyway, but we explicitly free the
+    // record so memory doesn't grow with churn.
     m_subscriptionsBySocket.remove(socket);
     socket->deleteLater();
 }
@@ -428,17 +464,99 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
         socket->write(writeLine(buildReply(req.id, variantToJson(result))));
         return;
     }
-    if (req.type == QLatin1String(RequestType::Subscribe) || req.type == QLatin1String(RequestType::Unsubscribe)) {
-        // Subscribe semantics wire up in a follow-on commit on
-        // this branch. For now reply with a clear error so the
-        // CLI can surface "subscribe not yet implemented" without
-        // hanging the connection.
-        socket->write(writeLine(buildError(req.id, QString::fromUtf8(ErrorCode::MalformedRequest),
-                                           QStringLiteral("subscribe/unsubscribe not yet implemented"))));
+    if (req.type == QLatin1String(RequestType::Subscribe)) {
+        handleSubscribe(socket, req.id, req.target, req.signal);
+        return;
+    }
+    if (req.type == QLatin1String(RequestType::Unsubscribe)) {
+        handleUnsubscribe(socket, req.id, req.subscriptionId);
         return;
     }
     socket->write(writeLine(buildError(req.id, QString::fromUtf8(ErrorCode::MalformedRequest),
                                        QStringLiteral("unknown request type '%1'").arg(req.type))));
+}
+
+void IpcRouter::handleSubscribe(QLocalSocket* socket, qint64 id, const QString& targetName, const QString& signalName)
+{
+    if (targetName.isEmpty() || signalName.isEmpty()) {
+        socket->write(writeLine(buildError(id, QString::fromUtf8(ErrorCode::MalformedRequest),
+                                           QStringLiteral("subscribe requires non-empty target and signal"))));
+        return;
+    }
+    QObject* obj = target(targetName);
+    if (!obj) {
+        socket->write(writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchTarget),
+                                           QStringLiteral("unknown target '%1'").arg(targetName))));
+        return;
+    }
+    // Validate the signal name against the target's metaobject so
+    // typos surface as NO_SUCH_SIGNAL instead of silently
+    // accepting a subscription that will never fire. Signal lookup
+    // here is advisory: broadcastEvent dispatches by string name,
+    // not by metaobject index, so a future signal added via QML
+    // dynamic property would also work even without recompiling.
+    if (!findSignal(obj->metaObject(), signalName, nullptr).isValid()) {
+        socket->write(
+            writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchSignal),
+                                 QStringLiteral("target '%1' has no signal '%2'").arg(targetName, signalName))));
+        return;
+    }
+
+    // Subscription id == request id; clients use that on subsequent
+    // unsubscribe and to demultiplex inbound events. The router
+    // doesn't enforce uniqueness across all clients — id is scoped
+    // per-socket because the wire identity is (socket, subscriptionId).
+    Subscription sub;
+    sub.socket = socket;
+    sub.subscriptionId = id;
+    sub.target = targetName;
+    sub.signalName = signalName;
+    m_subscriptionsBySocket[socket].append(sub);
+
+    // Acknowledge the subscription is live so the client knows to
+    // start streaming events.
+    socket->write(writeLine(buildReply(id, QJsonValue::Null)));
+}
+
+void IpcRouter::handleUnsubscribe(QLocalSocket* socket, qint64 id, qint64 subscriptionId)
+{
+    auto it = m_subscriptionsBySocket.find(socket);
+    if (it == m_subscriptionsBySocket.end()) {
+        socket->write(writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchSubscription),
+                                           QStringLiteral("no subscriptions on this connection"))));
+        return;
+    }
+    QList<Subscription>& subs = it.value();
+    for (int i = 0; i < subs.size(); ++i) {
+        if (subs.at(i).subscriptionId == subscriptionId) {
+            subs.removeAt(i);
+            socket->write(writeLine(buildReply(id, QJsonValue::Null)));
+            return;
+        }
+    }
+    socket->write(writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchSubscription),
+                                       QStringLiteral("unknown subscriptionId %1").arg(subscriptionId))));
+}
+
+void IpcRouter::broadcastEvent(const QString& targetName, const QString& signalName, const QJsonArray& args)
+{
+    // Walk every subscriber set and forward to any subscription
+    // matching (targetName, signalName). Iteration is O(N
+    // subscriptions); for the expected per-process subscription
+    // count (≤ ~50 in any realistic shell deployment) the linear
+    // scan is faster than maintaining a secondary index.
+    for (auto it = m_subscriptionsBySocket.begin(); it != m_subscriptionsBySocket.end(); ++it) {
+        QLocalSocket* sock = it.key();
+        if (!sock || sock->state() != QLocalSocket::ConnectedState) {
+            continue;
+        }
+        for (const Subscription& sub : it.value()) {
+            if (sub.target == targetName && sub.signalName == signalName) {
+                sock->write(writeLine(buildEvent(sub.subscriptionId, args)));
+                sock->flush();
+            }
+        }
+    }
 }
 
 } // namespace PhosphorIpc
