@@ -12,7 +12,29 @@ or design decisions the audit could not unilaterally make.
 
 ---
 
-## 1. ISettings* across all page controllers (D5 — HIGH)
+## 1. ISettings* across all page controllers (D5 — HIGH, PARTIAL pass 21/22)
+
+**Resolved sub-passes:**
+- Pass 21 (F#1a): `GeneralPageController` switched to `ISettings&` —
+  only used `renderingBackend()` which ISettings already declared.
+- Pass 22 (F#1b): `SnappingBehaviorController` + `TilingBehaviorController`
+  switched to `ISettings*`. ISettings already declares the snapping
+  trigger surface through its `IZoneActivationSettings` /
+  `IZoneSelectorSettings` sub-interfaces.
+
+**Remaining sub-passes (each requires widening ISettings + adding
+StubSettings stubs before the controller migration):**
+
+- 1c: `EditorPageController` — ~11 editor* getter/setter pairs to add.
+- 1d: `SnappingAppearanceController` — `loadColorsFromFile()` plus a
+  handful of border/color accessors.
+- 1e: `TilingAlgorithmController` — `autotilePerAlgorithmSettings` +
+  its setter (the only methods the controller reads).
+- 1f: `TilingAppearanceController` — autotile border + radius surface.
+
+---
+
+## 1. ISettings* across all page controllers (D5 — HIGH, original spec retained below)
 
 **Finding:** Six page controllers (`EditorPageController`,
 `GeneralPageController`, `SnappingAppearanceController`,

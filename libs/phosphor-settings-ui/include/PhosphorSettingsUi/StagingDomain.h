@@ -3,6 +3,7 @@
 #pragma once
 
 #include <QObject>
+#include <QString>
 #include <QtQml/qqmlregistration.h>
 
 #include "phosphorsettingsui_export.h"
@@ -60,6 +61,27 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void dirtyChanged();
+    /** Optional async-completion signal. Domains that perform their
+     *  apply() / discard() out-of-band (D-Bus call, file I/O on a
+     *  worker thread, etc.) should emit this when the operation
+     *  finishes so the chrome can surface in-flight + failure state
+     *  to the user. The bool return on apply() is too coarse for that
+     *  shape — it pins success at function return but cannot signal a
+     *  later daemon error or a partial-failure that the user can
+     *  retry.
+     *
+     *  Domains whose apply() is fully synchronous don't need to emit
+     *  this — the existing dirtyChanged transition tells the chrome
+     *  the work is done. Until the first consumer emits it, the
+     *  signal is intentionally inert.
+     *
+     *  @p ok      true on a clean apply / discard.
+     *  @p error   user-readable error message (empty when ok). Caller
+     *             owns translation context — emit translated text. */
+    void applyResult(bool ok, const QString& error);
+    /** Companion to applyResult for discard() — separate signal so the
+     *  chrome can wire distinct user-visible states. */
+    void discardResult(bool ok, const QString& error);
 };
 
 } // namespace PhosphorSettingsUi
