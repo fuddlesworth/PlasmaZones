@@ -2,10 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <PhosphorPopout/PopoutRequest.h>
+
 #include <QObject>
 #include <QPointer>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -68,6 +71,13 @@ Q_SIGNALS:
 
 private:
     QQmlComponent* buildContentComponent(const QString& qmlPath);
+
+    // Shared core of the four toggle slots. Builds a PopoutRequest
+    // from the per-toggle inputs and forwards to the controller.
+    // Caller-owned QQmlComponent (may be a cached member); the
+    // controller does not take ownership.
+    void toggleNamed(const QString& popoutId, QQmlComponent* content, PhosphorPopout::ExclusiveMode mode,
+                     bool dismissOnFocusLoss, const QVariantMap& props = {});
 
     // Declaration order is load-bearing for destruction safety.
     // m_controller's destructor calls transport->setSurfaceDismissedCallback({}),

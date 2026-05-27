@@ -60,7 +60,7 @@ consistently.
 | `dismissOnClickOutside: bool` | property | When true, a click on the backdrop sets `open = false`. The transport wires this from `PopoutRequest.dismissOnFocusLoss` |
 | `backdropColor: color`        | property | Background dim color. The transport binds a scrim for Modal, a lighter dim for Cooperative, transparent for Detached |
 | `dismiss()`                   | function | Content delegates several levels deep can call this to close the popout without walking the parent chain. The transport injects a `_popoutHost` reference on the content; the content calls `_popoutHost.dismiss()` |
-| `dismissed()`                 | signal   | Emitted after the close animation finishes. Fires once per open-then-close cycle, so transports that reuse a single host across many popouts get a fresh dismissed each time. The transport's `dismissed` callback fires through here so the bookkeeping lines up with the visual |
+| `dismissed()`                 | signal   | Emitted after the close animation finishes. Fires once per open-then-close cycle, so transports that reuse a single host across many popouts get a fresh dismissed each time. Also fires once on `Component.onDestruction` if the host is torn down with `open` still true, so transport bookkeeping never leaks a handle when a popout is destroyed mid-cycle. The transport's `dismissed` callback fires through here so the bookkeeping lines up with the visual |
 
 ## Typical use
 
@@ -68,6 +68,7 @@ consistently.
 
 ```cpp
 #include <PhosphorPopout/PhosphorPopout.h>
+#include <QObject>
 
 using namespace PhosphorPopout;
 
@@ -79,10 +80,13 @@ QObject::connect(&controller, &PopoutController::popoutOpened,
                      qDebug() << "opened" << id << "->" << handle;
                  });
 
+QQmlComponent* controlCenterComponent = ...;      // caller owns; keep alive until popoutClosed
+
 PopoutRequest req;
 req.popoutId = QStringLiteral("control-center");
-req.content = controlCenterComponent;             // caller keeps alive until popoutClosed
-req.anchor = Anchor::BarRight;
+req.content = controlCenterComponent;
+req.anchor = Anchor::BarRight;                    // BarLeft / BarCenter / BarRight / ScreenCenter
+                                                  // / AtPointer / Custom. Custom uses req.customAnchor.
 req.exclusive = ExclusiveMode::Cooperative;
 const QString handle = controller.open(req);      // empty if rejected
 ```
@@ -150,12 +154,15 @@ constructor. Field assignment uses regular property syntax.
 - The Qt module `Phosphor.Theme`. PopoutHost.qml binds `Motion`
   durations and easings for its animation timing. The C++ core has
   no Phosphor link-time dependency.
-- Consumers building against `find_package(PhosphorPopout)` must
-  also link the PhosphorTheme QML plugin so the runtime `import
-  Phosphor.Theme` inside PopoutHost.qml resolves. When PhosphorTheme
-  is available the library's CMake links it transitively through
-  `PhosphorPopout::PhosphorPopoutQml`, so a consumer that links the
-  Qml target gets the theme plugin for free.
+- The QML module target (`PhosphorPopout::PhosphorPopoutQml`) is
+  the in-tree linkable artefact. Out-of-tree consumption via
+  `find_package(PhosphorPopout)` exposes the C++ core
+  (`PhosphorPopout::PhosphorPopout`) only; installed QML module
+  deployment lands together with the layer-shell transport in a
+  follow-up. In-tree consumers that link `PhosphorPopout::PhosphorPopoutQml`
+  pick up the PhosphorTheme QML plugin transitively, so the runtime
+  `import Phosphor.Theme` inside PopoutHost.qml resolves without
+  extra wiring at the consumer side.
 
 ## See also
 

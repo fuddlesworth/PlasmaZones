@@ -41,8 +41,13 @@ int main(int argc, char* argv[])
     // aboutToQuit fires before the event loop returns, so the close
     // storm runs while every QML binding target is still alive. Doing
     // this from a destructor would happen too late, after the engine
-    // has already half-destroyed the QML object tree.
-    QObject::connect(&app, &QGuiApplication::aboutToQuit, &demoController, &PhosphorPopoutDemo::DemoController::shutdown);
+    // has already half-destroyed the QML object tree. The connection
+    // is explicitly DirectConnection because shutdown MUST complete
+    // synchronously inside aboutToQuit: a queued connection would
+    // defer the slot past the event-loop return and the engine's
+    // teardown would run first.
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, &demoController,
+                     &PhosphorPopoutDemo::DemoController::shutdown, Qt::DirectConnection);
 
     engine.loadFromModule(QStringLiteral("Phosphor.PopoutDemo"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty()) {

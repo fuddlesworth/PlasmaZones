@@ -44,13 +44,21 @@ Item {
     // Detached popouts want transparent.
     property color backdropColor: "transparent"
 
+    // Internal: longest animation duration across the host's
+    // Behaviors (content opacity/scale on duration_medium_2, backdrop
+    // opacity on duration_short_4). Single source of truth so the
+    // dismiss timer and the Behaviors stay aligned through any token
+    // retuning. Bound rather than computed at startup so a runtime
+    // theme switch picks up the new value.
+    readonly property int closeDuration: Math.max(Motion.duration_medium_2, Motion.duration_short_4)
+
     // Emitted once the close animation finishes. Transport callers
     // wire this to their bookkeeping so the IPopoutTransport's
     // dismissed callback fires only after the visual finishes. Fires
     // once per open-then-close cycle so transports that reuse a
     // single PopoutHost across many popouts get a fresh dismissed
     // for each.
-    signal dismissed()
+    signal dismissed
 
     // Public dismiss helper for content. Content delegates that want
     // to close themselves (a Cancel button on a Modal, for example)
@@ -77,7 +85,7 @@ Item {
     onOpenChanged: {
         if (open) {
             dismissEmitter.stop();
-            _internal.dismissedFired = false;
+            dismissLatch.dismissedFired = false;
         } else {
             dismissEmitter.start();
         }
@@ -95,19 +103,19 @@ Item {
     // still true. The fired flag guards against a double fire when
     // the timer also pumps during teardown.
     Component.onDestruction: {
-        if (!_internal.dismissedFired) {
+        if (!dismissLatch.dismissedFired) {
             dismissEmitter.stop();
-            _internal.dismissedFired = true;
+            dismissLatch.dismissedFired = true;
             root.dismissed();
         }
     }
 
     // Held inside a child QtObject so the latch isn't part of the
     // host's public surface. Consumers must NOT poke
-    // _internal.dismissedFired; the lifecycle is managed inside this
+    // dismissLatch.dismissedFired; the lifecycle is managed inside this
     // file.
     QtObject {
-        id: _internal
+        id: dismissLatch
 
         property bool dismissedFired: false
     }
@@ -136,9 +144,7 @@ Item {
                 duration: Motion.duration_short_4
                 easing: Motion.emphasized
             }
-
         }
-
     }
 
     // Content frame. Owns the slide-and-fade animation. Centered in
@@ -187,7 +193,7 @@ Item {
             anchors.fill: parent
             preventStealing: true
             acceptedButtons: Qt.LeftButton
-            onPressed: (mouse) => {
+            onPressed: mouse => {
                 mouse.accepted = true;
             }
         }
@@ -209,7 +215,6 @@ Item {
                 duration: Motion.duration_medium_2
                 easing: Motion.emphasized
             }
-
         }
 
         Behavior on scale {
@@ -217,34 +222,24 @@ Item {
                 duration: Motion.duration_medium_2
                 easing: Motion.emphasized
             }
-
         }
-
     }
 
     // dismissed fires once the close animation has had time to
-    // settle. The interval matches the longest Behavior duration
-    // above (Motion.duration_medium_2). Binding the interval to the
-    // same token keeps the two in sync. If the Behaviors switch to a
-    // different duration token, update this binding too or extract
-    // both into a shared property.
+    // settle. The interval and the host's Behaviors both bind
+    // closeDuration, so retuning the Motion tokens (or swapping the
+    // Behaviors to longer/shorter tokens) keeps the timer aligned
+    // without a second edit.
     Timer {
         id: dismissEmitter
 
-        // Interval matches the longest Behavior duration above.
-        // Content opacity and scale animate over
-        // Motion.duration_medium_2. Backdrop opacity uses
-        // duration_short_4 which is shorter. Computing the max
-        // keeps the timer aligned even if the backdrop duration is
-        // ever retuned above the content's.
-        interval: Math.max(Motion.duration_medium_2, Motion.duration_short_4)
+        interval: root.closeDuration
         repeat: false
         onTriggered: {
-            if (!_internal.dismissedFired) {
-                _internal.dismissedFired = true;
+            if (!dismissLatch.dismissedFired) {
+                dismissLatch.dismissedFired = true;
                 root.dismissed();
             }
         }
     }
-
 }

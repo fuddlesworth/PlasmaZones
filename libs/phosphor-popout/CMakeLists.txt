@@ -198,10 +198,9 @@ if(TARGET PhosphorThemeQmlplugin)
     target_link_libraries(PhosphorPopoutQml PUBLIC PhosphorThemeQmlplugin)
 endif()
 
-set_target_properties(PhosphorPopoutQml PROPERTIES
-    VERSION ${PHOSPHORPOPOUT_VERSION}
-    SOVERSION 0
-)
+# Static archive: VERSION/SOVERSION apply to SHARED libraries only and are
+# silently ignored on STATIC. Don't set them so the property surface
+# matches what the target actually carries.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
@@ -217,6 +216,7 @@ install(TARGETS PhosphorPopout
     RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${KDE_INSTALL_INCLUDEDIR}
 )
 
 install(FILES ${phosphorpopout_public_HDRS}

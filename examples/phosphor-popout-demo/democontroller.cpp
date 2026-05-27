@@ -61,19 +61,29 @@ QQmlComponent* DemoController::buildContentComponent(const QString& qmlPath)
     return new QQmlComponent(m_engine.data(), QUrl(qmlPath), this);
 }
 
+void DemoController::toggleNamed(const QString& popoutId, QQmlComponent* content, ExclusiveMode mode,
+                                 bool dismissOnFocusLoss, const QVariantMap& props)
+{
+    PopoutRequest req;
+    req.popoutId = popoutId;
+    req.content = content;
+    req.exclusive = mode;
+    req.dismissOnFocusLoss = dismissOnFocusLoss;
+    req.props = props;
+    // scope is left at PopoutRequest::DefaultScope. Modal and Detached
+    // arbitration ignores scope; the two cooperatives both share the
+    // default scope by design (the demo exercises same-scope cooperative
+    // swap).
+    m_controller->toggle(req);
+}
+
 void DemoController::toggleCooperativeA()
 {
     if (!m_calendarComponent) {
         m_calendarComponent =
             buildContentComponent(QStringLiteral("qrc:/qt/qml/Phosphor/PopoutDemo/CalendarPopout.qml"));
     }
-    PopoutRequest req;
-    req.popoutId = QStringLiteral("calendar");
-    req.content = m_calendarComponent;
-    req.exclusive = ExclusiveMode::Cooperative;
-    req.scope = QStringLiteral("default");
-    req.dismissOnFocusLoss = true;
-    m_controller->toggle(req);
+    toggleNamed(QStringLiteral("calendar"), m_calendarComponent, ExclusiveMode::Cooperative, true);
 }
 
 void DemoController::toggleCooperativeB()
@@ -81,13 +91,7 @@ void DemoController::toggleCooperativeB()
     if (!m_noteComponent) {
         m_noteComponent = buildContentComponent(QStringLiteral("qrc:/qt/qml/Phosphor/PopoutDemo/NotePopout.qml"));
     }
-    PopoutRequest req;
-    req.popoutId = QStringLiteral("quick-note");
-    req.content = m_noteComponent;
-    req.exclusive = ExclusiveMode::Cooperative;
-    req.scope = QStringLiteral("default");
-    req.dismissOnFocusLoss = true;
-    m_controller->toggle(req);
+    toggleNamed(QStringLiteral("quick-note"), m_noteComponent, ExclusiveMode::Cooperative, true);
 }
 
 void DemoController::toggleModal()
@@ -95,12 +99,7 @@ void DemoController::toggleModal()
     if (!m_alertComponent) {
         m_alertComponent = buildContentComponent(QStringLiteral("qrc:/qt/qml/Phosphor/PopoutDemo/AlertPopout.qml"));
     }
-    PopoutRequest req;
-    req.popoutId = QStringLiteral("alert");
-    req.content = m_alertComponent;
-    req.exclusive = ExclusiveMode::Modal;
-    req.dismissOnFocusLoss = false;
-    m_controller->toggle(req);
+    toggleNamed(QStringLiteral("alert"), m_alertComponent, ExclusiveMode::Modal, false);
 }
 
 void DemoController::toggleDetached()
@@ -108,17 +107,15 @@ void DemoController::toggleDetached()
     if (!m_noteComponent) {
         m_noteComponent = buildContentComponent(QStringLiteral("qrc:/qt/qml/Phosphor/PopoutDemo/NotePopout.qml"));
     }
-    PopoutRequest req;
-    req.popoutId = QStringLiteral("pinned-note");
-    req.content = m_noteComponent;
-    req.exclusive = ExclusiveMode::Detached;
-    req.dismissOnFocusLoss = false;
     // NotePopout is shared with toggleCooperativeB. The `pinned` prop
     // gives the Detached instance distinct chrome (tertiary border,
     // different header) so the two can be on screen at the same time
-    // without looking identical.
-    req.props.insert(QStringLiteral("pinned"), true);
-    m_controller->toggle(req);
+    // without looking identical. The shared QQmlComponent is safe to
+    // reuse here because openSurface is synchronous: a begin/complete
+    // create cycle for each open runs to completion before the next.
+    QVariantMap props;
+    props.insert(QStringLiteral("pinned"), true);
+    toggleNamed(QStringLiteral("pinned-note"), m_noteComponent, ExclusiveMode::Detached, false, props);
 }
 
 void DemoController::closeAll()
@@ -155,7 +152,7 @@ QStringList DemoController::openPopoutIds() const
 
 bool DemoController::modalActive() const
 {
-    return m_controller && m_controller->isModalActive();
+    return m_controller->isModalActive();
 }
 
 } // namespace PhosphorPopoutDemo

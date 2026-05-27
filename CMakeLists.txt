@@ -210,6 +210,12 @@ file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/kwin-effect/*.h
     ${CMAKE_SOURCE_DIR}/tests/**/*.cpp
     ${CMAKE_SOURCE_DIR}/tests/**/*.h
+    ${CMAKE_SOURCE_DIR}/libs/**/*.cpp
+    ${CMAKE_SOURCE_DIR}/libs/**/*.h
+    ${CMAKE_SOURCE_DIR}/libs/**/*.hpp
+    ${CMAKE_SOURCE_DIR}/examples/**/*.cpp
+    ${CMAKE_SOURCE_DIR}/examples/**/*.h
+    ${CMAKE_SOURCE_DIR}/examples/**/*.hpp
 )
 kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
 
@@ -218,6 +224,8 @@ find_program(QMLFORMAT qmlformat)
 file(GLOB_RECURSE ALL_QML_FILES
     ${CMAKE_SOURCE_DIR}/src/**/*.qml
     ${CMAKE_SOURCE_DIR}/kcm/**/*.qml
+    ${CMAKE_SOURCE_DIR}/libs/**/*.qml
+    ${CMAKE_SOURCE_DIR}/examples/**/*.qml
 )
 if(QMLFORMAT AND ALL_QML_FILES)
     # Run qmlformat via helper script; per-file failures are ignored (one bad QML won't fail target)

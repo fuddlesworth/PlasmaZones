@@ -196,15 +196,23 @@ PopoutController::PopoutController(IPopoutTransport* transport, QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Impl>(this, transport))
 {
-    Q_ASSERT_X(transport != nullptr, "PopoutController", "transport must not be null");
+    // qFatal in BOTH debug and release. Q_ASSERT_X is a no-op in
+    // release builds, which would let the next line dereference null
+    // and crash with no useful diagnostic. The constructor's
+    // documented precondition is non-null transport; honouring it
+    // with a clear abort is friendlier than a SIGSEGV.
+    if (transport == nullptr) {
+        qFatal("PopoutController: transport must not be null");
+    }
 
     // Install the dismissed callback exactly once. The transport
     // invokes it when a surface goes away on its own. We use it to
     // mirror the change in our entries table. Without this, isOpen
     // would lie about a popout that the compositor already tore down.
     //
-    // The lambda captures `this` and `d.get()`. The destructor must
-    // detach this callback before d is destroyed. See ~PopoutController.
+    // The lambda captures `this`; `d` is reached via the member.
+    // The destructor must detach this callback before d is destroyed.
+    // See ~PopoutController.
     transport->setSurfaceDismissedCallback([this](const QString& handle) {
         if (d->inSelfTeardown) {
             return;
@@ -227,8 +235,7 @@ PopoutController::~PopoutController()
     //
     // d is non-null here. make_unique in the ctor either succeeded or
     // threw, in which case the destructor never runs. transport is
-    // non-null because the ctor's Q_ASSERT_X enforces it (and a real
-    // null would have crashed at the install-callback line above).
+    // non-null because the ctor qFatal-aborts on a null transport.
     d->transport->setSurfaceDismissedCallback({});
 }
 
@@ -327,6 +334,10 @@ void PopoutController::closeAll()
     // modalActiveChanged when the count reaches zero, so the per-row
     // invariant (Q_ASSERT(modalCount > 0) before each decrement) is
     // preserved during the drain.
+    //
+    // Snapshot the keys BEFORE iterating. removeEntry mutates entries,
+    // and iterating the live container would invalidate the iterator
+    // mid-loop. Same pattern as closeAllCooperatives.
     ScopedTrue guard(d->inSelfTeardown);
     const auto handles = d->entries.keys();
     for (const QString& handle : handles) {

@@ -28,6 +28,10 @@ Rectangle {
     radius: Tokens.radius_l
     Accessible.role: Accessible.Dialog
     Accessible.name: root.pinned ? qsTr("Pinned note popout") : qsTr("Quick note popout")
+    // Body Text exposes the same hint to sighted users; mirror it via
+    // Accessible.description so AT users get the "stays open" vs
+    // "pin me" semantic too.
+    Accessible.description: root.pinned ? qsTr("Stays open across modal cycles") : qsTr("Pin me with the Detached button")
 
     ColumnLayout {
         anchors.centerIn: parent
@@ -49,7 +53,5 @@ Rectangle {
             font.pixelSize: Tokens.font_size_body_s
             font.family: Tokens.font_family
         }
-
     }
-
 }

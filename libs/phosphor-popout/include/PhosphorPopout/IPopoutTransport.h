@@ -63,6 +63,14 @@ public:
     // closeSurface; the controller has a re-entrancy guard for
     // misbehaving transports but well-behaved transports defer
     // dismiss events to the next event-loop tick.
+    //
+    // Thread affinity: the callback must be invoked on the same
+    // thread the PopoutController lives on (typically the GUI
+    // thread). The controller mutates internal tables synchronously
+    // from the callback and does not lock. Transports that observe
+    // surface-dismissed events on a Wayland reader or background
+    // thread must marshal via QMetaObject::invokeMethod or a queued
+    // signal-slot connection before firing the callback.
     virtual void setSurfaceDismissedCallback(std::function<void(const QString&)> callback) = 0;
 };
 

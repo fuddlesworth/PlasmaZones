@@ -68,7 +68,9 @@ class PHOSPHORPOPOUT_EXPORT PopoutController : public QObject, public IPopoutSer
 public:
     // transport must be non-null. The controller does not own the
     // transport. The caller must keep the transport alive at least as
-    // long as the controller. Asserted in debug builds.
+    // long as the controller. Null transport aborts via qFatal in both
+    // debug and release builds; a silent crash on the first transport
+    // method call would be harder to diagnose than the explicit abort.
     explicit PopoutController(IPopoutTransport* transport, QObject* parent = nullptr);
     ~PopoutController() override;
 

@@ -10,7 +10,9 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 
-set(CMAKE_AUTOMOC ON)
+# AUTOMOC is enabled at the top-level CMakeLists.txt. qt_add_qml_module
+# also turns AUTOMOC on for the module target it creates. Setting it
+# again here is redundant.
 
 # Bundle demo QML into its own static module so qmlcachegen compiles
 # it and the resources are reachable via qrc:/qt/qml/Phosphor/PopoutDemo/.

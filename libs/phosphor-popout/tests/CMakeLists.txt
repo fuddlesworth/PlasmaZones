@@ -3,6 +3,13 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+# PopoutController's test coverage is split across three test binaries
+# by concern. Splitting keeps each test file under the 800-line cap
+# (the prior monolithic file ran to 1030 lines) and lets a future
+# contributor add tests in one slice without re-reading the others.
+#   _arbitration : open/close/toggle/closeAll arbitration paths
+#   _dismiss     : dismissed-callback routing, re-entrancy guard, destructor
+#   _signals     : signal-ordering invariants, slot-state consistency, DefaultScope
 function(phosphorpopout_add_test name)
     add_executable(${name} ${name}.cpp)
     target_link_libraries(${name}
@@ -19,4 +26,6 @@ function(phosphorpopout_add_test name)
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
-phosphorpopout_add_test(test_popoutcontroller)
+phosphorpopout_add_test(test_popoutcontroller_arbitration)
+phosphorpopout_add_test(test_popoutcontroller_dismiss)
+phosphorpopout_add_test(test_popoutcontroller_signals)

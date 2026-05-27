@@ -29,19 +29,21 @@ InAppPopoutTransport::~InAppPopoutTransport()
     // events never fire and the items leak.
     //
     // Snapshot the entry values into a local list and clear m_entries
-    // BEFORE deleting. deleting a host fires its
-    // Component.onDestruction which emits dismissed, which routes
-    // through onHostDismissed and calls m_entries.erase. Iterating
-    // m_entries with a range-for while that erase runs would
-    // invalidate the iterator.
+    // BEFORE deleting. Deleting a host fires its
+    // Component.onDestruction which emits dismissed; the snapshot
+    // plus disconnect-before-delete below stops that signal from
+    // re-entering onHostDismissed during teardown.
+    //
+    // contentItem is a QObject child of hostItem (PopoutHost.qml's
+    // contentFrame.rebindContentItem reparents it under the host),
+    // so deleting hostItem destroys contentItem too. Mirrors the
+    // shutdown() teardown shape; no second contentItem delete.
     const auto victims = m_entries.values();
     m_entries.clear();
     for (const auto& entry : victims) {
         if (entry.hostItem) {
+            QObject::disconnect(entry.hostItem.data(), nullptr, this, nullptr);
             delete entry.hostItem.data();
-        }
-        if (entry.contentItem) {
-            delete entry.contentItem.data();
         }
     }
 }
@@ -94,11 +96,21 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     }
     contentComponent->completeCreate();
 
-    // Build the wrapper host. The controller-assigned handle is the
-    // dictionary key the transport uses to look up the wrapper later.
-    QObject* hostObj = m_hostComponent->create(engine->rootContext());
+    // Build the wrapper host using two-phase create so contentItem,
+    // backdropColor, and dismissOnClickOutside are applied BEFORE the
+    // host's bindings settle. One-phase create would let
+    // PopoutHost.qml's Component.onCompleted and onContentItemChanged
+    // run against null/default values once, then re-run on every
+    // setProperty below. Two-phase matches the content delegate path
+    // and keeps the open animation from briefly observing the wrong
+    // initial state.
+    QObject* hostObj = m_hostComponent->beginCreate(engine->rootContext());
     auto* hostItem = qobject_cast<QQuickItem*>(hostObj);
     if (!hostItem) {
+        // Pair beginCreate with completeCreate before discarding the
+        // object, same reasoning as the contentItem failure path
+        // above.
+        m_hostComponent->completeCreate();
         if (hostObj) {
             hostObj->deleteLater();
         }
@@ -132,6 +144,7 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // would distinguish them; a real layer-shell transport handles
     // both concepts separately.
     hostItem->setProperty("dismissOnClickOutside", request.dismissOnFocusLoss);
+    m_hostComponent->completeCreate();
 
     const QString handle = QStringLiteral("popout-%1").arg(++m_counter);
     m_entries.insert(handle, Entry{hostItem, contentItem});
@@ -204,6 +217,11 @@ void InAppPopoutTransport::shutdown()
         // QQmlComponent::beginCreate sets the parent), so it was
         // deleted by the line above. The QPointer is null here.
     }
+    // Drop the host/component references so any post-shutdown openSurface
+    // is rejected by the null guard at the top of openSurface rather
+    // than racing the QQmlEngine teardown.
+    m_host.clear();
+    m_hostComponent.clear();
 }
 
 void InAppPopoutTransport::onHostDismissed()
