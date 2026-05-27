@@ -111,7 +111,10 @@ private:
     void trackDomain(StagingDomain* domain);
     void recomputeDirty();
 
-    PageRegistry* m_registry;
+    // All POD-like members default-initialised here for uniformity —
+    // m_registry is assigned in the ctor body for clarity (it depends
+    // on `this` as its QObject parent).
+    PageRegistry* m_registry = nullptr;
     QList<QPointer<StagingDomain>> m_domains;
     QString m_currentPageId;
     bool m_dirty = false;

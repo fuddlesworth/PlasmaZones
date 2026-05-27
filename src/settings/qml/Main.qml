@@ -104,21 +104,15 @@ PhosphorUi.SettingsAppWindow {
         }
     }
 
-    // KNOWN LIMITATION: object-literal `i18n()` calls evaluate once at
-    // object construction. If the user switches the system locale while
-    // this window is open, the menu shows stale strings until restart.
-    // The "super-ultrawide" key contains a hyphen so a QtObject with
-    // bindable properties can't host all keys without renaming the wire
-    // protocol — accepting the stale-on-locale-change tradeoff is the
-    // less-invasive option and matches the fact that the rest of the
-    // settings app expects an app restart on locale change anyway.
     // Translated labels for aspect-ratio classes. Backed by a QtObject
     // so each property is its own binding — bindings re-evaluate when
     // QML's language-change signal fires, while an object-literal
     // declared with `property var = ({...})` is frozen at construction
     // time and would freeze the labels at the language active during
-    // first instantiation. Keep aspectRatioLabel(key) the call shape so
-    // consumers stay agnostic of the storage shape.
+    // first instantiation. The "super-ultrawide" key contains a hyphen
+    // so it lives under the `superUltrawide` member of this QtObject;
+    // the aspectRatioLabel(key) accessor function (above) translates
+    // back to the hyphenated key consumers use.
     QtObject {
         id: _aspectRatioLabels
 
@@ -372,8 +366,18 @@ PhosphorUi.SettingsAppWindow {
                 icon.name: (modelData && modelData.isPrimary) ? "starred-symbolic" : "monitor"
                 Accessible.name: text
                 onClicked: {
+                    // Capture by value because Qt.callLater fires after
+                    // the menu's onClicked stack unwinds — the model
+                    // delegate's row data is no longer guaranteed valid
+                    // (the Instantiator may rebuild on the same tick).
                     var screenName = _screenName;
                     var layoutId = layoutContextMenu.layoutId;
+                    // SIGSEGV-avoidance: setting `visible = false` on a
+                    // QtQuick.Controls Menu and then synchronously
+                    // invoking an action that tears down the parent
+                    // popup chain can deref the in-flight click target.
+                    // Defer the close + the controller call until after
+                    // the click event fully propagates.
                     Qt.callLater(function() {
                         layoutContextMenu.visible = false;
                         if (screenName.length > 0)
@@ -544,6 +548,13 @@ PhosphorUi.SettingsAppWindow {
                 icon.name: isSelected ? "checkmark" : ""
                 Accessible.name: text
                 onClicked: {
+                    // SIGSEGV-avoidance — see the matching pattern in
+                    // the per-screen edit MenuItem above. The submenu's
+                    // visible-toggle + the layoutContextMenu close +
+                    // the controller call all need to run AFTER the
+                    // click event unwinds, otherwise the submenu
+                    // dismissal can deref the click target's parent
+                    // chain mid-event.
                     var layoutId = layoutContextMenu.layoutId;
                     var idx = _arIndex;
                     Qt.callLater(function() {
