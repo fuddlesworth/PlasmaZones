@@ -98,22 +98,24 @@ and exclusivity policy across every transient surface in the shell.
 
 **Effort:** M (estimated ~2 weeks; actual ~1 session for the arbitration core + in-window transport. LayerPopoutTransport deferred until the shell binary needs it.)
 
-### 1.3: `phosphor-registry`
+### 1.3: `phosphor-registry` *(shipped, 2026-05-27, PR #538)*
 
 Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
-| Deliverable                                                                 | Notes                                                                                  |
-|-----------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| `libs/phosphor-registry/` (C++)                                             | `IBarWidgetFactory`, `IControlCenterTileFactory`, `ILauncherProviderFactory`, `IOSDFactory`, `IDesktopWidgetFactory` + a generic `Registry<T>` template. |
-| `examples/phosphor-registry-demo/`                                          | Window with a "bar" that renders widgets pulled from `IBarWidgetFactory`. Two built-in widgets (clock, color square). |
-| `examples/phosphor-registry-plugin-demo/`                                   | External `.so` + JSON manifest. The demo app loads it at startup and a third widget appears. Demonstrates the plugin ABI shape (no sandboxing yet, that's Phase 5). |
+| Deliverable                                                                 | Status | Notes                                                                                  |
+|-----------------------------------------------------------------------------|--------|----------------------------------------------------------------------------------------|
+| `libs/phosphor-registry/` (C++)                                             | ✓ shipped | Header-only `Registry<T>` template (5 instantiations: `IBarWidgetFactory`, `IControlCenterTileFactory`, `ILauncherProviderFactory`, `IOSDFactory`, `IDesktopWidgetFactory`) backed by a non-template `RegistryNotifier` QObject for `factoryRegistered` / `factoryUnregistered` signals. Common `IFactoryBase` carries `id()` / `displayName()` / `capabilities()`. `Manifest` POD mirrors plugin manifest.json; `PluginLoader` discovers + loads `.so` + manifest from a configurable plugin root via `QLibrary` + a fixed `phosphor_registry_create_factory` C entry point. `PHOSPHOR_PLUGIN_ABI_VERSION` CMake define + `static_assert` keeps the header constant locked to the build. |
+| `examples/phosphor-registry-demo/`                                          | ✓ shipped | In-process demo: Repeater-driven bar with two built-in `QmlComponentBarWidgetFactory` instances (clock, color-square). `DemoController` owns the registry, registers built-ins explicitly, and exposes `factoryIds` + `createWidgetFor` to QML. |
+| `examples/phosphor-registry-plugin-demo/`                                   | ✓ shipped | Same bar plus a third widget loaded from a separate `.so` (cpu-meter plugin). `PluginLoader` scans a `--plugin-root` directory; hot-reload via `phosphor-fsloader/WatchedDirectorySet` (directory add/remove only — in-place `.so` edits are out of scope because POSIX dlopen refcounts loads by path). |
+| `libs/phosphor-registry/tests/`                                             | ✓ shipped | 5 test binaries / ~55 cases: `test_phosphor_registry` (template register/unregister/lookup/enumerate, signal ordering), `test_phosphor_registry_manifest` (every rejection path: malformed JSON, missing fields, abi mismatch, id-vs-dir mismatch, path-traversal id, oversize manifest, empty manifest), `test_phosphor_registry_pluginloader` (4 fake-plugin .so fixtures exercising happy path, id-mismatch, null-factory, missing-entry-point, corrupt .so, hot-reload add + remove, library-pin-before-factory-destroy). Templated `manifest.json.in` fixtures linked to the ABI version via `configure_file @ONLY`. |
+| `libs/phosphor-registry/README.md`                                          | ✓ shipped | Responsibility / Key types / Typical use (C++ shell composition root + glue-layer `BarController` + Repeater-driven Bar QML) / Arbitration & lifecycle / Dependencies. Documents the dlopen-refcount limitation explicitly. |
 
 **Acceptance:**
-- Registry enumerates factories; plugin loads from `~/.local/share/phosphor/plugins/<id>/`
-- Capability declarations are present in metadata (enforcement deferred)
-- Plugin can be hot-reloaded by touching its directory
+- [x] Registry enumerates factories; plugin loads from `~/.local/share/phosphor/plugins/<id>/` (XDG-honouring; `--plugin-root` overrides for CI / demos)
+- [x] Capability declarations are present in `IFactoryBase::capabilities()` + manifest `capabilities` array (enforcement deferred to Phase 5 per plan)
+- [x] Plugin hot-reload by directory add/remove verified end-to-end (rename + restart still required for in-place .so edits — dlopen-refcount limitation documented in the README)
 
-**Effort:** M (~2 weeks)
+**Effort:** M (estimated ~2 weeks; actual ~1 session for the template + plugin loader + 2 demos. Four audit cycles before merge; final state 198 / 198 tests pass, 0 outstanding findings.)
 
 ### 1.4: `phosphor-ipc` + `phosphorctl`
 
