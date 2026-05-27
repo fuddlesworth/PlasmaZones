@@ -221,14 +221,16 @@ void TestMatugenRunner::run_normalisesRelativePathToAbsolute()
 
 void TestMatugenRunner::run_syncFailDoesNotEmitDoubleRunningChanged()
 {
-    // runningChanged contract: only fires on actual transitions. A run
-    // against a missing binary fails via errorOccurred. The total emit
-    // count must be even, never odd, so listeners never see an unpaired
-    // half-transition. With the wasRunning tracking in place we get
-    // either zero emits (failure detected before any state change) or
-    // two emits (false-to-true on start, then true-to-false on failure).
-    // Without it, a synchronous fail can yield one stray false-to-false
-    // emit.
+    // runningChanged contract. A run against a missing binary flips
+    // state to Starting synchronously inside QProcess::start() and then
+    // back to NotRunning asynchronously when Qt delivers errorOccurred.
+    // With the edge-trigger tracking in place we get exactly TWO emits.
+    //   1. false to true after start() returns (state == Starting)
+    //   2. true to false after errorOccurred runs disposeProcess
+    // An even-count assertion would pass a never-emit regression with
+    // count == 0; a count == 1 catches the original stray-emit bug; a
+    // count > 2 catches the spurious-edge regression. The right shape
+    // is exactly 2.
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     const QString wallpaper = tmp.filePath(QStringLiteral("w.jpg"));
@@ -246,9 +248,7 @@ void TestMatugenRunner::run_syncFailDoesNotEmitDoubleRunningChanged()
     r.run(wallpaper);
     QVERIFY(failedSpy.wait(2000) || failedSpy.count() >= 1);
     QVERIFY(failedSpy.count() >= 1);
-    // Even count. Each emit corresponds to a real isRunning() flip.
-    QVERIFY2(runSpy.count() % 2 == 0,
-             qPrintable(QStringLiteral("runningChanged count %1 is odd (unpaired transition)").arg(runSpy.count())));
+    QCOMPARE(runSpy.count(), 2);
     QVERIFY(!r.isRunning());
 }
 

@@ -408,7 +408,13 @@ void MatugenRunner::disposeProcess()
     // finished (orphaned by zombie reaping, kernel bug). ~QProcess
     // would otherwise warn and block when called before the child
     // exited.
+    //
+    // Reparenting to nullptr is critical. If we leave the released
+    // QProcess parented to `this`, ~MatugenRunner reclaims it as a
+    // QObject child and deletes it directly. That brings back the
+    // exact warn-and-block we orphaned the process to avoid.
     QProcess* released = m_process.release();
+    released->setParent(nullptr);
     released->disconnect(this);
     connect(released, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), released, &QObject::deleteLater);
     QTimer::singleShot(5000, released, &QObject::deleteLater);

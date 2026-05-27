@@ -148,16 +148,24 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
 
 bool PaletteStore::loadFromFile(const QString& path)
 {
-    QFile file(path);
+    // Canonicalise once at the boundary. The watcher resolves relative
+    // paths against CWD at watch-time, but reloadFromCurrentPath would
+    // resolve m_sourcePath against CWD at reload-time. Any CWD change
+    // between the load and a later reload (Qt FileDialogs, plugins,
+    // KDE-service-launched daemons) would make the two resolve to
+    // different files. Storing the absolute path closes that gap.
+    const QString absolutePath = QFileInfo(path).absoluteFilePath();
+
+    QFile file(absolutePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        Q_EMIT loadError(path, file.errorString());
+        Q_EMIT loadError(absolutePath, file.errorString());
         return false;
     }
     const auto data = file.readAll();
     file.close();
 
     if (!loadFromJson(data)) {
-        Q_EMIT loadError(path, QStringLiteral("invalid JSON or empty token map"));
+        Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON or empty token map"));
         return false;
     }
 
@@ -177,14 +185,14 @@ bool PaletteStore::loadFromFile(const QString& path)
     if (!m_watcher->directories().isEmpty()) {
         m_watcher->removePaths(m_watcher->directories());
     }
-    m_watcher->addPath(path);
-    const QString parentDir = QFileInfo(path).absolutePath();
+    m_watcher->addPath(absolutePath);
+    const QString parentDir = QFileInfo(absolutePath).absolutePath();
     if (!parentDir.isEmpty()) {
         m_watcher->addPath(parentDir);
     }
 
-    if (m_sourcePath != path) {
-        m_sourcePath = path;
+    if (m_sourcePath != absolutePath) {
+        m_sourcePath = absolutePath;
         Q_EMIT sourcePathChanged();
     }
     return true;

@@ -5,9 +5,11 @@
 
 #include <QColor>
 #include <QFile>
+#include <QFileSystemWatcher>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 #include <QVariantMap>
 
 using namespace PhosphorTheme;
@@ -269,6 +271,11 @@ void TestPaletteStore::loadFromJson_rejectsWrappedTokensWithNonObjectValue()
 
 void TestPaletteStore::resetToDefaults_releasesDirectoryWatch()
 {
+    // Direct white-box assertion against the watcher's tracked paths.
+    // A behavioural test would route through directoryChanged, but the
+    // handler short-circuits when m_sourcePath.isEmpty() (which reset
+    // makes true), so a leaked watch would still emit no paletteChanged
+    // and the test would falsely pass.
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     const QString path = tmp.filePath(QStringLiteral("p.json"));
@@ -280,26 +287,22 @@ void TestPaletteStore::resetToDefaults_releasesDirectoryWatch()
 
     PaletteStore s;
     QVERIFY(s.loadFromFile(path));
+
+    // The watcher is constructed with `this` as parent, so findChildren
+    // surfaces it. Confirm both file and directory watches were armed.
+    const auto watchers = s.findChildren<QFileSystemWatcher*>();
+    QCOMPARE(watchers.size(), 1);
+    QFileSystemWatcher* watcher = watchers.first();
+    QVERIFY(!watcher->files().isEmpty());
+    QVERIFY(!watcher->directories().isEmpty());
+
     s.resetToDefaults();
 
-    // After reset, atomic-rename the file in the prior parent dir. If
-    // the directory watch leaked, the lib would re-arm a file watch and
-    // re-emit paletteChanged. With the watch properly released, the
-    // event is ignored.
-    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
-    const QString tmpFile = path + QStringLiteral(".tmp");
-    {
-        QFile f(tmpFile);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#445566"}})");
-    }
-    QVERIFY(QFile::remove(path));
-    QVERIFY(QFile::rename(tmpFile, path));
-
-    // Give the watcher more than enough time to fire if it leaked.
-    QTest::qWait(300);
-    QCOMPARE(palSpy.count(), 0);
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6")); // defaults still active
+    // Both lists must be cleared. A leaked directory entry would mean
+    // an inotify slot stayed held for the program lifetime.
+    QVERIFY(watcher->files().isEmpty());
+    QVERIFY(watcher->directories().isEmpty());
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
 }
 
 void TestPaletteStore::hotReload_debouncesBurstOfFileChanges()
@@ -354,27 +357,42 @@ void TestPaletteStore::hotReload_resetCancelsPendingDebounce()
     PaletteStore s;
     QVERIFY(s.loadFromFile(path));
 
-    // Edit the file. The watcher schedules a reload in 80ms via the
-    // debounce timer.
+    // The debounce timer is parented to the store. We need it to verify
+    // the timer is actually armed before we call resetToDefaults; without
+    // this check the test passes even if reset never stops the timer
+    // (the fileChanged event would deliver later and re-arm the timer
+    // anyway, then short-circuit on empty m_sourcePath).
+    const auto timers = s.findChildren<QTimer*>();
+    QCOMPARE(timers.size(), 1);
+    QTimer* debounce = timers.first();
+    QVERIFY(!debounce->isActive());
+
+    // Edit the file. The watcher schedules a reload via the debounce
+    // timer. fileChanged is delivered asynchronously, so spin the event
+    // loop until the timer arms (or until a short deadline) before
+    // attempting to cancel it.
     {
         QFile f(path);
         QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
         f.write(R"({"tokens": {"primary": "#ff0000"}})");
     }
+    QTRY_VERIFY_WITH_TIMEOUT(debounce->isActive(), 2000);
 
-    // Reset before the debounce fires. The pending reload must NOT
-    // clobber the defaults that resetToDefaults just applied.
+    // Reset with a debounce known to be armed. resetToDefaults must
+    // stop the timer. Without that fix the timer would fire 80ms later,
+    // run reloadFromCurrentPath against the now-empty sourcePath, and
+    // no-op (clean short-circuit) — but the timer leaking is still a
+    // contract violation we want pinned.
     QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
     s.resetToDefaults();
     QCOMPARE(palSpy.count(), 1); // reset itself
+    QVERIFY(!debounce->isActive());
 
-    // Wait longer than the debounce window. If the timer leaked, it
-    // would fire reloadFromCurrentPath against the now-empty source
-    // path and either no-op or load stale state. With cancellation the
-    // timer never fires.
-    QTest::qWait(300);
+    // Even after waiting past the debounce window, no additional
+    // paletteChanged fires.
+    QTest::qWait(200);
     QCOMPARE(palSpy.count(), 1);
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6")); // defaults still active
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
 }
 
 QTEST_MAIN(TestPaletteStore)
