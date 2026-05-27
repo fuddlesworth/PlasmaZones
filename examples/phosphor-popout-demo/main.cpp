@@ -37,6 +37,13 @@ int main(int argc, char* argv[])
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("demoController"), &demoController);
 
+    // Drain popouts before the engine starts destroying QML objects.
+    // aboutToQuit fires before the event loop returns, so the close
+    // storm runs while every QML binding target is still alive. Doing
+    // this from a destructor would happen too late, after the engine
+    // has already half-destroyed the QML object tree.
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, &demoController, &PhosphorPopoutDemo::DemoController::shutdown);
+
     engine.loadFromModule(QStringLiteral("Phosphor.PopoutDemo"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty()) {
         return 1;

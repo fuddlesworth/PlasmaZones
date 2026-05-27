@@ -48,6 +48,15 @@ public:
     Q_INVOKABLE void toggleDetached();
     Q_INVOKABLE void closeAll();
 
+    // Drain the controller and disconnect from it so QML engine
+    // teardown does not race the controller's signal chain. Wired to
+    // QCoreApplication::aboutToQuit in main.cpp. Without this, the
+    // engine destroying popout host items while the controller's
+    // popoutClosed handler is still connected emits signals into
+    // partially-destroyed QML bindings and aborts with "pure virtual
+    // method called".
+    void shutdown();
+
     [[nodiscard]] QStringList openPopoutIds() const;
     [[nodiscard]] bool modalActive() const;
 

@@ -120,6 +120,21 @@ void DemoController::closeAll()
     m_controller->closeAll();
 }
 
+void DemoController::shutdown()
+{
+    if (!m_controller) {
+        return;
+    }
+    // Disconnect this object's slots from the controller's signals
+    // before draining so the close storm doesn't re-enter Q_PROPERTY
+    // notify handlers that bind into QML objects the engine is about
+    // to destroy. After this point, openPopoutIds / modalActive stop
+    // reflecting reality; the demo is shutting down so no consumer
+    // cares.
+    m_controller->disconnect(this);
+    m_controller->closeAll();
+}
+
 QStringList DemoController::openPopoutIds() const
 {
     return m_openIds;

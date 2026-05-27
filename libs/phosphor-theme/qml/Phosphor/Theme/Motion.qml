@@ -5,8 +5,9 @@
 // one-off durations and Easing.* picks. A single tuning here propagates
 // across every animated surface.
 
-import QtQuick
 pragma Singleton
+
+import QtQuick
 
 QtObject {
     // ─── Durations (ms) ──────────────────────────────────────────────────
@@ -32,31 +33,31 @@ QtObject {
     // Stored as bezier control-point arrays in Qt's BezierSpline format.
     // Each array is the four-control-point cubic-bezier from M3, padded
     // with the curve endpoint at 1,1 as Qt's BezierSpline requires.
-    // Every literal is spelled with a fractional part so Qt's QML→QVariant
-    // conversion records each element as QVariant(double) rather than
-    // QVariant(int). The Easing.bezierCurve property is QList<double> and
-    // refuses mixed-type QVariantList inputs at runtime ("Could not
-    // convert ... to QList<double>"); explicit doubles avoid that path.
-    readonly property var easing_standard: [0.2, 0, 0, 1, 1, 1]
-    readonly property var easing_emphasized: [0.05, 0.7, 0.1, 1, 1, 1]
-    readonly property var easing_decelerated: [0, 0, 0.2, 1, 1, 1]
-    readonly property var easing_accelerated: [0.3, 0, 1, 1, 1, 1]
+    // Typed list<real> so QML stores each control point as a double in
+    // C++. Plain `property var` would round-trip through JS Number, and
+    // V4 tags integer-valued Numbers as Int, producing QVariant(int)
+    // elements that Easing.bezierCurve (QList<double>) refuses with a
+    // runtime "Could not convert ... to QList<double>" log.
+    readonly property list<real> easing_standard: [0.2, 0, 0, 1, 1, 1]
+    readonly property list<real> easing_emphasized: [0.05, 0.7, 0.1, 1, 1, 1]
+    readonly property list<real> easing_decelerated: [0, 0, 0.2, 1, 1, 1]
+    readonly property list<real> easing_accelerated: [0.3, 0, 1, 1, 1, 1]
     // Pre-built easing objects. Hand directly to Behavior.easing. Example.
     //   Behavior on x { NumberAnimation { duration: Motion.duration_medium_2; easing: Motion.standard } }
     readonly property var standard: ({
-        "type": Easing.BezierSpline,
-        "bezierCurve": easing_standard
-    })
+            "type": Easing.BezierSpline,
+            "bezierCurve": easing_standard
+        })
     readonly property var emphasized: ({
-        "type": Easing.BezierSpline,
-        "bezierCurve": easing_emphasized
-    })
+            "type": Easing.BezierSpline,
+            "bezierCurve": easing_emphasized
+        })
     readonly property var decelerated: ({
-        "type": Easing.BezierSpline,
-        "bezierCurve": easing_decelerated
-    })
+            "type": Easing.BezierSpline,
+            "bezierCurve": easing_decelerated
+        })
     readonly property var accelerated: ({
-        "type": Easing.BezierSpline,
-        "bezierCurve": easing_accelerated
-    })
+            "type": Easing.BezierSpline,
+            "bezierCurve": easing_accelerated
+        })
 }
