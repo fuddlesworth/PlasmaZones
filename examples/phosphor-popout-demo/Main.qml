@@ -17,11 +17,10 @@ ApplicationWindow {
     id: window
 
     // Single source of truth for which popoutIds are open. Each
-    // cooperative/detached button's accent binding reads one field.
-    // Without this, every button does its own
-    // `openPopoutIds.indexOf("...")` scan and the QML engine re-runs
-    // each indexOf on every list mutation. The Modal button reads
-    // demoController.modalActive directly so it isn't represented
+    // cooperative/detached button's accent binding reads one field
+    // off this object, keeping the per-button bindings short and the
+    // openPopoutIds-shape detail centralised. The Modal button binds
+    // demoController.modalActive directly, so it isn't represented
     // here.
     readonly property var openSet: {
         const ids = demoController.openPopoutIds;
@@ -46,9 +45,7 @@ ApplicationWindow {
     Component {
         id: popoutHostTemplate
 
-        PopoutHost {
-        }
-
+        PopoutHost {}
     }
 
     ColumnLayout {
@@ -117,7 +114,6 @@ ApplicationWindow {
                 text: qsTr("Close all")
                 onClicked: demoController.closeAll()
             }
-
         }
 
         Rectangle {
@@ -145,7 +141,6 @@ ApplicationWindow {
                     return qsTr("Open: %1").arg(list);
                 }
             }
-
         }
 
         // The popout host area. Everything below the controls is where
@@ -170,9 +165,6 @@ ApplicationWindow {
                 font.pixelSize: Tokens.font_size_body_l
                 font.family: Tokens.font_family
             }
-
         }
-
     }
-
 }

@@ -147,7 +147,7 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     m_hostComponent->completeCreate();
 
     const QString handle = QStringLiteral("popout-%1").arg(++m_counter);
-    m_entries.insert(handle, Entry{hostItem, contentItem});
+    m_entries.insert(handle, Entry{hostItem});
 
     // Wire self-dismiss. When PopoutHost emits `dismissed` after a
     // click-outside drains its close animation, route the handle to
@@ -155,8 +155,12 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // SIGNAL/SLOT string form is the legitimate path here. `dismissed`
     // is a QML-defined signal on PopoutHost.qml and the C++ side has
     // no compile-time method pointer for it; the function-pointer
-    // connect would require forward-declaring a QML symbol.
-    QObject::connect(hostItem, SIGNAL(dismissed()), this, SLOT(onHostDismissed()));
+    // connect would require forward-declaring a QML symbol. Explicit
+    // Qt::DirectConnection enforces the IPopoutTransport thread-affinity
+    // contract: dismissed must run synchronously on the controller's
+    // thread so the entries-table mutation completes before the next
+    // GUI-thread iteration.
+    QObject::connect(hostItem, SIGNAL(dismissed()), this, SLOT(onHostDismissed()), Qt::DirectConnection);
     // Stash the handle on the host so the slot can route it back.
     hostItem->setProperty("_popoutHandle", handle);
 
@@ -241,10 +245,12 @@ void InAppPopoutTransport::onHostDismissed()
     Entry copy = it.value();
     m_entries.erase(it);
     if (copy.hostItem) {
+        // contentItem is a QObject child of hostItem (PopoutHost.qml's
+        // contentFrame.rebindContentItem reparented it under the host),
+        // so deleteLater on hostItem cascades to contentItem. Mirrors
+        // the destructor / shutdown teardown model; no second
+        // contentItem deleteLater needed.
         copy.hostItem->deleteLater();
-    }
-    if (copy.contentItem) {
-        copy.contentItem->deleteLater();
     }
     // Only fire the controller callback for self-dismisses. A
     // controller-initiated close marks the entry with `closing` and

@@ -6,6 +6,7 @@
 #include <PhosphorPopout/phosphorpopout_export.h>
 
 #include <QString>
+#include <QtCore/qtclasshelpermacros.h> // Q_DISABLE_COPY_MOVE
 
 namespace PhosphorPopout {
 

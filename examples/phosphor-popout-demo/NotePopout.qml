@@ -28,10 +28,11 @@ Rectangle {
     radius: Tokens.radius_l
     Accessible.role: Accessible.Dialog
     Accessible.name: root.pinned ? qsTr("Pinned note popout") : qsTr("Quick note popout")
-    // Body Text exposes the same hint to sighted users; mirror it via
-    // Accessible.description so AT users get the "stays open" vs
-    // "pin me" semantic too.
-    Accessible.description: root.pinned ? qsTr("Stays open across modal cycles") : qsTr("Pin me with the Detached button")
+    // Distinct semantic role information for AT users beyond what the
+    // body Text already conveys to sighted users — describing the
+    // exclusivity behaviour (detached vs cooperative) rather than
+    // repeating the visible copy verbatim.
+    Accessible.description: root.pinned ? qsTr("Detached popout; persists across modal cycles") : qsTr("Cooperative popout; dismissed when another cooperative or a modal opens")
 
     ColumnLayout {
         anchors.centerIn: parent

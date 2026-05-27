@@ -262,7 +262,7 @@ The connected-corner geometry primitive, central to the visual identity.
 | `qml/Phosphor/Notifications/ToastHost.qml` + `Toast.qml`     | Layer-shell surface per screen, stacks toasts top-right. Slide-in from edge, auto-dismiss, hover-to-pause. |
 | `examples/phosphor-toast-demo/`                              | Send a notification via `notify-send` and a toast appears. Uses `phosphor-notifications` from Phase 2.5. |
 
-**Acceptance:** toasts queue, dismiss correctly; rich text + image support; respects per-app rules registered in settings (stub acceptable at this phase; real rules wire in 4.3).
+**Acceptance:** toasts queue, dismiss correctly; rich text + image support; the per-app-rules consumption seam exists and applies any rules supplied by the rules service. The rules editor and its persistence layer belong to Phase 4.3 (Notification center) and wire into this seam without changes to ToastHost.
 
 **Effort:** M (~2 weeks)
 

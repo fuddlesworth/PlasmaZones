@@ -7,6 +7,8 @@
 
 #include <QHash>
 #include <QString>
+#include <QStringList>
+#include <QtGlobal>
 
 namespace PhosphorPopout {
 

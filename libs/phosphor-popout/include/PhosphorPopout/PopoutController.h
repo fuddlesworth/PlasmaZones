@@ -74,6 +74,13 @@ public:
     explicit PopoutController(IPopoutTransport* transport, QObject* parent = nullptr);
     ~PopoutController() override;
 
+    // QObject blocks copy via Q_OBJECT but leaves move ill-formed
+    // rather than deleted. Make the intent explicit so static
+    // analyzers and readers see both copy and move are forbidden,
+    // matching the disable-copy-move pattern on IPopoutService /
+    // IPopoutTransport.
+    Q_DISABLE_COPY_MOVE(PopoutController)
+
     // IPopoutService. Re-declared as Q_INVOKABLE so QML callers reach
     // them through this concrete type. The base interface has no
     // Q_OBJECT/Q_GADGET so it cannot carry Q_INVOKABLE itself.

@@ -77,15 +77,20 @@ Item {
     // Item has no parent yet, so a top-level instantiation with no
     // parent assignment is safe without explicit null-guarding.
     anchors.fill: parent
-    // Open going true resets the dismiss latch so a re-used host can
-    // fire dismissed again on the next close. Open going false starts
-    // the close-animation timer; the timer emits dismissed after the
-    // longest Behavior duration settles. Re-opening while a close is
-    // in flight cancels the pending close.
+    // Open going true resets the dismissed-fired latch AND records
+    // that this host has begun a lifecycle. A re-used host can fire
+    // dismissed again on the next close. A host destroyed without
+    // ever being opened (transport pre-builds then discards) does
+    // NOT fire dismissed, since there was no open-then-close cycle
+    // to bookend; firing would double-decrement transport state.
+    // Open going false starts the close-animation timer; the timer
+    // emits dismissed after the longest Behavior duration settles.
+    // Re-opening while a close is in flight cancels the pending close.
     onOpenChanged: {
         if (open) {
             dismissEmitter.stop();
             dismissLatch.dismissedFired = false;
+            dismissLatch.everOpened = true;
         } else {
             dismissEmitter.start();
         }
@@ -96,28 +101,35 @@ Item {
     // assigned before the host finished construction.
     onContentItemChanged: contentFrame.rebindContentItem()
     Component.onCompleted: contentFrame.rebindContentItem()
-    // If the host is destroyed before the close-animation timer
-    // emits dismissed, emit dismissed here so the transport's
-    // bookkeeping never leaks a handle. This covers a mid-close
-    // teardown or a transport that destroys the host while open is
-    // still true. The fired flag guards against a double fire when
-    // the timer also pumps during teardown.
+    // If the host is destroyed mid-cycle (open was set true but the
+    // close-animation timer hasn't emitted dismissed yet), fire
+    // dismissed here so the transport's bookkeeping never leaks a
+    // handle. Skipped when the host never opened (no cycle to
+    // bookend) and when the timer already fired (everOpened guards
+    // the first case, dismissedFired guards the second).
     Component.onDestruction: {
-        if (!dismissLatch.dismissedFired) {
+        if (dismissLatch.everOpened && !dismissLatch.dismissedFired) {
             dismissEmitter.stop();
             dismissLatch.dismissedFired = true;
             root.dismissed();
         }
     }
 
-    // Held inside a child QtObject so the latch isn't part of the
-    // host's public surface. Consumers must NOT poke
-    // dismissLatch.dismissedFired; the lifecycle is managed inside this
-    // file.
+    // Held inside a child QtObject so the latches aren't part of the
+    // host's public surface. Consumers must NOT poke either field;
+    // both are lifecycle bookkeeping managed inside this file.
     QtObject {
         id: dismissLatch
 
+        // Set by Component.onDestruction (or the dismissEmitter
+        // timer) to suppress a double-fire of dismissed when both
+        // paths could run for the same close cycle.
         property bool dismissedFired: false
+        // Set on the first open=true transition. Used by
+        // Component.onDestruction to distinguish a destroy-without-
+        // open from a destroy-mid-cycle so only the latter fires
+        // dismissed.
+        property bool everOpened: false
     }
 
     // Click-outside catcher. Sits behind the content. Swallows clicks

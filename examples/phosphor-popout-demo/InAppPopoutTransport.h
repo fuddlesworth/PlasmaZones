@@ -69,8 +69,12 @@ private Q_SLOTS:
 private:
     struct Entry
     {
-        QPointer<QQuickItem> hostItem; // PopoutHost.qml instance
-        QPointer<QQuickItem> contentItem; // delegate instantiated by us
+        // Only the host needs lifetime tracking. The content delegate
+        // becomes a QObject child of the host when PopoutHost.qml's
+        // contentFrame.rebindContentItem reparents it, so deleting
+        // the host cascades to the delegate; no separate handle is
+        // needed.
+        QPointer<QQuickItem> hostItem;
         // True once closeSurface has set open=false on the host.
         // onHostDismissed uses this to skip the dismissed-callback
         // routing back to the controller, since the controller is

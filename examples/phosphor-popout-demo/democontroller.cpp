@@ -33,7 +33,11 @@ DemoController::DemoController(QObject* parent)
                      });
     QObject::connect(m_controller.get(), &PopoutController::popoutClosed, this,
                      [this](const QString& id, const QString&) {
-                         if (m_openIds.removeAll(id) > 0) {
+                         // removeOne matches the PopoutController invariant
+                         // (at most one open entry per popoutId per
+                         // arbitration). removeAll would silently paper
+                         // over a future invariant violation.
+                         if (m_openIds.removeOne(id)) {
                              Q_EMIT openPopoutIdsChanged();
                          }
                      });
@@ -129,8 +133,7 @@ void DemoController::shutdown()
     // before draining so the close storm doesn't re-enter Q_PROPERTY
     // notify handlers that bind into QML objects the engine is about
     // to destroy. After this point, openPopoutIds / modalActive stop
-    // reflecting reality; the demo is shutting down so no consumer
-    // cares.
+    // emitting NOTIFY (reads still pass through until destruction).
     if (m_controller) {
         m_controller->disconnect(this);
         m_controller->closeAll();
@@ -142,6 +145,14 @@ void DemoController::shutdown()
     // engine has invalidated the host items' QML metadata.
     if (m_transport) {
         m_transport->shutdown();
+    }
+    // The popoutClosed handler that normally maintains m_openIds was
+    // disconnected above; do the final-drain emit by hand so any
+    // remaining QML bindings on openPopoutIds see the empty state
+    // before the engine tears down.
+    if (!m_openIds.isEmpty()) {
+        m_openIds.clear();
+        Q_EMIT openPopoutIdsChanged();
     }
 }
 

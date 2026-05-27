@@ -12,17 +12,17 @@ find_package(Qt6 REQUIRED COMPONENTS Test)
 #   _signals     : signal-ordering invariants, slot-state consistency, DefaultScope
 function(phosphorpopout_add_test name)
     add_executable(${name} ${name}.cpp)
+    # Qt6::Core / Qt6::Gui / Qt6::Qml propagate via PUBLIC link from
+    # PhosphorPopout::PhosphorPopout; only Qt6::Test is test-specific.
     target_link_libraries(${name}
         PRIVATE
             PhosphorPopout::PhosphorPopout
-            Qt6::Core
-            Qt6::Gui
             Qt6::Test
     )
     add_test(NAME ${name} COMMAND ${name})
-    # offscreen QPA keeps the tests headless on CI even though we only
-    # touch QObject machinery (no QQuickWindow yet, but the controller
-    # eventually wires up to one via the transport).
+    # offscreen QPA keeps the tests headless on CI; the test binaries
+    # transitively link Qt Gui (via QScreen on PopoutRequest) and
+    # construct a QCoreApplication via QTEST_MAIN.
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
 

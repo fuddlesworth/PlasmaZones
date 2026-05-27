@@ -204,10 +204,12 @@ file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/**/*.cpp
     ${CMAKE_SOURCE_DIR}/src/**/*.h
     ${CMAKE_SOURCE_DIR}/src/**/*.hpp
-    ${CMAKE_SOURCE_DIR}/kcm/*.cpp
-    ${CMAKE_SOURCE_DIR}/kcm/*.h
-    ${CMAKE_SOURCE_DIR}/kwin-effect/*.cpp
-    ${CMAKE_SOURCE_DIR}/kwin-effect/*.h
+    ${CMAKE_SOURCE_DIR}/kcm/**/*.cpp
+    ${CMAKE_SOURCE_DIR}/kcm/**/*.h
+    ${CMAKE_SOURCE_DIR}/kcm/**/*.hpp
+    ${CMAKE_SOURCE_DIR}/kwin-effect/**/*.cpp
+    ${CMAKE_SOURCE_DIR}/kwin-effect/**/*.h
+    ${CMAKE_SOURCE_DIR}/kwin-effect/**/*.hpp
     ${CMAKE_SOURCE_DIR}/tests/**/*.cpp
     ${CMAKE_SOURCE_DIR}/tests/**/*.h
     ${CMAKE_SOURCE_DIR}/libs/**/*.cpp

@@ -6,6 +6,7 @@
 #include <PhosphorPopout/phosphorpopout_export.h>
 
 #include <QString>
+#include <QtCore/qtclasshelpermacros.h> // Q_DISABLE_COPY_MOVE
 
 #include <functional>
 
@@ -47,7 +48,10 @@ public:
     // Tear down the surface for handle. No-op if the handle is
     // unknown or already closed. Must NOT invoke the dismissed
     // callback for this handle. The callback is reserved for
-    // surfaces that close themselves.
+    // surfaces that close themselves. The controller may call
+    // closeSurface synchronously from inside the dismissed callback
+    // for OTHER handles (e.g., during arbitration-driven teardown);
+    // the controller's re-entrancy guard handles this case.
     virtual void closeSurface(const QString& handle) = 0;
 
     // Install a callback fired when a surface dismisses itself. The

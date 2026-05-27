@@ -275,6 +275,10 @@ void TestPopoutControllerDismiss::destructor_withOpenPopoutsDoesNotDrainTranspor
     // them; the controller does not call closeSurface for them.
     QCOMPARE(t.closeSurfaceCalls, 0);
     QCOMPARE(t.alive.size(), 3);
+    // Destructor must still drive the callback detach even with open
+    // popouts (i.e., the open-popouts path doesn't bypass the dtor's
+    // setSurfaceDismissedCallback({}) call).
+    QCOMPARE(t.clearCallbackCalls, 1);
 }
 
 QTEST_MAIN(TestPopoutControllerDismiss)
