@@ -17,6 +17,8 @@
 
 #include "settingscontroller.h"
 
+#include <QDebug>
+
 namespace PlasmaZones {
 
 namespace {
@@ -69,7 +71,18 @@ bool moveOrderedItem(const QVariantList& resolved, int fromIndex, int toIndex, s
     QStringList ids;
     ids.reserve(resolved.size());
     for (const QVariant& v : resolved) {
-        ids.append(v.toMap().value(QStringLiteral("id")).toString());
+        const QString id = v.toMap().value(QStringLiteral("id")).toString();
+        if (id.isEmpty()) {
+            // A resolved-order entry missing its "id" key indicates an
+            // upstream wiring bug (resolvedSnappingOrder / resolvedTilingOrder
+            // should always stamp an id). Refuse the move rather than
+            // staging a list that contains an empty-id slot — persisting
+            // that would round-trip back as a phantom entry on next load.
+            qWarning() << "moveOrderedItem: resolved entry at index" << ids.size()
+                       << "has empty id; refusing to stage reorder";
+            return false;
+        }
+        ids.append(id);
     }
     ids.move(fromIndex, toIndex);
     staged = ids;

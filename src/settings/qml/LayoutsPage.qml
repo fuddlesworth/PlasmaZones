@@ -69,7 +69,7 @@ ColumnLayout {
         onRequestOpenLayoutsFolder: settingsController.openLayoutsFolder()
         onRequestImportAlgorithm: algorithmImportDialog.open()
         onRequestOpenAlgorithmsFolder: settingsController.openAlgorithmsFolder()
-        onViewModeRequested: (mode) => {
+        onViewModeRequested: mode => {
             root.viewMode = mode;
             layoutGrid.selectedLayoutId = "";
             // rebuildModel() already triggered by filterBar.onViewModeChanged → loadState → filterSettingsChanged
@@ -129,42 +129,48 @@ ColumnLayout {
                 // recreating on every rebuildModel() call.
                 // NOTE: items matching multiple capabilities appear in multiple groups;
                 // the same card will be highlighted in both sections simultaneously.
-                readonly property var tilingCapabilityGroups: [{
-                    "key": "masterCount",
-                    "label": i18n("Master Count"),
-                    "order": 0,
-                    "test": (a) => {
-                        return a.supportsMasterCount === true;
+                readonly property var tilingCapabilityGroups: [
+                    {
+                        "key": "masterCount",
+                        "label": i18n("Master Count"),
+                        "order": 0,
+                        "test": a => {
+                            return a.supportsMasterCount === true;
+                        }
+                    },
+                    {
+                        "key": "splitRatio",
+                        "label": i18n("Split Ratio"),
+                        "order": 1,
+                        "test": a => {
+                            return a.supportsSplitRatio === true;
+                        }
+                    },
+                    {
+                        "key": "overlapping",
+                        "label": i18n("Overlapping Zones"),
+                        "order": 2,
+                        "test": a => {
+                            return a.producesOverlappingZones === true;
+                        }
+                    },
+                    {
+                        "key": "persistent",
+                        "label": i18n("Persistent (Memory)"),
+                        "order": 3,
+                        "test": a => {
+                            return a.supportsMemory === true;
+                        }
+                    },
+                    {
+                        "key": "customParams",
+                        "label": i18n("Custom Parameters"),
+                        "order": 4,
+                        "test": a => {
+                            return a.supportsCustomParams === true;
+                        }
                     }
-                }, {
-                    "key": "splitRatio",
-                    "label": i18n("Split Ratio"),
-                    "order": 1,
-                    "test": (a) => {
-                        return a.supportsSplitRatio === true;
-                    }
-                }, {
-                    "key": "overlapping",
-                    "label": i18n("Overlapping Zones"),
-                    "order": 2,
-                    "test": (a) => {
-                        return a.producesOverlappingZones === true;
-                    }
-                }, {
-                    "key": "persistent",
-                    "label": i18n("Persistent (Memory)"),
-                    "order": 3,
-                    "test": (a) => {
-                        return a.supportsMemory === true;
-                    }
-                }, {
-                    "key": "customParams",
-                    "label": i18n("Custom Parameters"),
-                    "order": 4,
-                    "test": (a) => {
-                        return a.supportsCustomParams === true;
-                    }
-                }]
+                ]
 
                 function rebuildModel() {
                     let allLayouts = settingsController.layouts;
@@ -191,7 +197,6 @@ ColumnLayout {
                     let defaultId = (mode === 1) ? ("autotile:" + root.settingsBridge.defaultAutotileAlgorithm) : root.settingsBridge.defaultLayoutId;
                     if (defaultId)
                         selectedLayoutId = defaultId;
-
                 }
 
                 function selectLayoutById(layoutId) {
@@ -207,30 +212,30 @@ ColumnLayout {
                         if (groupIdx === filterBar.groupCapability)
                             return Logic.groupByCapability(filtered, tilingCapabilityGroups, i18n("Other"));
                         else if (groupIdx === filterBar.groupTilingSource)
-                            return Logic.groupByBoolKey(filtered, (item) => {
-                            return Logic.isBuiltIn(item);
-                        }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
+                            return Logic.groupByBoolKey(filtered, item => {
+                                return Logic.isBuiltIn(item);
+                            }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
                         else if (groupIdx === filterBar.groupPersistent)
-                            return Logic.groupByBoolKey(filtered, (item) => {
-                            return item.supportsMemory === true;
-                        }, "persistent", i18n("Persistent"), "stateless", i18n("Stateless"));
+                            return Logic.groupByBoolKey(filtered, item => {
+                                return item.supportsMemory === true;
+                            }, "persistent", i18n("Persistent"), "stateless", i18n("Stateless"));
                         return Logic.ungrouped(filtered);
                     }
                     // Snapping grouping
                     if (groupIdx === filterBar.groupAspectRatio)
                         return Logic.groupByAspectRatio(filtered);
                     else if (groupIdx === filterBar.groupZoneCount)
-                        return Logic.groupByZoneCount(filtered, (count) => {
-                        return i18np("%n zone", "%n zones", count);
-                    }, i18n("Unknown"));
+                        return Logic.groupByZoneCount(filtered, count => {
+                            return i18np("%n zone", "%n zones", count);
+                        }, i18n("Unknown"));
                     else if (groupIdx === filterBar.groupAutoManual)
-                        return Logic.groupByBoolKey(filtered, (item) => {
-                        return item.autoAssign === true;
-                    }, "auto", i18n("Auto"), "manual", i18n("Manual"));
+                        return Logic.groupByBoolKey(filtered, item => {
+                            return item.autoAssign === true;
+                        }, "auto", i18n("Auto"), "manual", i18n("Manual"));
                     else if (groupIdx === filterBar.groupSource)
-                        return Logic.groupByBoolKey(filtered, (item) => {
-                        return Logic.isBuiltIn(item);
-                    }, "builtin", i18n("Built-in"), "user", i18n("User Layouts"));
+                        return Logic.groupByBoolKey(filtered, item => {
+                            return Logic.isBuiltIn(item);
+                        }, "builtin", i18n("Built-in"), "user", i18n("User Layouts"));
                     return Logic.ungrouped(filtered);
                 }
 
@@ -297,7 +302,6 @@ ColumnLayout {
                         icon.name: "edit-reset"
                         onTriggered: filterBar.resetFilters()
                     }
-
                 }
 
                 // ─── Section Delegate (header + Flow of layout cards) ────────
@@ -341,31 +345,31 @@ ColumnLayout {
                                 cellHeight: layoutGrid.cellHeight
                                 viewMode: root.viewMode
                                 isSelected: String(modelData.id) === layoutGrid.selectedLayoutId
-                                onSelected: (idx) => {
+                                onSelected: idx => {
                                     layoutGrid.selectedLayoutId = String(modelData.id);
                                 }
-                                onActivated: (layoutId) => {
+                                onActivated: layoutId => {
                                     settingsController.editLayout(layoutId);
                                 }
-                                onDeleteRequested: (layout) => {
+                                onDeleteRequested: layout => {
                                     deleteConfirmDialog.layoutToDelete = layout;
                                     deleteConfirmDialog.open();
                                 }
-                                onContextMenuRequested: (layout) => {
-                                    window.layoutContextMenu.showForLayout(layout);
+                                onContextMenuRequested: layout => {
+                                    // Same defensive guard the toast call
+                                    // sites below use — the page can be
+                                    // hosted inside other consumers (KCM,
+                                    // future external preview) that don't
+                                    // attach `layoutContextMenu`.
+                                    if (window && window.layoutContextMenu)
+                                        window.layoutContextMenu.showForLayout(layout);
                                 }
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // Import file dialog
@@ -405,7 +409,6 @@ ColumnLayout {
             if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile))) {
                 if (window && window.showToast)
                     window.showToast(i18n("Algorithm imported"));
-
             }
         }
     }
@@ -429,7 +432,6 @@ ColumnLayout {
         function onKzonesImportFinished(_count, message) {
             if (window && window.showToast)
                 window.showToast(message);
-
         }
 
         target: settingsController
@@ -479,7 +481,6 @@ ColumnLayout {
             layoutGrid.rebuildModel();
             if (root.viewMode === 1)
                 layoutGrid.selectedLayoutId = "autotile:" + algorithmId;
-
         }
 
         function onAlgorithmOperationFailed(reason) {
@@ -487,7 +488,6 @@ ColumnLayout {
             // is open, it shows the error inline via its own Connections block
             if (!newAlgorithmDialog.opened && window && window.showToast)
                 window.showToast(reason);
-
         }
 
         function onLayoutOperationFailed(reason) {
@@ -495,7 +495,6 @@ ColumnLayout {
             // is open, it shows the error inline via its own Connections block
             if (!newLayoutDialog.opened && window && window.showToast)
                 window.showToast(reason);
-
         }
 
         target: settingsController
@@ -551,5 +550,4 @@ ColumnLayout {
             }
         ]
     }
-
 }
