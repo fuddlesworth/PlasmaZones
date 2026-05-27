@@ -32,6 +32,14 @@ inline constexpr int kDefaultSyncTimeoutMs = 500;
  * exported for visibility-hidden builds — downstream consumers need typeinfo
  * symbols to construct, copy, and pass DBusEndpoint instances cleanly.
  */
+// Windows MSVC `<objbase.h>` defines `interface` as a `struct` macro.
+// We don't currently build on Windows but the lib is meant to be
+// portable — undef defensively so a future Windows consumer doesn't
+// hit "expected member name" on this declaration.
+#ifdef interface
+#undef interface
+#endif
+
 struct PHOSPHORSETTINGSUI_EXPORT DBusEndpoint
 {
     QString service;

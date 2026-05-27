@@ -299,14 +299,18 @@ void AnimationsPageController::revertPending()
 {
     // Shader tree changes are reverted by the subsequent m_settings.load()
     // call in SettingsController, not by this method. Do not call
-    // revertPending() without a following load().
+    // revertPending() without a following load(). m_shaderTreeDirty is
+    // intentionally NOT cleared here — the on-load shaderProfileTreeChanged
+    // handler in the ctor clears it once the canonical tree has been
+    // reloaded. Clearing here would let hasPendingChanges() report a
+    // not-dirty state in the window between this return and the load()
+    // call landing — if any consumer checks dirty in that window, it
+    // sees a falsely clean state for the shader-tree axis.
     using namespace PhosphorAnimation;
     using namespace PhosphorAnimationShaders;
 
     if (!hasPendingChanges())
         return;
-
-    m_shaderTreeDirty = false;
 
     const QString profilesDir = userProfilesDir();
     const QString setsDir = userMotionSetsDir();
@@ -557,13 +561,15 @@ QVariantMap AnimationsPageController::resolvedProfile(const QString& path) const
 
 bool AnimationsPageController::setOverride(const QString& path, const QVariantMap& profileJson)
 {
-    const bool wasPending = hasPendingChanges();
     if (!isValidEventPath(path))
         return false;
 
     const QString dir = userProfilesDir();
     if (!QDir().mkpath(dir))
         return false;
+    // Capture dirty state AFTER the cheap validity / mkpath guards so an
+    // invalid path doesn't pay for a hasPendingChanges() walk.
+    const bool wasPending = hasPendingChanges();
 
     const QString filePath = profileFilePath(path);
 

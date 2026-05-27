@@ -7,22 +7,6 @@
 
 namespace PhosphorSettingsUi {
 
-namespace {
-// Resolve the live translation context. If the user has set one
-// explicitly, honour it; otherwise read `QCoreApplication::applicationName()`
-// lazily on every call so the context tracks late `setApplicationName()`
-// calls (typical pattern: QApplication is created, settings are loaded,
-// then setApplicationName runs — a constructor-time capture would miss
-// that and yield an empty Qt translation context).
-QByteArray effectiveContext(const QString& explicitCtx)
-{
-    if (!explicitCtx.isEmpty()) {
-        return explicitCtx.toUtf8();
-    }
-    return QCoreApplication::applicationName().toUtf8();
-}
-} // namespace
-
 LocalizedContext::LocalizedContext(QObject* parent)
     : QObject(parent)
 {
@@ -30,14 +14,29 @@ LocalizedContext::LocalizedContext(QObject* parent)
     // QCoreApplication::applicationName(). Forward that signal so QML
     // bindings re-evaluate when applicationName() changes post-construction
     // (typical pattern: QApplication created, settings loaded, then
-    // setApplicationName called).
+    // setApplicationName called). Also invalidates the cached UTF-8
+    // effective-context so the next i18n*() call re-reads the new name.
     if (auto* app = QCoreApplication::instance()) {
         connect(app, &QCoreApplication::applicationNameChanged, this, [this]() {
+            m_effectiveContextCache.clear();
             if (m_context.isEmpty()) {
                 Q_EMIT translationContextChanged();
             }
         });
     }
+}
+
+QByteArray LocalizedContext::cachedEffectiveContext() const
+{
+    // Hot path: every QML text binding re-evaluates on locale/lang change
+    // and calls into i18n*() — repeatedly re-encoding the application
+    // name to UTF-8 each call is wasteful. Cache the encoded form and
+    // invalidate via setTranslationContext / applicationNameChanged.
+    if (m_effectiveContextCache.isEmpty()) {
+        m_effectiveContextCache =
+            m_context.isEmpty() ? QCoreApplication::applicationName().toUtf8() : m_context.toUtf8();
+    }
+    return m_effectiveContextCache;
 }
 
 LocalizedContext::~LocalizedContext() = default;
@@ -55,18 +54,19 @@ void LocalizedContext::setTranslationContext(const QString& ctx)
         return;
     }
     m_context = ctx;
+    m_effectiveContextCache.clear();
     Q_EMIT translationContextChanged();
 }
 
 QString LocalizedContext::i18n(const QString& text) const
 {
-    const QByteArray ctx = effectiveContext(m_context);
+    const QByteArray ctx = cachedEffectiveContext();
     return QCoreApplication::translate(ctx.constData(), text.toUtf8().constData());
 }
 
 QString LocalizedContext::i18nc(const QString& context, const QString& text) const
 {
-    const QByteArray ctx = effectiveContext(m_context);
+    const QByteArray ctx = cachedEffectiveContext();
     return QCoreApplication::translate(ctx.constData(), text.toUtf8().constData(), context.toUtf8().constData());
 }
 
@@ -95,7 +95,7 @@ QString LocalizedContext::i18np(const QString& singular, const QString& plural, 
     // against the raw `singular` would mistake the miss for a hit.
     // Compare against the source with %n pre-substituted, then fall
     // back to picking singular/plural by English rules.
-    const QByteArray ctx = effectiveContext(m_context);
+    const QByteArray ctx = cachedEffectiveContext();
     const QByteArray src = singular.toUtf8();
     const QString translated = QCoreApplication::translate(ctx.constData(), src.constData(), nullptr, n);
     const QString srcWithN = substitutePlaceholderN(singular, n);
@@ -107,7 +107,7 @@ QString LocalizedContext::i18np(const QString& singular, const QString& plural, 
 
 QString LocalizedContext::i18ncp(const QString& context, const QString& singular, const QString& plural, int n) const
 {
-    const QByteArray ctx = effectiveContext(m_context);
+    const QByteArray ctx = cachedEffectiveContext();
     const QByteArray src = singular.toUtf8();
     const QByteArray disambiguation = context.toUtf8();
     const QString translated =

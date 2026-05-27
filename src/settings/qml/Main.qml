@@ -23,7 +23,10 @@ PhosphorUi.SettingsAppWindow {
     // ── Public API used by per-page QML files ───────────────────────
     // Pages reach the layout-context popup via window.layoutContextMenu.
     readonly property alias layoutContextMenu: layoutContextMenu
-    // Shared aspect-ratio labels (also referenced by other pages).
+    // Aspect-ratio labels consumed by the layout context menu's
+    // submenu — kept at window scope rather than inside the Menu so
+    // future consumers (Per-Screen Override picker, Layouts page) can
+    // bind to the same canonical i18n strings without duplicating them.
     readonly property var aspectRatioLabels: ({
         "any": i18n("All Monitors"),
         "standard": i18n("Standard (16:9)"),
@@ -40,10 +43,6 @@ PhosphorUi.SettingsAppWindow {
 
     function showToast(msg) {
         toast.show(msg);
-    }
-
-    function showLayoutContextMenu(layout) {
-        layoutContextMenu.showForLayout(layout);
     }
 
     controller: settingsController.app
@@ -200,10 +199,12 @@ PhosphorUi.SettingsAppWindow {
 
     // ── Layout context menu (lives outside any Loader to avoid Qt6 SIGSEGV on Menu destruction) ──
     Menu {
+        // _cachedScreens is now a declarative binding above — no
+        // Component.onCompleted seed or screensChanged handler needed.
+
         id: layoutContextMenu
 
         property var layout: null
-        property int viewMode: 0
         /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
         /// aspect-ratio submenu was last reconciled to. showForLayout
         /// only mutates the menu when the current layout's kind
@@ -227,7 +228,18 @@ PhosphorUi.SettingsAppWindow {
         // Memoise the screen list result. The getter still re-runs on
         // `settingsController.screensChanged`, but doesn't re-run on
         // each popup() / every `_screenItemsModel.length` read.
-        property var _cachedScreens: []
+        // Cache the screens snapshot when there's more than one — the
+        // multi-screen menu items only appear in that case. The binding
+        // tracks settingsController.screens directly so a screensChanged
+        // emit (e.g. daemon-driven hot-plug, late-arriving D-Bus reply)
+        // refreshes the cache without needing a Connections + imperative
+        // seed. Previously Component.onCompleted seeded once and missed
+        // any value that arrived between settingsController construction
+        // and Main.qml mount.
+        readonly property var _cachedScreens: {
+            const s = settingsController.screens || [];
+            return s.length > 1 ? s : [];
+        }
         readonly property var _screenItemsModel: _cachedScreens
 
         signal deleteRequested(var layout)
@@ -235,7 +247,6 @@ PhosphorUi.SettingsAppWindow {
 
         function showForLayout(layout) {
             layoutContextMenu.layout = layout;
-            layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? 1 : 0;
             var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
             if (wantKind !== layoutContextMenu._aspectRatioMenuKind) {
                 if (wantKind === "snap") {
@@ -256,20 +267,6 @@ PhosphorUi.SettingsAppWindow {
                 layoutContextMenu._aspectRatioMenuKind = wantKind;
             }
             layoutContextMenu.popup();
-        }
-
-        Component.onCompleted: {
-            var s = settingsController.screens || [];
-            _cachedScreens = (s.length > 1) ? s : [];
-        }
-
-        Connections {
-            function onScreensChanged() {
-                var s = settingsController.screens || [];
-                layoutContextMenu._cachedScreens = (s.length > 1) ? s : [];
-            }
-
-            target: settingsController
         }
 
         MenuItem {
@@ -338,13 +335,13 @@ PhosphorUi.SettingsAppWindow {
                 if (!layoutContextMenu.layout)
                     return false;
 
-                if (layoutContextMenu.viewMode === 1)
+                if (layoutContextMenu.isAutotile)
                     return layoutContextMenu.layoutId !== ("autotile:" + appSettings.defaultAutotileAlgorithm);
 
                 return layoutContextMenu.layoutId !== appSettings.defaultLayoutId;
             }
             onTriggered: {
-                if (layoutContextMenu.viewMode === 1)
+                if (layoutContextMenu.isAutotile)
                     appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
                 else
                     appSettings.defaultLayoutId = layoutContextMenu.layoutId;
@@ -375,31 +372,31 @@ PhosphorUi.SettingsAppWindow {
         }
 
         MenuSeparator {
-            visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
+            visible: !layoutContextMenu.isAutotile
         }
 
         MenuItem {
             text: i18n("Duplicate")
             icon.name: "edit-copy"
-            visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
+            visible: !layoutContextMenu.isAutotile
             onTriggered: settingsController.duplicateLayout(layoutContextMenu.layoutId)
         }
 
         MenuItem {
             text: i18n("Export")
             icon.name: "document-export"
-            visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
+            visible: !layoutContextMenu.isAutotile
             onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
         }
 
         MenuSeparator {
-            visible: layoutContextMenu.viewMode === 0 && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+            visible: layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
         }
 
         MenuItem {
             text: i18n("Delete")
             icon.name: "edit-delete"
-            visible: layoutContextMenu.viewMode === 0 && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+            visible: layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
             onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
         }
 

@@ -196,6 +196,10 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     // treats it as a real value that wins over a parent's effectId,
     // so inheritance from an ancestor (e.g. `panel` → "dissolve") is
     // BLOCKED at this path and every descendant resolves to no shader.
+    // Parameters PASSED ALONGSIDE an empty effectId are preserved on
+    // the disable sentinel — callers that need to clear them entirely
+    // should pass `parameters = {}` (the default). This lets a future
+    // re-enable inherit the previous tuning rather than starting over.
     //
     // This is intentionally distinct from `clearShaderOverride`, which
     // removes the override entry entirely so resolution falls through

@@ -125,8 +125,12 @@ target_compile_definitions(PhosphorSettingsUi PRIVATE
 # QML Module — org.phosphor.settings.ui (STATIC, in-tree linkable)
 #
 # The C++ library above intentionally avoids Qt6::Qml/Quick so non-QML
-# consumers (e.g. headless tests) stay light. Foreign type registrations
-# live in qml/foreigntypes.cpp, processed only by this target.
+# consumers (e.g. headless tests) stay light. The QML module target
+# below re-compiles the same public C++ sources so qmltyperegistrar
+# sees the QML_NAMED_ELEMENT markers and emits the type registrations
+# into the org.phosphor.settings.ui module — no separate foreigntypes
+# .cpp is needed because every exposed type lives in this lib's own
+# headers.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # The QML module re-compiles the same public headers + sources as the C++

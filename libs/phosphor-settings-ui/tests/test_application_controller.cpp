@@ -351,6 +351,33 @@ private Q_SLOTS:
         // edge). We require exactly one.
         QCOMPARE(spy.count(), 1);
     }
+
+    void rejectsNullPageRegistration()
+    {
+        // Pin the nullptr-rejection paths in registerPage/registerDomain.
+        // A regression that allowed nullptr through would crash on the
+        // first recomputeDirty/applyAll iteration.
+        ApplicationController app;
+        QSignalSpy spy(&app, &ApplicationController::dirtyChanged);
+        app.registerPage(nullptr, {}, QStringLiteral("P"), QUrl());
+        app.registerDomain(nullptr);
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(app.isDirty(), false);
+    }
+
+    void resetCurrentPageOnEmptyIdIsNoOp()
+    {
+        // Pins the empty-id early-return branch in resetCurrentPage —
+        // a regression removing the guard would deref a null controller
+        // lookup.
+        ApplicationController app;
+        auto* page = new StubPage(QStringLiteral("p"));
+        app.registerPage(page, {}, QStringLiteral("P"), QUrl());
+        // currentPageId is empty by default; resetCurrentPage should
+        // not invoke resetToDefaults on any registered page.
+        app.resetCurrentPage();
+        QCOMPARE(page->resetCount, 0);
+    }
 };
 
 QTEST_MAIN(TestApplicationController)

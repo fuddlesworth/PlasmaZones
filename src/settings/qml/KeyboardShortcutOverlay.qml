@@ -25,13 +25,19 @@ Rectangle {
     /// Drives visibility + animation direction. Consumers bind this to
     /// their window-scope toggle.
     property bool shown: false
+    // Theme-tinted text-color shades used multiple times below — extract
+    // once to a readonly property so a future theme tweak only touches
+    // one place (E32 follow-up).
+    readonly property color overlayBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
+    readonly property color subtleBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+    readonly property color keyChipBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
 
     /// Fired when the user dismisses the overlay (Esc key, background
     /// click). Consumers flip their toggle false.
     signal dismiss()
 
     anchors.fill: parent
-    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
+    color: root.overlayBg
     visible: opacity > 0
     opacity: root.shown ? 1 : 0
     z: 200
@@ -50,7 +56,7 @@ Rectangle {
         radius: Kirigami.Units.smallSpacing * 2
         color: Kirigami.Theme.backgroundColor
         border.width: Math.round(Kirigami.Units.devicePixelRatio)
-        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+        border.color: root.subtleBorder
 
         ColumnLayout {
             id: shortcutContent
@@ -101,9 +107,9 @@ Rectangle {
                         implicitWidth: keyLabel.implicitWidth + Kirigami.Units.largeSpacing
                         implicitHeight: keyLabel.implicitHeight + Kirigami.Units.smallSpacing
                         radius: Kirigami.Units.smallSpacing / 2
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                        color: root.keyChipBg
                         border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+                        border.color: root.subtleBorder
 
                         Label {
                             id: keyLabel

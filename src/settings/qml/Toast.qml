@@ -23,9 +23,12 @@ Rectangle {
 
     /// Last message passed to show(). Read-only externally — write via show().
     property string message: ""
+    // Toast surface tint — extracted to a single readonly so future
+    // theme tweaks live in one place (E32 follow-up).
+    readonly property color toastBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.85)
 
     /// Display `msg` immediately, replacing any in-flight toast.
-    function show(msg) {
+    function show(msg: string) {
         root.message = msg;
         toastShow.restart();
         toastHide.restart();
@@ -37,10 +40,14 @@ Rectangle {
     width: toastLabel.implicitWidth + Kirigami.Units.largeSpacing * 3
     height: toastLabel.implicitHeight + Kirigami.Units.largeSpacing * 1.5
     radius: height / 2
-    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.85)
+    color: root.toastBg
     opacity: 0
     visible: opacity > 0
     z: 100
+    // Toast is a status-message surface — announce to AT consumers.
+    Accessible.role: Accessible.StaticText
+    Accessible.name: root.message
+    Accessible.description: i18n("Toast notification")
 
     Label {
         id: toastLabel

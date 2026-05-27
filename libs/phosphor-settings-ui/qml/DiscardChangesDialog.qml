@@ -52,8 +52,12 @@ Kirigami.PromptDialog {
         text: qsTr("Apply")
         icon.name: "dialog-ok-apply"
         onTriggered: {
-            root.close();
+            // Emit BEFORE close so observers can still inspect the dialog
+            // (read applyAvailable, etc.) if they need to. close() schedules
+            // teardown via the dialog's own animation, which runs after this
+            // returns regardless.
             root.applyConfirmed();
+            root.close();
         }
     }
 
@@ -63,8 +67,8 @@ Kirigami.PromptDialog {
         text: qsTr("Discard")
         icon.name: "dialog-cancel"
         onTriggered: {
-            root.close();
             root.discardConfirmed();
+            root.close();
         }
     }
 

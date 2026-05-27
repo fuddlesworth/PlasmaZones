@@ -118,26 +118,32 @@ void SettingsController::save()
     if (m_staging.hasPendingAssignments()) {
         QDBusMessage batchOn = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                       QStringLiteral("setSaveBatchMode"), {true});
-        if (batchOn.type() == QDBusMessage::ErrorMessage) {
-            qCWarning(lcCore) << "save: setSaveBatchMode(true) failed:" << batchOn.errorMessage();
+        const bool batchActive = (batchOn.type() != QDBusMessage::ErrorMessage);
+        if (!batchActive) {
+            qCWarning(lcCore)
+                << "save: setSaveBatchMode(true) failed:" << batchOn.errorMessage()
+                << "— skipping flush+apply to avoid per-assignment writes the batch was meant to coalesce";
             assignmentsCommitOk = false;
-        }
-        m_staging.flushAssignmentsToDaemon();
-        QDBusMessage apply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                    QStringLiteral("applyAssignmentChanges"));
-        if (apply.type() == QDBusMessage::ErrorMessage) {
-            qCWarning(lcCore) << "save: applyAssignmentChanges failed:" << apply.errorMessage();
-            Q_EMIT layoutOperationFailed(
-                PzI18n::tr("Failed to apply assignment changes: %1").arg(apply.errorMessage()));
-            assignmentsCommitOk = false;
-        }
-        // ALWAYS attempt to drop batch mode — leaving the daemon in
-        // batch mode after a failure would break the next save attempt.
-        QDBusMessage batchOff = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                       QStringLiteral("setSaveBatchMode"), {false});
-        if (batchOff.type() == QDBusMessage::ErrorMessage) {
-            qCWarning(lcCore) << "save: setSaveBatchMode(false) failed:" << batchOff.errorMessage();
-            assignmentsCommitOk = false;
+        } else {
+            m_staging.flushAssignmentsToDaemon();
+            QDBusMessage apply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                        QStringLiteral("applyAssignmentChanges"));
+            if (apply.type() == QDBusMessage::ErrorMessage) {
+                qCWarning(lcCore) << "save: applyAssignmentChanges failed:" << apply.errorMessage();
+                Q_EMIT layoutOperationFailed(
+                    PzI18n::tr("Failed to apply assignment changes: %1").arg(apply.errorMessage()));
+                assignmentsCommitOk = false;
+            }
+            // Only drop batch mode if we actually entered it. ALWAYS attempt
+            // to drop — leaving the daemon in batch mode after a failure
+            // would break the next save attempt.
+            QDBusMessage batchOff =
+                DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                       QStringLiteral("setSaveBatchMode"), {false});
+            if (batchOff.type() == QDBusMessage::ErrorMessage) {
+                qCWarning(lcCore) << "save: setSaveBatchMode(false) failed:" << batchOff.errorMessage();
+                assignmentsCommitOk = false;
+            }
         }
     }
 

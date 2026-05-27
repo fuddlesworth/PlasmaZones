@@ -75,6 +75,14 @@ ColumnLayout {
     /** Suppress per-row add/remove animations while the whole list is
      *  cross-fading on drill-in/out. */
     property bool _suppressAccordion: false
+    // Legacy row-height multipliers — extracted from inline magic numbers
+    // to a single source so a future row-density tweak touches one place.
+    readonly property real backButtonHeight: Kirigami.Units.gridUnit * 2.6
+    readonly property real navRowHeight: Kirigami.Units.gridUnit * 2.2
+    // Active-row left-accent stripe width — Math.round so fractional DPRs
+    // (1.5×, 1.25×) don't yield sub-pixel widths that anti-alias to a
+    // washed-out half-pixel line.
+    readonly property int accentBarWidth: Math.round(Kirigami.Units.devicePixelRatio * 2.5)
 
     function drillInto(parentId) {
         // Short-circuit on either the already-displayed scope OR a
@@ -378,7 +386,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 // Match legacy row height for the back button (slightly
                 // taller than nav rows so it reads as a header).
-                implicitHeight: Kirigami.Units.gridUnit * 2.6
+                implicitHeight: root.backButtonHeight
                 leftPadding: Kirigami.Units.smallSpacing
                 rightPadding: Kirigami.Units.smallSpacing
                 Accessible.name: qsTr("Back")
@@ -522,7 +530,7 @@ ColumnLayout {
                     // than empty rows. `highlighted` is intentionally
                     // NOT used because we paint the background
                     // ourselves below.
-                    implicitHeight: _isDivider ? Kirigami.Units.largeSpacing : (Kirigami.Units.gridUnit * 2.2)
+                    implicitHeight: _isDivider ? Kirigami.Units.largeSpacing : root.navRowHeight
                     // Accessible.name is always the row's title — in
                     // compact mode the visible Label is hidden, so a
                     // screen reader would otherwise have no announce-
@@ -596,7 +604,7 @@ ColumnLayout {
                         Rectangle {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            width: Math.round(Kirigami.Units.devicePixelRatio * 2.5)
+                            width: root.accentBarWidth
                             height: parent.height * 0.5
                             radius: width / 2
                             color: Kirigami.Theme.highlightColor

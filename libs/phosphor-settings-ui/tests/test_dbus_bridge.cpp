@@ -89,6 +89,21 @@ private Q_SLOTS:
         const auto reply = bridge.callOn(QString(), QStringLiteral("m"));
         QCOMPARE(reply.type(), QDBusMessage::ErrorMessage);
     }
+
+    void rejectsCallOnEmptyObjectPath()
+    {
+        // Fourth branch of validateEndpoint — pin the rejection on an
+        // endpoint with empty objectPath. A regression that dropped this
+        // check would let a malformed bus call past validation.
+        DBusEndpoint ep;
+        ep.service = QStringLiteral("org.example.svc");
+        ep.objectPath = QString();
+        ep.interface = QStringLiteral("org.example.Iface");
+        DBusBridge bridge(ep);
+
+        const auto reply = bridge.call(QStringLiteral("anyMethod"));
+        QCOMPARE(reply.type(), QDBusMessage::ErrorMessage);
+    }
 };
 
 QTEST_MAIN(TestDBusBridge)

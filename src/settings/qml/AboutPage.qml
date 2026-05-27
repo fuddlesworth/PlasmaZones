@@ -59,7 +59,12 @@ PhosphorUi.AboutPageShell {
                     horizontalPadding: Kirigami.Units.largeSpacing
                     Accessible.name: i18n("What's New")
                     onClicked: {
-                        if (typeof window !== "undefined" && window.showWhatsNew)
+                        // Defensive truthy-check: this AboutPage is also used
+                        // by the standalone phosphor-settings-ui demo, which
+                        // doesn't define `showWhatsNew`. The JS-web `typeof`
+                        // pattern was unidiomatic — a plain truthy check on
+                        // the function reference suffices.
+                        if (window.showWhatsNew)
                             window.showWhatsNew();
 
                     }

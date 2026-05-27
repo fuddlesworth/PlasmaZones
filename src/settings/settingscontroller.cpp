@@ -168,14 +168,14 @@ SettingsController::SettingsController(QObject* parent)
     // and installs a QFileSystemWatcher so any subsequent disk changes
     // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
     m_localLayoutManager->loadLayouts();
-    // Force a synchronous recalc over the primary screen so manual layouts
-    // with fixed-geometry zones have a non-empty lastRecalcGeometry() —
-    // ZonesLayoutSource reads that to populate LayoutPreview::zones and
-    // referenceAspectRatio. Without this, settings-process previews render
-    // with zero-size rects for authored-pixel layouts. Daemon runs the
-    // same recalc in Daemon::init(); settings does it here because it owns
-    // an in-process PhosphorZones::LayoutRegistry independent of the daemon.
-    recalcLocalLayouts();
+    // `loadLayouts()` emits `layoutsChanged` synchronously, which the
+    // handler wired above already routes through `recalcLocalLayouts()`
+    // — so manual layouts with fixed-geometry zones have a non-empty
+    // `lastRecalcGeometry()` and ZonesLayoutSource populates
+    // LayoutPreview::zones / referenceAspectRatio without needing a
+    // second explicit call here. Daemon runs the same recalc in
+    // Daemon::init(); settings owns an in-process LayoutRegistry
+    // independent of the daemon and gets there via the signal path.
 
     // Load scripted algorithms so they appear in the algorithm dropdown.
     // The daemon owns its own AlgorithmRegistry + loader; the KCM runs in
@@ -232,14 +232,21 @@ SettingsController::SettingsController(QObject* parent)
     // spacing variations between call sites are harmless — but the
     // helper takes the un-normalised string so call sites can be
     // grep'd consistently.
-    const auto subscribeDaemonSignal = [this](const QString& interfaceName, const QString& signalName,
-                                              const char* slot) {
+    // Accumulate failed subscription tuples so the post-loop summary can
+    // surface ALL missing routes at once, rather than scattering one
+    // warning per failure across the boot log. Helps diagnose the
+    // "daemon not up yet at construct time" case where many signals
+    // miss together.
+    QStringList failedSubscriptions;
+    const auto subscribeDaemonSignal = [this, &failedSubscriptions](const QString& interfaceName,
+                                                                    const QString& signalName, const char* slot) {
         const bool ok = QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
                                                               QString(PhosphorProtocol::Service::ObjectPath),
                                                               interfaceName, signalName, this, slot);
         if (!ok) {
             qCWarning(PlasmaZones::lcCore)
                 << "SettingsController: failed to connect D-Bus signal" << signalName << "on" << interfaceName;
+            failedSubscriptions.append(interfaceName + QStringLiteral(".") + signalName);
         }
     };
 
@@ -527,6 +534,11 @@ SettingsController::SettingsController(QObject* parent)
     m_screenHelper.refreshScreens();
     connect(&m_screenHelper, &ScreenHelper::screensChanged, this, &SettingsController::screensChanged);
     connect(&m_screenHelper, &ScreenHelper::needsSave, this, [this]() {
+        // A daemon-driven screen refresh that fires while load()/save() is
+        // batching its own state-transitions must not flip the page dirty
+        // — the same guard every other dirty-tracking path uses.
+        if (m_loading || m_saving)
+            return;
         setNeedsSave(true);
     });
 
@@ -601,6 +613,19 @@ SettingsController::SettingsController(QObject* parent)
     // PhosphorSettingsUi integration — must run AFTER every page controller
     // has been constructed (the registry holds stable pointers to them).
     buildApplicationController();
+
+    // Summary if any D-Bus subscription dropped during ctor. Surfaces a
+    // single boot-time line listing every unwired route so the operator
+    // can quickly see "daemon was not up at settings-app start, these
+    // signals are silently dead" — far easier to diagnose than scattered
+    // per-call warnings throughout the log.
+    if (!failedSubscriptions.isEmpty()) {
+        qCWarning(PlasmaZones::lcCore)
+            << "SettingsController: " << failedSubscriptions.size()
+            << " D-Bus signal subscription(s) failed at construction — affected routes:"
+            << failedSubscriptions.join(QStringLiteral(", "))
+            << "— corresponding live-update features will be inert until the next settings-app launch.";
+    }
 
     // Initial loads
     scheduleLayoutLoad();
@@ -704,13 +729,18 @@ void SettingsController::beginExternalEdit(const QString& page)
     }
     // Nested begin without a prior end means the previous caller leaked
     // state — dirty tracking for subsequent changes would target the wrong
-    // page. Warn loudly (debug-assert in dev builds) and fall through so
-    // the new target wins.
+    // page. Warn loudly (debug-assert in dev builds) and DO NOT overwrite
+    // the existing target in release builds: silently replacing it would
+    // mis-route every subsequent dirty signal until the outer caller's
+    // matching endExternalEdit fires (at which point both targets are
+    // cleared anyway). Better to drop the inner begin and keep the outer
+    // target so the next edit still lands on a coherent page.
     if (!m_externalEditPage.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: nested call without endExternalEdit — previous target:"
-                                       << m_externalEditPage << "new target:" << resolved;
+                                       << m_externalEditPage << "new target:" << resolved << "(ignoring nested begin)";
         Q_ASSERT_X(false, "SettingsController::beginExternalEdit",
                    "Nested call without endExternalEdit. Wrap sidebar/global edits with matched begin/end pairs.");
+        return;
     }
     m_externalEditPage = resolved;
 }

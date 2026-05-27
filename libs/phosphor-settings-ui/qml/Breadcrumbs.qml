@@ -32,7 +32,18 @@ RowLayout {
     //  (or two pages mutually parenting each other) would otherwise
     //  freeze the UI thread on first render.
     readonly property int _maxParentChainHops: 32
+    // Bumped whenever the registry emits pageRegistered — gives the
+    // `segments` binding below a dependency to track so a late-registered
+    // page whose id matches `currentPageId` (or any ancestor on the
+    // chain) refreshes the rendered crumb trail. Without this, the
+    // binding only re-evaluates when `currentPageId` changes and a
+    // post-registration ancestor title update would never reach QML.
+    property int _registryTick: 0
     readonly property var segments: {
+        // Touch _registryTick so the binding declares its dependency on
+        // post-registration updates. The value isn't read meaningfully
+        // — it's the change-notify that matters.
+        void root._registryTick;
         const out = [];
         // Object.create(null) gives a prototype-less map, so page ids
         // matching built-in property names ("constructor", "toString",
@@ -58,6 +69,14 @@ RowLayout {
     }
 
     spacing: Kirigami.Units.smallSpacing
+
+    Connections {
+        function onPageRegistered() {
+            root._registryTick = root._registryTick + 1;
+        }
+
+        target: root.controller.registry
+    }
 
     Repeater {
         model: root.segments

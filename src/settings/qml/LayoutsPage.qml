@@ -340,7 +340,7 @@ ColumnLayout {
                                     deleteConfirmDialog.open();
                                 }
                                 onContextMenuRequested: (layout) => {
-                                    window.showLayoutContextMenu(layout);
+                                    window.layoutContextMenu.showForLayout(layout);
                                 }
                             }
 

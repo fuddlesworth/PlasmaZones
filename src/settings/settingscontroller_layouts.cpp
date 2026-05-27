@@ -297,6 +297,13 @@ namespace {
 // Path validation for import/export dialogs. User-driven calls come
 // from QFileDialog (already canonical), but the methods are
 // Q_INVOKABLE so a compromised page resource — or a future --page
+} // namespace
+
+// Static — promoted out of the anonymous namespace so the cross-TU
+// `settingscontroller_session.cpp` (import/export-all-settings) can
+// reuse the same defence-in-depth path sanitiser. Definition mirrors
+// the prior file-local helper.
+//
 // CLI flag — could pass arbitrary strings. Defence-in-depth:
 //   * Reject paths containing NUL (POSIX path corruption / D-Bus
 //     marshalling break).
@@ -305,7 +312,7 @@ namespace {
 //   * Reject paths beginning with `~` (untilde resolution is QML's
 //     responsibility, not ours).
 // Returns the canonical path or empty on rejection. Caller logs.
-QString sanitizeIOPath(const QString& raw)
+QString SettingsController::sanitizeIOPath(const QString& raw)
 {
     if (raw.isEmpty() || raw.contains(QLatin1Char('\0'))) {
         return {};
@@ -322,7 +329,6 @@ QString sanitizeIOPath(const QString& raw)
     }
     return clean;
 }
-} // namespace
 
 void SettingsController::importLayout(const QString& filePath)
 {

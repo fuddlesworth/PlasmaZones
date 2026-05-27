@@ -16,8 +16,32 @@ class TestLocalizedContext : public QObject
 private Q_SLOTS:
     void initialContextMatchesApplicationName()
     {
+        // Set an explicit applicationName so the test actually verifies
+        // the fallback contract (translationContext follows applicationName
+        // when no explicit override is set) rather than comparing two
+        // empty strings.
+        const QString prev = QCoreApplication::applicationName();
+        QCoreApplication::setApplicationName(QStringLiteral("test-app-localized"));
+        {
+            LocalizedContext ctx;
+            QCOMPARE(ctx.translationContext(), QStringLiteral("test-app-localized"));
+        }
+        QCoreApplication::setApplicationName(prev);
+    }
+
+    void applicationNameChangeEmitsNotify()
+    {
+        // Confirms the ctor-time connect to QCoreApplication::applicationNameChanged:
+        // a late setApplicationName must re-fire translationContextChanged when
+        // no explicit override is set.
+        const QString prev = QCoreApplication::applicationName();
+        QCoreApplication::setApplicationName(QStringLiteral("test-app-pre"));
         LocalizedContext ctx;
-        QCOMPARE(ctx.translationContext(), QCoreApplication::applicationName());
+        QSignalSpy spy(&ctx, &LocalizedContext::translationContextChanged);
+        QCoreApplication::setApplicationName(QStringLiteral("test-app-post"));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(ctx.translationContext(), QStringLiteral("test-app-post"));
+        QCoreApplication::setApplicationName(prev);
     }
 
     void i18nReturnsInputWhenNoTranslatorInstalled()

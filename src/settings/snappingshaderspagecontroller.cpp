@@ -55,7 +55,29 @@ void SnappingShadersPageController::connectLayoutSignals()
     // membership check spares the per-call function-prologue cost and,
     // more importantly, scales sublinearly when contentsChanged fires
     // repeatedly during a bulk-edit (drag-reorder, import).
+    //
+    // Stale-entry eviction: `m_wiredLayouts` is drained by
+    // `onWiredLayoutDestroyed` (wired below) which assumes "removed from
+    // registry == destroyed". The registry's contract is that layouts
+    // are QObject-parented to it, so removal => destruction in the same
+    // tick. Belt-and-braces: also drop any tracked entry not present in
+    // the current registry snapshot, so a future registry refactor that
+    // detaches without destroying (e.g. cache-eviction) doesn't grow
+    // `m_wiredLayouts` unbounded.
     const QVector<PhosphorZones::Layout*> layouts = m_layoutRegistry->layouts();
+    const QSet<PhosphorZones::Layout*> live(layouts.cbegin(), layouts.cend());
+    for (auto it = m_wiredLayouts.begin(); it != m_wiredLayouts.end();) {
+        auto* tracked = qobject_cast<PhosphorZones::Layout*>(*it);
+        if (!tracked || !live.contains(tracked)) {
+            disconnect(*it, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed);
+            if (tracked)
+                disconnect(tracked, &PhosphorZones::Layout::shaderIdChanged, this,
+                           &SnappingShadersPageController::onLayoutShaderIdChanged);
+            it = m_wiredLayouts.erase(it);
+        } else {
+            ++it;
+        }
+    }
     for (PhosphorZones::Layout* layout : layouts) {
         if (!layout)
             continue;

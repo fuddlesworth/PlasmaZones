@@ -50,16 +50,26 @@ bool SettingsStagingDomain::isDirty() const
 
 void SettingsStagingDomain::apply()
 {
-    if (m_controller) {
-        m_controller->save();
+    if (!m_controller || m_inFlight) {
+        // m_inFlight short-circuits a re-entrant Apply (e.g. user clicks
+        // Apply twice during the singleShot reset window of save()'s
+        // m_saving flag). The second save would run against stale staging
+        // state still mid-flush by the first.
+        return;
     }
+    m_inFlight = true;
+    m_controller->save();
+    m_inFlight = false;
 }
 
 void SettingsStagingDomain::discard()
 {
-    if (m_controller) {
-        m_controller->load();
+    if (!m_controller || m_inFlight) {
+        return;
     }
+    m_inFlight = true;
+    m_controller->load();
+    m_inFlight = false;
 }
 
 } // namespace PlasmaZones

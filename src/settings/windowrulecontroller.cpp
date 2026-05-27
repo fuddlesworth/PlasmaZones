@@ -502,7 +502,24 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
     // — the matchSummary will distinguish the clone in that case (and the
     // user typically renames immediately on duplicate anyway).
     if (!source.name.isEmpty()) {
-        clone.name = PzI18n::tr("%1 (copy)").arg(source.name);
+        // Walk existing rules and pick a free suffix so three duplicates
+        // of the same source land as "X (copy)", "X (copy) 2", "X (copy) 3"
+        // instead of three identical "X (copy)" labels the user can't
+        // distinguish.
+        const QString base = PzI18n::tr("%1 (copy)").arg(source.name);
+        QString candidate = base;
+        int n = 2;
+        const auto nameTaken = [this](const QString& s) {
+            for (const WindowRule& r : m_model.rules()) {
+                if (r.name == s)
+                    return true;
+            }
+            return false;
+        };
+        while (nameTaken(candidate)) {
+            candidate = base + QStringLiteral(" %1").arg(n++);
+        }
+        clone.name = candidate;
     }
     if (!m_model.addRule(clone)) {
         qCWarning(lcConfig) << "WindowRuleController::duplicateRule: model rejected clone" << clone.id.toString();
@@ -567,8 +584,34 @@ bool WindowRuleController::setRuleEnabled(const QString& ruleId, bool enabled)
 
 bool WindowRuleController::moveRule(const QString& ruleId, const QString& beforeRuleId)
 {
+    // Capture order BEFORE the move so a no-op move (drop a rule on its
+    // own slot, or the slot immediately after — the model accepts both
+    // and returns true) doesn't flip the dirty flag. The model has its
+    // own no-op short-circuit but reports success either way; the user-
+    // visible "drag-drop back to where it started" should never pollute
+    // the dirty state.
+    QList<QUuid> before;
+    before.reserve(m_model.rules().size());
+    for (const WindowRule& r : m_model.rules()) {
+        before.append(r.id);
+    }
     if (!m_model.moveRule(QUuid::fromString(ruleId), QUuid::fromString(beforeRuleId))) {
         return false;
+    }
+    bool actuallyMoved = false;
+    const auto& after = m_model.rules();
+    if (after.size() != before.size()) {
+        actuallyMoved = true;
+    } else {
+        for (int i = 0; i < after.size(); ++i) {
+            if (after.at(i).id != before.at(i)) {
+                actuallyMoved = true;
+                break;
+            }
+        }
+    }
+    if (!actuallyMoved) {
+        return true;
     }
     renormalizePriorities();
     setDirty(true);

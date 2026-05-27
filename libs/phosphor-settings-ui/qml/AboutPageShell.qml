@@ -72,7 +72,10 @@ Kirigami.ScrollablePage {
     property string license: ""
     property string homepageUrl: ""
 
-    title: qsTr("About")
+    // Page title — defaults to "About <appName>" when appName is set,
+    // else plain "About". Consumers can override directly if a fully
+    // custom title is desired.
+    title: appName ? qsTr("About %1").arg(appName) : qsTr("About")
 
     ColumnLayout {
         // Width binding pattern. `root.width - root.leftPadding -

@@ -37,6 +37,11 @@ private:
     /// emit so per-page transitions that do not flip the global
     /// needsSave() bool do not spuriously re-fire it.
     bool m_lastDirty = false;
+    /// Re-entrancy guard for apply()/discard(). A second invocation
+    /// while the controller's save()/load() is still flushing would
+    /// run against stale staging state — short-circuit until the
+    /// outer call returns.
+    bool m_inFlight = false;
 };
 
 } // namespace PlasmaZones

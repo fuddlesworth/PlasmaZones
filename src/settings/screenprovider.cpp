@@ -12,9 +12,9 @@
 #include "config/settings.h"
 #include "core/constants.h"
 #include "core/utils.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorScreens/VirtualScreen.h>
 
 namespace PlasmaZones {
 
@@ -34,6 +34,13 @@ QList<ScreenInfo> fetchScreens()
     QDBusMessage screenReply =
         DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getScreens"));
 
+    // Track whether ANY per-screen getScreenInfo() reply succeeded. If every
+    // per-screen probe fails (daemon up enough to answer getScreens but
+    // unable to answer getScreenInfo — transient mid-startup or partial
+    // crash), `result` would otherwise be populated with zero-geometry
+    // entries that mislead the picker UI. Falling back to Qt's screen list
+    // in that case yields a useful (even if D-Bus-poor) view.
+    bool anyInfoReplySucceeded = false;
     if (screenReply.type() == QDBusMessage::ReplyMessage && !screenReply.arguments().isEmpty()) {
         const QStringList screenNames = screenReply.arguments().first().toStringList();
 
@@ -55,6 +62,7 @@ QList<ScreenInfo> fetchScreens()
                                                             QStringLiteral("getScreenInfo"), {screenName});
 
             if (infoReply.type() == QDBusMessage::ReplyMessage && !infoReply.arguments().isEmpty()) {
+                anyInfoReplySucceeded = true;
                 QString infoJson = infoReply.arguments().first().toString();
                 QJsonDocument doc = QJsonDocument::fromJson(infoJson.toUtf8());
                 if (!doc.isNull() && doc.isObject()) {
@@ -76,9 +84,16 @@ QList<ScreenInfo> fetchScreens()
                     if (jsonObj.contains(::PhosphorZones::ZoneJsonKeys::Name))
                         info.connectorName = jsonObj[::PhosphorZones::ZoneJsonKeys::Name].toString();
                     if (jsonObj.value(JsonKeys::IsVirtualScreen).toBool()) {
-                        info.isVirtualScreen = true;
-                        info.virtualIndex = PhosphorIdentity::VirtualScreenId::extractIndex(screenName);
-                        info.virtualDisplayName = jsonObj.value(JsonKeys::VirtualDisplayName).toString();
+                        const int idx = PhosphorIdentity::VirtualScreenId::extractIndex(screenName);
+                        // Daemon claimed virtual but the screenName isn't a
+                        // parseable virtual id — treat as physical rather
+                        // than persisting a sentinel index that would render
+                        // as garbage in the picker.
+                        if (idx >= 0) {
+                            info.isVirtualScreen = true;
+                            info.virtualIndex = idx;
+                            info.virtualDisplayName = jsonObj.value(JsonKeys::VirtualDisplayName).toString();
+                        }
                     }
                 } else {
                     info.screenId = screenName;
@@ -91,8 +106,13 @@ QList<ScreenInfo> fetchScreens()
         }
     }
 
-    // Fallback: if no screens from daemon, get from Qt
-    if (result.isEmpty()) {
+    // Fallback: if no screens from daemon (getScreens returned empty or
+    // errored), OR every per-screen getScreenInfo() call failed (we have
+    // names but no usable metadata), get from Qt. The second arm catches
+    // a partial-daemon-failure where surfacing zero-geometry entries would
+    // mislead the picker.
+    if (result.isEmpty() || !anyInfoReplySucceeded) {
+        result.clear();
         QScreen* primaryScreen = QGuiApplication::primaryScreen();
         for (QScreen* screen : QGuiApplication::screens()) {
             ScreenInfo info;

@@ -398,6 +398,9 @@ private:
     ISettings* m_settings = nullptr;
     QString m_userProfilesDirOverride; ///< Empty = use XDG default
 
+    // Sub-services owned via QObject-parent: both are constructed with
+    // `this` as parent so ~AnimationsPageController tears them down
+    // automatically. No manual delete; no QPointer needed.
     AnimationPresetLibrary* m_presets = nullptr;
     MotionSetStore* m_motionSets = nullptr;
 

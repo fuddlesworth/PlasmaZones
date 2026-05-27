@@ -301,8 +301,14 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // Without this, a future leaf added to a virtual parent only would
     // silently miss the top-level dirty propagation.
     //
-    // Keep the per-group leaf lists in sync with the matching
-    // `_childItems` entries in src/settings/qml/Main.qml.
+    // Keep the per-group leaf lists in sync with the parentId arguments
+    // in `buildApplicationController()` above — that function is the
+    // registry's source of truth for the page tree; this static map
+    // exists because `isPageDirty()` is a hot path and the per-call walk
+    // over `m_app->pageRegistry()->allPages()` to derive the parent→leaf
+    // mapping would otherwise re-scan every page on every dirty-check.
+    // (The historical "_childItems" reference in Main.qml is obsolete —
+    // the chrome now consumes registry topology directly via Sidebar.qml.)
     static const QSet<QString> kAnimationsSurfacesChildren{
         QStringLiteral("animations-windows"),  QStringLiteral("animations-osds"),
         QStringLiteral("animations-overlays"), QStringLiteral("animations-side-panels"),
@@ -328,8 +334,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // dirty state from their leaves — without these entries the
         // sidebar's collapsed dirty badge stays cold even when a
         // child page is dirty. Mirrors the registry topology in
-        // buildApplicationController() and the legacy _childItems
-        // map in src/settings/qml/Main.qml.
+        // buildApplicationController() above.
         {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
         {QStringLiteral("rules"), {QStringLiteral("window-rules"), QStringLiteral("exclusions")}},
     };

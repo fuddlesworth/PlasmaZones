@@ -93,17 +93,24 @@ Kirigami.ApplicationWindow {
             Sidebar {
                 id: sidebar
 
+                // Single intermediate property drives all three Layout
+                // width hints — one Behavior+animation runs per
+                // compact/non-compact transition instead of three
+                // concurrent ones doing identical work. Pattern
+                // mirrors UnsavedChangesFooter.qml's expansion driver.
+                readonly property real targetWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
+
                 Layout.fillHeight: true
                 // Sidebar width tracks sidebarCompact: 12 gridUnits at
                 // normal width (matches legacy), collapses to 3
                 // gridUnits in compact mode (icon-only rail). All
-                // three Layout width hints stay in lockstep so the
-                // animation lands at a clean width and inner-child
-                // implicitWidth can't push the rail wider during the
-                // transition.
-                Layout.preferredWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
-                Layout.minimumWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
-                Layout.maximumWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
+                // three Layout width hints stay in lockstep via
+                // targetWidth so the animation lands at a clean width
+                // and inner-child implicitWidth can't push the rail
+                // wider during the transition.
+                Layout.preferredWidth: targetWidth
+                Layout.minimumWidth: targetWidth
+                Layout.maximumWidth: targetWidth
                 controller: root.controller
                 compact: root.sidebarCompact
 
@@ -111,24 +118,10 @@ Kirigami.ApplicationWindow {
                 // Direction is read from `root.sidebarCompact` (the
                 // same flag that drove the width assignment above) so
                 // the easing leg is decided synchronously — reading
-                // `Layout.preferredWidth` inside the Behavior would
-                // re-evaluate during the animation and converge to
-                // the wrong leg as the value approached its target.
-                Behavior on Layout.preferredWidth {
-                    PhosphorMotionAnimation {
-                        profile: !root.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
-                    }
-
-                }
-
-                Behavior on Layout.minimumWidth {
-                    PhosphorMotionAnimation {
-                        profile: !root.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
-                    }
-
-                }
-
-                Behavior on Layout.maximumWidth {
+                // `targetWidth` inside the Behavior would re-evaluate
+                // during the animation and converge to the wrong leg
+                // as the value approached its target.
+                Behavior on targetWidth {
                     PhosphorMotionAnimation {
                         profile: !root.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
                     }

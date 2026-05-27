@@ -87,6 +87,14 @@ void ApplicationController::registerDomain(StagingDomain* domain)
 
 void ApplicationController::applyAll()
 {
+    // Best-effort, no rollback: runs `apply()` on every dirty domain in
+    // registration order. If domain N throws or fails internally,
+    // domains 1..N-1 stay applied and N+1..M get their normal apply
+    // call. StagingDomain::apply has a `void` return, so a domain that
+    // wants to surface a partial-failure must do so via its own
+    // signalling (see PlasmaZones::SettingsStagingDomain for an example
+    // that keeps `isDirty()` true on failure so the global dirty flag
+    // remains set and the user can retry).
     for (const auto& domain : m_domains) {
         if (domain && domain->isDirty()) {
             domain->apply();
@@ -97,6 +105,7 @@ void ApplicationController::applyAll()
 
 void ApplicationController::discardAll()
 {
+    // Same best-effort semantics as applyAll() — see above.
     for (const auto& domain : m_domains) {
         if (domain && domain->isDirty()) {
             domain->discard();
@@ -193,8 +202,8 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
     // indicates a cycle in the registry's parentId graph (programmer
     // error). Warn so the bug surfaces instead of silently producing a
     // truncated chain.
-    qWarning() << "ApplicationController::parentChainFor: cycle or depth>" << kMaxParentChainHops
-               << "in registry for id" << id;
+    qWarning() << "ApplicationController::parentChainFor: cycle in registry, or depth exceeded the"
+               << kMaxParentChainHops << "hop cap walking up from id" << id;
     return chain;
 }
 
@@ -227,6 +236,11 @@ void ApplicationController::onDomainDirtyChanged()
 
 void ApplicationController::recomputeDirty()
 {
+    // Compact null QPointers — a domain that was destroyed while tracked
+    // leaves a null entry in m_domains. The contract is "domains outlive
+    // the controller" but a poorly-ordered teardown shouldn't leak entries
+    // across the lifetime of a long-running app.
+    m_domains.removeAll(QPointer<StagingDomain>(nullptr));
     bool any = false;
     for (const auto& domain : m_domains) {
         if (domain && domain->isDirty()) {

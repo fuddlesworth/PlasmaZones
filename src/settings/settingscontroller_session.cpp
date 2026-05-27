@@ -263,7 +263,12 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
     Q_UNUSED(screenId)
     Q_UNUSED(layoutId)
     Q_UNUSED(virtualDesktop)
-    // External assignment change (hotkey, script, toggle) — refresh overview
+    // External assignment change (hotkey, script, toggle) — refresh overview.
+    // The daemon-side broadcast carries (screenId, layoutId, virtualDesktop)
+    // but every current QML consumer reacts by re-querying full state, so
+    // the no-arg signal is sufficient and keeps the public Q_SIGNAL surface
+    // small. If a future consumer needs per-screen targeting, widen the
+    // signal in lockstep with the QML side (single-signal source of truth).
     Q_EMIT screenLayoutChanged();
 }
 
@@ -341,6 +346,14 @@ bool SettingsController::exportAllSettings(const QString& filePath)
     if (filePath.isEmpty()) {
         return false;
     }
+    // Defence-in-depth: same sanitiser the per-layout import/export uses.
+    // A QML or D-Bus caller passing a path with `..` traversal segments,
+    // an embedded NUL, or a leading `~` is treated as a programmer error.
+    const QString safeFilePath = sanitizeIOPath(filePath);
+    if (safeFilePath.isEmpty()) {
+        qCWarning(lcCore) << "exportAllSettings: refusing unsafe path" << filePath;
+        return false;
+    }
     // Flush current in-memory settings to disk so the exported file reflects
     // the actual current state, not the last-saved snapshot.
     m_settings.save();
@@ -350,19 +363,24 @@ bool SettingsController::exportAllSettings(const QString& filePath)
         return false;
     }
     // Remove destination if it exists (QFile::copy won't overwrite)
-    if (QFile::exists(filePath)) {
-        QFile::remove(filePath);
+    if (QFile::exists(safeFilePath)) {
+        QFile::remove(safeFilePath);
     }
-    bool ok = QFile::copy(configPath, filePath);
+    bool ok = QFile::copy(configPath, safeFilePath);
     if (!ok) {
-        qCWarning(PlasmaZones::lcCore) << "Failed to export settings to:" << filePath;
+        qCWarning(PlasmaZones::lcCore) << "Failed to export settings to:" << safeFilePath;
     }
     return ok;
 }
 
 bool SettingsController::importAllSettings(const QString& filePath)
 {
-    if (filePath.isEmpty() || !QFile::exists(filePath)) {
+    if (filePath.isEmpty()) {
+        return false;
+    }
+    const QString safeFilePath = sanitizeIOPath(filePath);
+    if (safeFilePath.isEmpty() || !QFile::exists(safeFilePath)) {
+        qCWarning(lcCore) << "importAllSettings: refusing unsafe or missing path" << filePath;
         return false;
     }
 
@@ -372,7 +390,7 @@ bool SettingsController::importAllSettings(const QString& filePath)
     // If so, run the migration converter to produce a JSON file.
     bool isLegacyIni = false;
     {
-        QFile f(filePath);
+        QFile f(safeFilePath);
         if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
             // Read enough bytes to find the first non-whitespace character.
             // JSON files start with '{' (or '[' for arrays, though config is always an object).
@@ -422,44 +440,45 @@ bool SettingsController::importAllSettings(const QString& filePath)
         if (QFile::exists(configPath)) {
             QFile::remove(configPath);
         }
-        ok = PlasmaZones::ConfigMigration::migrateIniToJson(filePath, configPath);
+        ok = PlasmaZones::ConfigMigration::migrateIniToJson(safeFilePath, configPath);
         if (!ok) {
-            qCWarning(PlasmaZones::lcCore) << "Failed to convert legacy INI file:" << filePath;
+            qCWarning(PlasmaZones::lcCore) << "Failed to convert legacy INI file:" << safeFilePath;
         }
     } else {
         // Validate JSON before overwriting current config
-        QFile importFile(filePath);
+        QFile importFile(safeFilePath);
         if (!importFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-            qCWarning(PlasmaZones::lcCore) << "Failed to open import file:" << filePath;
+            qCWarning(PlasmaZones::lcCore) << "Failed to open import file:" << safeFilePath;
             ok = false;
         } else {
             QJsonParseError parseErr;
             QJsonDocument importDoc = QJsonDocument::fromJson(importFile.readAll(), &parseErr);
             if (parseErr.error != QJsonParseError::NoError || !importDoc.isObject()) {
-                qCWarning(PlasmaZones::lcCore) << "Invalid JSON in import file:" << filePath << parseErr.errorString();
+                qCWarning(PlasmaZones::lcCore)
+                    << "Invalid JSON in import file:" << safeFilePath << parseErr.errorString();
                 ok = false;
             } else {
                 // Valid JSON — copy to config path
                 if (QFile::exists(configPath)) {
                     QFile::remove(configPath);
                 }
-                ok = QFile::copy(filePath, configPath);
+                ok = QFile::copy(safeFilePath, configPath);
                 if (!ok) {
-                    qCWarning(PlasmaZones::lcCore) << "Failed to import settings from:" << filePath;
+                    qCWarning(PlasmaZones::lcCore) << "Failed to import settings from:" << safeFilePath;
                 }
             }
         }
     }
 
     if (!ok) {
-        // Restore backup on failure. Use rename-then-verify so we never
-        // delete the (possibly still-good) configPath without proof the
-        // backup is in place — a failed rename would otherwise leave the
-        // user with no config file at all.
+        // Restore backup on failure. `QFile::rename` is atomic on POSIX
+        // (the target is replaced via `rename(2)` which won't fail
+        // because the destination exists), so we don't need to
+        // `remove(configPath)` first — and skipping the remove means a
+        // pre-rename EACCES on configPath doesn't leave the user with
+        // NO config file. If the atomic rename itself fails, the backup
+        // stays put for manual recovery.
         if (QFile::exists(backupPath)) {
-            if (QFile::exists(configPath)) {
-                QFile::remove(configPath);
-            }
             if (!QFile::rename(backupPath, configPath)) {
                 qCWarning(PlasmaZones::lcCore)
                     << "Failed to restore config from backup after failed import. Backup remains at:" << backupPath;

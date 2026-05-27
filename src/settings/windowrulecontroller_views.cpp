@@ -90,6 +90,11 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     // total cost is O(rules × actions + screens) rather than O(screens × rules
     // × actions). A screen with no pinned rule simply never gets an entry and
     // falls through to the default "not assigned" tile below.
+    //
+    // Rebuilt on every QML rebind (no cache). Rule counts in practice are
+    // O(10s), so the recompute cost is negligible — if a user with O(100s)
+    // of rules surfaces, add a cache here invalidated on m_model::dataChanged
+    // / rowsInserted / rowsRemoved / modelReset.
     struct Summary
     {
         int ruleCount = 0;

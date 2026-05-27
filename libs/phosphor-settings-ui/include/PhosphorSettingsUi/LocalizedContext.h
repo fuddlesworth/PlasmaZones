@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
+#include <QByteArray>
 #include <QObject>
 #include <QString>
 #include <QtQml/qqmlregistration.h>
@@ -61,7 +62,13 @@ Q_SIGNALS:
     void translationContextChanged();
 
 private:
+    /// Cached UTF-8 form of `effective context` used by every i18n*() call.
+    /// Cleared on setTranslationContext() and on applicationNameChanged.
+    /// Mutable because the cache is lazily filled from a const accessor.
+    QByteArray cachedEffectiveContext() const;
+
     QString m_context;
+    mutable QByteArray m_effectiveContextCache;
 };
 
 } // namespace PhosphorSettingsUi

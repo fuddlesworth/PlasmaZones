@@ -26,7 +26,7 @@ their dependency. `AnimationsPageController` is the lone consumer of
 
 **Scope of work:**
 
-- `ISettings` (`src/core/isettings.h`, 457 lines, 218 existing pure virtuals)
+- `ISettings` (`src/core/isettings.h`, ~457 lines, ~57 existing pure virtuals)
   needs to grow ~100 additional pure virtual getter+setter pairs to cover the
   editor / general / snapping-appearance / snapping-behavior / tiling-*
   surface those six controllers use.
@@ -181,11 +181,11 @@ shows a placeholder instead of raw UUIDs.
 
 ## 7. Sidebar.qml extraction (B9 — LOW)
 
-**Finding:** `libs/phosphor-settings-ui/qml/Sidebar.qml` is at 778 lines
-(was 714 at original audit), even closer to the 800-line cap. The
-ItemDelegate `delegate: ...` block (~250 lines) is a natural extraction
-point. Reference symbols rather than line numbers to avoid further
-drift — find via `grep -n "delegate:" Sidebar.qml`.
+**Finding:** `libs/phosphor-settings-ui/qml/Sidebar.qml` sits near the
+800-line cap (verify with `wc -l`). The ItemDelegate `delegate: ...`
+block (~250 lines) is a natural extraction point. Reference symbols
+rather than line numbers to avoid further drift — find via
+`grep -n "delegate:" Sidebar.qml`.
 
 **Suggested approach:**
 
@@ -213,19 +213,20 @@ handlers.
 
 ---
 
-## 9. PageAdapter per-page dirty tracking (D6 — by design, document)
+## 9. PageAdapter per-page dirty tracking (D6 — CLOSED, rationale in headers)
 
-**Status:** `PageAdapter::isDirty()` always returns `false` and apply/discard
-are no-ops. The reviewer flagged this as broken; the design comment makes
-clear it's intentional — PlasmaZones centralises dirty tracking in
-`SettingsStagingDomain`, and PageAdapters are framework-identity wrappers
-that don't participate in per-page dirty.
+**Resolution:** `PageAdapter::isDirty()` always returns `false` and apply/discard
+are no-ops by design. The trade-off is documented in both
+`src/settings/pageadapter.h` and `src/settings/pageadapter.cpp` (which
+cross-references `src/settings/settingsstagingdomain.h`). PlasmaZones
+centralises dirty tracking in `SettingsStagingDomain`; PageAdapters are
+framework-identity wrappers that don't participate in per-page dirty.
 
-**Action:** None. The trade-off is documented in `src/settings/pageadapter.h`
-and `src/settings/settingsstagingdomain.h`. If a future consumer of the lib
-needs per-page dirty UX, they're not blocked — `PageController` (which is
-what `PageAdapter` derives from) supports per-page dirty natively, and the
-animations page demonstrates the pattern.
+Future consumers of the lib that need per-page dirty UX are not blocked
+— `PageController` (which `PageAdapter` derives from) supports per-page
+dirty natively, and the animations page demonstrates the pattern.
+
+**Action:** None — closed.
 
 ---
 
