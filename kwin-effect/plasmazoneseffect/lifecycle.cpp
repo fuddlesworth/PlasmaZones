@@ -491,6 +491,22 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // In KWin 6, use virtualScreenGeometryChanged (not per-screen signal)
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, m_screenChangeHandler.get(),
             &ScreenChangeHandler::slotScreenGeometryChanged);
+
+    // Discussion #527 follow-up: latch the screen-change flag the instant KWin
+    // tells us an output appeared or disappeared. KWin fires screenAdded /
+    // screenRemoved BEFORE the per-window outputChanged signals it emits for
+    // windows it reassigns as part of the layout change, so this beats the
+    // race where outputChanged would reach the autotile-delegation guard in
+    // window_lifecycle.cpp without isScreenChangeInProgress() set — and
+    // when KWin shifts a remaining monitor's x-offset on the second add
+    // (DPMS wake of a dual-monitor setup), oldScreenStillConnected returns
+    // true and is no help on its own. slotScreenLayoutChanged sets the same
+    // pending flag + debounce that virtualScreenGeometryChanged eventually
+    // would, so the existing settle path is unchanged once it catches up.
+    connect(KWin::effects, &KWin::EffectsHandler::screenAdded, m_screenChangeHandler.get(),
+            &ScreenChangeHandler::slotScreenLayoutChanged);
+    connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, m_screenChangeHandler.get(),
+            &ScreenChangeHandler::slotScreenLayoutChanged);
     // Invalidate screen ID cache and refresh virtual screen definitions on screen changes
     // (connector names may be reassigned, physical screen geometry changes invalidate
     // virtual screen absolute geometry)

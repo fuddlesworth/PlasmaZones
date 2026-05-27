@@ -71,6 +71,17 @@ public Q_SLOTS:
     void slotScreenGeometryChanged();
     void slotReapplyWindowGeometriesRequested();
 
+    /// Latch the screen-change-in-progress flag as soon as KWin emits
+    /// screenAdded / screenRemoved, before the per-window outputChanged
+    /// signals it fires for windows reassigned by the layout change can
+    /// reach @ref isScreenChangeInProgress checks elsewhere. Closes the
+    /// race between outputChanged and virtualScreenGeometryChanged
+    /// (discussion #527 follow-up). The 500 ms debounce + client-area
+    /// report scheduling mirror @ref slotScreenGeometryChanged so the
+    /// usual settle path still runs once virtualScreenGeometryChanged
+    /// catches up.
+    void slotScreenLayoutChanged();
+
     /// Connected to `EffectsHandler::windowClosed` — schedules a work-area
     /// report when @p w is a panel (dock) so the strut it freed reaches the
     /// daemon. A no-op for non-dock windows.

@@ -119,6 +119,29 @@ void ScreenChangeHandler::applyScreenGeometryChange()
     fetchAndApplyWindowGeometries();
 }
 
+void ScreenChangeHandler::slotScreenLayoutChanged()
+{
+    // KWin emits screenAdded / screenRemoved before per-window outputChanged
+    // signals for windows it reassigns when an output appears or disappears.
+    // virtualScreenGeometryChanged — which the geometry-debounce slot above
+    // listens for — fires later in the same cascade, leaving a window where
+    // outputChanged can be processed with no screen-change flag set. The
+    // guard in PlasmaZonesEffect's outputChanged lambda (window_lifecycle.cpp)
+    // depends on isScreenChangeInProgress() to recognize involuntary moves
+    // when oldScreenStillConnected is true (DPMS-wake layout shift onto a
+    // monitor that simply moved to a new x-offset rather than disappearing),
+    // so latch the flag at the earliest point KWin tells us anything is
+    // happening to the output set.
+    m_pendingScreenChange = true;
+    m_screenChangeDebounce.start();
+
+    // A real layout change also moves panels — re-push the work area for the
+    // same reason slotScreenGeometryChanged does. Coalesces via the queued
+    // continuation, so a burst of screenAdded / screenRemoved + a trailing
+    // virtualScreenGeometryChanged collapse into one client-area report.
+    scheduleClientAreaReport();
+}
+
 void ScreenChangeHandler::slotReapplyWindowGeometriesRequested()
 {
     qCInfo(lcScreenChange) << "Daemon requested re-apply of window geometries (e.g. after panel editor close)";
