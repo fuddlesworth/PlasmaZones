@@ -122,7 +122,7 @@ target_compile_definitions(PhosphorSettingsUi PRIVATE
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# QML Module — org.phosphor.settings.ui (STATIC, in-tree linkable)
+# QML Module — org.phosphor.settings.ui (STATIC, IN-TREE LINKABLE ONLY)
 #
 # The C++ library above intentionally avoids Qt6::Qml/Quick so non-QML
 # consumers (e.g. headless tests) stay light. The QML module target
@@ -131,6 +131,29 @@ target_compile_definitions(PhosphorSettingsUi PRIVATE
 # into the org.phosphor.settings.ui module — no separate foreigntypes
 # .cpp is needed because every exposed type lives in this lib's own
 # headers.
+#
+# IMPORTANT CONSUMPTION NOTE:
+#
+# This QML module is a STATIC archive. The `PhosphorSettingsUi::PhosphorSettingsUiQml`
+# ALIAS works inside this source tree (when consumed via add_subdirectory).
+# It is NOT installed and NOT added to the `PhosphorSettingsUiTargets`
+# export set, so an out-of-tree consumer doing `find_package(PhosphorSettingsUi)`
+# + `target_link_libraries(... PhosphorSettingsUi::PhosphorSettingsUiQml)`
+# will fail at configure time with "Target ... not found".
+#
+# Out-of-tree consumers must either:
+#   * Add this directory as a git submodule and consume via add_subdirectory,
+#     OR
+#   * Wait for the SHARED-variant install path (see the phosphor-animation
+#     CMakeLists.txt PHOSPHOR_ANIMATION_QML_INSTALL pattern for the
+#     reference implementation: a parallel `PhosphorSettingsUiQmlShared`
+#     target whose plugin .so + qmldir + qmltypes are installed under
+#     `${KDE_INSTALL_QMLDIR}/org/phosphor/settings/ui/`).
+#
+# A SHARED variant has not landed yet because every current consumer of
+# this library is in-tree (PlasmaZones settings app + the minimal example
+# in this directory). When the first out-of-tree consumer appears, copy
+# the phosphor-animation Shared pattern verbatim.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # The QML module re-compiles the same public headers + sources as the C++
@@ -140,6 +163,7 @@ target_compile_definitions(PhosphorSettingsUi PRIVATE
 set(phosphorsettingsui_qml_FILES
     qml/SettingsAppWindow.qml
     qml/Sidebar.qml
+    qml/SidebarBackButton.qml
     qml/Breadcrumbs.qml
     qml/UnsavedChangesFooter.qml
     qml/PageHost.qml

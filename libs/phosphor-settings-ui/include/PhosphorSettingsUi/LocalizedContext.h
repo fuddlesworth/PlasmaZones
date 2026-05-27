@@ -78,6 +78,11 @@ private:
 
     QString m_context;
     mutable QByteArray m_effectiveContextCache;
+    /// Explicit validity bit so an empty effective context (no
+    /// QCoreApplication, or unset applicationName) still memoizes the
+    /// empty bytearray. Without this, `isEmpty()`-based gating would
+    /// re-encode on every call when the resolved context is empty.
+    mutable bool m_effectiveContextValid = false;
     mutable QHash<QString, QByteArray> m_disambiguationCache;
 };
 

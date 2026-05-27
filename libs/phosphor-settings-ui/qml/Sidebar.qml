@@ -45,6 +45,12 @@ import org.phosphor.settings.ui
  *     status + enable/disable toggle.
  */
 ColumnLayout {
+    // Flip relative to the *displayed* state — _isExpanded() treats
+    // an absent id as expanded (the rail starts open), so the
+    // toggle must respect that view. The earlier ternary form
+    // mapped undefined → true (no-op for the user) and required a
+    // second click to actually collapse a never-toggled category.
+
     id: root
 
     required property ApplicationController controller
@@ -58,9 +64,16 @@ ColumnLayout {
     //* Empty string means "showing top-level pages"; otherwise the parent id.
     property string currentParentId: ""
     /** Per-id expand state for inline-collapsible categories. Default
-     *  expanded (true). Flip an entry to false to start it collapsed. */
-    property var expandedCategories: ({
-    })
+     *  expanded (true). Flip an entry to false to start it collapsed.
+     *
+     *  Initialised via `Object.create(null)` (not `{}`) so page ids that
+     *  collide with JS built-in property names (`toString`, `constructor`,
+     *  `hasOwnProperty`, etc.) read as `undefined` instead of inheriting
+     *  the prototype's truthy method. Without this defensive form,
+     *  `_isExpanded("toString")` would read the inherited function
+     *  reference, treat it as `!== false`, and report expanded
+     *  regardless of the toggle state. */
+    property var expandedCategories: Object.create(null)
     //* Search text. Empty disables filtering.
     property alias searchText: searchField.text
     /** Optional Component instantiated next to each row's title. The
@@ -112,13 +125,10 @@ ColumnLayout {
     }
 
     function toggleCategory(id) {
-        // Flip relative to the *displayed* state — _isExpanded() treats
-        // an absent id as expanded (the rail starts open), so the
-        // toggle must respect that view. The earlier ternary form
-        // mapped undefined → true (no-op for the user) and required a
-        // second click to actually collapse a never-toggled category.
-        const next = Object.assign({
-        }, root.expandedCategories);
+        // Clone target is `Object.create(null)` to preserve the
+        // prototype-less invariant on the property (see
+        // expandedCategories docstring above).
+        const next = Object.assign(Object.create(null), root.expandedCategories);
         next[id] = !root._isExpanded(id);
         root.expandedCategories = next;
     }
@@ -280,7 +290,18 @@ ColumnLayout {
     onCurrentParentIdChanged: _refreshModel()
     onExpandedCategoriesChanged: _refreshModel()
     onSearchTextChanged: _refreshModel()
-    Component.onCompleted: _refreshModel()
+    Component.onCompleted: {
+        // Suppress per-row add Transitions for the initial fill so the
+        // sidebar doesn't visibly accordion-expand every top-level row
+        // on the very first paint. Same mechanism the drill/search
+        // paths use; flip back on the next event-loop tick so steady-
+        // state animations resume.
+        root._suppressAccordion = true;
+        _refreshModel();
+        Qt.callLater(() => {
+            root._suppressAccordion = false;
+        });
+    }
 
     Connections {
         function onCurrentPageIdChanged() {
@@ -379,80 +400,12 @@ ColumnLayout {
             width: listScroll.availableWidth
             spacing: 0
 
-            QQC2.ItemDelegate {
+            SidebarBackButton {
                 id: backButton
 
                 visible: root.currentParentId !== "" && root.searchText.length === 0
-                Layout.fillWidth: true
-                // Match legacy row height for the back button (slightly
-                // taller than nav rows so it reads as a header).
-                implicitHeight: root.backButtonHeight
-                leftPadding: Kirigami.Units.smallSpacing
-                rightPadding: Kirigami.Units.smallSpacing
-                Accessible.name: qsTr("Back")
-                Accessible.role: Accessible.Button
-                onClicked: root.drillOut()
-
-                background: Rectangle {
-                    id: backButtonBackground
-
-                    // Default Rectangle color is white — without an initial
-                    // assignment the Behavior would tint from white to
-                    // "transparent" on the very first paint (binding eval).
-                    // Gate the Behavior on completion so the first eval
-                    // lands without animation.
-                    property bool _behaviorReady: false
-
-                    Component.onCompleted: _behaviorReady = true
-                    color: backButton.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : Qt.rgba(0, 0, 0, 0)
-                    radius: Kirigami.Units.smallSpacing
-
-                    // Legacy back-button bottom separator — a 1-dp line
-                    // tucked inside the row's bottom edge so the rail
-                    // reads as "you're inside a sub-section".
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.leftMargin: Kirigami.Units.smallSpacing
-                        anchors.rightMargin: Kirigami.Units.smallSpacing
-                        height: Math.round(Kirigami.Units.devicePixelRatio)
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                    }
-
-                    Behavior on color {
-                        enabled: backButtonBackground._behaviorReady
-
-                        PhosphorMotionAnimation {
-                            profile: "widget.tint.fast"
-                        }
-
-                    }
-
-                }
-
-                contentItem: RowLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Kirigami.Icon {
-                        source: "go-previous-symbolic"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                        opacity: 0.7
-                    }
-
-                    QQC2.Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Back")
-                        // Legacy back-button label uses demi-bold @
-                        // 0.8 opacity — reads as a section header
-                        // rather than another nav row.
-                        font.weight: Font.DemiBold
-                        opacity: 0.8
-                    }
-
-                }
-
+                backButtonHeight: root.backButtonHeight
+                onBackClicked: root.drillOut()
             }
 
             ListView {

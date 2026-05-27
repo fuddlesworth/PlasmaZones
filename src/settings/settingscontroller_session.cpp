@@ -731,8 +731,17 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
     root[QLatin1String("screens")] = screensArr;
 
     QString json = QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
-    DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen),
-                           QStringLiteral("setVirtualScreenConfig"), {physicalScreenId, json});
+    const QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen),
+                               QStringLiteral("setVirtualScreenConfig"), {physicalScreenId, json});
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        // Surface the daemon rejection — Pass-4 hardened the layout
+        // setters against silent-error swallowing but applyVirtualScreen
+        // Config and its removeVirtualScreenConfig forwarder are still
+        // Q_INVOKABLE reachable from QML / D-Bus and would otherwise
+        // leave the user with no feedback on a failed save.
+        qCWarning(lcConfig) << "applyVirtualScreenConfig failed for" << physicalScreenId << ":" << reply.errorMessage();
+    }
 }
 
 void SettingsController::removeVirtualScreenConfig(const QString& physicalScreenId)

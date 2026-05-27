@@ -340,6 +340,7 @@ void SettingsController::importLayout(const QString& filePath)
     const QString safe = sanitizeIOPath(filePath);
     if (safe.isEmpty()) {
         qCWarning(lcCore) << "importLayout: refusing unsafe path" << filePath;
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Import refused: unsafe path"));
         return;
     }
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
@@ -349,6 +350,14 @@ void SettingsController::importLayout(const QString& filePath)
         if (!newLayoutId.isEmpty()) {
             m_pendingSelectLayoutId = newLayoutId;
         }
+    } else if (reply.type() == QDBusMessage::ErrorMessage) {
+        // Surface the daemon's rejection (corrupt JSON, permission denied,
+        // layout-id collision, etc.) — without this branch the page
+        // silently refreshes and the user has no feedback, mirroring the
+        // pattern that Pass-4 hardening already applied to setLayoutHidden
+        // / setLayoutAutoAssign / setLayoutAspectRatio.
+        qCWarning(lcCore) << "importLayout failed:" << reply.errorMessage();
+        Q_EMIT layoutOperationFailed(PzI18n::tr("Failed to import layout: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
 }

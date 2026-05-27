@@ -104,15 +104,18 @@ namespace {
 // / pageData. Centralised so QML consumers (Sidebar.qml, Breadcrumbs.qml)
 // and a future test/typed-binding generator can reference the same canonical
 // strings without typos surviving until runtime.
+//
+// `inline` is omitted because anonymous-namespace symbols already have
+// internal linkage; `constexpr` alone is sufficient.
 namespace EntryKeys {
-inline constexpr QLatin1String Id{"id"};
-inline constexpr QLatin1String ParentId{"parentId"};
-inline constexpr QLatin1String Title{"title"};
-inline constexpr QLatin1String IconSource{"iconSource"};
-inline constexpr QLatin1String QmlSource{"qmlSource"};
-inline constexpr QLatin1String IsCollapsible{"isCollapsible"};
-inline constexpr QLatin1String HasDividerAfter{"hasDividerAfter"};
-inline constexpr QLatin1String HasQmlSource{"hasQmlSource"};
+constexpr QLatin1String Id{"id"};
+constexpr QLatin1String ParentId{"parentId"};
+constexpr QLatin1String Title{"title"};
+constexpr QLatin1String IconSource{"iconSource"};
+constexpr QLatin1String QmlSource{"qmlSource"};
+constexpr QLatin1String IsCollapsible{"isCollapsible"};
+constexpr QLatin1String HasDividerAfter{"hasDividerAfter"};
+constexpr QLatin1String HasQmlSource{"hasQmlSource"};
 } // namespace EntryKeys
 
 QVariantMap entryToVariant(const PageRegistry::Entry& e)

@@ -159,10 +159,13 @@ Kirigami.ApplicationWindow {
                         // the slot contract is "consumer Component must declare
                         // implicitWidth/Height" rather than the silent "renders
                         // as 0×0 if missing" pre-fix behaviour. Layout.alignment
-                        // matches the Breadcrumbs centering above.
+                        // matches the Breadcrumbs centering above. visible gates
+                        // on Loader.Ready so a mid-instantiation skeleton can't
+                        // take layout space.
                         Layout.preferredWidth: item ? item.implicitWidth : 0
                         Layout.preferredHeight: item ? item.implicitHeight : 0
                         Layout.alignment: Qt.AlignVCenter
+                        visible: status === Loader.Ready && item
                     }
 
                 }

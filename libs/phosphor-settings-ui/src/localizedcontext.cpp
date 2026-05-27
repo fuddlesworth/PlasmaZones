@@ -27,7 +27,7 @@ LocalizedContext::LocalizedContext(QObject* parent)
     // effective-context so the next i18n*() call re-reads the new name.
     if (auto* app = QCoreApplication::instance()) {
         connect(app, &QCoreApplication::applicationNameChanged, this, [this]() {
-            m_effectiveContextCache.clear();
+            m_effectiveContextValid = false;
             if (m_context.isEmpty()) {
                 Q_EMIT translationContextChanged();
             }
@@ -35,15 +35,38 @@ LocalizedContext::LocalizedContext(QObject* parent)
     }
 }
 
+LocalizedContext::~LocalizedContext() = default;
+
+QString LocalizedContext::translationContext() const
+{
+    // Surface the resolved context — explicit override if set, otherwise
+    // the current applicationName() snapshot.
+    return m_context.isEmpty() ? QCoreApplication::applicationName() : m_context;
+}
+
+void LocalizedContext::setTranslationContext(const QString& ctx)
+{
+    if (m_context == ctx) {
+        return;
+    }
+    m_context = ctx;
+    m_effectiveContextValid = false;
+    Q_EMIT translationContextChanged();
+}
+
 QByteArray LocalizedContext::cachedEffectiveContext() const
 {
     // Hot path: every QML text binding re-evaluates on locale/lang change
     // and calls into i18n*() — repeatedly re-encoding the application
     // name to UTF-8 each call is wasteful. Cache the encoded form and
-    // invalidate via setTranslationContext / applicationNameChanged.
-    if (m_effectiveContextCache.isEmpty()) {
+    // invalidate via setTranslationContext / applicationNameChanged. Use
+    // an explicit `valid` bool rather than `isEmpty()` so an empty
+    // applicationName (no QCoreApplication, or unset) still memoizes the
+    // empty bytearray instead of re-encoding on every call.
+    if (!m_effectiveContextValid) {
         m_effectiveContextCache =
             m_context.isEmpty() ? QCoreApplication::applicationName().toUtf8() : m_context.toUtf8();
+        m_effectiveContextValid = true;
     }
     return m_effectiveContextCache;
 }
@@ -65,25 +88,6 @@ QByteArray LocalizedContext::cachedDisambiguation(const QString& context) const
     QByteArray encoded = context.toUtf8();
     m_disambiguationCache.insert(context, encoded);
     return encoded;
-}
-
-LocalizedContext::~LocalizedContext() = default;
-
-QString LocalizedContext::translationContext() const
-{
-    // Surface the resolved context — explicit override if set, otherwise
-    // the current applicationName() snapshot.
-    return m_context.isEmpty() ? QCoreApplication::applicationName() : m_context;
-}
-
-void LocalizedContext::setTranslationContext(const QString& ctx)
-{
-    if (m_context == ctx) {
-        return;
-    }
-    m_context = ctx;
-    m_effectiveContextCache.clear();
-    Q_EMIT translationContextChanged();
 }
 
 QString LocalizedContext::i18n(const QString& text) const

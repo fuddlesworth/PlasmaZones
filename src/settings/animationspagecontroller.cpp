@@ -298,13 +298,20 @@ void AnimationsPageController::commitPending()
 void AnimationsPageController::revertPending()
 {
     // discard() / revertPending() is the StagingDomain contract for "undo
-    // everything since the last apply". It MUST leave hasPendingChanges()
-    // false on success, regardless of whether the caller pairs us with
-    // a follow-up load() (StagingDomain consumers do; future direct callers
-    // might not). Clear the shader-tree dirty flag at the end of the
-    // successful restore path; the subsequent load()-driven
-    // shaderProfileTreeChanged handler in the ctor sets m_lastShaderTree
-    // for the next diff-check baseline.
+    // everything since the last apply". This method:
+    //   * Restores every snapshotted profile file from disk.
+    //   * Clears our own dirty flag (m_shaderTreeDirty) only when all
+    //     snapshots restore successfully — partial-failure keeps the flag
+    //     so a retry path still sees hasPendingChanges()==true.
+    //
+    // IMPORTANT CALLER CONTRACT: the in-memory shader tree on m_settings
+    // (Settings::shaderProfileTree) is NOT reverted here — that state is
+    // owned by Settings, not this page, and is refreshed only by a
+    // subsequent Settings::load(). SettingsController::discard() pairs
+    // discard() with a follow-up load(); any future direct caller of
+    // discard() MUST do the same, otherwise hasPendingChanges() returns
+    // false while m_settings->shaderProfileTree() still holds unsaved
+    // edits.
     using namespace PhosphorAnimation;
     using namespace PhosphorAnimationShaders;
 

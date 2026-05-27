@@ -23,7 +23,7 @@ inline constexpr int kDefaultSyncTimeoutMs = 500;
  *
  *   service       — bus name (e.g. "org.phosphor.plasmazones.daemon")
  *   objectPath    — object path on that service (e.g. "/Daemon")
- *   interface     — default interface used by call()/asyncCall(). Apps that
+ *   interfaceName — default interface used by call()/asyncCall(). Apps that
  *                   talk to multiple interfaces on the same object call
  *                   callOn() / asyncCallOn() with an explicit interface.
  *   syncTimeoutMs — bound for synchronous calls; see kDefaultSyncTimeoutMs.

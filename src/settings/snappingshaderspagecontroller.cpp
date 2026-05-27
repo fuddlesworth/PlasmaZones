@@ -68,13 +68,18 @@ void SnappingShadersPageController::connectLayoutSignals()
     const QSet<PhosphorZones::Layout*> live(layouts.cbegin(), layouts.cend());
     for (auto it = m_wiredLayouts.begin(); it != m_wiredLayouts.end();) {
         auto* tracked = qobject_cast<PhosphorZones::Layout*>(*it);
-        // `tracked` may be null when the qobject_cast fails — the underlying
-        // QObject* (*it) was already partially destroyed and Qt's runtime
-        // type info is gone. We still need to disconnect the destroyed()
-        // signal via the raw QObject*, but the typed shaderIdChanged
-        // disconnect is skipped because we have no live Layout* to pass.
-        // Qt's disconnect-on-nullptr-tracked is a no-op (safe), so this is
-        // an intentional asymmetry rather than a missing branch.
+        // The "tracked == nullptr" branch is defensive: in practice this
+        // never fires because onWiredLayoutDestroyed() (wired via
+        // QObject::destroyed in connectLayoutSignals) evicts entries from
+        // m_wiredLayouts synchronously inside the source's ~QObject before
+        // we'd see a dangling cast result here. We keep the branch as
+        // belt-and-braces in case a future refactor detaches a Layout
+        // without destroying it; the typed shaderIdChanged disconnect is
+        // skipped because we have no live Layout* to pass. NOTE: if this
+        // branch ever DID fire against a truly-dangling raw pointer,
+        // disconnect(*it, ...) would be UB — but the synchronous
+        // destroyed() eviction makes that path unreachable in the current
+        // wiring.
         if (!tracked || !live.contains(tracked)) {
             disconnect(*it, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed);
             if (tracked)

@@ -179,13 +179,15 @@ shows a placeholder instead of raw UUIDs.
 
 ---
 
-## 7. Sidebar.qml extraction (B9 — LOW)
+## 7. Sidebar.qml extraction (B9 — PARTIAL Pass 10)
 
-**Finding:** `libs/phosphor-settings-ui/qml/Sidebar.qml` sits near the
-800-line cap (verify with `wc -l`). The ItemDelegate `delegate: ...`
-block (~250 lines) is a natural extraction point. Reference symbols
-rather than line numbers to avoid further drift — find via
-`grep -n "delegate:" Sidebar.qml`.
+**Partial Pass-10 fix:** The back-button block (~75 lines) was
+extracted to `SidebarBackButton.qml` to bring Sidebar.qml from 809
+lines (over the 800 cap) down to ~735 lines.
+
+**Still open:** The ListView `delegate: ...` block (~250 lines) is the
+larger extraction target. Reference symbols rather than line numbers
+to avoid further drift — find via `grep -n "delegate:" Sidebar.qml`.
 
 **Suggested approach:**
 
@@ -195,7 +197,8 @@ rather than line numbers to avoid further drift — find via
 3. Sidebar.qml drops to ~470 lines, the delegate's internals become
    independently testable.
 
-Worth doing before the next visual-tweak pass pushes the file past 800.
+Worth doing before the next visual-tweak pass pushes the file past
+800 again.
 
 ---
 
@@ -250,6 +253,62 @@ on the wire is still a string), but localises the marshalling.
 
 ---
 
+## 12. PhosphorSettingsUiQml SHARED-variant install (Pass 10 — HIGH, partial)
+
+**Finding:** The `PhosphorSettingsUiQml` STATIC target's namespaced
+alias `PhosphorSettingsUi::PhosphorSettingsUiQml` works for in-tree
+consumers (PlasmaZones + examples/minimal) but is NOT installed and
+NOT added to the `PhosphorSettingsUiTargets` export set. An
+out-of-tree consumer doing `find_package(PhosphorSettingsUi)` +
+`target_link_libraries(... PhosphorSettingsUi::PhosphorSettingsUiQml)`
+fails at configure with "Target not found".
+
+**Pass-10 partial fix:** The CMakeLists.txt now carries a prominent
+"IN-TREE LINKABLE ONLY" docstring on the QML module section so the
+contract is explicit rather than misleading.
+
+**Suggested approach:** Mirror `libs/phosphor-animation/CMakeLists.txt`'s
+PHOSPHOR_ANIMATION_QML_INSTALL pattern — add a parallel
+`PhosphorSettingsUiQmlShared` target whose plugin .so + qmldir +
+qmltypes are installed under `${KDE_INSTALL_QMLDIR}/org/phosphor/settings/ui/`.
+Gated behind a PHOSPHOR_SETTINGS_UI_QML_INSTALL option, default false.
+Lands when the first out-of-tree consumer needs it.
+
+---
+
+## 13. WindowRule monitorOverview layout-token lookup contract (Pass 10 — LOW)
+
+**Finding:** `WindowRuleController::monitorOverview` resolves both
+snappingLayout (UUIDs) and tilingAlgorithm (algorithm tokens like
+"bsp") through the same `m_layoutLookup` callable. The header
+docstring scopes the lookup to layoutIds only — if the wired lookup
+fails on algorithm tokens, autotile-pinned monitor tiles show the
+raw token instead of a localised name.
+
+**Suggested approach:** Either widen the lookup contract in
+`windowrulecontroller.h` to cover algorithm tokens (the impl branches
+on what it sees), or split into two lookups
+(`snappingLayoutLookup` + `tilingAlgorithmLookup`) for explicit
+type-safety. Cross-partition wiring concern — touches
+SettingsController's lookup setup as well.
+
+---
+
+## 14. UnsavedChangesFooter applyAll silent-failure toast (Pass 10 — LOW)
+
+**Finding:** `SettingsAppWindow.qml`'s onApplyConfirmed calls
+`controller.applyAll()` then `Qt.callLater(root.close)`. If applyAll
+fails to fully clean dirty (a backend page leaves `m_dirty = true`),
+the next `onClosing` re-fires the discard dialog instead of actually
+closing — which reads as a UI glitch since the user just clicked
+Apply and is now seeing the same prompt again.
+
+**Suggested approach:** After `applyAll()`, check `controller.dirty`
+and surface a toast or persistent error banner explaining which page
+refused the apply, rather than silently re-prompting.
+
+---
+
 ## 11. NIT items deferred for cosmetic reasons
 
 A handful of NIT findings remain explicitly unaddressed:
@@ -275,7 +334,7 @@ These items should be filed as GitHub issues with the `phosphor-settings-ui`
 label once PR #533 merges. Each maps to one or more audit findings (audit
 codes preserved above so reviewers can cross-reference the original report).
 
-Last updated: 2026-05-26 (post-Pass 2g — broader re-audit applied
-correctness fixes that were not in the original deferral set; the
-architectural items above remain explicitly out of scope for the
-PR-#533 merge).
+Last updated: 2026-05-26 (post-Pass 10 — added items #7 partial,
+#12 PhosphorSettingsUiQml SHARED-variant install, #13 monitorOverview
+lookup contract, #14 applyAll silent-failure toast; the architectural
+items above remain explicitly out of scope for the PR-#533 merge).

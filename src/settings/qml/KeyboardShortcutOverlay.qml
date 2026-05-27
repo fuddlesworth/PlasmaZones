@@ -58,6 +58,16 @@ Rectangle {
         border.width: Math.round(Kirigami.Units.devicePixelRatio)
         border.color: root.subtleBorder
 
+        // Swallow clicks inside the dialog body so curious clicks on key
+        // chips or labels don't bubble through to the background MouseArea
+        // and dismiss the overlay. Only true background clicks + Esc
+        // should dismiss.
+        MouseArea {
+            anchors.fill: parent
+            onClicked: {
+            }
+        }
+
         ColumnLayout {
             id: shortcutContent
 

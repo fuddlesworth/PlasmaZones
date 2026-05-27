@@ -12,6 +12,11 @@ import org.plasmazones.common as QFZCommon
 
 ColumnLayout {
     // Flickable
+    // Extract URL-to-path helper to avoid duplicating regex in FileDialogs.
+    // Linux/POSIX only — file:///path → /path. A Windows-style
+    // file:///C:/path would become /C:/path here, which is wrong, but
+    // PlasmaZones is Wayland-only (per CLAUDE.md) so the regex is
+    // intentionally limited to the POSIX URI shape.
 
     id: root
 
@@ -22,13 +27,16 @@ ColumnLayout {
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
 
-    // Extract URL-to-path helper to avoid duplicating regex in FileDialogs.
-    // Linux/POSIX only — file:///path → /path. A Windows-style
-    // file:///C:/path would become /C:/path here, which is wrong, but
-    // PlasmaZones is Wayland-only (per CLAUDE.md) so the regex is
-    // intentionally limited to the POSIX URI shape.
+    // Qt's FileDialog returns selectedFile as a percent-encoded URL —
+    // a folder named "My Layouts" comes back as
+    // file:///home/user/My%20Layouts. We MUST decode after stripping the
+    // scheme prefix; otherwise downstream importLayout / exportLayout /
+    // importAlgorithm / importFromKZonesFile / exportAlgorithm callers
+    // receive a non-existent path. The native shaderpackinstaller path
+    // sidesteps this by using QUrl(...).toLocalFile() on the C++ side;
+    // here we mirror its effect at the QML boundary.
     function filePathFromUrl(url) {
-        return url.toString().replace(/^file:\/\/+/, "/");
+        return decodeURIComponent(url.toString().replace(/^file:\/\/+/, "/"));
     }
 
     spacing: 0
