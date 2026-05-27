@@ -264,10 +264,10 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
         qWarning().noquote() << "PluginLoader: failed to load" << libraryPath << "—" << library->errorString();
         return;
     }
-    auto entryFn = reinterpret_cast<PluginFactoryEntry>(library->resolve(kPluginEntryPointSymbol));
+    auto entryFn = reinterpret_cast<PluginFactoryEntry>(library->resolve(PluginEntryPointSymbol));
     if (!entryFn) {
         qWarning().noquote() << "PluginLoader: plugin" << libraryPath << "missing entry point"
-                             << kPluginEntryPointSymbol;
+                             << PluginEntryPointSymbol;
         library->unload();
         return;
     }

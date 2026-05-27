@@ -45,7 +45,7 @@ function(phosphorregistry_add_fake_plugin target sourceDir source linkQt)
         UNITY_BUILD OFF
     )
     # Template the manifest so abi: stays locked to
-    # PhosphorRegistry::kPluginAbiVersion (mirrored from CMake via
+    # PhosphorRegistry::PluginAbiVersion (mirrored from CMake via
     # PHOSPHOR_PLUGIN_ABI_VERSION). Drift between header and fixture
     # would silently break every pluginloader test on the next
     # version bump.

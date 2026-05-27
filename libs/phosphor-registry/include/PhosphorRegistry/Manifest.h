@@ -26,11 +26,11 @@ namespace PhosphorRegistry {
 // this header without linking the target will silently skip the
 // check, which is acceptable because such TUs cannot ship a real
 // plugin anyway.
-constexpr int kPluginAbiVersion = 1;
+constexpr int PluginAbiVersion = 1;
 
 #ifdef PHOSPHOR_PLUGIN_ABI_VERSION
-static_assert(PHOSPHOR_PLUGIN_ABI_VERSION == kPluginAbiVersion,
-              "CMake's PHOSPHOR_PLUGIN_ABI_VERSION must match Manifest.h's kPluginAbiVersion");
+static_assert(PHOSPHOR_PLUGIN_ABI_VERSION == PluginAbiVersion,
+              "CMake's PHOSPHOR_PLUGIN_ABI_VERSION must match Manifest.h's PluginAbiVersion");
 #endif
 
 // Plain-old-data mirror of the plugin manifest.json schema. Filled
@@ -46,7 +46,7 @@ struct PHOSPHORREGISTRY_EXPORT Manifest
     // Human-readable label shown in plugin browsers and settings.
     QString displayName;
     // ABI version the plugin was built against. Loaded only if this
-    // equals kPluginAbiVersion.
+    // equals PluginAbiVersion.
     int abi = 0;
     // Capability declarations. Phase 5 will enforce these against a
     // sandbox; today they are informational and exposed via

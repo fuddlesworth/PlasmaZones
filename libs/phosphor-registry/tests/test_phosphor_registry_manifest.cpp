@@ -50,7 +50,7 @@ QJsonObject makeValidManifestObject(const QString& id = QStringLiteral("clock"))
     QJsonObject obj;
     obj.insert(QLatin1String("id"), id);
     obj.insert(QLatin1String("displayName"), QStringLiteral("Test"));
-    obj.insert(QLatin1String("abi"), kPluginAbiVersion);
+    obj.insert(QLatin1String("abi"), PluginAbiVersion);
     return obj;
 }
 
@@ -81,7 +81,7 @@ void TestManifest::parseObject_acceptsValidManifest()
     QVERIFY(m.isValid);
     QCOMPARE(m.id, QStringLiteral("clock"));
     QCOMPARE(m.displayName, QStringLiteral("Test"));
-    QCOMPARE(m.abi, kPluginAbiVersion);
+    QCOMPARE(m.abi, PluginAbiVersion);
     QVERIFY(m.parseError.isEmpty());
 }
 
@@ -115,7 +115,7 @@ void TestManifest::parseObject_rejectsMissingAbi()
 void TestManifest::parseObject_rejectsAbiMismatch()
 {
     QJsonObject obj = makeValidManifestObject();
-    obj.insert(QLatin1String("abi"), kPluginAbiVersion + 99);
+    obj.insert(QLatin1String("abi"), PluginAbiVersion + 99);
     const Manifest m = Manifest::parseObject(obj, QString());
     QVERIFY(!m.isValid);
     QVERIFY(m.parseError.contains(QStringLiteral("abi mismatch")));
@@ -224,7 +224,7 @@ void TestManifest::parseFile_acceptsValidFile()
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString contents =
-        QStringLiteral("{\"id\":\"clock\",\"displayName\":\"Clock\",\"abi\":%1}").arg(kPluginAbiVersion);
+        QStringLiteral("{\"id\":\"clock\",\"displayName\":\"Clock\",\"abi\":%1}").arg(PluginAbiVersion);
     const QString path = writeTempManifest(dir, QStringLiteral("clock"), contents);
     QVERIFY(!path.isEmpty());
 
@@ -267,7 +267,7 @@ void TestManifest::parseFile_rejectsNonObjectRoot()
 
 void TestManifest::parseFile_rejectsOversizedManifest()
 {
-    // The 64-KiB cap (kManifestMaxBytes in manifest.cpp) is a
+    // The 64-KiB cap (ManifestMaxBytes in manifest.cpp) is a
     // security gate — a hostile or corrupt manifest mustn't be
     // able to blow up process memory. Write 70 KiB of padding
     // inside a valid-shape JSON object to trip the size check
@@ -277,7 +277,7 @@ void TestManifest::parseFile_rejectsOversizedManifest()
     QString padding;
     padding.fill(QLatin1Char('x'), 70 * 1024);
     const QString contents =
-        QStringLiteral("{\"id\":\"clock\",\"displayName\":\"%1\",\"abi\":%2}").arg(padding).arg(kPluginAbiVersion);
+        QStringLiteral("{\"id\":\"clock\",\"displayName\":\"%1\",\"abi\":%2}").arg(padding).arg(PluginAbiVersion);
     const QString path = writeTempManifest(dir, QStringLiteral("clock"), contents);
     QVERIFY(!path.isEmpty());
 

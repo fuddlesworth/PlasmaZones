@@ -206,7 +206,7 @@ loader enforces this so on-disk layout and registry keys stay aligned.
   produced keep working until they destruct naturally. Phase 5's
   sandbox revisits this with refcounted safe-unload.
 - **ABI mismatch rejected at load.** Manifests declaring `"abi"` other
-  than `PhosphorRegistry::kPluginAbiVersion` (currently `1`) are refused
+  than `PhosphorRegistry::PluginAbiVersion` (currently `1`) are refused
   with a clear log message. Bumping the ABI version is reserved for
   changes to the C entry point signature, the factory vtable layout,
   or the manifest schema.

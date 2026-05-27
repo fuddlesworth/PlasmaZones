@@ -274,7 +274,7 @@ void TestPluginLoader::rejectsPathTraversalId()
     QDir().mkpath(pluginDir);
     QFile mf(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
     QVERIFY(mf.open(QIODevice::WriteOnly | QIODevice::Text));
-    mf.write(QStringLiteral("{\"id\":\"foo..bar\",\"displayName\":\"X\",\"abi\":%1}").arg(kPluginAbiVersion).toUtf8());
+    mf.write(QStringLiteral("{\"id\":\"foo..bar\",\"displayName\":\"X\",\"abi\":%1}").arg(PluginAbiVersion).toUtf8());
     mf.close();
 
     Registry<IBarWidgetFactory> registry;
@@ -343,7 +343,7 @@ void TestPluginLoader::rejectsCorruptSoFile()
     QFile mfFile(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
     QVERIFY(mfFile.open(QIODevice::WriteOnly | QIODevice::Text));
     mfFile.write(
-        QStringLiteral("{\"id\":\"corrupt-plugin\",\"displayName\":\"X\",\"abi\":%1}").arg(kPluginAbiVersion).toUtf8());
+        QStringLiteral("{\"id\":\"corrupt-plugin\",\"displayName\":\"X\",\"abi\":%1}").arg(PluginAbiVersion).toUtf8());
     mfFile.close();
 
     Registry<IBarWidgetFactory> registry;

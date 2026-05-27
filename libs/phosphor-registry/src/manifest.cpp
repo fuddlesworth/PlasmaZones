@@ -20,7 +20,7 @@ namespace {
 // unusually verbose capabilities lists and future schema fields
 // without giving a malicious or corrupted .json the chance to
 // balloon process RSS.
-constexpr qint64 kManifestMaxBytes = 64 * 1024;
+constexpr qint64 ManifestMaxBytes = 64 * 1024;
 
 Manifest invalid(const QString& reason)
 {
@@ -70,7 +70,7 @@ bool isSafeId(const QString& id)
 //
 // Failure modes (parseError populated, returns {}):
 //   - open() rejected (file missing, permissions, ...)
-//   - size exceeds kManifestMaxBytes
+//   - size exceeds ManifestMaxBytes
 //   - file is empty (zero bytes) — explicitly flagged so the caller
 //     doesn't see a confusing "malformed JSON at offset 0" later
 QByteArray readJsonFile(const QString& path, QString& parseError)
@@ -81,8 +81,8 @@ QByteArray readJsonFile(const QString& path, QString& parseError)
         return {};
     }
     const qint64 size = file.size();
-    if (size > kManifestMaxBytes) {
-        parseError = QStringLiteral("manifest exceeds %1-byte cap (was %2)").arg(kManifestMaxBytes).arg(size);
+    if (size > ManifestMaxBytes) {
+        parseError = QStringLiteral("manifest exceeds %1-byte cap (was %2)").arg(ManifestMaxBytes).arg(size);
         return {};
     }
     if (size == 0) {
@@ -138,8 +138,8 @@ Manifest Manifest::parseObject(const QJsonObject& obj, const QString& pluginDir)
     if (abiField < 0) {
         return invalid(QStringLiteral("missing or invalid 'abi'"));
     }
-    if (abiField != kPluginAbiVersion) {
-        return invalid(QStringLiteral("abi mismatch: manifest=%1 expected=%2").arg(abiField).arg(kPluginAbiVersion));
+    if (abiField != PluginAbiVersion) {
+        return invalid(QStringLiteral("abi mismatch: manifest=%1 expected=%2").arg(abiField).arg(PluginAbiVersion));
     }
 
     // The plugin's directory basename must match the manifest id so

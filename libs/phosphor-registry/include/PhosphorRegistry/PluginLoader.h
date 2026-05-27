@@ -51,7 +51,7 @@ namespace PhosphorRegistry {
 // be parameterised by a "kind" argument so a single plugin can
 // export factories for multiple seams. For now: one .so, one
 // IBarWidgetFactory.
-constexpr const char* kPluginEntryPointSymbol = "phosphor_registry_create_factory";
+constexpr const char* PluginEntryPointSymbol = "phosphor_registry_create_factory";
 using PluginFactoryEntry = PhosphorRegistry::IBarWidgetFactory* (*)();
 
 // Discovers plugin directories under a configurable root, loads

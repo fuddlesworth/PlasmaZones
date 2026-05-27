@@ -10,7 +10,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORREGISTRY_VERSION "0.1.0")
-# Plugin ABI version. Mirrors PhosphorRegistry::kPluginAbiVersion in
+# Plugin ABI version. Mirrors PhosphorRegistry::PluginAbiVersion in
 # Manifest.h. Exported as a compile definition so headers can
 # static_assert the two stay in sync, and consumed by test fixture
 # manifests via configure_file so they bump in lockstep with the
