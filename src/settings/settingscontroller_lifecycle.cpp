@@ -183,6 +183,11 @@ void SettingsController::save()
     }
     QTimer::singleShot(0, this, [this]() {
         m_saving = false;
+        // Now that m_saving has drained, downstream consumers
+        // (SettingsStagingDomain in particular) can release any
+        // in-flight guards and emit their applyResult signals
+        // without racing this controller's deferred state reset.
+        Q_EMIT savingFinished();
     });
 }
 

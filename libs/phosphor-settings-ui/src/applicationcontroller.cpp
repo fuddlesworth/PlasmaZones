@@ -185,20 +185,36 @@ void ApplicationController::applyAllAsync()
     m_inTransaction = true;
 
     for (StagingDomain* domain : dirty) {
-        // One-shot per-domain hookup: capture the connection handle
-        // so we can self-disconnect on first fire (a domain that
-        // emits applyResult twice would otherwise double-decrement).
-        auto* conn = new QMetaObject::Connection;
-        *conn = connect(domain, &StagingDomain::applyResult, this, [this, conn](bool ok, const QString& error) {
-            disconnect(*conn);
-            delete conn;
-            if (!ok && !error.isEmpty())
-                m_applyErrors.append(error);
-            else if (!ok)
-                m_applyErrors.append(QStringLiteral("Unknown error"));
-            --m_applyPending;
-            completeApplyIfDone();
-        });
+        // Use Qt::SingleShotConnection so the lambda self-disconnects
+        // after first fire. Avoids the prior heap-allocated
+        // QMetaObject::Connection*  pattern that leaked when a domain
+        // was destroyed mid-batch (Qt auto-disconnects on sender
+        // destruction without running the manual cleanup body).
+        connect(
+            domain, &StagingDomain::applyResult, this,
+            [this](bool ok, const QString& error) {
+                if (!ok && !error.isEmpty())
+                    m_applyErrors.append(error);
+                else if (!ok)
+                    m_applyErrors.append(QStringLiteral("Unknown error"));
+                --m_applyPending;
+                completeApplyIfDone();
+            },
+            Qt::SingleShotConnection);
+        // Companion guard for the destroyed-mid-batch case: if the
+        // domain QObject dies before it emits applyResult, the
+        // applyResult connection above is auto-removed by Qt — so we
+        // also wire a one-shot destroyed() hook that ticks the
+        // counter down. Without this, m_applying would stall at true
+        // forever, freezing the Save button as "Saving…" disabled.
+        connect(
+            domain, &QObject::destroyed, this,
+            [this]() {
+                m_applyErrors.append(QStringLiteral("Domain destroyed before apply completed"));
+                --m_applyPending;
+                completeApplyIfDone();
+            },
+            Qt::SingleShotConnection);
         domain->apply();
     }
 }
@@ -227,17 +243,27 @@ void ApplicationController::discardAllAsync()
     m_inTransaction = true;
 
     for (StagingDomain* domain : dirty) {
-        auto* conn = new QMetaObject::Connection;
-        *conn = connect(domain, &StagingDomain::discardResult, this, [this, conn](bool ok, const QString& error) {
-            disconnect(*conn);
-            delete conn;
-            if (!ok && !error.isEmpty())
-                m_discardErrors.append(error);
-            else if (!ok)
-                m_discardErrors.append(QStringLiteral("Unknown error"));
-            --m_discardPending;
-            completeDiscardIfDone();
-        });
+        // Same Qt::SingleShotConnection + destroyed() guard pattern
+        // as applyAllAsync above. See the rationale comment there.
+        connect(
+            domain, &StagingDomain::discardResult, this,
+            [this](bool ok, const QString& error) {
+                if (!ok && !error.isEmpty())
+                    m_discardErrors.append(error);
+                else if (!ok)
+                    m_discardErrors.append(QStringLiteral("Unknown error"));
+                --m_discardPending;
+                completeDiscardIfDone();
+            },
+            Qt::SingleShotConnection);
+        connect(
+            domain, &QObject::destroyed, this,
+            [this]() {
+                m_discardErrors.append(QStringLiteral("Domain destroyed before discard completed"));
+                --m_discardPending;
+                completeDiscardIfDone();
+            },
+            Qt::SingleShotConnection);
         domain->discard();
     }
 }
@@ -247,12 +273,16 @@ void ApplicationController::completeApplyIfDone()
     if (m_applyPending > 0)
         return;
     m_inTransaction = false;
-    recomputeDirty();
+    // Set m_applying = false BEFORE recomputeDirty so any
+    // dirtyChanged listener that probes controller.applying sees a
+    // consistent "batch finished" state rather than "dirty just
+    // cleared but still applying".
     const bool ok = m_applyErrors.isEmpty();
     const QStringList errors = std::move(m_applyErrors);
     m_applyErrors.clear();
     m_applying = false;
     Q_EMIT applyingChanged();
+    recomputeDirty();
     Q_EMIT applyAllComplete(ok, errors);
 }
 
@@ -261,12 +291,15 @@ void ApplicationController::completeDiscardIfDone()
     if (m_discardPending > 0)
         return;
     m_inTransaction = false;
-    recomputeDirty();
+    // Same ordering as completeApplyIfDone — m_discarding flips false
+    // BEFORE recomputeDirty so observers see a consistent post-batch
+    // state.
     const bool ok = m_discardErrors.isEmpty();
     const QStringList errors = std::move(m_discardErrors);
     m_discardErrors.clear();
     m_discarding = false;
     Q_EMIT discardingChanged();
+    recomputeDirty();
     Q_EMIT discardAllComplete(ok, errors);
 }
 

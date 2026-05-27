@@ -64,12 +64,36 @@ void SettingsStagingDomain::apply()
         return;
     }
     m_inFlight = true;
+    // Hook savingFinished BEFORE save() — save() drives a singleShot(0,
+    // …) inside SettingsController to drain queued daemon broadcasts,
+    // and emits savingFinished from inside that singleShot. Releasing
+    // m_inFlight on save() return (the prior pattern) raced the
+    // daemon-broadcast drain and let a second Apply land while the
+    // first was still being unwound.
+    //
+    // Truthful applyResult: SettingsController re-flags pages whose
+    // commit failed (window-rules push, assignment flush) inside
+    // save(), so post-savingFinished needsSave() tells us whether the
+    // batch fully succeeded.
+    connect(
+        m_controller, &SettingsController::savingFinished, this,
+        [this]() {
+            m_inFlight = false;
+            const bool ok = m_controller && !m_controller->needsSave();
+            Q_EMIT applyResult(ok, ok ? QString() : QStringLiteral("One or more settings failed to save"));
+        },
+        Qt::SingleShotConnection);
+    connect(
+        m_controller, &QObject::destroyed, this,
+        [this]() {
+            // Controller died mid-save — release the in-flight guard
+            // and surface failure so the framework's wait-counter
+            // doesn't stall.
+            m_inFlight = false;
+            Q_EMIT applyResult(false, QStringLiteral("Controller destroyed before save completed"));
+        },
+        Qt::SingleShotConnection);
     m_controller->save();
-    m_inFlight = false;
-    // SettingsController::save() is fully synchronous (KConfig write
-    // to disk via QSettings). Emit completion immediately so
-    // applyAllAsync's per-domain wait-counter ticks down.
-    Q_EMIT applyResult(true, QString());
 }
 
 void SettingsStagingDomain::discard()

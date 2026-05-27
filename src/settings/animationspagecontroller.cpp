@@ -416,6 +416,16 @@ void AnimationsPageController::asyncRevertPending()
     using namespace PhosphorAnimation;
     using namespace PhosphorAnimationShaders;
 
+    if (m_asyncRevertInFlight) {
+        // Second invocation while a worker is running would race the
+        // first — the second worker's reply could overwrite the live
+        // m_pendingFileSnapshots map AFTER the first worker already
+        // truncated some files on disk, producing inconsistent state.
+        // Surface a quick failure so the framework's discard counter
+        // ticks down and the user knows to retry.
+        Q_EMIT discardResult(false, QStringLiteral("Discard already in flight"));
+        return;
+    }
     if (!hasPendingChanges()) {
         Q_EMIT discardResult(true, QString());
         return;
@@ -429,14 +439,32 @@ void AnimationsPageController::asyncRevertPending()
     const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
     const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
     const QHash<QString, std::optional<QByteArray>> snapshots = m_pendingFileSnapshots;
+    // Track the keys the worker is going to process so the finished
+    // handler can MERGE results back into m_pendingFileSnapshots
+    // (which may have gained NEW keys via concurrent setOverride /
+    // setShaderOverride calls during the worker run) instead of
+    // overwriting it — overwriting would silently drop those new
+    // entries and re-emerge as silent data-loss to the user.
+    const QSet<QString> dispatchedKeys(snapshots.keyBegin(), snapshots.keyEnd());
 
+    m_asyncRevertInFlight = true;
     auto* watcher = new QFutureWatcher<WorkerResult>(this);
-    connect(watcher, &QFutureWatcher<WorkerResult>::finished, this, [this, watcher]() {
+    connect(watcher, &QFutureWatcher<WorkerResult>::finished, this, [this, watcher, dispatchedKeys]() {
         const WorkerResult result = watcher->result();
         watcher->deleteLater();
+        m_asyncRevertInFlight = false;
 
-        // Back on the GUI thread — install retained + emit signals.
-        m_pendingFileSnapshots = result.retained;
+        // Back on the GUI thread — merge retained map with the live
+        // map: keys we dispatched + the worker did NOT retain (i.e.
+        // successfully restored) are removed from the live map; keys
+        // the worker retained are kept (its content matches what we
+        // dispatched — concurrent edits to those keys would also be
+        // dropped, but that's correct: the user asked to discard
+        // them and the file restore failed).
+        for (const QString& key : dispatchedKeys) {
+            if (!result.retained.contains(key))
+                m_pendingFileSnapshots.remove(key);
+        }
         if (m_pendingFileSnapshots.isEmpty())
             m_shaderTreeDirty = false;
 

@@ -422,6 +422,13 @@ private:
     /// re-emit path like every other settings page.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
     bool m_shaderTreeDirty = false;
+    /// In-flight guard for asyncRevertPending — set true on dispatch
+    /// and cleared in the QFutureWatcher::finished handler. A second
+    /// asyncRevertPending invocation while a worker is running would
+    /// run on stale captured state AND the second worker would
+    /// overwrite the first's retained map, producing inconsistent
+    /// disk state. Mirrors ApplicationController::m_applying.
+    bool m_asyncRevertInFlight = false;
     /// Set to true while a controller-owned setter is mutating the
     /// shader profile tree on m_settings. The shaderProfileTreeChanged
     /// handler uses this to distinguish our own writes (which keep

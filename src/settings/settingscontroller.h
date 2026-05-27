@@ -495,6 +495,15 @@ public:
 Q_SIGNALS:
     void activePageChanged();
     void dirtyPagesChanged();
+    /// Emitted after a `save()` call has fully completed, including the
+    /// deferred `singleShot(0)` reset of the internal `m_saving` guard
+    /// that drains lingering daemon broadcasts. Consumers that need to
+    /// chain post-save bookkeeping (e.g. SettingsStagingDomain's async
+    /// applyResult emission) MUST wait for this signal rather than
+    /// inspecting state on `save()` return — the m_saving flag is still
+    /// set when save() returns and a second apply can race the open
+    /// window otherwise.
+    void savingFinished();
     void daemonRunningChanged();
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
