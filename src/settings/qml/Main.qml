@@ -138,6 +138,27 @@ PhosphorUi.SettingsAppWindow {
             settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
         }
 
+        // Wire the lib's apply-on-close failure signal to a toast so
+        // the user sees WHY the window didn't close, instead of getting
+        // re-prompted with the same discard dialog. The lib hands us
+        // the ids of pages still dirty after applyAll(); resolve them
+        // to titles via the registry for a readable message.
+        function onApplyOnCloseFailed(dirtyPageIds) {
+            const reg = settingsController.app.registry;
+            const titles = [];
+            for (let i = 0; i < dirtyPageIds.length; ++i) {
+                const data = reg.pageData(dirtyPageIds[i]);
+                if (data && data.title)
+                    titles.push(data.title);
+                else if (dirtyPageIds[i])
+                    titles.push(dirtyPageIds[i]);
+            }
+            if (titles.length === 0)
+                window.showToast(i18n("Save did not complete — some pages remain dirty."));
+            else
+                window.showToast(i18n("Save did not complete — still unsaved on: %1", titles.join(", ")));
+        }
+
         target: window
     }
 

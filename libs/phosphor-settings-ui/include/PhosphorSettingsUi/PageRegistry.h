@@ -104,6 +104,10 @@ public:
     Q_INVOKABLE QVariantList topLevelPagesData() const;
     Q_INVOKABLE QVariantList childPagesData(const QString& parentId) const;
     Q_INVOKABLE QVariantMap pageData(const QString& id) const;
+    /** Full flat list of every registered page, used by QML that needs
+     *  to walk the whole catalogue (e.g. for an apply-on-close failure
+     *  toast that names every page still dirty after applyAll()). */
+    Q_INVOKABLE QVariantList allPagesData() const;
 
 Q_SIGNALS:
     void pageRegistered(const QString& id);

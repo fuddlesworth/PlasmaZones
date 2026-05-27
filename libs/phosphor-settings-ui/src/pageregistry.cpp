@@ -176,4 +176,14 @@ QVariantMap PageRegistry::pageData(const QString& id) const
     return entryToVariant(m_pages.at(it.value()));
 }
 
+QVariantList PageRegistry::allPagesData() const
+{
+    QVariantList out;
+    out.reserve(m_pages.size());
+    for (const Entry& e : m_pages) {
+        out.append(entryToVariant(e));
+    }
+    return out;
+}
+
 } // namespace PhosphorSettingsUi

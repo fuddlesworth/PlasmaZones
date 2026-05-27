@@ -192,6 +192,27 @@ private Q_SLOTS:
         QCOMPARE(reg.pageData(QStringLiteral("p1")).value(QStringLiteral("hasDividerAfter")).toBool(), true);
     }
 
+    void allPagesDataReturnsFlatList()
+    {
+        // allPagesData feeds the lib's apply-on-close failure toast
+        // (SettingsAppWindow.collectDirtyPageIds) — must enumerate
+        // every registered page in insertion order so consumers can
+        // iterate without first walking topLevel + child layers.
+        PageRegistry reg;
+        auto* a = new StubPage(QStringLiteral("a"), &reg);
+        auto* b = new StubPage(QStringLiteral("a.b"), &reg);
+        auto* c = new StubPage(QStringLiteral("c"), &reg);
+        reg.registerPage({QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(), a});
+        reg.registerPage({QStringLiteral("a.b"), QStringLiteral("a"), QStringLiteral("B"), {}, QUrl(), b});
+        reg.registerPage({QStringLiteral("c"), {}, QStringLiteral("C"), {}, QUrl(), c});
+
+        const auto all = reg.allPagesData();
+        QCOMPARE(all.size(), 3);
+        QCOMPARE(all.at(0).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("a"));
+        QCOMPARE(all.at(1).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("a.b"));
+        QCOMPARE(all.at(2).toMap().value(QStringLiteral("id")).toString(), QStringLiteral("c"));
+    }
+
     void qmlAccessorsCoverEverything()
     {
         // topLevelPagesData / childPagesData / pageData are the three

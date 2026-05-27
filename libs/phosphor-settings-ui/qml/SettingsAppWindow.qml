@@ -43,6 +43,40 @@ Kirigami.ApplicationWindow {
      *  collapsed rail) by reassigning the property. */
     property bool sidebarCompact: width < Kirigami.Units.gridUnit * 50
 
+    /** Emitted when the user picked Apply in the close-confirmation
+     *  prompt, applyAll() ran, and the controller is STILL dirty —
+     *  meaning at least one staging domain refused or failed its
+     *  commit. Consumers wire this to a toast / error banner so the
+     *  user understands the close-was-blocked path instead of being
+     *  silently re-prompted with the same dialog on the next close
+     *  attempt. Carries the unresolved page ids (best-effort: walks
+     *  the registry and collects each PageController whose isDirty()
+     *  is still true). */
+    signal applyOnCloseFailed(var dirtyPageIds)
+
+    /// Walk the registry and return the ids of every page whose
+    /// controller is still dirty. Used by applyOnCloseFailed above so
+    /// a consumer toast can name the page(s) that refused the commit
+    /// instead of just saying "save failed".
+    function collectDirtyPageIds() {
+        const ids = [];
+        if (!root.controller || !root.controller.registry)
+            return ids;
+
+        const entries = root.controller.registry.allPagesData();
+        for (let i = 0; i < entries.length; ++i) {
+            const id = entries[i].id;
+            if (!id)
+                continue;
+
+            const ctrl = root.controller.registry.controller(id);
+            if (ctrl && ctrl.isDirty())
+                ids.push(id);
+
+        }
+        return ids;
+    }
+
     // Default geometry sized in gridUnits so HiDPI displays (gridUnit ~24-36)
     // scale the window proportionally — staying above the compact-rail
     // threshold (50 gridUnits) at every DPI. At 1× DPR (gridUnit ~18)
@@ -81,6 +115,17 @@ Kirigami.ApplicationWindow {
         }
         onApplyConfirmed: {
             root.controller.applyAll();
+            // If applyAll() left the controller dirty (at least one
+            // staging domain refused or failed to commit), DON'T close
+            // — closing would re-fire onClosing → re-open this same
+            // discard dialog, which reads to the user as a UI glitch.
+            // Surface a signal the consumer can wire to a toast and
+            // hand the user a chance to retry / inspect.
+            if (root.controller.dirty) {
+                const dirtyIds = root.collectDirtyPageIds();
+                root.applyOnCloseFailed(dirtyIds);
+                return ;
+            }
             Qt.callLater(root.close);
         }
     }
