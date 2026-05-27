@@ -194,11 +194,17 @@ Kirigami.Dialog {
                     Layout.fillWidth: true
                     controller: root.controller
                     appSettings: root.appSettings
-                    // Seed once via the picker → root._workingRule. Body
-                    // owns mutation thereafter. NO echo back — produced
-                    // a Qt 6.11 binding loop. Dirty-check + Create read
-                    // editorBody.workingRule directly.
+                    // Bind workingRule to the wizard seed; the body
+                    // emits workingRuleEdited(next) and we push back
+                    // into root._workingRule. The binding then
+                    // propagates the new value back into editorBody,
+                    // keeping the wizard as the single source of
+                    // truth and preserving the binding across
+                    // _goBack / re-pick cycles (the prior shape had
+                    // the body assign workingRule directly, breaking
+                    // the binding on first edit).
                     workingRule: root._workingRule
+                    onWorkingRuleEdited: next => root._workingRule = next
                 }
 
                 RuleEditorStatusBar {

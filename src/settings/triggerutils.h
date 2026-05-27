@@ -14,6 +14,12 @@ namespace PlasmaZones::TriggerUtils {
 /// Storage stores the modifier as a `DragModifier` enum value; QML reads
 /// it as a Qt::KeyboardModifier-style bitmask. The two are bridged by
 /// `ModifierUtils::dragModifierToBitmask`.
+///
+/// **Input MUST NOT contain the AlwaysActive sentinel** — the bridge is
+/// lossy on `DragModifier::AlwaysActive` (modifier=8 → bitmask=0), so a
+/// sentinel entry round-trips to a phantom "no-modifier, no-mouse-button"
+/// chip in the QML widget. Call `stripAlwaysActiveTrigger` first on any
+/// list that may carry the sentinel.
 QVariantList convertTriggersForQml(const QVariantList& triggers);
 
 /// Inverse of convertTriggersForQml — QML-authored triggers come in as

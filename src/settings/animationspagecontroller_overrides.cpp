@@ -117,6 +117,20 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
     if (!isValidEventPath(path))
         return false;
 
+    // Refuse writes while a Discard worker is in flight — the worker
+    // is concurrently rewriting profile files from the snapshot map
+    // taken before the worker started. A simultaneous setOverride on
+    // a path the worker is processing would race: last writer wins on
+    // disk (non-deterministic), and the worker's finished handler
+    // would clear the dirty bit afterward — silently dropping the
+    // user's concurrent edit. The QML chrome already gates the
+    // editor controls on `discarding`, but defence-in-depth at the
+    // C++ Q_INVOKABLE entry point protects programmatic callers.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "setOverride: refusing write while async discard is in flight; path=" << path;
+        return false;
+    }
+
     const QString dir = userProfilesDir();
     if (!QDir().mkpath(dir))
         return false;
@@ -175,6 +189,14 @@ bool AnimationsPageController::clearOverride(const QString& path)
 {
     if (!isValidEventPath(path))
         return false;
+    // Same race rationale as setOverride above — refuse mutation
+    // while the Discard worker has the snapshot map captured. A
+    // clearOverride on a path the worker is rewriting would let the
+    // worker re-create the file the user just deleted.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "clearOverride: refusing delete while async discard is in flight; path=" << path;
+        return false;
+    }
     const QString filePath = profileFilePath(path);
     QFile file(filePath);
     if (!file.exists())

@@ -33,7 +33,16 @@ bool TilingBehaviorController::alwaysReinsertIntoStack() const
 
 QVariantList TilingBehaviorController::autotileDragInsertTriggers() const
 {
-    return TriggerUtils::convertTriggersForQml(m_settings->autotileDragInsertTriggers());
+    // Strip the AlwaysActive sentinel BEFORE converting so QML never sees
+    // a phantom "no-modifier, no-mouse-button" chip when the master
+    // toggle is on. Mirrors SnappingBehaviorController::dragActivationTriggers
+    // — both surfaces use the AlwaysActive bit as a master-toggle proxy
+    // stored in the trigger list, and the chip widget would render the
+    // sentinel as an empty trigger row otherwise. convertTriggersForQml
+    // is lossy on AlwaysActive (modifier=8 → bitmask=0), so this strip
+    // is the canonical way to feed QML.
+    return TriggerUtils::convertTriggersForQml(
+        TriggerUtils::stripAlwaysActiveTrigger(m_settings->autotileDragInsertTriggers()));
 }
 
 QVariantList TilingBehaviorController::defaultAutotileDragInsertTriggers() const

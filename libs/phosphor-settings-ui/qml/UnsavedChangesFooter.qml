@@ -70,14 +70,23 @@ ColumnLayout {
         id: dirtyBar
 
         property real expansion: root.controller.dirty ? 1 : 0
-        /// Cached direction at the moment expansion was set, so a
-        /// dirty flip mid-animation doesn't rubber-band the slide
-        /// (Behavior re-reads profile on every animation tick under
-        /// the prior `dirty ?` form; if dirty flipped during a slide
-        /// the profile would swap to the opposite direction and the
-        /// bar visibly bounces back).
+        /// Direction of the running slide. Set in the dirtyChanged
+        /// handler BELOW (before expansion's binding re-evaluates and
+        /// the Behavior reads the value), not from
+        /// onExpansionChanged — that approach updated the cache
+        /// AFTER expansion began changing, so the first dirty→clean
+        /// leg ran with the stale "Expand" profile from the prior
+        /// dirty→true cycle (and vice-versa), giving every transition
+        /// the wrong easing curve.
         property string _slideProfile: "widget.accordionExpand"
-        onExpansionChanged: _slideProfile = (expansion >= 0.5 ? "widget.accordionExpand" : "widget.accordionCollapse")
+
+        Connections {
+            function onDirtyChanged() {
+                dirtyBar._slideProfile = root.controller.dirty ? "widget.accordionExpand" : "widget.accordionCollapse";
+            }
+
+            target: root.controller
+        }
 
         Layout.fillWidth: true
         Layout.preferredHeight: expansion * barContent.implicitHeight

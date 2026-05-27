@@ -107,11 +107,17 @@ Kirigami.OverlaySheet {
 
         controller: sheet.controller
         appSettings: sheet.appSettings
-        // Seed once via openFor → sheet._workingRule. The body owns
-        // mutation thereafter. NO echo back into _workingRule — that
-        // produced a Qt 6.11 binding loop. Consumers (dirty check,
-        // Save) read editorBody.workingRule directly.
+        // Bind workingRule to the sheet's seed — the body emits
+        // `workingRuleEdited(next)` for every mutation, and the
+        // handler below pushes `next` back into sheet._workingRule.
+        // The binding then propagates the new value into editorBody.
+        // This keeps the host as the single source of truth and
+        // preserves the binding across openFor re-seeds (the prior
+        // shape had the body assign `workingRule = next` directly,
+        // which broke the binding on first edit and stuck subsequent
+        // openFor calls on the previously-edited rule).
         workingRule: sheet._workingRule
+        onWorkingRuleEdited: next => sheet._workingRule = next
     }
 
     footer: ColumnLayout {

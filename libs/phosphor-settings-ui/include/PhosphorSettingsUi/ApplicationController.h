@@ -5,6 +5,7 @@
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QUrl>
@@ -190,14 +191,30 @@ private:
     QStringList m_discardErrors;
     bool m_discarding = false;
     // Monotonic batch generation counters. Bumped at the start of each
-    // *Async batch and captured by that batch's timeout lambda — when
-    // the timer fires, the lambda compares its captured generation
-    // against the current value and bails out if they don't match.
-    // Prevents a stale timer from a previous batch from spuriously
-    // triggering against a *new* batch the user kicked off after the
-    // first one completed (60s gap is unlikely but possible).
+    // *Async batch (and inside forceResetAsyncState) and captured by
+    // every lambda the batch wires — the lambda bails out when its
+    // captured generation no longer matches the live counter. Guards
+    // against ALL stale-callback shapes:
+    //   * a 60s timer firing after a previous batch completed and a
+    //     new batch is now in flight
+    //   * a per-domain applyResult/destroyed lambda from a re-entered
+    //     batch decrementing the NEW batch's pending counter
+    //   * an applyResult fired after forceResetAsyncState recovered a
+    //     wedged batch (the stale lambdas are still wired but the
+    //     generation has moved on)
     quint64 m_applyGeneration = 0;
     quint64 m_discardGeneration = 0;
+    // Per-batch outstanding domain sets. A domain is in the set when
+    // we still expect EXACTLY ONE more terminal signal (applyResult
+    // OR destroyed) from it. The first to fire removes the domain;
+    // the second is a no-op. Without this, a domain that emits
+    // applyResult synchronously and is then destroyed later in the
+    // batch would tick the pending counter TWICE (once per signal),
+    // driving it negative and miscounting completion. Pointers are
+    // never dereferenced — only used as hash keys — so dangling
+    // post-destroyed entries are harmless.
+    QSet<StagingDomain*> m_applyOutstanding;
+    QSet<StagingDomain*> m_discardOutstanding;
     /// Hard-cap on how long an async batch waits for terminal result
     /// signals before synthesising a failure entry per still-pending
     /// domain. 60 seconds is generous for D-Bus chains (typical

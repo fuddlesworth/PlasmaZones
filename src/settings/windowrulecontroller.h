@@ -432,6 +432,13 @@ private:
     /// discardResult so the framework's wait-counter ticks down
     /// rather than the chrome stalling.
     bool m_discardInFlight = false;
+    /// Symmetric guard for the StagingDomain apply() entry point.
+    /// Cleared inside pushToDaemonAsync's reply lambda before the
+    /// applyResult emit. Refuses re-entrant apply() while a setAllRules
+    /// D-Bus call is still outstanding — without this, a second
+    /// apply() dispatches a duplicate setAllRules push, and the reply
+    /// lambdas race on setDirty(false) + applyResult emission.
+    bool m_asyncCommitInFlight = false;
     /// Split lookups: monitorOverview's tile picks one based on the rule's
     /// engineMode, so a SetSnappingLayout with a UUID-shaped value can't
     /// accidentally hit the tiling-algorithm path and vice versa.

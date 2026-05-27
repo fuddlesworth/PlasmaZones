@@ -66,9 +66,6 @@ void ApplicationController::registerPage(PageController* page, const QString& pa
         qWarning() << "ApplicationController::registerPage: null page";
         return;
     }
-    if (!page->parent()) {
-        page->setParent(this);
-    }
 
     PageRegistry::Entry entry;
     entry.id = page->id();
@@ -79,12 +76,16 @@ void ApplicationController::registerPage(PageController* page, const QString& pa
     entry.controller = page;
     entry.isCollapsible = isCollapsible;
     entry.hasDividerAfter = hasDividerAfter;
-    // Only track the page as a staging domain if the registry accepted
-    // it. A rejected registration (empty id, duplicate, unknown parent)
-    // must not leak into m_domains — otherwise the page contributes to
-    // global dirty / applyAll / discardAll while the UI cannot see it.
+    // Reparent ONLY when registration is accepted — otherwise a
+    // caller who built a null-parented page and held it on the
+    // stack/heap would lose ownership to us on rejection (empty id,
+    // duplicate, unknown parent) and we'd destroy the page when this
+    // controller dies. Symmetric for registerDomain below.
     if (!m_registry->registerPage(std::move(entry))) {
         return;
+    }
+    if (!page->parent()) {
+        page->setParent(this);
     }
 
     trackDomain(page);
@@ -96,10 +97,16 @@ void ApplicationController::registerDomain(StagingDomain* domain)
         qWarning() << "ApplicationController::registerDomain: null domain";
         return;
     }
-    if (!domain->parent()) {
+    // No PageRegistry-side validation gate for headless domains — but
+    // trackDomain refuses duplicates with a warning. Only reparent if
+    // tracking actually accepted the domain (i.e. it wasn't already
+    // in m_domains). Pre-trackDomain check mirrors trackDomain's
+    // duplicate guard exactly.
+    const bool alreadyTracked = m_domains.contains(QPointer<StagingDomain>(domain));
+    trackDomain(domain);
+    if (!alreadyTracked && !domain->parent()) {
         domain->setParent(this);
     }
-    trackDomain(domain);
 }
 
 void ApplicationController::applyAll()
@@ -191,6 +198,10 @@ void ApplicationController::applyAllAsync()
 
     m_applyPending = dirty.size();
     m_applyErrors.clear();
+    m_applyOutstanding.clear();
+    m_applyOutstanding.reserve(dirty.size());
+    for (StagingDomain* d : dirty)
+        m_applyOutstanding.insert(d);
     m_applying = true;
     ++m_applyGeneration;
     Q_EMIT applyingChanged();
@@ -221,15 +232,30 @@ void ApplicationController::applyAllAsync()
         completeApplyIfDone();
     });
 
+    // Per-domain lambdas share the same `generation` snapshot captured
+    // above for the timer — see the generation-counter comment in the
+    // header. Reusing the variable keeps the timer + per-domain
+    // lambdas semantically equivalent for stale-fire detection.
     for (StagingDomain* domain : dirty) {
         // Use Qt::SingleShotConnection so the lambda self-disconnects
         // after first fire. Avoids the prior heap-allocated
         // QMetaObject::Connection*  pattern that leaked when a domain
         // was destroyed mid-batch (Qt auto-disconnects on sender
         // destruction without running the manual cleanup body).
+        //
+        // The lambda checks generation FIRST (stale-batch guard) and
+        // then removes the domain from m_applyOutstanding — if the
+        // domain isn't in the set, this is the SECOND terminal fire
+        // (applyResult ran sync then destroyed() fired, or vice-
+        // versa) and we no-op so the pending counter only ticks once
+        // per domain regardless of how many terminal signals arrive.
         connect(
             domain, &StagingDomain::applyResult, this,
-            [this](bool ok, const QString& error) {
+            [this, domain, generation](bool ok, const QString& error) {
+                if (generation != m_applyGeneration)
+                    return;
+                if (m_applyOutstanding.remove(domain) == 0)
+                    return;
                 if (!ok && !error.isEmpty())
                     m_applyErrors.append(error);
                 else if (!ok)
@@ -239,14 +265,17 @@ void ApplicationController::applyAllAsync()
             },
             Qt::SingleShotConnection);
         // Companion guard for the destroyed-mid-batch case: if the
-        // domain QObject dies before it emits applyResult, the
-        // applyResult connection above is auto-removed by Qt — so we
-        // also wire a one-shot destroyed() hook that ticks the
-        // counter down. Without this, m_applying would stall at true
-        // forever, freezing the Save button as "Saving…" disabled.
+        // domain QObject dies before it emits applyResult, this fires
+        // and ticks the counter so m_applying doesn't stall true.
+        // Shares the generation + outstanding-set protocol with the
+        // applyResult lambda above so the two are idempotent.
         connect(
             domain, &QObject::destroyed, this,
-            [this]() {
+            [this, domain, generation]() {
+                if (generation != m_applyGeneration)
+                    return;
+                if (m_applyOutstanding.remove(domain) == 0)
+                    return;
                 m_applyErrors.append(QStringLiteral("Domain destroyed before apply completed"));
                 --m_applyPending;
                 completeApplyIfDone();
@@ -275,6 +304,10 @@ void ApplicationController::discardAllAsync()
 
     m_discardPending = dirty.size();
     m_discardErrors.clear();
+    m_discardOutstanding.clear();
+    m_discardOutstanding.reserve(dirty.size());
+    for (StagingDomain* d : dirty)
+        m_discardOutstanding.insert(d);
     m_discarding = true;
     ++m_discardGeneration;
     Q_EMIT discardingChanged();
@@ -296,12 +329,19 @@ void ApplicationController::discardAllAsync()
         completeDiscardIfDone();
     });
 
+    // Per-domain lambdas reuse the same `generation` snapshot above
+    // (timer + apply/destroyed lambdas all key off it for stale-fire
+    // detection).
     for (StagingDomain* domain : dirty) {
-        // Same Qt::SingleShotConnection + destroyed() guard pattern
-        // as applyAllAsync above. See the rationale comment there.
+        // Same generation + outstanding-set guard pattern as
+        // applyAllAsync above. See the rationale comment there.
         connect(
             domain, &StagingDomain::discardResult, this,
-            [this](bool ok, const QString& error) {
+            [this, domain, generation](bool ok, const QString& error) {
+                if (generation != m_discardGeneration)
+                    return;
+                if (m_discardOutstanding.remove(domain) == 0)
+                    return;
                 if (!ok && !error.isEmpty())
                     m_discardErrors.append(error);
                 else if (!ok)
@@ -312,7 +352,11 @@ void ApplicationController::discardAllAsync()
             Qt::SingleShotConnection);
         connect(
             domain, &QObject::destroyed, this,
-            [this]() {
+            [this, domain, generation]() {
+                if (generation != m_discardGeneration)
+                    return;
+                if (m_discardOutstanding.remove(domain) == 0)
+                    return;
                 m_discardErrors.append(QStringLiteral("Domain destroyed before discard completed"));
                 --m_discardPending;
                 completeDiscardIfDone();
@@ -327,17 +371,26 @@ void ApplicationController::completeApplyIfDone()
     if (m_applyPending > 0)
         return;
     m_inTransaction = false;
-    // Set m_applying = false BEFORE recomputeDirty so any
-    // dirtyChanged listener that probes controller.applying sees a
-    // consistent "batch finished" state rather than "dirty just
-    // cleared but still applying".
+    m_applyOutstanding.clear();
+    // State-change emission order:
+    //   1) m_applying = false (set field first so probes see it)
+    //   2) applyingChanged   (state-bit observers refresh)
+    //   3) applyAllComplete  (terminal-batch signal fires while applying
+    //                         is still observably false; a slot that
+    //                         re-invokes applyAllAsync from here starts
+    //                         a fresh batch cleanly)
+    //   4) recomputeDirty    (dirtyChanged-driven side effects can now
+    //                         observe both applying=false AND the
+    //                         terminal signal has already been emitted —
+    //                         no chance of Complete arriving AFTER a
+    //                         re-invoked batch's applyingChanged(true))
     const bool ok = m_applyErrors.isEmpty();
     const QStringList errors = std::move(m_applyErrors);
     m_applyErrors.clear();
     m_applying = false;
     Q_EMIT applyingChanged();
-    recomputeDirty();
     Q_EMIT applyAllComplete(ok, errors);
+    recomputeDirty();
 }
 
 void ApplicationController::completeDiscardIfDone()
@@ -345,16 +398,16 @@ void ApplicationController::completeDiscardIfDone()
     if (m_discardPending > 0)
         return;
     m_inTransaction = false;
-    // Same ordering as completeApplyIfDone — m_discarding flips false
-    // BEFORE recomputeDirty so observers see a consistent post-batch
-    // state.
+    m_discardOutstanding.clear();
+    // Same Complete-before-recomputeDirty ordering as completeApplyIfDone —
+    // see the rationale comment there.
     const bool ok = m_discardErrors.isEmpty();
     const QStringList errors = std::move(m_discardErrors);
     m_discardErrors.clear();
     m_discarding = false;
     Q_EMIT discardingChanged();
-    recomputeDirty();
     Q_EMIT discardAllComplete(ok, errors);
+    recomputeDirty();
 }
 
 void ApplicationController::forceResetAsyncState()
@@ -363,14 +416,26 @@ void ApplicationController::forceResetAsyncState()
     // stuck because both the terminal result signal AND the
     // destroyed() guard failed to fire (should be unreachable but
     // chrome buttons would be permanently disabled if it did).
+    //
+    // Bumping the generation counter is essential: the per-domain
+    // applyResult/destroyed lambdas from the wedged batch are STILL
+    // WIRED on the domains. If those domains later fire either signal
+    // after this reset, the lambdas' generation guard will see the
+    // new value and bail — without the bump, a stale fire after
+    // reset would corrupt whatever state-machine state happens to be
+    // live (the NEXT batch's counters, most likely).
     if (m_applying) {
+        ++m_applyGeneration;
         m_applyPending = 0;
+        m_applyOutstanding.clear();
         if (m_applyErrors.isEmpty())
             m_applyErrors.append(QStringLiteral("Async apply state force-reset"));
         completeApplyIfDone();
     }
     if (m_discarding) {
+        ++m_discardGeneration;
         m_discardPending = 0;
+        m_discardOutstanding.clear();
         if (m_discardErrors.isEmpty())
             m_discardErrors.append(QStringLiteral("Async discard state force-reset"));
         completeDiscardIfDone();

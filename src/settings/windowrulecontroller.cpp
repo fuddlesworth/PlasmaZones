@@ -290,8 +290,14 @@ bool WindowRuleController::pushToDaemonAsync(const QList<WindowRule>& rules)
                                                    QStringLiteral("setAllRules"),
                                                    {QString::fromUtf8(doc.toJson(QJsonDocument::Compact))}),
         this);
+    // Flip the in-flight guard now so an asyncCommit re-entry during
+    // the wire round-trip rejects rather than dispatching a second
+    // setAllRules. Cleared in the reply lambda below before every
+    // applyResult emit.
+    m_asyncCommitInFlight = true;
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        m_asyncCommitInFlight = false;
         QDBusPendingReply<bool> reply = *w;
         if (reply.isError()) {
             setDaemonReachable(false);
@@ -446,6 +452,15 @@ void WindowRuleController::asyncCommit(bool force)
     // Mirror commit(force) but emit applyResult on the reply instead
     // of returning bool. Clean state is emitted as applyResult(true, "");
     // refusals + transport errors carry an explanatory message.
+    //
+    // Refuse re-entrant invocation while a prior setAllRules push is
+    // outstanding — a second push would race the first reply (both
+    // would call setDirty(false) and emit applyResult), and the
+    // daemon receives two identical writes for one user action.
+    if (m_asyncCommitInFlight) {
+        Q_EMIT applyResult(false, tr("A save is already in flight."));
+        return;
+    }
     if (!m_dirty) {
         Q_EMIT applyResult(true, QString());
         return;

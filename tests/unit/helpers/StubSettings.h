@@ -702,7 +702,10 @@ public:
     }
     void setSnappingLayoutOrder(const QStringList& order) override
     {
+        if (m_snappingLayoutOrder == order)
+            return;
         m_snappingLayoutOrder = order;
+        Q_EMIT settingsChanged();
     }
     QStringList tilingAlgorithmOrder() const override
     {
@@ -710,7 +713,10 @@ public:
     }
     void setTilingAlgorithmOrder(const QStringList& order) override
     {
+        if (m_tilingAlgorithmOrder == order)
+            return;
         m_tilingAlgorithmOrder = order;
+        Q_EMIT settingsChanged();
     }
 
     // Animation settings (ISettings)

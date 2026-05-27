@@ -57,10 +57,19 @@ void SettingsController::load()
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
     m_staging.clearAll();
+    // Emit stagedXxxChanged only when reset() actually transitions a
+    // non-empty optional to empty. Unconditional emit violates
+    // CLAUDE.md's "only emit signals when value actually changes" rule
+    // and re-walks every QML binding keyed on these signals on every
+    // load(), including the startup load when nothing was staged.
+    const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
+    const bool hadStagedTile = m_stagedTilingOrder.has_value();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
-    Q_EMIT stagedSnappingOrderChanged();
-    Q_EMIT stagedTilingOrderChanged();
+    if (hadStagedSnap)
+        Q_EMIT stagedSnappingOrderChanged();
+    if (hadStagedTile)
+        Q_EMIT stagedTilingOrderChanged();
     m_loading = false;
     setNeedsSave(false);
 }
@@ -69,15 +78,25 @@ void SettingsController::save()
 {
     m_saving = true;
 
-    // Flush staged ordering to settings before persisting
-    if (m_stagedSnappingOrder.has_value()) {
+    // Flush staged ordering to settings before persisting; emit the
+    // transitioned-to-empty NOTIFY signals after the writes so QML
+    // bindings tracking the staged state see the persisted-clean
+    // transition (load()/defaults() emit symmetrically — save() was
+    // the asymmetric outlier).
+    const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
+    const bool hadStagedTile = m_stagedTilingOrder.has_value();
+    if (hadStagedSnap) {
         m_settings.setSnappingLayoutOrder(*m_stagedSnappingOrder);
         m_stagedSnappingOrder.reset();
     }
-    if (m_stagedTilingOrder.has_value()) {
+    if (hadStagedTile) {
         m_settings.setTilingAlgorithmOrder(*m_stagedTilingOrder);
         m_stagedTilingOrder.reset();
     }
+    if (hadStagedSnap)
+        Q_EMIT stagedSnappingOrderChanged();
+    if (hadStagedTile)
+        Q_EMIT stagedTilingOrderChanged();
 
     // Persistence phase (pre-save): staged tiling-quick-slot writes + VS
     // configs need to be in Settings before the save flushes to disk.
@@ -87,19 +106,16 @@ void SettingsController::save()
     // Save main settings (includes editor settings + VS configs persisted above)
     m_settings.save();
 
-    // Animations write to disk immediately, so commit just clears the
-    // session snapshot — there's nothing left to flush. After this the
-    // user can no longer Discard back to the pre-session state for any
-    // animation edits made so far.
-    if (m_animationsPage)
-        m_animationsPage->commitPending();
-
-    // Push the staged window-rule set to the daemon (sole writer of
-    // windowrules.json). Done before notifyReload so the daemon's rule
-    // engine picks up the new set as part of the same save. A failed push
-    // (daemon down, or a partial rule drop) must NOT be reported as saved —
-    // tracked here and re-flagged after the blanket setNeedsSave(false) below.
-    const bool windowRulesCommitOk = !m_windowRulesPage || m_windowRulesPage->commit();
+    // WindowRuleController and AnimationsPageController are registered
+    // as their own StagingDomains and the framework's applyAllAsync
+    // walks them directly — their own apply() methods drive the
+    // async D-Bus push (windowrules) and the snapshot clear
+    // (animations). Calling commit/commitPending here would double-
+    // dispatch (and for window rules, ALSO send a synchronous
+    // setAllRules over D-Bus *before* the async one returned, hitting
+    // the daemon twice in the same save tick). The framework owns
+    // those terminal signals; this save() handles only the Settings-
+    // backed surface.
 
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.
@@ -158,15 +174,12 @@ void SettingsController::save()
     // reset through singleShot(0) drains those queued signals first, so
     // onExternalSettingsChanged() sees m_saving=true and returns early.
     setNeedsSave(false);
-    // If the window-rule push failed, the page still has unsaved staged edits
-    // — re-flag it so the user is not told everything saved. Done after the
-    // blanket clear above (and with m_saving still true, so the dirtyChanged
-    // connect lambda's guard short-circuits and does not double-mark).
-    if (!windowRulesCommitOk) {
-        beginExternalEdit(QStringLiteral("window-rules"));
-        setNeedsSave(true);
-        endExternalEdit();
-    }
+    // Window-rule failure handling moved to WindowRuleController itself
+    // (see pushToDaemonAsync): a failed/partial-drop push keeps the page
+    // m_dirty=true and emits applyResult(false), and the framework's
+    // applyAllComplete carries the error. SettingsController::save()
+    // no longer dispatches window-rule pushes (see comment above) so
+    // there is no commit-result to re-flag here.
     if (!assignmentsCommitOk) {
         // Surface the assignment-flush failure to the user — same shape
         // as the window-rules retry path. Without this, a failed batch
@@ -203,10 +216,16 @@ void SettingsController::defaults()
     m_loading = false;
 
     m_staging.clearAll();
+    // Gate the staged-order NOTIFY emits on transition (same rationale
+    // as load() / save()) — CLAUDE.md emit-on-change rule.
+    const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
+    const bool hadStagedTile = m_stagedTilingOrder.has_value();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
-    Q_EMIT stagedSnappingOrderChanged();
-    Q_EMIT stagedTilingOrderChanged();
+    if (hadStagedSnap)
+        Q_EMIT stagedSnappingOrderChanged();
+    if (hadStagedTile)
+        Q_EMIT stagedTilingOrderChanged();
 
     // Drop the animations page's in-memory staged edits so the page
     // matches the reset settings (on-disk animation overrides in

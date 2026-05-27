@@ -69,7 +69,7 @@ Item {
         if (contentItem) {
             contentItem.parent = contentColumn;
             contentItem.y = Kirigami.Units.largeSpacing;
-            contentItem.width = Qt.binding(function() {
+            contentItem.width = Qt.binding(function () {
                 return contentColumn.width;
             });
         }
@@ -78,7 +78,7 @@ Item {
     onHeaderChanged: {
         if (header) {
             header.parent = headerLoader;
-            header.width = Qt.binding(function() {
+            header.width = Qt.binding(function () {
                 return headerLoader.width;
             });
             headerLoader.sourceComponent = null;
@@ -176,7 +176,7 @@ Item {
                         checked: root.toggleChecked
                         accessibleName: root.headerText
                         Layout.rightMargin: Kirigami.Units.smallSpacing
-                        onToggled: function(newValue) {
+                        onToggled: function (newValue) {
                             root.toggleClicked(newValue);
                         }
                     }
@@ -194,17 +194,12 @@ Item {
                         Behavior on rotation {
                             PhosphorMotionAnimation {
                                 profile: "widget.hover"
-                                durationOverride: 200
+                                durationOverride: Kirigami.Units.shortDuration
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // ── Separator ──────────────────────────────────────────────────
@@ -243,7 +238,7 @@ Item {
                     properties: "opacity"
                     to: 0
                     profile: "widget.fadeOut"
-                    durationOverride: 150
+                    durationOverride: Kirigami.Units.veryShortDuration * 2
                 }
 
                 PhosphorMotionAnimation {
@@ -251,9 +246,8 @@ Item {
                     properties: "height"
                     to: 0
                     profile: "widget.accordionCollapse"
-                    durationOverride: 200
+                    durationOverride: Kirigami.Units.shortDuration
                 }
-
             }
 
             SequentialAnimation {
@@ -264,7 +258,7 @@ Item {
                     properties: "height"
                     to: contentColumn.implicitHeight
                     profile: "widget.accordionExpand"
-                    durationOverride: 200
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
                 PhosphorMotionAnimation {
@@ -276,35 +270,30 @@ Item {
 
                 ScriptAction {
                     script: {
-                        contentClip.height = Qt.binding(function() {
+                        contentClip.height = Qt.binding(function () {
                             return contentColumn.implicitHeight;
                         });
-                        contentClip.opacity = Qt.binding(function() {
+                        contentClip.opacity = Qt.binding(function () {
                             return root.showToggle && !root.toggleChecked ? 0.5 : 1;
                         });
                     }
                 }
-
             }
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 200
+                    durationOverride: Kirigami.Units.shortDuration
                 }
-
             }
-
         }
 
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.shortDuration
             }
-
         }
-
     }
 
     // Subtle lift on hover
@@ -314,11 +303,8 @@ Item {
         Behavior on y {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.shortDuration
             }
-
         }
-
     }
-
 }

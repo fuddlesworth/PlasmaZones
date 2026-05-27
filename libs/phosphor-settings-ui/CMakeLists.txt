@@ -308,10 +308,28 @@ if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
     # the linker's default search path. $ORIGIN on the plugin's
     # INSTALL_RPATH resolves the sibling library at runtime and during
     # dpkg-shlibdeps packaging scans.
-    set_target_properties(${_phosphor_settings_ui_qml_shared_plugin_target} PROPERTIES
-        INSTALL_RPATH "$ORIGIN"
-    )
+    #
+    # Defer the rpath set with cmake_language(DEFER) — Qt creates the
+    # plugin target via qt_finalize_target() deferred to end of dir
+    # scope on some 6.6.x configurations, so a direct set_target_properties
+    # call here can race the target's actual creation. The DEFER guard +
+    # TARGET check covers every supported Qt 6.6+ generator path.
+    cmake_language(DEFER CALL _phosphor_settings_ui_apply_plugin_rpath
+        ${_phosphor_settings_ui_qml_shared_plugin_target})
 endif()
+
+# Helper invoked via cmake_language(DEFER) above so the plugin target
+# is fully realised by Qt's finalizer before we touch it. Defined here
+# (after the if block) so it's visible to the DEFER call which executes
+# at end of dir scope.
+function(_phosphor_settings_ui_apply_plugin_rpath plugin_target)
+    if(NOT TARGET ${plugin_target})
+        message(WARNING "phosphor-settings-ui: plugin target ${plugin_target} not found at install-rpath set time"
+                        " — packaging may need LD_LIBRARY_PATH for the QML module directory.")
+        return()
+    endif()
+    set_target_properties(${plugin_target} PROPERTIES INSTALL_RPATH "$ORIGIN")
+endfunction()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Examples — opt-in via -DBUILD_PHOSPHOR_SETTINGS_UI_EXAMPLES=ON

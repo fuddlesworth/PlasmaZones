@@ -177,6 +177,17 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (!m_settings || path.isEmpty())
         return false;
 
+    // Same race rationale as setOverride/clearOverride in
+    // animationspagecontroller_overrides.cpp — the shader tree is
+    // captured in m_pendingFileSnapshots when a discard starts, and
+    // a concurrent mutation here would race the worker's
+    // setShaderProfileTree write. The chrome gates the picker UI on
+    // `discarding`; this guard protects programmatic callers.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "setShaderOverride: refusing write while async discard is in flight; path=" << path;
+        return false;
+    }
+
     // Cheap sanity check on effectId BEFORE the registry-membership gate
     // below — the registry gate is skipped during the "registry not yet
     // populated" startup window, so without this guard a stray Q_INVOKABLE
@@ -295,6 +306,10 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     using namespace PhosphorAnimationShaders;
     if (!m_settings || path.isEmpty())
         return false;
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "clearShaderOverride: refusing while async discard is in flight; path=" << path;
+        return false;
+    }
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     if (!tree.hasOverride(path))
         return false;
@@ -345,6 +360,11 @@ int AnimationsPageController::clearShaderOverrideDescendants(const QString& path
     using namespace PhosphorAnimationShaders;
     if (!m_settings)
         return 0;
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "clearShaderOverrideDescendants: refusing while async discard is in flight; path="
+                            << path;
+        return 0;
+    }
     ShaderProfileTree tree = m_settings->shaderProfileTree();
     const QStringList toClear = collectShaderOverrideDescendants(tree, path);
     if (toClear.isEmpty())

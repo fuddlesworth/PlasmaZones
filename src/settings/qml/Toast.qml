@@ -66,7 +66,9 @@ Rectangle {
         from: 0
         to: 1
         profile: "popup"
-        durationOverride: 200
+        // Scales with the user's animation-speed preference / respects
+        // "reduce motion" — was a hardcoded 200ms that bypassed both.
+        durationOverride: Kirigami.Units.shortDuration
     }
 
     SequentialAnimation {

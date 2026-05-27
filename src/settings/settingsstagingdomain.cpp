@@ -6,6 +6,9 @@
 #include "settingscontroller.h"
 
 #include <QDebug>
+#include <QScopeGuard>
+
+#include <memory>
 
 namespace PlasmaZones {
 
@@ -71,13 +74,26 @@ void SettingsStagingDomain::apply()
     // daemon-broadcast drain and let a second Apply land while the
     // first was still being unwound.
     //
+    // Both lambdas (savingFinished + destroyed) capture a SHARED
+    // settled-flag. Without it the destroyed() Qt::SingleShotConnection
+    // never auto-disconnects (destroyed only fires once, at end of
+    // life), so every apply() that completes via savingFinished leaves
+    // its destroyed-handler connection live until the controller dies
+    // — at which point N applies fire N applyResult emissions. The
+    // shared flag lets the first lambda to fire mark the apply as
+    // settled and the second no-op.
+    //
     // Truthful applyResult: SettingsController re-flags pages whose
     // commit failed (window-rules push, assignment flush) inside
     // save(), so post-savingFinished needsSave() tells us whether the
     // batch fully succeeded.
+    auto settled = std::make_shared<bool>(false);
     connect(
         m_controller, &SettingsController::savingFinished, this,
-        [this]() {
+        [this, settled]() {
+            if (*settled)
+                return;
+            *settled = true;
             m_inFlight = false;
             const bool ok = m_controller && !m_controller->needsSave();
             Q_EMIT applyResult(ok, ok ? QString() : QStringLiteral("One or more settings failed to save"));
@@ -85,10 +101,10 @@ void SettingsStagingDomain::apply()
         Qt::SingleShotConnection);
     connect(
         m_controller, &QObject::destroyed, this,
-        [this]() {
-            // Controller died mid-save — release the in-flight guard
-            // and surface failure so the framework's wait-counter
-            // doesn't stall.
+        [this, settled]() {
+            if (*settled)
+                return;
+            *settled = true;
             m_inFlight = false;
             Q_EMIT applyResult(false, QStringLiteral("Controller destroyed before save completed"));
         },
@@ -104,8 +120,13 @@ void SettingsStagingDomain::discard()
         return;
     }
     m_inFlight = true;
+    // RAII reset of m_inFlight — if SettingsController::load() throws
+    // (some future code path), m_inFlight must NOT remain stuck true
+    // or every subsequent apply/discard will be permanently refused.
+    auto guard = qScopeGuard([this]() {
+        m_inFlight = false;
+    });
     m_controller->load();
-    m_inFlight = false;
     Q_EMIT discardResult(true, QString());
 }
 
