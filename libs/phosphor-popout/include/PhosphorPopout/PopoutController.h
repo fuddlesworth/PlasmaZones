@@ -19,25 +19,27 @@ class IPopoutTransport;
 // Concrete IPopoutService. Owns the arbitration state machine and
 // delegates surface creation to an injected IPopoutTransport. One
 // instance per shell process. Registered as a QML singleton so QML
-// callers reach the same arbiter as C++ callers (a separate instance
-// per engine would defeat the "single arbiter" guarantee, so consumers
-// that want a shared instance across engines must use
-// `qmlRegisterSingletonInstance` to pin the same C++ pointer in each).
+// callers reach the same arbiter as C++ callers. A separate instance
+// per engine would defeat the single-arbiter guarantee. Consumers that
+// want a shared instance across engines must use
+// qmlRegisterSingletonInstance to pin the same C++ pointer in each.
 //
-// Arbitration rules:
+// Arbitration rules.
 //
 //   Cooperative   At most one Cooperative popout per scope. Opening a
 //                 new Cooperative request in the same scope closes the
-//                 prior one (via the transport) before opening the new
-//                 one. Different scopes are independent.
+//                 prior one before opening the new one. Different
+//                 scopes are independent.
 //
 //   Modal         While ANY Modal is open, every new Cooperative
-//                 request is rejected (open() returns ""). Existing
-//                 Cooperative popouts are closed when the first Modal
-//                 opens. They are NOT restored when the modal closes
-//                 (the user explicitly demanded the modal; restoring
-//                 would clobber whatever they're focused on next).
-//                 Modal-on-Modal is allowed; modals stack.
+//                 request is rejected. open returns an empty string.
+//                 Existing Cooperative popouts are closed when the
+//                 first Modal opens. They are NOT restored when the
+//                 modal closes. The user explicitly demanded the
+//                 modal. Restoring would clobber whatever they focus
+//                 next. Modal-on-Modal stacks, but a second Modal
+//                 with the same popoutId is rejected like any other
+//                 same-id collision.
 //
 //   Detached      Ignored by scope arbitration. Detached popouts open,
 //                 stay open across cooperative-swap and modal-open
@@ -48,14 +50,17 @@ class PHOSPHORPOPOUT_EXPORT PopoutController : public QObject, public IPopoutSer
     Q_OBJECT
     QML_ELEMENT
     // PopoutController requires a transport injected at construction.
-    // QML cannot default-construct it, so the type is registered for
+    // QML cannot default-construct it. The type is registered for
     // type-annotation visibility only. Production wiring uses
     // qmlRegisterSingletonInstance from C++ to publish a pre-built
-    // instance to QML; the demo uses a context property.
+    // instance to QML. The demo uses a context property.
     QML_UNCREATABLE(
         "Construct PopoutController in C++ with an IPopoutTransport, then expose via qmlRegisterSingletonInstance")
 
 public:
+    // transport must be non-null. The controller does not own the
+    // transport. The caller must keep the transport alive at least as
+    // long as the controller. Asserted in debug builds.
     explicit PopoutController(IPopoutTransport* transport, QObject* parent = nullptr);
     ~PopoutController() override;
 
@@ -66,9 +71,9 @@ public:
     [[nodiscard]] Q_INVOKABLE bool isOpen(const QString& popoutId) const override;
     Q_INVOKABLE void closeAll() override;
 
-    // Diagnostic accessors. The handle for a known popoutId, or empty
-    // string if the popoutId isn't currently open. Useful from QML
-    // for binding visible-state badges to a specific popout.
+    // Diagnostic accessor. Returns the handle for a known popoutId, or
+    // empty string if the popoutId isn't currently open. Useful from
+    // QML for binding visible-state badges to a specific popout.
     [[nodiscard]] Q_INVOKABLE QString handleFor(const QString& popoutId) const;
 
     // True if any Modal popout is currently open. Cooperative requests
@@ -76,13 +81,14 @@ public:
     [[nodiscard]] Q_INVOKABLE bool isModalActive() const;
 
 Q_SIGNALS:
-    // Fired after a popout is opened. `popoutId` is the request's
-    // popoutId; `handle` is the transport-assigned identifier. Use
-    // `handle` for subsequent close() calls.
+    // Fired after a popout is opened. popoutId is the request's
+    // popoutId. handle is the transport-assigned identifier. Use
+    // handle for subsequent close calls.
     void popoutOpened(const QString& popoutId, const QString& handle);
 
-    // Fired after a popout closes, regardless of who initiated the
-    // close (caller, arbitration, or transport-driven dismiss).
+    // Fired after a popout closes. Fires regardless of who initiated
+    // the close. The initiator may be the caller, arbitration policy,
+    // or a transport-driven dismiss.
     void popoutClosed(const QString& popoutId, const QString& handle);
 
     // Fired when modal-active state changes. UIs that want to disable

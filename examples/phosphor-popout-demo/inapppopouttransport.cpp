@@ -22,12 +22,18 @@ InAppPopoutTransport::InAppPopoutTransport(QObject* parent)
 InAppPopoutTransport::~InAppPopoutTransport()
 {
     // Tear down any surviving entries directly. The controller calls
-    // closeAll on shutdown via its own destructor sequence; this is a
-    // belt-and-suspenders cleanup for the case where the transport
-    // outlives the controller.
+    // closeAll on shutdown via its own destructor sequence. This is
+    // a belt-and-suspenders cleanup for the case where the transport
+    // outlives the controller. Use synchronous delete rather than
+    // deleteLater because by the time this destructor runs the event
+    // loop may already have exited, in which case queued deleteLater
+    // events never fire and the items leak.
     for (auto& entry : m_entries) {
         if (entry.hostItem) {
-            entry.hostItem->deleteLater();
+            delete entry.hostItem.data();
+        }
+        if (entry.contentItem) {
+            delete entry.contentItem.data();
         }
     }
     m_entries.clear();
@@ -89,6 +95,10 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     }
     hostItem->setParentItem(m_host);
     hostItem->setProperty("contentItem", QVariant::fromValue(contentItem));
+    // Inject a back-reference so content delegates can dismiss
+    // themselves. AlertPopout's Dismiss button uses this to call
+    // _popoutHost.dismiss() rather than walking the parent chain.
+    contentItem->setProperty("_popoutHost", QVariant::fromValue<QObject*>(hostItem));
     // Cooperative popouts use a dim translucent backdrop; modal uses a
     // heavier scrim; detached stays transparent. The demo wires these
     // values directly here so the visual difference is obvious.
@@ -140,16 +150,18 @@ void InAppPopoutTransport::closeSurface(const QString& handle)
         m_entries.erase(it);
         copy.hostItem->setProperty("open", false);
         // Defer the actual destroy past the animation. PopoutHost's
-        // dismiss timer is 300ms; 500ms gives slack for compositor
-        // jitter.
-        QQuickItem* hostItem = copy.hostItem.data();
-        QQuickItem* contentItem = copy.contentItem.data();
-        QTimer::singleShot(500, this, [hostItem, contentItem]() {
-            if (hostItem) {
-                hostItem->deleteLater();
+        // dismiss timer is 300ms. 500ms gives slack for compositor
+        // jitter. Capture QPointers, not raw pointers, so the lambda
+        // resolves to no-ops if either item is already destroyed by
+        // the time it fires.
+        QPointer<QQuickItem> hostPtr = copy.hostItem;
+        QPointer<QQuickItem> contentPtr = copy.contentItem;
+        QTimer::singleShot(500, this, [hostPtr, contentPtr]() {
+            if (hostPtr) {
+                hostPtr->deleteLater();
             }
-            if (contentItem) {
-                contentItem->deleteLater();
+            if (contentPtr) {
+                contentPtr->deleteLater();
             }
         });
     } else {

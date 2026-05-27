@@ -25,6 +25,7 @@ qt_add_qml_module(phosphor_popout_demo_qml
         CalendarPopout.qml
         NotePopout.qml
         AlertPopout.qml
+        PhosphorButton.qml
     SOURCES
         DemoController.h
         democontroller.cpp

@@ -24,7 +24,7 @@ struct Entry
 
 struct PopoutController::Impl
 {
-    explicit Impl(PopoutController* owner, IPopoutTransport* t)
+    Impl(PopoutController* owner, IPopoutTransport* t)
         : self(owner)
         , transport(t)
     {
@@ -34,21 +34,19 @@ struct PopoutController::Impl
     IPopoutTransport* transport;
 
     // Active popouts, keyed by transport handle. The handle is the
-    // identity for close() routing. popoutId is the user-facing logical
-    // name (potentially shared across reopens of the same popout).
+    // identity for close routing. popoutId is the user-facing logical
+    // name. The same popoutId can recur across reopens of the same
+    // popout.
     QHash<QString, Entry> entries;
 
     // Modal count. Modals stack, so a u16-ish counter is fine. The
-    // public isModalActive() returns count > 0.
+    // public isModalActive returns count > 0.
     int modalCount = 0;
 
-    // Re-entrancy guard for the transport's dismissed callback. The
-    // callback fires when a surface goes away on its own (focus loss,
-    // user click-outside). Without the guard, closeAll() iterating
-    // entries.keys() while the callback synchronously mutates entries
-    // would invalidate the iteration. Setting closing=true tells the
-    // dismissed callback to skip its bookkeeping; closeAll does it
-    // itself.
+    // Re-entrancy guard. Set while the controller is mid-mutation of
+    // its own tables. The dismissed callback short-circuits when set
+    // so iterations are not invalidated by callback-driven mutations.
+    // Both closeAll and open set this around their suppression closes.
     bool inSelfTeardown = false;
 
     [[nodiscard]] bool isModalActive() const
@@ -67,23 +65,51 @@ struct PopoutController::Impl
         return {};
     }
 
+    // Remove an entry, tell the transport, fire the closed signal, and
+    // update modal bookkeeping. Single source of truth for the three
+    // teardown call sites. emitClosed allows closeAll to defer signal
+    // emission to a final pass if it ever needs to.
+    void removeEntry(const QString& handle)
+    {
+        const auto it = entries.constFind(handle);
+        if (it == entries.constEnd()) {
+            return;
+        }
+        const Entry copy = it.value();
+
+        // Drop from our table BEFORE telling the transport so any
+        // queued dismissed callback for this handle finds no entry
+        // and no-ops. Matches the close() pattern documented at
+        // IPopoutTransport.h.
+        entries.erase(it);
+
+        const bool wasModal = (copy.exclusive == ExclusiveMode::Modal);
+        if (wasModal) {
+            Q_ASSERT(modalCount > 0);
+            --modalCount;
+        }
+
+        transport->closeSurface(handle);
+        Q_EMIT self->popoutClosed(copy.popoutId, handle);
+        if (wasModal && modalCount == 0) {
+            Q_EMIT self->modalActiveChanged();
+        }
+    }
+
     // Close every Cooperative entry. Used when the first Modal opens to
-    // suppress prior Cooperative popouts across all scopes.
+    // suppress prior Cooperative popouts across all scopes. Snapshot
+    // the handles before iterating so removeEntry's mutation of
+    // entries does not invalidate the loop.
     void closeAllCooperatives()
     {
-        const auto handles = entries.keys();
-        for (const QString& handle : handles) {
-            const auto it = entries.constFind(handle);
-            if (it == entries.constEnd()) {
-                continue;
+        QStringList victims;
+        for (auto it = entries.constBegin(); it != entries.constEnd(); ++it) {
+            if (it.value().exclusive == ExclusiveMode::Cooperative) {
+                victims.append(it.key());
             }
-            if (it.value().exclusive != ExclusiveMode::Cooperative) {
-                continue;
-            }
-            const Entry copy = it.value();
-            transport->closeSurface(handle);
-            entries.remove(handle);
-            Q_EMIT self->popoutClosed(copy.popoutId, handle);
+        }
+        for (const QString& handle : victims) {
+            removeEntry(handle);
         }
     }
 
@@ -99,13 +125,9 @@ struct PopoutController::Impl
                 break;
             }
         }
-        if (victim.isEmpty()) {
-            return;
+        if (!victim.isEmpty()) {
+            removeEntry(victim);
         }
-        const Entry copy = entries.value(victim);
-        transport->closeSurface(victim);
-        entries.remove(victim);
-        Q_EMIT self->popoutClosed(copy.popoutId, victim);
     }
 };
 
@@ -113,54 +135,72 @@ PopoutController::PopoutController(IPopoutTransport* transport, QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Impl>(this, transport))
 {
+    Q_ASSERT_X(transport != nullptr, "PopoutController", "transport must not be null");
+
     // Install the dismissed callback exactly once. The transport
     // invokes it when a surface goes away on its own. We use it to
-    // mirror the change in our entries table; without this, isOpen()
+    // mirror the change in our entries table. Without this, isOpen
     // would lie about a popout that the compositor already tore down.
-    if (transport) {
-        transport->setSurfaceDismissedCallback([this](const QString& handle) {
-            if (d->inSelfTeardown) {
-                return;
-            }
-            const auto it = d->entries.constFind(handle);
-            if (it == d->entries.constEnd()) {
-                return;
-            }
-            const Entry copy = it.value();
-            d->entries.remove(handle);
-            const bool wasModal = (copy.exclusive == ExclusiveMode::Modal);
-            if (wasModal) {
-                if (d->modalCount > 0) {
-                    --d->modalCount;
-                }
-            }
-            Q_EMIT popoutClosed(copy.popoutId, handle);
-            if (wasModal && d->modalCount == 0) {
-                Q_EMIT modalActiveChanged();
-            }
-        });
+    //
+    // The lambda captures `this` and `d.get()`. The destructor must
+    // detach this callback before d is destroyed. See ~PopoutController.
+    transport->setSurfaceDismissedCallback([this](const QString& handle) {
+        if (d->inSelfTeardown) {
+            return;
+        }
+        const auto it = d->entries.constFind(handle);
+        if (it == d->entries.constEnd()) {
+            return;
+        }
+        const Entry copy = it.value();
+        d->entries.erase(it);
+        const bool wasModal = (copy.exclusive == ExclusiveMode::Modal);
+        if (wasModal) {
+            Q_ASSERT(d->modalCount > 0);
+            --d->modalCount;
+        }
+        Q_EMIT popoutClosed(copy.popoutId, handle);
+        if (wasModal && d->modalCount == 0) {
+            Q_EMIT modalActiveChanged();
+        }
+    });
+}
+
+PopoutController::~PopoutController()
+{
+    // Detach the dismissed callback BEFORE d is destroyed. The
+    // transport may outlive the controller if the owner releases them
+    // in the wrong order. Without this, any subsequent dismiss the
+    // transport routes through the stale lambda dereferences a dead
+    // d-pointer and crashes.
+    if (d && d->transport) {
+        d->transport->setSurfaceDismissedCallback({});
     }
 }
 
-PopoutController::~PopoutController() = default;
-
 QString PopoutController::open(const PopoutRequest& request)
 {
-    if (!d->transport) {
-        return {};
-    }
-
-    // toggle() routes here when re-opening, so the popoutId-collision
-    // case is the caller's concern (they should call toggle() to swap
-    // an existing popout). If a popoutId is already open, treat this
-    // as a no-op rather than opening a duplicate. Callers that want
-    // the new instance must close() the old handle first.
+    // toggle re-enters here when the popoutId is not yet open. If a
+    // popoutId is already open, treat this as a no-op rather than
+    // opening a duplicate. Callers that want the new instance must
+    // close the old handle first. Applies to every ExclusiveMode,
+    // including Modal: a second Modal with the same popoutId is
+    // rejected like any other same-id collision.
     if (!request.popoutId.isEmpty() && !d->handleForId(request.popoutId).isEmpty()) {
         return {};
     }
 
+    // Set the re-entrancy guard for the arbitration phase below.
+    // closeAllCooperatives and closeCooperativeInScope iterate
+    // entries while removeEntry mutates the same table. A transport
+    // that violates the IPopoutTransport contract by firing the
+    // dismissed callback synchronously from closeSurface would
+    // otherwise re-enter this function and double-emit popoutClosed
+    // for an already-removed handle.
+    d->inSelfTeardown = true;
+
     // Arbitration. Detached requests skip the scope-and-modal checks
-    // entirely; modals close existing cooperatives; cooperatives are
+    // entirely. Modals close existing cooperatives. Cooperatives are
     // rejected while a modal is up and swap any same-scope sibling.
     switch (request.exclusive) {
     case ExclusiveMode::Detached:
@@ -170,20 +210,21 @@ QString PopoutController::open(const PopoutRequest& request)
         break;
     case ExclusiveMode::Cooperative:
         if (d->isModalActive()) {
+            d->inSelfTeardown = false;
             return {};
         }
         d->closeCooperativeInScope(request.scope);
         break;
     }
 
+    d->inSelfTeardown = false;
+
     const QString handle = d->transport->openSurface(request);
     if (handle.isEmpty()) {
-        // Transport refused. We already cleaned up any prior
-        // cooperative in this scope above; that is intentional.
-        // Rejecting the new open does not restore the old (the
-        // previous popout was the user's prior intent; the transport
-        // failure on the new request doesn't put us in any consistent
-        // "go back" state).
+        // Transport refused. Any prior cooperative in this scope was
+        // already closed above. That is intentional. Restoring the
+        // prior popout on transport failure would put us in an
+        // inconsistent state.
         return {};
     }
 
@@ -201,27 +242,10 @@ QString PopoutController::open(const PopoutRequest& request)
 
 void PopoutController::close(const QString& handle)
 {
-    const auto it = d->entries.constFind(handle);
-    if (it == d->entries.constEnd()) {
+    if (handle.isEmpty()) {
         return;
     }
-    const Entry copy = it.value();
-    // Remove from our table BEFORE telling the transport. If the
-    // transport synchronously fires the dismissed callback inside
-    // closeSurface (some implementations may), the callback will
-    // find no entry and no-op, which is exactly what we want here:
-    // the caller initiated the close, so we don't need the callback's
-    // mirror update.
-    d->entries.remove(handle);
-    const bool wasModal = (copy.exclusive == ExclusiveMode::Modal);
-    if (wasModal && d->modalCount > 0) {
-        --d->modalCount;
-    }
-    d->transport->closeSurface(handle);
-    Q_EMIT popoutClosed(copy.popoutId, handle);
-    if (wasModal && d->modalCount == 0) {
-        Q_EMIT modalActiveChanged();
-    }
+    d->removeEntry(handle);
 }
 
 QString PopoutController::toggle(const PopoutRequest& request)
@@ -245,12 +269,7 @@ bool PopoutController::isOpen(const QString& popoutId) const
 
 void PopoutController::closeAll()
 {
-    if (!d->transport) {
-        d->entries.clear();
-        return;
-    }
     d->inSelfTeardown = true;
-    const bool hadModal = d->isModalActive();
     const auto handles = d->entries.keys();
     for (const QString& handle : handles) {
         const auto it = d->entries.constFind(handle);
@@ -258,10 +277,11 @@ void PopoutController::closeAll()
             continue;
         }
         const Entry copy = it.value();
-        d->entries.remove(handle);
+        d->entries.erase(it);
         d->transport->closeSurface(handle);
         Q_EMIT popoutClosed(copy.popoutId, handle);
     }
+    const bool hadModal = d->modalCount > 0;
     d->modalCount = 0;
     d->inSelfTeardown = false;
     if (hadModal) {

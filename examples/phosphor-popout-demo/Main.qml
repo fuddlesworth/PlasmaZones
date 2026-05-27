@@ -7,6 +7,7 @@
 // entirely and stay open across modal cycles.
 
 import Phosphor.Popout
+import Phosphor.PopoutDemo
 import Phosphor.Theme
 import QtQuick
 import QtQuick.Controls
@@ -49,7 +50,12 @@ ApplicationWindow {
 
         Text {
             Layout.fillWidth: true
-            text: qsTr("Cooperative buttons share the default scope, so opening one closes the other. " + "Modal closes every cooperative and rejects new cooperative opens until dismissed. " + "Detached ignores arbitration entirely and stays put.")
+            // One qsTr() per logical sentence. Concatenating "..." + "..."
+            // inside a single qsTr makes only the first literal
+            // translatable and leaks the joiner spaces into the
+            // translation memory. Keeping them separate lets translators
+            // reorder and rephrase each sentence independently.
+            text: qsTr("Cooperative buttons share the default scope, so opening one closes the other.") + " " + qsTr("Modal closes every cooperative and rejects new cooperative opens until dismissed.") + " " + qsTr("Detached ignores arbitration entirely and stays put.")
             color: Theme.on_surface_variant
             font.pixelSize: Tokens.font_size_body_m
             font.family: Tokens.font_family
@@ -59,27 +65,35 @@ ApplicationWindow {
         RowLayout {
             spacing: Tokens.spacing_m
 
-            Button {
+            PhosphorButton {
                 text: qsTr("Cooperative A (Calendar)")
+                accentColor: demoController.openPopoutIds.indexOf("calendar") !== -1 ? Theme.primary : "transparent"
+                onAccentColor: Theme.on_primary
                 onClicked: demoController.toggleCooperativeA()
             }
 
-            Button {
+            PhosphorButton {
                 text: qsTr("Cooperative B (Note)")
+                accentColor: demoController.openPopoutIds.indexOf("quick-note") !== -1 ? Theme.primary : "transparent"
+                onAccentColor: Theme.on_primary
                 onClicked: demoController.toggleCooperativeB()
             }
 
-            Button {
+            PhosphorButton {
                 text: qsTr("Modal (Alert)")
+                accentColor: demoController.modalActive ? Theme.error : "transparent"
+                onAccentColor: Theme.on_error
                 onClicked: demoController.toggleModal()
             }
 
-            Button {
+            PhosphorButton {
                 text: qsTr("Detached (Pinned)")
+                accentColor: demoController.openPopoutIds.indexOf("pinned-note") !== -1 ? Theme.tertiary : "transparent"
+                onAccentColor: Theme.on_tertiary
                 onClicked: demoController.toggleDetached()
             }
 
-            Button {
+            PhosphorButton {
                 text: qsTr("Close all")
                 onClicked: demoController.closeAll()
             }
@@ -104,7 +118,11 @@ ApplicationWindow {
                     if (ids.length === 0)
                         return qsTr("No popouts open.");
 
-                    return qsTr("Open: ") + ids.join(", ") + (demoController.modalActive ? qsTr("  ·  modal active") : "");
+                    const list = ids.join(", ");
+                    if (demoController.modalActive)
+                        return qsTr("Open: %1. Modal active.").arg(list);
+
+                    return qsTr("Open: %1").arg(list);
                 }
             }
 

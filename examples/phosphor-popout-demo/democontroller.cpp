@@ -20,10 +20,8 @@ namespace PhosphorPopoutDemo {
 DemoController::DemoController(QObject* parent)
     : QObject(parent)
     , m_transport(new InAppPopoutTransport(this))
-    , m_controller(nullptr)
+    , m_controller(new PopoutController(m_transport, this))
 {
-    m_controller = new PopoutController(m_transport, this);
-
     // Mirror controller state into our Q_PROPERTYs. QML status bar
     // binds to openPopoutIds and modalActive.
     QObject::connect(m_controller, &PopoutController::popoutOpened, this, [this](const QString& id, const QString&) {

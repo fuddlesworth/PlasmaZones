@@ -11,7 +11,11 @@ import QtQuick.Layouts
 Rectangle {
     id: root
 
-    signal dismissRequested()
+    // The transport injects a back-reference to the PopoutHost via a
+    // dynamic property named `_popoutHost`. The Dismiss button calls
+    // its `dismiss()` function. Without this, the modal cannot close
+    // itself because dismissOnClickOutside is disabled for modals.
+    property QtObject _popoutHost: null
 
     implicitWidth: 360
     implicitHeight: 200
@@ -64,7 +68,11 @@ Rectangle {
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.dismissRequested()
+                onClicked: {
+                    if (root._popoutHost)
+                        root._popoutHost.dismiss();
+
+                }
             }
 
         }

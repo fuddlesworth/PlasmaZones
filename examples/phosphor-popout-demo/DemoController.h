@@ -58,8 +58,12 @@ Q_SIGNALS:
 private:
     QQmlComponent* buildContentComponent(const QString& qmlPath);
 
-    PhosphorPopout::PopoutController* m_controller = nullptr;
+    // Declaration order matches the constructor's init order so the
+    // compiler does not warn about reordered initialization and so
+    // reverse-order destruction frees the controller before the
+    // transport it depends on.
     InAppPopoutTransport* m_transport = nullptr;
+    PhosphorPopout::PopoutController* m_controller = nullptr;
     QPointer<QQmlEngine> m_engine;
 
     // Cached content components, one per demo popout. Built lazily on

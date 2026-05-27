@@ -53,9 +53,10 @@ public:
         dismissedCb = std::move(cb);
     }
 
-    // Test helper. Simulates the surface dismissing itself (focus loss,
-    // user click-outside, compositor revocation). Routes through the
-    // callback the controller registered, which removes the handle from
+    // Test helper. Simulates the surface dismissing itself. Mirrors
+    // how a real layer-shell signals focus loss, a click outside the
+    // surface, or compositor revocation. Routes through the callback
+    // the controller registered. The callback removes the handle from
     // the controller's tables.
     void dismiss(const QString& handle)
     {
@@ -101,19 +102,29 @@ private Q_SLOTS:
     void open_modalClosesAllCooperatives();
     void open_cooperativeRejectedWhileModalActive();
     void open_modalStacksOnModal();
+    void open_modalSameIdRejected();
     void open_detachedSurvivesArbitration();
+    void open_detachedAcceptedWhileModalActive();
+    void open_emptyIdAllowsMultiple();
     void open_sameIdReturnsEmpty();
     void open_transportRefusalReturnsEmpty();
     void close_unknownHandleNoOp();
+    void close_emptyHandleNoOp();
     void close_modalClearsModalActiveAfterStackDrain();
     void toggle_openWhenClosed();
     void toggle_closeWhenOpen();
     void toggle_emptyIdRoutesToOpen();
+    void toggle_emptyIdAlwaysOpens();
     void isOpen_tracksByPopoutId();
+    void handleFor_unknownIdReturnsEmpty();
     void closeAll_drainsEntriesAndClearsModalCount();
+    void dismissedCallback_installedDuringConstruction();
     void dismissedCallback_removesEntryAndUpdatesModalState();
+    void dismissedCallback_cooperativeDoesNotEmitModalChange();
     void dismissedCallback_unknownHandleNoOp();
+    void dismissedCallback_reentrantTransportSuppressedDuringSelfTeardown();
     void modalActiveChanged_firesOnFirstAndLast();
+    void destructor_detachesDismissedCallback();
 };
 
 void TestPopoutController::open_cooperativeReturnsNonEmptyHandle()
@@ -158,6 +169,7 @@ void TestPopoutController::open_cooperativeDifferentScopesCoexist()
     FakeTransport t;
     PopoutController c(&t);
 
+    QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
     const QString h1 = c.open(makeRequest(QStringLiteral("a"), ExclusiveMode::Cooperative, QStringLiteral("scope-1")));
     const QString h2 = c.open(makeRequest(QStringLiteral("b"), ExclusiveMode::Cooperative, QStringLiteral("scope-2")));
 
@@ -166,6 +178,9 @@ void TestPopoutController::open_cooperativeDifferentScopesCoexist()
     QVERIFY(c.isOpen(QStringLiteral("a")));
     QVERIFY(c.isOpen(QStringLiteral("b")));
     QCOMPARE(t.alive.size(), 2);
+    // Different scopes are independent. The second open must not
+    // close the first one.
+    QCOMPARE(closedSpy.count(), 0);
 }
 
 void TestPopoutController::open_modalClosesAllCooperatives()
@@ -205,7 +220,7 @@ void TestPopoutController::open_cooperativeRejectedWhileModalActive()
     QCOMPARE(openedSpy.count(), 0);
     QVERIFY(!c.isOpen(QStringLiteral("calendar")));
     // Transport must NOT have been invoked for the rejected request.
-    // (One open already, for the alert; this is the only one.)
+    // The only entry in openLog is the alert that opened up first.
     QCOMPARE(t.openLog.size(), 1);
 }
 
@@ -215,7 +230,12 @@ void TestPopoutController::open_modalStacksOnModal()
     PopoutController c(&t);
 
     const QString m1 = c.open(makeRequest(QStringLiteral("alert-1"), ExclusiveMode::Modal));
+    // The spy is installed after the first modal so it observes only
+    // the no-op second-modal case. A second modal must not fire
+    // modalActiveChanged (state was already "active") and must not
+    // close the first modal.
     QSignalSpy modalSpy(&c, &PopoutController::modalActiveChanged);
+    QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
     const QString m2 = c.open(makeRequest(QStringLiteral("alert-2"), ExclusiveMode::Modal));
 
     QVERIFY(!m1.isEmpty());
@@ -223,9 +243,8 @@ void TestPopoutController::open_modalStacksOnModal()
     QVERIFY(c.isOpen(QStringLiteral("alert-1")));
     QVERIFY(c.isOpen(QStringLiteral("alert-2")));
     QVERIFY(c.isModalActive());
-    // modalActiveChanged should NOT fire on the second modal because
-    // the state is already "active".
     QCOMPARE(modalSpy.count(), 0);
+    QCOMPARE(closedSpy.count(), 0);
 }
 
 void TestPopoutController::open_detachedSurvivesArbitration()
@@ -258,9 +277,13 @@ void TestPopoutController::open_sameIdReturnsEmpty()
 
     QVERIFY(!h1.isEmpty());
     // Second open with the same popoutId is a no-op rather than a
-    // silent duplicate. Callers must close() first to reopen.
+    // silent duplicate. Callers must close first to reopen.
     QVERIFY(h2.isEmpty());
     QCOMPARE(t.alive.size(), 1);
+    // openLog assertion catches a regression where the transport sees
+    // the rejected request even though the controller dropped its
+    // table entry.
+    QCOMPARE(t.openLog.size(), 1);
     QCOMPARE(c.handleFor(QStringLiteral("a")), h1);
 }
 
@@ -395,9 +418,10 @@ void TestPopoutController::dismissedCallback_unknownHandleNoOp()
     FakeTransport t;
     PopoutController c(&t);
     QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
-    if (t.dismissedCb) {
-        t.dismissedCb(QStringLiteral("never-existed"));
-    }
+    // QVERIFY rather than `if`. A guard here would mask a regression
+    // where the controller never installs its dismissed callback.
+    QVERIFY(t.dismissedCb);
+    t.dismissedCb(QStringLiteral("never-existed"));
     QCOMPARE(closedSpy.count(), 0);
 }
 
@@ -420,6 +444,197 @@ void TestPopoutController::modalActiveChanged_firesOnFirstAndLast()
 
     c.close(h2);
     QCOMPARE(modalSpy.count(), 2); // last modal cleared
+}
+
+void TestPopoutController::open_modalSameIdRejected()
+{
+    FakeTransport t;
+    PopoutController c(&t);
+
+    const QString h1 = c.open(makeRequest(QStringLiteral("alert"), ExclusiveMode::Modal));
+    QVERIFY(!h1.isEmpty());
+
+    // Second open with the same popoutId is rejected regardless of
+    // ExclusiveMode. Modal-on-Modal stacks only across distinct ids.
+    const QString h2 = c.open(makeRequest(QStringLiteral("alert"), ExclusiveMode::Modal));
+    QVERIFY(h2.isEmpty());
+    QCOMPARE(t.openLog.size(), 1);
+}
+
+void TestPopoutController::open_detachedAcceptedWhileModalActive()
+{
+    FakeTransport t;
+    PopoutController c(&t);
+    QVERIFY(!c.open(makeRequest(QStringLiteral("alert"), ExclusiveMode::Modal)).isEmpty());
+    QVERIFY(c.isModalActive());
+
+    // Detached bypasses the modal-suppression check entirely.
+    const QString h = c.open(makeRequest(QStringLiteral("note"), ExclusiveMode::Detached));
+    QVERIFY(!h.isEmpty());
+    QVERIFY(c.isOpen(QStringLiteral("note")));
+}
+
+void TestPopoutController::open_emptyIdAllowsMultiple()
+{
+    FakeTransport t;
+    PopoutController c(&t);
+
+    // The same-id collision check skips empty popoutIds, so two
+    // anonymous opens both succeed.
+    PopoutRequest req;
+    req.exclusive = ExclusiveMode::Cooperative;
+    req.scope = QStringLiteral("scope-a");
+    const QString h1 = c.open(req);
+    req.scope = QStringLiteral("scope-b");
+    const QString h2 = c.open(req);
+    QVERIFY(!h1.isEmpty());
+    QVERIFY(!h2.isEmpty());
+    QVERIFY(h1 != h2);
+    QCOMPARE(t.alive.size(), 2);
+}
+
+void TestPopoutController::close_emptyHandleNoOp()
+{
+    FakeTransport t;
+    PopoutController c(&t);
+    QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
+    c.close(QString());
+    QCOMPARE(closedSpy.count(), 0);
+    QCOMPARE(t.closeLog.size(), 0);
+}
+
+void TestPopoutController::toggle_emptyIdAlwaysOpens()
+{
+    FakeTransport t;
+    PopoutController c(&t);
+    QVERIFY(!c.toggle(makeRequest(QString())).isEmpty());
+    QVERIFY(!c.toggle(makeRequest(QString())).isEmpty());
+    // Empty-id toggle has no fixed referent, so each call opens a
+    // fresh popout rather than toggling an existing one. The two
+    // calls used distinct default scopes so the second does not
+    // close the first via cooperative-scope arbitration.
+    PopoutRequest a;
+    a.scope = QStringLiteral("scope-a");
+    PopoutRequest b;
+    b.scope = QStringLiteral("scope-b");
+    FakeTransport t2;
+    PopoutController c2(&t2);
+    QVERIFY(!c2.toggle(a).isEmpty());
+    QVERIFY(!c2.toggle(b).isEmpty());
+    QCOMPARE(t2.openLog.size(), 2);
+    QCOMPARE(t2.alive.size(), 2);
+}
+
+void TestPopoutController::handleFor_unknownIdReturnsEmpty()
+{
+    FakeTransport t;
+    PopoutController c(&t);
+    QVERIFY(c.handleFor(QStringLiteral("ghost")).isEmpty());
+    QVERIFY(!c.open(makeRequest(QStringLiteral("a"))).isEmpty());
+    QVERIFY(c.handleFor(QStringLiteral("ghost")).isEmpty());
+}
+
+void TestPopoutController::dismissedCallback_installedDuringConstruction()
+{
+    // The controller's ctor installs exactly one callback. Sibling
+    // tests assume this; check it explicitly so a regression that
+    // removes the install is caught here rather than as a confusing
+    // failure elsewhere.
+    FakeTransport t;
+    QVERIFY(!t.dismissedCb);
+    PopoutController c(&t);
+    QVERIFY(t.dismissedCb);
+}
+
+void TestPopoutController::dismissedCallback_cooperativeDoesNotEmitModalChange()
+{
+    // Cooperative dismissal must not touch modal bookkeeping. A
+    // regression that always emits modalActiveChanged from the
+    // callback would fail this.
+    FakeTransport t;
+    PopoutController c(&t);
+    const QString h = c.open(makeRequest(QStringLiteral("calendar")));
+    QVERIFY(!h.isEmpty());
+
+    QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
+    QSignalSpy modalSpy(&c, &PopoutController::modalActiveChanged);
+    t.dismiss(h);
+
+    QCOMPARE(closedSpy.count(), 1);
+    QCOMPARE(modalSpy.count(), 0);
+    QVERIFY(!c.isOpen(QStringLiteral("calendar")));
+}
+
+// Re-entrant fake. Synchronously fires the dismissed callback from
+// inside closeSurface, violating the IPopoutTransport contract on
+// purpose so the controller's `inSelfTeardown` guard is exercised.
+class ReentrantFakeTransport : public IPopoutTransport
+{
+public:
+    QString openSurface(const PopoutRequest& request) override
+    {
+        const QString handle = QStringLiteral("rh%1").arg(++counter);
+        alive.insert(handle, request.popoutId);
+        return handle;
+    }
+    void closeSurface(const QString& handle) override
+    {
+        if (!alive.contains(handle)) {
+            return;
+        }
+        alive.remove(handle);
+        // Contract violation, on purpose. Real transports must not
+        // do this; the guard exists so a misbehaving transport
+        // cannot corrupt the controller's tables.
+        if (dismissedCb) {
+            dismissedCb(handle);
+        }
+    }
+    bool isSurfaceAlive(const QString& handle) const override
+    {
+        return alive.contains(handle);
+    }
+    void setSurfaceDismissedCallback(std::function<void(const QString&)> cb) override
+    {
+        dismissedCb = std::move(cb);
+    }
+    QHash<QString, QString> alive;
+    int counter = 0;
+    std::function<void(const QString&)> dismissedCb;
+};
+
+void TestPopoutController::dismissedCallback_reentrantTransportSuppressedDuringSelfTeardown()
+{
+    // A transport that synchronously fires dismissed inside
+    // closeSurface would re-enter the controller's mutation paths
+    // and double-emit popoutClosed or corrupt iteration. The
+    // inSelfTeardown guard suppresses the callback during open's
+    // suppression closes and during closeAll.
+    ReentrantFakeTransport t;
+    PopoutController c(&t);
+    QVERIFY(!c.open(makeRequest(QStringLiteral("coop-1"), ExclusiveMode::Cooperative, QStringLiteral("s1"))).isEmpty());
+    QVERIFY(!c.open(makeRequest(QStringLiteral("coop-2"), ExclusiveMode::Cooperative, QStringLiteral("s2"))).isEmpty());
+
+    QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
+    // Opening a Modal closes both cooperatives via the suppression
+    // path. The re-entrant transport's dismissed-from-closeSurface
+    // must be suppressed by the guard so popoutClosed fires exactly
+    // twice, not four times.
+    QVERIFY(!c.open(makeRequest(QStringLiteral("alert"), ExclusiveMode::Modal)).isEmpty());
+    QCOMPARE(closedSpy.count(), 2);
+}
+
+void TestPopoutController::destructor_detachesDismissedCallback()
+{
+    // The controller's destructor must clear the transport's
+    // callback. Without that, any subsequent dismiss invokes a
+    // lambda that captures the now-dangling controller and crashes.
+    FakeTransport t;
+    {
+        PopoutController c(&t);
+        QVERIFY(t.dismissedCb);
+    }
+    QVERIFY(!t.dismissedCb);
 }
 
 QTEST_MAIN(TestPopoutController)
