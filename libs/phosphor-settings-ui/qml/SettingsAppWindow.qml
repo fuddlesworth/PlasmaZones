@@ -192,7 +192,13 @@ Kirigami.ApplicationWindow {
                 // compact/non-compact transition instead of three
                 // concurrent ones doing identical work. Pattern
                 // mirrors UnsavedChangesFooter.qml's expansion driver.
-                readonly property real targetWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
+                //
+                // NOTE: not `readonly` — Qt 6.11 hardened the readonly
+                // contract and blocks Behavior attachments on
+                // readonly-marked properties. The value still flows
+                // from the binding below; the Behavior intercepts the
+                // transition between binding-driven values.
+                property real targetWidth: root.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
 
                 Layout.fillHeight: true
                 // Sidebar width tracks sidebarCompact: 12 gridUnits at
