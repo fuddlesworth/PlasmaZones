@@ -34,27 +34,27 @@ PhosphorUi.SettingsAppWindow {
     // forces the dependent binding via the QtObject's per-property
     // bindings, so locale changes still propagate.
     readonly property var aspectRatioLabels: ({
-        "any": _aspectRatioLabels.any,
-        "standard": _aspectRatioLabels.standard,
-        "ultrawide": _aspectRatioLabels.ultrawide,
-        "super-ultrawide": _aspectRatioLabels.superUltrawide,
-        "portrait": _aspectRatioLabels.portrait
-    })
+            "any": aspectRatioLabelsObject.allMonitors,
+            "standard": aspectRatioLabelsObject.standard,
+            "ultrawide": aspectRatioLabelsObject.ultrawide,
+            "super-ultrawide": aspectRatioLabelsObject.superUltrawide,
+            "portrait": aspectRatioLabelsObject.portrait
+        })
     // Keyboard-shortcut overlay state.
     property bool _showShortcuts: false
 
     function aspectRatioLabel(key) {
         switch (key) {
         case "any":
-            return _aspectRatioLabels.any;
+            return aspectRatioLabelsObject.allMonitors;
         case "standard":
-            return _aspectRatioLabels.standard;
+            return aspectRatioLabelsObject.standard;
         case "ultrawide":
-            return _aspectRatioLabels.ultrawide;
+            return aspectRatioLabelsObject.ultrawide;
         case "super-ultrawide":
-            return _aspectRatioLabels.superUltrawide;
+            return aspectRatioLabelsObject.superUltrawide;
         case "portrait":
-            return _aspectRatioLabels.portrait;
+            return aspectRatioLabelsObject.portrait;
         default:
             return key;
         }
@@ -114,9 +114,13 @@ PhosphorUi.SettingsAppWindow {
     // the aspectRatioLabel(key) accessor function (above) translates
     // back to the hyphenated key consumers use.
     QtObject {
-        id: _aspectRatioLabels
+        // `any` (instead of e.g. `allMonitors`) was the original
+        // property name — qmlformat 6.11 silently fails on a property
+        // named `any` (same shadow-class bug that hits `id`). Renamed
+        // to `allMonitors` and the consumer reads below follow.
+        id: aspectRatioLabelsObject
 
-        readonly property string any: i18n("All Monitors")
+        readonly property string allMonitors: i18n("All Monitors")
         readonly property string standard: i18n("Standard (16:9)")
         readonly property string ultrawide: i18n("Ultrawide (21:9)")
         readonly property string superUltrawide: i18n("Super-Ultrawide (32:9)")
@@ -133,7 +137,7 @@ PhosphorUi.SettingsAppWindow {
             // close — geometry should only persist on an actual close, not
             // on every cancelled-by-dialog attempt.
             if (!close.accepted)
-                return ;
+                return;
 
             settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
         }
@@ -177,14 +181,13 @@ PhosphorUi.SettingsAppWindow {
                     if (window.sidebar.currentParentId !== chain[i])
                         window.sidebar.drillInto(chain[i]);
 
-                    return ;
+                    return;
                 }
             }
             // No non-collapsible ancestor — page lives under main
             // mode (top-level or under an inline category).
             if (window.sidebar.currentParentId !== "")
                 window.sidebar.drillOut();
-
         }
 
         target: settingsController
@@ -195,13 +198,11 @@ PhosphorUi.SettingsAppWindow {
         function onSnappingEnabledChanged() {
             if (!appSettings.snappingEnabled && window.sidebar.currentParentId === "snapping")
                 window.sidebar.drillOut();
-
         }
 
         function onAutotileEnabledChanged() {
             if (!appSettings.autotileEnabled && window.sidebar.currentParentId === "tiling")
                 window.sidebar.drillOut();
-
         }
 
         target: appSettings
@@ -297,27 +298,33 @@ PhosphorUi.SettingsAppWindow {
         // instead of positional `modelData[0]` / `[1]` / `[2]` — a future
         // edit that adds a field to one entry won't silently shift index
         // meanings on the others.
-        readonly property var _aspectRatioOptions: [{
-            "key": "any",
-            "label": window.aspectRatioLabels["any"],
-            "index": 0
-        }, {
-            "key": "standard",
-            "label": window.aspectRatioLabels["standard"],
-            "index": 1
-        }, {
-            "key": "ultrawide",
-            "label": window.aspectRatioLabels["ultrawide"],
-            "index": 2
-        }, {
-            "key": "super-ultrawide",
-            "label": window.aspectRatioLabels["super-ultrawide"],
-            "index": 3
-        }, {
-            "key": "portrait",
-            "label": window.aspectRatioLabels["portrait"],
-            "index": 4
-        }]
+        readonly property var _aspectRatioOptions: [
+            {
+                "key": "any",
+                "label": window.aspectRatioLabels["any"],
+                "index": 0
+            },
+            {
+                "key": "standard",
+                "label": window.aspectRatioLabels["standard"],
+                "index": 1
+            },
+            {
+                "key": "ultrawide",
+                "label": window.aspectRatioLabels["ultrawide"],
+                "index": 2
+            },
+            {
+                "key": "super-ultrawide",
+                "label": window.aspectRatioLabels["super-ultrawide"],
+                "index": 3
+            },
+            {
+                "key": "portrait",
+                "label": window.aspectRatioLabels["portrait"],
+                "index": 4
+            }
+        ]
         // Memoise the screen list result. The getter still re-runs on
         // `settingsController.screensChanged`, but doesn't re-run on
         // each popup() / every `_screenItemsModel.length` read.
@@ -372,10 +379,10 @@ PhosphorUi.SettingsAppWindow {
             id: screenItemInstantiator
 
             model: layoutContextMenu._screenItemsModel
-            onObjectAdded: function(index, object) {
+            onObjectAdded: function (index, object) {
                 layoutContextMenu.insertItem(1 + index, object);
             }
-            onObjectRemoved: function(index, object) {
+            onObjectRemoved: function (index, object) {
                 layoutContextMenu.removeItem(object);
             }
 
@@ -399,15 +406,13 @@ PhosphorUi.SettingsAppWindow {
                     // popup chain can deref the in-flight click target.
                     // Defer the close + the controller call until after
                     // the click event fully propagates.
-                    Qt.callLater(function() {
+                    Qt.callLater(function () {
                         layoutContextMenu.visible = false;
                         if (screenName.length > 0)
                             settingsController.editLayoutOnScreen(layoutId, screenName);
-
                     });
                 }
             }
-
         }
 
         MenuSeparator {
@@ -428,8 +433,7 @@ PhosphorUi.SettingsAppWindow {
             }
         }
 
-        MenuSeparator {
-        }
+        MenuSeparator {}
 
         MenuItem {
             text: i18n("Set as Default")
@@ -531,7 +535,6 @@ PhosphorUi.SettingsAppWindow {
             visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
             onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
         }
-
     }
 
     // Aspect-ratio submenu (added/removed imperatively by showForLayout).
@@ -549,10 +552,10 @@ PhosphorUi.SettingsAppWindow {
             id: aspectRatioItemInstantiator
 
             model: layoutContextMenu._aspectRatioOptions
-            onObjectAdded: function(index, object) {
+            onObjectAdded: function (index, object) {
                 aspectRatioSubMenu.insertItem(index, object);
             }
-            onObjectRemoved: function(index, object) {
+            onObjectRemoved: function (index, object) {
                 aspectRatioSubMenu.removeItem(object);
             }
 
@@ -578,22 +581,18 @@ PhosphorUi.SettingsAppWindow {
                     // chain mid-event.
                     var layoutId = layoutContextMenu.layoutId;
                     var idx = _arIndex;
-                    Qt.callLater(function() {
+                    Qt.callLater(function () {
                         aspectRatioSubMenu.visible = false;
                         layoutContextMenu.visible = false;
                         settingsController.setLayoutAspectRatio(layoutId, idx);
                     });
                 }
             }
-
         }
 
-        enter: Transition {
-        }
+        enter: Transition {}
 
-        exit: Transition {
-        }
-
+        exit: Transition {}
     }
 
     // ── Reset / Restore-defaults dialogs (used by Tools menu in pages) ──
@@ -688,7 +687,6 @@ PhosphorUi.SettingsAppWindow {
                     height: Math.round(Kirigami.Units.devicePixelRatio)
                     color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 }
-
             }
 
             contentItem: RowLayout {
@@ -718,9 +716,7 @@ PhosphorUi.SettingsAppWindow {
                             to: 1
                             profile: "widget.pulse.slow"
                         }
-
                     }
-
                 }
 
                 Label {
@@ -736,15 +732,12 @@ PhosphorUi.SettingsAppWindow {
                     checked: settingsController.daemonRunning
                     enabled: !settingsController.daemonController.busy
                     accessibleName: i18n("Toggle daemon")
-                    onToggled: function(newValue) {
+                    onToggled: function (newValue) {
                         settingsController.daemonController.setEnabled(newValue);
                     }
                 }
-
             }
-
         }
-
     }
 
     // Per-row sidebar trailing content — a Row with two slots:
@@ -758,9 +751,13 @@ PhosphorUi.SettingsAppWindow {
         RowLayout {
             id: trailingRow
 
+            // SidebarRow's trailingLoader exposes the row's role data via
+            // `modelData`. The lib renamed the row-identifier role from
+            // "id" to "pageId" (the prior name shadowed the QML id:
+            // directive); read `entry.pageId` accordingly.
             readonly property var entry: parent ? parent.modelData : null
-            readonly property bool isSnapping: entry && entry.id === "snapping"
-            readonly property bool isTiling: entry && entry.id === "tiling"
+            readonly property bool isSnapping: entry && entry.pageId === "snapping"
+            readonly property bool isTiling: entry && entry.pageId === "tiling"
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -801,7 +798,7 @@ PhosphorUi.SettingsAppWindow {
                         return false;
 
                     trailingRow._dirtyTick; // re-evaluate when dirty state changes
-                    return settingsController.isPageDirty(trailingRow.entry.id);
+                    return settingsController.isPageDirty(trailingRow.entry.pageId);
                 }
 
                 SequentialAnimation on opacity {
@@ -819,9 +816,7 @@ PhosphorUi.SettingsAppWindow {
                         to: 1
                         profile: "widget.pulse"
                     }
-
                 }
-
             }
 
             // ── Snapping / Tiling toggle ────────────────────────────
@@ -829,7 +824,7 @@ PhosphorUi.SettingsAppWindow {
                 visible: trailingRow.isSnapping || trailingRow.isTiling
                 checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : false)
                 accessibleName: trailingRow.entry ? trailingRow.entry.title : ""
-                onToggled: function(newValue) {
+                onToggled: function (newValue) {
                     settingsController.beginExternalEdit(trailingRow.isSnapping ? "snapping" : "tiling");
                     if (trailingRow.isSnapping)
                         appSettings.snappingEnabled = newValue;
@@ -838,9 +833,6 @@ PhosphorUi.SettingsAppWindow {
                     settingsController.endExternalEdit();
                 }
             }
-
         }
-
     }
-
 }

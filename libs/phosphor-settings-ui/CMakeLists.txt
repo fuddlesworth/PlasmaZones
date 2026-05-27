@@ -163,6 +163,7 @@ target_compile_definitions(PhosphorSettingsUi PRIVATE
 set(phosphorsettingsui_qml_FILES
     qml/SettingsAppWindow.qml
     qml/Sidebar.qml
+    qml/SidebarRow.qml
     qml/SidebarBackButton.qml
     qml/Breadcrumbs.qml
     qml/UnsavedChangesFooter.qml
