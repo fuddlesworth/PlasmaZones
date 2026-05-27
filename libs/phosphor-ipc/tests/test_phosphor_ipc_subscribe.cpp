@@ -339,46 +339,58 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
     router.registerTarget(QStringLiteral("count"), &c);
     QVERIFY(router.start(sockPath));
 
+    // First subscriber connects + subscribes + disconnects. If the
+    // router's disconnect path FAILS to prune m_subscriptionsBySocket
+    // for the dead socket, broadcastEvent later would either
+    // crash writing to a dead QPointer or silently no-op against
+    // the now-disconnected socket — neither outcome is detectable
+    // from "did it not crash."
     {
-        QLocalSocket socket;
-        socket.connectToServer(sockPath);
-        QVERIFY(socket.waitForConnected(2000));
-        socket.write(writeLine(
+        QLocalSocket sock;
+        sock.connectToServer(sockPath);
+        QVERIFY(sock.waitForConnected(2000));
+        sock.write(writeLine(
             makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
-        socket.flush();
-        readLines(socket, 1); // ack
-        socket.disconnectFromServer();
-        // Allow the router to process the disconnect.
-        QTest::qWait(100);
+        sock.flush();
+        readLines(sock, 1); // ack
+        sock.disconnectFromServer();
+        QTest::qWait(100); // let router process the disconnect
     }
-    // Reconnect a fresh socket and try to unsubscribe id=1 — the
-    // server should reject with NO_SUCH_SUBSCRIPTION because the
-    // disconnected client's subscription record is gone. A
-    // regression where handleClientDisconnected stops calling
-    // m_subscriptionsBySocket.remove would let the record persist
-    // (orphaned, but still in the map); broadcastEvent would then
-    // attempt to write to a dead socket. We can't directly observe
-    // the map from outside the router, so we exercise the
-    // negative-confirmation path instead.
-    //
-    // NOTE: subscription ids are scoped per-socket, so a new
-    // socket asking to unsubscribe id=1 SHOULD always get
-    // NO_SUCH_SUBSCRIPTION regardless of the prior client. The
-    // assertion is that broadcastEvent doesn't crash AND that
-    // the router state is sane after the prune.
-    QJsonArray args;
-    args.append(7);
-    router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), args);
 
-    QLocalSocket probe;
-    probe.connectToServer(sockPath);
-    QVERIFY(probe.waitForConnected(2000));
-    probe.write(writeLine(makeReq(QStringLiteral("unsubscribe"), 99, {}, {}, 1)));
-    probe.flush();
-    const QList<QJsonObject> resp = readLines(probe, 1);
-    QCOMPARE(resp.size(), 1);
-    QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
-    QCOMPARE(resp.first().value(QStringLiteral("code")).toString(), QStringLiteral("NO_SUCH_SUBSCRIPTION"));
+    // Second subscriber on a fresh connection. Subscribe + broadcast
+    // 3 events + assert all 3 land. If the disconnected first
+    // subscriber's record was orphaned in m_subscriptionsBySocket,
+    // broadcastEvent would iterate it; the QPointer guard would skip
+    // it (no crash), but the iteration cost grows unbounded with
+    // every disconnected client. The real evidence of correct
+    // pruning is observable from the working second subscriber:
+    // it sees exactly the 3 events it subscribed to, no more, no
+    // less. (A regression that incorrectly fans dead-subscriber
+    // events back onto the live socket would surface as extra
+    // events arriving here.)
+    QLocalSocket live;
+    live.connectToServer(sockPath);
+    QVERIFY(live.waitForConnected(2000));
+    live.write(
+        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
+    live.flush();
+    readLines(live, 1); // ack
+
+    for (int i = 1; i <= 3; ++i) {
+        QJsonArray args;
+        args.append(i);
+        router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), args);
+    }
+    const QList<QJsonObject> events = readLines(live, 3);
+    QCOMPARE(events.size(), 3);
+    QCOMPARE(events.at(0).value(QStringLiteral("args")).toArray().first().toInt(), 1);
+    QCOMPARE(events.at(2).value(QStringLiteral("args")).toArray().first().toInt(), 3);
+
+    // No-extra-events check: give the loop a brief window to
+    // deliver any spurious fan-out from a residual subscription;
+    // assert nothing more arrives.
+    const QList<QJsonObject> extra = readLines(live, 1, 200);
+    QCOMPARE(extra.size(), 0);
 }
 
 QTEST_MAIN(TestPhosphorIpcSubscribe)

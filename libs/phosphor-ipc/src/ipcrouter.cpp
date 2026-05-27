@@ -22,6 +22,8 @@
 #include <QString>
 #include <QVariant>
 
+#include <sys/stat.h> // umask
+
 namespace PhosphorIpc {
 
 namespace {
@@ -121,10 +123,16 @@ bool IpcRouter::start(const QString& socketPath)
     // option makes QLocalServer auto-unlink any existing socket
     // file before binding, which would silently clobber another
     // live listener on the same path. Instead we listen() against
-    // the bare path and chmod the resulting socket file manually
-    // below — same 0600 security outcome, but our stale-detection
-    // path stays in control of unlink decisions.
-    if (!m_server->listen(resolved)) {
+    // the bare path with an umask scope that forces the
+    // newly-created socket file to be mode 0600 atomically — no
+    // chmod-after-listen window where the socket exists at the
+    // umask-default mode. Restore the prior umask after listen()
+    // returns so we don't affect later file creations on the
+    // same thread.
+    const mode_t prevUmask = ::umask(0177);
+    const bool initialBound = m_server->listen(resolved);
+    ::umask(prevUmask);
+    if (!initialBound) {
         const QString initialError = m_server->errorString();
         bool removedStale = false;
         if (QFile::exists(resolved)) {
@@ -143,22 +151,28 @@ bool IpcRouter::start(const QString& socketPath)
                 removedStale = true;
             }
         }
-        if (!removedStale || !m_server->listen(resolved)) {
+        bool retryBound = false;
+        if (removedStale) {
+            // Same umask scope as the initial listen so the
+            // post-unlink retry also creates the socket file at
+            // mode 0600 atomically.
+            const mode_t retryUmask = ::umask(0177);
+            retryBound = m_server->listen(resolved);
+            ::umask(retryUmask);
+        }
+        if (!retryBound) {
             qWarning("PhosphorIpc::IpcRouter::start: listen() failed for '%s': %s", qPrintable(resolved),
                      qPrintable(removedStale ? m_server->errorString() : initialError));
             m_server.reset();
             return false;
         }
     }
-    // Restrict the socket to the owning user. $XDG_RUNTIME_DIR is
-    // already 0700, but the socket file's own mode controls who
-    // can connect; 0600 prevents an unprivileged co-tenant on the
-    // same machine (e.g. a sidecar container sharing the runtime
-    // dir) from connecting and invoking arbitrary registered
-    // targets. Done after listen() rather than via
-    // setSocketOptions(UserAccessOption) so our stale-detect path
-    // remains the only thing that can unlink the file.
-    QFile::setPermissions(resolved, QFile::ReadOwner | QFile::WriteOwner);
+    // Socket file is at mode 0600 by construction (the umask
+    // scope above forced the create-time permissions); no
+    // post-listen chmod needed. $XDG_RUNTIME_DIR's own 0700
+    // restricts the directory; the socket file mode adds
+    // defense-in-depth against a sidecar container with the
+    // same uid sharing the runtime dir.
     m_socketPath = resolved;
     QObject::connect(m_server.get(), &QLocalServer::newConnection, this, &IpcRouter::handleNewConnection);
     return true;
@@ -195,12 +209,15 @@ void IpcRouter::registerTarget(const QString& name, QObject* object)
             return;
         }
         // Prior QObject was destroyed out from under us; the
-        // QPointer has cleared. Treat the slot as vacant so the
-        // caller can re-register a fresh QObject under the same
-        // name. We still need to emit targetUnregistered so any
-        // observer counts stay balanced.
+        // QPointer auto-cleared without emitting targetUnregistered
+        // (QPointer clearing is silent by design). We DON'T emit a
+        // synthetic unregister here either — it would create an
+        // observable empty-then-filled gap for any Qt::DirectConnection
+        // slot reading listTargets() during the emission. Instead,
+        // overwrite the slot in place and emit a single
+        // targetRegistered. Observers that cared about the prior
+        // QObject can connect to its destroyed() signal directly.
         m_targets.remove(name);
-        Q_EMIT targetUnregistered(name);
     }
     m_targets.insert(name, QPointer<QObject>(object));
     Q_EMIT targetRegistered(name);

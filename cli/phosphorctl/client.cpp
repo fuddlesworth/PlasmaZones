@@ -100,6 +100,14 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
                 continue;
             }
             const QJsonObject obj = doc.object();
+            // An absent `id` is the server's "no client correlation"
+            // sentinel — see buildError(0,...) which omits the id
+            // field. Don't match those against a client request
+            // that happens to use id=0; they're parse-level errors
+            // unrelated to any specific request.
+            if (!obj.contains(QString::fromUtf8(PhosphorIpc::Field::Id))) {
+                continue;
+            }
             const qint64 respId = static_cast<qint64>(obj.value(QString::fromUtf8(PhosphorIpc::Field::Id)).toDouble(0));
             if (respId == expectedId) {
                 matched = obj;

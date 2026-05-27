@@ -74,7 +74,12 @@ bool installSignalHandlers()
     // are implementation-defined (BSD vs SysV historical split).
     // sigaction is portable. SA_RESTART avoids interrupting
     // syscalls in the main thread when SIGINT fires.
-    struct sigaction sa;
+    //
+    // Zero-init via {} so internal/reserved fields (sa_restorer
+    // on glibc, padding) don't carry stack garbage into
+    // sigaction(2); the man page explicitly warns against partial
+    // init.
+    struct sigaction sa{};
     sa.sa_handler = signalHandler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
