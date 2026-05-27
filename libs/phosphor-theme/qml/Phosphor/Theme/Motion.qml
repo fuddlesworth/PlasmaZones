@@ -32,6 +32,11 @@ QtObject {
     // Stored as bezier control-point arrays in Qt's BezierSpline format.
     // Each array is the four-control-point cubic-bezier from M3, padded
     // with the curve endpoint at 1,1 as Qt's BezierSpline requires.
+    // Every literal is spelled with a fractional part so Qt's QML→QVariant
+    // conversion records each element as QVariant(double) rather than
+    // QVariant(int). The Easing.bezierCurve property is QList<double> and
+    // refuses mixed-type QVariantList inputs at runtime ("Could not
+    // convert ... to QList<double>"); explicit doubles avoid that path.
     readonly property var easing_standard: [0.2, 0, 0, 1, 1, 1]
     readonly property var easing_emphasized: [0.05, 0.7, 0.1, 1, 1, 1]
     readonly property var easing_decelerated: [0, 0, 0.2, 1, 1, 1]

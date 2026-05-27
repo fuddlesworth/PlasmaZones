@@ -33,8 +33,13 @@ Button {
     property color accentColor: Theme.primary
     property color labelColor: Theme.on_primary
     readonly property color _fill: {
+        // Phosphor.Theme exposes surface_container, surface_container_high.
+        // The pressed-state needs a darker step than hover; Qt.darker on
+        // the hover token approximates the M3 surface_container_highest
+        // ramp without depending on a token the theme library does not
+        // yet publish.
         if (root.down)
-            return root.accented ? Qt.darker(root.accentColor, 1.15) : Theme.surface_container_highest;
+            return root.accented ? Qt.darker(root.accentColor, 1.15) : Qt.darker(Theme.surface_container_high, 1.1);
 
         if (root.hovered)
             return root.accented ? root.accentColor : Theme.surface_container_high;
