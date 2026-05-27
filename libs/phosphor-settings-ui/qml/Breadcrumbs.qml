@@ -101,26 +101,24 @@ RowLayout {
             Item {
                 id: segmentItem
 
+                // Activation helper shared by all three Keys handlers
+                // below — Return / Enter / Space all do the same
+                // "navigate to this segment" action. Without the
+                // function the three handlers were identical 3-line
+                // blocks and any future change had to be made thrice.
+                function _activate() {
+                    if (segmentRow.clickable)
+                        root.controller.currentPageId = segmentRow.modelData.id;
+                }
+
                 Layout.preferredWidth: segmentLabel.implicitWidth
                 Layout.preferredHeight: segmentLabel.implicitHeight
                 activeFocusOnTab: segmentRow.clickable
                 Accessible.name: segmentLabel.text
                 Accessible.role: segmentRow.clickable ? Accessible.Link : Accessible.StaticText
-                Keys.onReturnPressed: {
-                    if (segmentRow.clickable) {
-                        root.controller.currentPageId = segmentRow.modelData.id;
-                    }
-                }
-                Keys.onEnterPressed: {
-                    if (segmentRow.clickable) {
-                        root.controller.currentPageId = segmentRow.modelData.id;
-                    }
-                }
-                Keys.onSpacePressed: {
-                    if (segmentRow.clickable) {
-                        root.controller.currentPageId = segmentRow.modelData.id;
-                    }
-                }
+                Keys.onReturnPressed: segmentItem._activate()
+                Keys.onEnterPressed: segmentItem._activate()
+                Keys.onSpacePressed: segmentItem._activate()
 
                 QQC2.Label {
                     id: segmentLabel
@@ -140,7 +138,6 @@ RowLayout {
                     cursorShape: segmentRow.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: root.controller.currentPageId = segmentRow.modelData.id
                 }
-
             }
 
             QQC2.Label {
@@ -152,14 +149,11 @@ RowLayout {
                 text: "›"
                 opacity: 0.5
             }
-
         }
-
     }
 
     // Spacer to push subsequent items in the parent layout to the right.
     Item {
         Layout.fillWidth: true
     }
-
 }

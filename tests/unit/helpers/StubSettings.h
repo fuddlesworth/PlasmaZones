@@ -14,7 +14,9 @@ namespace PlasmaZones {
  * @brief Unified stub ISettings for unit tests
  *
  * Provides sensible defaults for all ISettings pure virtual methods.
- * The defaultLayoutId can be overridden via setTestDefaultLayoutId().
+ * The defaultLayoutId is mutated via setDefaultLayoutId() (the
+ * ISettings setter); tests should call that directly rather than a
+ * "test-only" duplicate.
  *
  * Also inherits PhosphorEngine::ISnapSettings so SnapEngine's
  * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
@@ -22,6 +24,13 @@ namespace PlasmaZones {
  * stickyWindowHandling, moveNewWindowsToLastZone, restoreWindowsToZonesOnLogin,
  * autoAssignAllLayouts) are already implemented for ISettings — the multiple
  * inheritance just registers the second base so the cast resolves.
+ *
+ * NOTE: This stub does NOT inherit PhosphorEngine::IAutotileSettings —
+ * the AutotileEngine fetches its config via a separate code path and
+ * no currently-exercised unit test routes through a
+ * dynamic_cast<IAutotileSettings*> against the stub. If a future test
+ * exercises autotile-engine wiring through ISettings, the stub
+ * should grow that base + the 22 IAutotileSettings overrides.
  */
 class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
 {
@@ -43,11 +52,11 @@ public:
     }
     void setDefaultLayoutId(const QString& id) override
     {
+        if (m_defaultLayoutId == id)
+            return;
         m_defaultLayoutId = id;
-    }
-    void setTestDefaultLayoutId(const QString& id)
-    {
-        m_defaultLayoutId = id;
+        Q_EMIT defaultLayoutIdChanged();
+        Q_EMIT settingsChanged();
     }
 
     // IZoneActivationSettings
@@ -641,7 +650,11 @@ public:
     }
     void setAutoAssignAllLayouts(bool enabled) override
     {
+        if (m_autoAssignAllLayouts == enabled)
+            return;
         m_autoAssignAllLayouts = enabled;
+        Q_EMIT autoAssignAllLayoutsChanged();
+        Q_EMIT settingsChanged();
     }
     bool snapAssistFeatureEnabled() const override
     {
@@ -649,7 +662,11 @@ public:
     }
     void setSnapAssistFeatureEnabled(bool enabled) override
     {
+        if (m_snapAssistFeatureEnabled == enabled)
+            return;
         m_snapAssistFeatureEnabled = enabled;
+        Q_EMIT snapAssistFeatureEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     bool snapAssistEnabled() const override
     {
@@ -657,7 +674,11 @@ public:
     }
     void setSnapAssistEnabled(bool enabled) override
     {
+        if (m_snapAssistEnabled == enabled)
+            return;
         m_snapAssistEnabled = enabled;
+        Q_EMIT snapAssistEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     QVariantList snapAssistTriggers() const override
     {
@@ -841,7 +862,11 @@ public:
     }
     void setAutotilePerAlgorithmSettings(const QVariantMap& settings) override
     {
+        if (m_autotilePerAlgorithmSettings == settings)
+            return;
         m_autotilePerAlgorithmSettings = settings;
+        Q_EMIT autotilePerAlgorithmSettingsChanged();
+        Q_EMIT settingsChanged();
     }
     QString loadColorsFromFile(const QString&) override
     {

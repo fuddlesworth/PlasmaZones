@@ -15,9 +15,15 @@ namespace PhosphorSettingsUiExamplesMinimal {
 namespace {
 
 /** Trivial about page with no staged state. Demonstrates a read-only
- *  page that the framework still routes to and shows in the sidebar. */
+ *  page that the framework still routes to and shows in the sidebar.
+ *  Q_OBJECT is included so the demo mirrors the real-consumer
+ *  pattern: any page that adds signals or Q_PROPERTY later needs the
+ *  macro present, and copy-pasting from the example shouldn't teach
+ *  a broken pattern. The trailing `demoapp.moc` include below brings
+ *  in the generated metaobject. */
 class AboutPage : public PhosphorSettingsUi::PageController
 {
+    Q_OBJECT
 public:
     explicit AboutPage(QObject* parent = nullptr)
         : PhosphorSettingsUi::PageController(QStringLiteral("about"), parent)
@@ -57,3 +63,6 @@ DemoApp::DemoApp(QObject* parent)
 }
 
 } // namespace PhosphorSettingsUiExamplesMinimal
+
+// Moc-generated metaobject for the in-source AboutPage Q_OBJECT class.
+#include "demoapp.moc"

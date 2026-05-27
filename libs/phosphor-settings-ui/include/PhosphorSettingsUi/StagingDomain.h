@@ -37,9 +37,12 @@ public:
     explicit StagingDomain(QObject* parent = nullptr);
     ~StagingDomain() override;
 
-    // Q_INVOKABLE so QML can read isDirty() imperatively; apply/discard
-    // below are slots, so QML can call all three through the same shape.
-    Q_INVOKABLE virtual bool isDirty() const = 0;
+    // Pure virtual reader — QML accesses it via the `dirty` Q_PROPERTY
+    // (READ binding above) or imperatively as `domain.dirty`. No
+    // Q_INVOKABLE: that would register a duplicate metaobject entry
+    // covering the same getter (the property accessor moc already
+    // generates one). Keep the signal/slot/invokable surface minimal.
+    virtual bool isDirty() const = 0;
 
 public Q_SLOTS:
     /** Persist staged changes to the backing store. ApplicationController

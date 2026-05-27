@@ -27,8 +27,13 @@ LocalizedContext::LocalizedContext(QObject* parent)
     // effective-context so the next i18n*() call re-reads the new name.
     if (auto* app = QCoreApplication::instance()) {
         connect(app, &QCoreApplication::applicationNameChanged, this, [this]() {
-            m_effectiveContextValid = false;
+            // Only invalidate when m_context is empty — otherwise the
+            // explicit override is the effective value and the cached
+            // UTF-8 encoding stays correct. Re-invalidating on every
+            // app-name change when an override is set would re-encode
+            // the same bytes on the next i18n() call for no reason.
             if (m_context.isEmpty()) {
+                m_effectiveContextValid = false;
                 Q_EMIT translationContextChanged();
             }
         });

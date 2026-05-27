@@ -79,11 +79,14 @@ public:
      *  multiple interfaces on the same object path). */
     QDBusMessage callOn(const QString& interfaceName, const QString& method, const QVariantList& args = {}) const;
 
-    /** Fire-and-forget call on the endpoint's default interface. */
-    void asyncCall(const QString& method, const QVariantList& args = {}) const;
+    /** Fire-and-forget call on the endpoint's default interface.
+     *  Non-const: the implementation parents a QDBusPendingCallWatcher
+     *  to `this` so the QObject child tree mutates. */
+    void asyncCall(const QString& method, const QVariantList& args = {});
 
-    /** Fire-and-forget call on a specified interface. */
-    void asyncCallOn(const QString& interfaceName, const QString& method, const QVariantList& args = {}) const;
+    /** Fire-and-forget call on a specified interface.
+     *  Non-const for the same parenting rationale as asyncCall. */
+    void asyncCallOn(const QString& interfaceName, const QString& method, const QVariantList& args = {});
 
 private:
     DBusEndpoint m_endpoint;

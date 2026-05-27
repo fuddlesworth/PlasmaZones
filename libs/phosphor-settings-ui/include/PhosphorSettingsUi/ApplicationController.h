@@ -108,6 +108,9 @@ public:
 public Q_SLOTS:
     void applyAll();
     void discardAll();
+    void resetCurrentPage();
+
+public:
     /// Async variant of applyAll — collects each dirty domain's
     /// applyResult signal and emits applyAllComplete(ok, errors) when
     /// all responses have landed. Chrome should prefer this over
@@ -116,10 +119,21 @@ public Q_SLOTS:
     /// applyResult immediately, so they complete on the same event-
     /// loop turn — the async path degenerates to "sync + one tail
     /// signal" for them.
+    ///
+    /// Q_INVOKABLE (not slot) — async-batch state is too stateful for
+    /// arbitrary signal wiring; QML calls it directly and that's the
+    /// only intended caller surface. The sync slots above accept
+    /// signal wiring for legacy compatibility.
     Q_INVOKABLE void applyAllAsync();
     /// Symmetric to applyAllAsync; emits discardAllComplete(ok, errors).
     Q_INVOKABLE void discardAllAsync();
-    void resetCurrentPage();
+    /// Force-reset the async-batch state machine to idle.
+    /// Recovers from the (hopefully-impossible) case where a domain
+    /// failed to emit applyResult/discardResult AND its destroyed()
+    /// signal also never fired (e.g. an exception unwound past Qt's
+    /// child-deletion). Emits the matching *Complete signal with
+    /// ok=false so observers are notified. QML escape hatch.
+    Q_INVOKABLE void forceResetAsyncState();
 
 Q_SIGNALS:
     void dirtyChanged();
@@ -175,6 +189,13 @@ private:
     int m_discardPending = 0;
     QStringList m_discardErrors;
     bool m_discarding = false;
+    /// Hard-cap on how long an async batch waits for terminal result
+    /// signals before synthesising a failure entry per still-pending
+    /// domain. 60 seconds is generous for D-Bus chains (typical
+    /// reply &lt; 500 ms) but tight enough that a fully-wedged backend
+    /// surfaces a visible failure rather than wedging the chrome
+    /// indefinitely.
+    static constexpr int kAsyncBatchTimeoutMs = 60'000;
 };
 
 } // namespace PhosphorSettingsUi

@@ -8,6 +8,7 @@
 #include "PhosphorSettingsUi/StagingDomain.h"
 
 #include <QDebug>
+#include <QTimer>
 
 namespace PhosphorSettingsUi {
 
@@ -103,6 +104,15 @@ void ApplicationController::registerDomain(StagingDomain* domain)
 
 void ApplicationController::applyAll()
 {
+    // Refuse the sync entry point while the async batch is in flight
+    // — mixing the two paths drives nested m_inTransaction toggles
+    // and lets the trailing recomputeDirty observe mid-batch state.
+    // Chrome always uses applyAllAsync; this guard pins the contract
+    // for stray legacy callers.
+    if (m_applying) {
+        qWarning() << "ApplicationController::applyAll: refused — applyAllAsync already in flight";
+        return;
+    }
     // Best-effort, no rollback: runs `apply()` on every dirty domain in
     // registration order. If domain N throws or fails internally,
     // domains 1..N-1 stay applied and N+1..M get their normal apply
@@ -134,6 +144,10 @@ void ApplicationController::applyAll()
 
 void ApplicationController::discardAll()
 {
+    if (m_discarding) {
+        qWarning() << "ApplicationController::discardAll: refused — discardAllAsync already in flight";
+        return;
+    }
     // Same best-effort semantics as applyAll() — see above.
     // Same iterator-invalidation rationale for the snapshot + the same
     // m_inTransaction batching to avoid O(N²) dirty recomputation.
@@ -183,6 +197,21 @@ void ApplicationController::applyAllAsync()
     // duration of the batch (A15 rationale) — the trailing completion
     // helper does a final recomputeDirty.
     m_inTransaction = true;
+
+    // Hard timeout — if any pending domain hasn't reported by the
+    // deadline, synthesise a failure entry per pending domain, zero
+    // the counter, and emit applyAllComplete(false, …). Without this
+    // a stuck D-Bus reply with no client-side timeout would freeze
+    // the chrome's "Saving…" indicator indefinitely.
+    QTimer::singleShot(kAsyncBatchTimeoutMs, this, [this]() {
+        if (!m_applying || m_applyPending == 0)
+            return;
+        const int stuck = m_applyPending;
+        for (int i = 0; i < stuck; ++i)
+            m_applyErrors.append(QStringLiteral("Domain did not report apply completion within timeout"));
+        m_applyPending = 0;
+        completeApplyIfDone();
+    });
 
     for (StagingDomain* domain : dirty) {
         // Use Qt::SingleShotConnection so the lambda self-disconnects
@@ -241,6 +270,18 @@ void ApplicationController::discardAllAsync()
     m_discarding = true;
     Q_EMIT discardingChanged();
     m_inTransaction = true;
+
+    // Same hard-timeout safety net as applyAllAsync — see comment
+    // there for rationale.
+    QTimer::singleShot(kAsyncBatchTimeoutMs, this, [this]() {
+        if (!m_discarding || m_discardPending == 0)
+            return;
+        const int stuck = m_discardPending;
+        for (int i = 0; i < stuck; ++i)
+            m_discardErrors.append(QStringLiteral("Domain did not report discard completion within timeout"));
+        m_discardPending = 0;
+        completeDiscardIfDone();
+    });
 
     for (StagingDomain* domain : dirty) {
         // Same Qt::SingleShotConnection + destroyed() guard pattern
@@ -301,6 +342,26 @@ void ApplicationController::completeDiscardIfDone()
     Q_EMIT discardingChanged();
     recomputeDirty();
     Q_EMIT discardAllComplete(ok, errors);
+}
+
+void ApplicationController::forceResetAsyncState()
+{
+    // Emergency escape hatch — recovers from a state machine that's
+    // stuck because both the terminal result signal AND the
+    // destroyed() guard failed to fire (should be unreachable but
+    // chrome buttons would be permanently disabled if it did).
+    if (m_applying) {
+        m_applyPending = 0;
+        if (m_applyErrors.isEmpty())
+            m_applyErrors.append(QStringLiteral("Async apply state force-reset"));
+        completeApplyIfDone();
+    }
+    if (m_discarding) {
+        m_discardPending = 0;
+        if (m_discardErrors.isEmpty())
+            m_discardErrors.append(QStringLiteral("Async discard state force-reset"));
+        completeDiscardIfDone();
+    }
 }
 
 void ApplicationController::resetCurrentPage()
@@ -413,9 +474,11 @@ void ApplicationController::trackDomain(StagingDomain* domain)
     // pointee — defence-in-depth so double-tracking can never double-fire.
     connect(domain, &StagingDomain::dirtyChanged, this, &ApplicationController::onDomainDirtyChanged,
             Qt::UniqueConnection);
-    if (domain->isDirty()) {
-        recomputeDirty();
-    }
+    // Run recomputeDirty unconditionally — even when the new domain
+    // is clean, the walk compacts any null QPointer entries that
+    // accumulated from previously-destroyed domains. Cost is O(N)
+    // for a settings app's typical N (~20 domains), negligible.
+    recomputeDirty();
 }
 
 void ApplicationController::onDomainDirtyChanged()

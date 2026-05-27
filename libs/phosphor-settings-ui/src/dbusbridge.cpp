@@ -104,12 +104,12 @@ QDBusMessage DBusBridge::callOn(const QString& interfaceName, const QString& met
     return QDBusConnection::sessionBus().call(msg, QDBus::Block, m_endpoint.syncTimeoutMs);
 }
 
-void DBusBridge::asyncCall(const QString& method, const QVariantList& args) const
+void DBusBridge::asyncCall(const QString& method, const QVariantList& args)
 {
     asyncCallOn(m_endpoint.interfaceName, method, args);
 }
 
-void DBusBridge::asyncCallOn(const QString& interfaceName, const QString& method, const QVariantList& args) const
+void DBusBridge::asyncCallOn(const QString& interfaceName, const QString& method, const QVariantList& args)
 {
     if (!validateEndpoint(m_endpoint, interfaceName, method, "PhosphorSettingsUi::DBusBridge::asyncCallOn")) {
         return;
@@ -139,10 +139,9 @@ void DBusBridge::asyncCallOn(const QString& interfaceName, const QString& method
     // Parent the watcher to the bridge so an in-flight call cancels cleanly
     // when the bridge is destroyed (Qt auto-deletes children). Without a
     // parent, a watcher whose owning thread's event loop ended before the
-    // reply arrived would leak. const_cast is safe here: parenting is a
-    // tracking concern (Qt's parent/child machinery), not a logical-state
-    // mutation of the bridge.
-    auto* watcher = new QDBusPendingCallWatcher(pending, const_cast<DBusBridge*>(this));
+    // reply arrived would leak. asyncCall* are non-const because the
+    // parent/child mutation is real state — const-correctness would lie.
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
     QObject::connect(
         watcher, &QDBusPendingCallWatcher::finished, watcher, [interfaceName, method](QDBusPendingCallWatcher* w) {
             QDBusPendingReply<> reply = *w;

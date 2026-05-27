@@ -29,6 +29,11 @@ ColumnLayout {
     id: root
 
     required property ApplicationController controller
+    /// True while an async apply OR discard is in flight; both
+    /// action buttons disable on this. Hoisted from per-button
+    /// `!applying && !discarding` to dedupe and provide a single
+    /// hook a consumer could read.
+    readonly property bool actionsBusy: root.controller.applying || root.controller.discarding
 
     /** Emitted after the user confirms a discard. Consumers can hook
      *  this to flash a toast, log telemetry, etc. — the discard
@@ -65,6 +70,14 @@ ColumnLayout {
         id: dirtyBar
 
         property real expansion: root.controller.dirty ? 1 : 0
+        /// Cached direction at the moment expansion was set, so a
+        /// dirty flip mid-animation doesn't rubber-band the slide
+        /// (Behavior re-reads profile on every animation tick under
+        /// the prior `dirty ?` form; if dirty flipped during a slide
+        /// the profile would swap to the opposite direction and the
+        /// bar visibly bounces back).
+        property string _slideProfile: "widget.accordionExpand"
+        onExpansionChanged: _slideProfile = (expansion >= 0.5 ? "widget.accordionExpand" : "widget.accordionCollapse")
 
         Layout.fillWidth: true
         Layout.preferredHeight: expansion * barContent.implicitHeight
@@ -136,7 +149,7 @@ ColumnLayout {
                     text: root.controller.discarding ? qsTr("Discarding…") : qsTr("Discard")
                     icon.name: "edit-undo"
                     flat: true
-                    enabled: !root.controller.applying && !root.controller.discarding
+                    enabled: !root.actionsBusy
                     Accessible.name: qsTr("Discard changes")
                     // Confirm-before-throw matches the legacy chrome:
                     // unsaved edits are easy to lose, so the
@@ -149,7 +162,7 @@ ColumnLayout {
                     text: root.controller.applying ? qsTr("Saving…") : qsTr("Save")
                     icon.name: "document-save"
                     highlighted: true
-                    enabled: !root.controller.applying && !root.controller.discarding
+                    enabled: !root.actionsBusy
                     Accessible.name: qsTr("Save settings")
                     onClicked: {
                         // applyAllAsync dispatches each domain's
@@ -165,14 +178,13 @@ ColumnLayout {
             }
         }
 
-        // Use the project's accordion motion profiles. Direction is
-        // taken from `controller.dirty` (the same flag driving
-        // `expansion` above) — reading `expansion` here would re-
-        // evaluate during the Behavior and pick the wrong leg as the
-        // value approaches its target.
+        // Direction comes from _slideProfile (cached at the moment
+        // expansion changes — see onExpansionChanged above). Reading
+        // controller.dirty here would re-evaluate during the slide
+        // and rubber-band if dirty flipped mid-animation.
         Behavior on expansion {
             PhosphorMotionAnimation {
-                profile: root.controller.dirty ? "widget.accordionExpand" : "widget.accordionCollapse"
+                profile: dirtyBar._slideProfile
             }
         }
     }

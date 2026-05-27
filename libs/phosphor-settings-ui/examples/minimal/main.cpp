@@ -4,8 +4,8 @@
 #include <QDebug>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
-#include <QQmlContext>
 #include <QQuickStyle>
+#include <QVariantMap>
 
 #include "demoapp.h"
 
@@ -25,12 +25,11 @@ int main(int argc, char* argv[])
     PhosphorSettingsUiExamplesMinimal::DemoApp controller;
 
     QQmlApplicationEngine engine;
-    // Demo uses setContextProperty for brevity. Real applications should
-    // prefer engine.setInitialProperties({{"controller", ...}}) plus a
-    // `required property` on the QML root — compile-time-checked and
-    // moc-friendly. Context properties are kept here only so the demo
-    // stays a single-file example.
-    engine.rootContext()->setContextProperty(QStringLiteral("demoController"), &controller);
+    // Use setInitialProperties + a `required property` on Main.qml —
+    // compile-time-checked vs. setContextProperty's stringly-typed
+    // global context. This is the pattern real consumers should
+    // copy, so the demo demonstrates it.
+    engine.setInitialProperties({{QStringLiteral("controller"), QVariant::fromValue(&controller)}});
     engine.loadFromModule(QStringLiteral("org.phosphor.settings.ui.examples.minimal"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty()) {
         qCritical() << "phosphor-settings-ui-minimal: failed to load Main.qml — check QML import paths and module"

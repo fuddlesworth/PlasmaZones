@@ -106,4 +106,27 @@ Item {
         text: qsTr("Select a page from the sidebar")
         icon.name: "settings-configure"
     }
+
+    // If a page gets re-registered (dynamic registration after
+    // startup) with a different controller, the already-loaded
+    // page keeps the stale pointer. Listen for pageRegistered and
+    // re-inject the controller when it matches the active page.
+    Connections {
+        function onPageRegistered(id) {
+            if (id !== root.controller.currentPageId)
+                return;
+            if (!pageLoader.item)
+                return;
+            const pageController = root.controller.registry.controller(id);
+            if (pageLoader.item.hasOwnProperty("controller")) {
+                try {
+                    pageLoader.item.controller = pageController;
+                } catch (e) {
+                    // Page binds its own controller (readonly) — skip.
+                }
+            }
+        }
+
+        target: root.controller.registry
+    }
 }
