@@ -35,6 +35,7 @@
 #include "virtualscreenutils.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>

@@ -14,6 +14,7 @@
 #include "../common/layoutbundlebuilder.h"
 #include "../common/layoutpreviewserialize.h"
 #include "../config/configdefaults.h"
+#include "../core/geometryutils.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../pz_i18n.h"
@@ -24,6 +25,7 @@
 // D-Bus helpers, page controllers) is reached transitively through
 // settingscontroller.h. Only headers used directly here are listed.
 #include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/LayoutComputeService.h>
 
 #include <QDBusConnection>
