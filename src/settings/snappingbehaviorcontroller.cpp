@@ -4,22 +4,22 @@
 #include "snappingbehaviorcontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../config/settings.h"
+#include "../core/isettings.h"
 #include "triggerutils.h"
 
 namespace PlasmaZones {
 
-SnappingBehaviorController::SnappingBehaviorController(Settings* settings, QObject* parent)
+SnappingBehaviorController::SnappingBehaviorController(ISettings* settings, QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("snapping-behavior"), parent)
     , m_settings(settings)
 {
     Q_ASSERT(m_settings);
     m_lastAlwaysActiveOnDrag = alwaysActivateOnDrag();
 
-    // Forward Settings NOTIFY signals to the QML-facing Q_PROPERTY signals.
+    // Forward ISettings NOTIFY signals to the QML-facing Q_PROPERTY signals.
     // alwaysActivateOnDrag is derived from the drag-trigger list, so it only
     // fires when the AlwaysActive modifier actually comes or goes.
-    connect(m_settings, &Settings::dragActivationTriggersChanged, this, [this]() {
+    connect(m_settings, &ISettings::dragActivationTriggersChanged, this, [this]() {
         Q_EMIT dragActivationTriggersChanged();
         const bool newAlwaysActive = alwaysActivateOnDrag();
         if (newAlwaysActive != m_lastAlwaysActiveOnDrag) {
@@ -27,8 +27,9 @@ SnappingBehaviorController::SnappingBehaviorController(Settings* settings, QObje
             Q_EMIT alwaysActivateOnDragChanged();
         }
     });
-    connect(m_settings, &Settings::zoneSpanTriggersChanged, this, &SnappingBehaviorController::zoneSpanTriggersChanged);
-    connect(m_settings, &Settings::snapAssistTriggersChanged, this,
+    connect(m_settings, &ISettings::zoneSpanTriggersChanged, this,
+            &SnappingBehaviorController::zoneSpanTriggersChanged);
+    connect(m_settings, &ISettings::snapAssistTriggersChanged, this,
             &SnappingBehaviorController::snapAssistTriggersChanged);
 }
 

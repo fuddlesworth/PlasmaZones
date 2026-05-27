@@ -4,19 +4,19 @@
 #include "tilingbehaviorcontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../config/settings.h"
+#include "../core/isettings.h"
 #include "triggerutils.h"
 
 namespace PlasmaZones {
 
-TilingBehaviorController::TilingBehaviorController(Settings* settings, QObject* parent)
+TilingBehaviorController::TilingBehaviorController(ISettings* settings, QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("tiling-behavior"), parent)
     , m_settings(settings)
 {
     Q_ASSERT(m_settings);
     m_lastAlwaysReinsertIntoStack = alwaysReinsertIntoStack();
 
-    connect(m_settings, &Settings::autotileDragInsertTriggersChanged, this, [this]() {
+    connect(m_settings, &ISettings::autotileDragInsertTriggersChanged, this, [this]() {
         Q_EMIT autotileDragInsertTriggersChanged();
         const bool newAlwaysReinsert = alwaysReinsertIntoStack();
         if (newAlwaysReinsert != m_lastAlwaysReinsertIntoStack) {

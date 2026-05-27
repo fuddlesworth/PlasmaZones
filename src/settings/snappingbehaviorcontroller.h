@@ -9,7 +9,7 @@
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Snapping → Behavior" settings page.
 ///
@@ -48,7 +48,7 @@ class SnappingBehaviorController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int adjacentThresholdMax READ adjacentThresholdMax CONSTANT)
 
 public:
-    explicit SnappingBehaviorController(Settings* settings, QObject* parent = nullptr);
+    explicit SnappingBehaviorController(ISettings* settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {
@@ -84,7 +84,7 @@ Q_SIGNALS:
     void snapAssistTriggersChanged();
 
 private:
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
     /// Cached alwaysActivateOnDrag state, so the
     /// `dragActivationTriggersChanged → alwaysActivateOnDragChanged` forwarder
     /// only fires when the derived boolean actually flips (CLAUDE.md:

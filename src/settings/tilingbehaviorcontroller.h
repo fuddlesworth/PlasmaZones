@@ -9,7 +9,7 @@
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Tiling → Behavior" settings page.
 ///
@@ -35,7 +35,7 @@ class TilingBehaviorController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(QVariantList defaultAutotileDragInsertTriggers READ defaultAutotileDragInsertTriggers CONSTANT)
 
 public:
-    explicit TilingBehaviorController(Settings* settings, QObject* parent = nullptr);
+    explicit TilingBehaviorController(ISettings* settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {
@@ -60,7 +60,7 @@ Q_SIGNALS:
     void autotileDragInsertTriggersChanged();
 
 private:
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
     /// Cached alwaysReinsertIntoStack state so the
     /// `autotileDragInsertTriggersChanged → alwaysReinsertIntoStackChanged`
     /// forwarder only fires when the derived boolean actually flips.

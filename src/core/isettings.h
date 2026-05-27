@@ -160,6 +160,11 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
+    // Snapping behavior triggers (dragActivation, zoneSpan, snapAssist)
+    // are declared by the IZoneActivationSettings / IZoneSelectorSettings
+    // sub-interfaces ISettings inherits from — see settings_interfaces.h.
+    // Re-declaring them here would shadow the parent virtual.
+
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
