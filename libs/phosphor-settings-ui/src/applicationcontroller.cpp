@@ -106,25 +106,35 @@ void ApplicationController::applyAll()
     // dirtyChanged synchronously, which routes through onDomainDirtyChanged
     // into recomputeDirty(), which may erase null entries from m_domains.
     // Iterating the live list would invalidate the outer iterators.
+    //
+    // m_inTransaction suppresses the inner per-domain recomputeDirty
+    // walks (A15 followup) so the transaction is O(N) instead of O(N²).
+    // The trailing recomputeDirty() with the flag cleared emits the
+    // single net dirtyChanged for the whole batch.
     const QList<QPointer<StagingDomain>> snapshot = m_domains;
+    m_inTransaction = true;
     for (const auto& domain : snapshot) {
         if (domain && domain->isDirty()) {
             domain->apply();
         }
     }
+    m_inTransaction = false;
     recomputeDirty();
 }
 
 void ApplicationController::discardAll()
 {
     // Same best-effort semantics as applyAll() — see above.
-    // Same iterator-invalidation rationale for the snapshot.
+    // Same iterator-invalidation rationale for the snapshot + the same
+    // m_inTransaction batching to avoid O(N²) dirty recomputation.
     const QList<QPointer<StagingDomain>> snapshot = m_domains;
+    m_inTransaction = true;
     for (const auto& domain : snapshot) {
         if (domain && domain->isDirty()) {
             domain->discard();
         }
     }
+    m_inTransaction = false;
     recomputeDirty();
 }
 
@@ -245,6 +255,12 @@ void ApplicationController::trackDomain(StagingDomain* domain)
 
 void ApplicationController::onDomainDirtyChanged()
 {
+    // During applyAll / discardAll batches the outer transaction
+    // emits a single recomputeDirty at the end (A15 followup) —
+    // skip the per-edge walk so the batch is O(N) overall.
+    if (m_inTransaction) {
+        return;
+    }
     recomputeDirty();
 }
 

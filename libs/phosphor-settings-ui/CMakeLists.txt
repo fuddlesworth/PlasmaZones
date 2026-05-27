@@ -177,6 +177,7 @@ set(phosphorsettingsui_qml_FILES
 # `.qml`/`.mjs` for QML_FILES and `.js` for RESOURCES.
 set(phosphorsettingsui_qml_RESOURCES
     qml/LoaderHelpers.js
+    qml/ThemeHelpers.js
 )
 
 qt_add_qml_module(PhosphorSettingsUiQml

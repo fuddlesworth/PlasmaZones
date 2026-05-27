@@ -118,6 +118,11 @@ private:
     QList<QPointer<StagingDomain>> m_domains;
     QString m_currentPageId;
     bool m_dirty = false;
+    // Set during applyAll / discardAll so each inner dirtyChanged →
+    // recomputeDirty edge is suppressed; the outer transaction emits
+    // a single recomputeDirty at the end. Eliminates the O(N²) walk
+    // pattern audit-follow-up A15 flagged.
+    bool m_inTransaction = false;
 };
 
 } // namespace PhosphorSettingsUi

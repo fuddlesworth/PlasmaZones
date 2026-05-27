@@ -6,6 +6,7 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
+import "ThemeHelpers.js" as ThemeHelpers
 
 /**
  * Single row in the Sidebar's ListView delegate.
@@ -113,10 +114,10 @@ QQC2.ItemDelegate {
                 return Qt.rgba(0, 0, 0, 0);
 
             if (rowItem.isCurrent)
-                return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12);
+                return ThemeHelpers.activeTint(Kirigami.Theme.highlightColor);
 
             if (rowItem.hovered)
-                return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06);
+                return ThemeHelpers.hoverTint(Kirigami.Theme.textColor);
 
             return Qt.rgba(0, 0, 0, 0);
         }

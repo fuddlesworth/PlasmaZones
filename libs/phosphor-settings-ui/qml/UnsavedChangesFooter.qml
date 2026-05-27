@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.phosphor.settings.ui
+import "ThemeHelpers.js" as ThemeHelpers
 
 /**
  * Persistent dirty indicator + slide-in unsaved-changes action bar.
@@ -32,11 +33,11 @@ ColumnLayout {
     /** Emitted after the user confirms a discard. Consumers can hook
      *  this to flash a toast, log telemetry, etc. — the discard
      *  itself is already routed through `controller.discardAll()`. */
-    signal discarded()
+    signal discarded
     /** Emitted after the user clicks Save. Same wiring rationale as
      *  `discarded()`: `controller.applyAll()` has already run by the
      *  time consumers see this. */
-    signal saved()
+    signal saved
 
     spacing: 0
 
@@ -44,15 +45,13 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         height: Math.round(Kirigami.Units.devicePixelRatio)
-        color: root.controller.dirty ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+        color: root.controller.dirty ? Kirigami.Theme.highlightColor : ThemeHelpers.withAlpha(Kirigami.Theme.textColor, ThemeHelpers.SUBTLE_BACKGROUND_ALPHA)
 
         Behavior on color {
             PhosphorMotionAnimation {
                 profile: "widget.tint"
             }
-
         }
-
     }
 
     // ── Slide-in unsaved-changes bar ────────────────────────────────
@@ -77,7 +76,7 @@ ColumnLayout {
             width: parent.width
             implicitHeight: barRow.implicitHeight + Kirigami.Units.smallSpacing * 3
             anchors.bottom: parent.bottom
-            color: Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, 0.12)
+            color: ThemeHelpers.activeTint(Kirigami.Theme.neutralTextColor)
 
             // Top accent line for the bar itself, separate from the
             // persistent line above. Always neutralTextColor so the
@@ -151,9 +150,7 @@ ColumnLayout {
                         root.saved();
                     }
                 }
-
             }
-
         }
 
         // Use the project's accordion motion profiles. Direction is
@@ -165,9 +162,7 @@ ColumnLayout {
             PhosphorMotionAnimation {
                 profile: root.controller.dirty ? "widget.accordionExpand" : "widget.accordionCollapse"
             }
-
         }
-
     }
 
     // ── Discard-confirm prompt ──────────────────────────────────────
@@ -198,5 +193,4 @@ ColumnLayout {
             }
         ]
     }
-
 }

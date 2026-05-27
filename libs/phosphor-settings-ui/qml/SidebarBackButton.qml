@@ -6,6 +6,7 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
+import "ThemeHelpers.js" as ThemeHelpers
 
 /**
  * Drill-out "Back" row shown at the top of the sidebar list when the user
@@ -24,7 +25,7 @@ QQC2.ItemDelegate {
     property real backButtonHeight: Kirigami.Units.gridUnit * 2.6
 
     //* Fired when the user clicks the back row. Sidebar wires this to drillOut().
-    signal backClicked()
+    signal backClicked
 
     Layout.fillWidth: true
     implicitHeight: backButton.backButtonHeight
@@ -45,7 +46,7 @@ QQC2.ItemDelegate {
         property bool _behaviorReady: false
 
         Component.onCompleted: _behaviorReady = true
-        color: backButton.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : Qt.rgba(0, 0, 0, 0)
+        color: backButton.hovered ? ThemeHelpers.hoverTint(Kirigami.Theme.textColor) : Qt.rgba(0, 0, 0, 0)
         radius: Kirigami.Units.smallSpacing
 
         // Legacy back-button bottom separator — a 1-dp line tucked
@@ -58,7 +59,7 @@ QQC2.ItemDelegate {
             anchors.leftMargin: Kirigami.Units.smallSpacing
             anchors.rightMargin: Kirigami.Units.smallSpacing
             height: Math.round(Kirigami.Units.devicePixelRatio)
-            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+            color: ThemeHelpers.withAlpha(Kirigami.Theme.textColor, 0.1)
         }
 
         Behavior on color {
@@ -67,9 +68,7 @@ QQC2.ItemDelegate {
             PhosphorMotionAnimation {
                 profile: "widget.tint.fast"
             }
-
         }
-
     }
 
     contentItem: RowLayout {
@@ -90,7 +89,5 @@ QQC2.ItemDelegate {
             font.weight: Font.DemiBold
             opacity: 0.8
         }
-
     }
-
 }
