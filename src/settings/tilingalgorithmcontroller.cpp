@@ -4,7 +4,7 @@
 #include "tilingalgorithmcontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../config/settings.h"
+#include "../core/isettings.h"
 #include "../core/logging.h"
 
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -41,7 +41,7 @@ constexpr QLatin1String Enum{"enum"};
 } // namespace ParamTypes
 } // namespace
 
-TilingAlgorithmController::TilingAlgorithmController(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
+TilingAlgorithmController::TilingAlgorithmController(ISettings* settings, PhosphorTiles::AlgorithmRegistry* registry,
                                                      QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("tiling-algorithm"), parent)
     , m_settings(settings)

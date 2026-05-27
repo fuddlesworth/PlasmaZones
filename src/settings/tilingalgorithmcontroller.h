@@ -16,7 +16,7 @@ class AlgorithmRegistry;
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Tiling → Algorithm" settings page.
 ///
@@ -42,7 +42,7 @@ class TilingAlgorithmController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(qreal autotileSplitRatioStepMax READ autotileSplitRatioStepMax CONSTANT)
 
 public:
-    explicit TilingAlgorithmController(Settings* settings, PhosphorTiles::AlgorithmRegistry* registry,
+    explicit TilingAlgorithmController(ISettings* settings, PhosphorTiles::AlgorithmRegistry* registry,
                                        QObject* parent = nullptr);
 
     bool isDirty() const override
@@ -85,7 +85,7 @@ Q_SIGNALS:
 private:
     QVariantMap savedCustomParams(const QString& algorithmId) const;
 
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
     PhosphorTiles::AlgorithmRegistry* m_registry = nullptr;
 };
 

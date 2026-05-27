@@ -835,6 +835,22 @@ public:
     void setAutotileDragInsertToggle(bool) override
     {
     }
+    QVariantMap autotilePerAlgorithmSettings() const override
+    {
+        return m_autotilePerAlgorithmSettings;
+    }
+    void setAutotilePerAlgorithmSettings(const QVariantMap& settings) override
+    {
+        m_autotilePerAlgorithmSettings = settings;
+    }
+    QString loadColorsFromFile(const QString&) override
+    {
+        // Stub returns "not supported" so a test that exercised this
+        // path could distinguish a real failure from a missing impl,
+        // but the controllers under test don't reach this in their
+        // unit-test paths today.
+        return QStringLiteral("loadColorsFromFile: stub not supported");
+    }
     QStringList lockedScreens() const override
     {
         return {};
@@ -898,6 +914,7 @@ private:
     int m_animationMinimumWindowHeight = 0;
     QStringList m_animationExcludedApplications;
     QStringList m_animationExcludedWindowClasses;
+    QVariantMap m_autotilePerAlgorithmSettings;
 };
 
 } // namespace PlasmaZones

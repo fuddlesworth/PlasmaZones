@@ -4,7 +4,7 @@
 #include "snappingappearancecontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../config/settings.h"
+#include "../core/isettings.h"
 #include "../pz_i18n.h"
 
 #include <QFile>
@@ -13,7 +13,7 @@
 
 namespace PlasmaZones {
 
-SnappingAppearanceController::SnappingAppearanceController(Settings* settings, QObject* parent)
+SnappingAppearanceController::SnappingAppearanceController(ISettings* settings, QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("snapping-appearance"), parent)
     , m_settings(settings)
 {

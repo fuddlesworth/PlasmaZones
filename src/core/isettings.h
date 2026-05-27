@@ -160,6 +160,20 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
+    // Per-algorithm autotile settings map. Settings inherits from
+    // PhosphorEngine::IAutotileSettings (which also declares these),
+    // so the override in Settings covers both bases — the redundant
+    // declaration here is the price of letting page controllers
+    // depend on ISettings without dragging in PhosphorTileEngine.
+    virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
+    virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
+
+    // Color-import helper used by SnappingAppearanceController. Returns
+    // an empty string on success, a user-readable error message
+    // otherwise. The signature mirrors Settings::loadColorsFromFile
+    // exactly so its existing Q_INVOKABLE annotation overrides this.
+    virtual QString loadColorsFromFile(const QString& filePath) = 0;
+
     // Snapping behavior triggers (dragActivation, zoneSpan, snapAssist)
     // are declared by the IZoneActivationSettings / IZoneSelectorSettings
     // sub-interfaces ISettings inherits from — see settings_interfaces.h.

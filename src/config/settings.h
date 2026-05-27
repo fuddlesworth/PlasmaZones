@@ -1051,7 +1051,7 @@ public:
     void reset() override;
 
     // Additional methods
-    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath);
+    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     Q_INVOKABLE void applySystemColorScheme();
     void applyAutotileBorderSystemColor();
 

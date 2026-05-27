@@ -9,7 +9,7 @@
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Snapping → Appearance" settings page.
 ///
@@ -34,7 +34,7 @@ class SnappingAppearanceController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
 
 public:
-    explicit SnappingAppearanceController(Settings* settings, QObject* parent = nullptr);
+    explicit SnappingAppearanceController(ISettings* settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {
@@ -73,7 +73,7 @@ Q_SIGNALS:
     void changed();
 
 private:
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
 };
 
 } // namespace PlasmaZones
