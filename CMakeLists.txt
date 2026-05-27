@@ -200,24 +200,41 @@ endif()
 #   make format-qml   (or ninja format-qml)
 # ---------------------------------------------------------------------------
 include(KDEClangFormat)
+# `**` is not a CMake glob primitive; it expands to the same regex as
+# `*` (anything except `/`). GLOB_RECURSE with a plain `*.cpp` pattern
+# already recurses into subdirectories, so the recursive form is what
+# we want; using `**/*.cpp` would require an intermediate path segment
+# and silently drop files directly under each root (e.g. src/pz_qml_i18n.cpp,
+# any top-level kwin-effect/.cpp).
 file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
-    ${CMAKE_SOURCE_DIR}/src/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/src/**/*.h
-    ${CMAKE_SOURCE_DIR}/src/**/*.hpp
+    ${CMAKE_SOURCE_DIR}/src/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/*.h
+    ${CMAKE_SOURCE_DIR}/src/*.hpp
     ${CMAKE_SOURCE_DIR}/kcm/*.cpp
     ${CMAKE_SOURCE_DIR}/kcm/*.h
+    ${CMAKE_SOURCE_DIR}/kcm/*.hpp
     ${CMAKE_SOURCE_DIR}/kwin-effect/*.cpp
     ${CMAKE_SOURCE_DIR}/kwin-effect/*.h
-    ${CMAKE_SOURCE_DIR}/tests/**/*.cpp
-    ${CMAKE_SOURCE_DIR}/tests/**/*.h
+    ${CMAKE_SOURCE_DIR}/kwin-effect/*.hpp
+    ${CMAKE_SOURCE_DIR}/tests/*.cpp
+    ${CMAKE_SOURCE_DIR}/tests/*.h
+    ${CMAKE_SOURCE_DIR}/libs/*.cpp
+    ${CMAKE_SOURCE_DIR}/libs/*.h
+    ${CMAKE_SOURCE_DIR}/libs/*.hpp
+    ${CMAKE_SOURCE_DIR}/examples/*.cpp
+    ${CMAKE_SOURCE_DIR}/examples/*.h
+    ${CMAKE_SOURCE_DIR}/examples/*.hpp
 )
 kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
 
 # QML: qmlformat (from qt6-tools, optional)
+# Same `**`-vs-recursion rationale as the clang-format glob above.
 find_program(QMLFORMAT qmlformat)
 file(GLOB_RECURSE ALL_QML_FILES
-    ${CMAKE_SOURCE_DIR}/src/**/*.qml
-    ${CMAKE_SOURCE_DIR}/kcm/**/*.qml
+    ${CMAKE_SOURCE_DIR}/src/*.qml
+    ${CMAKE_SOURCE_DIR}/kcm/*.qml
+    ${CMAKE_SOURCE_DIR}/libs/*.qml
+    ${CMAKE_SOURCE_DIR}/examples/*.qml
 )
 if(QMLFORMAT AND ALL_QML_FILES)
     # Run qmlformat via helper script; per-file failures are ignored (one bad QML won't fail target)
@@ -373,6 +390,12 @@ add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mecha
 # dependencies and is a leaf module. Gating it would hide it from users
 # who don't ship the bundled shell. The shell binary itself stays gated.
 add_subdirectory(libs/phosphor-theme)       # M3 color-token store + Phosphor.Theme QML singletons
+# phosphor-popout is also unconditional. It is consumed by the
+# examples/phosphor-popout-demo target (also unconditional) and by
+# third-party hosts that may want to ship popout-style UI without
+# enabling BUILD_PHOSPHOR_SHELL. Gating phosphor-popout would break
+# the demo target. The shell binary itself stays gated below.
+add_subdirectory(libs/phosphor-popout)      # central popout coordinator (lifetime, focus, scope arbitration)
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
@@ -610,6 +633,13 @@ install(FILES ${_plasmazones_light_icons}
 # matugen to palette JSON to rendered template.
 add_subdirectory(examples/phosphor-theme-demo)
 add_subdirectory(examples/phosphor-theme-cli)
+
+# phosphor-popout-demo. Acceptance harness for libs/phosphor-popout.
+# Same gating logic as the theme demos: built unconditionally so a
+# popout developer doesn't need BUILD_PHOSPHOR_SHELL=ON to exercise
+# the arbitration. The demo links only phosphor-popout, phosphor-theme,
+# and base Qt; no Wayland dependency.
+add_subdirectory(examples/phosphor-popout-demo)
 
 if(BUILD_PHOSPHOR_SHELL)
     # Build the bundled example shell as a Qt QML module so qmlcachegen
