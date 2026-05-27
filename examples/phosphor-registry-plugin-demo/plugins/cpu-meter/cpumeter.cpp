@@ -80,18 +80,18 @@ public:
         if (!engine) {
             return nullptr;
         }
-        // QQmlComponent's PreferSynchronous mode is a hint, not a
-        // guarantee. Qt 6.5+ uses a worker thread pool for QML
-        // compilation; setData can leave the component in Loading
-        // state even with PreferSynchronous, then create() warns
-        // "Component is not ready" and returns nullptr.
-        // The reliable pattern is to wait for the statusChanged
-        // signal via a nested event loop. Re-entry concerns are
+        // Qt 6.5+ uses a worker thread pool for QML compilation;
+        // setData can leave the component in Loading state, and a
+        // subsequent create() warns "Component is not ready" and
+        // returns nullptr. Construct with the engine-only ctor
+        // (the URL-overload-with-empty-URL is rejected as "Invalid
+        // empty URL" on some Qt builds), then pump a nested event
+        // loop until statusChanged fires. Re-entry concerns are
         // minimal here: this runs from a Repeater delegate's
         // Component.onCompleted (synchronous on the GUI thread),
-        // no user-event re-entry expected before the QML compile
+        // no user-event re-entry expected before the compile
         // finishes.
-        QQmlComponent component(engine, QUrl(), QQmlComponent::PreferSynchronous);
+        QQmlComponent component(engine);
         component.setData(QByteArray(kCpuMeterQml), QUrl(QStringLiteral("inline:cpu-meter")));
         if (component.isLoading()) {
             QEventLoop loop;
