@@ -12,7 +12,7 @@
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "General" settings page.
 ///
@@ -43,11 +43,12 @@ class GeneralPageController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
 
 public:
-    /// Reference parameter, not pointer: the Settings instance is required
+    /// Reference parameter, not pointer: the ISettings instance is required
     /// at construction time (to snapshot the current rendering backend) and
     /// must not be null. Taking it by reference makes the precondition a
-    /// compile-time guarantee.
-    explicit GeneralPageController(Settings& settings, QObject* parent = nullptr);
+    /// compile-time guarantee. ISettings (not the concrete Settings) per
+    /// CLAUDE.md so unit tests can stub.
+    explicit GeneralPageController(ISettings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {

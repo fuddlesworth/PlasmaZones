@@ -3,12 +3,12 @@
 
 #include "generalpagecontroller.h"
 
-#include "../config/settings.h"
+#include "../core/isettings.h"
 #include "../pz_i18n.h"
 
 namespace PlasmaZones {
 
-GeneralPageController::GeneralPageController(Settings& settings, QObject* parent)
+GeneralPageController::GeneralPageController(ISettings& settings, QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("general"), parent)
 {
     // Translate rendering backend display names once at construction.
