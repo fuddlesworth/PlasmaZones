@@ -117,6 +117,17 @@ QObject::connect(m_registry.notifier(),
                  &PhosphorRegistry::RegistryNotifier::factoryUnregistered,
                  this, &BarController::factoryIdsChanged);
 
+QStringList BarController::factoryIds() const
+{
+    // Registry::ids() returns hash order, which is unspecified and
+    // unstable across restarts. Sort for a deterministic bar layout
+    // (a real shell would persist a user-configured order; the
+    // demos sort alphabetically for simplicity).
+    QStringList ids = m_registry.ids();
+    ids.sort();
+    return ids;
+}
+
 QQuickItem* BarController::createWidgetFor(const QString& id, QQuickItem* parent)
 {
     if (!m_engine) return nullptr;

@@ -8,6 +8,7 @@
 
 #include <PhosphorRegistry/IBarWidgetFactory.h>
 
+#include <QQmlEngine>
 #include <QQuickItem>
 #include <QtCore/qtclasshelpermacros.h>
 

@@ -20,6 +20,9 @@
 #include <QQuickItem>
 #include <QString>
 #include <QStringList>
+#include <QtCore/qtclasshelpermacros.h>
+
+#include <new> // std::nothrow
 
 namespace {
 
@@ -63,6 +66,10 @@ Rectangle {
 class CpuMeterFactory : public PhosphorRegistry::IBarWidgetFactory
 {
 public:
+    CpuMeterFactory() = default;
+    ~CpuMeterFactory() override = default;
+    Q_DISABLE_COPY_MOVE(CpuMeterFactory)
+
     QString id() const override
     {
         return QStringLiteral("cpu-meter");
@@ -94,19 +101,22 @@ public:
         // Ready transition via a nested QEventLoop.
         //
         // Re-entry hazard: any queued event delivered while the
-        // event loop spins will run before this function returns.
-        // Mitigations: (a) createWidget is invoked from a Repeater
-        // delegate's Component.onCompleted on the GUI thread, where
-        // no user input is in flight during the bar's initial
-        // composition; (b) the loop's only exit condition is
-        // statusChanged, so even a re-entered call cannot leak the
-        // event loop past compilation completion.
+        // event loop spins runs before this function returns. The
+        // reload-button in the plugin demo can queue a SECOND
+        // reloadPlugins() while a first createWidget is mid-compile,
+        // re-entering this function and stacking nested loops.
+        // QEventLoop::ExcludeUserInputEvents blocks mouse/keyboard
+        // delivery during the spin so the Reload button cannot
+        // re-fire mid-compile. Non-user events (timers, deferred
+        // deletes) still flow, which is required for the QML
+        // compilation worker thread to post its statusChanged
+        // signal back to us.
         QQmlComponent component(engine);
         component.setData(QByteArray(kCpuMeterQml), QUrl(QStringLiteral("inline:cpu-meter")));
         if (component.isLoading()) {
             QEventLoop loop;
             QObject::connect(&component, &QQmlComponent::statusChanged, &loop, &QEventLoop::quit);
-            loop.exec();
+            loop.exec(QEventLoop::ExcludeUserInputEvents);
         }
         if (component.isError()) {
             qWarning("CpuMeterFactory: component error %s", qPrintable(component.errorString()));
@@ -143,5 +153,12 @@ public:
 
 extern "C" Q_DECL_EXPORT PhosphorRegistry::IBarWidgetFactory* phosphor_registry_create_factory()
 {
-    return new CpuMeterFactory();
+    // The PluginLoader ABI contract (PluginLoader.h) says the entry
+    // point must not throw — exceptions crossing the extern "C"
+    // boundary are UB. Throwing-new could violate that contract on
+    // allocation failure; nothrow-new returns nullptr instead, which
+    // the loader treats as a recoverable "plugin construction
+    // failed" failure mode. This also keeps the plugin buildable
+    // with -fno-exceptions.
+    return new (std::nothrow) CpuMeterFactory();
 }

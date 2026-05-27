@@ -21,6 +21,10 @@ if(NOT PROJECT_VERSION)
     project(PhosphorRegistry VERSION ${PHOSPHORREGISTRY_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    # GNU extensions (-std=gnu++20) would let non-portable code creep
+    # into LGPL public headers consumed by plugin authors compiling
+    # with stricter toolchains. Stay strictly ISO C++20.
+    set(CMAKE_CXX_EXTENSIONS OFF)
     set(CMAKE_AUTOMOC ON)
 endif()
 

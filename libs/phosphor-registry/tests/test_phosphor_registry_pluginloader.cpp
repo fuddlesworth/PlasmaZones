@@ -54,6 +54,7 @@ private Q_SLOTS:
     void liveWidgetCountReturnsMinusOneForUnknownPlugin();
     void pluginRootReturnsConfiguredPath();
     void pluginRootResolvesXdgWhenEmpty();
+    void destructorPinsLibraryBeforeFactoryDestruction();
 
 private:
     // Helper: install one of the templated fake-plugin fixtures into
@@ -100,15 +101,30 @@ QString TestPluginLoader::installPluginFixture(const QString& pluginRoot, const 
                                                const QString& fixtureDir, const QString& soBasename) const
 {
     const QString destDir = QDir(pluginRoot).absoluteFilePath(subdir);
-    QDir().mkpath(destDir);
+    [&] {
+        QVERIFY(QDir().mkpath(destDir));
+    }();
     const QString fixtureSo = QDir(fixtureDir).absoluteFilePath(soBasename + QStringLiteral(".so"));
     const QString fixtureManifest = QDir(fixtureDir).absoluteFilePath(QStringLiteral("manifest.json"));
+    [&] {
+        QVERIFY2(QFileInfo::exists(fixtureSo), qPrintable(QStringLiteral("missing fixture .so: %1").arg(fixtureSo)));
+        QVERIFY2(QFileInfo::exists(fixtureManifest),
+                 qPrintable(QStringLiteral("missing fixture manifest: %1").arg(fixtureManifest)));
+    }();
 
     const QString destSo = QDir(destDir).absoluteFilePath(subdir + QStringLiteral(".so"));
     const QString destManifest = QDir(destDir).absoluteFilePath(QStringLiteral("manifest.json"));
 
-    QFile::copy(fixtureSo, destSo);
-    QFile::copy(fixtureManifest, destManifest);
+    // Surface QFile::copy failures as test failures with a clear
+    // message instead of silently proceeding and tripping a downstream
+    // "loadedSpy.count() == 0" assertion that gives no clue what went
+    // wrong.
+    [&] {
+        QVERIFY2(QFile::copy(fixtureSo, destSo),
+                 qPrintable(QStringLiteral("failed to copy %1 -> %2").arg(fixtureSo, destSo)));
+        QVERIFY2(QFile::copy(fixtureManifest, destManifest),
+                 qPrintable(QStringLiteral("failed to copy %1 -> %2").arg(fixtureManifest, destManifest)));
+    }();
 
     return destDir;
 }
@@ -445,6 +461,37 @@ void TestPluginLoader::pluginRootResolvesXdgWhenEmpty()
     const QString resolved = loader.pluginRoot();
     QVERIFY(!resolved.isEmpty());
     QVERIFY(resolved.endsWith(QStringLiteral("phosphor/plugins")));
+}
+
+void TestPluginLoader::destructorPinsLibraryBeforeFactoryDestruction()
+{
+    // Smoke test for the library-pin-before-factory-destroy invariant
+    // documented in pluginloader.cpp's performScanCycle unload block.
+    // Sequence: load a plugin → remove its directory → rescan
+    // (loader moves the QLibrary into m_pinnedLibraries) → drop the
+    // PluginLoader. If a future refactor reversed the move-then-
+    // destroy ordering, the factory destructor would dispatch through
+    // a vtable in a freshly-unmapped .so and segfault under
+    // QTEST_MAIN's exit path. Today the test simply asserting "no
+    // crash" suffices.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    const QString installedDir = installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+
+    {
+        Registry<IBarWidgetFactory> registry;
+        PluginLoader loader(&registry, pluginRoot);
+        loader.scanAndLoad();
+        QCOMPARE(registry.size(), 1);
+
+        QDir(installedDir).removeRecursively();
+        loader.rescanNow();
+        QCOMPARE(registry.size(), 0);
+        // loader + registry destruct here; m_pinnedLibraries holds
+        // the .so until ~PluginLoader runs, and only after the
+        // pinned-library destructor unmaps does the test exit.
+    }
 }
 
 QTEST_MAIN(TestPluginLoader)

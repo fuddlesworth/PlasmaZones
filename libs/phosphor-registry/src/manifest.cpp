@@ -15,13 +15,6 @@ namespace PhosphorRegistry {
 
 namespace {
 
-// Refuse to read manifest files larger than this. A legit phosphor
-// plugin manifest is well under 1 KiB; capping at 64 KiB tolerates
-// unusually verbose capabilities lists and future schema fields
-// without giving a malicious or corrupted .json the chance to
-// balloon process RSS.
-constexpr qint64 ManifestMaxBytes = 64 * 1024;
-
 Manifest invalid(const QString& reason)
 {
     Manifest m;
@@ -121,7 +114,7 @@ Manifest Manifest::parseObject(const QJsonObject& obj, const QString& pluginDir)
 {
     const QString idField = obj.value(QLatin1String("id")).toString();
     const QString displayNameField = obj.value(QLatin1String("displayName")).toString();
-    const int abiField = obj.value(QLatin1String("abi")).toInt(-1);
+    const QJsonValue abiValue = obj.value(QLatin1String("abi"));
     const QJsonValue capsField = obj.value(QLatin1String("capabilities"));
 
     if (idField.isEmpty()) {
@@ -135,9 +128,17 @@ Manifest Manifest::parseObject(const QJsonObject& obj, const QString& pluginDir)
     if (displayNameField.isEmpty()) {
         return invalid(QStringLiteral("missing or empty 'displayName'"));
     }
-    if (abiField < 0) {
-        return invalid(QStringLiteral("missing or invalid 'abi'"));
+    if (abiValue.isUndefined() || abiValue.isNull()) {
+        return invalid(QStringLiteral("missing 'abi' field"));
     }
+    if (!abiValue.isDouble()) {
+        // QJsonValue::toInt accepts double-shaped values only; a
+        // string/object/array shaped abi is a manifest authoring
+        // error distinct from "missing." Diagnose it separately so
+        // plugin authors get an actionable message.
+        return invalid(QStringLiteral("'abi' must be an integer, got non-numeric type"));
+    }
+    const int abiField = abiValue.toInt(-1);
     if (abiField != PluginAbiVersion) {
         return invalid(QStringLiteral("abi mismatch: manifest=%1 expected=%2").arg(abiField).arg(PluginAbiVersion));
     }
@@ -146,10 +147,15 @@ Manifest Manifest::parseObject(const QJsonObject& obj, const QString& pluginDir)
     // the on-disk layout and the registered id stay aligned.
     // Disconnects between the two confuse hot-reload bookkeeping
     // (the watcher fires by directory, the registry keys by id).
-    const QString dirBasename = QFileInfo(QDir(pluginDir).absolutePath()).fileName();
-    if (!pluginDir.isEmpty() && dirBasename != idField) {
-        return invalid(
-            QStringLiteral("id '%1' does not match plugin directory basename '%2'").arg(idField, dirBasename));
+    // An empty pluginDir skips this check — that's the in-memory
+    // parseObject test seam (test_manifest.cpp exercises every
+    // rejection path without staging real directories).
+    if (!pluginDir.isEmpty()) {
+        const QString dirBasename = QFileInfo(QDir(pluginDir).absolutePath()).fileName();
+        if (dirBasename != idField) {
+            return invalid(
+                QStringLiteral("id '%1' does not match plugin directory basename '%2'").arg(idField, dirBasename));
+        }
     }
 
     QStringList caps;

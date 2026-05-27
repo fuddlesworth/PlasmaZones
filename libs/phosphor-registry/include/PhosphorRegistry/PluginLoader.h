@@ -149,11 +149,11 @@ private:
     // the .so and the factory the loader returned. See
     // pluginloader.cpp for the full unload-strategy rationale.
     struct LoadedPlugin;
+    // Bridges WatchedDirectorySet's IScanStrategy callbacks into
+    // performScanCycle. Nested private class — has access to
+    // PluginLoader's privates by virtue of the enclosing-class rule,
+    // no `friend` declaration needed.
     class ScanStrategyImpl;
-
-    // Test seam: override the IScanStrategy callbacks for headless
-    // unit tests. Not part of the public API.
-    friend class ScanStrategyImpl;
 
     // Resolve the default plugin root when the ctor's pluginRoot
     // argument is empty. Always returns
@@ -177,11 +177,12 @@ private:
     QString m_pluginRoot;
     std::unique_ptr<ScanStrategyImpl> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
-    // shared_ptr (not unique_ptr) because QHash's internal node
-    // detach machinery requires the value type to be
-    // copy-constructible. The plugin map's logical ownership stays
-    // exclusive — only the QHash holds a ref in steady state — but
-    // shared_ptr unblocks the COW path.
+    // shared_ptr (not unique_ptr) because Qt 6's QHash still
+    // requires the value type to be copy-constructible — the
+    // internal Node<K,V> copy ctor used during rehash detach is
+    // not move-only friendly even in Qt 6.11. The plugin map's
+    // logical ownership stays exclusive (only the QHash holds a
+    // ref in steady state); shared_ptr just unblocks the COW path.
     QHash<QString, std::shared_ptr<LoadedPlugin>> m_plugins;
     // QLibrary instances retained from prior unregisters. Pinned for
     // the PluginLoader's lifetime so old widgets whose vtables live

@@ -33,8 +33,17 @@ DemoController::~DemoController() = default;
 
 void DemoController::setEngine(QQmlEngine* engine)
 {
-    Q_ASSERT_X(!m_engine || m_engine == engine, "DemoController::setEngine",
-               "DemoController::setEngine must be called at most once (or with the same engine)");
+    // Idempotent on same-engine repeat — silent no-op so debug and
+    // release behave identically. Different-engine after first set
+    // is a contract violation that would leave dangling QML bindings
+    // against the prior engine; qFatal so release builds fail loud
+    // instead of silently corrupting state. The matching debug-only
+    // Q_ASSERT_X catches the same case earlier with a clearer
+    // backtrace under a debugger.
+    if (m_engine && m_engine != engine) {
+        Q_ASSERT_X(false, "DemoController::setEngine", "DemoController::setEngine called twice with different engines");
+        qFatal("DemoController::setEngine called twice with different engines");
+    }
     m_engine = engine;
 }
 

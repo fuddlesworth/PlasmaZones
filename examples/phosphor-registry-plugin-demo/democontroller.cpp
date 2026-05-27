@@ -48,8 +48,13 @@ DemoController::~DemoController() = default;
 
 void DemoController::setEngine(QQmlEngine* engine)
 {
-    Q_ASSERT_X(!m_engine || m_engine == engine, "DemoController::setEngine",
-               "DemoController::setEngine must be called at most once (or with the same engine)");
+    // Idempotent on same-engine repeat; qFatal on different-engine
+    // after first set (same contract as the in-process demo's
+    // DemoController — see that .cpp for the long-form rationale).
+    if (m_engine && m_engine != engine) {
+        Q_ASSERT_X(false, "DemoController::setEngine", "DemoController::setEngine called twice with different engines");
+        qFatal("DemoController::setEngine called twice with different engines");
+    }
     m_engine = engine;
 }
 

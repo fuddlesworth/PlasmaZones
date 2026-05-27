@@ -10,9 +10,9 @@
 #include <QString>
 #include <QtGlobal> // qWarning, qPrintable
 
-#include <functional>
 #include <memory>
 #include <type_traits>
+#include <utility> // std::forward
 
 namespace PhosphorRegistry {
 
@@ -65,7 +65,8 @@ public:
         }
         const QString id = factory->id();
         if (id.isEmpty()) {
-            qWarning("PhosphorRegistry::Registry::registerFactory: factory with empty id ignored");
+            qWarning("PhosphorRegistry::Registry::registerFactory: factory %p with empty id ignored",
+                     static_cast<const void*>(factory.get()));
             return;
         }
         if (m_factories.contains(id)) {
@@ -107,11 +108,15 @@ public:
     // Functional iteration. Visits each registered factory exactly
     // once. The visitor must not mutate the registry (register /
     // unregister inside the loop is undefined behaviour — same as
-    // any QHash iteration contract).
-    void forEach(const std::function<void(const std::shared_ptr<Factory>&)>& visitor) const
+    // any QHash iteration contract). Templated to avoid the
+    // std::function type-erasure + allocation overhead on the bar
+    // repaint hot path; the visitor is called as
+    // `visitor(const std::shared_ptr<Factory>&)`.
+    template<typename Visitor>
+    void forEach(Visitor&& visitor) const
     {
         for (const auto& entry : m_factories) {
-            visitor(entry);
+            std::forward<Visitor>(visitor)(entry);
         }
     }
 

@@ -267,15 +267,14 @@ void TestManifest::parseFile_rejectsNonObjectRoot()
 
 void TestManifest::parseFile_rejectsOversizedManifest()
 {
-    // The 64-KiB cap (ManifestMaxBytes in manifest.cpp) is a
-    // security gate — a hostile or corrupt manifest mustn't be
-    // able to blow up process memory. Write 70 KiB of padding
-    // inside a valid-shape JSON object to trip the size check
-    // before any structural parsing runs.
+    // The cap is a security gate — a hostile or corrupt manifest
+    // mustn't be able to blow up process memory. Pad past the
+    // public ManifestMaxBytes constant so the test exercises the
+    // exact boundary even if the cap is bumped later.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QString padding;
-    padding.fill(QLatin1Char('x'), 70 * 1024);
+    padding.fill(QLatin1Char('x'), static_cast<int>(ManifestMaxBytes) + 1024);
     const QString contents =
         QStringLiteral("{\"id\":\"clock\",\"displayName\":\"%1\",\"abi\":%2}").arg(padding).arg(PluginAbiVersion);
     const QString path = writeTempManifest(dir, QStringLiteral("clock"), contents);

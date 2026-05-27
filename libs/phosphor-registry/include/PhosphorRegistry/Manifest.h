@@ -33,6 +33,14 @@ static_assert(PHOSPHOR_PLUGIN_ABI_VERSION == PluginAbiVersion,
               "CMake's PHOSPHOR_PLUGIN_ABI_VERSION must match Manifest.h's PluginAbiVersion");
 #endif
 
+// Maximum size in bytes of a manifest.json file the loader will
+// accept. Defends against a corrupt or hostile manifest ballooning
+// process RSS — a legitimate phosphor plugin manifest is well under
+// 1 KiB; the 64 KiB cap tolerates unusually verbose capability lists
+// and future schema fields. Exposed publicly so test_manifest can
+// assert against the exact boundary without duplicating the literal.
+constexpr qint64 ManifestMaxBytes = 64 * 1024;
+
 // Plain-old-data mirror of the plugin manifest.json schema. Filled
 // in by Manifest::parse() from the on-disk JSON. The struct stays
 // validity-checked via the isValid bool — callers should refuse to
@@ -45,8 +53,11 @@ struct PHOSPHORREGISTRY_EXPORT Manifest
     QString id;
     // Human-readable label shown in plugin browsers and settings.
     QString displayName;
-    // ABI version the plugin was built against. Loaded only if this
-    // equals PluginAbiVersion.
+    // ABI version the plugin was built against. Default-initialized
+    // to 0 — that is NOT a sentinel for "unset" (a manifest declaring
+    // "abi": 0 would also produce 0). Always check isValid first; if
+    // isValid is true, abi equals PluginAbiVersion by construction
+    // (the parser refuses any other value).
     int abi = 0;
     // Capability declarations. Phase 5 will enforce these against a
     // sandbox; today they are informational and exposed via
@@ -56,7 +67,9 @@ struct PHOSPHORREGISTRY_EXPORT Manifest
     // not by the JSON itself — the JSON only carries metadata.
     QString libraryPath;
     // Absolute path to the manifest.json file. Useful for diagnostic
-    // logging and for hot-reload comparisons (mtime tracking).
+    // logging. Note: Phase 1.3 hot-reload triggers on directory
+    // add/remove events from WatchedDirectorySet, not on per-file
+    // mtime comparisons — this field is informational only.
     QString manifestPath;
     // False when parse() rejected the input; isValid implies every
     // required field above is populated and abi matched.
@@ -66,20 +79,22 @@ struct PHOSPHORREGISTRY_EXPORT Manifest
     // loader; not surfaced to end users.
     QString parseError;
 
-    // Parse a manifest.json from disk. The pluginDir is the directory
-    // the manifest lives in; the manifest's id must match
-    // pluginDir's basename. pluginDir MUST be an absolute path —
-    // relative inputs are normalised against the current working
-    // directory which would couple validation to CWD. The PluginLoader
-    // always passes absolute paths (built via QDir::absoluteFilePath);
-    // tests calling parse() directly must mirror that. On parse
-    // error, returns a Manifest with isValid == false and parseError
-    // populated.
+    // Parse a manifest.json from disk. pluginDir is the directory
+    // the manifest lives in; when non-empty, the manifest's id must
+    // match pluginDir's basename. The PluginLoader always passes
+    // absolute paths (built via QDir::absoluteFilePath); production
+    // callers should do the same. An empty pluginDir skips the
+    // directory-basename check — that's the in-memory parseObject
+    // test seam, retained on the file-based entry point for
+    // symmetry, and is the only way to call parse() without
+    // staging a real directory. On parse error, returns a Manifest
+    // with isValid == false and parseError populated.
     [[nodiscard]] static Manifest parse(const QString& manifestJsonPath, const QString& pluginDir);
 
     // Test seam: parse a manifest from an in-memory QJsonObject
-    // (skips the file-read step). Used by test_manifest.cpp. Same
-    // absolute-path requirement on pluginDir.
+    // (skips the file-read step). Used by test_manifest.cpp.
+    // pluginDir follows the same semantics as parse() — empty
+    // skips the dir-basename check.
     [[nodiscard]] static Manifest parseObject(const QJsonObject& obj, const QString& pluginDir);
 };
 

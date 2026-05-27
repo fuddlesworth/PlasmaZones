@@ -212,13 +212,12 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
     // working until the bar tears them down.
     //
     // Critical ordering: move the QLibrary into m_pinnedLibraries
-    // BEFORE m_plugins.remove() drops the last shared_ptr ref to
-    // the LoadedPlugin (and thus runs the factory's deleter). The
-    // factory's destructor and any of its vtable dispatch live
-    // inside the .so; if the QLibrary were unmapped first, that
-    // destructor call would jump into freed memory and segfault.
-    // Future refactors of this block MUST preserve the library-
-    // move-before-factory-destroy ordering.
+    // BEFORE the LoadedPlugin's shared_ptr last ref drops (and runs
+    // the factory's deleter). The factory's destructor and any of
+    // its vtable dispatch live inside the .so; if the QLibrary were
+    // unmapped first, that destructor call would jump into freed
+    // memory and segfault. Future refactors of this block MUST
+    // preserve the library-move-before-factory-destroy ordering.
     const QList<QString> currentIds = m_plugins.keys();
     for (const QString& pluginId : currentIds) {
         if (!discoveredIds.contains(pluginId)) {
@@ -277,10 +276,22 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
         library->unload();
         return;
     }
-    if (rawFactory->id() != manifest.id) {
-        qWarning().noquote() << "PluginLoader: factory id" << rawFactory->id() << "does not match manifest id"
+    // Wrap the raw factory in a shared_ptr with a custom deleter
+    // IMMEDIATELY. The factory was allocated via `new` inside the
+    // plugin's TU (linked against the plugin's libstdc++ / new+delete
+    // pair); a raw `delete` from inside the loader's TU on any error
+    // path would invoke the loader's `operator delete`, which may
+    // differ (e.g. plugin built against tcmalloc, loader against
+    // glibc). Routing through this shared_ptr keeps `delete` inside
+    // the plugin's TU on EVERY exit path including the id-mismatch
+    // branch below.
+    std::shared_ptr<IBarWidgetFactory> factory(rawFactory, [](IBarWidgetFactory* p) {
+        delete p;
+    });
+    if (factory->id() != manifest.id) {
+        qWarning().noquote() << "PluginLoader: factory id" << factory->id() << "does not match manifest id"
                              << manifest.id;
-        delete rawFactory;
+        factory.reset(); // runs custom deleter before .so unmap
         library->unload();
         return;
     }
@@ -288,20 +299,12 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
     auto entryRecord = std::make_shared<LoadedPlugin>();
     entryRecord->manifest = manifest;
     entryRecord->library = std::move(library);
-    // Custom deleter is non-optional: the factory was allocated by
-    // `entryFn()` inside the .so's `new`, and must be freed via the
-    // .so's `delete` operator. The std::shared_ptr's deleter captures
-    // the right `delete` because the lambda lives in the same TU as
-    // the only `new` site — they resolve to the same operator-new/
-    // delete pair.
-    entryRecord->factory.reset(rawFactory, [](IBarWidgetFactory* p) {
-        delete p;
-    });
+    entryRecord->factory = factory;
 
     const QString pluginId = manifest.id;
     m_plugins.insert(pluginId, entryRecord);
     if (m_registry) {
-        m_registry->registerFactory(m_plugins.value(pluginId)->factory);
+        m_registry->registerFactory(factory);
     }
 
     Q_EMIT pluginLoaded(pluginId);
