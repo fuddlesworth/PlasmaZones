@@ -7,6 +7,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <memory>
+
 class QQmlComponent;
 class QQmlEngine;
 class QQuickItem;
@@ -67,12 +69,22 @@ Q_SIGNALS:
 private:
     QQmlComponent* buildContentComponent(const QString& qmlPath);
 
-    // Declaration order matches the constructor's init order so the
-    // compiler does not warn about reordered initialization and so
-    // reverse-order destruction frees the controller before the
-    // transport it depends on.
-    InAppPopoutTransport* m_transport = nullptr;
-    PhosphorPopout::PopoutController* m_controller = nullptr;
+    // Declaration order is load-bearing for destruction safety.
+    // m_controller's destructor calls transport->setSurfaceDismissedCallback({}),
+    // so it MUST run before m_transport's destructor. C++ destroys
+    // members in reverse-declaration order, so m_transport is declared
+    // FIRST and m_controller SECOND — the reverse-order destruction
+    // tears the controller down first.
+    //
+    // QObject-parenting these to `this` would defeat the ordering
+    // because QObject::deleteChildren() deletes in INSERT order (which
+    // matches construction order, i.e. transport first), producing
+    // a "pure virtual method called" abort when the controller's
+    // destructor calls into the already-freed transport. unique_ptr
+    // owns the lifetime directly so the reverse-member-destruction
+    // invariant holds.
+    std::unique_ptr<InAppPopoutTransport> m_transport;
+    std::unique_ptr<PhosphorPopout::PopoutController> m_controller;
     QPointer<QQmlEngine> m_engine;
 
     // Cached content components, one per demo popout. Built lazily on

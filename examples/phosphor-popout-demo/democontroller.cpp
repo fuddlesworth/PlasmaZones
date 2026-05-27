@@ -19,25 +19,31 @@ namespace PhosphorPopoutDemo {
 
 DemoController::DemoController(QObject* parent)
     : QObject(parent)
-    , m_transport(new InAppPopoutTransport(this))
-    , m_controller(new PopoutController(m_transport, this))
+    , m_transport(std::make_unique<InAppPopoutTransport>())
+    , m_controller(std::make_unique<PopoutController>(m_transport.get()))
 {
     // Mirror controller state into our Q_PROPERTYs. QML status bar
     // binds to openPopoutIds and modalActive.
-    QObject::connect(m_controller, &PopoutController::popoutOpened, this, [this](const QString& id, const QString&) {
-        if (!m_openIds.contains(id)) {
-            m_openIds.append(id);
-            Q_EMIT openPopoutIdsChanged();
-        }
-    });
-    QObject::connect(m_controller, &PopoutController::popoutClosed, this, [this](const QString& id, const QString&) {
-        if (m_openIds.removeAll(id) > 0) {
-            Q_EMIT openPopoutIdsChanged();
-        }
-    });
-    QObject::connect(m_controller, &PopoutController::modalActiveChanged, this, &DemoController::modalActiveChanged);
+    QObject::connect(m_controller.get(), &PopoutController::popoutOpened, this,
+                     [this](const QString& id, const QString&) {
+                         if (!m_openIds.contains(id)) {
+                             m_openIds.append(id);
+                             Q_EMIT openPopoutIdsChanged();
+                         }
+                     });
+    QObject::connect(m_controller.get(), &PopoutController::popoutClosed, this,
+                     [this](const QString& id, const QString&) {
+                         if (m_openIds.removeAll(id) > 0) {
+                             Q_EMIT openPopoutIdsChanged();
+                         }
+                     });
+    QObject::connect(m_controller.get(), &PopoutController::modalActiveChanged, this,
+                     &DemoController::modalActiveChanged);
 }
 
+// Defined out-of-line so unique_ptr<InAppPopoutTransport>'s and
+// unique_ptr<PopoutController>'s destructors instantiate here, where
+// both forward-declared types are complete via the #includes above.
 DemoController::~DemoController() = default;
 
 void DemoController::wire(QQuickItem* hostItem, QQmlComponent* hostComponent)
