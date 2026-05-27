@@ -35,7 +35,7 @@ class TilingBehaviorController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(QVariantList defaultAutotileDragInsertTriggers READ defaultAutotileDragInsertTriggers CONSTANT)
 
 public:
-    explicit TilingBehaviorController(ISettings* settings, QObject* parent = nullptr);
+    explicit TilingBehaviorController(ISettings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {

@@ -4,6 +4,7 @@
 #include "PhosphorSettingsUi/LocalizedContext.h"
 
 #include <QCoreApplication>
+#include <QDebug>
 
 namespace PhosphorSettingsUi {
 
@@ -96,7 +97,16 @@ QByteArray LocalizedContext::cachedDisambiguation(const QString& context) const
     }
     if (m_disambiguationCache.size() >= kMaxDisambiguationCacheEntries) {
         // Don't grow without bound — a caller synthesising unique keys
-        // per binding would silently leak memory. Encode without caching.
+        // per binding would silently leak memory. Encode without
+        // caching. Warn once so the misuse pattern is debuggable:
+        // every subsequent fall-through is uncached toUtf8(), so the
+        // performance cliff matters but should never be invisible.
+        if (!m_disambiguationCacheFullWarned) {
+            m_disambiguationCacheFullWarned = true;
+            qWarning() << "LocalizedContext: disambiguation cache full at" << kMaxDisambiguationCacheEntries
+                       << "entries — falling back to uncached UTF-8 encoding for new contexts. Likely caller bug: "
+                          "synthesising unique disambiguations per binding.";
+        }
         return context.toUtf8();
     }
     QByteArray encoded = context.toUtf8();

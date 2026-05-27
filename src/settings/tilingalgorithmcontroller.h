@@ -42,7 +42,7 @@ class TilingAlgorithmController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(qreal autotileSplitRatioStepMax READ autotileSplitRatioStepMax CONSTANT)
 
 public:
-    explicit TilingAlgorithmController(ISettings* settings, PhosphorTiles::AlgorithmRegistry* registry,
+    explicit TilingAlgorithmController(ISettings& settings, PhosphorTiles::AlgorithmRegistry& registry,
                                        QObject* parent = nullptr);
 
     bool isDirty() const override

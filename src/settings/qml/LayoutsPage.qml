@@ -463,7 +463,12 @@ ColumnLayout {
             }
         }
 
-        target: window.layoutContextMenu
+        // When LayoutsPage is hosted outside Main.qml (KCM / preview
+        // host), `window.layoutContextMenu` is undefined; an unguarded
+        // target would emit a runtime warning on every signal fire.
+        // Disable the Connections entirely in that case.
+        enabled: window && window.layoutContextMenu
+        target: window && window.layoutContextMenu ? window.layoutContextMenu : null
     }
 
     // New Layout wizard dialog

@@ -61,10 +61,9 @@ CopyOutcome copyDirRecursive(const QString& sourcePath, const QString& destPath,
             if (sub != CopyOutcome::Ok)
                 return sub;
         } else if (entry.isFile()) {
-            const qint64 entrySize = entry.size();
+            const qint64 srcSizeAtEnumeration = entry.size();
             ++totalFiles;
-            totalBytes += entrySize;
-            if (totalFiles > kMaxPackFileCount || totalBytes > kMaxPackTotalBytes)
+            if (totalFiles > kMaxPackFileCount)
                 return CopyOutcome::TooLarge;
             // QFile::copy refuses to overwrite — caller's collision
             // check already guarantees a clean destination, but
@@ -74,6 +73,19 @@ CopyOutcome copyDirRecursive(const QString& sourcePath, const QString& destPath,
                 QFile::remove(destEntryPath);
             if (!QFile::copy(entry.absoluteFilePath(), destEntryPath))
                 return CopyOutcome::IoFailed;
+            // TOCTOU: the entrySize captured at enumeration could
+            // have been swapped under us between size-check and copy
+            // — a malicious source could replace the file with a
+            // larger one to evade kMaxPackTotalBytes. Re-check from
+            // the destination after copy and roll back if the budget
+            // is exceeded.
+            const qint64 destSize = QFile(destEntryPath).size();
+            const qint64 chargedSize = destSize > 0 ? destSize : srcSizeAtEnumeration;
+            totalBytes += chargedSize;
+            if (totalBytes > kMaxPackTotalBytes) {
+                QFile::remove(destEntryPath);
+                return CopyOutcome::TooLarge;
+            }
         }
         // Devices, FIFOs, sockets, etc. fall through silently — same
         // intent as the symlink skip above.

@@ -116,12 +116,15 @@ SettingsController::~SettingsController()
         m_windowRulesPage->setActivityLookup({});
         m_windowRulesPage->setSnappingLayoutLookup({});
         m_windowRulesPage->setTilingAlgorithmLookup({});
+        // Drain any in-flight `dataChanged` emissions queued against
+        // the cleared lookups before the model captures the now-
+        // empty resolvers. refreshLabels walks every row once and
+        // rebuilds the label cache with the identity (empty) lookups
+        // so the next paint reads consistent data.
+        if (m_windowRulesPage->model())
+            m_windowRulesPage->model()->refreshLabels();
     }
 }
-
-// ensureScreenIdResolver() now lives in src/common/screenidresolver.{h,cpp}
-// so daemon/editor/settings share the same install-once helper instead of
-// maintaining three parallel copies.
 
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
@@ -133,9 +136,10 @@ SettingsController::SettingsController(QObject* parent)
 {
     // Install the library-level screen-id resolver before any layout load
     // runs. First call initialises the static; subsequent constructions
-    // in the same process reuse it. Moved out of the ctor-initializer
-    // comma-operator trick so the intent is obvious at a glance —
-    // matches the daemon's handling.
+    // in the same process reuse it. ensureScreenIdResolver() now lives in
+    // src/common/screenidresolver.{h,cpp} so daemon/editor/settings share
+    // the same install-once helper instead of maintaining three parallel
+    // copies.
     ensureScreenIdResolver();
 
     // Auto-discovery pattern: every linked provider library has
@@ -355,8 +359,8 @@ SettingsController::SettingsController(QObject* parent)
     // loop above already wires them to onSettingsPropertyChanged(); the
     // sub-controllers only provide the QML-facing forwarders + storage/QML
     // trigger-list conversion.
-    m_snappingBehaviorPage = new SnappingBehaviorController(&m_settings, this);
-    m_tilingBehaviorPage = new TilingBehaviorController(&m_settings, this);
+    m_snappingBehaviorPage = new SnappingBehaviorController(m_settings, this);
+    m_tilingBehaviorPage = new TilingBehaviorController(m_settings, this);
 
     // Snapping→Zone Selector page sub-controller. Pure CONSTANT bounds
     // facade over ConfigDefaults — no Settings wiring required.
@@ -365,7 +369,7 @@ SettingsController::SettingsController(QObject* parent)
     // Snapping→Appearance page sub-controller. Owns border bounds plus the
     // color-import action surface; its changed() signal drives dirty
     // tracking on successful imports.
-    m_snappingAppearancePage = new SnappingAppearanceController(&m_settings, this);
+    m_snappingAppearancePage = new SnappingAppearanceController(m_settings, this);
     connect(m_snappingAppearancePage, &SnappingAppearanceController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
@@ -381,8 +385,7 @@ SettingsController::SettingsController(QObject* parent)
     // `this` would defer destruction to ~QObject, which runs AFTER the
     // registry unique_ptr — leaving the controller's raw m_registry pointer
     // briefly dangling.
-    m_tilingAlgorithmPage =
-        std::make_unique<TilingAlgorithmController>(&m_settings, m_localAlgorithmRegistry.get(), nullptr);
+    m_tilingAlgorithmPage = std::make_unique<TilingAlgorithmController>(m_settings, *m_localAlgorithmRegistry, nullptr);
     connect(m_tilingAlgorithmPage.get(), &TilingAlgorithmController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
@@ -803,9 +806,5 @@ void SettingsController::endExternalEdit()
 {
     m_externalEditPage.clear();
 }
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Font helpers (for FontPickerDialog)
-// ═══════════════════════════════════════════════════════════════════════════════
 
 } // namespace PlasmaZones

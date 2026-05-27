@@ -6,8 +6,14 @@
 #   cmake --build build --target phosphor-settings-ui-minimal
 #   ./build/bin/phosphor-settings-ui-minimal
 
-# Inherit the QML policies set by the parent lib's CMakeLists.txt. When
-# the example is built standalone (top-level project), set them locally.
+# Inherit the QML policies set by the parent lib's CMakeLists.txt. This
+# subdirectory is always built under the parent project (there is no
+# cmake_minimum_required / project() declaration here, so it can't be a
+# top-level build) — the qt_policy guards exist so a future standalone
+# build can opt in without code change. When that future build lands it
+# will need its own cmake_minimum_required / project() / find_package
+# bootstrap; the guard below is intentionally a no-op under normal
+# in-tree builds where the parent already set the policies.
 if(COMMAND qt_policy)
     qt_policy(SET QTP0001 NEW)
     qt_policy(SET QTP0004 NEW)

@@ -56,6 +56,11 @@ void SettingsController::load()
     m_settings.load();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
+    // Clear staged state BEFORE m_loading=false so any NOTIFY emits
+    // it triggers (clearing a staged assignment fires the mirrored
+    // Settings property) route through onSettingsPropertyChanged
+    // with m_loading=true and stay clean — the trailing
+    // setNeedsSave(false) is the authoritative reset.
     m_staging.clearAll();
     // Emit stagedXxxChanged only when reset() actually transitions a
     // non-empty optional to empty. Unconditional emit violates

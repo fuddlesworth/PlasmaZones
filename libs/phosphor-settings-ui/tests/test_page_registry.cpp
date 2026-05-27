@@ -134,13 +134,17 @@ private Q_SLOTS:
         QVERIFY(reg.allPages().isEmpty());
     }
 
-    void rejectsSelfParent()
+    void rejectsParentNotYetRegistered()
     {
+        // This pins the "parent must already be registered" guard
+        // rather than a dedicated self-parent cycle guard — the
+        // registry rejects parentId="self" + id="self" because
+        // "self" hasn't been registered yet at the time the parent
+        // existence check runs. Renamed from `rejectsSelfParent` so
+        // a future maintainer doesn't read it as "registry has a
+        // dedicated self-cycle guard."
         PageRegistry reg;
         auto* page = new StubPage(QStringLiteral("self"), &reg);
-        // parentId == id is a cycle of depth 0 — the registry checks
-        // that parentId, if non-empty, already exists. At this point
-        // "self" doesn't yet, so registration rejects it.
         reg.registerPage({QStringLiteral("self"), QStringLiteral("self"), QStringLiteral("Self"), {}, QUrl(), page});
 
         QVERIFY(!reg.hasPage(QStringLiteral("self")));

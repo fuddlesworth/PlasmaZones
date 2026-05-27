@@ -9,11 +9,10 @@
 
 namespace PlasmaZones {
 
-TilingBehaviorController::TilingBehaviorController(ISettings* settings, QObject* parent)
+TilingBehaviorController::TilingBehaviorController(ISettings& settings, QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("tiling-behavior"), parent)
-    , m_settings(settings)
+    , m_settings(&settings)
 {
-    Q_ASSERT(m_settings);
     m_lastAlwaysReinsertIntoStack = alwaysReinsertIntoStack();
     m_lastAutotileDragInsertTriggers = autotileDragInsertTriggers();
 

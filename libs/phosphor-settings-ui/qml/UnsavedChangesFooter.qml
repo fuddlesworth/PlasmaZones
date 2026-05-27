@@ -85,13 +85,14 @@ ColumnLayout {
 
             // Top accent line for the bar itself, separate from the
             // persistent line above. Always neutralTextColor so the
-            // bar reads as a distinct surface.
+            // bar reads as a distinct surface. Routes through
+            // ThemeHelpers.withAlpha for symmetry with the persistent
+            // line just above (also 0.4 alpha).
             Rectangle {
                 anchors.top: parent.top
                 width: parent.width
                 height: Math.round(Kirigami.Units.devicePixelRatio)
-                color: Kirigami.Theme.neutralTextColor
-                opacity: 0.4
+                color: ThemeHelpers.withAlpha(Kirigami.Theme.neutralTextColor, 0.4)
             }
 
             RowLayout {

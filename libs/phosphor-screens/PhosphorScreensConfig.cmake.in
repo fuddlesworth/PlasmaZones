@@ -24,8 +24,14 @@ include("${CMAKE_CURRENT_LIST_DIR}/PhosphorScreensTargets.cmake")
 # that forwards link/include via target_link_libraries. The wrapper is a
 # zero-cost forwarder — it adds no compile or link steps.
 if(TARGET PhosphorScreens::PhosphorScreensCore AND NOT TARGET PhosphorScreens::Core)
-    add_library(PhosphorScreens_CoreAliasWrapper INTERFACE)
-    target_link_libraries(PhosphorScreens_CoreAliasWrapper INTERFACE PhosphorScreens::PhosphorScreensCore)
+    # Guard against a name collision if a downstream consumer nests
+    # find_package(PhosphorScreens) twice through a transitive
+    # dependency — without the TARGET check around add_library, the
+    # second find_package would fatal on "target already exists".
+    if(NOT TARGET PhosphorScreens_CoreAliasWrapper)
+        add_library(PhosphorScreens_CoreAliasWrapper INTERFACE)
+        target_link_libraries(PhosphorScreens_CoreAliasWrapper INTERFACE PhosphorScreens::PhosphorScreensCore)
+    endif()
     add_library(PhosphorScreens::Core ALIAS PhosphorScreens_CoreAliasWrapper)
 endif()
 

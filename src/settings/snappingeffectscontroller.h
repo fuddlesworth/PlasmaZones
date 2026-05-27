@@ -8,7 +8,7 @@
 #include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QStandardPaths>
-#include <QStringLiteral>
+#include <QString>
 
 namespace PlasmaZones {
 

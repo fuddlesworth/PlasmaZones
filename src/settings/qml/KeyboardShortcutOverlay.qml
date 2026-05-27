@@ -25,6 +25,12 @@ Rectangle {
     /// Drives visibility + animation direction. Consumers bind this to
     /// their window-scope toggle.
     property bool shown: false
+    /// Settings facade exposing `openSettingsShortcut` / `openEditorShortcut`.
+    /// Declared as a required property so the dependency is explicit
+    /// — previously read via the implicit context property, which
+    /// would silently bind to whatever `appSettings` resolved to at
+    /// each consumer's scope.
+    required property var appSettings
     // Theme-tinted text-color shades used multiple times below — extract
     // once to a readonly property so a future theme tweak only touches
     // one place (E32 follow-up).
@@ -74,10 +80,9 @@ Rectangle {
             anchors.margins: Kirigami.Units.largeSpacing * 1.5
             spacing: Kirigami.Units.largeSpacing
 
-            Label {
+            Kirigami.Heading {
                 text: i18n("Keyboard Shortcuts")
-                font.weight: Font.DemiBold
-                font.pixelSize: Kirigami.Units.gridUnit * 1.2
+                level: 2
                 Layout.alignment: Qt.AlignHCenter
             }
 
@@ -95,11 +100,11 @@ Rectangle {
                 // legacy default only if the setting is empty.
                 model: [
                     {
-                        "key": (appSettings.openSettingsShortcut && appSettings.openSettingsShortcut.length > 0) ? appSettings.openSettingsShortcut : "Meta+Shift+P",
+                        "key": (root.appSettings.openSettingsShortcut && root.appSettings.openSettingsShortcut.length > 0) ? root.appSettings.openSettingsShortcut : "Meta+Shift+P",
                         "action": i18n("Open PlasmaZones Settings")
                     },
                     {
-                        "key": (appSettings.openEditorShortcut && appSettings.openEditorShortcut.length > 0) ? appSettings.openEditorShortcut : "Meta+Shift+E",
+                        "key": (root.appSettings.openEditorShortcut && root.appSettings.openEditorShortcut.length > 0) ? root.appSettings.openEditorShortcut : "Meta+Shift+E",
                         "action": i18n("Open Zone Editor")
                     },
                     {

@@ -95,8 +95,12 @@ WindowRuleController::~WindowRuleController()
 
 WindowRuleController::RulesChangedSubscription WindowRuleController::rulesChangedSubscriptionArgs()
 {
-    return {QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-            QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged")};
+    // QLatin1String avoids the QString allocation that `QString(...)` of a
+    // const-char* produced — the protocol constants are compile-time
+    // literals, and the implicit-conversion to QString happens once at
+    // the QDBus connect call boundary.
+    return {QLatin1String(PhosphorProtocol::Service::Name), QLatin1String(PhosphorProtocol::Service::ObjectPath),
+            QLatin1String(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged")};
 }
 
 bool WindowRuleController::subscribeRulesChanged()

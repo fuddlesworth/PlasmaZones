@@ -99,6 +99,12 @@ QQC2.ItemDelegate {
         // Default Rectangle color is white; gate the tint Behavior on
         // Component.completed so the first paint lands without an
         // animated white→transparent flash.
+        //
+        // Shared pattern with SidebarBackButton.qml — Qt's
+        // `Behavior on X` block must be a sibling of the animated
+        // property, so we can't extract this into a reusable
+        // Component. If you change the gate/profile here, mirror
+        // the edit there.
         property bool _behaviorReady: false
 
         Component.onCompleted: _behaviorReady = true

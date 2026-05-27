@@ -5,7 +5,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
-#include <QVariantMap>
+#include <QVariant>
 
 #include "demoapp.h"
 

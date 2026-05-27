@@ -14,7 +14,7 @@
 #include <QLatin1String>
 #include <QLoggingCategory>
 #include <algorithm>
-#include <cmath>
+#include <cmath> // std::isfinite — guards the NaN/inf clamp in setCustomParam
 
 namespace PlasmaZones {
 
@@ -41,14 +41,12 @@ constexpr QLatin1String Enum{"enum"};
 } // namespace ParamTypes
 } // namespace
 
-TilingAlgorithmController::TilingAlgorithmController(ISettings* settings, PhosphorTiles::AlgorithmRegistry* registry,
+TilingAlgorithmController::TilingAlgorithmController(ISettings& settings, PhosphorTiles::AlgorithmRegistry& registry,
                                                      QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("tiling-algorithm"), parent)
-    , m_settings(settings)
-    , m_registry(registry)
+    , m_settings(&settings)
+    , m_registry(&registry)
 {
-    Q_ASSERT(m_settings);
-    Q_ASSERT(m_registry);
 }
 
 int TilingAlgorithmController::autotileGapMin() const
@@ -190,6 +188,13 @@ void TilingAlgorithmController::setCustomParam(const QString& algorithmId, const
         const qreal num = value.toDouble(&ok);
         if (!ok) {
             qCWarning(lcCore) << "setCustomParam: value" << value << "is not a valid number for" << paramName;
+            return;
+        }
+        // QString::toDouble accepts "inf"/"-inf"/"nan" with ok=true,
+        // and std::clamp(NaN, ...) returns NaN unchanged — silently
+        // persisting NaN would crash the downstream tiling algorithm.
+        if (!std::isfinite(num)) {
+            qCWarning(lcCore) << "setCustomParam: refusing non-finite value" << num << "for" << paramName;
             return;
         }
         if (!defMap.contains(ParamDefKeys::MinValue) || !defMap.contains(ParamDefKeys::MaxValue)) {

@@ -12,20 +12,21 @@
 
 namespace PhosphorSettingsUiExamplesMinimal {
 
-namespace {
-
-/** Trivial about page with no staged state. Demonstrates a read-only
- *  page that the framework still routes to and shows in the sidebar.
- *  Q_OBJECT is included so the demo mirrors the real-consumer
- *  pattern: any page that adds signals or Q_PROPERTY later needs the
- *  macro present, and copy-pasting from the example shouldn't teach
- *  a broken pattern. The trailing `demoapp.moc` include below brings
- *  in the generated metaobject. */
-class AboutPage : public PhosphorSettingsUi::PageController
+// Trivial about page with no staged state. Demonstrates a read-only
+// page that the framework still routes to and shows in the sidebar.
+// Q_OBJECT is included so the demo mirrors the real-consumer pattern:
+// any page that adds signals or Q_PROPERTY later needs the macro
+// present, and copy-pasting from the example shouldn't teach a broken
+// pattern. Lifted out of the anonymous namespace — moc-generated
+// `qt_meta_stringdata` symbol names for anonymous-namespace classes
+// can collide across TUs if multiple files declare a same-named class
+// in their own anonymous namespaces. Naming the class with the demo's
+// namespace prefix keeps the metaobject symbols unique.
+class DemoAboutPage : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 public:
-    explicit AboutPage(QObject* parent = nullptr)
+    explicit DemoAboutPage(QObject* parent = nullptr)
         : PhosphorSettingsUi::PageController(QStringLiteral("about"), parent)
     {
     }
@@ -42,8 +43,6 @@ public:
     }
 };
 
-} // namespace
-
 DemoApp::DemoApp(QObject* parent)
     : PhosphorSettingsUi::ApplicationController(parent)
 {
@@ -53,7 +52,7 @@ DemoApp::DemoApp(QObject* parent)
                                      "examples/minimal/qml/GeneralPage.qml")),
                  QStringLiteral("preferences-system-symbolic"));
 
-    auto* about = new AboutPage(this);
+    auto* about = new DemoAboutPage(this);
     registerPage(about, {}, QStringLiteral("About"),
                  QUrl(QStringLiteral("qrc:/qt/qml/org/phosphor/settings/ui/"
                                      "examples/minimal/qml/AboutPage.qml")),

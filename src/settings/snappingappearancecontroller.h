@@ -34,7 +34,7 @@ class SnappingAppearanceController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
 
 public:
-    explicit SnappingAppearanceController(ISettings* settings, QObject* parent = nullptr);
+    explicit SnappingAppearanceController(ISettings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {

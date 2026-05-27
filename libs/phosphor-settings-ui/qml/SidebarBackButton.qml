@@ -43,6 +43,11 @@ QQC2.ItemDelegate {
         // "transparent" on the very first paint (binding eval).
         // Gate the Behavior on completion so the first eval
         // lands without animation.
+        //
+        // Shared pattern with SidebarRow.qml — Qt's `Behavior on X`
+        // block must be a sibling of the animated property, so we
+        // can't extract this into a reusable Component. If you
+        // change the gate/profile here, mirror the edit there.
         property bool _behaviorReady: false
 
         Component.onCompleted: _behaviorReady = true

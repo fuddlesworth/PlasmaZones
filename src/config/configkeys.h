@@ -14,12 +14,11 @@
         return QStringLiteral(str);                                                                                    \
     }
 
-// Alias for group name accessors — identical expansion, separate macro for readability.
-#define PZ_CONFIG_GROUP(name, str)                                                                                     \
-    static QString name()                                                                                              \
-    {                                                                                                                  \
-        return QStringLiteral(str);                                                                                    \
-    }
+// Alias for group-name accessors — same body as PZ_CONFIG_KEY, single
+// definition so a future tweak to PZ_CONFIG_KEY (e.g. attribute
+// annotation) automatically applies to groups too. Separate macro
+// name preserved for readability at the call sites.
+#define PZ_CONFIG_GROUP(name, str) PZ_CONFIG_KEY(name, str)
 
 namespace PlasmaZones {
 

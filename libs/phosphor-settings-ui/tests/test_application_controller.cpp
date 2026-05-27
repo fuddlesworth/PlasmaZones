@@ -35,8 +35,11 @@ public:
         ++applyCount;
         setDirty(false);
         // Sync stub emits applyResult immediately so
-        // applyAllAsync's wait-counter ticks down.
-        Q_EMIT applyResult(true, QString());
+        // applyAllAsync's wait-counter ticks down. Tests pinning the
+        // batch-timeout recovery path flip m_emitApplyResult to false
+        // to simulate a wedged domain.
+        if (m_emitApplyResult)
+            Q_EMIT applyResult(true, QString());
     }
 
     void discard() override
@@ -61,12 +64,18 @@ public:
         Q_EMIT dirtyChanged();
     }
 
+    void setEmitApplyResult(bool emit)
+    {
+        m_emitApplyResult = emit;
+    }
+
     int applyCount = 0;
     int discardCount = 0;
     int resetCount = 0;
 
 private:
     bool m_dirty = false;
+    bool m_emitApplyResult = true;
 };
 
 class StubHeadlessDomain : public StagingDomain
@@ -520,8 +529,12 @@ private Q_SLOTS:
         QCOMPARE(completeSpy.count(), 1);
         QCOMPARE(completeSpy.first().at(0).toBool(), true);
         QCOMPARE(a->applyCount, 0); // not dirty → not called
-        // No applying flag transition for a no-op batch.
-        QCOMPARE(applyingSpy.count(), 0);
+        // Even on a no-op batch we drive applyingChanged through the
+        // full false→true→false transition so consumers binding "show
+        // toast on applyingChanged false→true" see the tick.
+        // Documented in ApplicationController.h::applyingChanged.
+        QCOMPARE(applyingSpy.count(), 2);
+        QVERIFY(!app.isApplying());
     }
 
     void discardAllAsyncEmitsComplete()
@@ -539,6 +552,7 @@ private Q_SLOTS:
         headless->setDirty(true);
 
         QSignalSpy completeSpy(&app, &ApplicationController::discardAllComplete);
+        QSignalSpy discardingSpy(&app, &ApplicationController::discardingChanged);
         app.discardAllAsync();
 
         QCOMPARE(completeSpy.count(), 1);
@@ -546,6 +560,37 @@ private Q_SLOTS:
         QCOMPARE(a->discardCount, 1);
         QCOMPARE(headless->discardCount, 1);
         QVERIFY(!app.isDirty());
+        // discarding flag drives the chrome's "Discarding…" UX;
+        // matches the apply path's pinning of applyingChanged.
+        QCOMPARE(discardingSpy.count(), 2);
+        QVERIFY(!app.isDiscarding());
+    }
+
+    void asyncBatchTimeoutEmitsCompleteWithErrors()
+    {
+        // Pin the kAsyncBatchTimeoutMs recovery path. A domain that
+        // never reports applyResult AND whose lifetime spans the
+        // timeout must land in the completion handler with ok=false
+        // and a synthesised error per pending domain, so the chrome's
+        // "Saving…" indicator can't pin forever.
+        ApplicationController app;
+        // Override the default 60 s with 80 ms — short enough to keep
+        // the test under a second but long enough to outlast the
+        // first event-loop turn the spy reads on.
+        app.setAsyncBatchTimeoutMs(80);
+
+        auto* silent = new StubPage(QStringLiteral("silent"));
+        silent->setEmitApplyResult(false);
+        app.registerPage(silent, {}, QStringLiteral("Silent"), QUrl());
+        silent->setDirty(true);
+
+        QSignalSpy completeSpy(&app, &ApplicationController::applyAllComplete);
+        app.applyAllAsync();
+        QVERIFY(completeSpy.wait(2000));
+        QCOMPARE(completeSpy.count(), 1);
+        QCOMPARE(completeSpy.first().at(0).toBool(), false);
+        const QStringList errors = completeSpy.first().at(1).toStringList();
+        QVERIFY(!errors.isEmpty());
     }
 
     void applyAllOnPartialFailureKeepsDirty()

@@ -26,10 +26,12 @@
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
 #include "../core/logging.h"
+#include "../core/settings_interfaces.h"
 #include "dbusutils.h"
 #include "kzonesimporter.h"
 #include "virtualscreenutils.h"
 
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QDBusConnection>

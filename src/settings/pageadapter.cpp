@@ -5,18 +5,12 @@
 
 namespace PlasmaZones {
 
-PageAdapter::PageAdapter(QString id, QObject* delegate, QObject* parent)
+PageAdapter::PageAdapter(QString id, QObject* parent)
     : PhosphorSettingsUi::PageController(std::move(id), parent)
-    , m_delegate(delegate)
 {
 }
 
 PageAdapter::~PageAdapter() = default;
-
-QObject* PageAdapter::delegate() const
-{
-    return m_delegate;
-}
 
 bool PageAdapter::isDirty() const
 {

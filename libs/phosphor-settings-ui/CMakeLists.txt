@@ -407,8 +407,13 @@ if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
     endif()
     set(_phosphor_settings_ui_qml_install_dir "${KDE_INSTALL_QMLDIR}/org/phosphor/settings/ui")
 
+    # NOTE: no EXPORT clause here on purpose — QML modules are consumed
+    # via the QML import path at runtime, not via `find_package` +
+    # `target_link_libraries`. Earlier revisions registered these to
+    # an export set that was never installed via `install(EXPORT ...)`,
+    # which left a dangling reference for any consumer that tried to
+    # use the QML targets through CMake.
     install(TARGETS PhosphorSettingsUiQmlShared ${_phosphor_settings_ui_qml_shared_plugin_target}
-        EXPORT PhosphorSettingsUiQmlTargets
         RUNTIME DESTINATION ${_phosphor_settings_ui_qml_install_dir}
         LIBRARY DESTINATION ${_phosphor_settings_ui_qml_install_dir}
         ARCHIVE DESTINATION ${_phosphor_settings_ui_qml_install_dir}

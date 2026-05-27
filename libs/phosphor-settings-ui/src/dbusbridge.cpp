@@ -143,14 +143,20 @@ void DBusBridge::asyncCallOn(const QString& interfaceName, const QString& method
     // parent/child mutation is real state — const-correctness would lie.
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     QObject::connect(
-        watcher, &QDBusPendingCallWatcher::finished, watcher, [interfaceName, method](QDBusPendingCallWatcher* w) {
+        watcher, &QDBusPendingCallWatcher::finished, watcher,
+        [interfaceName, method](QDBusPendingCallWatcher* w) {
             QDBusPendingReply<> reply = *w;
             if (reply.isError()) {
                 qWarning() << "PhosphorSettingsUi::DBusBridge::asyncCallOn: D-Bus error on" << interfaceName << method
                            << "—" << reply.error().name() << reply.error().message();
             }
             w->deleteLater();
-        });
+        },
+        // Qt::SingleShotConnection self-disconnects after first fire.
+        // QDBusPendingCallWatcher::finished is contractually fire-
+        // once, but defending in depth means a future Qt-internal
+        // re-emit can't deref `w` post-deleteLater.
+        Qt::SingleShotConnection);
 }
 
 } // namespace PhosphorSettingsUi

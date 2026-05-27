@@ -35,6 +35,11 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# PhosphorScreens::Core is QtDBus-free (constants + screen-topology
+# helpers only); the umbrella PhosphorScreens target adds the DBus
+# wiring on top. find_package pulls all three regardless so the
+# umbrella build doesn't need a second find_package call later — the
+# Core target's link interface stays QtDBus-free either way.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus)
 
 # PhosphorIdentity ships VirtualScreenId — the cross-process ID format
@@ -80,8 +85,13 @@ function(_phosphorscreens_target_defaults _target)
         # of PhosphorScreens.so would fail with "PhosphorScreensCore.so:
         # cannot open shared object file". $ORIGIN tells the dynamic
         # linker to look beside the loading .so first, which is exactly
-        # where both shipped libs live.
+        # where both shipped libs live. BUILD_WITH_INSTALL_RPATH lets
+        # ctest dlopen the in-tree binaries without an explicit
+        # LD_LIBRARY_PATH — without it, in-tree consumers (the demo,
+        # the test runner) inherit CMake's empty build-tree rpath and
+        # fail at sibling-lib resolution before install lands.
         INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH ON
     )
     target_compile_features(${_target} PUBLIC cxx_std_20)
 endfunction()

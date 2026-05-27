@@ -93,18 +93,29 @@ PhosphorUi.SettingsAppWindow {
         // restored activePage. The legacy file did a 90-line traversal
         // over _mainItems / _childItems for this — the framework now
         // exposes the same lookup as one Q_INVOKABLE on the controller.
-        // Drill into the deepest non-collapsible ancestor so the sub-
-        // sidebar opens at the right level; inline-collapsible
-        // ancestors stay where they live (the sidebar will expand
-        // them via the default-true `expandedCategories` map).
+        window._drillIntoActivePage();
+    }
+
+    // Drill into the deepest non-collapsible ancestor of the current
+    // activePage so the sub-sidebar opens at the right level; inline-
+    // collapsible ancestors stay where they live (the sidebar will
+    // expand them via the default-true `expandedCategories` map). Used
+    // both at restore-time (Component.onCompleted) AND when activePage
+    // changes externally (CLI --page, daemon broadcast, shortcut). DRY
+    // the chain-walk so future tweaks happen in one place.
+    function _drillIntoActivePage() {
         const chain = settingsController.app.parentChainFor(settingsController.activePage);
         for (let i = chain.length - 1; i >= 0; --i) {
             const entry = settingsController.app.registry.pageData(chain[i]);
             if (entry && entry.id && entry.isCollapsible !== true) {
-                window.sidebar.drillInto(chain[i]);
-                break;
+                if (window.sidebar.currentParentId !== chain[i])
+                    window.sidebar.drillInto(chain[i]);
+                return;
             }
         }
+        // No non-collapsible ancestor — page lives under main mode.
+        if (window.sidebar.currentParentId !== "")
+            window.sidebar.drillOut();
     }
 
     // Translated labels for aspect-ratio classes. Backed by a QtObject
@@ -188,22 +199,7 @@ PhosphorUi.SettingsAppWindow {
     // leaving the sidebar showing a stale top-level / wrong-parent list.
     Connections {
         function onActivePageChanged() {
-            const chain = settingsController.app.parentChainFor(settingsController.activePage);
-            // Pick the deepest non-collapsible ancestor — same logic
-            // Component.onCompleted uses on startup.
-            for (let i = chain.length - 1; i >= 0; --i) {
-                const entry = settingsController.app.registry.pageData(chain[i]);
-                if (entry && entry.id && entry.isCollapsible !== true) {
-                    if (window.sidebar.currentParentId !== chain[i])
-                        window.sidebar.drillInto(chain[i]);
-
-                    return;
-                }
-            }
-            // No non-collapsible ancestor — page lives under main
-            // mode (top-level or under an inline category).
-            if (window.sidebar.currentParentId !== "")
-                window.sidebar.drillOut();
+            window._drillIntoActivePage();
         }
 
         target: settingsController
@@ -235,15 +231,20 @@ PhosphorUi.SettingsAppWindow {
     // the window's active state. Without the combined guard the user
     // could navigate the underlying page state while interacting with
     // any of these prompts.
+    // Shared enable-guard for page-navigation shortcuts. Hoisted from
+    // the two identical inline expressions so a future dialog addition
+    // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
+
     Shortcut {
         sequence: "Ctrl+PgUp"
-        enabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
+        enabled: window._navShortcutsEnabled
         onActivated: settingsController.app.gotoPreviousPage()
     }
 
     Shortcut {
         sequence: "Ctrl+PgDown"
-        enabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
+        enabled: window._navShortcutsEnabled
         onActivated: settingsController.app.gotoNextPage()
     }
 
@@ -386,6 +387,8 @@ PhosphorUi.SettingsAppWindow {
         }
 
         MenuItem {
+            id: editMenuItem
+
             text: i18n("Edit")
             icon.name: "document-edit"
             onTriggered: settingsController.editLayout(layoutContextMenu.layoutId)
@@ -396,7 +399,17 @@ PhosphorUi.SettingsAppWindow {
 
             model: layoutContextMenu._screenItemsModel
             onObjectAdded: function (index, object) {
-                layoutContextMenu.insertItem(1 + index, object);
+                // Insert relative to the Edit marker — a future
+                // MenuItem inserted before Edit would otherwise shift
+                // the per-screen entries to the wrong slot.
+                let editPos = 0;
+                for (var k = 0; k < layoutContextMenu.count; k++) {
+                    if (layoutContextMenu.itemAt(k) === editMenuItem) {
+                        editPos = k;
+                        break;
+                    }
+                }
+                layoutContextMenu.insertItem(editPos + 1 + index, object);
             }
             onObjectRemoved: function (index, object) {
                 layoutContextMenu.removeItem(object);
@@ -661,6 +674,10 @@ PhosphorUi.SettingsAppWindow {
     // ── Keyboard-shortcut overlay ───────────────────────────────────
     KeyboardShortcutOverlay {
         parent: window.contentItem
+        // `appSettings` is the context property exposed by main.cpp;
+        // pass it explicitly through the new required property so the
+        // overlay no longer relies on the implicit context-name match.
+        appSettings: appSettings
         shown: window._showShortcuts
         onDismiss: window._showShortcuts = false
     }
@@ -701,6 +718,12 @@ PhosphorUi.SettingsAppWindow {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     height: Math.round(Kirigami.Units.devicePixelRatio)
+                    // Subtle theme-tinted hairline. Same shape as the
+                    // KeyboardShortcutOverlay subtleBorder + Toast
+                    // toastBg tints documented in E32; future tweaks
+                    // should go through PhosphorUi.ThemeHelpers when
+                    // it's exposed publicly. For now we accept the
+                    // copy here (3 sites, low churn).
                     color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 }
             }

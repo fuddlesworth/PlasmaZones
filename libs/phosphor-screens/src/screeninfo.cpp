@@ -3,6 +3,7 @@
 
 #include "PhosphorScreens/ScreenInfo.h"
 
+#include <QDebug>
 #include <QStringList>
 
 namespace Phosphor::Screens {
@@ -12,7 +13,29 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
     QVariantList list;
     list.reserve(screens.size());
 
+    const auto vendorModelParts = [](const ScreenInfo& info) -> QStringList {
+        QStringList parts;
+        if (!info.manufacturer.isEmpty())
+            parts.append(info.manufacturer);
+        if (!info.model.isEmpty())
+            parts.append(info.model);
+        return parts;
+    };
+
     for (const ScreenInfo& s : screens) {
+        // Sanity-check the virtual identity payload. The producer
+        // contract is virtualIndex ≥ 0 when isVirtualScreen is true
+        // (header docstring). A negative index plus the truthy flag
+        // surfaces as "VS0" via `virtualIndex + 1`, which is
+        // misleading; warn so producers find the regression instead
+        // of silently shipping a wrong tile label.
+        if (s.isVirtualScreen && s.virtualIndex < 0) {
+            qWarning(
+                "Phosphor::Screens::screenInfoListToVariantList: virtual screen with virtualIndex < 0 (= %d) — "
+                "label will report VS%d",
+                s.virtualIndex, s.virtualIndex + 1);
+        }
+
         QVariantMap map;
         map[QStringLiteral("name")] = s.name;
         map[QStringLiteral("isPrimary")] = s.isPrimary;
@@ -20,11 +43,16 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
             map[QStringLiteral("manufacturer")] = s.manufacturer;
         if (!s.model.isEmpty())
             map[QStringLiteral("model")] = s.model;
-        if (s.width > 0 && s.height > 0) {
-            map[QStringLiteral("resolution")] = QStringLiteral("%1×%2").arg(s.width).arg(s.height);
+        // Emit each dimension independently — the previous all-or-
+        // nothing form dropped both width and height when only one
+        // was positive, even though consumers binding `map.width`
+        // separately can handle a sentinel zero.
+        if (s.width > 0)
             map[QStringLiteral("width")] = s.width;
+        if (s.height > 0)
             map[QStringLiteral("height")] = s.height;
-        }
+        if (s.width > 0 && s.height > 0)
+            map[QStringLiteral("resolution")] = QStringLiteral("%1×%2").arg(s.width).arg(s.height);
         if (!s.screenId.isEmpty())
             map[QStringLiteral("screenId")] = s.screenId;
         // Always emit the flag — QML consumers that test
@@ -47,19 +75,11 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
         if (s.isVirtualScreen) {
             const QString vsName =
                 s.virtualDisplayName.isEmpty() ? QStringLiteral("VS%1").arg(s.virtualIndex + 1) : s.virtualDisplayName;
-            QStringList parts;
-            if (!s.manufacturer.isEmpty())
-                parts.append(s.manufacturer);
-            if (!s.model.isEmpty())
-                parts.append(s.model);
+            const QStringList parts = vendorModelParts(s);
             const QString monitorName = parts.isEmpty() ? s.connectorName : parts.join(QLatin1Char(' '));
             label = monitorName.isEmpty() ? vsName : vsName + QStringLiteral(" — ") + monitorName;
         } else {
-            QStringList parts;
-            if (!s.manufacturer.isEmpty())
-                parts.append(s.manufacturer);
-            if (!s.model.isEmpty())
-                parts.append(s.model);
+            const QStringList parts = vendorModelParts(s);
             label = parts.isEmpty() ? s.name : parts.join(QLatin1Char(' '));
         }
         if (s.width > 0 && s.height > 0) {

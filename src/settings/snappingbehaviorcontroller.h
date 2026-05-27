@@ -48,7 +48,7 @@ class SnappingBehaviorController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int adjacentThresholdMax READ adjacentThresholdMax CONSTANT)
 
 public:
-    explicit SnappingBehaviorController(ISettings* settings, QObject* parent = nullptr);
+    explicit SnappingBehaviorController(ISettings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {

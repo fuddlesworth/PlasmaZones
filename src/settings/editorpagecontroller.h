@@ -5,6 +5,7 @@
 
 #include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
+#include <QString>
 
 namespace PlasmaZones {
 

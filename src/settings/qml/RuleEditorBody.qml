@@ -55,12 +55,24 @@ ScrollView {
     readonly property var _emptyMatch: ({
             "all": []
         })
-    /// Controller authoring metadata — cached once because
+    /// Controller authoring metadata — cached on construction because
     /// actionTypes() / matchFields() allocate fresh QVariantLists on every
     /// call. Repeaters down the tree key off these so binding them through
-    /// a property keeps the recompute fan-out tight.
-    readonly property var _actionTypeOptions: root.controller.actionTypes()
-    readonly property var _matchFieldOptions: root.controller.matchFields()
+    /// a property keeps the recompute fan-out tight. The catalogue
+    /// invalidation signal lets a plugin-driven controller refresh the
+    /// cache at runtime; static-catalogue controllers (the common case)
+    /// just never fire it.
+    property var _actionTypeOptions: root.controller.actionTypes()
+    property var _matchFieldOptions: root.controller.matchFields()
+
+    Connections {
+        function onAuthoringCatalogueChanged() {
+            root._actionTypeOptions = root.controller.actionTypes();
+            root._matchFieldOptions = root.controller.matchFields();
+        }
+        target: root.controller
+        ignoreUnknownSignals: true
+    }
     /// Live semantic-validation pass over the working rule. Exposed so the
     /// consumer's footer can render an inline-message + gate its Save
     /// button — the wizard and the edit sheet both surface them.
@@ -86,10 +98,20 @@ ScrollView {
         root.workingRuleEdited(next);
     }
 
+    /// Hard recursion-depth cap. A malformed or malicious rule with a
+    /// cyclic composite (or just absurdly nested) would otherwise
+    /// stack-overflow on every keystroke through `canSave`. 64 is
+    /// generous for any human-authored rule.
+    readonly property int _maxMatchDepth: 64
+
     /// True if every leaf predicate in @p node carries a non-empty value.
     /// A leaf with an empty string / missing value would match an empty-string
     /// id (e.g. the guided `ScreenId == ""` seed) — block saving that.
-    function _matchHasFilledLeaves(node) {
+    function _matchHasFilledLeaves(node, depth) {
+        if (depth === undefined)
+            depth = 0;
+        if (depth > root._maxMatchDepth)
+            return false;
         if (!node)
             return true;
 
@@ -117,7 +139,7 @@ ScrollView {
             children = node.all || [];
         }
         for (var i = 0; i < children.length; ++i) {
-            if (!root._matchHasFilledLeaves(children[i]))
+            if (!root._matchHasFilledLeaves(children[i], depth + 1))
                 return false;
         }
         return true;

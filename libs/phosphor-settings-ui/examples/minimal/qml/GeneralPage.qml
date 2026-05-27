@@ -23,7 +23,6 @@ Item {
             onToggled: {
                 if (root.controller)
                     root.controller.soundsEnabled = checked;
-
             }
         }
 
@@ -34,10 +33,7 @@ Item {
             onEditingFinished: {
                 if (root.controller)
                     root.controller.greeting = text;
-
             }
         }
-
     }
-
 }

@@ -110,21 +110,43 @@ private Q_SLOTS:
     {
         // asyncCall / asyncCallOn return void so we can't QCOMPARE a reply.
         // The contract is: validation rejects the call before any
-        // QDBusPendingCall is enqueued. Pin no-crash + no-watcher-leak
-        // behaviour — a regression that dropped validation in the async
-        // path would dispatch a malformed bus call, but here neither the
-        // ctor's empty-endpoint warning nor the bridge's normal flow
-        // can be observed deterministically across threads. The crash-
-        // free outcome of the call IS the verifiable behaviour.
+        // QDBusPendingCall is enqueued. Capture qWarning output via a
+        // scoped message handler so we can pin both the no-crash
+        // outcome AND the observable rejection-path side-effect.
         DBusEndpoint ep;
         ep.service = QString();
         ep.objectPath = QStringLiteral("/Path");
         ep.interfaceName = QStringLiteral("org.example.Iface");
+
+        QStringList warnings;
+        // Static-instance hand-off: QtMessageHandler is a free
+        // function pointer, no captures. Stash the list in a static
+        // pointer for the handler's lifetime, restore the previous
+        // handler at scope end.
+        static QStringList* g_warnings = nullptr;
+        g_warnings = &warnings;
+        QtMessageHandler previousHandler =
+            qInstallMessageHandler([](QtMsgType type, const QMessageLogContext&, const QString& msg) {
+                if (type == QtWarningMsg && g_warnings)
+                    g_warnings->append(msg);
+            });
+
         DBusBridge bridge(ep);
         bridge.asyncCall(QStringLiteral("anyMethod"));
         bridge.asyncCallOn(QString(), QStringLiteral("m"));
         bridge.asyncCall(QString());
-        QVERIFY(true); // no abort, no segfault
+
+        qInstallMessageHandler(previousHandler);
+        g_warnings = nullptr;
+
+        // Bridge validation must surface SOMETHING — empty endpoint
+        // / empty method should produce at least one warning. The
+        // exact message text is implementation detail; what matters
+        // is that the rejection path actually ran (not silently
+        // dispatched a malformed bus call).
+        QVERIFY2(!warnings.isEmpty(),
+                 "DBusBridge::asyncCall with empty endpoint/method must emit a qWarning — "
+                 "silent dispatch would let malformed bus calls leak through.");
     }
 
     void rejectsCallOnFromForeignThread()

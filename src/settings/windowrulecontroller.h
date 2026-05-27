@@ -391,11 +391,11 @@ private:
     /// edits; `revert()` calls this directly to bypass that guard.
     /// @p fromRevert tags this fetch as originating from an explicit
     /// revert() (true) vs. ctor/reload() (false). The reply handler
-    /// only emits revertFinished when fromRevert is true. Passing
-    /// the bool explicitly instead of inferring from
-    /// `m_pendingRevertFetches > 0` prevents a concurrent daemon
-    /// broadcast (reload path) from spoofing a `revertFinished(true)`
-    /// when a real revert is in flight on a sibling watcher.
+    /// only emits revertFinished when fromRevert is true. Each
+    /// watcher carries the bool through its lambda capture, so a
+    /// concurrent daemon broadcast (reload path) can't spoof a
+    /// `revertFinished(true)` while a real revert is in flight on a
+    /// sibling watcher.
     void fetchAndLoad(bool fromRevert = false);
 
     /// Push @p rules to the daemon via `setAllRules`. Returns true only if the

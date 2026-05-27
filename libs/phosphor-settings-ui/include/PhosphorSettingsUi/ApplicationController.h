@@ -192,6 +192,10 @@ private:
     // a single recomputeDirty at the end. Eliminates the O(N²) walk
     // pattern audit-follow-up A15 flagged.
     bool m_inTransaction = false;
+    // Re-entrancy guard for recomputeDirty. A subclass that emits
+    // dirtyChanged from inside its isDirty() virtual would otherwise
+    // recursively re-enter the QList::erase loop, undefined behaviour.
+    bool m_recomputingDirty = false;
 
     // Async batch state. m_*Pending counts how many domains still
     // owe an applyResult / discardResult; m_*Errors collects user-

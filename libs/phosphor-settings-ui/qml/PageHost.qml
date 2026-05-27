@@ -118,6 +118,16 @@ Item {
             if (!pageLoader.item)
                 return;
             const pageController = root.controller.registry.controller(id);
+            // A registration that explicitly passes a null controller
+            // ("detach the controller" path) leaves the previously
+            // injected pointer in place rather than clobbering it
+            // with null — re-using a stale controller is preferable
+            // to a runtime "TypeError: cannot read property of null"
+            // in the page body. Consumers wanting the detach
+            // behaviour should re-register with a placeholder
+            // controller instead.
+            if (!pageController)
+                return;
             if (pageLoader.item.hasOwnProperty("controller")) {
                 try {
                     pageLoader.item.controller = pageController;

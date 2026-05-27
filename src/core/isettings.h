@@ -30,6 +30,16 @@ namespace PlasmaZones {
  * Allows dependency inversion - components depend on this interface
  * rather than concrete Settings implementation. Inherits from focused
  * sub-interfaces so components can depend on just what they need.
+ *
+ * Note on the sub-interface NOTIFY surface: the sub-interfaces
+ * (IZoneActivationSettings, IZoneSelectorSettings, etc.) are
+ * deliberately non-QObject and so cannot declare Q_SIGNALS of their
+ * own. All notify signals live on this ISettings level. Consumers
+ * holding a `IZoneSelectorSettings*` therefore must hold an
+ * `ISettings*` alongside (or back-cast via `dynamic_cast`) to wire
+ * `connect(&ISettings::zoneSelectorEnabledChanged, ...)`. The
+ * back-cast is safe because Settings — the only concrete subclass —
+ * inherits from both.
  */
 class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneActivationSettings,
@@ -251,6 +261,14 @@ public:
         return false;
     }
 
+    // NOTE: only the getter `override`s — `getPerScreenSnappingSettings`
+    // is the lone snapping accessor declared on
+    // PhosphorEngine::IGeometrySettings (consumed by the geometry
+    // pipeline). The set/clear/has triplet is ISettings-only (writers
+    // live in settings + KCM, never reached from the geometry path),
+    // so they're plain `virtual` with no base to override. Mirrors the
+    // autotile + zone-selector blocks above where neither side declares
+    // any of the four on IGeometrySettings.
     QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
     {
         return {};

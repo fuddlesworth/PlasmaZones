@@ -24,6 +24,7 @@
 // Most of the dependency graph (Settings, PhosphorZones layouts, daemon
 // D-Bus helpers, page controllers) is reached transitively through
 // settingscontroller.h. Only headers used directly here are listed.
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorZones/LayoutComputeService.h>
@@ -101,6 +102,12 @@ void SettingsController::loadLayoutsAsync()
             // has already navigated away from (or that was deleted from
             // another session).
             m_pendingSelectLayoutId.clear();
+            // Re-emit the local view: the file-watcher emit that ran
+            // while m_awaitingDaemonLayouts was true was suppressed
+            // (see settingscontroller.cpp's connect lambda). Without
+            // this re-emit, an immediate user-visible refresh after a
+            // daemon error waits for the next disk change.
+            Q_EMIT layoutsChanged();
             return;
         }
 
@@ -250,6 +257,12 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
 
 void SettingsController::deleteLayout(const QString& layoutId)
 {
+    // Drop any pending select-after-create id — if the user deletes
+    // a layout that was just created (and is still in the
+    // create→reply→select pipeline), the trailing layoutAdded() emit
+    // would name an id the user just removed.
+    if (m_pendingSelectLayoutId == layoutId)
+        m_pendingSelectLayoutId.clear();
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("deleteLayout"), {layoutId});
     if (reply.type() == QDBusMessage::ErrorMessage) {
@@ -271,6 +284,10 @@ void SettingsController::duplicateLayout(const QString& layoutId)
     } else if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "duplicateLayout failed:" << reply.errorMessage();
         Q_EMIT layoutOperationFailed(PzI18n::tr("Could not duplicate layout: %1").arg(reply.errorMessage()));
+        // Clear so a stale create's reply doesn't accidentally land
+        // a layoutAdded() for an id this failed duplicate never
+        // produced — the user has no other context for the emit.
+        m_pendingSelectLayoutId.clear();
     }
     scheduleLayoutLoad();
 }
@@ -348,6 +365,15 @@ QString SettingsController::sanitizeIOPath(const QString& raw)
     // `../../bar`) — they're still relative-traversal escape attempts
     // even after canonicalisation.
     if (clean == QStringLiteral("..") || clean.startsWith(QStringLiteral("../"))) {
+        return {};
+    }
+    // Require absolute paths. The Q_INVOKABLE entry points are reached
+    // from QFileDialog (which always yields an absolute URL) and from
+    // the test suite; relative paths shouldn't surface here. A
+    // compromised QML page or a future `--page` CLI flag passing a
+    // bare `report.json` would otherwise resolve relative to the
+    // settings-app cwd and read/write outside the user's intent.
+    if (!clean.startsWith(QLatin1Char('/'))) {
         return {};
     }
     return clean;

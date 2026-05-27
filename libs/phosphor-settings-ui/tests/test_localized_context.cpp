@@ -9,6 +9,31 @@
 
 using PhosphorSettingsUi::LocalizedContext;
 
+namespace {
+/// RAII guard for the QCoreApplication::applicationName setting. The
+/// previous manual snapshot/restore pattern was easy to forget on the
+/// failure path of any nested QCOMPARE/QVERIFY — a RAII type cleans
+/// up automatically even when QTest aborts mid-test.
+class ApplicationNameGuard
+{
+public:
+    explicit ApplicationNameGuard(const QString& temporaryName)
+        : m_previous(QCoreApplication::applicationName())
+    {
+        QCoreApplication::setApplicationName(temporaryName);
+    }
+    ~ApplicationNameGuard()
+    {
+        QCoreApplication::setApplicationName(m_previous);
+    }
+    ApplicationNameGuard(const ApplicationNameGuard&) = delete;
+    ApplicationNameGuard& operator=(const ApplicationNameGuard&) = delete;
+
+private:
+    QString m_previous;
+};
+} // namespace
+
 class TestLocalizedContext : public QObject
 {
     Q_OBJECT
@@ -20,13 +45,9 @@ private Q_SLOTS:
         // the fallback contract (translationContext follows applicationName
         // when no explicit override is set) rather than comparing two
         // empty strings.
-        const QString prev = QCoreApplication::applicationName();
-        QCoreApplication::setApplicationName(QStringLiteral("test-app-localized"));
-        {
-            LocalizedContext ctx;
-            QCOMPARE(ctx.translationContext(), QStringLiteral("test-app-localized"));
-        }
-        QCoreApplication::setApplicationName(prev);
+        ApplicationNameGuard guard(QStringLiteral("test-app-localized"));
+        LocalizedContext ctx;
+        QCOMPARE(ctx.translationContext(), QStringLiteral("test-app-localized"));
     }
 
     void applicationNameChangeEmitsNotify()
@@ -34,14 +55,12 @@ private Q_SLOTS:
         // Confirms the ctor-time connect to QCoreApplication::applicationNameChanged:
         // a late setApplicationName must re-fire translationContextChanged when
         // no explicit override is set.
-        const QString prev = QCoreApplication::applicationName();
-        QCoreApplication::setApplicationName(QStringLiteral("test-app-pre"));
+        ApplicationNameGuard guard(QStringLiteral("test-app-pre"));
         LocalizedContext ctx;
         QSignalSpy spy(&ctx, &LocalizedContext::translationContextChanged);
         QCoreApplication::setApplicationName(QStringLiteral("test-app-post"));
         QCOMPARE(spy.count(), 1);
         QCOMPARE(ctx.translationContext(), QStringLiteral("test-app-post"));
-        QCoreApplication::setApplicationName(prev);
     }
 
     void i18nReturnsInputWhenNoTranslatorInstalled()

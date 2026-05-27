@@ -368,8 +368,13 @@ bool WindowRuleModel::addRuleAt(const WindowRule& rule, int insertIndex)
     }
     // Clamp so callers don't have to range-check; -1 / negative goes
     // to the front, anything >= rowCount goes to the end. Matches the
-    // semantics QML drag-reorder expects.
-    const int row = std::clamp(insertIndex, 0, static_cast<int>(m_rules.size()));
+    // semantics QML drag-reorder expects. Use qsizetype-clamped form
+    // to avoid `-Wshorten-64-to-32` for the m_rules.size() cast;
+    // beginInsertRows takes int (Qt API), so the final narrow is
+    // both unavoidable and safe for any rule count ≤ INT_MAX (rules
+    // realistically fit on a single page — N ≈ 10s, not billions).
+    const qsizetype clampedRow = std::clamp(static_cast<qsizetype>(insertIndex), qsizetype{0}, m_rules.size());
+    const int row = static_cast<int>(clampedRow);
     beginInsertRows(QModelIndex(), row, row);
     m_rules.insert(row, rule);
     endInsertRows();

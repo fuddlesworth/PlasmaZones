@@ -62,7 +62,7 @@ void SettingsController::buildApplicationController()
     const auto regVirtual = [this, &qmlPrefix](const QString& id, const QString& parentId, const QString& title,
                                                const QString& qmlFile, const QString& icon, bool collapsible = false,
                                                bool divider = false) {
-        auto* adapter = new PageAdapter(id, /*delegate=*/nullptr, m_app.get());
+        auto* adapter = new PageAdapter(id, m_app.get());
         const QUrl source = qmlFile.isEmpty() ? QUrl() : QUrl(qmlPrefix + qmlFile);
         m_app->registerPage(adapter, parentId, title, source, icon, collapsible, divider);
     };

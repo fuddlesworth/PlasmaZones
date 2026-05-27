@@ -170,14 +170,6 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // setShaderOverride no-op branches). Gating the forwarder on the
     // observed state-flip keeps the dirty Q_PROPERTY's NOTIFY contract
     // honest — downstream listeners only re-evaluate on real changes.
-    m_lastHadPendingChanges = hasPendingChanges();
-    connect(this, &AnimationsPageController::pendingChangesChanged, this, [this]() {
-        const bool current = hasPendingChanges();
-        if (current == m_lastHadPendingChanges)
-            return;
-        m_lastHadPendingChanges = current;
-        Q_EMIT dirtyChanged();
-    });
     // Forward the snapshot helper as a callable so the sub-services can
     // capture pre-edit content without coupling to the controller's
     // m_pendingFileSnapshots layout.
@@ -194,8 +186,21 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         return setOverride(path, profile);
     };
 
+    // Sub-service construction lands BEFORE the dirty-forwarder wiring
+    // below so any pendingChangesChanged synchronously fired from a
+    // ctor (e.g. AnimationPresetLibrary loading pre-existing
+    // overrides on first construct) isn't missed by the forwarder.
     m_presets = new AnimationPresetLibrary(profilesDirFn, snapshotFn, this);
     m_motionSets = new MotionSetStore(profilesDirFn, motionSetsDirFn, writeOverrideFn, snapshotFn, this);
+
+    m_lastHadPendingChanges = hasPendingChanges();
+    connect(this, &AnimationsPageController::pendingChangesChanged, this, [this]() {
+        const bool current = hasPendingChanges();
+        if (current == m_lastHadPendingChanges)
+            return;
+        m_lastHadPendingChanges = current;
+        Q_EMIT dirtyChanged();
+    });
 
     connect(m_presets, &AnimationPresetLibrary::userPresetsChanged, this,
             &AnimationsPageController::userPresetsChanged);
@@ -215,22 +220,34 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                 &AnimationsPageController::shaderEffectsChanged);
     }
     if (m_settings) {
-        connect(m_settings, &ISettings::shaderProfileTreeChanged, this, [this]() {
-            // Path-agnostic broadcast — the tree is a single Q_PROPERTY so we
-            // can't tell which path moved without diffing. QML pages refresh
-            // every visible event card on this signal which is cheap enough.
-            Q_EMIT shaderProfileChanged(QString());
-            // If this signal arrived from an external reload (Discard from
-            // another page, import, settings.load()), the on-disk tree is
-            // now authoritative — drop the staged-dirty flag so
-            // hasPendingChanges() does not report phantom edits. The
-            // m_mutatingShaderTree guard distinguishes our own writes
-            // (which keep the dirty flag set) from external reloads.
-            if (m_mutatingShaderTree == 0 && m_shaderTreeDirty) {
-                m_shaderTreeDirty = false;
-                Q_EMIT pendingChangesChanged();
-            }
-        });
+        // Qt::DirectConnection is mandatory here: the
+        // m_mutatingShaderTree depth check below distinguishes "our
+        // own write" (depth > 0) from "external reload" (depth == 0),
+        // and that only works when the NOTIFY fires SYNCHRONOUSLY
+        // inside the MutatingShaderTreeScope. A queued connection
+        // would dispatch the lambda after the scope's destructor has
+        // already restored depth=0, the guard sees external-reload
+        // semantics, and the lambda silently clears m_shaderTreeDirty
+        // on the user's own write — a silent revert of staged edits.
+        connect(
+            m_settings, &ISettings::shaderProfileTreeChanged, this,
+            [this]() {
+                // Path-agnostic broadcast — the tree is a single Q_PROPERTY so we
+                // can't tell which path moved without diffing. QML pages refresh
+                // every visible event card on this signal which is cheap enough.
+                Q_EMIT shaderProfileChanged(QString());
+                // If this signal arrived from an external reload (Discard from
+                // another page, import, settings.load()), the on-disk tree is
+                // now authoritative — drop the staged-dirty flag so
+                // hasPendingChanges() does not report phantom edits. The
+                // m_mutatingShaderTree guard distinguishes our own writes
+                // (which keep the dirty flag set) from external reloads.
+                if (m_mutatingShaderTree == 0 && m_shaderTreeDirty) {
+                    m_shaderTreeDirty = false;
+                    Q_EMIT pendingChangesChanged();
+                }
+            },
+            Qt::DirectConnection);
     }
 }
 
@@ -351,7 +368,6 @@ void AnimationsPageController::revertPending()
     // false while m_settings->shaderProfileTree() still holds unsaved
     // edits.
     using namespace PhosphorAnimation;
-    using namespace PhosphorAnimationShaders;
 
     if (!hasPendingChanges())
         return;
@@ -440,7 +456,6 @@ void AnimationsPageController::asyncRevertPending()
     };
 
     using namespace PhosphorAnimation;
-    using namespace PhosphorAnimationShaders;
 
     if (m_asyncRevertInFlight) {
         // Second invocation while a worker is running would race the
@@ -449,7 +464,7 @@ void AnimationsPageController::asyncRevertPending()
         // truncated some files on disk, producing inconsistent state.
         // Surface a quick failure so the framework's discard counter
         // ticks down and the user knows to retry.
-        Q_EMIT discardResult(false, QStringLiteral("Discard already in flight"));
+        Q_EMIT discardResult(false, PzI18n::tr("Discard already in flight"));
         return;
     }
     if (!hasPendingChanges()) {
@@ -466,11 +481,14 @@ void AnimationsPageController::asyncRevertPending()
     const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
     const QHash<QString, std::optional<QByteArray>> snapshots = m_pendingFileSnapshots;
     // Track the keys the worker is going to process so the finished
-    // handler can MERGE results back into m_pendingFileSnapshots
-    // (which may have gained NEW keys via concurrent setOverride /
-    // setShaderOverride calls during the worker run) instead of
-    // overwriting it — overwriting would silently drop those new
-    // entries and re-emerge as silent data-loss to the user.
+    // handler can MERGE results back into m_pendingFileSnapshots.
+    // Today the m_asyncRevertInFlight guard rejects concurrent
+    // setOverride / setShaderOverride / setOverlay / clear* calls
+    // during the worker run, so a fresh post-discard mutator would
+    // be the only way new entries could appear — kept the merge as
+    // belt-and-braces against a future change that opens the
+    // mutator gate (or a post-discard race between the worker reply
+    // and a user click on Save).
     const QSet<QString> dispatchedKeys(snapshots.keyBegin(), snapshots.keyEnd());
 
     m_asyncRevertInFlight = true;

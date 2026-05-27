@@ -84,6 +84,9 @@ private:
     /// re-encode on every call when the resolved context is empty.
     mutable bool m_effectiveContextValid = false;
     mutable QHash<QString, QByteArray> m_disambiguationCache;
+    /// One-shot flag for the cache-full warning so the cliff is
+    /// debuggable but doesn't spam the log on every subsequent call.
+    mutable bool m_disambiguationCacheFullWarned = false;
 };
 
 } // namespace PhosphorSettingsUi

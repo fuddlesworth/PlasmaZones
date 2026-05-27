@@ -13,11 +13,10 @@
 
 namespace PlasmaZones {
 
-SnappingAppearanceController::SnappingAppearanceController(ISettings* settings, QObject* parent)
+SnappingAppearanceController::SnappingAppearanceController(ISettings& settings, QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("snapping-appearance"), parent)
-    , m_settings(settings)
+    , m_settings(&settings)
 {
-    Q_ASSERT(m_settings);
 }
 
 int SnappingAppearanceController::borderWidthMin() const
@@ -47,21 +46,12 @@ void SnappingAppearanceController::loadColorsFromPywal()
     // users who've relocated their cache dir.
     const QString pywalPath =
         QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + QStringLiteral("/wal/colors.json");
-    if (!QFile::exists(pywalPath)) {
-        Q_EMIT colorImportError(PzI18n::tr("Pywal colors not found. Run 'wal' to generate colors first.\n\n"
-                                           "Expected file: %1")
-                                    .arg(pywalPath));
-        return;
-    }
-
-    const QString error = m_settings->loadColorsFromFile(pywalPath);
-    if (!error.isEmpty()) {
-        Q_EMIT colorImportError(error);
-        return;
-    }
-
-    Q_EMIT colorImportSuccess();
-    Q_EMIT changed();
+    // Route through the same validated entry point loadColorsFromFile
+    // uses so the defence-in-depth (canonical-path + suffix +
+    // regular-file check) applies symmetrically. A user-controllable
+    // symlink at ~/.cache/wal/colors.json would otherwise bypass
+    // those checks if we forwarded directly to m_settings.
+    loadColorsFromFile(pywalPath);
 }
 
 void SnappingAppearanceController::loadColorsFromFile(const QString& filePath)

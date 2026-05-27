@@ -119,13 +119,21 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     // FIRST rule visited pins each slot. Without sorting that's "first
     // in rule-iteration order"; with sorting it's "highest priority" —
     // which matches the daemon's own resolution order for the same rule
-    // set.
-    QList<WindowRule> sortedRules = m_model.rules();
-    std::stable_sort(sortedRules.begin(), sortedRules.end(), [](const WindowRule& a, const WindowRule& b) {
-        return a.priority > b.priority;
+    // set. Sort an index vector rather than the rule list — WindowRule
+    // carries the full match tree + actions, so copying the list to
+    // sort it was O(N × tree-depth). Sorting ints stays O(N log N) in
+    // ints regardless of rule complexity.
+    const auto& rules = m_model.rules();
+    QList<int> indices;
+    indices.reserve(rules.size());
+    for (int i = 0; i < rules.size(); ++i)
+        indices.append(i);
+    std::stable_sort(indices.begin(), indices.end(), [&rules](int a, int b) {
+        return rules[a].priority > rules[b].priority;
     });
 
-    for (const WindowRule& rule : sortedRules) {
+    for (int idx : indices) {
+        const WindowRule& rule = rules[idx];
         // Only context-only rules that pin a monitor count toward a tile.
         if (!rule.match.isContextOnly()) {
             continue;

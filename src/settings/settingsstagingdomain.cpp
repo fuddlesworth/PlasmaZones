@@ -151,13 +151,13 @@ void SettingsStagingDomain::discard()
     // the "already in flight" rejection. The qScopeGuard is the
     // exception-path back-stop: if load() throws, m_inFlight resets
     // anyway.
-    bool savedLoad = false;
-    auto guard = qScopeGuard([this, &savedLoad]() {
-        if (!savedLoad)
+    bool loadCompleted = false;
+    auto guard = qScopeGuard([this, &loadCompleted]() {
+        if (!loadCompleted)
             m_inFlight = false;
     });
     m_controller->load();
-    savedLoad = true;
+    loadCompleted = true;
     m_inFlight = false;
     Q_EMIT discardResult(true, QString());
 }

@@ -8,6 +8,7 @@
 #include "PhosphorSettingsUi/StagingDomain.h"
 
 #include <QDebug>
+#include <QScopeGuard>
 #include <QTimer>
 
 namespace PhosphorSettingsUi {
@@ -207,25 +208,42 @@ void ApplicationController::applyAllAsync()
             dirty.append(domain.data());
     }
     if (dirty.isEmpty()) {
-        // Nothing to do — emit completion synchronously so a chrome
-        // bound to applyAllComplete still gets a "you're done" tick.
+        // Nothing to do — drive applyingChanged through the full
+        // false→true→false transition (matches the dirty-domain
+        // path's observable contract) so consumers binding "show
+        // toast on applyingChanged false→true" don't silently miss
+        // the no-op batch.
+        m_applying = true;
+        Q_EMIT applyingChanged();
+        m_applying = false;
+        Q_EMIT applyingChanged();
         Q_EMIT applyAllComplete(true, QStringList{});
         return;
     }
 
-    m_applyPending = dirty.size();
     m_applyErrors.clear();
     m_applyOutstanding.clear();
     m_applyOutstanding.reserve(dirty.size());
     for (StagingDomain* d : dirty)
         m_applyOutstanding.insert(d);
-    m_applying = true;
+    // Set pending counter from the outstanding set, not from the
+    // input list — duplicate StagingDomain pointers in `dirty`
+    // (defence-in-depth against trackDomain's contains-check) would
+    // otherwise leave the counter > set size and the batch stuck
+    // permanently mid-flight.
+    m_applyPending = m_applyOutstanding.size();
+    // Bump the generation BEFORE flipping m_applying / emitting
+    // applyingChanged so any slot that reads m_applyGeneration from
+    // the change handler sees the new value, not the previous batch's.
     ++m_applyGeneration;
-    Q_EMIT applyingChanged();
-    // Suppress the inner per-domain recomputeDirty walks for the
-    // duration of the batch (A15 rationale) — the trailing completion
-    // helper does a final recomputeDirty.
+    m_applying = true;
+    // Set m_inTransaction BEFORE applyingChanged emits so any slot
+    // that triggers domain dirtyChanged in response (cascade) takes
+    // the m_inTransaction-guarded path inside onDomainDirtyChanged
+    // instead of running a full O(N) recomputeDirty walk (the A15
+    // batching optimisation).
     m_inTransaction = true;
+    Q_EMIT applyingChanged();
 
     // Hard timeout — if any pending domain hasn't reported by the
     // deadline, synthesise a failure entry per pending domain, zero
@@ -260,6 +278,14 @@ void ApplicationController::applyAllAsync()
     // above for the timer — see the generation-counter comment in the
     // header. Reusing the variable keeps the timer + per-domain
     // lambdas semantically equivalent for stale-fire detection.
+    //
+    // Two-pass: connect ALL per-domain terminal handlers BEFORE
+    // calling any `apply()`. If domain N's synchronous apply() were
+    // to cascade and trigger domain N+1's `applyResult` (e.g. a
+    // shared signal bus, a cascading config-write), the single-pass
+    // form would lose that emission because N+1's lambda hadn't been
+    // connected yet — m_applyPending then never reaches 0 and the
+    // 60 s timer is the only recovery. Two-pass closes that hole.
     for (StagingDomain* domain : dirty) {
         // Use Qt::SingleShotConnection so the lambda self-disconnects
         // after first fire. Avoids the prior heap-allocated
@@ -305,6 +331,9 @@ void ApplicationController::applyAllAsync()
                 completeApplyIfDone();
             },
             Qt::SingleShotConnection);
+    }
+    // Second pass — every lambda is wired, now drive the apply()s.
+    for (StagingDomain* domain : dirty) {
         domain->apply();
     }
 }
@@ -323,20 +352,27 @@ void ApplicationController::discardAllAsync()
             dirty.append(domain.data());
     }
     if (dirty.isEmpty()) {
+        // Drive discardingChanged through the full false→true→false
+        // transition (matches the dirty-domain path's contract).
+        m_discarding = true;
+        Q_EMIT discardingChanged();
+        m_discarding = false;
+        Q_EMIT discardingChanged();
         Q_EMIT discardAllComplete(true, QStringList{});
         return;
     }
 
-    m_discardPending = dirty.size();
     m_discardErrors.clear();
     m_discardOutstanding.clear();
     m_discardOutstanding.reserve(dirty.size());
     for (StagingDomain* d : dirty)
         m_discardOutstanding.insert(d);
-    m_discarding = true;
+    // See applyAllAsync rationale for the from-set sizing.
+    m_discardPending = m_discardOutstanding.size();
     ++m_discardGeneration;
-    Q_EMIT discardingChanged();
+    m_discarding = true;
     m_inTransaction = true;
+    Q_EMIT discardingChanged();
 
     // Same hard-timeout safety net as applyAllAsync — see comment
     // there for rationale. Generation capture protects against a
@@ -362,7 +398,9 @@ void ApplicationController::discardAllAsync()
 
     // Per-domain lambdas reuse the same `generation` snapshot above
     // (timer + apply/destroyed lambdas all key off it for stale-fire
-    // detection).
+    // detection). Two-pass connect-then-discard mirrors the
+    // applyAllAsync structure so cross-domain sync cascades don't
+    // lose terminal signals.
     for (StagingDomain* domain : dirty) {
         // Same generation + outstanding-set guard pattern as
         // applyAllAsync above. See the rationale comment there.
@@ -393,6 +431,8 @@ void ApplicationController::discardAllAsync()
                 completeDiscardIfDone();
             },
             Qt::SingleShotConnection);
+    }
+    for (StagingDomain* domain : dirty) {
         domain->discard();
     }
 }
@@ -417,6 +457,11 @@ void ApplicationController::completeApplyIfDone()
     //                         re-invoked batch's applyingChanged(true))
     const bool ok = m_applyErrors.isEmpty();
     const QStringList errors = std::move(m_applyErrors);
+    // Defensive: std::move leaves the source in a valid-but-
+    // unspecified state. The next applyAllAsync also clears, but a
+    // re-entrant applyAllComplete listener that reads m_applyErrors
+    // would otherwise see whatever the QStringList's move-from
+    // implementation left behind.
     m_applyErrors.clear();
     m_applying = false;
     Q_EMIT applyingChanged();
@@ -434,6 +479,8 @@ void ApplicationController::completeDiscardIfDone()
     // see the rationale comment there.
     const bool ok = m_discardErrors.isEmpty();
     const QStringList errors = std::move(m_discardErrors);
+    // Defensive clear after std::move (same rationale as
+    // completeApplyIfDone — see comment there).
     m_discardErrors.clear();
     m_discarding = false;
     Q_EMIT discardingChanged();
@@ -578,6 +625,17 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
 
 void ApplicationController::trackDomain(StagingDomain* domain)
 {
+    if (domain->thread() != this->thread()) {
+        // Cross-thread registration would route dirtyChanged via
+        // queued connection (slow + reorderable) AND fail at the
+        // subsequent setParent call in registerPage / registerDomain
+        // ("QObject::moveToThread: Cannot move objects with a
+        // parent"). Refuse loudly so the caller surfaces the bug
+        // instead of producing half-wired state.
+        qWarning() << "ApplicationController::trackDomain: cross-thread domain refused (controller in thread"
+                   << this->thread() << ", domain in thread" << domain->thread() << ")";
+        return;
+    }
     const QPointer<StagingDomain> tracked(domain);
     if (m_domains.contains(tracked)) {
         // Same domain registered twice (e.g. once via registerPage and
@@ -613,6 +671,19 @@ void ApplicationController::onDomainDirtyChanged()
 
 void ApplicationController::recomputeDirty()
 {
+    // Re-entrancy guard. `isDirty()` is a virtual exposed for
+    // subclass override; a misbehaving override that emits
+    // dirtyChanged from inside its getter would route through
+    // onDomainDirtyChanged into recomputeDirty while the outer call
+    // still holds iterators into m_domains — UB on QList erase.
+    if (m_recomputingDirty) {
+        return;
+    }
+    m_recomputingDirty = true;
+    auto guard = qScopeGuard([this]() {
+        m_recomputingDirty = false;
+    });
+
     // Single pass: compact null QPointers and compute the dirty fold
     // together. A domain that was destroyed while tracked leaves a null
     // entry in m_domains; the contract is "domains outlive the controller"
