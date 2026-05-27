@@ -114,7 +114,8 @@ SettingsController::~SettingsController()
     if (m_windowRulesPage) {
         m_windowRulesPage->setScreenLookup({});
         m_windowRulesPage->setActivityLookup({});
-        m_windowRulesPage->setLayoutLookup({});
+        m_windowRulesPage->setSnappingLayoutLookup({});
+        m_windowRulesPage->setTilingAlgorithmLookup({});
     }
 }
 
@@ -516,20 +517,29 @@ SettingsController::SettingsController(QObject* parent)
         }
         return activityId;
     });
-    m_windowRulesPage->setLayoutLookup([this](const QString& layoutId) -> QString {
+    // SettingsController::layouts() is the union of snapping layouts
+    // (UUID-keyed) and autotile entries (algorithm-token-keyed via the
+    // "autotile:<token>" or bare-token shape PhosphorTiles ships) — one
+    // resolver lambda is sufficient. The typed setters below are about
+    // CONTRACT clarity at the WindowRuleController API surface so a
+    // future caller can wire a more restrictive snapping-only lookup
+    // without also constraining the tiling resolver.
+    auto resolveByLayoutsLookup = [this](const QString& tokenOrId) -> QString {
         for (const QVariant& lv : std::as_const(m_layouts)) {
             const QVariantMap m = lv.toMap();
-            if (m.value(QStringLiteral("id")).toString() == layoutId) {
+            if (m.value(QStringLiteral("id")).toString() == tokenOrId) {
                 // Layouts are serialised via `toVariantMap(LayoutPreview)`
                 // which stamps the friendly label under `displayName`, not
                 // `name`. Reading `name` here would always return an empty
                 // string and the tile caption would show the raw UUID.
                 const QString name = m.value(QStringLiteral("displayName")).toString();
-                return name.isEmpty() ? layoutId : name;
+                return name.isEmpty() ? tokenOrId : name;
             }
         }
-        return layoutId;
-    });
+        return tokenOrId;
+    };
+    m_windowRulesPage->setSnappingLayoutLookup(resolveByLayoutsLookup);
+    m_windowRulesPage->setTilingAlgorithmLookup(resolveByLayoutsLookup);
     auto refreshRuleLabels = [this]() {
         if (m_windowRulesPage && m_windowRulesPage->model()) {
             m_windowRulesPage->model()->refreshLabels();

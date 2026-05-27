@@ -208,7 +208,18 @@ public:
     /// Install-once setter; lookups are read live every time `data()` is
     /// invoked. To refresh visible labels after a lookup-source change,
     /// call @ref refreshLabels.
+    ///
+    /// Back-compat shim that wires the SAME lookup into both
+    /// setSnappingLayoutLabelLookup and setTilingAlgorithmLabelLookup —
+    /// the legacy single-lookup contract assumed one resolver knew about
+    /// both layoutId UUIDs and tilingAlgorithm tokens. New callers should
+    /// prefer the typed pair below so a mistaken cross-mix surfaces at
+    /// the call site.
     void setLayoutLabelLookup(LabelLookup fn);
+    /// Resolver for `SetSnappingLayout` action params (layoutId UUIDs).
+    void setSnappingLayoutLabelLookup(LabelLookup fn);
+    /// Resolver for `SetTilingAlgorithm` action params (algorithm tokens like "bsp").
+    void setTilingAlgorithmLabelLookup(LabelLookup fn);
 
     /// Re-emit dataChanged for every row across every label-derived role,
     /// so the view rebinds resolved screen / activity / layout names. The
@@ -247,7 +258,12 @@ private:
     QList<PhosphorWindowRule::WindowRule> m_rules;
     LabelLookup m_screenLookup;
     LabelLookup m_activityLookup;
-    LabelLookup m_layoutLookup;
+    // Split so a SetSnappingLayout action whose layoutId happens to
+    // tokenise (e.g. matches an algorithm token by coincidence) and a
+    // SetTilingAlgorithm action with a UUID-shaped algorithm name
+    // can't cross-resolve through the wrong lookup.
+    LabelLookup m_snappingLayoutLookup;
+    LabelLookup m_tilingAlgorithmLookup;
 };
 
 } // namespace PlasmaZones

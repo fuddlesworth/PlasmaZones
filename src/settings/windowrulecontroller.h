@@ -80,7 +80,14 @@ public:
     /// just churn the closures without changing behaviour.
     void setScreenLookup(WindowRuleModel::LabelLookup fn);
     void setActivityLookup(WindowRuleModel::LabelLookup fn);
+    /// Back-compat: wires the same resolver into BOTH the snapping-layout
+    /// and tiling-algorithm lookups. New callers should prefer the typed
+    /// pair below.
     void setLayoutLookup(WindowRuleModel::LabelLookup fn);
+    /// layoutId UUID → display label resolver for SetSnappingLayout actions.
+    void setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn);
+    /// Algorithm token ("bsp", …) → display label resolver for SetTilingAlgorithm actions.
+    void setTilingAlgorithmLookup(WindowRuleModel::LabelLookup fn);
 
     WindowRuleModel* model()
     {
@@ -315,6 +322,15 @@ Q_SIGNALS:
     /// "window-rules" entry to its dirty-pages set when revert failed during
     /// the `setNeedsSave(false)` blanket-clear it does for every other page.
     void revertFinished(bool success);
+    /// Emitted exactly once when ALL three label resolvers
+    /// (screen / activity / snapping-layout + tiling-algorithm) have
+    /// been wired by the parent SettingsController. QML pages (notably
+    /// WindowRulesPage and monitorOverview consumers) gate "show raw
+    /// model" on this signal so the brief startup window where
+    /// `monitorOverview` would return raw UUIDs / wire tokens never
+    /// becomes visible to the user. Emitted at most once per controller
+    /// instance — the resolvers are install-once, not refreshable.
+    void lookupsReady();
 
 private:
     void setDirty(bool dirty);
@@ -384,10 +400,26 @@ private:
     /// (not a bool) tolerates user-mashing Discard repeatedly: every revert
     /// reply emits exactly once.
     int m_pendingRevertFetches = 0;
-    /// Resolves a layoutId to the layout's display name. Used by
-    /// `monitorOverview` to turn the raw UUID in `SetSnappingLayout` /
-    /// `SetTilingAlgorithm` params into the friendly layout/algorithm name.
-    WindowRuleModel::LabelLookup m_layoutLookup;
+    /// Split lookups: monitorOverview's tile picks one based on the rule's
+    /// engineMode, so a SetSnappingLayout with a UUID-shaped value can't
+    /// accidentally hit the tiling-algorithm path and vice versa.
+    WindowRuleModel::LabelLookup m_snappingLayoutLookup;
+    WindowRuleModel::LabelLookup m_tilingAlgorithmLookup;
+    /// Bit-mask of resolvers wired so far. When all four bits are set,
+    /// emit lookupsReady() once. Tracks individual setters because the
+    /// parent SettingsController wires them across separate calls in
+    /// its constructor and the QML side wants a single "everything is
+    /// ready" signal.
+    enum LookupBit : unsigned {
+        LookupScreen = 1u << 0,
+        LookupActivity = 1u << 1,
+        LookupSnappingLayout = 1u << 2,
+        LookupTilingAlgorithm = 1u << 3,
+        AllLookups = LookupScreen | LookupActivity | LookupSnappingLayout | LookupTilingAlgorithm,
+    };
+    unsigned m_wiredLookups = 0;
+    bool m_lookupsReadyEmitted = false;
+    void markLookupWired(LookupBit bit);
 };
 
 } // namespace PlasmaZones

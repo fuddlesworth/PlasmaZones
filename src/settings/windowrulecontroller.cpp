@@ -116,24 +116,49 @@ void WindowRuleController::unsubscribeRulesChanged()
 void WindowRuleController::setScreenLookup(WindowRuleModel::LabelLookup fn)
 {
     m_model.setScreenLabelLookup(std::move(fn));
+    markLookupWired(LookupScreen);
 }
 
 void WindowRuleController::setActivityLookup(WindowRuleModel::LabelLookup fn)
 {
     m_model.setActivityLabelLookup(std::move(fn));
+    markLookupWired(LookupActivity);
 }
 
 void WindowRuleController::setLayoutLookup(WindowRuleModel::LabelLookup fn)
 {
-    // Store the controller-side copy first, then hand the model a fresh
-    // copy from the member (instead of std::move-ing the parameter into
-    // the model after copying it — that left `fn` in a moved-from state
-    // while m_layoutLookup also held a live copy, an awkward construction
-    // a future reader might "fix" by removing the apparent duplication).
-    m_layoutLookup = std::move(fn);
-    // Also forward to the model so its `actionSummary` can resolve layoutId /
-    // algorithm-token wire values when building the rule-list captions.
-    m_model.setLayoutLabelLookup(m_layoutLookup);
+    // Back-compat: wire the same resolver into both split lookups. New
+    // callers should prefer setSnappingLayoutLookup +
+    // setTilingAlgorithmLookup so a UUID-shaped algorithm token (or
+    // vice versa) doesn't silently cross-resolve.
+    m_snappingLayoutLookup = fn;
+    m_tilingAlgorithmLookup = std::move(fn);
+    m_model.setLayoutLabelLookup(m_snappingLayoutLookup);
+    markLookupWired(LookupSnappingLayout);
+    markLookupWired(LookupTilingAlgorithm);
+}
+
+void WindowRuleController::setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn)
+{
+    m_snappingLayoutLookup = std::move(fn);
+    m_model.setSnappingLayoutLabelLookup(m_snappingLayoutLookup);
+    markLookupWired(LookupSnappingLayout);
+}
+
+void WindowRuleController::setTilingAlgorithmLookup(WindowRuleModel::LabelLookup fn)
+{
+    m_tilingAlgorithmLookup = std::move(fn);
+    m_model.setTilingAlgorithmLabelLookup(m_tilingAlgorithmLookup);
+    markLookupWired(LookupTilingAlgorithm);
+}
+
+void WindowRuleController::markLookupWired(LookupBit bit)
+{
+    m_wiredLookups |= static_cast<unsigned>(bit);
+    if (!m_lookupsReadyEmitted && (m_wiredLookups & AllLookups) == AllLookups) {
+        m_lookupsReadyEmitted = true;
+        Q_EMIT lookupsReady();
+    }
 }
 
 bool WindowRuleController::isDirty() const

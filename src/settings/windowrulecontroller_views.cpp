@@ -178,24 +178,33 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         // "snapping" but no snapping layout was provided, we leave the
         // label empty rather than showing a misleading autotile name.
         QString layoutLabel;
+        // Track WHICH lookup applies — split prevents a UUID-shaped
+        // algorithm token from resolving via the snapping path (or a
+        // tokenised layoutId via the tiling path) just because both
+        // were wired to the same generic resolver.
+        const WindowRuleModel::LabelLookup* labelLookup = nullptr;
         if (summary.engineMode == QLatin1String("autotile")) {
             // Autotile engine pinned: only show tiling-algorithm tokens.
             layoutLabel = summary.tilingAlgorithm;
+            labelLookup = &m_tilingAlgorithmLookup;
         } else if (summary.engineMode == QLatin1String("snapping")) {
             // Snapping engine pinned: only show snapping-layout tokens.
             layoutLabel = summary.snappingLayout;
+            labelLookup = &m_snappingLayoutLookup;
         } else if (!summary.snappingLayout.isEmpty()) {
             // No engine pin: prefer the snapping layout (more common).
             layoutLabel = summary.snappingLayout;
+            labelLookup = &m_snappingLayoutLookup;
         } else {
             // Last resort: a tiling-algorithm-only rule with no engine pin.
             layoutLabel = summary.tilingAlgorithm;
+            labelLookup = &m_tilingAlgorithmLookup;
         }
         // The token is the raw layoutId / algorithm name from the rule's
         // action params — resolve it to a user-facing label when a lookup
         // is wired so the tile reads "BSP" instead of "{25828c9b-…}".
-        if (m_layoutLookup && !layoutLabel.isEmpty()) {
-            const QString resolved = m_layoutLookup(layoutLabel);
+        if (labelLookup && *labelLookup && !layoutLabel.isEmpty()) {
+            const QString resolved = (*labelLookup)(layoutLabel);
             if (!resolved.isEmpty()) {
                 layoutLabel = resolved;
             }
