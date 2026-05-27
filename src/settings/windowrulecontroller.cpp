@@ -12,9 +12,7 @@
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorWindowRule/MatchExpression.h>
 #include <PhosphorWindowRule/MatchTypes.h>
-#include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
 
 #include <QDBusConnection>
@@ -30,9 +28,6 @@ namespace PlasmaZones {
 
 namespace {
 
-namespace ActionType = PhosphorWindowRule::ActionType;
-using PhosphorWindowRule::MatchExpression;
-using PhosphorWindowRule::RuleAction;
 using PhosphorWindowRule::WindowRule;
 using PhosphorWindowRule::WindowRuleSet;
 
@@ -551,8 +546,14 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
 bool WindowRuleController::setRuleEnabled(const QString& ruleId, bool enabled)
 {
     WindowRule rule = m_model.ruleById(QUuid::fromString(ruleId));
-    if (rule.id.isNull() || rule.enabled == enabled) {
+    if (rule.id.isNull()) {
         return false;
+    }
+    if (rule.enabled == enabled) {
+        // No-op: the rule is already in the requested state. Report success so
+        // a QML caller toggling a switch into its current state doesn't surface
+        // a spurious "save failed" toast.
+        return true;
     }
     rule.enabled = enabled;
     // The enabled-flag flip is guaranteed a real change (guarded above), so
@@ -578,246 +579,6 @@ QVariantMap WindowRuleController::ruleJson(const QString& ruleId) const
 {
     const WindowRule rule = m_model.ruleById(QUuid::fromString(ruleId));
     return rule.id.isNull() ? QVariantMap{} : rule.toJson().toVariantMap();
-}
-
-QVariantList WindowRuleController::sections() const
-{
-    // Canonical display order — Monitor & Layout first, Advanced last. The
-    // enum values are emitted as data so QML never hardcodes them.
-    static const QList<WindowRuleModel::Section> kOrder = {
-        WindowRuleModel::Section::Monitor,   WindowRuleModel::Section::Application, WindowRuleModel::Section::Activity,
-        WindowRuleModel::Section::Animation, WindowRuleModel::Section::Advanced,
-    };
-    QVariantList out;
-    for (WindowRuleModel::Section s : kOrder) {
-        QVariantMap entry;
-        entry[QStringLiteral("value")] = static_cast<int>(s);
-        entry[QStringLiteral("label")] = WindowRuleModel::sectionLabel(s);
-        out.append(entry);
-    }
-    return out;
-}
-
-QVariantList WindowRuleController::rulesSnapshot() const
-{
-    // Read every field through the model's own data() + role enum so the
-    // section / summary logic stays in exactly one place and QML never has to
-    // reference raw `Qt.UserRole + N` integers.
-    QVariantList out;
-    const int n = m_model.rowCount();
-    for (int i = 0; i < n; ++i) {
-        const QModelIndex idx = m_model.index(i, 0);
-        QVariantMap entry;
-        entry[QStringLiteral("ruleId")] = m_model.data(idx, WindowRuleModel::IdRole);
-        entry[QStringLiteral("name")] = m_model.data(idx, WindowRuleModel::NameRole);
-        entry[QStringLiteral("enabled")] = m_model.data(idx, WindowRuleModel::EnabledRole);
-        entry[QStringLiteral("priority")] = m_model.data(idx, WindowRuleModel::PriorityRole);
-        entry[QStringLiteral("section")] =
-            static_cast<int>(m_model.data(idx, WindowRuleModel::SectionRole).value<WindowRuleModel::Section>());
-        entry[QStringLiteral("matchSummary")] = m_model.data(idx, WindowRuleModel::MatchSummaryRole);
-        entry[QStringLiteral("actionSummary")] = m_model.data(idx, WindowRuleModel::ActionSummaryRole);
-        entry[QStringLiteral("conditionCount")] = m_model.data(idx, WindowRuleModel::ConditionCountRole);
-        entry[QStringLiteral("actionCount")] = m_model.data(idx, WindowRuleModel::ActionCountRole);
-        entry[QStringLiteral("isComposite")] = m_model.data(idx, WindowRuleModel::IsCompositeRole);
-        // ScreenIdsRole is computed in the model's data() — no per-row
-        // by-id lookup, so the snapshot stays O(n).
-        entry[QStringLiteral("screenIds")] = m_model.data(idx, WindowRuleModel::ScreenIdsRole);
-        entry[QStringLiteral("validationIssueCount")] = m_model.data(idx, WindowRuleModel::ValidationIssueCountRole);
-        out.append(entry);
-    }
-    return out;
-}
-
-QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) const
-{
-    // Per-screen accumulator — built in a single pass over the rule set so the
-    // total cost is O(rules × actions + screens) rather than O(screens × rules
-    // × actions). A screen with no pinned rule simply never gets an entry and
-    // falls through to the default "not assigned" tile below.
-    struct Summary
-    {
-        int ruleCount = 0;
-        bool tilingEnabled = true;
-        QString snappingLayout;
-        QString tilingAlgorithm;
-        // Mode the rule's `SetEngineMode` action selects (if any). Used to
-        // disambiguate which layout name the overview tile should show
-        // when a rule carries BOTH a snapping layout and a tiling
-        // algorithm — the engine mode is the source of truth for which
-        // engine actually runs.
-        QString engineMode;
-    };
-    QHash<QString, Summary> byScreen;
-
-    for (const WindowRule& rule : m_model.rules()) {
-        // Only context-only rules that pin a monitor count toward a tile.
-        if (!rule.match.isContextOnly()) {
-            continue;
-        }
-        const QStringList screenIds = WindowRuleModel::screenIdsOf(rule.match);
-        if (screenIds.isEmpty()) {
-            continue;
-        }
-        for (const QString& screenId : screenIds) {
-            Summary& s = byScreen[screenId];
-            ++s.ruleCount;
-            for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::DisableEngine) {
-                    s.tilingEnabled = false;
-                } else if (a.type == ActionType::SetEngineMode && s.engineMode.isEmpty()) {
-                    s.engineMode = a.params.value(QLatin1String("mode")).toString();
-                } else if (a.type == ActionType::SetSnappingLayout && s.snappingLayout.isEmpty()) {
-                    s.snappingLayout = a.params.value(QLatin1String("layoutId")).toString();
-                } else if (a.type == ActionType::SetTilingAlgorithm && s.tilingAlgorithm.isEmpty()) {
-                    s.tilingAlgorithm = a.params.value(QLatin1String("algorithm")).toString();
-                }
-            }
-        }
-    }
-
-    QVariantList out;
-    for (const QVariant& sv : screens) {
-        const QVariantMap screen = sv.toMap();
-        // Settings screen maps key the connector under "name" (and sometimes
-        // "id"); accept either so the overview never silently drops a tile.
-        QString screenId = screen.value(QStringLiteral("name")).toString();
-        if (screenId.isEmpty()) {
-            screenId = screen.value(QStringLiteral("id")).toString();
-        }
-        if (screenId.isEmpty()) {
-            continue;
-        }
-
-        const auto it = byScreen.constFind(screenId);
-        const bool assigned = it != byScreen.constEnd();
-        const Summary summary = assigned ? *it : Summary{};
-
-        QVariantMap tile;
-        tile[QStringLiteral("screenId")] = screenId;
-        // Pick the layout token that matches the rule's engine mode. When a
-        // rule sets BOTH a snapping layout AND a tiling algorithm (legal —
-        // they live in independent slots) the engine mode decides which
-        // one is actually visible. Without an explicit engine mode we
-        // prefer the snapping layout (the more common case) and fall back
-        // to the algorithm so the tile is never blank when only one is
-        // set.
-        QString layoutLabel;
-        if (summary.engineMode == QLatin1String("autotile") && !summary.tilingAlgorithm.isEmpty()) {
-            layoutLabel = summary.tilingAlgorithm;
-        } else if (summary.engineMode == QLatin1String("snapping") && !summary.snappingLayout.isEmpty()) {
-            layoutLabel = summary.snappingLayout;
-        } else if (!summary.snappingLayout.isEmpty()) {
-            layoutLabel = summary.snappingLayout;
-        } else {
-            layoutLabel = summary.tilingAlgorithm;
-        }
-        // The token is the raw layoutId / algorithm name from the rule's
-        // action params — resolve it to a user-facing label when a lookup
-        // is wired so the tile reads "BSP" instead of "{25828c9b-…}".
-        if (m_layoutLookup && !layoutLabel.isEmpty()) {
-            const QString resolved = m_layoutLookup(layoutLabel);
-            if (!resolved.isEmpty()) {
-                layoutLabel = resolved;
-            }
-        }
-        tile[QStringLiteral("layoutName")] = layoutLabel;
-        tile[QStringLiteral("tilingEnabled")] = summary.tilingEnabled;
-        tile[QStringLiteral("ruleCount")] = summary.ruleCount;
-        tile[QStringLiteral("assigned")] = assigned;
-        out.append(tile);
-    }
-    return out;
-}
-
-QStringList WindowRuleController::ruleScreenIds(const QString& ruleId) const
-{
-    const WindowRule rule = m_model.ruleById(QUuid::fromString(ruleId));
-    if (rule.id.isNull()) {
-        return {};
-    }
-    return WindowRuleModel::screenIdsOf(rule.match);
-}
-
-QVariantList WindowRuleController::matchFields() const
-{
-    return WindowRuleAuthoring::matchFields();
-}
-
-QVariantList WindowRuleController::operatorsForField(int fieldValue) const
-{
-    return WindowRuleAuthoring::operatorsForField(fieldValue);
-}
-
-QVariantList WindowRuleController::actionTypes() const
-{
-    return WindowRuleAuthoring::actionTypes();
-}
-
-QVariantMap WindowRuleController::defaultPayloadFor(const QString& typeWire) const
-{
-    return WindowRuleAuthoring::defaultPayloadFor(typeWire);
-}
-
-QVariantList WindowRuleController::validationIssuesForJson(const QVariantMap& ruleJson) const
-{
-    // Build a partial rule from the variant map — enough to run the semantic
-    // compatibility check without requiring a full `WindowRule::fromJson`
-    // (which would refuse a rule mid-edit: no id, no actions yet). The
-    // validator only consults `match` and `actions`, so reconstruct just those.
-    const QJsonObject obj = QJsonObject::fromVariantMap(ruleJson);
-
-    WindowRule probe;
-    const QJsonValue matchValue = obj.value(QLatin1String("match"));
-    if (matchValue.isObject()) {
-        if (const auto match = MatchExpression::fromJson(matchValue.toObject())) {
-            probe.match = *match;
-        }
-        // A malformed match leaves `probe.match` as the default catch-all,
-        // which is context-only — so the check still works as the user fills
-        // out leaves: the issue only surfaces once a window-property leaf
-        // lands AND a context action is present.
-    }
-    const QJsonValue actionsValue = obj.value(QLatin1String("actions"));
-    if (actionsValue.isArray()) {
-        for (const QJsonValue& v : actionsValue.toArray()) {
-            if (!v.isObject()) {
-                continue;
-            }
-            if (const auto action = RuleAction::fromJson(v.toObject())) {
-                probe.actions.append(*action);
-            }
-            // Malformed actions are silently dropped — the editor will fail
-            // its own structural gates (param fields empty etc.) before save.
-        }
-    }
-
-    QVariantList out;
-    for (const PhosphorWindowRule::ValidationIssue& issue : probe.validationIssues()) {
-        QVariantMap m;
-        m[QStringLiteral("code")] = static_cast<int>(issue.code);
-        m[QStringLiteral("actionIndex")] = issue.actionIndex;
-        m[QStringLiteral("actionType")] = issue.actionType;
-        m[QStringLiteral("message")] = issue.message;
-        out.append(m);
-    }
-    return out;
-}
-
-bool WindowRuleController::matchIsContextOnly(const QVariantMap& matchJson) const
-{
-    // An empty / unparseable match collapses to the default catch-all, which
-    // is context-only by definition (no leaves to fail against a context
-    // query). The picker treats this as "every action type compatible" so the
-    // user can start with any action and add window predicates afterwards.
-    const QJsonObject obj = QJsonObject::fromVariantMap(matchJson);
-    if (obj.isEmpty()) {
-        return true;
-    }
-    const auto match = MatchExpression::fromJson(obj);
-    if (!match) {
-        return true;
-    }
-    return match->isContextOnly();
 }
 
 } // namespace PlasmaZones

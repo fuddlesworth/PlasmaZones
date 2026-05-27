@@ -31,6 +31,7 @@ class SnappingEffectsController : public PhosphorSettingsUi::PageController
 public:
     explicit SnappingEffectsController(QObject* parent = nullptr)
         : PhosphorSettingsUi::PageController(QStringLiteral("snapping-effects"), parent)
+        , m_cavaAvailable(!QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty())
     {
     }
 
@@ -63,8 +64,11 @@ public:
     }
     bool cavaAvailable() const
     {
-        return !QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty();
+        return m_cavaAvailable;
     }
+
+private:
+    bool m_cavaAvailable;
 };
 
 } // namespace PlasmaZones

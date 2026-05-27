@@ -90,9 +90,30 @@ QVariantList TilingAlgorithmController::customParamsForAlgorithm(const QString& 
     for (const auto& defVar : defs) {
         QVariantMap paramMap = defVar.toMap();
         const QString name = paramMap.value(QLatin1String("name")).toString();
-        // Current value: saved value if exists, else default.
+        // Current value: saved value if exists (clamped/validated against
+        // the def so a stale on-disk value from an older bounds doesn't
+        // crash the QML slider), else default.
         if (savedCustom.contains(name)) {
-            paramMap[QLatin1String("value")] = savedCustom.value(name);
+            const QVariant saved = savedCustom.value(name);
+            const QString type = paramMap.value(QLatin1String("type")).toString();
+            if (type == QLatin1String("number")) {
+                bool ok = false;
+                const qreal num = saved.toDouble(&ok);
+                if (!ok) {
+                    paramMap[QLatin1String("value")] = paramMap.value(QLatin1String("defaultValue"));
+                } else {
+                    const qreal minVal = paramMap.value(QLatin1String("minValue")).toDouble();
+                    const qreal maxVal = paramMap.value(QLatin1String("maxValue")).toDouble();
+                    paramMap[QLatin1String("value")] = std::clamp(num, minVal, maxVal);
+                }
+            } else if (type == QLatin1String("enum")) {
+                const QString str = saved.toString();
+                const QStringList options = paramMap.value(QLatin1String("enumOptions")).toStringList();
+                paramMap[QLatin1String("value")] =
+                    options.contains(str) ? QVariant(str) : paramMap.value(QLatin1String("defaultValue"));
+            } else {
+                paramMap[QLatin1String("value")] = saved;
+            }
         } else {
             paramMap[QLatin1String("value")] = paramMap.value(QLatin1String("defaultValue"));
         }

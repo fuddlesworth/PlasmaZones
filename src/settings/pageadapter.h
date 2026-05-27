@@ -22,13 +22,19 @@ namespace PlasmaZones {
 /// tracking is centralised in SettingsController and orchestrated through
 /// the single SettingsStagingDomain registered alongside these adapters.
 ///
-/// Lifetime: `delegate` is required to outlive the adapter. Both the adapter
-/// and the delegate share `SettingsController` as their owning QObject parent,
-/// so they're destroyed in registration order on app shutdown — there is no
-/// path where the delegate disappears while the adapter is still alive. A
-/// raw pointer is therefore safe AND matches the CONSTANT Q_PROPERTY contract;
-/// the earlier QPointer would silently null out under contract violation
-/// without firing NOTIFY (CONSTANT properties must not change).
+/// Lifetime: `delegate` is either `nullptr` (the adapter wraps a "virtual"
+/// page with no concrete controller — drill-down headers and leaves whose
+/// QML binds directly to Settings) or a QObject expected to outlive the
+/// adapter. The adapter itself is parented to `ApplicationController`
+/// (which `SettingsController` owns via a `std::unique_ptr` declared after
+/// the page sub-controllers); the delegate (when present) is a child of
+/// `SettingsController`. Reverse-order destruction tears down
+/// `ApplicationController` first → adapters die → `SettingsController` then
+/// destroys delegate children. There is no path where a non-null delegate
+/// disappears while the adapter is still alive. A raw pointer is therefore
+/// safe AND matches the CONSTANT Q_PROPERTY contract; the earlier QPointer
+/// would silently null out under contract violation without firing NOTIFY
+/// (CONSTANT properties must not change).
 class PageAdapter : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT

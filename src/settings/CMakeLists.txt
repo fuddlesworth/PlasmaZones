@@ -20,6 +20,9 @@ set(plasmazones_settings_SRCS
     settingscontroller_pageregistration.cpp
     settingscontroller_layouts.cpp
     settingscontroller_session.cpp
+    # Per-screen autotile/snapping/zone-selector override wrappers — split
+    # out so settingscontroller_session.cpp stays under the 800-line cap.
+    settingscontroller_perscreen.cpp
     settingscontroller_ordering.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
     # exposing the Q_PROPERTY surface for a single settings page each.
@@ -85,6 +88,12 @@ set(plasmazones_settings_SRCS
     windowrulemodel.cpp
     windowrulecontroller.h
     windowrulecontroller.cpp
+    # Read-only / projection methods of WindowRuleController — sections,
+    # rulesSnapshot, monitorOverview, ruleScreenIds, author surfaces
+    # (matchFields/operatorsForField/actionTypes/defaultPayloadFor),
+    # validation entry points. Split out so windowrulecontroller.cpp stays
+    # under the 800-line cap; same class, separate TU, no API change.
+    windowrulecontroller_views.cpp
     # WindowRuleController authoring metadata + templates — pure read-only
     # helpers split out so windowrulecontroller.cpp stays under the project's
     # 800-line cap. The controller's Q_INVOKABLE entry points (matchFields,

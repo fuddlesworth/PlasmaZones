@@ -76,6 +76,10 @@ public:
 
     Q_INVOKABLE bool hasPage(const QString& id) const;
     Q_INVOKABLE PhosphorSettingsUi::PageController* controller(const QString& id) const;
+    /** Look up an Entry by id. Returns a default-constructed (empty) Entry
+     *  when the id is unknown — callers that need to distinguish "no such
+     *  page" from "page exists with empty optional fields" should call
+     *  hasPage() first. */
     Entry entry(const QString& id) const;
 
     QList<Entry> topLevelPages() const;

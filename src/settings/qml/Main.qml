@@ -88,6 +88,12 @@ PhosphorUi.SettingsAppWindow {
     // handler, so the framework's prompt still fires.
     Connections {
         function onClosing(close) {
+            // Skip when the framework's dirty-state prompt cancelled the
+            // close — geometry should only persist on an actual close, not
+            // on every cancelled-by-dialog attempt.
+            if (!close.accepted)
+                return ;
+
             settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
         }
 

@@ -12,22 +12,35 @@ namespace PlasmaZones::ShaderPackInstaller {
 
 namespace {
 
-/// Recursive directory copy with symlink protection. Returns false on
-/// the first failure so the caller can roll back via
-/// QDir::removeRecursively. Symlinks (file or dir) are explicitly
-/// skipped — without that, a dropped pack containing
-/// `metadata.json -> /etc/shadow` or `assets -> /etc` would silently
-/// follow the link during traversal and smuggle arbitrary readable
-/// filesystem content into the user shader dir under deceptive names.
-/// A shader pack contains regular files only; anything exotic is
-/// suspect and refused.
-bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
+/// Result of a copy walk that may surface a soft "pack too large" error
+/// distinct from a hard "copy I/O failed" error so the caller can map to
+/// the right user-facing Result.
+enum class CopyOutcome {
+    Ok,
+    TooLarge,
+    IoFailed
+};
+
+/// Recursive directory copy with symlink protection. Returns OK on success,
+/// TooLarge if the source exceeds the byte / file caps, IoFailed on any
+/// disk-level failure. Symlinks (file or dir) are explicitly skipped —
+/// without that, a dropped pack containing `metadata.json -> /etc/shadow`
+/// or `assets -> /etc` would silently follow the link during traversal
+/// and smuggle arbitrary readable filesystem content into the user
+/// shader dir under deceptive names. A shader pack contains regular
+/// files only; anything exotic is suspect and refused.
+///
+/// `totalBytes` / `totalFiles` accumulate across recursive calls; the
+/// caller seeds them at zero. We trip TooLarge BEFORE the actual copy
+/// to abort early on adversarial drops, then again AFTER each file copy
+/// to catch cases where a per-file growth pushes us over.
+CopyOutcome copyDirRecursive(const QString& sourcePath, const QString& destPath, qint64& totalBytes, int& totalFiles)
 {
     QDir sourceDir(sourcePath);
     if (!sourceDir.exists())
-        return false;
+        return CopyOutcome::IoFailed;
     if (!QDir().mkpath(destPath))
-        return false;
+        return CopyOutcome::IoFailed;
 
     const QFileInfoList entries =
         sourceDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoSymLinks | QDir::NoDotAndDotDot);
@@ -42,9 +55,15 @@ bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
 
         const QString destEntryPath = destPath + QLatin1Char('/') + entry.fileName();
         if (entry.isDir()) {
-            if (!copyDirRecursive(entry.absoluteFilePath(), destEntryPath))
-                return false;
+            const CopyOutcome sub = copyDirRecursive(entry.absoluteFilePath(), destEntryPath, totalBytes, totalFiles);
+            if (sub != CopyOutcome::Ok)
+                return sub;
         } else if (entry.isFile()) {
+            const qint64 entrySize = entry.size();
+            ++totalFiles;
+            totalBytes += entrySize;
+            if (totalFiles > kMaxPackFileCount || totalBytes > kMaxPackTotalBytes)
+                return CopyOutcome::TooLarge;
             // QFile::copy refuses to overwrite — caller's collision
             // check already guarantees a clean destination, but
             // defend against a partial failed previous run leaving
@@ -52,12 +71,12 @@ bool copyDirRecursive(const QString& sourcePath, const QString& destPath)
             if (QFile::exists(destEntryPath))
                 QFile::remove(destEntryPath);
             if (!QFile::copy(entry.absoluteFilePath(), destEntryPath))
-                return false;
+                return CopyOutcome::IoFailed;
         }
         // Devices, FIFOs, sockets, etc. fall through silently — same
         // intent as the symlink skip above.
     }
-    return true;
+    return CopyOutcome::Ok;
 }
 
 } // namespace
@@ -129,13 +148,16 @@ Result install(const QString& sourceUrl, const QString& userShaderDir)
     if (QFileInfo::exists(destDir))
         return Result::DestinationExists;
 
-    if (!copyDirRecursive(sourceInfo.absoluteFilePath(), destDir)) {
+    qint64 totalBytes = 0;
+    int totalFiles = 0;
+    const CopyOutcome outcome = copyDirRecursive(sourceInfo.absoluteFilePath(), destDir, totalBytes, totalFiles);
+    if (outcome != CopyOutcome::Ok) {
         // Best-effort rollback. If removeRecursively also fails the
         // destination is left half-populated — that's still better
         // than leaving the user without a clear error, and the next
         // install attempt will get DestinationExists.
         QDir(destDir).removeRecursively();
-        return Result::CopyFailed;
+        return outcome == CopyOutcome::TooLarge ? Result::PackTooLarge : Result::CopyFailed;
     }
 
     return Result::Success;
@@ -156,6 +178,8 @@ QString errorMessage(Result r)
         return QStringLiteral("user shader directory is empty or could not be created");
     case Result::DestinationExists:
         return QStringLiteral("destination basename already exists; refusing to overwrite");
+    case Result::PackTooLarge:
+        return QStringLiteral("pack exceeds maximum allowed total bytes or file count; destination rolled back");
     case Result::CopyFailed:
         return QStringLiteral("recursive copy failed mid-flight; destination rolled back");
     }

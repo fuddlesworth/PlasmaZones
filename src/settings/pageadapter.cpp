@@ -21,9 +21,10 @@ QObject* PageAdapter::delegate() const
 bool PageAdapter::isDirty() const
 {
     // Dirty tracking is global in PlasmaZones — SettingsController.needsSave
-    // flows through SettingsStagingDomain, which is registered alongside
-    // these adapters on the same ApplicationController. Adapter pages stay
-    // clean so the global dirty flag is the sole signal driving the footer.
+    // flows through SettingsStagingDomain (see settingsstagingdomain.h),
+    // which is registered alongside these adapters on the same
+    // ApplicationController. Adapter pages stay clean so the global dirty
+    // flag is the sole signal driving the footer.
     return false;
 }
 

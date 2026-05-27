@@ -647,6 +647,11 @@ add_executable(test_window_rule_controller
     settings/test_window_rule_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowrulemodel.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller.cpp
+    # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
+    # author surfaces, validation) — split out of windowrulecontroller.cpp
+    # to keep that TU under the 800-line cap; the controller's class
+    # definition spans both TUs.
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller_views.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowruletemplates.cpp
 )

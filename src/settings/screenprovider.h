@@ -3,15 +3,14 @@
 
 #pragma once
 
-#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/ScreenInfo.h>
 #include <PhosphorZones/AssignmentEntry.h>
-#include <QDBusConnection>
 #include <QList>
 #include <QString>
 #include <QVariantList>
 #include <functional>
-#include "core/constants.h"
+
+class QObject;
 
 namespace PlasmaZones {
 
@@ -54,18 +53,11 @@ void setMonitorDisabledFor(Settings* settings, PhosphorZones::AssignmentEntry::M
 /**
  * @brief Connect D-Bus screen change signals to a receiver's refreshScreens() slot.
  *
- * Call this in KCM constructors that need screen change tracking.
+ * Call this in KCM constructors that need screen change tracking. Returns
+ * true if BOTH subscriptions succeeded; on partial failure the receiver
+ * may miss screenAdded/screenRemoved broadcasts. The receiver MUST have a
+ * `refreshScreens()` slot declared in its meta-object (Q_SLOTS).
  */
-inline void connectScreenChangeSignals(QObject* receiver)
-{
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::Screen),
-                                          QStringLiteral("screenAdded"), receiver, SLOT(refreshScreens()));
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::Screen),
-                                          QStringLiteral("screenRemoved"), receiver, SLOT(refreshScreens()));
-}
+bool connectScreenChangeSignals(QObject* receiver);
 
 } // namespace PlasmaZones

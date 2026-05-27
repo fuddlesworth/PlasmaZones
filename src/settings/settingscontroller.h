@@ -375,7 +375,7 @@ public:
 
     PhosphorSettingsUi::ApplicationController* app() const
     {
-        return m_app;
+        return m_app.get();
     }
 
     // ── Running window picker (async flow) ──────────────────────────────────
@@ -734,11 +734,19 @@ private:
     std::optional<QStringList> m_stagedTilingOrder;
 
     // PhosphorSettingsUi integration — owns the PageRegistry the framework's
-    // SettingsAppWindow chrome consumes. Constructed lazily after every page
-    // controller exists (so adapter registrations carry stable pointers).
-    // Owned via QObject parent on `this`; declared after the other members so
-    // its setup in the constructor runs once everything else has been wired.
-    PhosphorSettingsUi::ApplicationController* m_app = nullptr;
+    // SettingsAppWindow chrome consumes. Constructed in buildApplicationController()
+    // after every page controller exists (so adapter registrations carry stable
+    // pointers).
+    //
+    // Declared as a unique_ptr (rather than QObject child of `this`) AFTER the
+    // page sub-controllers above so reverse-order member destruction tears down
+    // m_app FIRST: its PageRegistry holds raw PageController* refs to the
+    // m_tilingAlgorithmPage / m_snappingShadersPage unique_ptrs (and the
+    // PageAdapter QObject children of `this`). A QObject-child raw pointer
+    // would defer m_app's destruction to ~QObject, which runs AFTER the page
+    // unique_ptrs reset — leaving the registry briefly holding dangling refs
+    // any queued event-loop tick could trip on.
+    std::unique_ptr<PhosphorSettingsUi::ApplicationController> m_app;
 
     void buildApplicationController();
 

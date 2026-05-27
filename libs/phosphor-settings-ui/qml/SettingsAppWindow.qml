@@ -48,6 +48,11 @@ Kirigami.ApplicationWindow {
     // breathing room for tall pages. Consumers can override.
     width: 1200
     height: 800
+    // Floor sizes so the chrome stays usable: the compact rail keeps
+    // 3 gridUnits, breadcrumb row needs room for the page label, and
+    // a too-short window crushes the unsaved-changes footer.
+    minimumWidth: Kirigami.Units.gridUnit * 25
+    minimumHeight: Kirigami.Units.gridUnit * 20
     title: qsTr("Settings")
     // The chrome supplies its own breadcrumbs row inside the page
     // body — Kirigami's default ApplicationWindow global toolbar

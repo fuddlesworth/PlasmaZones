@@ -26,6 +26,18 @@ QByteArray effectiveContext(const QString& explicitCtx)
 LocalizedContext::LocalizedContext(QObject* parent)
     : QObject(parent)
 {
+    // When no explicit override is set, our translationContext() follows
+    // QCoreApplication::applicationName(). Forward that signal so QML
+    // bindings re-evaluate when applicationName() changes post-construction
+    // (typical pattern: QApplication created, settings loaded, then
+    // setApplicationName called).
+    if (auto* app = QCoreApplication::instance()) {
+        connect(app, &QCoreApplication::applicationNameChanged, this, [this]() {
+            if (m_context.isEmpty()) {
+                Q_EMIT translationContextChanged();
+            }
+        });
+    }
 }
 
 LocalizedContext::~LocalizedContext() = default;

@@ -210,7 +210,11 @@ void ApplicationController::trackDomain(StagingDomain* domain)
         return;
     }
     m_domains.append(tracked);
-    connect(domain, &StagingDomain::dirtyChanged, this, &ApplicationController::onDomainDirtyChanged);
+    // Qt::UniqueConnection guards against the (already-checked-above) duplicate
+    // registration path picking up a stale entry whose QPointer outlived its
+    // pointee — defence-in-depth so double-tracking can never double-fire.
+    connect(domain, &StagingDomain::dirtyChanged, this, &ApplicationController::onDomainDirtyChanged,
+            Qt::UniqueConnection);
     if (domain->isDirty()) {
         recomputeDirty();
     }

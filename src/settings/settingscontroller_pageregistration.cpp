@@ -36,7 +36,10 @@ namespace PlasmaZones {
 
 void SettingsController::buildApplicationController()
 {
-    m_app = new PhosphorSettingsUi::ApplicationController(this);
+    // No QObject parent — m_app is owned by the unique_ptr declared after
+    // the page sub-controllers in the header, so reverse-order member
+    // destruction tears it down BEFORE the pages it references.
+    m_app = std::make_unique<PhosphorSettingsUi::ApplicationController>();
 
     const QString qmlPrefix = QStringLiteral("qrc:/qt/qml/org/plasmazones/settings/qml/");
 
@@ -59,7 +62,7 @@ void SettingsController::buildApplicationController()
     const auto regVirtual = [this, &qmlPrefix](const QString& id, const QString& parentId, const QString& title,
                                                const QString& qmlFile, const QString& icon, bool collapsible = false,
                                                bool divider = false) {
-        auto* adapter = new PageAdapter(id, /*delegate=*/nullptr, m_app);
+        auto* adapter = new PageAdapter(id, /*delegate=*/nullptr, m_app.get());
         const QUrl source = qmlFile.isEmpty() ? QUrl() : QUrl(qmlPrefix + qmlFile);
         m_app->registerPage(adapter, parentId, title, source, icon, collapsible, divider);
     };
@@ -179,18 +182,18 @@ void SettingsController::buildApplicationController()
 
     // Bridge SettingsController.save/load to the framework's Apply/Cancel
     // (and to the global dirty flag QML chrome binds to).
-    m_app->registerDomain(new SettingsStagingDomain(this, m_app));
+    m_app->registerDomain(new SettingsStagingDomain(this, m_app.get()));
 
     // Sync activePage ↔ ApplicationController.currentPageId. Both directions
     // are guarded against re-entrancy by comparing the incoming value to the
     // already-stored one before propagating.
     m_app->setCurrentPageId(m_activePage);
-    connect(this, &SettingsController::activePageChanged, m_app, [this]() {
+    connect(this, &SettingsController::activePageChanged, m_app.get(), [this]() {
         if (m_app && m_app->currentPageId() != m_activePage) {
             m_app->setCurrentPageId(m_activePage);
         }
     });
-    connect(m_app, &PhosphorSettingsUi::ApplicationController::currentPageIdChanged, this, [this]() {
+    connect(m_app.get(), &PhosphorSettingsUi::ApplicationController::currentPageIdChanged, this, [this]() {
         if (!m_app) {
             return;
         }

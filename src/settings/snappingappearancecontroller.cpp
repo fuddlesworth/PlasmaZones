@@ -78,12 +78,25 @@ void SnappingAppearanceController::loadColorsFromFile(const QString& filePath)
         Q_EMIT colorImportError(PzI18n::tr("Color import file does not exist: %1").arg(filePath));
         return;
     }
-    if (info.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) != 0) {
+    // Reject symlinks: a file picker selection that resolves through a
+    // symlink could point at an arbitrary readable file (e.g. /etc/...).
+    // Settings then JSON-parses the contents and any parse-error string
+    // would include surrounding text — surface as a clean rejection.
+    if (info.isSymLink()) {
+        Q_EMIT colorImportError(PzI18n::tr("Color import file must not be a symbolic link: %1").arg(filePath));
+        return;
+    }
+    // Re-check suffix on the canonical path — a `.json` user-visible name
+    // resolving (via earlier path normalisation or ancestor symlinks
+    // before the leaf check) to a non-json target is treated as garbage.
+    const QFileInfo canonInfo(info.canonicalFilePath());
+    if (info.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) != 0
+        || canonInfo.suffix().compare(QStringLiteral("json"), Qt::CaseInsensitive) != 0) {
         Q_EMIT colorImportError(PzI18n::tr("Color import file must be a .json file: %1").arg(filePath));
         return;
     }
 
-    const QString error = m_settings->loadColorsFromFile(info.canonicalFilePath());
+    const QString error = m_settings->loadColorsFromFile(canonInfo.absoluteFilePath());
     if (!error.isEmpty()) {
         Q_EMIT colorImportError(error);
         return;

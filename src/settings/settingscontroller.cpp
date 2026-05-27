@@ -287,15 +287,27 @@ SettingsController::SettingsController(QObject* parent)
     const int settingsChangedSlotIdx = metaObject()->indexOfSlot("onSettingsPropertyChanged()");
     Q_ASSERT_X(settingsChangedSlotIdx >= 0, "SettingsController::ctor",
                "onSettingsPropertyChanged() slot not found — was it renamed?");
-    const QMetaMethod settingsChangedSlot = metaObject()->method(settingsChangedSlotIdx);
-    const QMetaObject* mo = m_settings.metaObject();
-    // Walk from 0 (not propertyOffset()) so Q_PROPERTYs declared on the
-    // ISettings base or any future intermediate class are also wired —
-    // hasNotifySignal() filters out properties without NOTIFY.
-    for (int i = 0; i < mo->propertyCount(); ++i) {
-        QMetaProperty prop = mo->property(i);
-        if (prop.hasNotifySignal()) {
-            connect(&m_settings, prop.notifySignal(), this, settingsChangedSlot);
+    if (settingsChangedSlotIdx < 0) {
+        // Release-build fallback: Q_ASSERT compiles to nothing, the
+        // metaObject()->method(-1) call returns an invalid QMetaMethod, and
+        // every connect() below would silently no-op — turning the entire
+        // dirty-tracking loop into a permanent regression with zero
+        // diagnostics. Log critically and bail so the failure is at least
+        // visible, even if the page can't dirty-track until the rename is
+        // resolved.
+        qCCritical(lcCore) << "SettingsController::ctor: onSettingsPropertyChanged() slot not found in meta-object — "
+                              "Settings NOTIFY → dirty-tracking is DISABLED. Was the slot renamed?";
+    } else {
+        const QMetaMethod settingsChangedSlot = metaObject()->method(settingsChangedSlotIdx);
+        const QMetaObject* mo = m_settings.metaObject();
+        // Walk from 0 (not propertyOffset()) so Q_PROPERTYs declared on the
+        // ISettings base or any future intermediate class are also wired —
+        // hasNotifySignal() filters out properties without NOTIFY.
+        for (int i = 0; i < mo->propertyCount(); ++i) {
+            QMetaProperty prop = mo->property(i);
+            if (prop.hasNotifySignal()) {
+                connect(&m_settings, prop.notifySignal(), this, settingsChangedSlot);
+            }
         }
     }
 

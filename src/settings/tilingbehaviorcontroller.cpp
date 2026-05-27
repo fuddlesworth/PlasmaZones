@@ -18,9 +18,9 @@ TilingBehaviorController::TilingBehaviorController(Settings* settings, QObject* 
 
     connect(m_settings, &Settings::autotileDragInsertTriggersChanged, this, [this]() {
         Q_EMIT autotileDragInsertTriggersChanged();
-        const bool newAlwaysActive = alwaysReinsertIntoStack();
-        if (newAlwaysActive != m_lastAlwaysReinsertIntoStack) {
-            m_lastAlwaysReinsertIntoStack = newAlwaysActive;
+        const bool newAlwaysReinsert = alwaysReinsertIntoStack();
+        if (newAlwaysReinsert != m_lastAlwaysReinsertIntoStack) {
+            m_lastAlwaysReinsertIntoStack = newAlwaysReinsert;
             Q_EMIT alwaysReinsertIntoStackChanged();
         }
     });

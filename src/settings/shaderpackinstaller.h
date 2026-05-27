@@ -34,8 +34,15 @@ enum class Result {
     MissingMetadata, ///< no metadata.json, or metadata.json is a symlink
     InvalidUserDir, ///< user dir empty / mkpath failed
     DestinationExists, ///< pack already installed (refuse to overwrite)
+    PackTooLarge, ///< source exceeds maximum total bytes or file count
     CopyFailed, ///< partial copy; the destination has been rolled back
 };
+
+/// Upper bound on a single shader pack — generous enough for any legitimate
+/// pack while preventing a maliciously large drop (gigabyte-sized asset,
+/// thousand-deep directory) from filling the user's data partition.
+constexpr qint64 kMaxPackTotalBytes = 256LL * 1024 * 1024; // 256 MiB
+constexpr int kMaxPackFileCount = 4096;
 
 /// Install a shader pack from `sourceUrl` (path or `file://` URL) into
 /// `userShaderDir` as a child directory matching the source basename.

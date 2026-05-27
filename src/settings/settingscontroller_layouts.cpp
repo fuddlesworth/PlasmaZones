@@ -96,6 +96,11 @@ void SettingsController::loadLayoutsAsync()
         if (reply.isError()) {
             qCWarning(lcCore) << "Failed to load layouts (D-Bus):" << reply.error().message()
                               << "— keeping local manual-layout previews from Step 1.";
+            // Drop any pending select-after-create id so a future successful
+            // reload doesn't emit layoutAdded() for a stale id that the user
+            // has already navigated away from (or that was deleted from
+            // another session).
+            m_pendingSelectLayoutId.clear();
             return;
         }
 

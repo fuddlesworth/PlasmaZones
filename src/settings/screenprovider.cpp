@@ -3,6 +3,8 @@
 
 #include "screenprovider.h"
 #include "dbusutils.h"
+#include "../core/logging.h"
+#include <QDBusConnection>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -10,8 +12,9 @@
 #include "config/settings.h"
 #include "core/constants.h"
 #include "core/utils.h"
-#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include <PhosphorScreens/VirtualScreen.h>
 
 namespace PlasmaZones {
 
@@ -121,11 +124,25 @@ void setMonitorDisabledFor(Settings* settings, PhosphorZones::AssignmentEntry::M
         return;
 
     QString id = Phosphor::Screens::ScreenIdentity::idForName(screenName);
+    // Empty id means the connector name couldn't be canonicalised — bail
+    // rather than inserting an empty string into the disabled list (which
+    // would never round-trip back to a real screen).
+    if (id.isEmpty())
+        return;
     QStringList list = settings->disabledMonitors(mode);
 
     if (disabled) {
+        bool changed = false;
+        // Drop any pre-migration legacy `screenName` entry so a user that
+        // toggles disable/enable on the same row doesn't end up with both
+        // the legacy and canonical entries simultaneously.
+        if (id != screenName)
+            changed = list.removeAll(screenName) > 0;
         if (!list.contains(id)) {
             list.append(id);
+            changed = true;
+        }
+        if (changed) {
             settings->setDisabledMonitors(mode, list);
             if (onChanged)
                 onChanged();
@@ -141,6 +158,23 @@ void setMonitorDisabledFor(Settings* settings, PhosphorZones::AssignmentEntry::M
                 onChanged();
         }
     }
+}
+
+bool connectScreenChangeSignals(QObject* receiver)
+{
+    auto bus = QDBusConnection::sessionBus();
+    const bool a = bus.connect(QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+                               QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("screenAdded"),
+                               receiver, SLOT(refreshScreens()));
+    const bool b = bus.connect(QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+                               QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("screenRemoved"),
+                               receiver, SLOT(refreshScreens()));
+    if (!a || !b) {
+        qCWarning(lcConfig) << "connectScreenChangeSignals: failed to subscribe to screen change broadcasts —"
+                            << "screenAdded:" << a << "screenRemoved:" << b
+                            << "— screen list will not auto-refresh on hot-plug";
+    }
+    return a && b;
 }
 
 } // namespace PlasmaZones

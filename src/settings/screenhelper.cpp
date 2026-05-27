@@ -20,7 +20,14 @@ QVariantList ScreenHelper::screens() const
 
 void ScreenHelper::refreshScreens()
 {
-    m_screens = Phosphor::Screens::screenInfoListToVariantList(fetchScreens());
+    QVariantList fresh = Phosphor::Screens::screenInfoListToVariantList(fetchScreens());
+    if (fresh == m_screens) {
+        // Hot-plug events that don't actually change the list (e.g. a
+        // repeated `screenAdded` for an already-known screen) shouldn't
+        // fan out to a full QML model rebuild.
+        return;
+    }
+    m_screens = std::move(fresh);
     Q_EMIT screensChanged();
 }
 

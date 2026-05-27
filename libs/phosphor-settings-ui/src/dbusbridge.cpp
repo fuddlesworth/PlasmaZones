@@ -110,7 +110,14 @@ void DBusBridge::asyncCallOn(const QString& interface, const QString& method, co
     // not found, type mismatch) are completely swallowed. Attach one
     // that logs and deletes itself — keeps the "fire-and-forget"
     // ergonomics for callers while making real errors visible.
-    auto* watcher = new QDBusPendingCallWatcher(pending);
+    //
+    // Parent the watcher to the bridge so an in-flight call cancels cleanly
+    // when the bridge is destroyed (Qt auto-deletes children). Without a
+    // parent, a watcher whose owning thread's event loop ended before the
+    // reply arrived would leak. const_cast is safe here: parenting is a
+    // tracking concern (Qt's parent/child machinery), not a logical-state
+    // mutation of the bridge.
+    auto* watcher = new QDBusPendingCallWatcher(pending, const_cast<DBusBridge*>(this));
     QObject::connect(
         watcher, &QDBusPendingCallWatcher::finished, watcher, [interface, method](QDBusPendingCallWatcher* w) {
             QDBusPendingReply<> reply = *w;
