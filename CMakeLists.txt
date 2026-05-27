@@ -663,6 +663,10 @@ add_subdirectory(examples/phosphor-popout-demo)
 # enumerates them and instantiates one widget per id. Same
 # unconditional gating as the theme + popout demos.
 add_subdirectory(examples/phosphor-registry-demo)
+# phosphor-ipc-demo. Acceptance harness for libs/phosphor-ipc.
+# Three IpcTargets driven from another terminal via phosphorctl.
+# Unconditional (same rationale as the other foundation-lib demos).
+add_subdirectory(examples/phosphor-ipc-demo)
 
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third

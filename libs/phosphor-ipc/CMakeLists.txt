@@ -111,6 +111,52 @@ set_target_properties(PhosphorIpc PROPERTIES
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# QML module registrar
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# IpcTarget is declared with QML_ELEMENT in the SHARED PhosphorIpc
+# library. A separate STATIC qt_add_qml_module call publishes the
+# "Phosphor.Ipc" import URI by generating the QML module registrar
+# and plugin glue. Consumers link both PhosphorIpc::PhosphorIpcQml
+# and PhosphorIpc::PhosphorIpcQmlplugin to get the type registered
+# in their QQmlEngine. Mirrors the PhosphorTheme / PhosphorThemeQml
+# split.
+
+qt_add_qml_module(PhosphorIpcQml
+    URI Phosphor.Ipc
+    VERSION 1.0
+    STATIC
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Ipc
+    SOURCES
+        include/PhosphorIpc/IpcTarget.h
+)
+
+add_library(PhosphorIpc::PhosphorIpcQml ALIAS PhosphorIpcQml)
+
+# The QML type registration generator emits #include <IpcTarget.h>
+# (bare basename of the SOURCES file). Adding the PhosphorIpc/
+# directory itself to the include path lets that bare include
+# resolve without changing the public header layout.
+target_include_directories(PhosphorIpcQml
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorIpc
+)
+
+target_link_libraries(PhosphorIpcQml
+    PUBLIC
+        PhosphorIpc::PhosphorIpc
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+)
+
+target_compile_features(PhosphorIpcQml PUBLIC cxx_std_20)
+
+set_target_properties(PhosphorIpcQml PROPERTIES
+    UNITY_BUILD OFF
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
 
