@@ -25,6 +25,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFuture>
+#include <QFutureWatcher>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -33,6 +35,7 @@
 #include <QSet>
 #include <QStandardPaths>
 #include <QUrl>
+#include <QtConcurrent/QtConcurrent>
 
 #include <algorithm>
 
@@ -386,6 +389,102 @@ void AnimationsPageController::revertPending()
     if (anyMotionSet)
         Q_EMIT motionSetsChanged();
     Q_EMIT pendingChangesChanged();
+}
+
+void AnimationsPageController::asyncRevertPending()
+{
+    // POD payload threaded between GUI thread and the worker.
+    // Captured by value into the QtConcurrent lambda + returned by
+    // value through QFuture so it lifecycles cleanly across threads.
+    struct WorkerResult
+    {
+        QHash<QString, std::optional<QByteArray>> retained;
+        QStringList overrideEvents;
+        bool anyPreset = false;
+        bool anyMotionSet = false;
+    };
+
+    using namespace PhosphorAnimation;
+    using namespace PhosphorAnimationShaders;
+
+    if (!hasPendingChanges()) {
+        Q_EMIT discardResult(true, QString());
+        return;
+    }
+
+    // Snapshot every input the worker needs by value. The worker
+    // touches nothing else on `this` — that's what keeps the I/O
+    // loop safe on a non-GUI thread.
+    const QString profilesDir = userProfilesDir();
+    const QString setsDir = userMotionSetsDir();
+    const QStringList knownPaths = ProfilePaths::allBuiltInPaths();
+    const QSet<QString> knownPathSet(knownPaths.cbegin(), knownPaths.cend());
+    const QHash<QString, std::optional<QByteArray>> snapshots = m_pendingFileSnapshots;
+
+    auto* watcher = new QFutureWatcher<WorkerResult>(this);
+    connect(watcher, &QFutureWatcher<WorkerResult>::finished, this, [this, watcher]() {
+        const WorkerResult result = watcher->result();
+        watcher->deleteLater();
+
+        // Back on the GUI thread — install retained + emit signals.
+        m_pendingFileSnapshots = result.retained;
+        if (m_pendingFileSnapshots.isEmpty())
+            m_shaderTreeDirty = false;
+
+        for (const QString& path : result.overrideEvents)
+            Q_EMIT overrideChanged(path);
+        if (result.anyPreset)
+            Q_EMIT userPresetsChanged();
+        if (result.anyMotionSet)
+            Q_EMIT motionSetsChanged();
+        Q_EMIT pendingChangesChanged();
+        Q_EMIT discardResult(
+            result.retained.isEmpty(),
+            result.retained.isEmpty()
+                ? QString()
+                : tr("Failed to restore %1 profile file(s); they remain pending.").arg(result.retained.size()));
+    });
+
+    QFuture<WorkerResult> future = QtConcurrent::run([profilesDir, setsDir, knownPathSet, snapshots]() {
+        WorkerResult result;
+        for (auto it = snapshots.cbegin(); it != snapshots.cend(); ++it) {
+            const QString& filePath = it.key();
+            const auto& content = it.value();
+
+            bool restored = false;
+            if (!content.has_value()) {
+                if (!QFile::exists(filePath) || QFile::remove(filePath))
+                    restored = true;
+            } else {
+                QSaveFile f(filePath);
+                if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                    f.write(*content);
+                    if (f.commit())
+                        restored = true;
+                }
+            }
+
+            if (!restored) {
+                qCWarning(lcConfig) << "AnimationsPageController::asyncRevertPending: failed to restore" << filePath;
+                result.retained.insert(filePath, content);
+                continue;
+            }
+
+            const QFileInfo info(filePath);
+            const QString absDir = info.absolutePath();
+            const QString stem = info.completeBaseName();
+            if (absDir == setsDir) {
+                result.anyMotionSet = true;
+            } else if (absDir == profilesDir) {
+                if (knownPathSet.contains(stem))
+                    result.overrideEvents.append(stem);
+                else
+                    result.anyPreset = true;
+            }
+        }
+        return result;
+    });
+    watcher->setFuture(future);
 }
 
 // ─── Path discovery ────────────────────────────────────────────────────

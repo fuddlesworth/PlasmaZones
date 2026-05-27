@@ -247,6 +247,49 @@ bool WindowRuleController::pushToDaemon(const QList<WindowRule>& rules)
     return !reply.arguments().isEmpty() && reply.arguments().constFirst().toBool();
 }
 
+bool WindowRuleController::pushToDaemonAsync(const QList<WindowRule>& rules)
+{
+    // Same up-front validation as the sync path — bail out BEFORE
+    // dispatching so a partial-drop never reaches the daemon.
+    WindowRuleSet set;
+    const int accepted = set.setRules(rules);
+    if (accepted != rules.size()) {
+        qCWarning(lcConfig) << "WindowRuleController::pushToDaemonAsync: rejecting push —" << (rules.size() - accepted)
+                            << "of" << rules.size() << "rules failed client-side validation; daemon NOT updated";
+        return false;
+    }
+    const QJsonDocument doc(set.toJson());
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::WindowRules),
+                                                   QStringLiteral("setAllRules"),
+                                                   {QString::fromUtf8(doc.toJson(QJsonDocument::Compact))}),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<bool> reply = *w;
+        if (reply.isError()) {
+            setDaemonReachable(false);
+            qCWarning(lcConfig) << "WindowRuleController::pushToDaemonAsync: setAllRules failed —"
+                                << reply.error().message();
+            Q_EMIT applyResult(false, reply.error().message());
+            return;
+        }
+        setDaemonReachable(true);
+        // The daemon's bool reply tells us whether it accepted every
+        // rule; treat anything other than `true` as a partial-drop
+        // failure so the page can stay dirty for retry.
+        const bool ok = reply.value();
+        if (!ok) {
+            Q_EMIT applyResult(false, tr("The daemon rejected one or more rules."));
+            return;
+        }
+        setDirty(false);
+        setDaemonChangedWhileDirty(false);
+        Q_EMIT applyResult(true, QString());
+    });
+    return true;
+}
+
 void WindowRuleController::fetchAndLoad()
 {
     // Asynchronous `getAllRules` — the reply handler repopulates the model.
@@ -368,6 +411,37 @@ bool WindowRuleController::commit(bool force)
     setDirty(false);
     setDaemonChangedWhileDirty(false);
     return true;
+}
+
+void WindowRuleController::asyncCommit(bool force)
+{
+    // Mirror commit(force) but emit applyResult on the reply instead
+    // of returning bool. Clean state is emitted as applyResult(true, "");
+    // refusals + transport errors carry an explanatory message.
+    if (!m_dirty) {
+        Q_EMIT applyResult(true, QString());
+        return;
+    }
+    if (m_daemonChangedWhileDirty && !force) {
+        qCWarning(lcConfig) << "WindowRuleController::asyncCommit: refusing to push — daemon rules changed while the "
+                               "page had staged edits; review or force-overwrite required";
+        Q_EMIT applyResult(false,
+                           tr("The daemon's window rules changed while you were editing. Review or use "
+                              "Save anyway to overwrite."));
+        return;
+    }
+    if (!pushToDaemonAsync(m_model.rules())) {
+        // The up-front client validation failed (a rule was rejected
+        // before any wire dispatch). pushToDaemonAsync already logged a
+        // diagnostic; surface a user-readable error so the chrome can
+        // toast / banner the failure rather than leaving the page in a
+        // silent-fail "still dirty" state.
+        Q_EMIT applyResult(false,
+                           tr("One or more window rules failed validation and could not be saved. See the "
+                              "log for details."));
+    }
+    // pushToDaemonAsync's QDBusPendingCallWatcher emits applyResult on
+    // the reply (success or transport error) — nothing to do here.
 }
 
 void WindowRuleController::revert()

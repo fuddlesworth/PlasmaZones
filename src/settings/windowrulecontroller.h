@@ -132,6 +132,19 @@ public:
     /// "page dirty / save refused" loop.
     Q_INVOKABLE bool forceCommit();
 
+    /// Async sibling of `commit()` — pushes the staged rule set to the
+    /// daemon via QDBusPendingCallWatcher and emits the inherited
+    /// `applyResult(ok, error)` signal on the reply. UI threads no
+    /// longer block waiting for the daemon (a stuck/firewalled daemon
+    /// would freeze the whole Settings window with the sync path).
+    ///
+    /// The sync `commit()` above stays callable for back-compat:
+    /// `SettingsController::save()` and the inherited `apply()` slot
+    /// still use it. Once the chrome footer surfaces the async
+    /// applyResult state-machine, the sync helper can become an
+    /// internal implementation detail.
+    Q_INVOKABLE void asyncCommit(bool force = false);
+
     /// Discard staged edits and re-fetch from the daemon. The fetch is async,
     /// so this returns immediately — the model is repopulated when the reply
     /// arrives (signalled by `rulesLoaded()`). The dirty +
@@ -375,6 +388,13 @@ private:
     /// Push @p rules to the daemon via `setAllRules`. Returns true only if the
     /// daemon accepted every rule (no partial drop).
     bool pushToDaemon(const QList<PhosphorWindowRule::WindowRule>& rules);
+
+    /// Async sibling of pushToDaemon — dispatches `setAllRules` via
+    /// QDBusPendingCallWatcher and emits applyResult on the reply.
+    /// Returns false ONLY for the up-front validation failure (a rule
+    /// was rejected client-side) — the async leg covers transport
+    /// errors via the applyResult signal.
+    bool pushToDaemonAsync(const QList<PhosphorWindowRule::WindowRule>& rules);
 
     /// Renormalize every rule's priority so descending list order ⇒
     /// descending priority. Keeps the migrated-context bands roughly intact

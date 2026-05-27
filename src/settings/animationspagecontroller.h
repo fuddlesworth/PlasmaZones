@@ -372,6 +372,17 @@ public:
     /// retained in the snapshot so a subsequent revert can retry.
     void revertPending();
 
+    /// Async sibling of revertPending — runs the QSaveFile restore
+    /// loop on a QtConcurrent worker so a Discard with dozens of
+    /// snapshotted profile paths doesn't stall the GUI thread for
+    /// dozens of disk round-trips. Emits the inherited
+    /// `discardResult(ok, error)` signal on completion (back on the
+    /// GUI thread) so a future chrome footer can surface
+    /// "discarding..." state. Same retain-on-failure semantics as
+    /// revertPending — partial failures stay in m_pendingFileSnapshots
+    /// for a subsequent retry.
+    Q_INVOKABLE void asyncRevertPending();
+
 private:
     QString userProfilesDir() const;
     QString userMotionSetsDir() const;
