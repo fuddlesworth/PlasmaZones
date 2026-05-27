@@ -25,17 +25,22 @@ Button {
     // `accentColorChanged` signal at every call site.
     property color accentColor: "transparent"
     property color labelColor: Theme.on_surface
-    readonly property bool _accented: accentColor.a > 0
+    // Explicit accent toggle. Earlier this derived from accentColor.a > 0,
+    // which silently flipped to "accented" for any caller passing a
+    // semi-transparent theme color. Naming the flag here lets callers
+    // request "draw as accented" independently of the color's alpha.
+    property bool accented: accentColor != "transparent"
     readonly property color _fill: {
         if (root.down)
-            return root._accented ? root.accentColor : Theme.surface_container_high;
+            return root.accented ? Qt.darker(root.accentColor, 1.15) : Theme.surface_container_highest;
 
         if (root.hovered)
-            return root._accented ? root.accentColor : Theme.surface_container_high;
+            return root.accented ? root.accentColor : Theme.surface_container_high;
 
-        return root._accented ? root.accentColor : Theme.surface_container;
+        return root.accented ? root.accentColor : Theme.surface_container;
     }
-    readonly property color _label: root._accented ? root.labelColor : Theme.on_surface
+    readonly property color _borderColor: root.accented ? root.accentColor : Theme.outline_variant
+    readonly property color _label: root.accented ? root.labelColor : Theme.on_surface
 
     padding: Tokens.spacing_m
     leftPadding: Tokens.spacing_l
@@ -45,10 +50,22 @@ Button {
         implicitHeight: Tokens.spacing_xxl
         radius: Tokens.radius_full
         color: root._fill
-        border.color: root._accented ? root.accentColor : Theme.outline_variant
+        border.color: root._borderColor
         border.width: 1
 
         Behavior on color {
+            ColorAnimation {
+                duration: Motion.duration_short_3
+                easing: Motion.standard
+            }
+
+        }
+
+        // Without a matching Behavior, the border snaps to the new
+        // accent color on the same frame the fill starts animating.
+        // The visible result is a one-frame outline flicker against
+        // the older fill.
+        Behavior on border.color {
             ColorAnimation {
                 duration: Motion.duration_short_3
                 easing: Motion.standard
@@ -67,6 +84,15 @@ Button {
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
+
+        Behavior on color {
+            ColorAnimation {
+                duration: Motion.duration_short_3
+                easing: Motion.standard
+            }
+
+        }
+
     }
 
 }

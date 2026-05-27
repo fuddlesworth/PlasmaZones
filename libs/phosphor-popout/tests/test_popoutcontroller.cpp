@@ -434,8 +434,13 @@ void TestPopoutController::dismissedCallback_unknownHandleNoOp()
     // QVERIFY rather than `if`. A guard here would mask a regression
     // where the controller never installs its dismissed callback.
     QVERIFY(t.dismissedCb);
+    const int callsBefore = t.closeSurfaceCalls;
     t.dismissedCb(QStringLiteral("never-existed"));
     QCOMPARE(closedSpy.count(), 0);
+    // Pin the removeEntryQuiet contract on the unknown-handle path
+    // too. A regression that swapped the quiet helper for removeEntry
+    // would call closeSurface for the unknown handle.
+    QCOMPARE(t.closeSurfaceCalls, callsBefore);
 }
 
 void TestPopoutController::modalActiveChanged_firesOnFirstAndLast()
@@ -639,23 +644,42 @@ public:
 
 void TestPopoutController::dismissedCallback_reentrantTransportSuppressedDuringSelfTeardown()
 {
-    // A transport that synchronously fires dismissed inside
-    // closeSurface would re-enter the controller's mutation paths
-    // and double-emit popoutClosed or corrupt iteration. The
-    // inSelfTeardown guard suppresses the callback during open's
-    // suppression closes and during closeAll.
+    // Mirrors the closeAll test, but exercises the ScopedTrue guard
+    // on open's Modal-suppression path (popoutcontroller.cpp's
+    // ExclusiveMode::Modal branch wraps closeAllCooperatives in a
+    // guard). Same-handle echo cannot prove the guard because
+    // removeEntry's erase-before-closeSurface ordering makes the
+    // re-entrant callback's lookup find nothing. Cross-handle echo
+    // closes a sibling cooperative out from under closeAllCooperatives'
+    // iteration if the guard is absent.
+    //
+    // With the guard, opening the Modal drains [h1, h2]:
+    //   removeEntry(h1) -> erase h1 -> closeSurface(h1)
+    //     -> transport fires dismissed(h2) cross-handle
+    //     -> callback short-circuits because inSelfTeardown is true
+    //   removeEntry(h2) -> erase h2 -> closeSurface(h2)
+    //   Total closeSurfaceCalls: 2
+    //
+    // Without the guard, dismissed(h2) would removeEntryQuiet h2 mid-
+    // iteration, removeEntry(h2) would find nothing, and only one
+    // closeSurface call would fire.
     ReentrantFakeTransport t;
     PopoutController c(&t);
-    QVERIFY(!c.open(makeRequest(QStringLiteral("coop-1"), ExclusiveMode::Cooperative, QStringLiteral("s1"))).isEmpty());
-    QVERIFY(!c.open(makeRequest(QStringLiteral("coop-2"), ExclusiveMode::Cooperative, QStringLiteral("s2"))).isEmpty());
+    const QString h1 = c.open(makeRequest(QStringLiteral("coop-1"), ExclusiveMode::Cooperative, QStringLiteral("s1")));
+    const QString h2 = c.open(makeRequest(QStringLiteral("coop-2"), ExclusiveMode::Cooperative, QStringLiteral("s2")));
+    QVERIFY(!h1.isEmpty());
+    QVERIFY(!h2.isEmpty());
+
+    t.crossHandleEcho.insert(h1, h2);
 
     QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
-    // Opening a Modal closes both cooperatives via the suppression
-    // path. The re-entrant transport's dismissed-from-closeSurface
-    // must be suppressed by the guard so popoutClosed fires exactly
-    // twice, not four times.
     QVERIFY(!c.open(makeRequest(QStringLiteral("alert"), ExclusiveMode::Modal)).isEmpty());
+
     QCOMPARE(closedSpy.count(), 2);
+    QCOMPARE(t.closeSurfaceCalls, 2);
+    QVERIFY(!c.isOpen(QStringLiteral("coop-1")));
+    QVERIFY(!c.isOpen(QStringLiteral("coop-2")));
+    QVERIFY(c.isOpen(QStringLiteral("alert")));
 }
 
 void TestPopoutController::dismissedCallback_reentrantTransportSuppressedDuringCloseAll()

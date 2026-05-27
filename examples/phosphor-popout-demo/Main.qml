@@ -16,6 +16,22 @@ import QtQuick.Layouts
 ApplicationWindow {
     id: window
 
+    // Single source of truth for which popoutIds are open. Each
+    // button's accent binding reads one field. Without this, every
+    // button does its own `openPopoutIds.indexOf("...")` scan and the
+    // QML engine re-runs each indexOf on every list mutation. With
+    // four buttons that is a 4x O(n) scan per change. The object form
+    // here is hand-built rather than computed in JS so the bindings
+    // stay declarative.
+    readonly property var _openSet: {
+        const ids = demoController.openPopoutIds;
+        return {
+            "calendar": ids.indexOf("calendar") !== -1,
+            "quick-note": ids.indexOf("quick-note") !== -1,
+            "pinned-note": ids.indexOf("pinned-note") !== -1
+        };
+    }
+
     width: 960
     height: 640
     visible: true
@@ -67,14 +83,14 @@ ApplicationWindow {
 
             PhosphorButton {
                 text: qsTr("Cooperative A (Calendar)")
-                accentColor: demoController.openPopoutIds.indexOf("calendar") !== -1 ? Theme.primary : "transparent"
+                accentColor: window._openSet["calendar"] ? Theme.primary : "transparent"
                 labelColor: Theme.on_primary
                 onClicked: demoController.toggleCooperativeA()
             }
 
             PhosphorButton {
                 text: qsTr("Cooperative B (Note)")
-                accentColor: demoController.openPopoutIds.indexOf("quick-note") !== -1 ? Theme.primary : "transparent"
+                accentColor: window._openSet["quick-note"] ? Theme.primary : "transparent"
                 labelColor: Theme.on_primary
                 onClicked: demoController.toggleCooperativeB()
             }
@@ -88,7 +104,7 @@ ApplicationWindow {
 
             PhosphorButton {
                 text: qsTr("Detached (Pinned)")
-                accentColor: demoController.openPopoutIds.indexOf("pinned-note") !== -1 ? Theme.tertiary : "transparent"
+                accentColor: window._openSet["pinned-note"] ? Theme.tertiary : "transparent"
                 labelColor: Theme.on_tertiary
                 onClicked: demoController.toggleDetached()
             }

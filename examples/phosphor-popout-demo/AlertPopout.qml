@@ -4,6 +4,7 @@
 // cooperative popouts open while this is up are rejected by the
 // controller.
 
+import Phosphor.PopoutDemo
 import Phosphor.Theme
 import QtQuick
 import QtQuick.Layouts
@@ -47,34 +48,16 @@ Rectangle {
             horizontalAlignment: Text.AlignHCenter
         }
 
-        Rectangle {
+        PhosphorButton {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: dismissLabel.implicitWidth + Tokens.spacing_xl
-            Layout.preferredHeight: Tokens.spacing_xxl
-            color: Theme.error
-            radius: Tokens.radius_m
+            text: qsTr("Dismiss")
+            accentColor: Theme.error
+            labelColor: Theme.on_error
+            onClicked: {
+                if (root._popoutHost)
+                    root._popoutHost.dismiss();
 
-            Text {
-                id: dismissLabel
-
-                anchors.centerIn: parent
-                text: qsTr("Dismiss")
-                color: Theme.on_error
-                font.pixelSize: Tokens.font_size_label_l
-                font.family: Tokens.font_family
-                font.weight: Tokens.font_weight_medium
             }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (root._popoutHost)
-                        root._popoutHost.dismiss();
-
-                }
-            }
-
         }
 
     }

@@ -46,7 +46,7 @@ consistently.
 | `PhosphorPopout::Anchor`            | Where on the screen the popout anchors. Values are `BarLeft`, `BarCenter`, `BarRight`, `ScreenCenter`, `AtPointer`, `Custom`. Q_ENUM_NS |
 | `PhosphorPopout::IPopoutService`    | Abstract service. Methods are `open`, `close`, `toggle`, `isOpen`, `closeAll` |
 | `PhosphorPopout::IPopoutTransport`  | Transport seam. Implementations create, tear down, and track layer-shell surfaces. Notifies the controller on self-dismiss |
-| `PhosphorPopout::PopoutController`  | Concrete `IPopoutService`. Owns the arbitration state machine and delegates surface creation to an injected transport. Registered as a QML element but marked uncreatable; instantiate from C++ and publish via `qmlRegisterSingletonInstance` |
+| `PhosphorPopout::PopoutController`  | Concrete `IPopoutService`. Owns the arbitration state machine and delegates surface creation to an injected transport. Registered as a QML element but marked uncreatable. Instantiate from C++ and publish via `qmlRegisterSingletonInstance` |
 | `Phosphor.Popout.PopoutHost` (QML)  | Transport-agnostic wrapper for popout content. Owns the open/close opacity-plus-scale animation, the backdrop dim, and the click-outside dismiss. Both transports instantiate this host wrapping the content delegate |
 
 ### `PopoutHost.qml` properties and signals

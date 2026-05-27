@@ -16,7 +16,11 @@ Item {
 
     // The popout's content. The host accepts either a pre-built Item
     // which the host reparents, or a Component the host instantiates
-    // inline. One of the two must be set.
+    // inline. One of the two must be set. The host takes parenting
+    // ownership of any Item assigned to contentItem. Reassigning
+    // contentItem orphans the previous value (parent set to null),
+    // not restored to its prior parent. Callers handing in a pre-built
+    // Item should expect to give up its parenting.
     property Component contentComponent: null
     property Item contentItem: null
     // Open state. Driving this from false to true plays the open
@@ -156,7 +160,7 @@ Item {
             preventStealing: true
             acceptedButtons: Qt.AllButtons
             onPressed: (mouse) => {
-                return mouse.accepted = true;
+                mouse.accepted = true;
             }
         }
 
