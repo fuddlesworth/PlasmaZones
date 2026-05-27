@@ -25,15 +25,20 @@ RowLayout {
     id: root
 
     required property ApplicationController controller
-    //  Cycle guard mirrors ApplicationController::parentChainFor's
-    //  kMaxParentChainHops — a misregistered page with `parentId ==
-    //  own id` (or two pages mutually parenting each other) would
-    //  otherwise freeze the UI thread on first render.
+    //  Cycle guard EXTENDS ApplicationController::parentChainFor's
+    //  kMaxParentChainHops with a seen-set: the C++ guard catches an
+    //  N-hop cycle after 32 hops + warns; the QML guard breaks on
+    //  first repeat. A misregistered page with `parentId == own id`
+    //  (or two pages mutually parenting each other) would otherwise
+    //  freeze the UI thread on first render.
     readonly property int _maxParentChainHops: 32
     readonly property var segments: {
         const out = [];
-        const seen = ({
-        });
+        // Object.create(null) gives a prototype-less map, so page ids
+        // matching built-in property names ("constructor", "toString",
+        // "hasOwnProperty") don't spuriously short-circuit on inherited
+        // truthy values.
+        const seen = Object.create(null);
         let id = root.controller.currentPageId;
         let hops = 0;
         while (id && hops < root._maxParentChainHops) {

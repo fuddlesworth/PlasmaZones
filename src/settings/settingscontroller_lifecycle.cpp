@@ -166,7 +166,14 @@ void SettingsController::save()
         // as the window-rules retry path. Without this, a failed batch
         // looks "saved" in the UI while the daemon never applied the
         // edits, so the next launch silently shows stale assignments.
+        // MUST wrap in beginExternalEdit("overview") — assignments are
+        // edited from MonitorStatePage (Overview), so re-flagging the
+        // active page would dirty whatever page the user happens to be
+        // viewing at save time, not the page that actually has the
+        // unsaved data. Same shape as the window-rules block above.
+        beginExternalEdit(QStringLiteral("overview"));
         setNeedsSave(true);
+        endExternalEdit();
     }
     QTimer::singleShot(0, this, [this]() {
         m_saving = false;
