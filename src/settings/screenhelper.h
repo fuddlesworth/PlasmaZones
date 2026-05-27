@@ -9,7 +9,7 @@
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /**
  * @brief Helper that manages screen list, monitor disable, and D-Bus signal connections.
@@ -23,7 +23,7 @@ class ScreenHelper : public QObject
 {
     Q_OBJECT
 public:
-    explicit ScreenHelper(Settings* settings, QObject* parent = nullptr);
+    explicit ScreenHelper(ISettings* settings, QObject* parent = nullptr);
 
     QVariantList screens() const;
 
@@ -45,7 +45,7 @@ Q_SIGNALS:
     void needsSave();
 
 private:
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
     QVariantList m_screens;
 };
 

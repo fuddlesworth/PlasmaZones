@@ -9,8 +9,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScreen>
-#include "config/settings.h"
 #include "core/constants.h"
+#include "core/isettings.h"
 #include "core/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -141,13 +141,13 @@ QList<ScreenInfo> fetchScreens()
     return result;
 }
 
-bool isMonitorDisabledFor(const Settings* settings, PhosphorZones::AssignmentEntry::Mode mode,
+bool isMonitorDisabledFor(const ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode,
                           const QString& screenName)
 {
     return settings && settings->isMonitorDisabled(mode, screenName);
 }
 
-void setMonitorDisabledFor(Settings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
+void setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
                            bool disabled, const std::function<void()>& onChanged)
 {
     if (!settings || screenName.isEmpty())

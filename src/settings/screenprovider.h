@@ -14,7 +14,7 @@ class QObject;
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Re-export of the lib's POD so PlasmaZones-internal callers don't need the
 /// `Phosphor::Screens::` prefix. Single update-site for any future renames.
@@ -32,22 +32,22 @@ QList<ScreenInfo> fetchScreens();
 
 /**
  * @brief Check whether a given monitor is disabled in settings for the given mode
- * @param settings The Settings instance to query
+ * @param settings The ISettings instance to query
  * @param mode The mode whose disable list to check
  * @param screenName The connector name of the screen
  */
-bool isMonitorDisabledFor(const Settings* settings, PhosphorZones::AssignmentEntry::Mode mode,
+bool isMonitorDisabledFor(const ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode,
                           const QString& screenName);
 
 /**
  * @brief Enable or disable a monitor in settings for the given mode
- * @param settings The Settings instance to modify
+ * @param settings The ISettings instance to modify
  * @param mode The mode whose disable list to modify
  * @param screenName The connector name of the screen
  * @param disabled Whether to disable (true) or enable (false)
  * @param onChanged Callback invoked when the disabled list actually changes
  */
-void setMonitorDisabledFor(Settings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
+void setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
                            bool disabled, const std::function<void()>& onChanged);
 
 /**

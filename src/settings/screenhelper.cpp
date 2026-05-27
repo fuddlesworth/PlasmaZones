@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "screenhelper.h"
+#include "core/isettings.h"
 #include "screenprovider.h"
-#include "config/settings.h"
 
 namespace PlasmaZones {
 
-ScreenHelper::ScreenHelper(Settings* settings, QObject* parent)
+ScreenHelper::ScreenHelper(ISettings* settings, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
 {
