@@ -1,0 +1,207 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1730"/>
+      <stop offset=".55" stop-color="#070F22"/>
+      <stop offset="1" stop-color="#050916"/>
+    </linearGradient>
+    <!-- The default Phosphor wallpaper: brand-gradient sweep -->
+    <linearGradient id="wpDefault" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset=".45" stop-color="#3B82F6"/>
+      <stop offset=".85" stop-color="#A855F7"/>
+      <stop offset="1" stop-color="#0B1730"/>
+    </linearGradient>
+    <linearGradient id="wpB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F43F5E"/><stop offset="1" stop-color="#070F22"/>
+    </linearGradient>
+    <linearGradient id="wpC" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10B981"/><stop offset="1" stop-color="#070F22"/>
+    </linearGradient>
+    <linearGradient id="wpD" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FBBF24"/><stop offset="1" stop-color="#581C87"/>
+    </linearGradient>
+    <linearGradient id="wpE" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#A855F7"/><stop offset="1" stop-color="#050916"/>
+    </linearGradient>
+    <linearGradient id="wpF" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/><stop offset="1" stop-color="#164E63"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="60"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <g opacity=".3" filter="url(#blur)">
+    <circle cx="200" cy="200" r="220" fill="#3B82F6"/>
+    <circle cx="1080" cy="540" r="240" fill="#A855F7"/>
+  </g>
+
+  <g transform="translate(80 70)">
+    <rect width="1120" height="580" rx="20" fill="#0B1730" stroke="#1E293B"/>
+
+    <g transform="translate(24 22)">
+      <text fill="#E6EDFF" font-size="14" font-weight="600">Wallpapers &amp; Themes</text>
+      <g transform="translate(660 -4)" font-size="11">
+        <g>
+          <rect width="92" height="28" rx="14" fill="#3B82F6"/>
+          <text x="46" y="18" text-anchor="middle" fill="#F0F9FF" font-weight="600">Wallpaper</text>
+        </g>
+        <g transform="translate(100 0)">
+          <rect width="68" height="28" rx="14" fill="#101A36" stroke="#1E293B"/>
+          <text x="34" y="18" text-anchor="middle" fill="#E6EDFF">Theme</text>
+        </g>
+        <g transform="translate(176 0)">
+          <rect width="68" height="28" rx="14" fill="#101A36" stroke="#1E293B"/>
+          <text x="34" y="18" text-anchor="middle" fill="#E6EDFF">Cycle</text>
+        </g>
+        <g transform="translate(252 0)">
+          <rect width="120" height="28" rx="14" fill="#101A36" stroke="#1E293B"/>
+          <text x="60" y="18" text-anchor="middle" fill="#E6EDFF">Per‑monitor</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- Active preview, default Phosphor wallpaper -->
+    <g transform="translate(24 68)">
+      <rect width="500" height="320" rx="16" fill="url(#wpDefault)"/>
+      <g transform="translate(24 20)">
+        <rect width="452" height="24" rx="12" fill="#0B1730" opacity=".88"/>
+        <rect x="8" y="6" width="14" height="12" rx="6" fill="#3B82F6"/>
+        <text x="226" y="16" text-anchor="middle" fill="#E6EDFF" font-size="10" font-variant-numeric="tabular-nums">14:32 · Sun 24 May</text>
+        <circle cx="432" cy="12" r="6" fill="#101A36" stroke="#1E293B"/>
+      </g>
+      <text x="24" y="306" fill="#050916" font-size="10" font-weight="600">phosphor‑default.svg · brand gradient</text>
+
+      <g transform="translate(316 268)">
+        <g>
+          <rect width="84" height="32" rx="16" fill="#0B1730" opacity=".85"/>
+          <text x="42" y="20" text-anchor="middle" fill="#E6EDFF" font-size="11">Apply</text>
+        </g>
+        <g transform="translate(92 0)">
+          <rect width="92" height="32" rx="16" fill="#3B82F6"/>
+          <text x="46" y="20" text-anchor="middle" fill="#F0F9FF" font-size="11" font-weight="600">Apply + Theme</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- Right column: palette + mode + fan-out -->
+    <g transform="translate(548 68)">
+      <text fill="#94A3B8" font-size="10">EXTRACTED PALETTE (matugen) · current = built‑in</text>
+      <g transform="translate(0 14)">
+        <g>
+          <rect width="86" height="44" rx="10" fill="#3B82F6"/>
+          <text x="43" y="58" text-anchor="middle" fill="#94A3B8" font-size="9">primary</text>
+          <text x="43" y="68" text-anchor="middle" fill="#94A3B8" font-size="8" opacity=".8">#3B82F6</text>
+        </g>
+        <g transform="translate(94 0)">
+          <rect width="86" height="44" rx="10" fill="#A855F7"/>
+          <text x="43" y="58" text-anchor="middle" fill="#94A3B8" font-size="9">secondary</text>
+          <text x="43" y="68" text-anchor="middle" fill="#94A3B8" font-size="8" opacity=".8">#A855F7</text>
+        </g>
+        <g transform="translate(188 0)">
+          <rect width="86" height="44" rx="10" fill="#22D3EE"/>
+          <text x="43" y="58" text-anchor="middle" fill="#94A3B8" font-size="9">tertiary</text>
+          <text x="43" y="68" text-anchor="middle" fill="#94A3B8" font-size="8" opacity=".8">#22D3EE</text>
+        </g>
+        <g transform="translate(282 0)">
+          <rect width="86" height="44" rx="10" fill="#F43F5E"/>
+          <text x="43" y="58" text-anchor="middle" fill="#94A3B8" font-size="9">error</text>
+          <text x="43" y="68" text-anchor="middle" fill="#94A3B8" font-size="8" opacity=".8">#F43F5E</text>
+        </g>
+        <g transform="translate(376 0)">
+          <rect width="86" height="44" rx="10" fill="#0B1730" stroke="#1E293B"/>
+          <text x="43" y="58" text-anchor="middle" fill="#94A3B8" font-size="9">surface</text>
+          <text x="43" y="68" text-anchor="middle" fill="#94A3B8" font-size="8" opacity=".8">#0B1730</text>
+        </g>
+      </g>
+
+      <text y="108" fill="#94A3B8" font-size="10">MODE · SCHEME</text>
+      <g transform="translate(0 118)" font-size="11">
+        <g>
+          <rect width="68" height="28" rx="14" fill="#101A36" stroke="#1E293B"/>
+          <text x="34" y="18" text-anchor="middle" fill="#E6EDFF">Light</text>
+        </g>
+        <g transform="translate(76 0)">
+          <rect width="68" height="28" rx="14" fill="#3B82F6"/>
+          <text x="34" y="18" text-anchor="middle" fill="#F0F9FF" font-weight="600">Dark</text>
+        </g>
+        <g transform="translate(152 0)">
+          <rect width="68" height="28" rx="14" fill="#101A36" stroke="#1E293B"/>
+          <text x="34" y="18" text-anchor="middle" fill="#E6EDFF">Auto</text>
+        </g>
+        <g transform="translate(232 0)">
+          <rect width="120" height="28" rx="14" fill="#101A36" stroke="#1E293B"/>
+          <text x="60" y="18" text-anchor="middle" fill="#E6EDFF">tonal · scheme</text>
+        </g>
+      </g>
+
+      <text y="180" fill="#94A3B8" font-size="10">FAN‑OUT TARGETS (matugen templates)</text>
+      <g transform="translate(0 192)" font-size="11" fill="#E6EDFF">
+        <!-- Each row's ✓ checkmark fades in with staggered delay, loops -->
+        <g>
+          <rect width="540" height="26" rx="6" fill="#070F22" stroke="#1E293B"/>
+          <text x="14" y="17">Phosphor Theme JSON · ~/.local/share/phosphor/palettes/current.json</text>
+          <text x="528" y="17" text-anchor="end" fill="#10B981" font-size="10" opacity="0">✓
+            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.08;0.16;0.92;1" dur="6s" repeatCount="indefinite"/>
+          </text>
+        </g>
+        <g transform="translate(0 32)">
+          <rect width="540" height="26" rx="6" fill="#070F22" stroke="#1E293B"/>
+          <text x="14" y="17">qt6ct · gtk‑3.0 · gtk‑4.0 colors</text>
+          <text x="528" y="17" text-anchor="end" fill="#10B981" font-size="10" opacity="0">✓
+            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.22;0.3;0.92;1" dur="6s" repeatCount="indefinite"/>
+          </text>
+        </g>
+        <g transform="translate(0 64)">
+          <rect width="540" height="26" rx="6" fill="#070F22" stroke="#1E293B"/>
+          <text x="14" y="17">kitty · foot · ghostty · alacritty · wezterm</text>
+          <text x="528" y="17" text-anchor="end" fill="#10B981" font-size="10" opacity="0">✓
+            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.36;0.44;0.92;1" dur="6s" repeatCount="indefinite"/>
+          </text>
+        </g>
+        <g transform="translate(0 96)">
+          <rect width="540" height="26" rx="6" fill="#070F22" stroke="#1E293B"/>
+          <text x="14" y="17">firefox / zen userchrome · vesktop · vscode (ext)</text>
+          <text x="528" y="17" text-anchor="end" fill="#10B981" font-size="10" opacity="0">✓
+            <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.5;0.58;0.92;1" dur="6s" repeatCount="indefinite"/>
+          </text>
+        </g>
+      </g>
+    </g>
+
+    <!-- Wallpaper gallery -->
+    <g transform="translate(24 412)">
+      <text fill="#94A3B8" font-size="10">GALLERY · ~/Pictures/Wallpapers</text>
+      <g transform="translate(0 14)">
+        <rect width="156" height="96" rx="12" fill="url(#wpDefault)" stroke="#3B82F6" stroke-width="2"/>
+        <rect x="164" width="156" height="96" rx="12" fill="url(#wpB)"/>
+        <rect x="328" width="156" height="96" rx="12" fill="url(#wpC)"/>
+        <rect x="492" width="156" height="96" rx="12" fill="url(#wpD)"/>
+        <rect x="656" width="156" height="96" rx="12" fill="url(#wpE)"/>
+        <rect x="820" width="156" height="96" rx="12" fill="url(#wpF)"/>
+        <g transform="translate(984 28)">
+          <rect width="80" height="40" rx="12" fill="#101A36" stroke="#1E293B" stroke-dasharray="4 3"/>
+          <text x="40" y="26" text-anchor="middle" fill="#94A3B8" font-size="11">＋ add</text>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <g font-size="11">
+    <g transform="translate(80 28)">
+      <rect width="370" height="32" rx="8" fill="#070F22" stroke="#3B82F6" opacity=".94"/>
+      <text x="14" y="20" font-weight="600" fill="#3B82F6">Drop wallpaper → every themed surface retints (watch fan‑out)</text>
+    </g>
+  </g>
+
+  <text x="640" y="680" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
+    Phosphor, Wallpaper &amp; Theme picker (default theme · matugen fan‑out cycling)
+  </text>
+  <text x="640" y="698" text-anchor="middle" fill="#94A3B8" font-size="9" opacity=".7">
+    Theme: phosphor‑works.github.io/palette · current preview = built‑in brand gradient
+  </text>
+</svg>

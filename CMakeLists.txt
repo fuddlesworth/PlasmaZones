@@ -176,7 +176,7 @@ else()
 endif()
 
 # Wayland layer-shell support (direct zwlr_layer_shell_v1 protocol, no KDE
-# dependency). PlasmaZones is Wayland-only — Plasma 6 dropped X11 as a
+# dependency). PlasmaZones is Wayland-only, Plasma 6 dropped X11 as a
 # session target, and the layer-shell overlays we use have no X equivalent.
 find_package(Wayland 1.21 REQUIRED COMPONENTS Client)
 find_package(Qt6 6.6 REQUIRED COMPONENTS WaylandClient)
@@ -345,7 +345,7 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # following the same phosphor-<name> convention.
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-dbus)        # generic, service-agnostic D-Bus client utilities (Client, HasDBusStreaming)
-add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants — needed by phosphor-screens (Resolver endpoint defaults)
+add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants, needed by phosphor-screens (Resolver endpoint defaults)
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
@@ -367,6 +367,12 @@ add_subdirectory(libs/phosphor-animation)   # unified animation library: motion 
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
 add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mechanism (rides on layer/shell-patterns/surfaces/animation/screens)
+# Foundation theme library. Built unconditionally so downstream libs and
+# tooling can consume it without the BUILD_PHOSPHOR_SHELL gate. Examples
+# are plugins and third-party shells. The lib has zero shell-side
+# dependencies and is a leaf module. Gating it would hide it from users
+# who don't ship the bundled shell. The shell binary itself stays gated.
+add_subdirectory(libs/phosphor-theme)       # M3 color-token store + Phosphor.Theme QML singletons
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
@@ -382,7 +388,7 @@ add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 # Qt6::Quick, the cost model changes: every QObject in the engine gets a
 # JS scope, bindings cross language boundaries, and ownership becomes
 # implicit through QQmlEngine. That's the trajectory Noctalia couldn't
-# escape — their engines and config were both QML, so multi-day uptime
+# escape, their engines and config were both QML, so multi-day uptime
 # leaks (FD exhaustion, GC pauses, JSValue retention across reloads) had
 # nowhere to be fixed without a full rewrite.
 #
@@ -397,7 +403,7 @@ foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine Phosp
                 if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
                     message(FATAL_ERROR
                         "Engine library '${_pz_engine_lib}' links '${_pz_link}'. "
-                        "Engine libs must stay QML-free — see comment above this "
+                        "Engine libs must stay QML-free, see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
             endforeach()
@@ -408,7 +414,7 @@ foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine Phosp
                 if(_pz_link MATCHES "(^|::)Qt6::(Qml|Quick)$")
                     message(FATAL_ERROR
                         "Engine library '${_pz_engine_lib}' publicly links '${_pz_link}'. "
-                        "Engine libs must stay QML-free — see comment above this "
+                        "Engine libs must stay QML-free, see comment above this "
                         "check in CMakeLists.txt for rationale.")
                 endif()
             endforeach()
@@ -450,7 +456,7 @@ if(BUILD_TESTING)
 endif()
 
 # Install D-Bus interface XMLs (one per interface). Keep in sync with
-# dbus/*.xml on disk — third-party clients (and qdbus-qt6 introspection)
+# dbus/*.xml on disk, third-party clients (and qdbus-qt6 introspection)
 # resolve interfaces against these files post-install.
 install(FILES
     dbus/org.plasmazones.Autotile.xml
@@ -509,8 +515,8 @@ install(DIRECTORY data/curves/
 # `plasmazones/profiles` subdirectory - never to a directory we don't
 # own - so an accidental wide install prefix can't cascade.
 # Use KDE_INSTALL_FULL_DATADIR (already prefix-resolved by ECM) so we
-# don't manually concatenate CMAKE_INSTALL_PREFIX with KDE_INSTALL_DATADIR
-# — that join produces `/usr//absolute/...` when ECM hands us an absolute
+# don't manually concatenate CMAKE_INSTALL_PREFIX with KDE_INSTALL_DATADIR:
+# that join produces `/usr//absolute/...` when ECM hands us an absolute
 # KDE_INSTALL_DATADIR (some distros override it that way).
 install(CODE "
     set(_pz_profiles_install_dir \"\$ENV{DESTDIR}${KDE_INSTALL_FULL_DATADIR}/plasmazones/profiles\")
@@ -571,7 +577,7 @@ install(PROGRAMS scripts/plasmazones-report.sh
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes).
-# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL —
+# The phosphor-shell.svg icons are conditional on BUILD_PHOSPHOR_SHELL:
 # no point shipping the icon if the binary isn't built.
 set(_plasmazones_dark_icons
     icons/hicolor/scalable/apps/plasmazones.svg
@@ -594,6 +600,17 @@ install(FILES ${_plasmazones_light_icons}
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
 
+# phosphor-theme example apps. These are the lib's acceptance harness.
+# They consume only the phosphor-theme lib, so they build whenever the
+# lib builds. Gating them behind BUILD_PHOSPHOR_SHELL would force a
+# theme developer to pull in the whole shell tree just to run the demo.
+# phosphor-theme-demo renders the active PaletteStore as a swatch sheet
+# and hot-reloads from ~/.local/share/phosphor/palettes/current.json.
+# phosphor-theme-cli is the headless round-trip driver: wallpaper to
+# matugen to palette JSON to rendered template.
+add_subdirectory(examples/phosphor-theme-demo)
+add_subdirectory(examples/phosphor-theme-cli)
+
 if(BUILD_PHOSPHOR_SHELL)
     # Build the bundled example shell as a Qt QML module so qmlcachegen
     # and qmlsc run at build time. The resulting static module gets linked
@@ -603,11 +620,11 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-shell)
 
     # Install the example phosphor-shell QML/shaders so users can copy
-    # them into their config dir and edit. Same source as the qrc above —
-    # qrc is the build-time frozen copy used as final fallback, this is
-    # the user-editable copy. ShellLoader::resolve() probes
-    # GenericConfigLocation (~/.config) → GenericDataLocation (this
-    # install) → qrc:/ (linked-in fallback) in that order.
+    # them into their config dir and edit. Same source as the qrc above.
+    # The qrc is the build-time frozen copy used as final fallback. This
+    # install is the user-editable copy. ShellLoader::resolve() probes
+    # GenericConfigLocation (~/.config), then GenericDataLocation (this
+    # install), then qrc:/ (linked-in fallback) in that order.
     install(DIRECTORY examples/phosphor-shell/
         DESTINATION ${KDE_INSTALL_DATADIR}/phosphor-shell
         FILES_MATCHING
@@ -646,7 +663,7 @@ feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CPack — source tarball generation (`cpack --config CPackSourceConfig.cmake`
+# CPack: source tarball generation (`cpack --config CPackSourceConfig.cmake`
 # or `make package_source`). Distro builds in release.yml still hand-roll
 # tarballs for filename-control reasons; this exists so a release engineer
 # can also bootstrap a tarball locally without the workflow.
