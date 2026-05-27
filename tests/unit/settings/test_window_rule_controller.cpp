@@ -462,16 +462,17 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
 
 void TestWindowRuleController::forceCommitIsInvokable()
 {
-    // Pin the F#3 contract — forceCommit must be Q_INVOKABLE so QML's
-    // "Save anyway" button on the daemonChangedWhileDirty banner can
-    // call it. Verified via the meta-object so a refactor that drops
-    // the macro silently is caught at the unit-test layer rather than
-    // surfacing as a QML "function is not a method of object" at
-    // runtime.
+    // Pin the post-pass-27 contract — asyncCommit(bool) is the
+    // QML-facing escape hatch the daemonChangedWhileDirty banner
+    // uses. Originally forceCommit() carried the Q_INVOKABLE, but
+    // pass 27 migrated QML to the async path so the test now pins
+    // the live contract. The old test name is preserved so the
+    // history is grep-able; the assertion targets the actual hot
+    // path.
     WindowRuleController controller;
     const QMetaObject* mo = controller.metaObject();
-    QVERIFY2(mo->indexOfMethod("forceCommit()") >= 0,
-             "WindowRuleController::forceCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
+    QVERIFY2(mo->indexOfMethod("asyncCommit(bool)") >= 0,
+             "WindowRuleController::asyncCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
 }
 
 QTEST_MAIN(TestWindowRuleController)

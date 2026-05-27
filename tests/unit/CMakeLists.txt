@@ -198,60 +198,40 @@ pz_add_test(test_screen_mode_router core/test_screen_mode_router.cpp)
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - Settings Tests (core, validation, per-screen)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_settings_core config/test_settings_core.cpp)
-target_link_libraries(test_settings_core PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_core COMMAND test_settings_core)
+pz_add_test(test_settings_core config/test_settings_core.cpp)
 
 # Companion test executable: animation Profile JSON-blob storage,
 # per-field signal discrimination, aggregate-setter merge semantics.
 # Split from test_settings_core to keep each test file under the
 # project's <800-line guideline.
-add_executable(test_settings_animation_profile config/test_settings_animation_profile.cpp)
-target_link_libraries(test_settings_animation_profile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_animation_profile COMMAND test_settings_animation_profile)
+pz_add_test(test_settings_animation_profile config/test_settings_animation_profile.cpp)
 
 # Companion test executable: ShaderProfileTree persistence + prune,
 # autoAssignAllLayouts master toggle. Split from test_settings_core to
 # keep each test file under the project's <800-line guideline.
-add_executable(test_settings_shader_tree config/test_settings_shader_tree.cpp)
-target_link_libraries(test_settings_shader_tree PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_shader_tree COMMAND test_settings_shader_tree)
+pz_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 
-add_executable(test_settings_validation config/test_settings_validation.cpp)
-target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_validation COMMAND test_settings_validation)
+pz_add_test(test_settings_validation config/test_settings_validation.cpp)
 
-add_executable(test_settings_perscreen config/test_settings_perscreen.cpp)
-target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
+pz_add_test(test_settings_perscreen config/test_settings_perscreen.cpp)
 
-add_executable(test_settings_disable_per_mode config/test_settings_disable_per_mode.cpp)
-target_link_libraries(test_settings_disable_per_mode PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_disable_per_mode COMMAND test_settings_disable_per_mode)
+pz_add_test(test_settings_disable_per_mode config/test_settings_disable_per_mode.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - Virtual Screen Settings Tests (save/load round-trip, staged flow)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_settings_virtualscreen config/test_settings_virtualscreen.cpp)
-target_link_libraries(test_settings_virtualscreen PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_virtualscreen COMMAND test_settings_virtualscreen)
+pz_add_test(test_settings_virtualscreen config/test_settings_virtualscreen.cpp)
 
 pz_add_test(test_virtualscreen_staged config/test_virtualscreen_staged.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - ConfigDefaults Tests (standalone, no external dependency)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_configdefaults config/test_configdefaults.cpp)
-target_link_libraries(test_configdefaults PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_configdefaults COMMAND test_configdefaults)
+pz_add_test(test_configdefaults config/test_configdefaults.cpp)
 
-add_executable(test_configbackend_json config/test_configbackend_json.cpp)
-target_link_libraries(test_configbackend_json PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_configbackend_json COMMAND test_configbackend_json)
+pz_add_test(test_configbackend_json config/test_configbackend_json.cpp)
 
-add_executable(test_configmigration config/test_configmigration.cpp)
-target_link_libraries(test_configmigration PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_configmigration COMMAND test_configmigration)
+pz_add_test(test_configmigration config/test_configmigration.cpp)
 
 # v3 → v4 window-rule consolidation migration.
 add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)

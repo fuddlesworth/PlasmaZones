@@ -593,6 +593,45 @@ private Q_SLOTS:
         QVERIFY(!errors.isEmpty());
     }
 
+    void registerPageMidBatchIsSafe()
+    {
+        // Registering a new dirty domain DURING an applyAllAsync (from a
+        // slot connected to applyingChanged on the way to true) must
+        // not destabilise the in-flight batch. The new domain isn't
+        // captured in the batch's snapshot — it's a fresh entrant that
+        // contributes its dirty bit to the global flag and gets
+        // committed on the NEXT applyAllAsync. This test pins that
+        // contract so a regression where mid-batch registration tries
+        // to mutate the iteration target doesn't ship.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl());
+        a->setDirty(true);
+
+        // Late entrant — a slot dispatched on applyingChanged=true
+        // registers a new dirty page mid-batch.
+        StubPage* late = nullptr;
+        connect(&app, &ApplicationController::applyingChanged, &app, [&app, &late]() {
+            if (app.isApplying() && !late) {
+                late = new StubPage(QStringLiteral("late"));
+                app.registerPage(late, {}, QStringLiteral("Late"), QUrl());
+                late->setDirty(true);
+            }
+        });
+
+        QSignalSpy completeSpy(&app, &ApplicationController::applyAllComplete);
+        app.applyAllAsync();
+
+        QCOMPARE(completeSpy.count(), 1);
+        QCOMPARE(a->applyCount, 1);
+        // The late entrant did NOT participate in the just-completed
+        // batch — it joined after the dirty-snapshot was taken.
+        QVERIFY(late);
+        QCOMPARE(late->applyCount, 0);
+        // Its dirty state contributes to the global flag.
+        QVERIFY(app.isDirty());
+    }
+
     void applyAllOnPartialFailureKeepsDirty()
     {
         // Pin the documented best-effort semantics: a domain whose

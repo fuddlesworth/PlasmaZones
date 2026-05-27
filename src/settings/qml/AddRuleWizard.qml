@@ -60,11 +60,16 @@ Kirigami.Dialog {
         // template/subject id so a debug log can trace which starting
         // point produced an issue, but we don't gate behaviour on it.
         root._workingRule = ruleJson;
-        // Snapshot at hand-off — every subsequent body edit will diverge
-        // from this, which is exactly when the close-discard prompt should
-        // fire. Re-stringifying the post-clone object matches the same
-        // shape `_requestClose` compares against.
-        root._initialSnapshot = JSON.stringify(ruleJson);
+        // Snapshot after the binding has propagated. `editorBody.
+        // workingRule` is bound to `root._workingRule`; the same-tick
+        // assignment above hasn't yet pushed the new value down to the
+        // editor body, so snapshotting `editorBody.workingRule` here
+        // would capture the PREVIOUS run's content. Qt.callLater
+        // defers to the next event loop turn, by which time the
+        // binding has settled.
+        Qt.callLater(function () {
+            root._initialSnapshot = JSON.stringify(root._workingRule);
+        });
         root.currentStep = 1;
     }
 

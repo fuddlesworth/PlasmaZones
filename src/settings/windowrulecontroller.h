@@ -130,13 +130,13 @@ public:
     /// once the user has chosen "overwrite anyway".
     bool commit(bool force = false);
 
-    /// QML-callable shorthand for `commit(true)`. Surfaces the "overwrite
-    /// anyway" escape hatch the daemonChangedWhileDirty banner needs — the
-    /// inherited StagingDomain `apply()` slot calls `commit(false)` and
-    /// discards the bool return, so without this Q_INVOKABLE QML had no way
-    /// to reach the force path and the user could get stuck in a permanent
-    /// "page dirty / save refused" loop.
-    Q_INVOKABLE bool forceCommit();
+    /// C++ helper that forwards to `commit(true)`. Was Q_INVOKABLE in
+    /// pass 17 when the QML daemonChangedWhileDirty banner called it
+    /// directly; pass 27 migrated that banner to the async path
+    /// (`asyncCommit(true)`), so the QML-facing escape hatch now lives
+    /// on `asyncCommit`. Kept as a public sync helper for tests and
+    /// any future internal caller — the Q_INVOKABLE marker is gone.
+    bool forceCommit();
 
     /// Async sibling of `commit()` — pushes the staged rule set to the
     /// daemon via QDBusPendingCallWatcher and emits the inherited
