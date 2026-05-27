@@ -294,6 +294,18 @@ bool AnimationsPageController::isDirty() const
 
 void AnimationsPageController::apply()
 {
+    // Refuse Apply while an asyncRevertPending worker is still
+    // rewriting profile files from its captured snapshot. Without
+    // this, an apply() call mid-revert would clear m_pendingFileSnapshots
+    // and m_shaderTreeDirty — letting the worker's still-running
+    // file restores silently UNDO writes the user wanted to keep,
+    // then emit discardResult(true) on a now-clean page. Symmetric
+    // to the per-mutator guards added in pass 36 (setOverride etc.)
+    // and to WindowRuleController::m_asyncCommitInFlight.
+    if (m_asyncRevertInFlight) {
+        Q_EMIT applyResult(false, tr("Cannot save while a discard is in progress."));
+        return;
+    }
     commitPending();
     // commitPending is synchronous (just clears the snapshot map +
     // dirty bit; the per-edit writes already hit disk through

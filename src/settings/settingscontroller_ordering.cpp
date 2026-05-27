@@ -155,6 +155,16 @@ void SettingsController::moveTilingAlgorithm(int fromIndex, int toIndex)
 
 void SettingsController::resetSnappingOrder()
 {
+    // Only emit + dirty when the staged optional ACTUALLY transitions
+    // to an empty list. Calling reset twice (or right after a load()
+    // where it's already nullopt → being set to empty IS a transition,
+    // but a second call from {} → {} is a no-op) would otherwise emit
+    // a spurious stagedSnappingOrderChanged + setNeedsSave(true), re-
+    // dirtying the page for nothing. Matches the emit-on-change
+    // discipline in CLAUDE.md.
+    if (m_stagedSnappingOrder.has_value() && m_stagedSnappingOrder->isEmpty()) {
+        return;
+    }
     m_stagedSnappingOrder = QStringList{};
     Q_EMIT stagedSnappingOrderChanged();
     setNeedsSave(true);
@@ -162,6 +172,10 @@ void SettingsController::resetSnappingOrder()
 
 void SettingsController::resetTilingOrder()
 {
+    // Same emit-on-change rationale as resetSnappingOrder above.
+    if (m_stagedTilingOrder.has_value() && m_stagedTilingOrder->isEmpty()) {
+        return;
+    }
     m_stagedTilingOrder = QStringList{};
     Q_EMIT stagedTilingOrderChanged();
     setNeedsSave(true);

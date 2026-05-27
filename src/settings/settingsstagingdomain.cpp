@@ -74,42 +74,66 @@ void SettingsStagingDomain::apply()
     // daemon-broadcast drain and let a second Apply land while the
     // first was still being unwound.
     //
-    // Both lambdas (savingFinished + destroyed) capture a SHARED
-    // settled-flag. Without it the destroyed() Qt::SingleShotConnection
-    // never auto-disconnects (destroyed only fires once, at end of
-    // life), so every apply() that completes via savingFinished leaves
-    // its destroyed-handler connection live until the controller dies
-    // — at which point N applies fire N applyResult emissions. The
-    // shared flag lets the first lambda to fire mark the apply as
-    // settled and the second no-op.
+    // Connection-leak prevention: the destroyed() Qt::SingleShotConnection
+    // never auto-disconnects on a normal apply() (destroyed only fires
+    // once at end-of-life, NOT when savingFinished fires). Without
+    // explicit cleanup, every apply() that completes via
+    // savingFinished would leak ONE destroyed-handler connection that
+    // stays live until the controller dies. We track the destroyed
+    // connection via a `Connection` captured by the savingFinished
+    // lambda — the lambda explicitly disconnects it after handling
+    // the result so successful applies don't accumulate connections.
     //
-    // Truthful applyResult: SettingsController re-flags pages whose
-    // commit failed (window-rules push, assignment flush) inside
-    // save(), so post-savingFinished needsSave() tells us whether the
-    // batch fully succeeded.
+    // The `settled` shared flag is the back-stop for the cross-
+    // connection idempotency invariant: if destroyed somehow fires
+    // first (controller dies during save()'s singleShot delay), the
+    // savingFinished lambda — which fires later from the queued
+    // singleShot — sees `*settled == true` and bails. The
+    // shared_ptr<bool> outlives BOTH lambdas until both have run or
+    // been disconnected.
+    //
+    // Exception safety: applyGuard cleans up m_inFlight + both
+    // connections if save() throws. The normal path dismisses the
+    // guard before returning so cleanup runs exactly once.
     auto settled = std::make_shared<bool>(false);
-    connect(
+    auto destroyedConn = std::make_shared<QMetaObject::Connection>();
+    auto savingConn = std::make_shared<QMetaObject::Connection>();
+    *savingConn = connect(
         m_controller, &SettingsController::savingFinished, this,
-        [this, settled]() {
+        [this, settled, destroyedConn]() {
             if (*settled)
                 return;
             *settled = true;
+            // Disconnect the still-live destroyed guard so it doesn't
+            // accumulate one entry per apply() over the session.
+            if (*destroyedConn)
+                QObject::disconnect(*destroyedConn);
             m_inFlight = false;
             const bool ok = m_controller && !m_controller->needsSave();
             Q_EMIT applyResult(ok, ok ? QString() : QStringLiteral("One or more settings failed to save"));
         },
         Qt::SingleShotConnection);
-    connect(
+    *destroyedConn = connect(
         m_controller, &QObject::destroyed, this,
-        [this, settled]() {
+        [this, settled, savingConn]() {
             if (*settled)
                 return;
             *settled = true;
+            if (*savingConn)
+                QObject::disconnect(*savingConn);
             m_inFlight = false;
             Q_EMIT applyResult(false, QStringLiteral("Controller destroyed before save completed"));
         },
         Qt::SingleShotConnection);
+    auto applyGuard = qScopeGuard([this, savingConn, destroyedConn]() {
+        if (*savingConn)
+            QObject::disconnect(*savingConn);
+        if (*destroyedConn)
+            QObject::disconnect(*destroyedConn);
+        m_inFlight = false;
+    });
     m_controller->save();
+    applyGuard.dismiss();
 }
 
 void SettingsStagingDomain::discard()
@@ -120,13 +144,19 @@ void SettingsStagingDomain::discard()
         return;
     }
     m_inFlight = true;
-    // RAII reset of m_inFlight — if SettingsController::load() throws
-    // (some future code path), m_inFlight must NOT remain stuck true
-    // or every subsequent apply/discard will be permanently refused.
-    auto guard = qScopeGuard([this]() {
-        m_inFlight = false;
+    // Clear m_inFlight BEFORE the emit so a slot connected to
+    // discardResult can re-enter apply()/discard() without tripping
+    // the "already in flight" rejection. The qScopeGuard is the
+    // exception-path back-stop: if load() throws, m_inFlight resets
+    // anyway.
+    bool savedLoad = false;
+    auto guard = qScopeGuard([this, &savedLoad]() {
+        if (!savedLoad)
+            m_inFlight = false;
     });
     m_controller->load();
+    savedLoad = true;
+    m_inFlight = false;
     Q_EMIT discardResult(true, QString());
 }
 

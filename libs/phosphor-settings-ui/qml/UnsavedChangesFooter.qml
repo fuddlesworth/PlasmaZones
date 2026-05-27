@@ -70,23 +70,6 @@ ColumnLayout {
         id: dirtyBar
 
         property real expansion: root.controller.dirty ? 1 : 0
-        /// Direction of the running slide. Set in the dirtyChanged
-        /// handler BELOW (before expansion's binding re-evaluates and
-        /// the Behavior reads the value), not from
-        /// onExpansionChanged — that approach updated the cache
-        /// AFTER expansion began changing, so the first dirty→clean
-        /// leg ran with the stale "Expand" profile from the prior
-        /// dirty→true cycle (and vice-versa), giving every transition
-        /// the wrong easing curve.
-        property string _slideProfile: "widget.accordionExpand"
-
-        Connections {
-            function onDirtyChanged() {
-                dirtyBar._slideProfile = root.controller.dirty ? "widget.accordionExpand" : "widget.accordionCollapse";
-            }
-
-            target: root.controller
-        }
 
         Layout.fillWidth: true
         Layout.preferredHeight: expansion * barContent.implicitHeight
@@ -187,13 +170,19 @@ ColumnLayout {
             }
         }
 
-        // Direction comes from _slideProfile (cached at the moment
-        // expansion changes — see onExpansionChanged above). Reading
-        // controller.dirty here would re-evaluate during the slide
-        // and rubber-band if dirty flipped mid-animation.
+        // Direction is read inline at the moment the Behavior fires:
+        // PhosphorMotionAnimation.profile is evaluated when the
+        // animation starts (the property assignment is a one-shot at
+        // animation kickoff, not a live binding into the running
+        // animation), so picking up `controller.dirty` HERE captures
+        // the just-flipped state without the slot-ordering trap a
+        // cached `_slideProfile` had (the cache update slot and the
+        // `expansion` binding both fire on dirtyChanged; Qt invokes
+        // them in connection order, which left the Behavior reading
+        // a stale cache on the first leg of every transition).
         Behavior on expansion {
             PhosphorMotionAnimation {
-                profile: dirtyBar._slideProfile
+                profile: root.controller.dirty ? "widget.accordionExpand" : "widget.accordionCollapse"
             }
         }
     }

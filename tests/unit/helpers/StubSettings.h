@@ -705,6 +705,7 @@ public:
         if (m_snappingLayoutOrder == order)
             return;
         m_snappingLayoutOrder = order;
+        Q_EMIT snappingLayoutOrderChanged();
         Q_EMIT settingsChanged();
     }
     QStringList tilingAlgorithmOrder() const override
@@ -716,6 +717,7 @@ public:
         if (m_tilingAlgorithmOrder == order)
             return;
         m_tilingAlgorithmOrder = order;
+        Q_EMIT tilingAlgorithmOrderChanged();
         Q_EMIT settingsChanged();
     }
 
