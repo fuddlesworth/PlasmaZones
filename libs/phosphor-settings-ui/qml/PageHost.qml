@@ -44,7 +44,7 @@ Item {
         source: root.currentEntry ? root.currentEntry.qmlSource : ""
         onLoaded: {
             if (!item)
-                return ;
+                return;
 
             // Pin opacity to 0 BEFORE the animation starts. Without this,
             // the new item's default opacity is 1 for the first paint
@@ -53,11 +53,30 @@ Item {
             // fade-in actually begins.
             item.opacity = 0;
             const pageController = root.controller.registry.controller(root.controller.currentPageId);
-            if (item.hasOwnProperty("controller"))
-                item.controller = pageController;
+            // Pages that already have their own readonly `controller`
+            // binding (e.g. `readonly property var controller:
+            // settingsController.windowRulesPage`) reject the
+            // assignment under Qt 6.11. That's fine — the page
+            // already has a controller; PageHost's injection is
+            // redundant. Try/catch swallows the TypeError so the
+            // page still loads instead of failing to mount entirely.
+            if (item.hasOwnProperty("controller")) {
+                try {
+                    item.controller = pageController;
+                } catch (e) {
+                    // Page has its own readonly controller binding —
+                    // skip the injection, the page is wired through
+                    // its own channel.
+                }
+            }
 
-            if (item.hasOwnProperty("settingsApp"))
-                item.settingsApp = root.controller;
+            if (item.hasOwnProperty("settingsApp")) {
+                try {
+                    item.settingsApp = root.controller;
+                } catch (e) {
+                    // Same readonly tolerance as `controller`.
+                }
+            }
 
             // Fade in the freshly-loaded page from opacity 0. The
             // animation starts immediately because the Loader has just
@@ -77,7 +96,6 @@ Item {
             profile: "widget.fadeIn"
             durationOverride: 180
         }
-
     }
 
     // Empty state when no page is selected.
@@ -87,5 +105,4 @@ Item {
         text: qsTr("Select a page from the sidebar")
         icon.name: "settings-configure"
     }
-
 }
