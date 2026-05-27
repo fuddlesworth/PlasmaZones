@@ -601,6 +601,7 @@ public:
     }
     void closeSurface(const QString& handle) override
     {
+        ++closeSurfaceCalls;
         if (!alive.contains(handle)) {
             return;
         }
@@ -609,7 +610,16 @@ public:
         // do this. The guard exists so a misbehaving transport
         // cannot corrupt the controller's tables.
         if (dismissedCb) {
-            dismissedCb(handle);
+            // Optional cross-handle echo: when set, fire dismissed
+            // for a DIFFERENT live handle than the one being closed.
+            // This is the scenario the ScopedTrue guard actually
+            // protects against. Same-handle echo is benign because
+            // removeEntry erases the entry before calling closeSurface.
+            // Cross-handle echo would let the re-entrant callback
+            // remove a sibling out from under an in-flight closeAll
+            // iteration if the guard were absent.
+            const QString echoHandle = crossHandleEcho.value(handle, handle);
+            dismissedCb(echoHandle);
         }
     }
     bool isSurfaceAlive(const QString& handle) const override
@@ -621,6 +631,8 @@ public:
         dismissedCb = std::move(cb);
     }
     QHash<QString, QString> alive;
+    QHash<QString, QString> crossHandleEcho; // closed-handle -> echo-handle
+    int closeSurfaceCalls = 0;
     int counter = 0;
     std::function<void(const QString&)> dismissedCb;
 };
@@ -648,29 +660,47 @@ void TestPopoutController::dismissedCallback_reentrantTransportSuppressedDuringS
 
 void TestPopoutController::dismissedCallback_reentrantTransportSuppressedDuringCloseAll()
 {
-    // closeAll has its own ScopedTrue guard. Without it, a re-entrant
-    // transport that fires dismissed-from-closeSurface would loop
-    // into the callback and double-emit popoutClosed for every
-    // entry being drained. This test exercises the closeAll guard
-    // specifically; the open-Modal path is covered separately by
-    // dismissedCallback_reentrantTransportSuppressedDuringSelfTeardown.
+    // closeAll's ScopedTrue guard is genuinely load-bearing only when
+    // the contract-violating transport fires dismissed for a sibling
+    // handle (cross-handle echo). For the same-handle echo case, the
+    // erase-before-closeSurface ordering in removeEntry already
+    // prevents corruption. This test sets up the cross-handle
+    // scenario and pins the guard via the transport's closeSurface
+    // call count.
+    //
+    // With the guard, closeAll's iteration of [h1, h2] reaches both:
+    //   removeEntry(h1) -> erase h1 -> closeSurface(h1)
+    //     -> transport fires dismissed(h2) cross-handle
+    //     -> callback short-circuits because inSelfTeardown is true
+    //     -> h2 still in entries
+    //   removeEntry(h2) -> erase h2 -> closeSurface(h2)
+    //   Total closeSurfaceCalls: 2
+    //
+    // Without the guard, the cross-handle callback would removeEntryQuiet(h2)
+    // mid-iteration:
+    //   removeEntry(h1) -> erase h1 -> closeSurface(h1)
+    //     -> dismissed(h2) -> removeEntryQuiet(h2) erases h2
+    //   removeEntry(h2) finds nothing, bails (no closeSurface call)
+    //   Total closeSurfaceCalls: 1
+    //
+    // closeSurfaceCalls == 2 pins the guard's effect.
     ReentrantFakeTransport t;
     PopoutController c(&t);
-    QVERIFY(!c.open(makeRequest(QStringLiteral("coop-1"), ExclusiveMode::Cooperative, QStringLiteral("s1"))).isEmpty());
-    QVERIFY(!c.open(makeRequest(QStringLiteral("alert"), ExclusiveMode::Modal)).isEmpty());
-    QVERIFY(c.isModalActive());
+    const QString h1 = c.open(makeRequest(QStringLiteral("coop-1"), ExclusiveMode::Cooperative, QStringLiteral("s1")));
+    const QString h2 = c.open(makeRequest(QStringLiteral("coop-2"), ExclusiveMode::Cooperative, QStringLiteral("s2")));
+    QVERIFY(!h1.isEmpty());
+    QVERIFY(!h2.isEmpty());
+
+    // Wire the cross-handle echo: closing h1 will fire dismissed for h2.
+    t.crossHandleEcho.insert(h1, h2);
 
     QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
-    QSignalSpy modalSpy(&c, &PopoutController::modalActiveChanged);
     c.closeAll();
 
-    // alert + a fresh cooperative opened after the modal would also
-    // be closed. We only opened one cooperative and the modal closed
-    // it before opening, so closeAll drains the modal alone.
-    QCOMPARE(closedSpy.count(), 1);
-    QCOMPARE(closedSpy.first().at(0).toString(), QStringLiteral("alert"));
-    QVERIFY(!c.isModalActive());
-    QCOMPARE(modalSpy.count(), 1);
+    QCOMPARE(closedSpy.count(), 2);
+    QCOMPARE(t.closeSurfaceCalls, 2);
+    QVERIFY(!c.isOpen(QStringLiteral("coop-1")));
+    QVERIFY(!c.isOpen(QStringLiteral("coop-2")));
 }
 
 void TestPopoutController::destructor_detachesDismissedCallback()
