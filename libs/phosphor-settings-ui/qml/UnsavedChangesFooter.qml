@@ -129,9 +129,14 @@ ColumnLayout {
                 }
 
                 QQC2.Button {
-                    text: qsTr("Discard")
+                    // Disabled while a save / discard is in flight so
+                    // the user can't fire a second batch on top of an
+                    // open D-Bus call. Label flips to "Discarding…"
+                    // for symmetry with Save.
+                    text: root.controller.discarding ? qsTr("Discarding…") : qsTr("Discard")
                     icon.name: "edit-undo"
                     flat: true
+                    enabled: !root.controller.applying && !root.controller.discarding
                     Accessible.name: qsTr("Discard changes")
                     // Confirm-before-throw matches the legacy chrome:
                     // unsaved edits are easy to lose, so the
@@ -141,12 +146,19 @@ ColumnLayout {
                 }
 
                 QQC2.Button {
-                    text: qsTr("Save")
+                    text: root.controller.applying ? qsTr("Saving…") : qsTr("Save")
                     icon.name: "document-save"
                     highlighted: true
+                    enabled: !root.controller.applying && !root.controller.discarding
                     Accessible.name: qsTr("Save settings")
                     onClicked: {
-                        root.controller.applyAll();
+                        // applyAllAsync dispatches each domain's
+                        // apply() and emits applyAllComplete(ok,
+                        // errors) when every domain's applyResult
+                        // has landed. The chrome's `applying` flag
+                        // drives the button label + a (future) toast
+                        // on completion.
+                        root.controller.applyAllAsync();
                         root.saved();
                     }
                 }
@@ -182,7 +194,7 @@ ColumnLayout {
                 icon.name: "edit-undo"
                 onTriggered: {
                     confirmDiscardDialog.close();
-                    root.controller.discardAll();
+                    root.controller.discardAllAsync();
                     root.discarded();
                 }
             },

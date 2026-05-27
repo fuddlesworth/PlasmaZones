@@ -34,12 +34,16 @@ public:
     {
         ++applyCount;
         setDirty(false);
+        // Sync stub emits applyResult immediately so
+        // applyAllAsync's wait-counter ticks down.
+        Q_EMIT applyResult(true, QString());
     }
 
     void discard() override
     {
         ++discardCount;
         setDirty(false);
+        Q_EMIT discardResult(true, QString());
     }
 
     void resetToDefaults() override
@@ -82,11 +86,13 @@ public:
     {
         ++applyCount;
         setDirty(false);
+        Q_EMIT applyResult(true, QString());
     }
     void discard() override
     {
         ++discardCount;
         setDirty(false);
+        Q_EMIT discardResult(true, QString());
     }
 
     void setDirty(bool d)
@@ -120,6 +126,7 @@ public:
         // Deliberately do not clear m_dirty — caller is on the hook to
         // surface the failure to the user, but the framework must keep
         // dirty set so a subsequent Apply retry hits this domain again.
+        Q_EMIT applyResult(false, QStringLiteral("simulated apply failure"));
     }
 };
 
@@ -430,6 +437,114 @@ private Q_SLOTS:
 
         QCOMPARE(keepA->applyCount, 1);
         QCOMPARE(keepB->applyCount, 1);
+        QVERIFY(!app.isDirty());
+    }
+
+    void applyAllAsyncEmitsCompleteOnAllSync()
+    {
+        // Pin the F#2 chrome contract: applyAllAsync calls each dirty
+        // domain's apply(), waits for every applyResult to land, then
+        // emits applyAllComplete(ok, errors) exactly once. With three
+        // sync domains the whole thing completes in the same event-
+        // loop turn.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* b = new StubPage(QStringLiteral("b"));
+        auto* headless = new StubHeadlessDomain();
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl());
+        app.registerPage(b, {}, QStringLiteral("B"), QUrl());
+        app.registerDomain(headless);
+
+        a->setDirty(true);
+        b->setDirty(true);
+        headless->setDirty(true);
+
+        QSignalSpy completeSpy(&app, &ApplicationController::applyAllComplete);
+        QSignalSpy applyingSpy(&app, &ApplicationController::applyingChanged);
+        app.applyAllAsync();
+
+        QCOMPARE(completeSpy.count(), 1);
+        QCOMPARE(completeSpy.first().at(0).toBool(), true);
+        QCOMPARE(completeSpy.first().at(1).toStringList().size(), 0);
+        QCOMPARE(a->applyCount, 1);
+        QCOMPARE(b->applyCount, 1);
+        QCOMPARE(headless->applyCount, 1);
+        QVERIFY(!app.isDirty());
+        // applying transitioned false→true→false; expect at least 2
+        // emissions. (Exactly 2 in practice — but assert the
+        // observable contract rather than the exact count.)
+        QVERIFY(applyingSpy.count() >= 2);
+        QVERIFY(!app.isApplying());
+    }
+
+    void applyAllAsyncCollectsFailureErrors()
+    {
+        // FailingHeadlessDomain emits applyResult(false, error) so the
+        // batch should complete with ok=false and the error string in
+        // the errors list. The clean domain's apply still counts.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* failing = new FailingHeadlessDomain();
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl());
+        app.registerDomain(failing);
+
+        a->setDirty(true);
+        failing->setDirty(true);
+
+        QSignalSpy completeSpy(&app, &ApplicationController::applyAllComplete);
+        app.applyAllAsync();
+
+        QCOMPARE(completeSpy.count(), 1);
+        QCOMPARE(completeSpy.first().at(0).toBool(), false);
+        const QStringList errors = completeSpy.first().at(1).toStringList();
+        QCOMPARE(errors.size(), 1);
+        QCOMPARE(errors.first(), QStringLiteral("simulated apply failure"));
+        // The failing domain kept itself dirty, so global stays dirty.
+        QVERIFY(app.isDirty());
+        QVERIFY(!app.isApplying());
+    }
+
+    void applyAllAsyncOnCleanEmitsImmediately()
+    {
+        // No dirty domains → applyAllComplete fires synchronously with
+        // ok=true. Chrome can rely on this so a "save when not dirty"
+        // path doesn't hang in a saving-forever state.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl());
+
+        QSignalSpy completeSpy(&app, &ApplicationController::applyAllComplete);
+        QSignalSpy applyingSpy(&app, &ApplicationController::applyingChanged);
+        app.applyAllAsync();
+
+        QCOMPARE(completeSpy.count(), 1);
+        QCOMPARE(completeSpy.first().at(0).toBool(), true);
+        QCOMPARE(a->applyCount, 0); // not dirty → not called
+        // No applying flag transition for a no-op batch.
+        QCOMPARE(applyingSpy.count(), 0);
+    }
+
+    void discardAllAsyncEmitsComplete()
+    {
+        // Symmetric to applyAllAsyncEmitsCompleteOnAllSync — sync
+        // domains report discardResult immediately, complete fires
+        // on the same event-loop turn.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        auto* headless = new StubHeadlessDomain();
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl());
+        app.registerDomain(headless);
+
+        a->setDirty(true);
+        headless->setDirty(true);
+
+        QSignalSpy completeSpy(&app, &ApplicationController::discardAllComplete);
+        app.discardAllAsync();
+
+        QCOMPARE(completeSpy.count(), 1);
+        QCOMPARE(completeSpy.first().at(0).toBool(), true);
+        QCOMPARE(a->discardCount, 1);
+        QCOMPARE(headless->discardCount, 1);
         QVERIFY(!app.isDirty());
     }
 

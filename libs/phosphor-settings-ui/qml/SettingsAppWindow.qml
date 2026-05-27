@@ -72,7 +72,6 @@ Kirigami.ApplicationWindow {
             const ctrl = root.controller.registry.controller(id);
             if (ctrl && ctrl.isDirty())
                 ids.push(id);
-
         }
         return ids;
     }
@@ -98,11 +97,23 @@ Kirigami.ApplicationWindow {
     // content directly under the window. None tells Kirigami's
     // pageStack to render nothing there.
     pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
-    onClosing: function(close) {
+    onClosing: function (close) {
         if (root.controller.dirty) {
             close.accepted = false;
             discardDialog.open();
         }
+    }
+
+    // True while we're waiting for an async apply/discard that was
+    // triggered by the close-prompt's Apply / Discard action — the
+    // applyAllComplete / discardAllComplete handlers below close the
+    // window only when this is set, so a normal footer-driven Save
+    // doesn't accidentally close the window.
+    QtObject {
+        id: closeFlow
+
+        property bool waitingApply: false
+        property bool waitingDiscard: false
     }
 
     DiscardChangesDialog {
@@ -110,24 +121,59 @@ Kirigami.ApplicationWindow {
 
         applyAvailable: root.closePromptShowsApply
         onDiscardConfirmed: {
-            root.controller.discardAll();
-            Qt.callLater(root.close);
+            // Async path so a heavy discard (motion-set restore that
+            // touches dozens of profile files) doesn't freeze the
+            // close-prompt window. Wait for discardAllComplete before
+            // actually closing.
+            closeFlow.waitingDiscard = true;
+            root.controller.discardAllAsync();
         }
         onApplyConfirmed: {
-            root.controller.applyAll();
-            // If applyAll() left the controller dirty (at least one
-            // staging domain refused or failed to commit), DON'T close
-            // — closing would re-fire onClosing → re-open this same
-            // discard dialog, which reads to the user as a UI glitch.
-            // Surface a signal the consumer can wire to a toast and
-            // hand the user a chance to retry / inspect.
-            if (root.controller.dirty) {
+            closeFlow.waitingApply = true;
+            root.controller.applyAllAsync();
+        }
+    }
+
+    // Async-path close drivers — fire only when an Apply / Discard
+    // confirmation in the close-prompt is in flight (closeFlow flags).
+    // The same applyAllComplete / discardAllComplete signals also fire
+    // for footer-driven Saves / Discards — those leave the close
+    // flags false and these handlers no-op.
+    Connections {
+        function onApplyAllComplete(ok, errors) {
+            if (!closeFlow.waitingApply)
+                return;
+
+            closeFlow.waitingApply = false;
+            if (!ok || root.controller.dirty) {
+                // applyAllAsync left the controller dirty (one or
+                // more staging domains refused or failed to commit).
+                // Surface to the consumer instead of silently re-
+                // prompting the discard dialog on the next close
+                // attempt.
                 const dirtyIds = root.collectDirtyPageIds();
                 root.applyOnCloseFailed(dirtyIds);
-                return ;
+                return;
             }
+            if (discardDialog.visible)
+                discardDialog.close();
             Qt.callLater(root.close);
         }
+
+        function onDiscardAllComplete(ok, errors) {
+            if (!closeFlow.waitingDiscard)
+                return;
+
+            closeFlow.waitingDiscard = false;
+            // A failed discard still progresses the close — the user
+            // explicitly said "throw away changes"; the failure
+            // surfaces in the log + a future toast wire.
+            if (discardDialog.visible)
+                discardDialog.close();
+            Qt.callLater(root.close);
+        }
+
+        target: root.controller
     }
 
     pageStack.initialPage: Kirigami.Page {
@@ -173,9 +219,7 @@ Kirigami.ApplicationWindow {
                     PhosphorMotionAnimation {
                         profile: !root.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
                     }
-
                 }
-
             }
 
             Kirigami.Separator {
@@ -212,7 +256,6 @@ Kirigami.ApplicationWindow {
                         Layout.alignment: Qt.AlignVCenter
                         visible: status === Loader.Ready && item
                     }
-
                 }
 
                 Kirigami.Separator {
@@ -233,11 +276,7 @@ Kirigami.ApplicationWindow {
                     Layout.fillWidth: true
                     controller: root.controller
                 }
-
             }
-
         }
-
     }
-
 }

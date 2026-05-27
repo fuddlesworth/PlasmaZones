@@ -282,11 +282,20 @@ bool AnimationsPageController::isDirty() const
 void AnimationsPageController::apply()
 {
     commitPending();
+    // commitPending is synchronous (just clears the snapshot map +
+    // dirty bit; the per-edit writes already hit disk through
+    // setOverride). Signal completion immediately so the chrome's
+    // applyAllAsync wait-counter ticks down.
+    Q_EMIT applyResult(true, QString());
 }
 
 void AnimationsPageController::discard()
 {
-    revertPending();
+    // The async revert moves the QSaveFile loop off the GUI thread
+    // (motion-set discards can touch dozens of profile files) and
+    // emits the inherited discardResult on completion — chrome
+    // wait-counter then ticks down.
+    asyncRevertPending();
 }
 
 void AnimationsPageController::commitPending()

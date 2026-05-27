@@ -43,6 +43,8 @@ class PHOSPHORSETTINGSUI_EXPORT ApplicationController : public QObject
     Q_PROPERTY(PhosphorSettingsUi::PageRegistry* registry READ registry CONSTANT)
     Q_PROPERTY(bool dirty READ isDirty NOTIFY dirtyChanged)
     Q_PROPERTY(QString currentPageId READ currentPageId WRITE setCurrentPageId NOTIFY currentPageIdChanged)
+    Q_PROPERTY(bool applying READ isApplying NOTIFY applyingChanged)
+    Q_PROPERTY(bool discarding READ isDiscarding NOTIFY discardingChanged)
     QML_NAMED_ELEMENT(ApplicationController)
     QML_UNCREATABLE("ApplicationController is constructed in C++.")
 
@@ -53,6 +55,14 @@ public:
     PageRegistry* registry() const;
 
     bool isDirty() const;
+
+    /// True while applyAllAsync is in flight (at least one domain's
+    /// applyResult hasn't landed yet). UnsavedChangesFooter binds to
+    /// this to swap "Save" → "Saving…" with the action disabled.
+    bool isApplying() const;
+    /// True while discardAllAsync is in flight — symmetric with
+    /// isApplying.
+    bool isDiscarding() const;
 
     QString currentPageId() const;
     void setCurrentPageId(const QString& id);
@@ -98,11 +108,36 @@ public:
 public Q_SLOTS:
     void applyAll();
     void discardAll();
+    /// Async variant of applyAll — collects each dirty domain's
+    /// applyResult signal and emits applyAllComplete(ok, errors) when
+    /// all responses have landed. Chrome should prefer this over
+    /// applyAll so a stuck D-Bus call doesn't freeze the GUI thread.
+    /// Domains whose apply() is fully synchronous still emit
+    /// applyResult immediately, so they complete on the same event-
+    /// loop turn — the async path degenerates to "sync + one tail
+    /// signal" for them.
+    Q_INVOKABLE void applyAllAsync();
+    /// Symmetric to applyAllAsync; emits discardAllComplete(ok, errors).
+    Q_INVOKABLE void discardAllAsync();
     void resetCurrentPage();
 
 Q_SIGNALS:
     void dirtyChanged();
     void currentPageIdChanged();
+    /// Emitted on every applying-state transition (false→true at the
+    /// start of applyAllAsync, true→false when the last applyResult
+    /// has landed). UnsavedChangesFooter binds Save button text +
+    /// enabled state to this.
+    void applyingChanged();
+    /// Symmetric to applyingChanged for discardAllAsync.
+    void discardingChanged();
+    /// Emitted exactly once per applyAllAsync invocation, when every
+    /// dirty domain's applyResult has been received. `ok` is true iff
+    /// every domain reported success. `errors` is a list of
+    /// user-readable messages (one per failed domain).
+    void applyAllComplete(bool ok, const QStringList& errors);
+    /// Symmetric to applyAllComplete for discardAllAsync.
+    void discardAllComplete(bool ok, const QStringList& errors);
 
 private Q_SLOTS:
     void onDomainDirtyChanged();
@@ -110,6 +145,13 @@ private Q_SLOTS:
 private:
     void trackDomain(StagingDomain* domain);
     void recomputeDirty();
+    /// Helpers used by the async batches. Set the matching m_*Pending
+    /// counter to N, hook a one-shot lambda per domain, then call
+    /// apply()/discard(). When the counter reaches zero, the helper
+    /// emits applyAllComplete / discardAllComplete and toggles the
+    /// applying/discarding state back to false.
+    void completeApplyIfDone();
+    void completeDiscardIfDone();
 
     // All POD-like members default-initialised here for uniformity —
     // m_registry is assigned in the ctor body for clarity (it depends
@@ -123,6 +165,16 @@ private:
     // a single recomputeDirty at the end. Eliminates the O(N²) walk
     // pattern audit-follow-up A15 flagged.
     bool m_inTransaction = false;
+
+    // Async batch state. m_*Pending counts how many domains still
+    // owe an applyResult / discardResult; m_*Errors collects user-
+    // readable failure messages.
+    int m_applyPending = 0;
+    QStringList m_applyErrors;
+    bool m_applying = false;
+    int m_discardPending = 0;
+    QStringList m_discardErrors;
+    bool m_discarding = false;
 };
 
 } // namespace PhosphorSettingsUi

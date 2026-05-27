@@ -29,6 +29,16 @@ bool ApplicationController::isDirty() const
     return m_dirty;
 }
 
+bool ApplicationController::isApplying() const
+{
+    return m_applying;
+}
+
+bool ApplicationController::isDiscarding() const
+{
+    return m_discarding;
+}
+
 QString ApplicationController::currentPageId() const
 {
     return m_currentPageId;
@@ -136,6 +146,128 @@ void ApplicationController::discardAll()
     }
     m_inTransaction = false;
     recomputeDirty();
+}
+
+void ApplicationController::applyAllAsync()
+{
+    // Already in flight — second click is a no-op rather than starting
+    // a parallel batch. UnsavedChangesFooter's Save button is gated on
+    // !applying so a user shouldn't reach this in practice, but the
+    // guard keeps the contract clean for QML callers that bypass the
+    // chrome.
+    if (m_applying) {
+        return;
+    }
+    // Count dirty domains and snapshot the iteration target to survive
+    // any synchronous m_domains mutation during apply (same rationale
+    // as applyAll above).
+    const QList<QPointer<StagingDomain>> snapshot = m_domains;
+    QList<StagingDomain*> dirty;
+    dirty.reserve(snapshot.size());
+    for (const auto& domain : snapshot) {
+        if (domain && domain->isDirty())
+            dirty.append(domain.data());
+    }
+    if (dirty.isEmpty()) {
+        // Nothing to do — emit completion synchronously so a chrome
+        // bound to applyAllComplete still gets a "you're done" tick.
+        Q_EMIT applyAllComplete(true, QStringList{});
+        return;
+    }
+
+    m_applyPending = dirty.size();
+    m_applyErrors.clear();
+    m_applying = true;
+    Q_EMIT applyingChanged();
+    // Suppress the inner per-domain recomputeDirty walks for the
+    // duration of the batch (A15 rationale) — the trailing completion
+    // helper does a final recomputeDirty.
+    m_inTransaction = true;
+
+    for (StagingDomain* domain : dirty) {
+        // One-shot per-domain hookup: capture the connection handle
+        // so we can self-disconnect on first fire (a domain that
+        // emits applyResult twice would otherwise double-decrement).
+        auto* conn = new QMetaObject::Connection;
+        *conn = connect(domain, &StagingDomain::applyResult, this, [this, conn](bool ok, const QString& error) {
+            disconnect(*conn);
+            delete conn;
+            if (!ok && !error.isEmpty())
+                m_applyErrors.append(error);
+            else if (!ok)
+                m_applyErrors.append(QStringLiteral("Unknown error"));
+            --m_applyPending;
+            completeApplyIfDone();
+        });
+        domain->apply();
+    }
+}
+
+void ApplicationController::discardAllAsync()
+{
+    if (m_discarding) {
+        return;
+    }
+    const QList<QPointer<StagingDomain>> snapshot = m_domains;
+    QList<StagingDomain*> dirty;
+    dirty.reserve(snapshot.size());
+    for (const auto& domain : snapshot) {
+        if (domain && domain->isDirty())
+            dirty.append(domain.data());
+    }
+    if (dirty.isEmpty()) {
+        Q_EMIT discardAllComplete(true, QStringList{});
+        return;
+    }
+
+    m_discardPending = dirty.size();
+    m_discardErrors.clear();
+    m_discarding = true;
+    Q_EMIT discardingChanged();
+    m_inTransaction = true;
+
+    for (StagingDomain* domain : dirty) {
+        auto* conn = new QMetaObject::Connection;
+        *conn = connect(domain, &StagingDomain::discardResult, this, [this, conn](bool ok, const QString& error) {
+            disconnect(*conn);
+            delete conn;
+            if (!ok && !error.isEmpty())
+                m_discardErrors.append(error);
+            else if (!ok)
+                m_discardErrors.append(QStringLiteral("Unknown error"));
+            --m_discardPending;
+            completeDiscardIfDone();
+        });
+        domain->discard();
+    }
+}
+
+void ApplicationController::completeApplyIfDone()
+{
+    if (m_applyPending > 0)
+        return;
+    m_inTransaction = false;
+    recomputeDirty();
+    const bool ok = m_applyErrors.isEmpty();
+    const QStringList errors = std::move(m_applyErrors);
+    m_applyErrors.clear();
+    m_applying = false;
+    Q_EMIT applyingChanged();
+    Q_EMIT applyAllComplete(ok, errors);
+}
+
+void ApplicationController::completeDiscardIfDone()
+{
+    if (m_discardPending > 0)
+        return;
+    m_inTransaction = false;
+    recomputeDirty();
+    const bool ok = m_discardErrors.isEmpty();
+    const QStringList errors = std::move(m_discardErrors);
+    m_discardErrors.clear();
+    m_discarding = false;
+    Q_EMIT discardingChanged();
+    Q_EMIT discardAllComplete(ok, errors);
 }
 
 void ApplicationController::resetCurrentPage()

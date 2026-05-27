@@ -168,16 +168,28 @@ bool WindowRuleController::isDirty() const
 
 void WindowRuleController::apply()
 {
-    // commit() pushes the staged rule set to the daemon. The bool return
-    // is consulted by SettingsController on the explicit save() path, but
-    // the framework's StagingDomain contract is fire-and-forget — if the
-    // push fails commit() leaves m_dirty true, dirtyChanged() doesn't fire,
-    // and ApplicationController sees the page as still dirty next tick.
-    commit(/*force=*/false);
+    // StagingDomain::apply contract: asyncCommit dispatches the
+    // setAllRules push via QDBusPendingCallWatcher and emits
+    // applyResult(ok, error) on the reply. The chrome's
+    // ApplicationController::applyAllAsync waits on this signal so a
+    // stuck daemon no longer freezes the Settings window — the user
+    // sees a "Saving…" indicator and an error toast if the push
+    // fails.
+    asyncCommit(/*force=*/false);
 }
 
 void WindowRuleController::discard()
 {
+    // revert() is already async (QDBusPendingCallWatcher) and emits
+    // revertFinished(ok). Map that to the StagingDomain
+    // discardResult contract via a one-shot connection — single-fire
+    // so a future re-revert doesn't accumulate stale handlers.
+    auto* conn = new QMetaObject::Connection;
+    *conn = connect(this, &WindowRuleController::revertFinished, this, [this, conn](bool success) {
+        Q_EMIT discardResult(success, success ? QString() : tr("Failed to fetch the daemon's rule set."));
+        disconnect(*conn);
+        delete conn;
+    });
     revert();
 }
 

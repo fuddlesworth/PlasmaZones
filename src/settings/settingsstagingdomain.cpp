@@ -55,21 +55,34 @@ void SettingsStagingDomain::apply()
         // Apply twice during the singleShot reset window of save()'s
         // m_saving flag). The second save would run against stale staging
         // state still mid-flush by the first.
+        //
+        // Synchronously emit applyResult so the framework's async
+        // completion tracker (ApplicationController::applyAllAsync)
+        // doesn't wait forever on a domain that refused the call.
+        Q_EMIT applyResult(
+            false, m_controller ? QStringLiteral("Apply already in flight") : QStringLiteral("No controller wired"));
         return;
     }
     m_inFlight = true;
     m_controller->save();
     m_inFlight = false;
+    // SettingsController::save() is fully synchronous (KConfig write
+    // to disk via QSettings). Emit completion immediately so
+    // applyAllAsync's per-domain wait-counter ticks down.
+    Q_EMIT applyResult(true, QString());
 }
 
 void SettingsStagingDomain::discard()
 {
     if (!m_controller || m_inFlight) {
+        Q_EMIT discardResult(
+            false, m_controller ? QStringLiteral("Discard already in flight") : QStringLiteral("No controller wired"));
         return;
     }
     m_inFlight = true;
     m_controller->load();
     m_inFlight = false;
+    Q_EMIT discardResult(true, QString());
 }
 
 } // namespace PlasmaZones
