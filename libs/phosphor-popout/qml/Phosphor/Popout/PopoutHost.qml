@@ -33,7 +33,7 @@ Item {
     // Detached popouts want transparent.
     property color backdropColor: "transparent"
     // Tracks whether dismissed has already fired. The signal is
-    // edge-triggered; consumers like the transport key bookkeeping
+    // edge-triggered. Consumers like the transport key bookkeeping
     // off the first fire. Component.onDestruction emits dismissed
     // if neither the close-animation timer nor a previous handler
     // fired it first.
@@ -77,11 +77,11 @@ Item {
     onContentItemChanged: contentFrame.rebindContentItem()
     Component.onCompleted: contentFrame.rebindContentItem()
     // If the host is destroyed before the close-animation timer
-    // emits dismissed (mid-close, or destroyed in open state by a
-    // transport that bypasses the animation), emit dismissed here so
-    // the transport's bookkeeping never leaks a handle. The fired
-    // flag guards against a double fire when the timer also pumps
-    // during teardown.
+    // emits dismissed, emit dismissed here so the transport's
+    // bookkeeping never leaks a handle. This covers a mid-close
+    // teardown or a transport that destroys the host while open is
+    // still true. The fired flag guards against a double fire when
+    // the timer also pumps during teardown.
     Component.onDestruction: {
         if (!_dismissedFired) {
             dismissEmitter.stop();
@@ -199,11 +199,12 @@ Item {
     Timer {
         id: dismissEmitter
 
-        // Interval matches the longest Behavior duration above
-        // (Motion.duration_medium_2 for content opacity and scale;
-        // backdrop opacity uses duration_short_4 which is shorter).
-        // Computing the max keeps the timer aligned even if the
-        // backdrop duration is ever retuned above the content's.
+        // Interval matches the longest Behavior duration above.
+        // Content opacity and scale animate over
+        // Motion.duration_medium_2. Backdrop opacity uses
+        // duration_short_4 which is shorter. Computing the max
+        // keeps the timer aligned even if the backdrop duration is
+        // ever retuned above the content's.
         interval: Math.max(Motion.duration_medium_2, Motion.duration_short_4)
         repeat: false
         onTriggered: {

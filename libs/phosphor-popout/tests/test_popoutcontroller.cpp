@@ -36,6 +36,11 @@ public:
 
     void closeSurface(const QString& handle) override
     {
+        // Counter is bumped on every entry, even for unknown
+        // handles, so the test suite can pin "no transport call at
+        // all" contracts. closeLog stays gated on alive so it only
+        // captures handles the transport actually owned.
+        ++closeSurfaceCalls;
         if (!alive.contains(handle)) {
             return;
         }
@@ -72,6 +77,7 @@ public:
     QHash<QString, QString> alive;
     QStringList openLog;
     QStringList closeLog;
+    int closeSurfaceCalls = 0;
     int counter = 0;
     bool refuseNextOpen = false;
     std::function<void(const QString&)> dismissedCb;
@@ -123,6 +129,7 @@ private Q_SLOTS:
     void dismissedCallback_cooperativeDoesNotEmitModalChange();
     void dismissedCallback_unknownHandleNoOp();
     void dismissedCallback_reentrantTransportSuppressedDuringSelfTeardown();
+    void dismissedCallback_reentrantTransportSuppressedDuringCloseAll();
     void modalActiveChanged_firesOnFirstAndLast();
     void destructor_detachesDismissedCallback();
 };
@@ -403,6 +410,7 @@ void TestPopoutController::dismissedCallback_removesEntryAndUpdatesModalState()
 
     QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
     QSignalSpy modalSpy(&c, &PopoutController::modalActiveChanged);
+    const int callsBefore = t.closeSurfaceCalls;
     t.dismiss(h);
 
     QCOMPARE(closedSpy.count(), 1);
@@ -411,6 +419,11 @@ void TestPopoutController::dismissedCallback_removesEntryAndUpdatesModalState()
     QVERIFY(!c.isOpen(QStringLiteral("alert")));
     QVERIFY(!c.isModalActive());
     QCOMPARE(modalSpy.count(), 1);
+    // The dismissed callback must route through removeEntryQuiet,
+    // NOT removeEntry. The transport already knows the surface is
+    // gone; calling closeSurface again would loop. A regression that
+    // swapped the helpers would bump closeSurfaceCalls here.
+    QCOMPARE(t.closeSurfaceCalls, callsBefore);
 }
 
 void TestPopoutController::dismissedCallback_unknownHandleNoOp()
@@ -513,11 +526,9 @@ void TestPopoutController::close_emptyHandleNoOp()
 void TestPopoutController::toggle_emptyIdAlwaysOpens()
 {
     // Empty-id toggle has no fixed referent. Each call opens a fresh
-    // popout rather than toggling an existing one. Two toggles in
-    // distinct scopes both stay open. Two toggles in the same scope
-    // cause the second to close the first via cooperative-scope
-    // arbitration, so the second toggle still returns a non-empty
-    // handle but only one entry remains alive at the end.
+    // popout rather than toggling an existing one. This test pins the
+    // distinct-scope case where two coexist. Same-scope cooperative
+    // arbitration is exercised by open_secondCooperativeSameScopeReplacesFirst.
     PopoutRequest a;
     a.scope = QStringLiteral("scope-a");
     PopoutRequest b;
@@ -564,11 +575,16 @@ void TestPopoutController::dismissedCallback_cooperativeDoesNotEmitModalChange()
 
     QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
     QSignalSpy modalSpy(&c, &PopoutController::modalActiveChanged);
+    const int callsBefore = t.closeSurfaceCalls;
     t.dismiss(h);
 
     QCOMPARE(closedSpy.count(), 1);
     QCOMPARE(modalSpy.count(), 0);
     QVERIFY(!c.isOpen(QStringLiteral("calendar")));
+    // Same removeEntryQuiet contract as the modal case. The
+    // transport already knows the surface is gone, so the callback
+    // path must not call closeSurface again.
+    QCOMPARE(t.closeSurfaceCalls, callsBefore);
 }
 
 // Re-entrant fake. Synchronously fires the dismissed callback from
@@ -628,6 +644,33 @@ void TestPopoutController::dismissedCallback_reentrantTransportSuppressedDuringS
     // twice, not four times.
     QVERIFY(!c.open(makeRequest(QStringLiteral("alert"), ExclusiveMode::Modal)).isEmpty());
     QCOMPARE(closedSpy.count(), 2);
+}
+
+void TestPopoutController::dismissedCallback_reentrantTransportSuppressedDuringCloseAll()
+{
+    // closeAll has its own ScopedTrue guard. Without it, a re-entrant
+    // transport that fires dismissed-from-closeSurface would loop
+    // into the callback and double-emit popoutClosed for every
+    // entry being drained. This test exercises the closeAll guard
+    // specifically; the open-Modal path is covered separately by
+    // dismissedCallback_reentrantTransportSuppressedDuringSelfTeardown.
+    ReentrantFakeTransport t;
+    PopoutController c(&t);
+    QVERIFY(!c.open(makeRequest(QStringLiteral("coop-1"), ExclusiveMode::Cooperative, QStringLiteral("s1"))).isEmpty());
+    QVERIFY(!c.open(makeRequest(QStringLiteral("alert"), ExclusiveMode::Modal)).isEmpty());
+    QVERIFY(c.isModalActive());
+
+    QSignalSpy closedSpy(&c, &PopoutController::popoutClosed);
+    QSignalSpy modalSpy(&c, &PopoutController::modalActiveChanged);
+    c.closeAll();
+
+    // alert + a fresh cooperative opened after the modal would also
+    // be closed. We only opened one cooperative and the modal closed
+    // it before opening, so closeAll drains the modal alone.
+    QCOMPARE(closedSpy.count(), 1);
+    QCOMPARE(closedSpy.first().at(0).toString(), QStringLiteral("alert"));
+    QVERIFY(!c.isModalActive());
+    QCOMPARE(modalSpy.count(), 1);
 }
 
 void TestPopoutController::destructor_detachesDismissedCallback()

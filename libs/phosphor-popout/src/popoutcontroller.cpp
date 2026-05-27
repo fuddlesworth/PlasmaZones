@@ -21,12 +21,12 @@ struct Entry
 };
 
 // Save-and-restore RAII guard for the bool re-entrancy flag. A blind
-// set-to-true / set-to-false pair (the obvious shape) breaks under
-// re-entrancy. The inner call's restore clears the outer caller's
-// guard while the outer is still mid-mutation, opening the very
-// double-emit window the guard exists to close. The RAII form stores
-// the prior value and restores it, so nested teardown windows nest
-// instead of clobbering each other.
+// set-to-true / set-to-false pair is the obvious shape and breaks
+// under re-entrancy. The inner call's restore clears the outer
+// caller's guard while the outer is still mid-mutation, opening the
+// very double-emit window the guard exists to close. The RAII form
+// stores the prior value and restores it, so nested teardown
+// windows nest instead of clobbering each other.
 class ScopedTrue
 {
 public:
@@ -204,9 +204,9 @@ PopoutController::PopoutController(IPopoutTransport* transport, QObject* parent)
         if (d->inSelfTeardown) {
             return;
         }
-        // Route through removeEntryQuiet (no transport call) since
-        // the transport already knows the surface is gone. The
-        // signal sequence and modal-count invariant match the
+        // Route through removeEntryQuiet so the transport is not
+        // re-notified. The surface is already gone. The signal
+        // sequence and modal-count invariant match the
         // caller-initiated removeEntry path.
         d->removeEntryQuiet(handle);
     });
@@ -240,9 +240,10 @@ QString PopoutController::open(const PopoutRequest& request)
     // entirely. Modals close existing cooperatives. Cooperatives are
     // rejected while a modal is up and swap any same-scope sibling.
     // The re-entrancy guard wraps each branch that actually mutates
-    // entries. Branches that don't mutate (Detached and the rejected
-    // Cooperative) skip the guard so a same-thread re-entrant slot
-    // can't observe an unnecessary self-teardown state.
+    // entries. Branches that don't mutate skip the guard so a
+    // same-thread re-entrant slot can't observe an unnecessary
+    // self-teardown state. Those are the Detached and the rejected
+    // Cooperative branches.
     switch (request.exclusive) {
     case ExclusiveMode::Detached:
         break;

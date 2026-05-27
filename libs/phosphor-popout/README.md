@@ -117,7 +117,7 @@ ToolButton {
 The `popoutRequest` value type, `Anchor`, and `ExclusiveMode` enums
 are all visible to QML through the registrations described in the
 key-types table above. `popoutRequest()` is the value type's default
-constructor; field assignment uses regular property syntax.
+constructor. Field assignment uses regular property syntax.
 
 ## Arbitration
 

@@ -27,7 +27,16 @@ InAppPopoutTransport::~InAppPopoutTransport()
     // deleteLater because by the time this destructor runs the event
     // loop may already have exited, in which case queued deleteLater
     // events never fire and the items leak.
-    for (auto& entry : m_entries) {
+    //
+    // Snapshot the entry values into a local list and clear m_entries
+    // BEFORE deleting. deleting a host fires its
+    // Component.onDestruction which emits dismissed, which routes
+    // through onHostDismissed and calls m_entries.erase. Iterating
+    // m_entries with a range-for while that erase runs would
+    // invalidate the iterator.
+    const auto victims = m_entries.values();
+    m_entries.clear();
+    for (const auto& entry : victims) {
         if (entry.hostItem) {
             delete entry.hostItem.data();
         }
@@ -35,7 +44,6 @@ InAppPopoutTransport::~InAppPopoutTransport()
             delete entry.contentItem.data();
         }
     }
-    m_entries.clear();
 }
 
 void InAppPopoutTransport::setHostItem(QQuickItem* host)
@@ -64,11 +72,17 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // Instantiate the content delegate first so the host wrapper can
     // reparent it on Component.onCompleted. Two-phase create gives us
     // a chance to apply the request's props before the delegate runs
-    // its bindings; mirrors the layer-shell transport's contract.
+    // its bindings. Mirrors the layer-shell transport's contract.
     QQmlComponent* contentComponent = request.content;
     QObject* contentObj = contentComponent->beginCreate(engine->rootContext());
     auto* contentItem = qobject_cast<QQuickItem*>(contentObj);
     if (!contentItem) {
+        // Pair beginCreate with completeCreate before discarding the
+        // object. Qt's QQmlComponent state machine assumes every
+        // beginCreate sees a matching completeCreate so its internal
+        // bookkeeping stays consistent for subsequent create calls
+        // against the same shared component.
+        contentComponent->completeCreate();
         if (contentObj) {
             contentObj->deleteLater();
         }
