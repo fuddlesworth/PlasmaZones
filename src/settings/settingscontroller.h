@@ -511,6 +511,10 @@ Q_SIGNALS:
     void algorithmCreated(const QString& algorithmId);
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
+    /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
+    /// fails at the daemon — QML can surface the reason in a toast so the
+    /// user knows the change wasn't saved.
+    void virtualScreenConfigFailed(const QString& physicalScreenId, const QString& reason);
     void screensChanged();
     void dismissedUpdateVersionChanged();
     void lastSeenWhatsNewVersionChanged();

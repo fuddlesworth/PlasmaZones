@@ -17,6 +17,8 @@
 
 #include "settingscontroller.h"
 
+#include "../core/logging.h"
+
 #include <QDebug>
 
 namespace PlasmaZones {
@@ -78,8 +80,8 @@ bool moveOrderedItem(const QVariantList& resolved, int fromIndex, int toIndex, s
             // should always stamp an id). Refuse the move rather than
             // staging a list that contains an empty-id slot — persisting
             // that would round-trip back as a phantom entry on next load.
-            qWarning() << "moveOrderedItem: resolved entry at index" << ids.size()
-                       << "has empty id; refusing to stage reorder";
+            qCWarning(lcCore) << "moveOrderedItem: resolved entry at index" << ids.size()
+                              << "has empty id; refusing to stage reorder";
             return false;
         }
         ids.append(id);

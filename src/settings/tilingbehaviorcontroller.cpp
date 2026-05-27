@@ -15,9 +15,18 @@ TilingBehaviorController::TilingBehaviorController(ISettings* settings, QObject*
 {
     Q_ASSERT(m_settings);
     m_lastAlwaysReinsertIntoStack = alwaysReinsertIntoStack();
+    m_lastAutotileDragInsertTriggers = autotileDragInsertTriggers();
 
+    // Cache the AlwaysActive-stripped trigger list so a master-flag
+    // toggle (which flips only the sentinel) doesn't re-emit
+    // autotileDragInsertTriggersChanged to QML when the visible list
+    // is identical. Symmetric with SnappingBehaviorController.
     connect(m_settings, &ISettings::autotileDragInsertTriggersChanged, this, [this]() {
-        Q_EMIT autotileDragInsertTriggersChanged();
+        const QVariantList newTriggers = autotileDragInsertTriggers();
+        if (newTriggers != m_lastAutotileDragInsertTriggers) {
+            m_lastAutotileDragInsertTriggers = newTriggers;
+            Q_EMIT autotileDragInsertTriggersChanged();
+        }
         const bool newAlwaysReinsert = alwaysReinsertIntoStack();
         if (newAlwaysReinsert != m_lastAlwaysReinsertIntoStack) {
             m_lastAlwaysReinsertIntoStack = newAlwaysReinsert;

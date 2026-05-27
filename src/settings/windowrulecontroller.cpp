@@ -201,7 +201,7 @@ void WindowRuleController::discard()
         this, &WindowRuleController::revertFinished, this,
         [this](bool success) {
             m_discardInFlight = false;
-            Q_EMIT discardResult(success, success ? QString() : tr("Failed to fetch the daemon's rule set."));
+            Q_EMIT discardResult(success, success ? QString() : PzI18n::tr("Failed to fetch the daemon's rule set."));
         },
         Qt::SingleShotConnection);
     revert();
@@ -312,7 +312,7 @@ bool WindowRuleController::pushToDaemonAsync(const QList<WindowRule>& rules)
         // failure so the page can stay dirty for retry.
         const bool ok = reply.value();
         if (!ok) {
-            Q_EMIT applyResult(false, tr("The daemon rejected one or more rules."));
+            Q_EMIT applyResult(false, PzI18n::tr("The daemon rejected one or more rules."));
             return;
         }
         setDirty(false);
@@ -424,6 +424,15 @@ bool WindowRuleController::forceCommit()
 
 bool WindowRuleController::commit(bool force)
 {
+    if (m_asyncCommitInFlight) {
+        // A sync commit() landing while an async push is still mid-flight
+        // would race the in-flight reply — both paths call setDirty(false)
+        // on success, and the daemon receives two parallel setAllRules
+        // writes for one user action. Refuse the sync path; the caller
+        // can wait for applyResult and retry.
+        qCWarning(lcConfig) << "WindowRuleController::commit: refusing — asyncCommit already in flight";
+        return false;
+    }
     if (!m_dirty) {
         return true;
     }
@@ -458,7 +467,7 @@ void WindowRuleController::asyncCommit(bool force)
     // would call setDirty(false) and emit applyResult), and the
     // daemon receives two identical writes for one user action.
     if (m_asyncCommitInFlight) {
-        Q_EMIT applyResult(false, tr("A save is already in flight."));
+        Q_EMIT applyResult(false, PzI18n::tr("A save is already in flight."));
         return;
     }
     if (!m_dirty) {
@@ -469,8 +478,8 @@ void WindowRuleController::asyncCommit(bool force)
         qCWarning(lcConfig) << "WindowRuleController::asyncCommit: refusing to push — daemon rules changed while the "
                                "page had staged edits; review or force-overwrite required";
         Q_EMIT applyResult(false,
-                           tr("The daemon's window rules changed while you were editing. Review or use "
-                              "Save anyway to overwrite."));
+                           PzI18n::tr("The daemon's window rules changed while you were editing. Review or use "
+                                      "Save anyway to overwrite."));
         return;
     }
     if (!pushToDaemonAsync(m_model.rules())) {
@@ -480,8 +489,8 @@ void WindowRuleController::asyncCommit(bool force)
         // toast / banner the failure rather than leaving the page in a
         // silent-fail "still dirty" state.
         Q_EMIT applyResult(false,
-                           tr("One or more window rules failed validation and could not be saved. See the "
-                              "log for details."));
+                           PzI18n::tr("One or more window rules failed validation and could not be saved. See the "
+                                      "log for details."));
     }
     // pushToDaemonAsync's QDBusPendingCallWatcher emits applyResult on
     // the reply (success or transport error) — nothing to do here.

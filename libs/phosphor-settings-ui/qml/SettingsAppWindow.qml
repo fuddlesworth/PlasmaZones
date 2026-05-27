@@ -115,7 +115,26 @@ Kirigami.ApplicationWindow {
         // and the deferred close (e.g. a daemon broadcast firing
         // mid-close) re-fires the prompt and the user gets stuck in
         // a close-loop.
+        //
+        // Reset the flag immediately so a *second* close that gets
+        // accepted (e.g. close.accepted = false elsewhere in a
+        // consumer's onClosing handler) doesn't leave forceClosing
+        // permanently true — a stale flag silently bypasses the
+        // dirty prompt on the NEXT close-with-dirty-data, losing
+        // user edits.
         if (closeFlow.forceClosing) {
+            closeFlow.forceClosing = false;
+            return;
+        }
+        // If we're already waiting on an in-flight async batch from a
+        // previous close attempt, leave the window open until the
+        // batch's applyAllComplete / discardAllComplete handler runs
+        // its deferred-close. Reading `dirty` here can race the
+        // batch (a fast staging domain commits before the completion
+        // signal arrives) and accidentally accept the close while
+        // applyAllComplete still expects to drive it.
+        if (closeFlow.waitingApply || closeFlow.waitingDiscard) {
+            close.accepted = false;
             return;
         }
         if (root.controller.dirty) {
@@ -125,7 +144,7 @@ Kirigami.ApplicationWindow {
             // unwinding) — Kirigami.PromptDialog tolerates this but
             // resetting waitingApply / waitingDiscard would silently
             // re-arm the close flow against a stale batch.
-            if (!discardDialog.visible && !closeFlow.waitingApply && !closeFlow.waitingDiscard)
+            if (!discardDialog.visible)
                 discardDialog.open();
         }
     }

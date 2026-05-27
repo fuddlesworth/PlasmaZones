@@ -117,6 +117,12 @@ Rectangle {
                 ]
 
                 delegate: RowLayout {
+                    // Required `modelData` declaration — Qt 6.5+ deprecates the
+                    // contextual `modelData` injected automatically by Repeater;
+                    // QML_REQUIRES_REGISTRATION builds emit a warning unless
+                    // the delegate consumes it through a required property.
+                    required property var modelData
+
                     Layout.fillWidth: true
 
                     Label {

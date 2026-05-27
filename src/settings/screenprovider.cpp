@@ -103,6 +103,13 @@ QList<ScreenInfo> fetchScreens()
                             info.isVirtualScreen = true;
                             info.virtualIndex = idx;
                             info.virtualDisplayName = jsonObj.value(JsonKeys::VirtualDisplayName).toString();
+                        } else {
+                            // Symmetric warning to the non-positive-geometry
+                            // branch above so wire-format drift surfaces in
+                            // the journal instead of silently dropping
+                            // virtual-screen identity.
+                            qCWarning(lcConfig) << "ScreenProvider: daemon claimed virtual but screenName" << screenName
+                                                << "is not a parseable virtual id — demoting to physical";
                         }
                     }
                 } else {

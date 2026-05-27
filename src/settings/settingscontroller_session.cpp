@@ -193,16 +193,35 @@ void SettingsController::refreshActivities()
                                                         QStringLiteral("getAllActivitiesInfo"));
         if (infoReply.type() == QDBusMessage::ReplyMessage && !infoReply.arguments().isEmpty()) {
             QString json = infoReply.arguments().first().toString();
-            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-            if (doc.isArray()) {
+            QJsonParseError parseErr;
+            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseErr);
+            if (parseErr.error != QJsonParseError::NoError) {
+                // Malformed payload — clear so QML stops rendering an
+                // activity set we can no longer trust to match the
+                // daemon's view. Silent-on-parse-error would keep
+                // m_activities stale forever.
+                qCWarning(lcCore) << "refreshActivities: getAllActivitiesInfo parse error:" << parseErr.errorString();
+                m_activities.clear();
+            } else if (doc.isArray()) {
                 m_activities.clear();
                 for (const auto& val : doc.array()) {
                     m_activities.append(val.toObject().toVariantMap());
                 }
+            } else {
+                // Reply was a JSON document but not an array — same
+                // shape mismatch as a parse error; treat as failure.
+                qCWarning(lcCore) << "refreshActivities: getAllActivitiesInfo reply was not a JSON array";
+                m_activities.clear();
             }
         } else if (infoReply.type() == QDBusMessage::ErrorMessage) {
             qCWarning(lcCore) << "refreshActivities: getAllActivitiesInfo D-Bus call failed:"
                               << infoReply.errorMessage();
+            // Same rationale as the isActivitiesAvailable branch above:
+            // a D-Bus failure leaves m_activities stale and QML
+            // continues to render activities the daemon can no longer
+            // enumerate. Clear so the view honestly reflects "we
+            // couldn't talk to the daemon."
+            m_activities.clear();
         }
 
         QDBusMessage currentReply = DaemonDBus::callDaemon(
@@ -551,10 +570,15 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // Clean up backup on success
         QFile::remove(backupPath);
         // Wrap the in-memory reload so property NOTIFY signals don't mark
-        // pages dirty — the imported config is already on disk.
+        // pages dirty — the imported config is already on disk. Keep
+        // m_loading=true through the page-controller revert calls below
+        // too: revertPending() emits pendingChangesChanged synchronously
+        // and revert() schedules a daemon fetch whose reply could
+        // re-fire dirtyChanged before the trailing setNeedsSave(false)
+        // runs. Both connect-side handlers (around settingscontroller
+        // .cpp:428 and :449) early-return when m_loading is true.
         m_loading = true;
         m_settings.load();
-        m_loading = false;
         // Page controllers with their own on-disk staging surfaces
         // (animations / window-rules) must reload too — m_settings.load()
         // only refreshes settings.json-backed state. Without these the
@@ -566,6 +590,7 @@ bool SettingsController::importAllSettings(const QString& filePath)
         if (m_windowRulesPage) {
             m_windowRulesPage->revert();
         }
+        m_loading = false;
         DaemonDBus::notifyReload();
         setNeedsSave(false);
     }

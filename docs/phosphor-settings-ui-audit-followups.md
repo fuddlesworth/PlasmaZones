@@ -29,7 +29,7 @@ All seven settings-app page controllers migrated:
 
 ---
 
-## 1. ISettings* across all page controllers (D5 — HIGH, original spec retained below)
+### 1.1 Original spec (HIGH at intake)
 
 **Finding:** Six page controllers (`EditorPageController`,
 `GeneralPageController`, `SnappingAppearanceController`,
@@ -43,17 +43,18 @@ their dependency. `AnimationsPageController` is the lone consumer of
 
 **Scope of work:**
 
-- `ISettings` (`src/core/isettings.h`, ~457 lines, ~57 existing pure virtuals)
-  needs to grow ~100 additional pure virtual getter+setter pairs to cover the
-  editor / general / snapping-appearance / snapping-behavior / tiling-*
-  surface those six controllers use.
+- `ISettings` (`src/core/isettings.h`) needs to grow additional pure virtual
+  getter+setter pairs to cover the editor / general / snapping-appearance /
+  snapping-behavior / tiling-* surface those six controllers use. (Line and
+  override counts intentionally elided here — they were snapshots from
+  Pass 1 and have since drifted as the migration progressed; see the
+  current file for the live numbers.)
 - Every new virtual needs a matching `override` declaration in `Settings`
   (`src/config/settings.h`). The methods already exist as non-virtual on the
   concrete class — only the `virtual` keyword + `override` are new.
-- `tests/unit/helpers/StubSettings.h` (903 lines, 218 overrides) needs a
-  matching stub override for every new pure virtual. Without that the
-  StubSettings becomes abstract and every test that instantiates it
-  fails to compile.
+- `tests/unit/helpers/StubSettings.h` needs a matching stub override for
+  every new pure virtual. Without that the StubSettings becomes abstract
+  and every test that instantiates it fails to compile.
 - Constructor parameters on the six controllers change from `Settings*` to
   `ISettings*`. Since `Settings : public ISettings`, the implicit conversion
   Just Works at the call site — but every member access inside the controller
@@ -109,7 +110,7 @@ first, then snapping pair, then tiling pair). For each:
   pin the async batch contract (complete-once, error collection,
   no-op clean batches emit immediately).
 
-## 2. Sync → async D-Bus on save / discard (D8, D10 — MEDIUM, original spec retained below)
+### 2.1 Original spec (MEDIUM at intake)
 
 **Finding:**
 
@@ -193,7 +194,7 @@ prior addRule + 2 moveRule sequence (was up to 4 model signals per
 Duplicate click; now 1 + the existing renormalize dataChanged). New
 unit test pins the single-emit + index-clamp contract.
 
-## 5. WindowRuleController::duplicateRule single-emit (D12 — original spec retained below)
+### 5.1 Original spec
 
 **Partial Pass-2d fix:** Added `renormalizePriorities()` after the clone
 + reorder sequence — closes the priority-collision concern (clone no
@@ -225,7 +226,7 @@ startup window where lookups would return raw UUIDs / wire tokens
 never becomes user-visible. Bit-mask tracking in the controller
 keeps the contract install-once.
 
-## 6. monitorOverview identity-default for lookups (D13 — original spec retained below)
+### 6.1 Original spec
 
 **Finding:** The reviewer flagged that `monitorOverview()` returns raw
 UUID-with-braces strings if `setScreenLookup` / `setActivityLookup` /
@@ -257,7 +258,7 @@ internals. The model role formerly named `id` was renamed to
 the QML `id:` directive. Sidebar.qml is now ~480 lines, well under
 the 800-line cap.
 
-## 7. Sidebar.qml extraction (B9 — original spec retained below)
+### 7.1 Original spec
 
 **Partial Pass-10 fix:** The back-button block (~75 lines) was
 extracted to `SidebarBackButton.qml` to bring Sidebar.qml from 809
@@ -338,7 +339,7 @@ INSTALL_RPATH on the plugin so it finds the sibling shared lib at
 runtime. In-tree consumers keep linking the STATIC target — no
 behavioural change with the option off.
 
-## 12. PhosphorSettingsUiQml SHARED-variant install (Pass 10 — original spec retained below)
+### 12.1 Original spec
 
 **Finding:** The `PhosphorSettingsUiQml` STATIC target's namespaced
 alias `PhosphorSettingsUi::PhosphorSettingsUiQml` works for in-tree
@@ -372,7 +373,7 @@ based on `rule.engineMode`. WindowRuleModel mirrors the split:
 `setLayoutLookup` / `setLayoutLabelLookup` setters survive as
 back-compat shims that wire both targets to the same resolver.
 
-## 13. WindowRule monitorOverview layout-token lookup contract (Pass 10 — original spec retained below)
+### 13.1 Original spec
 
 **Finding:** `WindowRuleController::monitorOverview` resolves both
 snappingLayout (UUIDs) and tilingAlgorithm (algorithm tokens like
@@ -400,7 +401,7 @@ Q_INVOKABLE. `DiscardChangesDialog`'s `onApplyConfirmed` now checks
 of silently re-prompting. PlasmaZones' Main.qml wires the signal to
 a toast that names the still-dirty page titles.
 
-## 14. UnsavedChangesFooter applyAll silent-failure toast (Pass 10 — original spec retained below)
+### 14.1 Original spec
 
 **Finding:** `SettingsAppWindow.qml`'s onApplyConfirmed calls
 `controller.applyAll()` then `Qt.callLater(root.close)`. If applyAll
@@ -415,7 +416,7 @@ refused the apply, rather than silently re-prompting.
 
 ---
 
-## 11. NIT items (statuses after passes 12-27)
+## 15. NIT items (statuses after passes 12-27)
 
 - A15: `recomputeDirty` O(N²) — CLOSED in pass 26. ApplicationController
   now holds an `m_inTransaction` flag set during applyAll/discardAll;
@@ -445,7 +446,11 @@ These items should be filed as GitHub issues with the `phosphor-settings-ui`
 label once PR #533 merges. Each maps to one or more audit findings (audit
 codes preserved above so reviewers can cross-reference the original report).
 
-Last updated: 2026-05-27 (after passes 12-28 from the senior PR review).
+Last updated: 2026-05-27 (after passes 12-39 from the senior PR review).
+Pass 39 restructured the H2 duplicates (each "CLOSED + original spec" pair
+collapsed into one H2 with an "### N.1 Original spec" subsection) and
+renumbered the trailing NIT items section from #11 to #15 so it sorts
+after #14 in document order.
 
 Closed: #1 (all sub-passes 1a-1f), #2 (foundation + async siblings +
 chrome state machine), #3, #5, #6, #7, #8, #12, #13, #14, A15, A17,

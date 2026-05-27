@@ -65,6 +65,12 @@ private:
     /// `autotileDragInsertTriggersChanged → alwaysReinsertIntoStackChanged`
     /// forwarder only fires when the derived boolean actually flips.
     bool m_lastAlwaysReinsertIntoStack = false;
+    /// Cached AlwaysActive-stripped trigger list. Toggling only the
+    /// master `alwaysReinsertIntoStack` flag flips the sentinel
+    /// modifier but leaves the QML-facing stripped list identical,
+    /// so we only emit `autotileDragInsertTriggersChanged` when the
+    /// stripped form actually differs.
+    QVariantList m_lastAutotileDragInsertTriggers;
 };
 
 } // namespace PlasmaZones

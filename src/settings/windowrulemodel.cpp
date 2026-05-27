@@ -12,6 +12,8 @@
 #include <QJsonArray>
 #include <QStringList>
 
+#include <algorithm>
+
 namespace PlasmaZones {
 
 namespace {

@@ -194,7 +194,16 @@ ColumnLayout {
                 }
 
                 function selectDefaultLayout(mode) {
-                    let defaultId = (mode === 1) ? ("autotile:" + root.settingsBridge.defaultAutotileAlgorithm) : root.settingsBridge.defaultLayoutId;
+                    let defaultId;
+                    if (mode === 1) {
+                        const algo = root.settingsBridge.defaultAutotileAlgorithm;
+                        // Empty algo would produce a truthy "autotile:" sentinel that
+                        // sails through the `if (defaultId)` guard below and selects a
+                        // nonsense layout id. Treat empty algo as "no default".
+                        defaultId = algo.length > 0 ? ("autotile:" + algo) : "";
+                    } else {
+                        defaultId = root.settingsBridge.defaultLayoutId;
+                    }
                     if (defaultId)
                         selectedLayoutId = defaultId;
                 }
@@ -377,7 +386,7 @@ ColumnLayout {
         id: importDialog
 
         title: i18n("Import Layout")
-        nameFilters: [i18n("JSON files") + " (*.json)", i18n("All files") + " (*)"]
+        nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             settingsController.importLayout(root.filePathFromUrl(selectedFile));
@@ -391,7 +400,7 @@ ColumnLayout {
         property string layoutId: ""
 
         title: i18n("Export Layout")
-        nameFilters: [i18n("JSON files") + " (*.json)"]
+        nameFilters: [i18n("JSON files (*.json)")]
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportLayout(exportDialog.layoutId, root.filePathFromUrl(selectedFile));
@@ -403,7 +412,7 @@ ColumnLayout {
         id: algorithmImportDialog
 
         title: i18n("Import Tiling Algorithm")
-        nameFilters: [i18n("JavaScript files") + " (*.js)", i18n("All files") + " (*)"]
+        nameFilters: [i18n("JavaScript files (*.js)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile))) {
@@ -418,7 +427,7 @@ ColumnLayout {
         id: kzonesFileDialog
 
         title: i18n("Import KZones Layout File")
-        nameFilters: [i18n("JSON files") + " (*.json)", i18n("All files") + " (*)"]
+        nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             settingsController.importFromKZonesFile(root.filePathFromUrl(selectedFile));
@@ -507,7 +516,7 @@ ColumnLayout {
         property string algorithmId: ""
 
         title: i18n("Export Algorithm")
-        nameFilters: [i18n("JavaScript files") + " (*.js)"]
+        nameFilters: [i18n("JavaScript files (*.js)")]
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile));

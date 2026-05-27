@@ -111,7 +111,12 @@ RowLayout {
                         root.controller.currentPageId = segmentRow.modelData.id;
                 }
 
-                Layout.preferredWidth: segmentLabel.implicitWidth
+                // Long localised crumbs (e.g. "Mostrar configuración
+                // avanzada de personalización") would otherwise push the
+                // headerExtras Loader off-screen — clamp to a sensible
+                // budget and elide with a middle ellipsis so both ends
+                // (parent context + leaf name) stay readable.
+                Layout.preferredWidth: Math.min(segmentLabel.implicitWidth, Kirigami.Units.gridUnit * 20)
                 Layout.preferredHeight: segmentLabel.implicitHeight
                 activeFocusOnTab: segmentRow.clickable
                 Accessible.name: segmentLabel.text
@@ -125,6 +130,7 @@ RowLayout {
 
                     anchors.fill: parent
                     text: segmentRow.modelData.title
+                    elide: Text.ElideMiddle
                     opacity: segmentRow.clickable && (segmentMouse.containsMouse || segmentItem.activeFocus) ? 0.8 : 0.5
                     font.underline: segmentRow.clickable && (segmentMouse.containsMouse || segmentItem.activeFocus)
                 }

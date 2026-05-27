@@ -14,9 +14,17 @@ QVariantList convertTriggersForQml(const QVariantList& triggers)
     QVariantList result;
     for (const auto& t : triggers) {
         auto map = t.toMap();
+        const int modifierValue = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        // The header contract requires callers to strip the
+        // AlwaysActive sentinel (DragModifier::AlwaysActive == 8)
+        // first — `dragModifierToBitmask(8)` returns 0, which would
+        // surface as a phantom "no-modifier" chip in QML. Skip the
+        // entry defensively so a forgetful caller can't silently
+        // poison the QML view.
+        if (modifierValue == static_cast<int>(DragModifier::AlwaysActive))
+            continue;
         QVariantMap converted;
-        converted[ConfigDefaults::triggerModifierField()] =
-            ModifierUtils::dragModifierToBitmask(map.value(ConfigDefaults::triggerModifierField(), 0).toInt());
+        converted[ConfigDefaults::triggerModifierField()] = ModifierUtils::dragModifierToBitmask(modifierValue);
         converted[ConfigDefaults::triggerMouseButtonField()] = map.value(ConfigDefaults::triggerMouseButtonField(), 0);
         result.append(converted);
     }

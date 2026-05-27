@@ -146,6 +146,14 @@ ColumnLayout {
         return root.controller.registry.childPagesData(parentId).length > 0;
     }
 
+    // Defence in depth against a misregistered page graph that
+    // names itself as its own ancestor (parent ↔ self cycle, or a
+    // longer ring). Without these caps a search keystroke would
+    // freeze the UI thread infinitely-recursing through the cycle.
+    // Mirrors the same guard pattern Breadcrumbs.qml uses for the
+    // current-page → root walk.
+    readonly property int _maxWalkDepth: 64
+
     function _visibleItems() {
         // NOTE: every row dict here uses `pageId` (not `id`) for the
         // model-role name. The delegate (SidebarRow.qml) consumes it
@@ -153,11 +161,19 @@ ColumnLayout {
         // the QML id: directive and trips up qmlformat's parser.
         if (root.searchText.length === 0) {
             const out = [];
-            const walk = function walk(parentId, depth) {
-                const kids = root._scopeChildren(parentId);
+            const seen = Object.create(null);
+            const walk = function walk(parentId, depth, kids) {
+                if (depth > root._maxWalkDepth || seen[parentId])
+                    return;
+                seen[parentId] = true;
                 for (let i = 0; i < kids.length; ++i) {
                     const child = kids[i];
-                    const childHasChildren = root._hasChildren(child.id);
+                    // Single _scopeChildren call per child — used for
+                    // the hasChildren predicate AND (when expanded)
+                    // the recursion. Two `childPagesData(child.id)`
+                    // hits per render row was wasted work.
+                    const childKids = root._scopeChildren(child.id);
+                    const childHasChildren = childKids.length > 0;
                     const collapsible = child.isCollapsible === true && childHasChildren;
                     out.push({
                         "pageId": child.id,
@@ -171,7 +187,7 @@ ColumnLayout {
                         "_isDivider": false
                     });
                     if (collapsible && root._isExpanded(child.id))
-                        walk(child.id, depth + 1);
+                        walk(child.id, depth + 1, childKids);
 
                     // Section divider — synthetic row pushed immediately
                     // after an entry that requested `hasDividerAfter`.
@@ -194,12 +210,16 @@ ColumnLayout {
                         });
                 }
             };
-            walk(root.currentParentId, 0);
+            walk(root.currentParentId, 0, root._scopeChildren(root.currentParentId));
             return out;
         }
         const needle = root.searchText.toLowerCase();
         const matches = [];
-        const collect = function collect(parentId, breadcrumb) {
+        const seen = Object.create(null);
+        const collect = function collect(parentId, breadcrumb, depth) {
+            if (depth > root._maxWalkDepth || seen[parentId])
+                return;
+            seen[parentId] = true;
             const kids = root._scopeChildren(parentId);
             for (let i = 0; i < kids.length; ++i) {
                 const child = kids[i];
@@ -212,7 +232,7 @@ ColumnLayout {
                 // navigable category page (one that has children AND
                 // a qmlSource) was unreachable through search.
                 if (grand)
-                    collect(child.id, childBreadcrumb);
+                    collect(child.id, childBreadcrumb, depth + 1);
 
                 if (!child.hasQmlSource)
                     continue;
@@ -231,7 +251,7 @@ ColumnLayout {
                     });
             }
         };
-        collect(root.currentParentId, "");
+        collect(root.currentParentId, "", 0);
         return matches;
     }
 
@@ -453,17 +473,32 @@ ColumnLayout {
                 }
 
                 delegate: SidebarRow {
+                    id: rowItem
+
                     // `isCurrent` is computed here (not inside SidebarRow)
                     // because the controller reference and currentPageId
                     // binding chain live at this scope. SidebarRow stays
                     // controller-agnostic — it just paints whatever
-                    // `isCurrent` resolves to.
-                    isCurrent: !_isCollapsibleHeader && hasQmlSource && root.controller.currentPageId === pageId
+                    // `isCurrent` resolves to. The required properties
+                    // declared in SidebarRow (pageId, _isCollapsibleHeader,
+                    // hasQmlSource) are addressed via the explicit `rowItem.`
+                    // qualifier — qmllint warns on the bare-identifier form
+                    // and a future Qt minor may tighten the rule.
+                    isCurrent: !rowItem._isCollapsibleHeader && rowItem.hasQmlSource && root.controller.currentPageId === rowItem.pageId
                     compact: root.compact
                     navRowHeight: root.navRowHeight
                     accentBarWidth: root.accentBarWidth
                     trailingDelegate: root.trailingDelegate
-                    onNavigationRequested: pid => root.controller.currentPageId = pid
+                    onNavigationRequested: pid => {
+                        // Synthetic divider rows have pageIds like
+                        // "__divider__<parent>/<id>" — never route those
+                        // into the controller. The SidebarRow click handler
+                        // already guards via `_isDivider`, but the signal
+                        // itself stays open to programmatic invocation;
+                        // defending here keeps the contract honest.
+                        if (!pid.startsWith("__divider__"))
+                            root.controller.currentPageId = pid;
+                    }
                     onCategoryToggleRequested: pid => root.toggleCategory(pid)
                     onDrillIntoRequested: pid => root.drillInto(pid)
                 }

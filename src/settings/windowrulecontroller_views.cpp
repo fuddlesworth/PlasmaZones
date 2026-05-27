@@ -25,6 +25,8 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
+#include <algorithm>
+
 namespace PlasmaZones {
 
 namespace {

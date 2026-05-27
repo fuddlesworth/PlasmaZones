@@ -61,12 +61,13 @@ PhosphorUi.AboutPageShell {
                     onClicked: {
                         // Defensive truthy-check: this AboutPage is also used
                         // by the standalone phosphor-settings-ui demo, which
-                        // doesn't define `showWhatsNew`. The JS-web `typeof`
-                        // pattern was unidiomatic — a plain truthy check on
-                        // the function reference suffices.
-                        if (window.showWhatsNew)
+                        // doesn't define `showWhatsNew`. Guard `window`
+                        // itself too — when AboutPage is hosted by the demo
+                        // (no chrome) the `window` context property may be
+                        // undefined, in which case reading `.showWhatsNew`
+                        // on it throws.
+                        if (window && window.showWhatsNew)
                             window.showWhatsNew();
-
                     }
 
                     contentItem: RowLayout {
@@ -90,13 +91,9 @@ PhosphorUi.AboutPageShell {
                             Layout.preferredHeight: Kirigami.Units.iconSizes.small
                             opacity: 0.5
                         }
-
                     }
-
                 }
-
             }
-
         },
         SettingsCard {
             Layout.fillWidth: true
@@ -122,9 +119,7 @@ PhosphorUi.AboutPageShell {
                     text: i18n("Built with Qt, KDE Frameworks, and Kirigami")
                     opacity: 0.7
                 }
-
             }
-
         }
     ]
 
@@ -150,14 +145,12 @@ PhosphorUi.AboutPageShell {
             SettingsSwitch {
                 checked: settingsController.daemonRunning
                 enabled: !settingsController.daemonController.busy
-                onToggled: function(newValue) {
+                onToggled: function (newValue) {
                     settingsController.daemonController.setEnabled(newValue);
                 }
                 accessibleName: i18n("Enable PlasmaZones")
             }
-
         }
-
     }
 
     component LinkButton: Button {
@@ -206,9 +199,6 @@ PhosphorUi.AboutPageShell {
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
                 opacity: 0.5
             }
-
         }
-
     }
-
 }

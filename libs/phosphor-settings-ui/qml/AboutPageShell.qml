@@ -90,7 +90,10 @@ Kirigami.ScrollablePage {
         // legacy SettingsFlickable pattern instead: bind to
         // `parent.width - spacing*2` and centre horizontally so the
         // column is always strictly narrower than the viewport.
-        width: parent.width - Kirigami.Units.largeSpacing * 2
+        // `parent` is null for a one-event-loop window during
+        // ScrollablePage instantiation — guard so the binding doesn't
+        // compute NaN and cascade through children's Layout.fillWidth.
+        width: parent ? parent.width - Kirigami.Units.largeSpacing * 2 : 0
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Kirigami.Units.largeSpacing
 
@@ -188,7 +191,19 @@ Kirigami.ScrollablePage {
         }
 
         Kirigami.UrlButton {
-            visible: root.homepageUrl !== ""
+            // Restrict to http(s) / mailto schemes to keep the
+            // consumer-supplied URL safe: this shell is exposed to
+            // third-party apps that drive `homepageUrl` via Q_PROPERTY,
+            // so a `javascript:` or `file:///etc/passwd` value would
+            // otherwise be opened verbatim by Qt.openUrlExternally().
+            readonly property bool _safeUrl: {
+                const u = root.homepageUrl;
+                if (u === "")
+                    return false;
+                const lower = u.toLowerCase();
+                return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("mailto:");
+            }
+            visible: _safeUrl
             url: root.homepageUrl
             text: root.homepageUrl
         }

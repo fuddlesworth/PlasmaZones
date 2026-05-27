@@ -114,8 +114,18 @@ void SettingsController::loadLayoutsAsync()
         }
 
         SettingsController::sortMergedLayoutList(newLayouts);
-        m_layouts = newLayouts;
-        Q_EMIT layoutsChanged();
+        // Skip the swap+emit when the daemon reply matches what we
+        // already have. Five debounced D-Bus signals
+        // (layoutCreated/Deleted/Changed/PropertyChanged/ListChanged)
+        // coalesce into one reload here, and identical payloads
+        // otherwise force every QML binding (LayoutComboBox model,
+        // monitor overview, picker dialogs) to recompute. Skipping
+        // the emit also avoids re-firing the pending-select path
+        // for an already-loaded id.
+        if (m_layouts != newLayouts) {
+            m_layouts = newLayouts;
+            Q_EMIT layoutsChanged();
+        }
 
         // Emit pending select after model is populated
         if (!m_pendingSelectLayoutId.isEmpty()) {

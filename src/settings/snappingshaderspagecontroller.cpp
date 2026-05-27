@@ -65,30 +65,38 @@ void SnappingShadersPageController::connectLayoutSignals()
     // detaches without destroying (e.g. cache-eviction) doesn't grow
     // `m_wiredLayouts` unbounded.
     const QVector<PhosphorZones::Layout*> layouts = m_layoutRegistry->layouts();
-    const QSet<PhosphorZones::Layout*> live(layouts.cbegin(), layouts.cend());
+    // Build a live-pointer set keyed as QObject* so the membership
+    // test can be applied to the tracked QObject* entries directly,
+    // sidestepping a qobject_cast on what could theoretically be a
+    // dangling pointer (see the destroyed-eviction note below).
+    QSet<QObject*> live;
+    live.reserve(layouts.size());
+    for (PhosphorZones::Layout* layout : layouts) {
+        if (layout)
+            live.insert(layout);
+    }
+    // Stale-entry eviction. onWiredLayoutDestroyed() drains entries
+    // synchronously from QObject::destroyed (wired below), so under
+    // the current registry contract m_wiredLayouts never carries a
+    // dangling pointer. The live-set guard here keeps disconnect()
+    // calls bounded to objects we KNOW are still alive — defence in
+    // depth against a future registry refactor that detaches without
+    // destroying (cache eviction etc.).
     for (auto it = m_wiredLayouts.begin(); it != m_wiredLayouts.end();) {
-        auto* tracked = qobject_cast<PhosphorZones::Layout*>(*it);
-        // The "tracked == nullptr" branch is defensive: in practice this
-        // never fires because onWiredLayoutDestroyed() (wired via
-        // QObject::destroyed in connectLayoutSignals) evicts entries from
-        // m_wiredLayouts synchronously inside the source's ~QObject before
-        // we'd see a dangling cast result here. We keep the branch as
-        // belt-and-braces in case a future refactor detaches a Layout
-        // without destroying it; the typed shaderIdChanged disconnect is
-        // skipped because we have no live Layout* to pass. NOTE: if this
-        // branch ever DID fire against a truly-dangling raw pointer,
-        // disconnect(*it, ...) would be UB — but the synchronous
-        // destroyed() eviction makes that path unreachable in the current
-        // wiring.
-        if (!tracked || !live.contains(tracked)) {
-            disconnect(*it, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed);
-            if (tracked)
-                disconnect(tracked, &PhosphorZones::Layout::shaderIdChanged, this,
-                           &SnappingShadersPageController::onLayoutShaderIdChanged);
-            it = m_wiredLayouts.erase(it);
-        } else {
+        QObject* tracked = *it;
+        if (live.contains(tracked)) {
             ++it;
+            continue;
         }
+        // Tracked entry no longer in the live registry snapshot. If
+        // it's also been destroyed, onWiredLayoutDestroyed already
+        // removed it earlier in this same event loop turn and this
+        // branch is unreachable. If it's been *detached* (hypothetical
+        // future case), tracked is still alive and we can safely
+        // disconnect — no UB.
+        disconnect(tracked, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed);
+        disconnect(tracked, nullptr, this, nullptr);
+        it = m_wiredLayouts.erase(it);
     }
     for (PhosphorZones::Layout* layout : layouts) {
         if (!layout)

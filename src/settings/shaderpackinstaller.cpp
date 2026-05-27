@@ -156,6 +156,15 @@ Result install(const QString& sourceUrl, const QString& userShaderDir)
     if (sourceAbs.startsWith(userDirAbs + QLatin1Char('/')))
         return Result::InvalidSource;
 
+    // Belt-and-braces against a separator-bearing basename. QDir::clean
+    // Path + QFileInfo::fileName strips path components from a cleaned
+    // input, so today `sourceBasename` never contains a '/' or '\\'.
+    // Defending in depth keeps the helper safe if a future refactor
+    // moves the cleanPath step or accepts a pre-trusted basename.
+    if (sourceBasename.contains(QLatin1Char('/')) || sourceBasename.contains(QLatin1Char('\\'))
+        || sourceBasename == QStringLiteral("..") || sourceBasename == QStringLiteral(".")) {
+        return Result::InvalidSource;
+    }
     const QString destDir = userShaderDir + QLatin1Char('/') + sourceBasename;
     if (QFileInfo::exists(destDir))
         return Result::DestinationExists;

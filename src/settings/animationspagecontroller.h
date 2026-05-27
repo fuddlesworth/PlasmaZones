@@ -438,10 +438,12 @@ private:
     bool m_lastHadPendingChanges = false;
     /// Set to true while a controller-owned setter is mutating the
     /// shader profile tree on m_settings. The shaderProfileTreeChanged
-    /// handler uses this to distinguish our own writes (which keep
-    /// m_shaderTreeDirty true) from external reloads (which should
-    /// clear it).
-    bool m_mutatingShaderTree = false;
+    /// handler checks `m_mutatingShaderTree > 0` to distinguish our own
+    /// writes (which keep m_shaderTreeDirty true) from external reloads
+    /// (which should clear it). Counter, not bool: a nested re-entrant
+    /// write inside the same setShaderProfileTree call chain must not
+    /// prematurely clear the outer scope's protection.
+    int m_mutatingShaderTree = 0;
     /// Memoised eventSections() result — taxonomy is static for the
     /// process lifetime so subsequent QML rebinds reuse the same list.
     /// Populated lazily on first call. NOTE: if `ProfilePaths::

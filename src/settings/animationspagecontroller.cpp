@@ -7,6 +7,7 @@
 #include "../core/animationshadersupportedpaths.h"
 #include "../core/isettings.h"
 #include "../core/logging.h"
+#include "../pz_i18n.h"
 #include "animationpresetlibrary.h"
 #include "animations_controller_detail.h"
 #include "dbusutils.h"
@@ -225,7 +226,7 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
             // hasPendingChanges() does not report phantom edits. The
             // m_mutatingShaderTree guard distinguishes our own writes
             // (which keep the dirty flag set) from external reloads.
-            if (!m_mutatingShaderTree && m_shaderTreeDirty) {
+            if (m_mutatingShaderTree == 0 && m_shaderTreeDirty) {
                 m_shaderTreeDirty = false;
                 Q_EMIT pendingChangesChanged();
             }
@@ -303,7 +304,7 @@ void AnimationsPageController::apply()
     // to the per-mutator guards added in pass 36 (setOverride etc.)
     // and to WindowRuleController::m_asyncCommitInFlight.
     if (m_asyncRevertInFlight) {
-        Q_EMIT applyResult(false, tr("Cannot save while a discard is in progress."));
+        Q_EMIT applyResult(false, PzI18n::tr("Cannot save while a discard is in progress."));
         return;
     }
     commitPending();
@@ -504,7 +505,7 @@ void AnimationsPageController::asyncRevertPending()
             result.retained.isEmpty(),
             result.retained.isEmpty()
                 ? QString()
-                : tr("Failed to restore %1 profile file(s); they remain pending.").arg(result.retained.size()));
+                : PzI18n::tr("Failed to restore %1 profile file(s); they remain pending.").arg(result.retained.size()));
     });
 
     QFuture<WorkerResult> future = QtConcurrent::run([profilesDir, setsDir, knownPathSet, snapshots]() {

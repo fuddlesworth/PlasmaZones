@@ -155,7 +155,11 @@ private:
     /// Layouts already wired via @c connectLayoutSignals — tracked so
     /// the O(N) walk on every @c contentsChanged is replaced by an
     /// O(new) walk. Entries are evicted on the layout's destroyed()
-    /// signal (see @c onWiredLayoutDestroyed).
+    /// signal (see @c onWiredLayoutDestroyed). connectLayoutSignals
+    /// itself only ever calls `disconnect()` on pointers it has
+    /// already confirmed are present in the current live registry
+    /// snapshot (`live` QSet), so the set never dereferences a
+    /// dangling raw pointer.
     QSet<QObject*> m_wiredLayouts;
 };
 

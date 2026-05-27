@@ -15,12 +15,21 @@ SnappingBehaviorController::SnappingBehaviorController(ISettings* settings, QObj
 {
     Q_ASSERT(m_settings);
     m_lastAlwaysActiveOnDrag = alwaysActivateOnDrag();
+    m_lastDragActivationTriggers = dragActivationTriggers();
 
     // Forward ISettings NOTIFY signals to the QML-facing Q_PROPERTY signals.
     // alwaysActivateOnDrag is derived from the drag-trigger list, so it only
-    // fires when the AlwaysActive modifier actually comes or goes.
+    // fires when the AlwaysActive modifier actually comes or goes. The
+    // QML-facing trigger list is ALSO derived (AlwaysActive sentinel
+    // stripped) — toggling only the master flag flips the sentinel but
+    // leaves the QML-visible list unchanged, so cache the stripped list
+    // and only emit when it actually differs.
     connect(m_settings, &ISettings::dragActivationTriggersChanged, this, [this]() {
-        Q_EMIT dragActivationTriggersChanged();
+        const QVariantList newTriggers = dragActivationTriggers();
+        if (newTriggers != m_lastDragActivationTriggers) {
+            m_lastDragActivationTriggers = newTriggers;
+            Q_EMIT dragActivationTriggersChanged();
+        }
         const bool newAlwaysActive = alwaysActivateOnDrag();
         if (newAlwaysActive != m_lastAlwaysActiveOnDrag) {
             m_lastAlwaysActiveOnDrag = newAlwaysActive;

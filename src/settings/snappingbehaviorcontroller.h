@@ -90,6 +90,12 @@ private:
     /// only fires when the derived boolean actually flips (CLAUDE.md:
     /// "Only emit signals when value actually changes").
     bool m_lastAlwaysActiveOnDrag = false;
+    /// Cached AlwaysActive-stripped trigger list. Same rationale: toggling
+    /// only the master `alwaysActivateOnDrag` flag flips the sentinel
+    /// modifier but leaves the QML-facing stripped list identical, so we
+    /// only emit `dragActivationTriggersChanged` when the stripped form
+    /// actually differs.
+    QVariantList m_lastDragActivationTriggers;
 };
 
 } // namespace PlasmaZones

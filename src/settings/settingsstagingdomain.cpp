@@ -5,6 +5,8 @@
 
 #include "settingscontroller.h"
 
+#include "../core/logging.h"
+
 #include <QDebug>
 #include <QScopeGuard>
 
@@ -22,8 +24,8 @@ SettingsStagingDomain::SettingsStagingDomain(SettingsController* controller, QOb
         // no-op. The framework would still happily register it and
         // wire dirtyChanged through, just to a domain that can
         // never transition. Warn loudly so the bug surfaces.
-        qWarning() << "PlasmaZones::SettingsStagingDomain: constructed with null SettingsController —"
-                   << "apply/discard/isDirty will be permanently no-op.";
+        qCWarning(lcCore) << "PlasmaZones::SettingsStagingDomain: constructed with null SettingsController —"
+                          << "apply/discard/isDirty will be permanently no-op.";
         return;
     }
     // SettingsController emits dirtyPagesChanged whenever m_dirtyPages

@@ -48,6 +48,8 @@
 #include <QStandardPaths>
 #include <QUrl>
 
+#include <algorithm>
+
 namespace PlasmaZones {
 
 // Bring the shared effect/parameter/profile→QVariantMap helpers from
@@ -57,21 +59,24 @@ using namespace animations_controller_detail;
 
 namespace {
 /// RAII scope guard for AnimationsPageController::m_mutatingShaderTree.
-/// Sets the flag on construction, clears on destruction — including the
-/// exception path through setShaderProfileTree, where a bare set/clear
-/// pair would leave the flag stuck true and silently disable external-
-/// reload dirty clearance for the rest of the process.
+/// Increments the depth on construction, decrements on destruction —
+/// including the exception path through setShaderProfileTree, where a
+/// bare set/clear pair would leave the depth stuck >0 and silently
+/// disable external-reload dirty clearance for the rest of the process.
+/// Counter (not flag): the NOTIFY-driven external-reload handler's
+/// guard checks `depth > 0`, so a nested re-entrant write (inner scope
+/// destructs first) does NOT prematurely clear the outer's protection.
 struct MutatingShaderTreeScope
 {
-    bool& flag;
-    explicit MutatingShaderTreeScope(bool& f)
-        : flag(f)
+    int& depth;
+    explicit MutatingShaderTreeScope(int& d)
+        : depth(d)
     {
-        flag = true;
+        ++depth;
     }
     ~MutatingShaderTreeScope()
     {
-        flag = false;
+        --depth;
     }
     MutatingShaderTreeScope(const MutatingShaderTreeScope&) = delete;
     MutatingShaderTreeScope& operator=(const MutatingShaderTreeScope&) = delete;

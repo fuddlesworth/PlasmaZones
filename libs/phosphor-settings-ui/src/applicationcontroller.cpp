@@ -120,6 +120,14 @@ void ApplicationController::applyAll()
         qWarning() << "ApplicationController::applyAll: refused — applyAllAsync already in flight";
         return;
     }
+    if (m_discarding) {
+        // Mutually exclusive with the discard batch: both paths flip
+        // m_inTransaction and clobber each other's recomputeDirty
+        // suppression window, and a domain told to apply AND discard
+        // concurrently would land in an inconsistent state.
+        qWarning() << "ApplicationController::applyAll: refused — discardAllAsync already in flight";
+        return;
+    }
     // Best-effort, no rollback: runs `apply()` on every dirty domain in
     // registration order. If domain N throws or fails internally,
     // domains 1..N-1 stay applied and N+1..M get their normal apply
@@ -155,6 +163,11 @@ void ApplicationController::discardAll()
         qWarning() << "ApplicationController::discardAll: refused — discardAllAsync already in flight";
         return;
     }
+    if (m_applying) {
+        // Symmetric to the cross-guard in applyAll — see comment there.
+        qWarning() << "ApplicationController::discardAll: refused — applyAllAsync already in flight";
+        return;
+    }
     // Same best-effort semantics as applyAll() — see above.
     // Same iterator-invalidation rationale for the snapshot + the same
     // m_inTransaction batching to avoid O(N²) dirty recomputation.
@@ -176,7 +189,11 @@ void ApplicationController::applyAllAsync()
     // !applying so a user shouldn't reach this in practice, but the
     // guard keeps the contract clean for QML callers that bypass the
     // chrome.
-    if (m_applying) {
+    if (m_applying || m_discarding) {
+        // Same mutual-exclusion rationale as the sync paths — both
+        // async batches share m_inTransaction and per-domain
+        // outstanding sets; running them concurrently would corrupt
+        // either book.
         return;
     }
     // Count dirty domains and snapshot the iteration target to survive
@@ -220,14 +237,21 @@ void ApplicationController::applyAllAsync()
     // previous batch can't mistakenly fire against a new batch the
     // user kicked off after the first one already completed.
     const quint64 generation = m_applyGeneration;
-    QTimer::singleShot(kAsyncBatchTimeoutMs, this, [this, generation]() {
+    QTimer::singleShot(m_asyncBatchTimeoutMs, this, [this, generation]() {
         if (generation != m_applyGeneration)
             return;
         if (!m_applying || m_applyPending == 0)
             return;
-        const int stuck = m_applyPending;
-        for (int i = 0; i < stuck; ++i)
-            m_applyErrors.append(QStringLiteral("Domain did not report apply completion within timeout"));
+        // Append one error per stuck domain, naming each by its
+        // objectName when set (consumers can stamp this in their
+        // constructor) so the chrome's toast can list which page
+        // wedged instead of N identical strings.
+        for (StagingDomain* stuck : m_applyOutstanding) {
+            const QString name = stuck ? stuck->objectName() : QString();
+            m_applyErrors.append(
+                name.isEmpty() ? QStringLiteral("Domain did not report apply completion within timeout")
+                               : QStringLiteral("Domain %1 did not report apply completion within timeout").arg(name));
+        }
         m_applyPending = 0;
         completeApplyIfDone();
     });
@@ -287,7 +311,8 @@ void ApplicationController::applyAllAsync()
 
 void ApplicationController::discardAllAsync()
 {
-    if (m_discarding) {
+    if (m_discarding || m_applying) {
+        // Symmetric to applyAllAsync — see comment there.
         return;
     }
     const QList<QPointer<StagingDomain>> snapshot = m_domains;
@@ -317,14 +342,20 @@ void ApplicationController::discardAllAsync()
     // there for rationale. Generation capture protects against a
     // stale timer firing against a subsequent batch.
     const quint64 generation = m_discardGeneration;
-    QTimer::singleShot(kAsyncBatchTimeoutMs, this, [this, generation]() {
+    QTimer::singleShot(m_asyncBatchTimeoutMs, this, [this, generation]() {
         if (generation != m_discardGeneration)
             return;
         if (!m_discarding || m_discardPending == 0)
             return;
-        const int stuck = m_discardPending;
-        for (int i = 0; i < stuck; ++i)
-            m_discardErrors.append(QStringLiteral("Domain did not report discard completion within timeout"));
+        // Same per-domain naming as the apply path so the chrome can
+        // identify the wedged page(s).
+        for (StagingDomain* stuck : m_discardOutstanding) {
+            const QString name = stuck ? stuck->objectName() : QString();
+            m_discardErrors.append(
+                name.isEmpty()
+                    ? QStringLiteral("Domain did not report discard completion within timeout")
+                    : QStringLiteral("Domain %1 did not report discard completion within timeout").arg(name));
+        }
         m_discardPending = 0;
         completeDiscardIfDone();
     });
@@ -440,6 +471,16 @@ void ApplicationController::forceResetAsyncState()
             m_discardErrors.append(QStringLiteral("Async discard state force-reset"));
         completeDiscardIfDone();
     }
+}
+
+void ApplicationController::setAsyncBatchTimeoutMs(int ms)
+{
+    if (ms <= 0) {
+        qWarning() << "ApplicationController::setAsyncBatchTimeoutMs: refusing non-positive value" << ms
+                   << "— keeping current" << m_asyncBatchTimeoutMs;
+        return;
+    }
+    m_asyncBatchTimeoutMs = ms;
 }
 
 void ApplicationController::resetCurrentPage()

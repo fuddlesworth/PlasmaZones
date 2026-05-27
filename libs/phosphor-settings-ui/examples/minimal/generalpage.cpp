@@ -50,6 +50,11 @@ void GeneralPage::apply()
     m_persistedSounds = m_stagedSounds;
     m_persistedGreeting = m_stagedGreeting;
     recomputeDirty();
+    // ApplicationController::applyAllAsync waits for applyResult to
+    // decrement its pending counter — synchronous domains MUST emit it
+    // or the chrome's Save button stays "Saving…" until the 60 s
+    // batch timeout fires.
+    Q_EMIT applyResult(true, QString());
 }
 
 void GeneralPage::discard()
@@ -63,6 +68,8 @@ void GeneralPage::discard()
         Q_EMIT greetingChanged();
     }
     recomputeDirty();
+    // Symmetric with apply() — discardAllAsync needs discardResult.
+    Q_EMIT discardResult(true, QString());
 }
 
 void GeneralPage::resetToDefaults()

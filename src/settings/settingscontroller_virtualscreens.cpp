@@ -90,6 +90,7 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
         // Q_INVOKABLE reachable from QML / D-Bus and would otherwise
         // leave the user with no feedback on a failed save.
         qCWarning(lcConfig) << "applyVirtualScreenConfig failed for" << physicalScreenId << ":" << reply.errorMessage();
+        Q_EMIT virtualScreenConfigFailed(physicalScreenId, reply.errorMessage());
     }
 }
 

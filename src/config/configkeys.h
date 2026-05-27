@@ -402,10 +402,14 @@ public:
     PZ_CONFIG_KEY(previousLayoutKey, "PreviousLayout")
     PZ_CONFIG_KEY(nextLayoutKey, "NextLayout")
 
-    // Parameterized — uses the pattern accessor to avoid duplication
+    // Parameterized — uses the pattern accessor to avoid duplication.
+    // 1..9 mirrors quickLayoutN() in the enum surface; out-of-range
+    // values would round-trip as e.g. "QuickLayout100" and ghost the
+    // config namespace.
     PZ_CONFIG_KEY(quickLayoutKeyPattern, "QuickLayout%1")
     static QString quickLayoutKey(int n)
     {
+        Q_ASSERT(n >= 1 && n <= 9);
         return quickLayoutKeyPattern().arg(n);
     }
 
@@ -425,10 +429,12 @@ public:
     PZ_CONFIG_KEY(swapWindowUpKey, "SwapWindowUp")
     PZ_CONFIG_KEY(swapWindowDownKey, "SwapWindowDown")
 
-    // Parameterized — uses the pattern accessor to avoid duplication
+    // Parameterized — uses the pattern accessor to avoid duplication.
+    // 1..9 mirrors snapToZoneN() in the enum surface.
     PZ_CONFIG_KEY(snapToZoneKeyPattern, "SnapToZone%1")
     static QString snapToZoneKey(int n)
     {
+        Q_ASSERT(n >= 1 && n <= 9);
         return snapToZoneKeyPattern().arg(n);
     }
 

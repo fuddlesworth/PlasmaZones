@@ -188,7 +188,11 @@ SettingsFlickable {
     // state.
     Connections {
         function onApplyResult(ok, error) {
-            if (!ok) {
+            if (!ok && window && window.showToast) {
+                // Match the defensive shape used throughout LayoutsPage:
+                // when this page is hosted outside Main.qml (KCM / preview
+                // host), `window.showToast` is undefined and an unguarded
+                // call would raise.
                 window.showToast(error.length > 0 ? error : i18n("Failed to save window rules."));
             }
         }
@@ -563,15 +567,21 @@ SettingsFlickable {
                                     var from = animDelegateRoot.index;
                                     var to = from;
                                     if (event.key === Qt.Key_Up) {
+                                        // Always accept the keystroke at the
+                                        // clamp boundaries — otherwise Alt+Up
+                                        // bubbles up to ancestors (menu
+                                        // mnemonics, focus traversal) and the
+                                        // user gets surprising secondary
+                                        // behaviour at the list endpoints.
+                                        event.accepted = true;
                                         if (from <= 0)
                                             return;
                                         to = from - 1;
-                                        event.accepted = true;
                                     } else if (event.key === Qt.Key_Down) {
+                                        event.accepted = true;
                                         if (from >= rules.length - 1)
                                             return;
                                         to = from + 1;
-                                        event.accepted = true;
                                     } else {
                                         return;
                                     }
@@ -618,18 +628,32 @@ SettingsFlickable {
                                             drag.axis: Drag.YAxis
                                             drag.minimumY: 0
                                             drag.maximumY: Math.max(0, (animationOrderContainer.rules.length - 1) * animationOrderContainer.rowHeight)
+                                            // Captured at onPressed so we
+                                            // move the rule the user actually
+                                            // grabbed even if the rules array
+                                            // mutates mid-drag (daemon-driven
+                                            // rulesChanged). Using the
+                                            // current-snapshot index at
+                                            // onReleased could pick up a
+                                            // different rule that landed at
+                                            // the same index.
+                                            property string draggedRuleId: ""
                                             onPressed: {
                                                 animationOrderContainer.dragFromIndex = animDelegateRoot.index;
                                                 animationOrderContainer.dropTargetIndex = animDelegateRoot.index;
                                                 animationOrderContainer.isDragging = true;
+                                                const snapshotRules = animationOrderContainer.rules;
+                                                draggedRuleId = (animDelegateRoot.index >= 0 && animDelegateRoot.index < snapshotRules.length) ? snapshotRules[animDelegateRoot.index].ruleId : "";
                                             }
                                             onReleased: {
                                                 var rules = animationOrderContainer.rules;
                                                 var from = animationOrderContainer.dragFromIndex;
                                                 var to = animationOrderContainer.dropTargetIndex;
+                                                var movedId = draggedRuleId;
                                                 animationOrderContainer.isDragging = false;
                                                 animationOrderContainer.dragFromIndex = -1;
                                                 animationOrderContainer.dropTargetIndex = -1;
+                                                draggedRuleId = "";
                                                 // Snap delegate back to its
                                                 // layout position before the
                                                 // controller mutation reorders
@@ -637,8 +661,7 @@ SettingsFlickable {
                                                 animDelegateRoot.y = Qt.binding(function () {
                                                     return animDelegateRoot.baseY + animDelegateRoot.visualOffset;
                                                 });
-                                                if (from >= 0 && to >= 0 && from !== to && from < rules.length && to < rules.length) {
-                                                    var movedId = rules[from].ruleId;
+                                                if (movedId !== "" && from >= 0 && to >= 0 && from !== to && to < rules.length) {
                                                     // controller.moveRule
                                                     // positions movedId
                                                     // immediately BEFORE

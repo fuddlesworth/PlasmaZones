@@ -136,6 +136,18 @@ public:
     /// ok=false so observers are notified. QML escape hatch.
     Q_INVOKABLE void forceResetAsyncState();
 
+    /// Async-batch timeout in milliseconds. Default 60 000 ms is
+    /// generous for typical D-Bus chains (~500 ms replies) but tight
+    /// enough to surface a wedged backend instead of pinning the
+    /// chrome's "Saving…" state indefinitely. Consumers with shorter
+    /// SLOs (interactive feedback within 5 s) or longer migrations
+    /// can adjust before the first applyAllAsync. Must be > 0.
+    int asyncBatchTimeoutMs() const
+    {
+        return m_asyncBatchTimeoutMs;
+    }
+    void setAsyncBatchTimeoutMs(int ms);
+
 Q_SIGNALS:
     void dirtyChanged();
     void currentPageIdChanged();
@@ -217,11 +229,10 @@ private:
     QSet<StagingDomain*> m_discardOutstanding;
     /// Hard-cap on how long an async batch waits for terminal result
     /// signals before synthesising a failure entry per still-pending
-    /// domain. 60 seconds is generous for D-Bus chains (typical
-    /// reply &lt; 500 ms) but tight enough that a fully-wedged backend
-    /// surfaces a visible failure rather than wedging the chrome
-    /// indefinitely.
-    static constexpr int kAsyncBatchTimeoutMs = 60'000;
+    /// domain. Default 60 seconds (see asyncBatchTimeoutMs() /
+    /// setAsyncBatchTimeoutMs() for consumer-facing tuning).
+    static constexpr int kDefaultAsyncBatchTimeoutMs = 60'000;
+    int m_asyncBatchTimeoutMs = kDefaultAsyncBatchTimeoutMs;
 };
 
 } // namespace PhosphorSettingsUi

@@ -1065,20 +1065,13 @@ Q_SIGNALS:
     /// signals per the existing NOTIFY wiring.
     void animationProfileChanged();
 
-    // Editor settings signals (not part of ISettings interface)
-    void editorDuplicateShortcutChanged();
-    void editorSplitHorizontalShortcutChanged();
-    void editorSplitVerticalShortcutChanged();
-    void editorFillShortcutChanged();
-    void editorGridSnappingEnabledChanged();
-    void editorEdgeSnappingEnabledChanged();
-    void editorSnapIntervalXChanged();
-    void editorSnapIntervalYChanged();
-    void editorSnapOverrideModifierChanged();
-    void fillOnDropEnabledChanged();
-    void fillOnDropModifierChanged();
-    void filterLayoutsByAspectRatioChanged();
-    void virtualScreenConfigsChanged();
+    // NOTE: do not redeclare signals already on ISettings here.
+    // Re-declaring a base-class Q_SIGNAL produces a second moc index
+    // and `connect(s, &ISettings::xChanged, ...)` then misses the
+    // unqualified `Q_EMIT xChanged()` (which resolves to the derived
+    // signal). All editor / fillOnDrop / filterLayoutsByAspectRatio /
+    // virtualScreenConfigs signals live on ISettings and are inherited
+    // here — see src/core/isettings.h.
 
 private:
     /// Member-function-pointer alias used by the indexed shortcut setters

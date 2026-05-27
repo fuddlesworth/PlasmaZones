@@ -168,14 +168,21 @@ SettingsController::SettingsController(QObject* parent)
         // path guarded on `!localLayouts.isEmpty()`, which left stale
         // entries in m_layouts after a wipe when the daemon was down.
         SettingsController::sortMergedLayoutList(localLayouts);
-        m_layouts = std::move(localLayouts);
+        // Skip when the disk view matches what we already have — file-
+        // watcher events fire on every daemon write during a save
+        // batch, and identical payloads would re-emit the model on
+        // each tick.
+        const bool actuallyChanged = m_layouts != localLayouts;
+        if (actuallyChanged) {
+            m_layouts = std::move(localLayouts);
+        }
         // Suppress the local-path emit while a D-Bus getLayoutList
         // call is in flight — the async reply lambda will emit once
         // it replaces m_layouts with the daemon-enriched view. If the
         // daemon is unreachable or the call errors, the gate is
         // cleared in the reply lambda's head and subsequent local
         // emits run normally (fallback behaviour).
-        if (!m_awaitingDaemonLayouts) {
+        if (actuallyChanged && !m_awaitingDaemonLayouts) {
             Q_EMIT layoutsChanged();
         }
     });
@@ -427,7 +434,17 @@ SettingsController::SettingsController(QObject* parent)
         // so dirty state attaches to the right tab even when the user is
         // currently viewing a different page. Symmetric with the
         // window-rules handler below.
-        beginExternalEdit(QStringLiteral("animations-general"));
+        //
+        // Prefer the user's current animations sub-page when they're
+        // already in the animations branch (animations-windows /
+        // animations-overlays / animations-side-panels / animations-
+        // shaders) so the dirty marker lands where the edit actually
+        // happened, not always on the General sub-page. The daemon-
+        // file-watcher case (user off the animations tree) still
+        // falls back to "animations-general" as a stable parent.
+        const QString animationsTarget =
+            m_activePage.startsWith(QLatin1String("animations-")) ? m_activePage : QStringLiteral("animations-general");
+        beginExternalEdit(animationsTarget);
         setNeedsSave(true);
         endExternalEdit();
     });
