@@ -1,0 +1,6 @@
+{
+    "id": "id-mismatch-plugin",
+    "displayName": "Fake Plugin Id Mismatch",
+    "abi": @PHOSPHOR_PLUGIN_ABI_VERSION@,
+    "capabilities": ["bar.widget"]
+}

@@ -396,6 +396,11 @@ add_subdirectory(libs/phosphor-theme)       # M3 color-token store + Phosphor.Th
 # enabling BUILD_PHOSPHOR_SHELL. Gating phosphor-popout would break
 # the demo target. The shell binary itself stays gated below.
 add_subdirectory(libs/phosphor-popout)      # central popout coordinator (lifetime, focus, scope arbitration)
+# phosphor-registry generalises the factory-by-name pattern across
+# the five UI extension seams. Same rationale as phosphor-popout:
+# unconditional so third-party hosts and the demos can consume it
+# without enabling the shell binary. Phase 1.3 deliverable.
+add_subdirectory(libs/phosphor-registry)    # generic Registry<T> + 5 factory interfaces + plugin loader
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
@@ -640,6 +645,19 @@ add_subdirectory(examples/phosphor-theme-cli)
 # the arbitration. The demo links only phosphor-popout, phosphor-theme,
 # and base Qt; no Wayland dependency.
 add_subdirectory(examples/phosphor-popout-demo)
+
+# phosphor-registry-demo. Acceptance harness for libs/phosphor-registry's
+# in-process registration path. Two built-in IBarWidgetFactory
+# implementations registered explicitly in main(); the bar QML
+# enumerates them and instantiates one widget per id. Same
+# unconditional gating as the theme + popout demos.
+add_subdirectory(examples/phosphor-registry-demo)
+
+# phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
+# that exercises the PluginLoader + hot-reload path. The third
+# (CPU-meter) widget builds as a separate .so + manifest.json and
+# is loaded via PluginLoader from a per-build plugin root.
+add_subdirectory(examples/phosphor-registry-plugin-demo)
 
 if(BUILD_PHOSPHOR_SHELL)
     # Build the bundled example shell as a Qt QML module so qmlcachegen
