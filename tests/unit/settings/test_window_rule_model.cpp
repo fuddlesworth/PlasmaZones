@@ -105,6 +105,7 @@ private Q_SLOTS:
     void crudByUuid();
     void updateNoOpDoesNotChurn();
     void reorder();
+    void addRuleAtInsertsAtIndexWithSingleSignal();
     void validationIssueCountRole();
     void screenIdsRoleHandlesInOperator();
 };
@@ -227,6 +228,51 @@ void TestWindowRuleModel::reorder()
 
     // An unknown id fails.
     QVERIFY(!model.moveRule(QUuid::createUuid(), QUuid()));
+}
+
+void TestWindowRuleModel::addRuleAtInsertsAtIndexWithSingleSignal()
+{
+    // Pin the F#5 contract: addRuleAt inserts at the requested slot
+    // with EXACTLY one rowsInserted signal (no follow-up moveRows /
+    // dataChanged churn). The prior duplicateRule shape fired up to
+    // four model signals per click; this test guards against that
+    // regressing.
+    WindowRuleModel model;
+    const WindowRule a = monitorRule(QStringLiteral("DP-1"), QStringLiteral("A"));
+    const WindowRule b = monitorRule(QStringLiteral("DP-2"), QStringLiteral("B"));
+    const WindowRule c = monitorRule(QStringLiteral("DP-3"), QStringLiteral("C"));
+    model.setRules({a, b, c});
+
+    QSignalSpy insertSpy(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy moveSpy(&model, &QAbstractItemModel::rowsMoved);
+    QSignalSpy dataSpy(&model, &QAbstractItemModel::dataChanged);
+    QSignalSpy countSpy(&model, &WindowRuleModel::countChanged);
+
+    const WindowRule mid = monitorRule(QStringLiteral("DP-4"), QStringLiteral("Mid"));
+    QVERIFY(model.addRuleAt(mid, 1));
+
+    // Order is now A, Mid, B, C — Mid lands at the requested slot.
+    QCOMPARE(model.rowCount(), 4);
+    QCOMPARE(model.index(1, 0).data(WindowRuleModel::IdRole).toString(), mid.id.toString());
+
+    // Exactly one rowsInserted, no moveRows, no dataChanged. countChanged
+    // fires once.
+    QCOMPARE(insertSpy.count(), 1);
+    QCOMPARE(moveSpy.count(), 0);
+    QCOMPARE(dataSpy.count(), 0);
+    QCOMPARE(countSpy.count(), 1);
+
+    // Out-of-range indices clamp without erroring.
+    const WindowRule head = monitorRule(QStringLiteral("DP-5"), QStringLiteral("Head"));
+    QVERIFY(model.addRuleAt(head, -10));
+    QCOMPARE(model.index(0, 0).data(WindowRuleModel::IdRole).toString(), head.id.toString());
+
+    const WindowRule tail = monitorRule(QStringLiteral("DP-6"), QStringLiteral("Tail"));
+    QVERIFY(model.addRuleAt(tail, 9999));
+    QCOMPARE(model.index(model.rowCount() - 1, 0).data(WindowRuleModel::IdRole).toString(), tail.id.toString());
+
+    // Duplicate id rejected even via addRuleAt.
+    QVERIFY(!model.addRuleAt(a, 0));
 }
 
 void TestWindowRuleModel::validationIssueCountRole()

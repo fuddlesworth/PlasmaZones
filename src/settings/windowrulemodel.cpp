@@ -359,6 +359,22 @@ bool WindowRuleModel::addRule(const WindowRule& rule)
     return true;
 }
 
+bool WindowRuleModel::addRuleAt(const WindowRule& rule, int insertIndex)
+{
+    if (rule.id.isNull() || !rule.isValid() || contains(rule.id)) {
+        return false;
+    }
+    // Clamp so callers don't have to range-check; -1 / negative goes
+    // to the front, anything >= rowCount goes to the end. Matches the
+    // semantics QML drag-reorder expects.
+    const int row = std::clamp(insertIndex, 0, static_cast<int>(m_rules.size()));
+    beginInsertRows(QModelIndex(), row, row);
+    m_rules.insert(row, rule);
+    endInsertRows();
+    Q_EMIT countChanged();
+    return true;
+}
+
 WindowRuleModel::UpdateResult WindowRuleModel::updateRule(const WindowRule& rule)
 {
     const int row = indexOf(rule.id);

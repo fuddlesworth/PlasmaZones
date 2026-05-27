@@ -577,35 +577,30 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
         }
         clone.name = candidate;
     }
-    if (!m_model.addRule(clone)) {
-        qCWarning(lcConfig) << "WindowRuleController::duplicateRule: model rejected clone" << clone.id.toString();
-        return QString();
-    }
-    // The model appends to the end; reorder so the clone sits just after the
-    // source — preserves the user's mental model ("the new rule is next to
-    // the one I copied") instead of dropping it at the bottom of the list.
-    m_model.moveRule(clone.id, source.id);
-    // moveRule "before source" puts the clone immediately ABOVE the source.
-    // Shift it once more to the next slot below the source — find the rule
-    // that currently follows source and move the clone before that. If the
-    // source was the LAST rule in the list, there is no rule after it; move
-    // the clone to the end of the list instead (an empty beforeId means
-    // "send to end"), otherwise the off-by-one leaves order [..., clone,
-    // source] instead of the intended [..., source, clone].
+    // Locate the source's slot ONCE and insert the clone directly into
+    // sourceIndex+1 via addRuleAt — the old shape fired addRule (append)
+    // + up to two moveRule() calls + a final renormalize, producing
+    // four model signals per Duplicate click. Now one beginInsertRows/
+    // endInsertRows pair carries everything.
+    int sourceIndex = -1;
     const auto& rules = m_model.rules();
     for (int i = 0; i < rules.size(); ++i) {
         if (rules.at(i).id == source.id) {
-            if (i + 1 < rules.size()) {
-                const QUuid afterSource = rules.at(i + 1).id;
-                if (afterSource != clone.id) {
-                    m_model.moveRule(clone.id, afterSource);
-                }
-            } else {
-                // Source is the last rule — push clone to the end.
-                m_model.moveRule(clone.id, QUuid());
-            }
+            sourceIndex = i;
             break;
         }
+    }
+    // Source vanished between ruleById() and this lookup (concurrent
+    // teardown / race) — bail out instead of inserting at a guessed
+    // index that could land in the wrong section.
+    if (sourceIndex < 0) {
+        qCWarning(lcConfig) << "WindowRuleController::duplicateRule: source rule disappeared during clone"
+                            << source.id.toString();
+        return QString();
+    }
+    if (!m_model.addRuleAt(clone, sourceIndex + 1)) {
+        qCWarning(lcConfig) << "WindowRuleController::duplicateRule: model rejected clone" << clone.id.toString();
+        return QString();
     }
     // The clone inherited the source's priority verbatim; without
     // re-stamping the two would collide on the band-base value and the

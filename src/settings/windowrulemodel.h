@@ -130,6 +130,15 @@ public:
     /// Append @p rule. Returns false if its id collides or it is invalid.
     bool addRule(const PhosphorWindowRule::WindowRule& rule);
 
+    /// Insert @p rule at @p insertIndex with a SINGLE beginInsertRows/
+    /// endInsertRows pair. Replaces the prior duplicateRule() shape
+    /// of addRule + N moveRule calls, which fired up to four model
+    /// signals (rowsInserted + rowsMoved + rowsMoved + dataChanged)
+    /// per user "Duplicate" click. @p insertIndex is clamped to
+    /// [0, rowCount()] so callers don't have to range-check. Returns
+    /// false if the rule's id collides or it is invalid.
+    bool addRuleAt(const PhosphorWindowRule::WindowRule& rule, int insertIndex);
+
     /// Outcome of an `updateRule()` call — lets the caller tell a genuine
     /// no-op (identical rule) apart from an applied change so a no-op save
     /// does not churn the dirty bit.
