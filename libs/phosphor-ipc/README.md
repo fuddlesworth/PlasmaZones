@@ -1,0 +1,183 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth
+     SPDX-License-Identifier: LGPL-2.1-or-later -->
+
+# phosphor-ipc
+
+> Typed JSON-over-Unix-socket invocation channel for the
+> phosphor-shell. Lets compositor keybinds, external scripts, and
+> other shells drive Phosphor actions by verb (`phosphorctl call
+> launcher.toggle`) without rebuilding the existing D-Bus surface.
+
+## Responsibility
+
+Modern Wayland shells (DMS, Noctalia, Quickshell) all ship a typed
+CLI: a single socket, JSON-shaped requests, schema-described
+targets. `phosphor-ipc` is Phosphor's equivalent. It sits **alongside**
+the existing D-Bus adaptors — service libraries in Phase 2 register
+both an IPC target and (where appropriate) a D-Bus method for each
+callable.
+
+The library owns:
+
+- **`IpcRouter`** — central dispatcher backed by a `QLocalServer`
+  listening on `$XDG_RUNTIME_DIR/phosphor.sock`. Registers QObject
+  "targets" by name, walks their `QMetaObject` to generate JSON
+  schemas, dispatches sync calls via `QMetaMethod::invoke`, and
+  routes signal-broadcast events to per-target subscribers.
+- **`IpcTarget`** — QML element. Plugin authors declare one per
+  exposed verb namespace and put `Q_INVOKABLE`-style functions on it
+  directly. `IpcTarget.emitEvent("name", [args])` pushes a JSON
+  event to every subscriber on (target, name).
+- **`IpcSchemaGenerator`** — `QMetaObject` → JSON Schema. Every
+  documented QMetaType maps to a JSON Schema fragment; unknown types
+  degrade to `{"description": "<QMetaType::name>"}` without a `type`
+  constraint.
+- **`IpcEngine::install`** — small bridge that stashes the
+  application's `IpcRouter` on the `QQmlEngine` so `IpcTarget`
+  instances find it in `componentComplete`.
+
+Ships alongside the **`phosphorctl`** CLI at `cli/phosphorctl/`,
+which provides `call`, `list`, `schema`, and `subscribe`
+subcommands.
+
+## Key types
+
+| Type | Purpose |
+|------|---------|
+| `PhosphorIpc::IpcRouter` | Per-application dispatcher. Owns one `QLocalServer`, the registry of named targets, and the per-socket subscription set. Single-threaded (GUI thread). |
+| `PhosphorIpc::IpcTarget` | QML element. Each instance binds to one target name. Functions declared on the instance become callable; the explicit `emitEvent(name, args)` pushes wire events. |
+| `PhosphorIpc::IpcProtocol` | Wire-format constants + parser/serialiser. Shared between the library (server) and the `phosphorctl` binary (client). |
+| `PhosphorIpc::IpcEngine` | Bridge between an application-owned `IpcRouter` and QML-side `IpcTarget` instances. |
+| `PhosphorIpc::IpcSchemaGenerator` | `QMetaObject` → JSON Schema. Used by the schema response and by the CLI for client-side argument validation. |
+
+## Wire protocol
+
+One JSON object per line, `\n`-terminated, UTF-8. Same NDJSON shape
+as niri-ipc and hyprland-ipc. Stable across protocol version 1
+(advertised via the `PHOSPHOR_IPC_PROTOCOL_VERSION` compile
+definition; the static_assert in `IpcProtocol.h` enforces sync
+between CMake and the header).
+
+### Requests (client → server)
+
+```jsonc
+// Sync call
+{"type":"call","id":42,"target":"greet","fn":"sayHello","args":["nate"]}
+// Enumerate targets
+{"type":"list","id":43}
+// Schema for one target
+{"type":"schema","id":44,"target":"greet"}
+// Subscribe to a signal — server streams events tagged with this id
+// until unsubscribe / disconnect
+{"type":"subscribe","id":45,"target":"count","signal":"countChanged"}
+// Cancel a subscription
+{"type":"unsubscribe","id":46,"subscriptionId":45}
+```
+
+### Responses (server → client)
+
+```jsonc
+{"type":"reply","id":42,"result":"Hello, nate"}
+{"type":"event","subscriptionId":45,"args":[7]}
+{"type":"error","id":42,"code":"NO_SUCH_TARGET","message":"...","detail":{}}
+```
+
+Error codes: `NO_SUCH_TARGET`, `NO_SUCH_FN`, `NO_SUCH_SIGNAL`,
+`NO_SUCH_SUBSCRIPTION`, `INVALID_ARG`, `INVOCATION_FAILED`,
+`MALFORMED_REQUEST`, `PROTOCOL_MISMATCH`.
+
+## Typical use
+
+### C++ shell composition root
+
+```cpp
+#include <PhosphorIpc/IpcEngine.h>
+#include <PhosphorIpc/IpcRouter.h>
+
+PhosphorIpc::IpcRouter router;
+router.start();  // binds $XDG_RUNTIME_DIR/phosphor.sock
+
+QQmlApplicationEngine engine;
+PhosphorIpc::IpcEngine::install(&engine, &router);
+engine.loadFromModule(...);  // shell QML
+```
+
+The shell QML can now declare `IpcTarget` instances anywhere in the
+component tree — each one auto-registers via the router stashed on
+the engine.
+
+### QML side
+
+```qml
+import Phosphor.Ipc
+
+IpcTarget {
+    target: "theme"
+
+    signal modeChanged(string mode)  // schema-visible
+
+    function setMode(mode: string) {
+        Theme.mode = mode
+        modeChanged(mode)
+        emitEvent("modeChanged", [mode])  // broadcasts to subscribers
+    }
+}
+```
+
+The schema generator surfaces both `Q_INVOKABLE` methods and
+declared signals, so `phosphorctl schema theme` shows the
+subscribable surface.
+
+### CLI side
+
+```
+phosphorctl call theme.setMode --arg mode=dark
+phosphorctl list
+phosphorctl schema theme | jq
+phosphorctl subscribe theme.modeChanged    # stays connected, streams events
+```
+
+Socket-path priority: `--socket PATH` > `$PHOSPHOR_SOCKET` >
+`$XDG_RUNTIME_DIR/phosphor.sock`.
+
+## Arbitration / lifecycle
+
+- **Duplicate target id rejected.** Registering an already-known
+  target is a no-op + `qWarning`. First registration wins.
+- **Signal name validated at subscribe.** Subscribe rejects with
+  `NO_SUCH_SIGNAL` if the signal isn't declared on the target's
+  metaobject — typos surface immediately instead of silently
+  ignoring later `emitEvent` calls.
+- **Subscription scope is per-socket.** A subscription id is unique
+  per connection, not globally. The wire identity is `(socket,
+  subscriptionId)`.
+- **Disconnect prunes subscriptions.** When a subscriber socket
+  disconnects, all its subscriptions are dropped automatically.
+- **Stale socket file recovery.** On `start`, if `listen()` fails
+  and the socket path is occupied, the router probes with a quick
+  connect; if no live listener answers, the stale path is unlinked
+  and `listen()` retries. A live listener is left alone (start
+  fails cleanly rather than clobbering).
+- **No subscribe auto-broadcast from Qt signals.** Plugin authors
+  call `IpcTarget.emitEvent` explicitly. This is by design —
+  introspecting arbitrary Qt signals via `qt_metacall` clashes with
+  Q_OBJECT moc-generated code, and explicit `emitEvent` matches the
+  "wire-visible state transitions are an explicit contract" model.
+
+## Dependencies
+
+- `QtCore` (always)
+- `QtGui` (for `IpcTarget` QML registration — no GUI work in C++)
+- `QtQml` (for `IpcTarget` QML registration)
+- `QtNetwork` (for `QLocalServer` / `QLocalSocket`)
+
+## See also
+
+- `cli/phosphorctl/` — typed CLI shipped alongside the library.
+- `examples/phosphor-ipc-demo/` — acceptance harness. Three
+  `IpcTarget` instances (greet / count / set-value) exercise the
+  full call / list / schema / subscribe wire surface.
+- `docs/phosphor-shell-design/04-implementation-plan.md` Phase 1.4
+  — this library's roadmap entry.
+- `docs/phosphor-shell-design/03-component-map.md#typed-ipc--phosphorctl`
+  — original design discussion.

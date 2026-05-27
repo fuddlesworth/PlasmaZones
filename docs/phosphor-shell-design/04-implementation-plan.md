@@ -144,17 +144,17 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
 
-**Phase 1 progress (as of 2026-05-26):** 2 / 5 libs shipped.
+**Phase 1 progress (as of 2026-05-27):** 4 / 5 libs shipped.
 
 | Lib                   | Status                                                  |
 |-----------------------|---------------------------------------------------------|
 | `phosphor-theme`      | ✓ shipped (PR #534)                                     |
 | `phosphor-popout`     | ✓ shipped (PR #535)                                     |
-| `phosphor-registry`   | not started                                             |
-| `phosphor-ipc`        | not started                                             |
-| `PerScreen` helper    | not started                                             |
+| `phosphor-registry`   | ✓ shipped (PR #538)                                     |
+| `phosphor-ipc`        | ✓ shipped (on `feat/phosphor-ipc`, PR pending)          |
+| `PerScreen` helper    | not started (Phase 1.5)                                 |
 
-The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.2-1.5 land.
+The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.5 lands.
 
 ---
 
