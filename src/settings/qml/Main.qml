@@ -70,8 +70,11 @@ PhosphorUi.SettingsAppWindow {
 
     controller: settingsController.app
     title: i18n("PlasmaZones Settings")
-    width: 1200
-    height: 800
+    // Sized in Kirigami grid units so the window scales with the
+    // user's gridUnit setting (HiDPI / large-text themes). Was a
+    // hardcoded 1200x800 that ignored both.
+    width: Kirigami.Units.gridUnit * 60
+    height: Kirigami.Units.gridUnit * 40
     // Use the lib's 3-action close prompt (Apply / Discard / Cancel)
     // — same UX as the legacy hand-rolled unsavedChangesDialog, but
     // the framework owns the dialog and the close orchestration.

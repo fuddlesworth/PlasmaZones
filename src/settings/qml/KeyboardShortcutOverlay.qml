@@ -13,7 +13,7 @@ import org.phosphor.animation
  * Toggled by the parent window's `_showShortcuts` flag (consumers
  * bind `shown: window._showShortcuts` and the overlay calls back
  * `onDismiss` to flip it false). The whole surface fades in/out via
- * `widget.fadeIn` / `widget.fadeOut` at 200 ms.
+ * `widget.fadeIn` / `widget.fadeOut` over Kirigami.Units.longDuration.
  *
  * Anchored relative to whatever `parent` is assigned — typical wiring
  * is `parent: window.contentItem` so the overlay covers the entire
@@ -158,9 +158,13 @@ Rectangle {
     }
 
     Behavior on opacity {
+        // Kirigami.Units.longDuration ≈ 250ms on the default profile;
+        // scales with the user's animation-speed preference (and
+        // honours "reduce motion" by going to 0). Was a hardcoded
+        // 200ms that ignored both.
         PhosphorMotionAnimation {
             profile: root.shown ? "widget.fadeIn" : "widget.fadeOut"
-            durationOverride: 200
+            durationOverride: Kirigami.Units.longDuration
         }
     }
 }

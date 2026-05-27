@@ -72,8 +72,12 @@ Rectangle {
     SequentialAnimation {
         id: toastHide
 
+        // Kirigami.Units.veryLongDuration (≈400ms) × 5 keeps the toast
+        // legible (≈2s on stock themes) while respecting the user's
+        // global animation-speed scale — hardcoding 2000ms ignored a
+        // user who'd configured the desktop to faster/slower motion.
         PauseAnimation {
-            duration: 2000
+            duration: Kirigami.Units.veryLongDuration * 5
         }
 
         PhosphorMotionAnimation {
@@ -83,7 +87,5 @@ Rectangle {
             to: 0
             profile: "widget.fadeOut"
         }
-
     }
-
 }
