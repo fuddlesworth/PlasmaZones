@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Network is PUBLIC because IpcRouter exposes QLocalServer-shaped
+# state. Gui + Qml are PUBLIC for IpcTarget (QML_ELEMENT).
+find_dependency(Qt6 6.6 COMPONENTS Core Gui Qml Network)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorIpcTargets.cmake")
+
+check_required_components(PhosphorIpc)

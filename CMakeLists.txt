@@ -401,6 +401,10 @@ add_subdirectory(libs/phosphor-popout)      # central popout coordinator (lifeti
 # unconditional so third-party hosts and the demos can consume it
 # without enabling the shell binary. Phase 1.3 deliverable.
 add_subdirectory(libs/phosphor-registry)    # generic Registry<T> + 5 factory interfaces + plugin loader
+# phosphor-ipc is also unconditional. Same rationale as the prior
+# three Phase-1 libs: third-party hosts and the demos consume it
+# without enabling the shell binary. Phase 1.4 deliverable.
+add_subdirectory(libs/phosphor-ipc)         # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()

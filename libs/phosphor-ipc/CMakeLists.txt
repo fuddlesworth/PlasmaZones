@@ -1,0 +1,169 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# PhosphorIpc — typed JSON-over-Unix-socket invocation channel for the
+# phosphor-shell. Lets compositor keybinds, external scripts, and other
+# shells drive Phosphor actions via `phosphorctl call <target>.<fn>`,
+# without replacing the existing D-Bus surface.
+#
+# Phase 1.4 deliverable per docs/phosphor-shell-design/04-implementation-plan.md.
+
+cmake_minimum_required(VERSION 3.16)
+
+set(PHOSPHORIPC_VERSION "0.1.0")
+# Wire-protocol version. The CLI sends this at handshake; mismatched
+# major versions terminate the connection cleanly. Bumped whenever the
+# JSON shape on the wire changes incompatibly. Exported as a compile
+# definition so both the library and bin/phosphorctl agree at build
+# time (mirrors PluginAbiVersion's CMake-↔-header link in phosphor-
+# registry).
+set(PHOSPHOR_IPC_PROTOCOL_VERSION 1)
+
+if(NOT PROJECT_VERSION)
+    project(PhosphorIpc VERSION ${PHOSPHORIPC_VERSION} LANGUAGES CXX)
+    set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    # Stay strictly ISO C++20 — no GNU extensions in LGPL public headers.
+    set(CMAKE_CXX_EXTENSIONS OFF)
+    set(CMAKE_AUTOMOC ON)
+endif()
+
+include(GenerateExportHeader)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Dependencies
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Network for QLocalServer / QLocalSocket. Gui + Qml for IpcTarget
+# (QML_ELEMENT registration). No Quick — IpcTarget is a non-visual
+# QML type and surfaces consuming it ship their own QtQuick deps.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Network)
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Library
+# ═══════════════════════════════════════════════════════════════════════════════
+
+set(phosphoripc_public_HDRS
+    include/PhosphorIpc/PhosphorIpc.h
+    include/PhosphorIpc/IpcRouter.h
+    include/PhosphorIpc/IpcTarget.h
+    include/PhosphorIpc/IpcEngine.h
+    include/PhosphorIpc/IpcProtocol.h
+    include/PhosphorIpc/IpcSchemaGenerator.h
+)
+
+set(phosphoripc_SRCS
+    src/ipcrouter.cpp
+    src/ipctarget.cpp
+    src/ipcengine.cpp
+    src/ipcprotocol.cpp
+    src/ipcschemagenerator.cpp
+)
+
+add_library(PhosphorIpc SHARED
+    ${phosphoripc_public_HDRS}
+    ${phosphoripc_SRCS}
+)
+
+add_library(PhosphorIpc::PhosphorIpc ALIAS PhosphorIpc)
+
+generate_export_header(PhosphorIpc
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/PhosphorIpc/phosphoripc_export.h
+    EXPORT_MACRO_NAME PHOSPHORIPC_EXPORT
+)
+
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+endif()
+
+target_include_directories(PhosphorIpc
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+)
+
+target_compile_features(PhosphorIpc PUBLIC cxx_std_20)
+
+target_compile_definitions(PhosphorIpc
+    PUBLIC
+        PHOSPHOR_IPC_PROTOCOL_VERSION=${PHOSPHOR_IPC_PROTOCOL_VERSION}
+)
+
+target_link_libraries(PhosphorIpc
+    PUBLIC
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Network
+)
+
+set_target_properties(PhosphorIpc PROPERTIES
+    VERSION ${PHOSPHORIPC_VERSION}
+    SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+    UNITY_BUILD OFF
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Install
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if(NOT DEFINED KDE_INSTALL_BINDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+
+install(TARGETS PhosphorIpc
+    EXPORT PhosphorIpcTargets
+    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${KDE_INSTALL_INCLUDEDIR}
+)
+
+install(FILES ${phosphoripc_public_HDRS}
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorIpc
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorIpc/phosphoripc_export.h
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorIpc
+)
+
+install(EXPORT PhosphorIpcTargets
+    FILE PhosphorIpcTargets.cmake
+    NAMESPACE PhosphorIpc::
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorIpc
+)
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/PhosphorIpcConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorIpcConfig.cmake"
+    INSTALL_DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorIpc
+)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorIpcConfigVersion.cmake"
+    VERSION ${PHOSPHORIPC_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorIpcConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorIpcConfigVersion.cmake"
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorIpc
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorIpc" OR BUILD_TESTING)
+    enable_testing()
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
+        add_subdirectory(tests)
+    endif()
+endif()
