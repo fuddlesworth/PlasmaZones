@@ -110,25 +110,25 @@ int runCall(QStringList args, QString socketPath)
     }
 
     QJsonObject req;
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Type), QString::fromUtf8(PhosphorIpc::RequestType::Call));
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Id), 1);
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Target), target);
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Fn), fn);
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Args), jsonArgs);
+    req.insert(QLatin1String(PhosphorIpc::Field::Type), QLatin1String(PhosphorIpc::RequestType::Call));
+    req.insert(QLatin1String(PhosphorIpc::Field::Id), 1);
+    req.insert(QLatin1String(PhosphorIpc::Field::Target), target);
+    req.insert(QLatin1String(PhosphorIpc::Field::Fn), fn);
+    req.insert(QLatin1String(PhosphorIpc::Field::Args), jsonArgs);
 
     const auto resp = client.request(req);
     if (!resp.has_value()) {
         err << "phosphorctl call: " << client.errorMessage() << "\n";
         return 2;
     }
-    if (resp->value(QString::fromUtf8(PhosphorIpc::Field::Type)).toString()
-        == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl call: " << resp->value(QString::fromUtf8(PhosphorIpc::Field::Code)).toString() << ": "
-            << resp->value(QString::fromUtf8(PhosphorIpc::Field::Message)).toString() << "\n";
+    if (resp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
+        == QLatin1String(PhosphorIpc::ResponseType::Error)) {
+        err << "phosphorctl call: " << resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString() << ": "
+            << resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString() << "\n";
         return 3;
     }
 
-    const QJsonValue result = resp->value(QString::fromUtf8(PhosphorIpc::Field::Result));
+    const QJsonValue result = resp->value(QLatin1String(PhosphorIpc::Field::Result));
     // Pretty-print object / array results; emit primitive results
     // raw (no surrounding quotes for strings, easier to pipe).
     if (result.isObject()) {

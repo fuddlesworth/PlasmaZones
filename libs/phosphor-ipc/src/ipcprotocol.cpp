@@ -18,8 +18,10 @@ namespace {
 // take ≤ ~10 positional args; 4096 is far above that ceiling and
 // well under any QJsonArray operational limit. Without a cap a
 // peer could send a multi-megabyte `args` array and force the
-// router to materialise it before any validation runs.
-constexpr int MaxArgsLength = 4096;
+// router to materialise it before any validation runs. Declared
+// as qsizetype to match QJsonArray::size()'s return type without
+// triggering -Wsign-compare on the bounds check.
+constexpr qsizetype MaxArgsLength = 4096;
 } // namespace
 
 std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
@@ -163,15 +165,17 @@ QJsonValue variantToJson(const QVariant& v)
         return v.toString();
     case QMetaType::QStringList: {
         QJsonArray arr;
-        for (const QString& s : v.toStringList()) {
-            arr.append(s);
+        const QStringList list = v.toStringList();
+        for (auto it = list.cbegin(); it != list.cend(); ++it) {
+            arr.append(*it);
         }
         return arr;
     }
     case QMetaType::QVariantList: {
         QJsonArray arr;
-        for (const QVariant& item : v.toList()) {
-            arr.append(variantToJson(item));
+        const QVariantList list = v.toList();
+        for (auto it = list.cbegin(); it != list.cend(); ++it) {
+            arr.append(variantToJson(*it));
         }
         return arr;
     }

@@ -39,21 +39,21 @@ int runList(QStringList args, QString socketPath)
     }
 
     QJsonObject req;
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Type), QString::fromUtf8(PhosphorIpc::RequestType::List));
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Id), 1);
+    req.insert(QLatin1String(PhosphorIpc::Field::Type), QLatin1String(PhosphorIpc::RequestType::List));
+    req.insert(QLatin1String(PhosphorIpc::Field::Id), 1);
 
     const auto resp = client.request(req);
     if (!resp.has_value()) {
         err << "phosphorctl list: " << client.errorMessage() << "\n";
         return 2;
     }
-    if (resp->value(QString::fromUtf8(PhosphorIpc::Field::Type)).toString()
-        == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl list: server error: "
-            << resp->value(QString::fromUtf8(PhosphorIpc::Field::Message)).toString() << "\n";
+    if (resp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
+        == QLatin1String(PhosphorIpc::ResponseType::Error)) {
+        err << "phosphorctl list: server error: " << resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()
+            << "\n";
         return 3;
     }
-    const QJsonArray names = resp->value(QString::fromUtf8(PhosphorIpc::Field::Result)).toArray();
+    const QJsonArray names = resp->value(QLatin1String(PhosphorIpc::Field::Result)).toArray();
     QStringList sorted;
     for (const QJsonValue& v : names) {
         sorted.append(v.toString());

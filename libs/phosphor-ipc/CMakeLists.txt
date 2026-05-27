@@ -121,10 +121,11 @@ set_target_properties(PhosphorIpc PROPERTIES
 # IpcTarget is declared with QML_ELEMENT in the SHARED PhosphorIpc
 # library. A separate STATIC qt_add_qml_module call publishes the
 # "Phosphor.Ipc" import URI by generating the QML module registrar
-# and plugin glue. Consumers link both PhosphorIpc::PhosphorIpcQml
-# and PhosphorIpc::PhosphorIpcQmlplugin to get the type registered
-# in their QQmlEngine. Mirrors the PhosphorTheme / PhosphorThemeQml
-# split.
+# and the plugin glue. Consumers link both PhosphorIpc::PhosphorIpcQml
+# (the namespaced alias declared below) and the unnamespaced
+# PhosphorIpcQmlplugin target that qt_add_qml_module creates to get
+# the type registered in their QQmlEngine. Mirrors the PhosphorTheme
+# / PhosphorThemeQml split.
 
 qt_add_qml_module(PhosphorIpcQml
     URI Phosphor.Ipc

@@ -17,8 +17,8 @@ namespace {
 
 // Map a QMetaType ID to a JSON Schema fragment. Per IpcSchemaGenerator.h's
 // documented table. Unknown / custom types degrade to a
-// {"description": "<typename>"} fragment without a "type" constraint
-//, the CLI will accept any value and let the server decide.
+// {"description": "<typename>"} fragment without a "type" constraint;
+// the CLI will accept any value and let the server decide.
 QJsonObject typeToSchema(int metaTypeId)
 {
     QJsonObject obj;

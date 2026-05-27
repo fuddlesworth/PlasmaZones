@@ -407,7 +407,7 @@ add_subdirectory(libs/phosphor-registry)    # generic Registry<T> + 5 factory in
 add_subdirectory(libs/phosphor-ipc)         # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
 # phosphorctl is the typed IPC CLI shipped alongside phosphor-ipc.
 # Unconditional: it's a user-facing tool every dev/operator wants
-# by default. Links Qt6::Core + Qt6::Network only — no GUI, no QML.
+# by default. Links Qt6::Core + Qt6::Network only (no GUI, no QML).
 # Source dir is cli/phosphorctl/ (not bin/) because bin/ is the
 # project's runtime output directory; a same-named source subdir
 # would collide with the binary's final path.

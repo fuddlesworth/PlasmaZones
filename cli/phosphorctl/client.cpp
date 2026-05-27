@@ -63,14 +63,22 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
         return std::nullopt;
     }
 
+    // Discard any leftover bytes from a previous request(). A live
+    // Client instance is expected to be either consumed by exactly
+    // one request() + one takePendingBytes() handoff, or by a chain
+    // of request()s with no streaming consumer. Either way, bytes
+    // that survived an earlier exchange aren't meaningful to the
+    // new one: they'd either match a stale id (replay) or be a
+    // residual event from a subscription that was never drained.
+    // Drop them rather than scan them against the new expectedId.
+    m_readBuffer.clear();
+
     // Extract the request id once so we can correlate the matching
-    // response. A response whose id doesn't match (e.g. a stray
-    // event from an unrelated subscription that landed before our
-    // reply) is preserved in m_readBuffer for takePendingBytes to
-    // hand off to the streaming-subscribe loop. Discarding events
-    // here would drop any broadcast that piggy-backed onto the
-    // subscribe ack's readyRead.
-    const qint64 expectedId = static_cast<qint64>(req.value(QString::fromUtf8(PhosphorIpc::Field::Id)).toDouble(0));
+    // response. Frames that don't match are kept in m_readBuffer
+    // for takePendingBytes to hand off to the streaming-subscribe
+    // loop, so that events broadcast in the same readyRead burst as
+    // the subscribe ack aren't silently dropped.
+    const qint64 expectedId = static_cast<qint64>(req.value(QLatin1String(PhosphorIpc::Field::Id)).toDouble(0));
 
     // QLocalSocket::waitForReadyRead on Linux doesn't reliably pump
     // the peer's accept / write loop. Use an explicit QEventLoop
@@ -83,11 +91,12 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
 
     auto drain = [&]() {
         m_readBuffer.append(m_socket.readAll());
-        // Scan complete lines without consuming them eagerly. Once
-        // we find a line that matches expectedId, we remove every
-        // byte up to and including that line; any later bytes stay
-        // in m_readBuffer for takePendingBytes to surface to the
-        // subscribe loop.
+        // Scan complete lines without consuming them eagerly. The
+        // line we match for expectedId (and any unrelated orphan
+        // error frames that arrived before it) get dropped from the
+        // buffer; subscription events that ride on the same burst
+        // stay in m_readBuffer for takePendingBytes to surface to
+        // the streaming-subscribe loop.
         int cursor = 0;
         while (true) {
             const int nl = m_readBuffer.indexOf('\n', cursor);
@@ -112,17 +121,25 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
                 continue;
             }
             const QJsonObject obj = doc.object();
-            // An absent `id` is the server's "no client correlation"
-            // sentinel, see buildError(0,...) which omits the id
-            // field. Don't match those against a client request
-            // that happens to use id=0; they're parse-level errors
-            // unrelated to any specific request. Drop them from the
-            // buffer rather than feeding them to the subscribe loop.
-            if (!obj.contains(QString::fromUtf8(PhosphorIpc::Field::Id))) {
+            const QString frameType = obj.value(QLatin1String(PhosphorIpc::Field::Type)).toString();
+            // Event frames (and any other ResponseType::Event-shaped
+            // payload) carry subscriptionId, not id. They must be
+            // preserved in m_readBuffer so the subscribe loop's
+            // takePendingBytes() handoff can deliver them. Advance
+            // the cursor without removing.
+            if (frameType == QLatin1String(PhosphorIpc::ResponseType::Event)) {
+                cursor = lineEnd;
+                continue;
+            }
+            // Non-event frames must carry an id to be correlated.
+            // An absent id on a reply / error is an uncorrelated
+            // server-side parse error (buildError(0,...) shape) and
+            // is dropped rather than handed to the subscribe loop.
+            if (!obj.contains(QLatin1String(PhosphorIpc::Field::Id))) {
                 m_readBuffer.remove(cursor, lineEnd - cursor);
                 continue;
             }
-            const qint64 respId = static_cast<qint64>(obj.value(QString::fromUtf8(PhosphorIpc::Field::Id)).toDouble(0));
+            const qint64 respId = static_cast<qint64>(obj.value(QLatin1String(PhosphorIpc::Field::Id)).toDouble(0));
             if (respId == expectedId) {
                 matched = obj;
                 // Consume everything up to and including the matched
@@ -133,9 +150,9 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
                 loop.quit();
                 return;
             }
-            // Non-matching id: leave the line in m_readBuffer for
-            // the subscribe handoff and advance the cursor past it.
-            cursor = lineEnd;
+            // Reply with a non-matching id: drop it. We don't have
+            // a use for stale replies and they shouldn't pile up.
+            m_readBuffer.remove(cursor, lineEnd - cursor);
         }
     };
 

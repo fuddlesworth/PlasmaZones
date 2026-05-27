@@ -332,6 +332,11 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
         return fail(InvokeOutcome::ArgCountMismatch,
                     QStringLiteral("argument count exceeds dispatch limit of %1").arg(MaxArgs));
     }
+    // reserve() is load-bearing: the second loop below builds
+    // QGenericArgument values holding const T* pointers into each
+    // coerced QVariant's internal storage. A reallocation during
+    // append() would invalidate those pointers, so pre-reserve the
+    // exact final size.
     QVariantList coerced;
     coerced.reserve(args.size());
     for (int i = 0; i < args.size(); ++i) {
@@ -339,11 +344,15 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
         const QMetaType expected(method.parameterType(i));
         if (v.metaType() != expected) {
             if (!v.convert(expected)) {
-                return fail(
-                    InvokeOutcome::ArgConvertFailed,
-                    QStringLiteral("arg %1 for '%2.%3': cannot convert %4 to %5")
-                        .arg(i)
-                        .arg(targetName, fn, QLatin1String(args.at(i).typeName()), QLatin1String(expected.name())));
+                // typeName() can return nullptr for a default-
+                // constructed QVariant (e.g. JSON null in an args
+                // slot). QLatin1String(nullptr) is UB, so guard.
+                const char* incomingType = args.at(i).typeName();
+                return fail(InvokeOutcome::ArgConvertFailed,
+                            QStringLiteral("arg %1 for '%2.%3': cannot convert %4 to %5")
+                                .arg(i)
+                                .arg(targetName, fn, QLatin1String(incomingType ? incomingType : "<null-variant>"),
+                                     QLatin1String(expected.name())));
             }
         }
         coerced.append(std::move(v));
@@ -356,7 +365,11 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
 
     QVariant returnValue;
     const QMetaType returnType(method.returnMetaType());
-    if (returnType.isValid() && returnType.id() != QMetaType::Void) {
+    // Treat UnknownType the same as Void: a return type whose
+    // metatype isn't registered can't be safely allocated via
+    // QVariant(type, nullptr), so skip the return slot entirely
+    // and let invoke() discard the value.
+    if (returnType.isValid() && returnType.id() != QMetaType::Void && returnType.id() != QMetaType::UnknownType) {
         returnValue = QVariant(returnType, nullptr);
     }
     QGenericReturnArgument ret = returnValue.isValid()
@@ -405,12 +418,16 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
     }
     // Hard cap on the unframed accumulation. canReadLine() only
     // returns true once a '\n' arrives; until then bytes accumulate
-    // in the QLocalSocket's internal buffer. A peer that never sends
-    // a newline would let that buffer grow unbounded. Once it crosses
-    // MaxLineBytes, force the socket closed with a MALFORMED_REQUEST
-    // diagnostic, handleClientDisconnected will clean up the
-    // subscription state.
-    if (!socket->canReadLine() && socket->bytesAvailable() > MaxLineBytes) {
+    // in the QLocalSocket's userspace buffer (bounded by
+    // setReadBufferSize(MaxLineBytes) on accept). Once bytesAvailable
+    // reaches the cap without a newline, no more bytes will be
+    // delivered to userspace and there's no way for a valid line to
+    // arrive on this connection. Force the socket closed with a
+    // MALFORMED_REQUEST diagnostic; handleClientDisconnected will
+    // clean up the subscription state. The check is `>=`, not `>`,
+    // because Qt caps userspace at MaxLineBytes exactly, so `>` would
+    // never trigger.
+    if (!socket->canReadLine() && socket->bytesAvailable() >= MaxLineBytes) {
         socket->write(writeLine(
             buildError(0, QString::fromUtf8(ErrorCode::MalformedRequest),
                        QStringLiteral("request line exceeds %1 bytes; closing connection").arg(MaxLineBytes))));

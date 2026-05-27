@@ -124,20 +124,20 @@ int runSubscribe(QStringList args, QString socketPath)
 
     constexpr qint64 SubscriptionId = 1;
     QJsonObject req;
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Type), QString::fromUtf8(PhosphorIpc::RequestType::Subscribe));
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Id), static_cast<double>(SubscriptionId));
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Target), target);
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Signal), signalName);
+    req.insert(QLatin1String(PhosphorIpc::Field::Type), QLatin1String(PhosphorIpc::RequestType::Subscribe));
+    req.insert(QLatin1String(PhosphorIpc::Field::Id), static_cast<double>(SubscriptionId));
+    req.insert(QLatin1String(PhosphorIpc::Field::Target), target);
+    req.insert(QLatin1String(PhosphorIpc::Field::Signal), signalName);
 
     const auto firstResp = client.request(req);
     if (!firstResp.has_value()) {
         err << "phosphorctl subscribe: " << client.errorMessage() << "\n";
         return 2;
     }
-    if (firstResp->value(QString::fromUtf8(PhosphorIpc::Field::Type)).toString()
-        == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl subscribe: " << firstResp->value(QString::fromUtf8(PhosphorIpc::Field::Code)).toString()
-            << ": " << firstResp->value(QString::fromUtf8(PhosphorIpc::Field::Message)).toString() << "\n";
+    if (firstResp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
+        == QLatin1String(PhosphorIpc::ResponseType::Error)) {
+        err << "phosphorctl subscribe: " << firstResp->value(QLatin1String(PhosphorIpc::Field::Code)).toString() << ": "
+            << firstResp->value(QLatin1String(PhosphorIpc::Field::Message)).toString() << "\n";
         return 3;
     }
 
@@ -202,6 +202,13 @@ int runSubscribe(QStringList args, QString socketPath)
         QCoreApplication::quit();
     });
 
+    // Close the gap between takePendingBytes() above and the
+    // readyRead slot wire-up: any bytes that arrived in the kernel
+    // buffer between those two points would only be delivered on
+    // the NEXT readyRead edge, so kick the drain manually here.
+    buffer.append(socket->readAll());
+    consumeBuffer();
+
     // Wake the loop on SIGINT/SIGTERM, send a clean unsubscribe,
     // wait for the kernel buffer to drain so the server actually
     // receives it, then quit.
@@ -211,10 +218,9 @@ int runSubscribe(QStringList args, QString socketPath)
         // Drain whatever the handler queued; ignore EAGAIN/EWOULDBLOCK.
         while (::read(g_signalFd[0], drain, sizeof(drain)) > 0) { }
         QJsonObject unsub;
-        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::Type),
-                     QString::fromUtf8(PhosphorIpc::RequestType::Unsubscribe));
-        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::Id), static_cast<double>(UnsubscribeRequestId));
-        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::SubscriptionId), static_cast<double>(SubscriptionId));
+        unsub.insert(QLatin1String(PhosphorIpc::Field::Type), QLatin1String(PhosphorIpc::RequestType::Unsubscribe));
+        unsub.insert(QLatin1String(PhosphorIpc::Field::Id), static_cast<double>(UnsubscribeRequestId));
+        unsub.insert(QLatin1String(PhosphorIpc::Field::SubscriptionId), static_cast<double>(SubscriptionId));
         socket->write(PhosphorIpc::writeLine(unsub));
         // QLocalSocket::flush is non-blocking on Linux. A short
         // waitForBytesWritten actually drains the kernel buffer

@@ -20,6 +20,10 @@ void install(QQmlEngine* engine, IpcRouter* router)
         qWarning("PhosphorIpc::IpcEngine::install: null engine ignored");
         return;
     }
+    if (!router) {
+        qWarning("PhosphorIpc::IpcEngine::install: null router; call uninstall() to drop the binding explicitly");
+        return;
+    }
     const QVariant current = engine->property(RouterPropertyName);
     if (current.isValid()) {
         IpcRouter* existing = qobject_cast<IpcRouter*>(current.value<QObject*>());

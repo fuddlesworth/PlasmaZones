@@ -37,22 +37,22 @@ int runSchema(QStringList args, QString socketPath)
     }
 
     QJsonObject req;
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Type), QString::fromUtf8(PhosphorIpc::RequestType::Schema));
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Id), 1);
-    req.insert(QString::fromUtf8(PhosphorIpc::Field::Target), target);
+    req.insert(QLatin1String(PhosphorIpc::Field::Type), QLatin1String(PhosphorIpc::RequestType::Schema));
+    req.insert(QLatin1String(PhosphorIpc::Field::Id), 1);
+    req.insert(QLatin1String(PhosphorIpc::Field::Target), target);
 
     const auto resp = client.request(req);
     if (!resp.has_value()) {
         err << "phosphorctl schema: " << client.errorMessage() << "\n";
         return 2;
     }
-    if (resp->value(QString::fromUtf8(PhosphorIpc::Field::Type)).toString()
-        == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
+    if (resp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
+        == QLatin1String(PhosphorIpc::ResponseType::Error)) {
         err << "phosphorctl schema: server error: "
-            << resp->value(QString::fromUtf8(PhosphorIpc::Field::Message)).toString() << "\n";
+            << resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString() << "\n";
         return 3;
     }
-    const QJsonObject schema = resp->value(QString::fromUtf8(PhosphorIpc::Field::Result)).toObject();
+    const QJsonObject schema = resp->value(QLatin1String(PhosphorIpc::Field::Result)).toObject();
     out << QString::fromUtf8(QJsonDocument(schema).toJson(QJsonDocument::Indented));
     return 0;
 }

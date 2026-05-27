@@ -111,6 +111,8 @@ private Q_SLOTS:
     void roundtrip_malformedRequest();
     void start_failsWhenPathConflict();
     void stop_idempotent();
+    void start_afterStop_succeeds();
+    void oversizedLineClosesConnection();
 };
 
 void TestPhosphorIpcE2e::roundtrip_call()
@@ -291,6 +293,96 @@ void TestPhosphorIpcE2e::stop_idempotent()
     router.stop(); // not started, should be safe no-op
     router.stop();
     QVERIFY(router.socketPath().isEmpty());
+}
+
+void TestPhosphorIpcE2e::start_afterStop_succeeds()
+{
+    // The header documents "safe to retry after stop()" but the
+    // original test only checked that stop() doesn't crash. Verify
+    // the full start -> stop -> start -> serve-traffic cycle so a
+    // regression in stop()'s teardown order (e.g. dangling
+    // m_subscriptionsBySocket entries blocking re-bind) is caught.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+
+    IpcRouter router;
+    EchoTarget echo;
+    router.registerTarget(QStringLiteral("echo"), &echo);
+    QVERIFY(router.start(sockPath));
+    router.stop();
+    QVERIFY(router.socketPath().isEmpty());
+    QVERIFY(router.start(sockPath));
+
+    QJsonObject req;
+    req.insert(QStringLiteral("type"), QStringLiteral("call"));
+    req.insert(QStringLiteral("id"), 1);
+    req.insert(QStringLiteral("target"), QStringLiteral("echo"));
+    req.insert(QStringLiteral("fn"), QStringLiteral("echo"));
+    QJsonArray args;
+    args.append(QStringLiteral("after-restart"));
+    req.insert(QStringLiteral("args"), args);
+
+    const QJsonObject resp = roundtrip(sockPath, req);
+    QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+    QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("after-restart"));
+}
+
+void TestPhosphorIpcE2e::oversizedLineClosesConnection()
+{
+    // Verify the 1 MiB line-cap path in IpcRouter::handleClientReadyRead.
+    // A peer that streams over 1 MiB of bytes without a newline must
+    // receive a MALFORMED_REQUEST diagnostic and be force-closed; without
+    // this guard a misbehaving client could pin unbounded memory in the
+    // QLocalSocket internal buffer until canReadLine() finally returned
+    // true.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+
+    IpcRouter router;
+    QVERIFY(router.start(sockPath));
+
+    QLocalSocket socket;
+    QByteArray buffer;
+    bool disconnected = false;
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(&socket, &QLocalSocket::readyRead, &loop, [&] {
+        buffer.append(socket.readAll());
+        if (buffer.contains('\n')) {
+            loop.quit();
+        }
+    });
+    QObject::connect(&socket, &QLocalSocket::disconnected, &loop, [&] {
+        disconnected = true;
+        loop.quit();
+    });
+
+    socket.connectToServer(sockPath);
+    QVERIFY(socket.waitForConnected(2000));
+
+    // Write 1 MiB + 1 byte without a newline. The router's 1 MiB cap
+    // should trigger MALFORMED_REQUEST + abort().
+    QByteArray flood(1024 * 1024 + 1, 'A');
+    socket.write(flood);
+    socket.flush();
+
+    timeout.start(5000);
+    loop.exec();
+
+    // We expect either: (a) an error frame arrived, OR (b) the
+    // server force-closed the socket. Some Qt versions may deliver
+    // disconnected before the error frame buffer flushes, so accept
+    // either signal as evidence the cap fired.
+    const bool errorFrameArrived = buffer.contains('\n')
+        && QJsonDocument::fromJson(buffer.left(buffer.indexOf('\n'))).object().value(QStringLiteral("code")).toString()
+            == QStringLiteral("MALFORMED_REQUEST");
+    QVERIFY2(errorFrameArrived || disconnected,
+             "oversized line should produce either a MALFORMED_REQUEST frame or a server-side disconnect");
+    socket.abort();
 }
 
 QTEST_MAIN(TestPhosphorIpcE2e)

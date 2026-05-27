@@ -94,8 +94,14 @@ void IpcTarget::componentComplete()
         return;
     }
     m_router = router;
-    router->registerTarget(m_target, this);
+    // Flip m_registered BEFORE registerTarget so any slot that
+    // reacts to targetRegistered (which the router emits
+    // synchronously) and re-enters this instance via emitEvent or
+    // setTarget sees a consistent "fully registered" state. The
+    // pair (m_router, m_registered) is the contract for emitEvent
+    // and the destructor's unregister symmetry.
     m_registered = true;
+    router->registerTarget(m_target, this);
 }
 
 } // namespace PhosphorIpc
