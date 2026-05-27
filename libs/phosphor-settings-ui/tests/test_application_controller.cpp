@@ -447,6 +447,18 @@ private Q_SLOTS:
         QCOMPARE(keepA->applyCount, 1);
         QCOMPARE(keepB->applyCount, 1);
         QVERIFY(!app.isDirty());
+
+        // Post-condition: a subsequent registerPage must still work —
+        // the recomputeDirty compaction during apply should have
+        // removed the stale null QPointer, leaving m_domains in a
+        // healthy state for further mutations.
+        auto* fresh = new StubPage(QStringLiteral("c"));
+        app.registerPage(fresh, {}, QStringLiteral("C"), QUrl());
+        fresh->setDirty(true);
+        QVERIFY(app.isDirty());
+        app.applyAll();
+        QCOMPARE(fresh->applyCount, 1);
+        QVERIFY(!app.isDirty());
     }
 
     void applyAllAsyncEmitsCompleteOnAllSync()
@@ -479,10 +491,11 @@ private Q_SLOTS:
         QCOMPARE(b->applyCount, 1);
         QCOMPARE(headless->applyCount, 1);
         QVERIFY(!app.isDirty());
-        // applying transitioned false→true→false; expect at least 2
-        // emissions. (Exactly 2 in practice — but assert the
-        // observable contract rather than the exact count.)
-        QVERIFY(applyingSpy.count() >= 2);
+        // applying transitions exactly false→true→false: two emits.
+        // Tightened from `>= 2` so a regression that adds spurious
+        // applyingChanged emissions (e.g. an extra toggle inside the
+        // completion helper) trips the assertion.
+        QCOMPARE(applyingSpy.count(), 2);
         QVERIFY(!app.isApplying());
     }
 

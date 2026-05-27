@@ -216,6 +216,27 @@ ColumnLayout {
         const needle = root.searchText.toLowerCase();
         const matches = [];
         const seen = Object.create(null);
+        // Recursively walk down from a parent until a navigable
+        // (hasQmlSource) descendant is found — used to route a
+        // category-title search match to its first reachable leaf so
+        // category-only parents (no qmlSource of their own) are not
+        // unreachable through search.
+        const findFirstNavigable = function findFirstNavigable(parentId, depth) {
+            if (depth > root._maxWalkDepth)
+                return null;
+            const kids = root._scopeChildren(parentId);
+            for (let i = 0; i < kids.length; ++i) {
+                const child = kids[i];
+                if (child.hasQmlSource)
+                    return child;
+                if (root._hasChildren(child.id)) {
+                    const desc = findFirstNavigable(child.id, depth + 1);
+                    if (desc)
+                        return desc;
+                }
+            }
+            return null;
+        };
         const collect = function collect(parentId, breadcrumb, depth) {
             if (depth > root._maxWalkDepth || seen[parentId])
                 return;
@@ -225,30 +246,45 @@ ColumnLayout {
                 const child = kids[i];
                 const grand = root._hasChildren(child.id);
                 const childBreadcrumb = breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title;
-                // Always recurse so descendants can match — but if
-                // this parent is itself navigable (`hasQmlSource`),
-                // also consider its own label as a match candidate.
-                // The previous form skipped parents entirely, so a
-                // navigable category page (one that has children AND
-                // a qmlSource) was unreachable through search.
+                // Always recurse so descendants can match.
                 if (grand)
                     collect(child.id, childBreadcrumb, depth + 1);
 
-                if (!child.hasQmlSource)
-                    continue;
-
-                if (childBreadcrumb.toLowerCase().indexOf(needle) >= 0)
-                    matches.push({
-                        "pageId": child.id,
-                        "title": childBreadcrumb,
-                        "iconSource": child.iconSource,
-                        "hasQmlSource": true,
-                        "_depth": 0,
-                        "_isCollapsibleHeader": false,
-                        "_isDrillParent": false,
-                        "_isExpanded": false,
-                        "_isDivider": false
-                    });
+                const matchesNeedle = childBreadcrumb.toLowerCase().indexOf(needle) >= 0;
+                if (child.hasQmlSource) {
+                    if (matchesNeedle)
+                        matches.push({
+                            "pageId": child.id,
+                            "title": childBreadcrumb,
+                            "iconSource": child.iconSource,
+                            "hasQmlSource": true,
+                            "_depth": 0,
+                            "_isCollapsibleHeader": false,
+                            "_isDrillParent": false,
+                            "_isExpanded": false,
+                            "_isDivider": false
+                        });
+                } else if (matchesNeedle && grand) {
+                    // Category-only parent (no qmlSource of its own)
+                    // whose title matches — route the user to its
+                    // first navigable descendant so they land
+                    // somewhere useful. Falls through silently if
+                    // the whole subtree is non-navigable.
+                    const landing = findFirstNavigable(child.id, depth + 1);
+                    if (landing) {
+                        matches.push({
+                            "pageId": landing.id,
+                            "title": childBreadcrumb,
+                            "iconSource": landing.iconSource,
+                            "hasQmlSource": true,
+                            "_depth": 0,
+                            "_isCollapsibleHeader": false,
+                            "_isDrillParent": false,
+                            "_isExpanded": false,
+                            "_isDivider": false
+                        });
+                    }
+                }
             }
         };
         collect(root.currentParentId, "", 0);
@@ -314,14 +350,26 @@ ColumnLayout {
     Component.onCompleted: {
         // Suppress per-row add Transitions for the initial fill so the
         // sidebar doesn't visibly accordion-expand every top-level row
-        // on the very first paint. Same mechanism the drill/search
-        // paths use; flip back on the next event-loop tick so steady-
-        // state animations resume.
+        // on the very first paint. Held through the initial paint AND
+        // any pages that register in the same startup batch — pages
+        // registered asynchronously after the first paint are
+        // legitimate user-visible additions and animate normally.
         root._suppressAccordion = true;
         _refreshModel();
-        Qt.callLater(() => {
-            root._suppressAccordion = false;
-        });
+        // Drop the suppression after a short delay (longer than a
+        // single event-loop tick) so any plugin-loaded pages
+        // registered during the initial QML evaluation batch also
+        // land without animation. Steady-state additions trigger
+        // through Connections.onPageRegistered below, after this
+        // timer fires.
+        suppressAccordionTimer.start();
+    }
+
+    Timer {
+        id: suppressAccordionTimer
+        interval: Kirigami.Units.shortDuration
+        repeat: false
+        onTriggered: root._suppressAccordion = false
     }
 
     Connections {

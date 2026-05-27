@@ -591,29 +591,32 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     }
 
     // ── Read all v1 groups (using ConfigKeys v1 accessors) ────────────────
-    const QJsonObject v1Activation = root.value(ConfigKeys::v1ActivationGroup()).toObject();
-    const QJsonObject v1Display = root.value(ConfigKeys::v1DisplayGroup()).toObject();
-    const QJsonObject v1Appearance = root.value(ConfigKeys::v1AppearanceGroup()).toObject();
-    const QJsonObject v1Zones = root.value(ConfigKeys::v1ZonesGroup()).toObject();
-    const QJsonObject v1Behavior = root.value(ConfigKeys::v1BehaviorGroup()).toObject();
-    const QJsonObject v1Exclusions = root.value(ConfigKeys::v1ExclusionsGroup()).toObject();
-    const QJsonObject v1ZoneSelector = root.value(ConfigKeys::v1ZoneSelectorGroup()).toObject();
-    const QJsonObject v1Autotiling = root.value(ConfigKeys::v1AutotilingGroup()).toObject();
-    const QJsonObject v1AutotileShortcuts = root.value(ConfigKeys::v1AutotileShortcutsGroup()).toObject();
-    const QJsonObject v1Animations = root.value(ConfigKeys::v1AnimationsGroup()).toObject();
-    const QJsonObject v1GlobalShortcuts = root.value(ConfigKeys::v1GlobalShortcutsGroup()).toObject();
-    const QJsonObject v1Editor = root.value(ConfigKeys::v1EditorGroup()).toObject();
-    const QJsonObject v1Ordering = root.value(ConfigKeys::v1OrderingGroup()).toObject();
-    const QJsonObject v1Rendering = root.value(ConfigKeys::v1RenderingGroup()).toObject();
-    const QJsonObject v1Shaders = root.value(ConfigKeys::v1ShadersGroup()).toObject();
+    const QJsonObject v1Activation = root.value(ConfigKeys::Legacy::v1ActivationGroup()).toObject();
+    const QJsonObject v1Display = root.value(ConfigKeys::Legacy::v1DisplayGroup()).toObject();
+    const QJsonObject v1Appearance = root.value(ConfigKeys::Legacy::v1AppearanceGroup()).toObject();
+    const QJsonObject v1Zones = root.value(ConfigKeys::Legacy::v1ZonesGroup()).toObject();
+    const QJsonObject v1Behavior = root.value(ConfigKeys::Legacy::v1BehaviorGroup()).toObject();
+    const QJsonObject v1Exclusions = root.value(ConfigKeys::Legacy::v1ExclusionsGroup()).toObject();
+    const QJsonObject v1ZoneSelector = root.value(ConfigKeys::Legacy::v1ZoneSelectorGroup()).toObject();
+    const QJsonObject v1Autotiling = root.value(ConfigKeys::Legacy::v1AutotilingGroup()).toObject();
+    const QJsonObject v1AutotileShortcuts = root.value(ConfigKeys::Legacy::v1AutotileShortcutsGroup()).toObject();
+    const QJsonObject v1Animations = root.value(ConfigKeys::Legacy::v1AnimationsGroup()).toObject();
+    const QJsonObject v1GlobalShortcuts = root.value(ConfigKeys::Legacy::v1GlobalShortcutsGroup()).toObject();
+    const QJsonObject v1Editor = root.value(ConfigKeys::Legacy::v1EditorGroup()).toObject();
+    const QJsonObject v1Ordering = root.value(ConfigKeys::Legacy::v1OrderingGroup()).toObject();
+    const QJsonObject v1Rendering = root.value(ConfigKeys::Legacy::v1RenderingGroup()).toObject();
+    const QJsonObject v1Shaders = root.value(ConfigKeys::Legacy::v1ShadersGroup()).toObject();
 
     // ── Remove all v1 groups ────────────────────────────────────────────────
     const QString v1Groups[] = {
-        ConfigKeys::v1ActivationGroup(),   ConfigKeys::v1DisplayGroup(),         ConfigKeys::v1AppearanceGroup(),
-        ConfigKeys::v1ZonesGroup(),        ConfigKeys::v1BehaviorGroup(),        ConfigKeys::v1ExclusionsGroup(),
-        ConfigKeys::v1ZoneSelectorGroup(), ConfigKeys::v1AutotilingGroup(),      ConfigKeys::v1AutotileShortcutsGroup(),
-        ConfigKeys::v1AnimationsGroup(),   ConfigKeys::v1GlobalShortcutsGroup(), ConfigKeys::v1EditorGroup(),
-        ConfigKeys::v1OrderingGroup(),     ConfigKeys::v1RenderingGroup(),       ConfigKeys::v1ShadersGroup(),
+        ConfigKeys::Legacy::v1ActivationGroup(),        ConfigKeys::Legacy::v1DisplayGroup(),
+        ConfigKeys::Legacy::v1AppearanceGroup(),        ConfigKeys::Legacy::v1ZonesGroup(),
+        ConfigKeys::Legacy::v1BehaviorGroup(),          ConfigKeys::Legacy::v1ExclusionsGroup(),
+        ConfigKeys::Legacy::v1ZoneSelectorGroup(),      ConfigKeys::Legacy::v1AutotilingGroup(),
+        ConfigKeys::Legacy::v1AutotileShortcutsGroup(), ConfigKeys::Legacy::v1AnimationsGroup(),
+        ConfigKeys::Legacy::v1GlobalShortcutsGroup(),   ConfigKeys::Legacy::v1EditorGroup(),
+        ConfigKeys::Legacy::v1OrderingGroup(),          ConfigKeys::Legacy::v1RenderingGroup(),
+        ConfigKeys::Legacy::v1ShadersGroup(),
     };
     for (const auto& key : v1Groups) {
         root.remove(key);
@@ -853,12 +856,12 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // Both sides go through accessors: v2 via ConfigDefaults / Profile
     // constants (per CLAUDE.md rule: no inline QStringLiteral for config
     // keys) so a schema rename touches one accessor, and v1 via
-    // ConfigKeys::v1Animation*Key() so the migration is unambiguous about
+    // ConfigKeys::Legacy::v1Animation*Key() so the migration is unambiguous about
     // "reading legacy field" — the v1 shape is stable by definition but
     // having a single source of truth keeps `grep "AnimationDuration"`
     // returning one accessor declaration instead of N call-sites.
     QJsonObject animations;
-    moveKey(v1Animations, ConfigKeys::v1AnimationsEnabledKey(), animations, ConfigDefaults::enabledKey());
+    moveKey(v1Animations, ConfigKeys::Legacy::v1AnimationsEnabledKey(), animations, ConfigDefaults::enabledKey());
 
     // Assemble Profile fields from the v1 keys (if present). We build
     // the JSON shape directly using Profile's public field-name
@@ -876,12 +879,12 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // Clamping at migration time prevents both: the stored value is
     // always in-range, and `Profile::fromJson` accepts it cleanly.
     QJsonObject profile;
-    if (v1Animations.contains(ConfigKeys::v1AnimationDurationKey())) {
-        const int raw = v1Animations.value(ConfigKeys::v1AnimationDurationKey()).toInt();
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationDurationKey())) {
+        const int raw = v1Animations.value(ConfigKeys::Legacy::v1AnimationDurationKey()).toInt();
         const int clamped = qBound(ConfigDefaults::animationDurationMin(), raw, ConfigDefaults::animationDurationMax());
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration)] = clamped;
     }
-    if (v1Animations.contains(ConfigKeys::v1AnimationEasingCurveKey())) {
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationEasingCurveKey())) {
         // Resolve the v1 friendly name (e.g. "easeOutCubic") through a
         // stack-local CurveRegistry so we store the canonical wire form
         // (e.g. "0.33,1.00,0.68,1.00") in the Profile blob. Without this
@@ -902,7 +905,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         // the repeating diagnostic. The migration log below records
         // the dropped spec so an operator investigating a silent
         // curve change can find it.
-        const QString v1Curve = v1Animations.value(ConfigKeys::v1AnimationEasingCurveKey()).toString();
+        const QString v1Curve = v1Animations.value(ConfigKeys::Legacy::v1AnimationEasingCurveKey()).toString();
         PhosphorAnimation::CurveRegistry registry;
         if (const auto resolved = registry.tryCreate(v1Curve)) {
             profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] = resolved->toString();
@@ -911,27 +914,27 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
                   qPrintable(v1Curve));
         }
     }
-    if (v1Animations.contains(ConfigKeys::v1AnimationMinDistanceKey())) {
-        const int raw = v1Animations.value(ConfigKeys::v1AnimationMinDistanceKey()).toInt();
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationMinDistanceKey())) {
+        const int raw = v1Animations.value(ConfigKeys::Legacy::v1AnimationMinDistanceKey()).toInt();
         const int clamped =
             qBound(ConfigDefaults::animationMinDistanceMin(), raw, ConfigDefaults::animationMinDistanceMax());
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] = clamped;
     }
-    if (v1Animations.contains(ConfigKeys::v1AnimationSequenceModeKey())) {
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationSequenceModeKey())) {
         // SequenceMode is a closed enum (AllAtOnce=0, Stagger=1 as of v2).
         // Out-of-range values snap to the project default rather than
         // clamping to the nearest bound — clamping would silently alias
         // e.g. 999 onto Stagger, which is semantically different from
         // "the user's setting is meaningless, use the default".
-        const int raw = v1Animations.value(ConfigKeys::v1AnimationSequenceModeKey()).toInt();
+        const int raw = v1Animations.value(ConfigKeys::Legacy::v1AnimationSequenceModeKey()).toInt();
         const int resolved =
             (raw >= ConfigDefaults::animationSequenceModeMin() && raw <= ConfigDefaults::animationSequenceModeMax())
             ? raw
             : ConfigDefaults::animationSequenceMode();
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode)] = resolved;
     }
-    if (v1Animations.contains(ConfigKeys::v1AnimationStaggerIntervalKey())) {
-        const int raw = v1Animations.value(ConfigKeys::v1AnimationStaggerIntervalKey()).toInt();
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationStaggerIntervalKey())) {
+        const int raw = v1Animations.value(ConfigKeys::Legacy::v1AnimationStaggerIntervalKey()).toInt();
         const int clamped =
             qBound(ConfigDefaults::animationStaggerIntervalMin(), raw, ConfigDefaults::animationStaggerIntervalMax());
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] = clamped;
@@ -1082,7 +1085,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // so this extraction is a stepping-stone that v3→v4 reads back out.
     {
         QJsonObject assignRoot;
-        const QString assignPrefix = ConfigDefaults::v3assignmentGroupPrefix();
+        const QString assignPrefix = ConfigKeys::Legacy::v3assignmentGroupPrefix();
         QStringList keysToRemove;
         for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
             if (it.key().startsWith(assignPrefix)) {
@@ -1090,7 +1093,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
                 keysToRemove.append(it.key());
             }
         }
-        const QString quickLayoutsKey = ConfigDefaults::v3quickLayoutsGroup();
+        const QString quickLayoutsKey = ConfigKeys::Legacy::v3quickLayoutsGroup();
         if (root.contains(quickLayoutsKey)) {
             assignRoot[quickLayoutsKey] = root.value(quickLayoutsKey);
             keysToRemove.append(quickLayoutsKey);
@@ -1099,7 +1102,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         // consumed by PhosphorZones::LayoutRegistry directly from config.json and deleted
         // after application. Extracting it would leave dead data in
         // assignments.json that nothing reads (and v4 doesn't read it either).
-        const QString modeTrackingKey = ConfigDefaults::v3modeTrackingGroup();
+        const QString modeTrackingKey = ConfigKeys::Legacy::v3modeTrackingGroup();
         if (root.contains(modeTrackingKey)) {
             keysToRemove.append(modeTrackingKey);
         }
@@ -1214,9 +1217,9 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
         return result;
     };
 
-    const QString v2Monitors = takeKey(v2Display, ConfigKeys::v2DisabledMonitorsKey());
-    const QString v2Desktops = takeKey(v2Display, ConfigKeys::v2DisabledDesktopsKey());
-    const QString v2Activities = takeKey(v2Display, ConfigKeys::v2DisabledActivitiesKey());
+    const QString v2Monitors = takeKey(v2Display, ConfigKeys::Legacy::v2DisabledMonitorsKey());
+    const QString v2Desktops = takeKey(v2Display, ConfigKeys::Legacy::v2DisabledDesktopsKey());
+    const QString v2Activities = takeKey(v2Display, ConfigKeys::Legacy::v2DisabledActivitiesKey());
 
     // Write the duplicated lists into the new Display group. Skip empties so
     // a clean v2 config with no disabled entries doesn't grow noise keys.
@@ -1228,12 +1231,12 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
         }
     };
 
-    writeIfNonEmpty(ConfigKeys::v3snappingDisabledMonitorsKey(), v2Monitors);
-    writeIfNonEmpty(ConfigKeys::v3autotileDisabledMonitorsKey(), v2Monitors);
-    writeIfNonEmpty(ConfigKeys::v3snappingDisabledDesktopsKey(), v2Desktops);
-    writeIfNonEmpty(ConfigKeys::v3autotileDisabledDesktopsKey(), v2Desktops);
-    writeIfNonEmpty(ConfigKeys::v3snappingDisabledActivitiesKey(), v2Activities);
-    writeIfNonEmpty(ConfigKeys::v3autotileDisabledActivitiesKey(), v2Activities);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3snappingDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3autotileDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3snappingDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3autotileDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3snappingDisabledActivitiesKey(), v2Activities);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3autotileDisabledActivitiesKey(), v2Activities);
 
     // Stitch the trimmed v2 Display object back into Snapping.Behavior, drop
     // the Display sub-object entirely if it became empty (no ShowOnAllMonitors
@@ -1315,12 +1318,12 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         }
         display.remove(configKey);
     };
-    moveDisableKey(ConfigKeys::v3snappingDisabledMonitorsKey(), QStringLiteral("snappingMonitors"));
-    moveDisableKey(ConfigKeys::v3autotileDisabledMonitorsKey(), QStringLiteral("autotileMonitors"));
-    moveDisableKey(ConfigKeys::v3snappingDisabledDesktopsKey(), QStringLiteral("snappingDesktops"));
-    moveDisableKey(ConfigKeys::v3autotileDisabledDesktopsKey(), QStringLiteral("autotileDesktops"));
-    moveDisableKey(ConfigKeys::v3snappingDisabledActivitiesKey(), QStringLiteral("snappingActivities"));
-    moveDisableKey(ConfigKeys::v3autotileDisabledActivitiesKey(), QStringLiteral("autotileActivities"));
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledMonitorsKey(), QStringLiteral("snappingMonitors"));
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledMonitorsKey(), QStringLiteral("autotileMonitors"));
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledDesktopsKey(), QStringLiteral("snappingDesktops"));
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledDesktopsKey(), QStringLiteral("autotileDesktops"));
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledActivitiesKey(), QStringLiteral("snappingActivities"));
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledActivitiesKey(), QStringLiteral("autotileActivities"));
 
     // Write the stripped Display group back; drop it entirely if now empty so
     // no husk object lingers.
@@ -1351,16 +1354,16 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // matcher. finalizeV4Conversion ports the bridge logic against the
     // stashed JSON and appends the resulting WindowRules to the same rule
     // set assignments/disable lists feed.
-    QJsonObject animations = root.value(ConfigKeys::v4AnimationsGroup()).toObject();
-    const QJsonArray animationRules = animations.value(ConfigKeys::v4AnimationAppRulesKey()).toArray();
+    QJsonObject animations = root.value(ConfigKeys::Legacy::v4AnimationsGroup()).toObject();
+    const QJsonArray animationRules = animations.value(ConfigKeys::Legacy::v4AnimationAppRulesKey()).toArray();
     if (!animationRules.isEmpty()) {
         root[kV4AnimationRulesStashKey] = animationRules;
     }
-    animations.remove(ConfigKeys::v4AnimationAppRulesKey());
+    animations.remove(ConfigKeys::Legacy::v4AnimationAppRulesKey());
     if (animations.isEmpty()) {
-        root.remove(ConfigKeys::v4AnimationsGroup());
+        root.remove(ConfigKeys::Legacy::v4AnimationsGroup());
     } else {
-        root[ConfigKeys::v4AnimationsGroup()] = animations;
+        root[ConfigKeys::Legacy::v4AnimationsGroup()] = animations;
     }
 
     // Stamp literal 4 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
@@ -1793,10 +1796,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // ── Assignment rules ───────────────────────────────────────────────────
     QJsonObject quickLayoutsToRelocate;
     if (haveAssignments) {
-        const QString prefix = ConfigDefaults::v3assignmentGroupPrefix();
+        const QString prefix = ConfigKeys::Legacy::v3assignmentGroupPrefix();
         for (auto it = assignmentsRoot.constBegin(); it != assignmentsRoot.constEnd(); ++it) {
             const QString& groupName = it.key();
-            if (groupName == ConfigDefaults::v3quickLayoutsGroup()) {
+            if (groupName == ConfigKeys::Legacy::v3quickLayoutsGroup()) {
                 // QuickLayouts slots are NOT rules — relocate them to the
                 // quicklayouts.json sidecar.
                 quickLayoutsToRelocate = it.value().toObject();

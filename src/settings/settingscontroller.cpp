@@ -700,14 +700,28 @@ void SettingsController::setActivePage(const QString& page)
         qCWarning(PlasmaZones::lcCore) << "Unknown settings page:" << page;
         return;
     }
+    // Reentrancy guard: a slot connected to activePageChanged that
+    // calls setActivePage again (e.g. a CLI --page handler that
+    // redirects to a fallback page) would otherwise re-trigger
+    // m_loading toggling, leaving the toggle in an unspecified state
+    // if the inner call set m_loading = false before the outer call's
+    // restore ran. Returning early on re-entry keeps m_loading's
+    // false→true→false window symmetric per public-entry call.
+    if (m_settingActivePage) {
+        qCWarning(PlasmaZones::lcCore) << "setActivePage: reentrant call refused (already setting active page to"
+                                       << m_activePage << ")";
+        return;
+    }
     if (m_activePage != resolved) {
         // m_loading suppresses onSettingsPropertyChanged — the QML Loader
         // reacts synchronously to activePageChanged and new page creation
         // may trigger NOTIFY signals that would otherwise mark pages dirty.
+        m_settingActivePage = true;
         m_loading = true;
         m_activePage = resolved;
         Q_EMIT activePageChanged();
         m_loading = false;
+        m_settingActivePage = false;
     }
 }
 

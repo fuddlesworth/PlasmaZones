@@ -113,13 +113,19 @@ void SettingsController::save()
 
     // WindowRuleController and AnimationsPageController are registered
     // as their own StagingDomains and the framework's applyAllAsync
-    // walks them directly — their own apply() methods drive the
-    // async D-Bus push (windowrules) and the snapshot clear
-    // (animations). Calling commit/commitPending here would double-
-    // dispatch (and for window rules, ALSO send a synchronous
-    // setAllRules over D-Bus *before* the async one returned, hitting
-    // the daemon twice in the same save tick). The framework owns
-    // those terminal signals; this save() handles only the Settings-
+    // walks them directly. The registration happens in
+    // settingscontroller_pageregistration.cpp via regPage(...) →
+    // ApplicationController::registerPage(...) → trackDomain(...),
+    // which connects dirtyChanged + appends the controller to
+    // m_domains. No explicit registerDomain() call on these two —
+    // their PageController identity is sufficient. Their own apply()
+    // methods drive the async D-Bus push (windowrules) and the
+    // snapshot clear (animations). Calling commit/commitPending here
+    // would double-dispatch (and for window rules, ALSO send a
+    // synchronous setAllRules over D-Bus *before* the async one
+    // returned, hitting the daemon twice in the same save tick). The
+    // framework owns those terminal signals; this save() handles only
+    // the Settings-
     // backed surface.
 
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen

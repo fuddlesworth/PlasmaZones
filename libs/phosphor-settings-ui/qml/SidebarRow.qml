@@ -225,26 +225,34 @@ QQC2.ItemDelegate {
             }
         }
 
+        // Stable QtObject view of the row — bindings update per field,
+        // so a downstream `modelData.iconSource` consumer only re-
+        // evaluates when iconSource actually changes (vs. the prior
+        // `property var modelData: ({...})` form, which allocated a
+        // fresh-identity dict on every dependency tick and force-
+        // invalidated every `modelData.foo` binding in the consumer's
+        // trailingDelegate on hover/active flips).
+        QtObject {
+            id: trailingModelData
+
+            readonly property string pageId: rowItem.pageId
+            readonly property string title: rowItem.title
+            readonly property string iconSource: rowItem.iconSource
+            readonly property bool hasQmlSource: rowItem.hasQmlSource
+            readonly property int _depth: rowItem._depth
+            readonly property bool _isCollapsibleHeader: rowItem._isCollapsibleHeader
+            readonly property bool _isDrillParent: rowItem._isDrillParent
+            readonly property bool _isExpanded: rowItem._isExpanded
+            readonly property bool _isDivider: rowItem._isDivider
+        }
+
         Loader {
             id: trailingLoader
 
-            // Lazy entryData rebuilt on demand from the row's required
-            // properties — keeps the contract identical to the
-            // pre-extraction Loader (the consumer's trailingDelegate
-            // reads `modelData.pageId` / `modelData.title` etc.) while
-            // not allocating a fresh dict per binding evaluation
-            // upstream.
-            property var modelData: ({
-                    "pageId": rowItem.pageId,
-                    "title": rowItem.title,
-                    "iconSource": rowItem.iconSource,
-                    "hasQmlSource": rowItem.hasQmlSource,
-                    "_depth": rowItem._depth,
-                    "_isCollapsibleHeader": rowItem._isCollapsibleHeader,
-                    "_isDrillParent": rowItem._isDrillParent,
-                    "_isExpanded": rowItem._isExpanded,
-                    "_isDivider": rowItem._isDivider
-                })
+            // Stable object identity (the QtObject above) so the
+            // consumer's `modelData.foo` bindings only re-evaluate
+            // when `foo` actually changes.
+            property var modelData: trailingModelData
 
             sourceComponent: rowItem.trailingDelegate
             // Trailing widgets (e.g. PlasmaZones' snapping/tiling

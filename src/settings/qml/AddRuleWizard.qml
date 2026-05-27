@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -116,7 +117,14 @@ Kirigami.Dialog {
     }
 
     title: i18nc("@title:window", "New Window Rule")
-    preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, parent ? parent.width * 0.9 : Kirigami.Units.gridUnit * 40)
+    // Bind to Window.window for a stable reference instead of `parent`
+    // — `parent` is null during the brief pre-attach window when the
+    // dialog is instantiated declaratively, and the binding wouldn't
+    // re-trigger once parent later becomes non-null because the
+    // binding tracks `parent` identity rather than field reads on
+    // null. Window.window resolves through Kirigami's overlay
+    // scope and is stable once the dialog is parented.
+    preferredWidth: Math.min(Kirigami.Units.gridUnit * 40, root.Window.window ? root.Window.window.width * 0.9 : Kirigami.Units.gridUnit * 40)
     standardButtons: Kirigami.Dialog.NoButton
     padding: Kirigami.Units.largeSpacing
     // `Kirigami.Dialog` defaults to `CloseOnEscape | CloseOnReleaseOutside`;

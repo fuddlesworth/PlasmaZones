@@ -6,6 +6,7 @@
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
@@ -132,6 +133,12 @@ private:
     // when stricter build flags land. Settings registries are never
     // anywhere near 2^31 pages, but the narrowing is unnecessary.
     QHash<QString, qsizetype> m_indexById;
+    // Controller-pointer dedup set — registerPage previously did an
+    // O(N) linear scan of m_pages per registration to reject a
+    // duplicate controller, which compounded to O(K²) for K page
+    // registrations. The set lookup keeps registration O(1) for
+    // catalogues that grow to dozens of pages.
+    QSet<PageController*> m_controllerSet;
 };
 
 } // namespace PhosphorSettingsUi

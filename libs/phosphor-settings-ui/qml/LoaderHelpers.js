@@ -37,3 +37,26 @@ function bindItemWidthToLoader(loader) {
             return loader.width;
         });
 }
+
+/**
+ * Inject `value` into `item[propName]` only when the item declares
+ * that property — and silently swallow the assignment when the
+ * consumer's binding made it readonly. Centralises the
+ * `hasOwnProperty + try-catch` idiom PageHost.qml uses three times
+ * to forward a controller pointer into pages without crashing on
+ * pages that bind their own controller.
+ *
+ * `value` may be `null` — the caller passes through whatever the
+ * registry produced. PageHost treats null re-registration as
+ * "keep prior" and won't call this function with a null value;
+ * other consumers may need different policy.
+ */
+function injectIfAssignable(item, propName, value) {
+    if (!item || !item.hasOwnProperty(propName))
+        return;
+    try {
+        item[propName] = value;
+    } catch (e) {
+        // Page binds its own controller (readonly) — skip.
+    }
+}

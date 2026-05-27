@@ -627,9 +627,17 @@ private:
     ScreenHelper m_screenHelper;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
-    QString m_externalEditPage; // Non-empty: setNeedsSave(true) targets this instead of m_activePage
+    /// Non-empty: `setNeedsSave(true)` targets this page id instead of
+    /// `m_activePage`. Used by `beginExternalEdit` to route a
+    /// daemon-driven dirty mark to the page that actually changed
+    /// when the user is on a different tab. `endExternalEdit` clears.
+    QString m_externalEditPage;
     bool m_saving = false;
     bool m_loading = false;
+    /// Reentrancy guard for setActivePage(). A slot connected to
+    /// activePageChanged that calls back into setActivePage would
+    /// otherwise corrupt the m_loading toggle window.
+    bool m_settingActivePage = false;
 
     // PhosphorZones::Layout state
     QVariantList m_layouts;

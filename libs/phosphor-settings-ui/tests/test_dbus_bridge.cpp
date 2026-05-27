@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <QTest>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QThread>
 #include <QtDBus/QDBusMessage>
 
@@ -163,6 +165,7 @@ private Q_SLOTS:
         DBusBridge bridge(ep);
 
         QDBusMessage reply;
+        QMutex replyMutex;
         QThread worker;
         // Heap-allocate the context QObject so its destruction is
         // deferred via deleteLater() running on the WORKER thread
@@ -172,12 +175,29 @@ private Q_SLOTS:
         QObject* context = new QObject;
         context->moveToThread(&worker);
         QObject::connect(&worker, &QThread::started, context, [&, context]() {
-            reply = bridge.callOn(QStringLiteral("org.example.Other"), QStringLiteral("m"));
+            QDBusMessage localReply = bridge.callOn(QStringLiteral("org.example.Other"), QStringLiteral("m"));
+            {
+                QMutexLocker locker(&replyMutex);
+                reply = localReply;
+            }
             context->deleteLater();
             worker.quit();
         });
         worker.start();
-        QVERIFY(worker.wait(2000));
+        // `worker.wait()` synchronises with the worker's exit. If it
+        // returns false (timeout), the worker is still running and the
+        // reply read below would race the lambda's write — guard with
+        // QVERIFY2 + return so the test fails fast instead of racing.
+        if (!worker.wait(2000)) {
+            worker.requestInterruption();
+            worker.wait(500);
+            QFAIL("worker thread did not finish within 2 s — cross-thread bridge call wedged");
+        }
+        // worker.wait() returned true → the worker thread has exited
+        // and its lambda's write to `reply` is happens-before-visible
+        // to this thread. The mutex is belt-and-braces for static
+        // analysers that don't model QThread::wait()'s synchronisation.
+        QMutexLocker locker(&replyMutex);
         QCOMPARE(reply.type(), QDBusMessage::ErrorMessage);
     }
 };

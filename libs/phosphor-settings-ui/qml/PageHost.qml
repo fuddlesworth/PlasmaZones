@@ -6,6 +6,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.phosphor.settings.ui
+import "LoaderHelpers.js" as PhosphorLoaderHelpers
 
 /**
  * Loads the QML page for ApplicationController.currentPageId.
@@ -62,23 +63,13 @@ Item {
             // already has a controller; PageHost's injection is
             // redundant. Try/catch swallows the TypeError so the
             // page still loads instead of failing to mount entirely.
-            if (item.hasOwnProperty("controller")) {
-                try {
-                    item.controller = pageController;
-                } catch (e) {
-                    // Page has its own readonly controller binding —
-                    // skip the injection, the page is wired through
-                    // its own channel.
-                }
-            }
-
-            if (item.hasOwnProperty("settingsApp")) {
-                try {
-                    item.settingsApp = root.controller;
-                } catch (e) {
-                    // Same readonly tolerance as `controller`.
-                }
-            }
+            // Both injections go through the shared helper so the
+            // hasOwnProperty + try-catch dance lives in one place.
+            // Pages that bind their own readonly `controller` /
+            // `settingsApp` Q_PROPERTY survive the assignment via the
+            // helper's catch block.
+            PhosphorLoaderHelpers.injectIfAssignable(item, "controller", pageController);
+            PhosphorLoaderHelpers.injectIfAssignable(item, "settingsApp", root.controller);
 
             // Fade in the freshly-loaded page. The Loader's own
             // opacity (pinned at 0 above) is what we animate — the
@@ -128,13 +119,7 @@ Item {
             // controller instead.
             if (!pageController)
                 return;
-            if (pageLoader.item.hasOwnProperty("controller")) {
-                try {
-                    pageLoader.item.controller = pageController;
-                } catch (e) {
-                    // Page binds its own controller (readonly) — skip.
-                }
-            }
+            PhosphorLoaderHelpers.injectIfAssignable(pageLoader.item, "controller", pageController);
         }
 
         target: root.controller.registry

@@ -43,17 +43,19 @@ bool PageRegistry::registerPage(Entry entry)
     // Reusing the controller would give it two sidebar rows that share one
     // dirty bit (only the first registered id ends up in
     // ApplicationController::m_domains), which the UI cannot render
-    // coherently. Always a caller bug.
-    for (const Entry& e : m_pages) {
-        if (e.controller.data() == entry.controller.data()) {
-            qWarning() << "PageRegistry::registerPage: controller already registered under id" << e.id
-                       << "— refusing duplicate registration under id" << entry.id;
-            return false;
-        }
+    // coherently. Always a caller bug. O(1) via m_controllerSet so
+    // registration stays linear in K (vs. the prior O(K²) walk).
+    PageController* const ctrl = entry.controller.data();
+    if (m_controllerSet.contains(ctrl)) {
+        qWarning() << "PageRegistry::registerPage: controller already registered — refusing duplicate registration "
+                      "under id"
+                   << entry.id;
+        return false;
     }
 
     const QString id = entry.id;
     m_indexById.insert(id, m_pages.size());
+    m_controllerSet.insert(ctrl);
     m_pages.append(std::move(entry));
     Q_EMIT pageRegistered(id);
     return true;

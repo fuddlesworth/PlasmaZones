@@ -94,6 +94,19 @@ void SettingsStagingDomain::apply()
     // shared_ptr<bool> outlives BOTH lambdas until both have run or
     // been disconnected.
     //
+    // On the destroyed-mid-batch defensive branch: under the current
+    // ownership invariant (SettingsStagingDomain is a QObject-child
+    // of m_app, m_app is a unique_ptr member of SettingsController
+    // destroyed BEFORE ~SettingsController emits `destroyed()`), this
+    // branch is unreachable — the staging domain is gone by the time
+    // the controller's destroyed signal fires, so the connection's
+    // receiver is already dead and Qt auto-disconnects. Kept as
+    // documented-unreachable defence: if a future refactor inverts
+    // the ownership (e.g. controller-owns-domain reversed, or domain
+    // hoisted to a different parent chain), the destroyed branch
+    // remains the correct cleanup path. Removing the branch would
+    // make the future refactor a silent latent bug.
+    //
     // Exception safety: applyGuard cleans up m_inFlight + both
     // connections if save() throws. The normal path dismisses the
     // guard before returning so cleanup runs exactly once.
