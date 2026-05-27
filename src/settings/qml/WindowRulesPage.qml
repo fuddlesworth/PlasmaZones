@@ -535,6 +535,57 @@ SettingsFlickable {
                                 height: animationOrderContainer.rowHeight
                                 y: baseY + visualOffset
                                 z: animDragArea.drag.active ? 100 : 0
+                                // Make the delegate receive keyboard focus so
+                                // the Keys.onPressed handler below can fire.
+                                // Tab walks the list; Alt+Up/Down then
+                                // reorders. WindowRuleRow's inner buttons
+                                // still receive focus on their own — this
+                                // only enables row-level focus for the
+                                // reorder handler.
+                                activeFocusOnTab: true
+                                focus: true
+                                Accessible.role: Accessible.ListItem
+                                Accessible.name: i18nc("Accessible row label for an animation rule", "Animation rule %1 of %2: %3", animDelegateRoot.index + 1, animationOrderContainer.rules.length, animDelegateRoot.modelData.name)
+
+                                // Keyboard reorder: Alt+Up / Alt+Down moves
+                                // the focused row in priority order without
+                                // requiring the drag MouseArea. Without
+                                // this, the rule list was reorderable by
+                                // pointer only — screen-reader and
+                                // keyboard-only users had no way to change
+                                // priority. Pairs with activeFocusOnTab on
+                                // the row WindowRuleRow below so Tab walks
+                                // the list focusably.
+                                Keys.onPressed: event => {
+                                    if (!(event.modifiers & Qt.AltModifier))
+                                        return;
+                                    var rules = animationOrderContainer.rules;
+                                    var from = animDelegateRoot.index;
+                                    var to = from;
+                                    if (event.key === Qt.Key_Up) {
+                                        if (from <= 0)
+                                            return;
+                                        to = from - 1;
+                                        event.accepted = true;
+                                    } else if (event.key === Qt.Key_Down) {
+                                        if (from >= rules.length - 1)
+                                            return;
+                                        to = from + 1;
+                                        event.accepted = true;
+                                    } else {
+                                        return;
+                                    }
+                                    var movedId = rules[from].ruleId;
+                                    // Mirror the drag-release beforeId math.
+                                    var beforeId = "";
+                                    if (from < to) {
+                                        if (to + 1 < rules.length)
+                                            beforeId = rules[to + 1].ruleId;
+                                    } else {
+                                        beforeId = rules[to].ruleId;
+                                    }
+                                    page.controller.moveRule(movedId, beforeId);
+                                }
 
                                 RowLayout {
                                     anchors.fill: parent

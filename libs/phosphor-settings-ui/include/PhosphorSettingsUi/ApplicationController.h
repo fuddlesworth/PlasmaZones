@@ -189,6 +189,15 @@ private:
     int m_discardPending = 0;
     QStringList m_discardErrors;
     bool m_discarding = false;
+    // Monotonic batch generation counters. Bumped at the start of each
+    // *Async batch and captured by that batch's timeout lambda — when
+    // the timer fires, the lambda compares its captured generation
+    // against the current value and bails out if they don't match.
+    // Prevents a stale timer from a previous batch from spuriously
+    // triggering against a *new* batch the user kicked off after the
+    // first one completed (60s gap is unlikely but possible).
+    quint64 m_applyGeneration = 0;
+    quint64 m_discardGeneration = 0;
     /// Hard-cap on how long an async batch waits for terminal result
     /// signals before synthesising a failure entry per still-pending
     /// domain. 60 seconds is generous for D-Bus chains (typical

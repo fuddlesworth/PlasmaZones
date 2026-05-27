@@ -192,6 +192,7 @@ void ApplicationController::applyAllAsync()
     m_applyPending = dirty.size();
     m_applyErrors.clear();
     m_applying = true;
+    ++m_applyGeneration;
     Q_EMIT applyingChanged();
     // Suppress the inner per-domain recomputeDirty walks for the
     // duration of the batch (A15 rationale) — the trailing completion
@@ -203,7 +204,14 @@ void ApplicationController::applyAllAsync()
     // the counter, and emit applyAllComplete(false, …). Without this
     // a stuck D-Bus reply with no client-side timeout would freeze
     // the chrome's "Saving…" indicator indefinitely.
-    QTimer::singleShot(kAsyncBatchTimeoutMs, this, [this]() {
+    //
+    // Captures the generation counter so a stale timer from a
+    // previous batch can't mistakenly fire against a new batch the
+    // user kicked off after the first one already completed.
+    const quint64 generation = m_applyGeneration;
+    QTimer::singleShot(kAsyncBatchTimeoutMs, this, [this, generation]() {
+        if (generation != m_applyGeneration)
+            return;
         if (!m_applying || m_applyPending == 0)
             return;
         const int stuck = m_applyPending;
@@ -268,12 +276,17 @@ void ApplicationController::discardAllAsync()
     m_discardPending = dirty.size();
     m_discardErrors.clear();
     m_discarding = true;
+    ++m_discardGeneration;
     Q_EMIT discardingChanged();
     m_inTransaction = true;
 
     // Same hard-timeout safety net as applyAllAsync — see comment
-    // there for rationale.
-    QTimer::singleShot(kAsyncBatchTimeoutMs, this, [this]() {
+    // there for rationale. Generation capture protects against a
+    // stale timer firing against a subsequent batch.
+    const quint64 generation = m_discardGeneration;
+    QTimer::singleShot(kAsyncBatchTimeoutMs, this, [this, generation]() {
+        if (generation != m_discardGeneration)
+            return;
         if (!m_discarding || m_discardPending == 0)
             return;
         const int stuck = m_discardPending;
