@@ -82,8 +82,9 @@ using PluginFactoryEntry = PhosphorRegistry::IBarWidgetFactory* (*)();
 //     is unregistered from the Registry and the .so pinned.
 //   - In-place .so edit: NOT honoured in Phase 1.3. POSIX dlopen
 //     refcounts loads by path; reloading the same path returns the
-//     prior mapping. Use rename-the-directory or restart-the-process
-//     for now.
+//     prior mapping. Plugin authors iterating in development should
+//     rename the plugin directory or restart the process; Phase 5's
+//     versioned-path scheme retires this limitation.
 //
 // Thread affinity
 //   - GUI thread only. Mirrors WatchedDirectorySet's contract.
