@@ -80,7 +80,7 @@ first, then snapping pair, then tiling pair). For each:
 
 ---
 
-## 2. Sync → async D-Bus on save / discard (D8, D10 — MOSTLY CLOSED passes 23 + 27)
+## 2. Sync → async D-Bus on save / discard (D8, D10 — CLOSED passes 23 + 27 + 28)
 
 **Resolved:**
 - Pass 23 (F#2a): `StagingDomain::applyResult(ok, error)` +
@@ -88,26 +88,26 @@ first, then snapping pair, then tiling pair). For each:
 - Pass 27 (F#2b): `WindowRuleController::asyncCommit()` Q_INVOKABLE
   dispatches `setAllRules` via `QDBusPendingCallWatcher` and emits
   `applyResult` on the reply. `pushToDaemonAsync()` mirrors the
-  client-side validation of the sync path. The sync `commit()` /
-  `forceCommit()` / `pushToDaemon()` stay callable for back-compat
-  until the chrome wires the async pipeline.
+  client-side validation of the sync path.
 - Pass 27 (F#2c): `AnimationsPageController::asyncRevertPending()`
   runs the QSaveFile restore loop on a `QtConcurrent` worker; a
   `QFutureWatcher` on the GUI thread installs the retained map +
   emits `discardResult`.
-
-**Still open (chrome wiring):**
-- Chrome footer should bind to the new applyResult/discardResult
-  signals and surface in-flight + failure state instead of relying
-  on the inherited `dirtyChanged` to imply completion.
-- `SettingsController::save()` and the inherited
-  `StagingDomain::apply()` slot still drive the sync path. Once the
-  chrome consumes the async signals, those callers can switch over
-  and the sync paths can become internal helpers.
-- Manual save-flow regression testing was the stated risk in the
-  original spec — the async siblings now exist but the cut-over
-  isn't done; the regression risk transfers to the future chrome
-  wiring PR.
+- Pass 28 (F#2 chrome): ApplicationController gained
+  `applying` / `discarding` Q_PROPERTY booleans, `applyAllAsync` /
+  `discardAllAsync` Q_INVOKABLE slots, and
+  `applyAllComplete(ok, errors)` / `discardAllComplete(ok, errors)`
+  signals. UnsavedChangesFooter Save/Discard buttons now show
+  "Saving…" / "Discarding…" while in flight (disabled), and call
+  the async variants. SettingsAppWindow's close-prompt waits for
+  applyAllComplete/discardAllComplete before closing — gated on a
+  closeFlow state-pair so footer-driven Saves don't also close
+  the window. Existing `apply()`/`discard()` slots on
+  WindowRuleController / AnimationsPageController / SettingsStagingDomain
+  bridge to the new contract (sync domains emit the result signals
+  inline; async domains emit on their watcher reply). 4 new tests
+  pin the async batch contract (complete-once, error collection,
+  no-op clean batches emit immediately).
 
 ## 2. Sync → async D-Bus on save / discard (D8, D10 — MEDIUM, original spec retained below)
 
@@ -445,12 +445,15 @@ These items should be filed as GitHub issues with the `phosphor-settings-ui`
 label once PR #533 merges. Each maps to one or more audit findings (audit
 codes preserved above so reviewers can cross-reference the original report).
 
-Last updated: 2026-05-27 (after passes 12-27 from the senior PR review).
+Last updated: 2026-05-27 (after passes 12-28 from the senior PR review).
 
-Closed: #1 (all sub-passes 1a-1f), #3, #5, #6, #7, #8, #12, #13, #14,
-A15, A17, A18, E27, E32, E37. #2 (async D-Bus) is "mostly closed":
-the async siblings on WindowRuleController + AnimationsPageController
-exist (passes 23 + 27) and emit applyResult/discardResult; the
-remaining work is chrome wiring (footer in-flight state + cut-over
-from sync apply/discard) which carries its own manual save-flow
-regression-testing risk and is a separate UX surface PR.
+Closed: #1 (all sub-passes 1a-1f), #2 (foundation + async siblings +
+chrome state machine), #3, #5, #6, #7, #8, #12, #13, #14, A15, A17,
+A18, E27, E32, E37. Every actionable item in this document is now
+resolved on the `feature/phosphor-settings-ui` branch.
+
+#10 (old-style D-Bus connect strings) is the only "still listed"
+item, and the spec itself documents it as a Qt API limitation
+(QDBusConnection::connect is fundamentally string-based) — not
+actionable inside this PR. A typed wrapper at the PhosphorProtocol
+layer would be a separate library-level design decision.
