@@ -24,6 +24,10 @@ set(plasmazones_settings_SRCS
     # out so settingscontroller_session.cpp stays under the 800-line cap.
     settingscontroller_perscreen.cpp
     settingscontroller_ordering.cpp
+    # Virtual-screen lifecycle methods (getVirtualScreenConfig +
+    # apply/remove/stage variants). Split out of _session.cpp to
+    # keep that TU under the 800-line cap (CLAUDE.md).
+    settingscontroller_virtualscreens.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
     # exposing the Q_PROPERTY surface for a single settings page each.
     animationspagecontroller.h
@@ -36,6 +40,11 @@ set(plasmazones_settings_SRCS
     # target — same class, separate TU, no API change. Keeps the main
     # cpp under the 800-line cap (CLAUDE.md).
     animationspagecontroller_shaders.cpp
+    # AnimationsPageController override-CRUD methods (userProfilesDir,
+    # hasOverride / rawProfile / resolvedProfile / setOverride /
+    # clearOverride). Same split rationale as _shaders.cpp — the main
+    # TU grew past 800 lines after the F#2c async-revert addition.
+    animationspagecontroller_overrides.cpp
     # Shared validate+copy primitive for installing shader packs.
     # Consumed by AnimationsPageController + SnappingShadersPageController.
     # Centralises the symlink-rejection + metadata.json safety checks.
