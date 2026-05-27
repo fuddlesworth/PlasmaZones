@@ -373,6 +373,7 @@ add_subdirectory(libs/phosphor-overlay)     # per-screen shell-host + slot mecha
 # dependencies and is a leaf module. Gating it would hide it from users
 # who don't ship the bundled shell. The shell binary itself stays gated.
 add_subdirectory(libs/phosphor-theme)       # M3 color-token store + Phosphor.Theme QML singletons
+add_subdirectory(libs/phosphor-popout)      # central popout coordinator (lifetime / focus / scope arbitration)
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
