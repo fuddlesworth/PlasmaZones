@@ -23,7 +23,7 @@ class DemoController : public QObject
     Q_OBJECT
     Q_PROPERTY(QString socketPath READ socketPath NOTIFY socketPathChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
-    // Live event log — newest first. Each IpcTarget in Main.qml
+    // Live event log, newest first. Each IpcTarget in Main.qml
     // calls recordEvent() alongside its emitEvent() so the demo
     // window shows events flowing as they're broadcast. Bounded to
     // the most recent 20 entries so a long phosphorctl call session
@@ -36,7 +36,7 @@ public:
 
     // Start the router on the given socket path. Empty path falls
     // back to PhosphorIpc::IpcRouter's XDG default. Returns true
-    // on success — the demo's main() shows the resolved path in
+    // on success, the demo's main() shows the resolved path in
     // the window title regardless.
     bool start(const QString& socketPath);
 
@@ -49,9 +49,9 @@ public:
 
     // Append "<target>.<signal>([args])" to the eventLog. Called
     // from QML alongside IpcTarget.emitEvent so the demo window
-    // visualises the same event stream wire subscribers receive —
-    // no need to open a separate `phosphorctl subscribe` terminal
-    // to see what subscribe delivers.
+    // visualises the same event stream wire subscribers receive,
+    // removing the need to open a separate `phosphorctl subscribe`
+    // terminal to see what subscribe delivers.
     Q_INVOKABLE void recordEvent(const QString& targetName, const QString& signalName, const QVariantList& args);
 
 Q_SIGNALS:

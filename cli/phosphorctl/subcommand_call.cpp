@@ -130,7 +130,7 @@ int runCall(QStringList args, QString socketPath)
 
     const QJsonValue result = resp->value(QString::fromUtf8(PhosphorIpc::Field::Result));
     // Pretty-print object / array results; emit primitive results
-    // raw (no surrounding quotes for strings — easier to pipe).
+    // raw (no surrounding quotes for strings, easier to pipe).
     if (result.isObject()) {
         out << QString::fromUtf8(QJsonDocument(result.toObject()).toJson(QJsonDocument::Indented));
     } else if (result.isArray()) {
@@ -138,7 +138,7 @@ int runCall(QStringList args, QString socketPath)
     } else if (result.isString()) {
         out << result.toString() << "\n";
     } else if (result.isNull()) {
-        // void return — print nothing.
+        // void return, print nothing.
     } else if (result.isBool()) {
         out << (result.toBool() ? QStringLiteral("true") : QStringLiteral("false")) << "\n";
     } else if (result.isDouble()) {

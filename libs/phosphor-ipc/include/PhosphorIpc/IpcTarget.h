@@ -17,7 +17,7 @@ namespace PhosphorIpc {
 // QML-side declarative wrapper for IpcRouter target registration.
 // Instantiated by user QML; auto-registers with the application's
 // IpcRouter in componentComplete(). Functions and signals declared
-// on the IpcTarget item itself form the exposed surface — the
+// on the IpcTarget item itself form the exposed surface, the
 // schema generator walks the IpcTarget's own metaobject.
 //
 // Router discovery: looks for the QQmlEngine property
@@ -46,14 +46,14 @@ public:
 
     // Push an event to every subscriber for (target, signalName).
     // QML plugin authors call this whenever a wire-visible state
-    // transition happens — explicit per-transition, in contrast
+    // transition happens, explicit per-transition, in contrast
     // to an auto-introspected Qt-signal hook. The args list is
     // serialised to JSON via the router's variant-to-JSON helper
     // (the same one used for sync call return values), so any
     // QVariantList-shaped payload works.
     Q_INVOKABLE void emitEvent(const QString& signalName, const QVariantList& args = {});
 
-    // QQmlParserStatus — register with the router after QML has
+    // QQmlParserStatus, register with the router after QML has
     // finished setting up the item (so the `target` property is
     // populated).
     void classBegin() override;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // phosphor-ipc-demo entry QML. Three IpcTargets (greet / count /
 // set-value) plus a live event-log panel showing the same events
-// `phosphorctl subscribe` would stream — so a single demo window
+// `phosphorctl subscribe` would stream, so a single demo window
 // covers the entire acceptance walkthrough without the user
 // having to open a separate subscribe terminal.
 
@@ -22,7 +22,7 @@ ApplicationWindow {
     color: Theme.background
 
     // Target 1: synchronous greet. `phosphorctl call greet.sayHello --arg name=nate`
-    // returns "Hello, nate". No event broadcast — sync only.
+    // returns "Hello, nate". No event broadcast, sync only.
     IpcTarget {
         target: "greet"
 
@@ -100,7 +100,7 @@ ApplicationWindow {
             font.family: Tokens.font_family
             font.pixelSize: Tokens.font_size_display_s
             font.weight: Tokens.font_weight_medium
-            text: qsTr("Phosphor.Ipc — call / list / schema / subscribe")
+            text: qsTr("Phosphor.Ipc: call / list / schema / subscribe")
         }
 
         Text {
@@ -108,11 +108,11 @@ ApplicationWindow {
             color: Theme.on_surface_variant
             font.family: Tokens.font_family
             font.pixelSize: Tokens.font_size_body_m
-            text: qsTr("Drive the targets from another terminal with phosphorctl. The Live events panel below shows the same events `phosphorctl subscribe` would stream — no separate subscribe terminal needed.")
+            text: qsTr("Drive the targets from another terminal with phosphorctl. The Live events panel below shows the same events `phosphorctl subscribe` would stream, so no separate subscribe terminal is needed.")
             wrapMode: Text.WordWrap
         }
 
-        // Cheat sheet — promoted above the status / event panels
+        // Cheat sheet, promoted above the status / event panels
         // because it's what the user is most likely reaching for
         // when they open the demo. Subscribe is listed first to
         // emphasise the live-events flow.
@@ -130,14 +130,14 @@ ApplicationWindow {
                 color: Theme.on_surface
                 font.family: "monospace"
                 font.pixelSize: Tokens.font_size_body_s
-                text: qsTr("# In another terminal — events from these calls\n# appear in the Live events panel below.\nexport PHOSPHOR_SOCKET=") + demoController.socketPath + qsTr("\nphosphorctl call count.increment              # one event per call\nphosphorctl call set-value.set --arg k=mood --arg v=happy\nphosphorctl call greet.sayHello --arg name=nate    # sync, no event\nphosphorctl list\nphosphorctl schema count | jq")
+                text: qsTr("# In another terminal, events from these calls\n# appear in the Live events panel below.\nexport PHOSPHOR_SOCKET=%1\nphosphorctl call count.increment              # one event per call\nphosphorctl call set-value.set --arg k=mood --arg v=happy\nphosphorctl call greet.sayHello --arg name=nate    # sync, no event\nphosphorctl list\nphosphorctl schema count | jq").arg(demoController.socketPath)
                 textFormat: Text.PlainText
                 verticalAlignment: Text.AlignTop
                 wrapMode: Text.WordWrap
             }
         }
 
-        // Live event log — newest-first list of broadcast events.
+        // Live event log, newest-first list of broadcast events.
         // The demo records into this list directly from QML, so the
         // panel shows exactly the events any external subscriber
         // would receive over the socket. Lets a single demo window
@@ -186,7 +186,7 @@ ApplicationWindow {
                         color: Theme.on_surface_variant
                         font.family: Tokens.font_family
                         font.pixelSize: Tokens.font_size_body_s
-                        text: qsTr("(no events yet — run `phosphorctl call count.increment` from a terminal)")
+                        text: qsTr("(no events yet: run `phosphorctl call count.increment` from a terminal)")
                         visible: eventList.count === 0
                     }
                 }
@@ -200,7 +200,7 @@ ApplicationWindow {
             elide: Text.ElideLeft
             font.family: "monospace"
             font.pixelSize: Tokens.font_size_body_s
-            text: qsTr("socket: %1 — %2").arg(demoController.socketPath !== "" ? demoController.socketPath : qsTr("(not running)")).arg(demoController.status)
+            text: qsTr("socket: %1, %2").arg(demoController.socketPath !== "" ? demoController.socketPath : qsTr("(not running)")).arg(demoController.status)
         }
     }
 }

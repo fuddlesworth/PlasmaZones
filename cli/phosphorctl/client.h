@@ -47,8 +47,12 @@ public:
 
     // Send a request, await a single response line with a matching
     // `id`. Frames whose id doesn't match (e.g. a stray event from
-    // an unrelated subscription on the same connection) are
-    // discarded. Returns the parsed response object, or
+    // an unrelated subscription on the same connection) are NOT
+    // discarded; they stay in the internal read buffer so the
+    // streaming-subscribe path can recover them via takePendingBytes.
+    // Without that handoff a server that broadcasts an event in the
+    // same readyRead burst as the subscribe ack would silently drop
+    // that first event. Returns the parsed response object, or
     // std::nullopt on read timeout / disconnect / parse error.
     // errorMessage populated on failure.
     [[nodiscard]] std::optional<QJsonObject> request(const QJsonObject& req, int timeoutMs = 2000);
@@ -59,8 +63,18 @@ public:
     // path; ownership stays with Client.
     [[nodiscard]] QLocalSocket* socket();
 
+    // Return any leftover read-buffer bytes that arrived AFTER the
+    // matching response for the most recent request() but before
+    // request() returned. The subscribe loop prepends these to its
+    // own buffer so events that piggy-backed onto the subscribe
+    // ack's readyRead are recovered cleanly. Clears the internal
+    // buffer as a side effect, call exactly once at the seam
+    // between request() and the streaming reader.
+    [[nodiscard]] QByteArray takePendingBytes();
+
 private:
     QLocalSocket m_socket;
+    QByteArray m_readBuffer;
     QString m_errorMessage;
 };
 

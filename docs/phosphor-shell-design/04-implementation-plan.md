@@ -106,32 +106,34 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 |-----------------------------------------------------------------------------|--------|----------------------------------------------------------------------------------------|
 | `libs/phosphor-registry/` (C++)                                             | ✓ shipped | Header-only `Registry<T>` template (5 instantiations: `IBarWidgetFactory`, `IControlCenterTileFactory`, `ILauncherProviderFactory`, `IOSDFactory`, `IDesktopWidgetFactory`) backed by a non-template `RegistryNotifier` QObject for `factoryRegistered` / `factoryUnregistered` signals. Common `IFactoryBase` carries `id()` / `displayName()` / `capabilities()`. `Manifest` POD mirrors plugin manifest.json; `PluginLoader` discovers + loads `.so` + manifest from a configurable plugin root via `QLibrary` + a fixed `phosphor_registry_create_factory` C entry point. `PHOSPHOR_PLUGIN_ABI_VERSION` CMake define + `static_assert` keeps the header constant locked to the build. |
 | `examples/phosphor-registry-demo/`                                          | ✓ shipped | In-process demo: Repeater-driven bar with two built-in `QmlComponentBarWidgetFactory` instances (clock, color-square). `DemoController` owns the registry, registers built-ins explicitly, and exposes `factoryIds` + `createWidgetFor` to QML. |
-| `examples/phosphor-registry-plugin-demo/`                                   | ✓ shipped | Same bar plus a third widget loaded from a separate `.so` (cpu-meter plugin). `PluginLoader` scans a `--plugin-root` directory; hot-reload via `phosphor-fsloader/WatchedDirectorySet` (directory add/remove only — in-place `.so` edits are out of scope because POSIX dlopen refcounts loads by path). |
+| `examples/phosphor-registry-plugin-demo/`                                   | ✓ shipped | Same bar plus a third widget loaded from a separate `.so` (cpu-meter plugin). `PluginLoader` scans a `--plugin-root` directory; hot-reload via `phosphor-fsloader/WatchedDirectorySet` (directory add/remove only; in-place `.so` edits are out of scope because POSIX dlopen refcounts loads by path). |
 | `libs/phosphor-registry/tests/`                                             | ✓ shipped | 5 test binaries / ~55 cases: `test_phosphor_registry` (template register/unregister/lookup/enumerate, signal ordering), `test_phosphor_registry_manifest` (every rejection path: malformed JSON, missing fields, abi mismatch, id-vs-dir mismatch, path-traversal id, oversize manifest, empty manifest), `test_phosphor_registry_pluginloader` (4 fake-plugin .so fixtures exercising happy path, id-mismatch, null-factory, missing-entry-point, corrupt .so, hot-reload add + remove, library-pin-before-factory-destroy). Templated `manifest.json.in` fixtures linked to the ABI version via `configure_file @ONLY`. |
 | `libs/phosphor-registry/README.md`                                          | ✓ shipped | Responsibility / Key types / Typical use (C++ shell composition root + glue-layer `BarController` + Repeater-driven Bar QML) / Arbitration & lifecycle / Dependencies. Documents the dlopen-refcount limitation explicitly. |
 
 **Acceptance:**
 - [x] Registry enumerates factories; plugin loads from `~/.local/share/phosphor/plugins/<id>/` (XDG-honouring; `--plugin-root` overrides for CI / demos)
 - [x] Capability declarations are present in `IFactoryBase::capabilities()` + manifest `capabilities` array (enforcement deferred to Phase 5 per plan)
-- [x] Plugin hot-reload by directory add/remove verified end-to-end (rename + restart still required for in-place .so edits — dlopen-refcount limitation documented in the README)
+- [x] Plugin hot-reload by directory add/remove verified end-to-end (rename + restart still required for in-place .so edits; dlopen-refcount limitation documented in the README)
 
 **Effort:** M (estimated ~2 weeks; actual ~1 session for the template + plugin loader + 2 demos. Four audit cycles before merge; final state 198 / 198 tests pass, 0 outstanding findings.)
 
-### 1.4: `phosphor-ipc` + `phosphorctl`
+### 1.4: `phosphor-ipc` + `phosphorctl` *(shipping in PR #539)*
 
-| Deliverable                                                       | Notes                                                                                |
-|-------------------------------------------------------------------|--------------------------------------------------------------------------------------|
-| `libs/phosphor-ipc/` (C++)                                        | `IpcRouter` + `IpcTarget` (QML attached property) + JSON schema generator.           |
-| `bin/phosphorctl/` (Go or Rust)                                   | Single static binary. Talks to `$XDG_RUNTIME_DIR/phosphor.sock`. `phosphorctl call`, `list`, `schema` subcommands. |
-| `examples/phosphor-ipc-demo/`                                     | App registers 3 IPC targets (`greet`, `count`, `set-value`). `phosphorctl call greet --name=nate` works end-to-end. |
+| Deliverable                                                       | Status        | Notes                                                                                |
+|-------------------------------------------------------------------|---------------|--------------------------------------------------------------------------------------|
+| `libs/phosphor-ipc/` (C++)                                        | in PR #539    | `IpcRouter` + `IpcTarget` (`QML_ELEMENT`, not attached property) + `IpcSchemaGenerator` (`QMetaObject` to JSON Schema) + `IpcEngine::install` engine-property bridge. NDJSON wire protocol over `QLocalServer` / `QLocalSocket` on `$XDG_RUNTIME_DIR/phosphor.sock`. Subscribe is in scope (typed signal streaming). |
+| `cli/phosphorctl/` (C++ / Qt6)                                    | in PR #539    | Standalone binary linking Qt6::Core + Qt6::Network only (no QML, no GUI). Subcommands: `call`, `list`, `schema`, `subscribe`. Source lives in `cli/phosphorctl/` rather than `bin/phosphorctl/` because `bin/` is the project's runtime output dir; a same-named source subdir would collide with the binary's final path. |
+| `examples/phosphor-ipc-demo/`                                     | in PR #539    | App registers 3 IPC targets (`greet`, `count`, `set-value`). `phosphorctl call greet.sayHello --arg name=nate` works end-to-end; the demo window mirrors the broadcast stream in a live-events panel so a single sidecar terminal exercises the full surface. |
+| `libs/phosphor-ipc/tests/`                                        | in PR #539    | 5 test binaries (protocol parser, router invoke / register / schema, e2e socket roundtrip, subscribe / broadcast / disconnect-prune) for ~75 cases including stale-socket recovery, live-listener-not-clobbered, multi-subscriber fan-out. |
 
 **Acceptance:**
-- `phosphorctl list` enumerates registered targets
-- `phosphorctl schema <target>` dumps JSON schema with arg types
-- Typed args validated client-side; errors are structured
-- Wraps (does not replace) existing D-Bus adaptors
+- [ ] `phosphorctl list` enumerates registered targets
+- [ ] `phosphorctl schema <target>` dumps JSON schema with arg types
+- [ ] Typed args validated server-side (`QVariant::convert`); errors are structured (`NO_SUCH_TARGET`, `NO_SUCH_FN`, `INVALID_ARG`, `INVOCATION_FAILED`, `MALFORMED_REQUEST`, `NO_SUCH_SIGNAL`, `NO_SUCH_SUBSCRIPTION`)
+- [ ] `phosphorctl subscribe <target>.<signal>` streams JSON events until Ctrl+C, with a clean unsubscribe handshake
+- [ ] Wraps (does not replace) existing D-Bus adaptors. Phase 2 service libs register both an IPC target and a D-Bus method for each callable.
 
-**Effort:** M (~2 weeks; CLI in 2-3 days, library is the bulk)
+**Effort:** M (~2 weeks estimated; actual ~1 session for the lib + CLI + demo + tests, plus audit cycles)
 
 ### 1.5: `PerScreen` QML helper
 
@@ -146,14 +148,14 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
 
-**Phase 1 progress (as of 2026-05-27):** 4 / 5 libs shipped.
+**Phase 1 progress (as of 2026-05-27):** 3 of 5 libs shipped, 1 in PR review, 1 not started.
 
 | Lib                   | Status                                                  |
 |-----------------------|---------------------------------------------------------|
 | `phosphor-theme`      | ✓ shipped (PR #534)                                     |
 | `phosphor-popout`     | ✓ shipped (PR #535)                                     |
 | `phosphor-registry`   | ✓ shipped (PR #538)                                     |
-| `phosphor-ipc`        | ✓ shipped (on `feat/phosphor-ipc`, PR pending)          |
+| `phosphor-ipc`        | in PR review (PR #539, branch `feat/phosphor-ipc`)      |
 | `PerScreen` helper    | not started (Phase 1.5)                                 |
 
 The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.5 lands.

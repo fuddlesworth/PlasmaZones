@@ -46,7 +46,7 @@ public:
 Q_SIGNALS:
     // Declared so subscribe's signal-existence check passes.
     // Subscribers receive events via the router's broadcastEvent
-    // path, not via Qt's signal/slot mechanism — so this signal is
+    // path, not via Qt's signal/slot mechanism, so this signal is
     // never actually emitted from the C++ side; broadcastEvent is
     // called directly in the test.
     void countChanged(int v);
@@ -58,8 +58,8 @@ private:
 // Connect a client and pump until N response lines arrive or
 // timeout fires. Returns the parsed objects in arrival order.
 // Drains any pre-buffered bytes upfront before entering the
-// event loop, because readyRead only fires on NEW arrivals —
-// data that landed during an earlier readLines() call on a
+// event loop, because readyRead only fires on NEW arrivals,
+// so data that landed during an earlier readLines() call on a
 // different socket would otherwise sit unread.
 QList<QJsonObject> readLines(QLocalSocket& socket, int expectedCount, int timeoutMs = 2000)
 {
@@ -128,6 +128,9 @@ QJsonObject makeReq(const QString& type, qint64 id, const QString& target = {}, 
 class TestPhosphorIpcSubscribe : public QObject
 {
     Q_OBJECT
+public:
+    Q_DISABLE_COPY_MOVE(TestPhosphorIpcSubscribe)
+    TestPhosphorIpcSubscribe() = default;
 private Q_SLOTS:
     void subscribe_replies_then_streams_events();
     void subscribe_unknownTarget();
@@ -343,7 +346,7 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
     // router's disconnect path FAILS to prune m_subscriptionsBySocket
     // for the dead socket, broadcastEvent later would either
     // crash writing to a dead QPointer or silently no-op against
-    // the now-disconnected socket — neither outcome is detectable
+    // the now-disconnected socket, neither outcome is detectable
     // from "did it not crash."
     {
         QLocalSocket sock;

@@ -35,7 +35,7 @@ void IpcTarget::setTarget(const QString& name)
     if (m_target == name) {
         return;
     }
-    // Changing target name after registration is a misuse — the
+    // Changing target name after registration is a misuse, the
     // registry key was already published. Refuse silently with a
     // diagnostic so plugin authors notice.
     if (m_registered) {
@@ -67,7 +67,7 @@ void IpcTarget::emitEvent(const QString& signalName, const QVariantList& args)
     // payloads match the JSON shape sync calls emit for return
     // values. (QJsonArray::fromVariantList would drop unknown
     // metatypes to null where the call path drops them to
-    // toString — keeping a single converter is the only way to
+    // toString, keeping a single converter is the only way to
     // avoid drift.)
     QJsonArray jsonArgs;
     for (const QVariant& v : args) {

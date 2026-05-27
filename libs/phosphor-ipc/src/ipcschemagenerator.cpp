@@ -18,7 +18,7 @@ namespace {
 // Map a QMetaType ID to a JSON Schema fragment. Per IpcSchemaGenerator.h's
 // documented table. Unknown / custom types degrade to a
 // {"description": "<typename>"} fragment without a "type" constraint
-// — the CLI will accept any value and let the server decide.
+//, the CLI will accept any value and let the server decide.
 QJsonObject typeToSchema(int metaTypeId)
 {
     QJsonObject obj;
@@ -60,7 +60,7 @@ QJsonObject typeToSchema(int metaTypeId)
         return obj;
     case QMetaType::QVariant:
     case QMetaType::QJsonValue:
-        // No type constraint — accept any JSON shape.
+        // No type constraint, accept any JSON shape.
         return obj;
     case QMetaType::Void:
         // Caller (return-type path) checks this and omits the
@@ -107,7 +107,13 @@ QJsonObject schemaFor(const QString& targetName, const QObject* object)
         return root;
     }
     const QMetaObject* meta = object->metaObject();
-    for (int i = meta->methodOffset(); i < meta->methodCount(); ++i) {
+    // Start above QObject's built-ins (destroyed, objectNameChanged,
+    // deleteLater, etc.) so the schema mirrors what
+    // IpcRouter::findInvokableMethod / findSignal actually expose on
+    // the wire. Methods declared on any user-defined base class above
+    // QObject still surface.
+    const int firstUserMethod = QObject::staticMetaObject.methodCount();
+    for (int i = firstUserMethod; i < meta->methodCount(); ++i) {
         const QMetaMethod m = meta->method(i);
         if (m.access() == QMetaMethod::Private) {
             continue;

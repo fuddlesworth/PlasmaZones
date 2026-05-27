@@ -13,6 +13,15 @@
 
 namespace PhosphorIpc {
 
+namespace {
+// Cap on the request `args` array size. Realistic shell methods
+// take ≤ ~10 positional args; 4096 is far above that ceiling and
+// well under any QJsonArray operational limit. Without a cap a
+// peer could send a multi-megabyte `args` array and force the
+// router to materialise it before any validation runs.
+constexpr int MaxArgsLength = 4096;
+} // namespace
+
 std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
 {
     QJsonParseError err{};
@@ -42,7 +51,7 @@ std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
     // `id` correlates request to response. Absent → 0 (clients
     // that don't care about correlation can omit it, e.g. one-
     // shot CLI invocations). Present-but-non-numeric is a
-    // malformed request, not a silent fallback to 0 — otherwise
+    // malformed request, not a silent fallback to 0, otherwise
     // clients that send a bogus id type get error frames with
     // mysteriously-missing ids (id=0 collides with the omission
     // sentinel in buildError).
@@ -71,7 +80,15 @@ std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
     // Anything else is a malformed-request signal.
     const QJsonValue argsValue = obj.value(QLatin1String(Field::Args));
     if (argsValue.isArray()) {
-        req.args = argsValue.toArray().toVariantList();
+        const QJsonArray argsArray = argsValue.toArray();
+        if (argsArray.size() > MaxArgsLength) {
+            if (parseError) {
+                *parseError =
+                    QStringLiteral("'args' length %1 exceeds limit of %2").arg(argsArray.size()).arg(MaxArgsLength);
+            }
+            return std::nullopt;
+        }
+        req.args = argsArray.toVariantList();
     } else if (!argsValue.isUndefined() && !argsValue.isNull()) {
         if (parseError) {
             *parseError = QStringLiteral("'args' must be an array if present");
@@ -161,7 +178,10 @@ QJsonValue variantToJson(const QVariant& v)
     case QMetaType::QVariantMap: {
         QJsonObject obj;
         const QVariantMap map = v.toMap();
-        for (auto it = map.begin(); it != map.end(); ++it) {
+        // cbegin/cend (not begin/end) so the implicitly-shared
+        // QVariantMap doesn't detach on each event broadcast in the
+        // hot path.
+        for (auto it = map.cbegin(); it != map.cend(); ++it) {
             obj.insert(it.key(), variantToJson(it.value()));
         }
         return obj;
@@ -173,7 +193,7 @@ QJsonValue variantToJson(const QVariant& v)
     case QMetaType::QJsonArray:
         return v.toJsonArray();
     default:
-        // Unknown type — emit the string-shaped fallback so the
+        // Unknown type, emit the string-shaped fallback so the
         // wire doesn't gain undocumented JSON shapes per metatype.
         return v.toString();
     }

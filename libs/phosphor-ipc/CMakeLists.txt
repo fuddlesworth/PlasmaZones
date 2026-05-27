@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorIpc — typed JSON-over-Unix-socket invocation channel for the
+# PhosphorIpc, typed JSON-over-Unix-socket invocation channel for the
 # phosphor-shell. Lets compositor keybinds, external scripts, and other
 # shells drive Phosphor actions via `phosphorctl call <target>.<fn>`,
 # without replacing the existing D-Bus surface.
@@ -23,7 +23,7 @@ if(NOT PROJECT_VERSION)
     project(PhosphorIpc VERSION ${PHOSPHORIPC_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    # Stay strictly ISO C++20 — no GNU extensions in LGPL public headers.
+    # Stay strictly ISO C++20, no GNU extensions in LGPL public headers.
     set(CMAKE_CXX_EXTENSIONS OFF)
     set(CMAKE_AUTOMOC ON)
 endif()
@@ -34,9 +34,14 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Network for QLocalServer / QLocalSocket. Gui + Qml for IpcTarget
-# (QML_ELEMENT registration). No Quick — IpcTarget is a non-visual
-# QML type and surfaces consuming it ship their own QtQuick deps.
+# Network for QLocalServer / QLocalSocket. Qml for IpcTarget's
+# QML_ELEMENT registration. No Gui, none of the public headers
+# (IpcRouter, IpcTarget, IpcProtocol, IpcSchemaGenerator, IpcEngine)
+# pull in any QtGui types, so linking Gui here would force CLI
+# consumers like phosphorctl to drag in the full GUI stack for no
+# reason. The QML plugin (PhosphorIpcQml) still needs Gui because
+# qmltyperegistrar's generated code transitively wants it; it's
+# declared on that target only.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Network)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -97,7 +102,6 @@ target_compile_definitions(PhosphorIpc
 target_link_libraries(PhosphorIpc
     PUBLIC
         Qt6::Core
-        Qt6::Gui
         Qt6::Qml
         Qt6::Network
 )

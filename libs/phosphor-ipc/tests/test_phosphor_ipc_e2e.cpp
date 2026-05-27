@@ -52,7 +52,7 @@ public:
 // Helper: connect a client, send one request line, await one
 // response line, return the parsed object. Uses a QEventLoop with
 // QTimer deadline so both the client AND server sides of the
-// connection get fully processed — QLocalSocket::waitForReadyRead
+// connection get fully processed, QLocalSocket::waitForReadyRead
 // alone doesn't reliably pump the server's accept loop on Linux,
 // which leaves the test hanging without the response.
 QJsonObject roundtrip(const QString& socketPath, const QJsonObject& request, int timeoutMs = 2000)
@@ -100,6 +100,9 @@ QJsonObject roundtrip(const QString& socketPath, const QJsonObject& request, int
 class TestPhosphorIpcE2e : public QObject
 {
     Q_OBJECT
+public:
+    Q_DISABLE_COPY_MOVE(TestPhosphorIpcE2e)
+    TestPhosphorIpcE2e() = default;
 private Q_SLOTS:
     void roundtrip_call();
     void roundtrip_list();
@@ -285,7 +288,7 @@ void TestPhosphorIpcE2e::start_failsWhenPathConflict()
 void TestPhosphorIpcE2e::stop_idempotent()
 {
     IpcRouter router;
-    router.stop(); // not started — should be safe no-op
+    router.stop(); // not started, should be safe no-op
     router.stop();
     QVERIFY(router.socketPath().isEmpty());
 }

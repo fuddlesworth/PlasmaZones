@@ -24,7 +24,7 @@ void install(QQmlEngine* engine, IpcRouter* router)
     if (current.isValid()) {
         IpcRouter* existing = qobject_cast<IpcRouter*>(current.value<QObject*>());
         if (existing == router) {
-            return; // idempotent — same router on same engine is fine
+            return; // idempotent, same router on same engine is fine
         }
         qWarning("PhosphorIpc::IpcEngine::install: replacing existing router on engine");
     }

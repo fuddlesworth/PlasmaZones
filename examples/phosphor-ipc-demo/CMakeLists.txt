@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# phosphor-ipc-demo. Acceptance harness for libs/phosphor-ipc — three
+# phosphor-ipc-demo. Acceptance harness for libs/phosphor-ipc, three
 # IpcTargets declared in QML are driven from another terminal via
 # phosphorctl. Demonstrates the full call / list / schema / subscribe
 # wire surface.

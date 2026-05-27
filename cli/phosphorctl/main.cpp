@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// phosphorctl — typed JSON-over-Unix-socket CLI for phosphor-shell.
+// phosphorctl, typed JSON-over-Unix-socket CLI for phosphor-shell.
 // Subcommand dispatcher: top-level QCommandLineParser identifies
 // `call`, `list`, `schema`, `subscribe` and hands off to the
 // matching handler in subcommand_*.cpp. Each handler builds its own
@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
     // We dispatch subcommands manually (QCommandLineParser treats
     // positional args weakly). The shared stripSocketFlag helper
     // pulls --socket / -s out of the arg list wherever it appears
-    // — before OR after the subcommand — so users don't have to
+    //, before OR after the subcommand, so users don't have to
     // remember the order.
     QStringList args = app.arguments();
     args.removeFirst();
@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
     // stripSocketFlag may have pulled the flag from the head of
     // args or from a later position. Run it again on the remaining
     // args in case the user wrote `phosphorctl call foo.bar --socket /x`
-    // — the post-subcommand position is also valid.
+    //, the post-subcommand position is also valid.
     const QString postSubcommandSocket = Phosphorctl::stripSocketFlag(args);
     if (!postSubcommandSocket.isEmpty()) {
         socketPathCli = postSubcommandSocket;

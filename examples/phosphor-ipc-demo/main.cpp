@@ -18,7 +18,6 @@
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
-#include <QDir>
 #include <QGuiApplication>
 #include <QProcessEnvironment>
 #include <QQmlApplicationEngine>
@@ -37,7 +36,7 @@ int main(int argc, char* argv[])
     parser.addHelpOption();
     QCommandLineOption socketOption(
         QStringList{QStringLiteral("socket"), QStringLiteral("s")},
-        QStringLiteral("Socket path to listen on. Defaults to PHOSPHOR_IPC_DEMO_SOCKET (CMake-injected) "
+        QStringLiteral("Socket path to listen on. Defaults to PHOSPHOR_IPC_DEMO_SOCKET (CMake-injected), "
                        "or a per-build path; falls back to $XDG_RUNTIME_DIR/phosphor.sock."),
         QStringLiteral("path"));
     parser.addOption(socketOption);
@@ -64,7 +63,7 @@ int main(int argc, char* argv[])
 #endif
     const bool routerOk = demoController.start(socketPath);
     if (!routerOk) {
-        qWarning("phosphor-ipc-demo: router failed to start on '%s' — see preceding log",
+        qWarning("phosphor-ipc-demo: router failed to start on '%s' (see preceding log)",
                  qPrintable(demoController.socketPath()));
     }
     // Startup banner is left to the QML status panel rather than a

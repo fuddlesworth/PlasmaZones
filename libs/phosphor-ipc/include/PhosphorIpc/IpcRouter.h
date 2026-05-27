@@ -27,7 +27,7 @@ namespace PhosphorIpc {
 
 // Central JSON-over-Unix-socket dispatcher. Owns one QLocalServer and
 // the registry of named callable QObject "targets". Speaks the
-// NDJSON wire protocol defined in IpcProtocol.h. Single-threaded —
+// NDJSON wire protocol defined in IpcProtocol.h. Single-threaded:
 // must be constructed and used on the GUI thread (Qt's QLocalServer
 // + the QMetaObject::invokeMethod path both assume that).
 //
@@ -110,7 +110,7 @@ public:
 
     // Broadcast a JSON event to every connected subscriber that has
     // subscribed to (target, signalName). The IpcTarget QML type's
-    // emitEvent() method is the canonical call site — plugin
+    // emitEvent() method is the canonical call site, plugin
     // authors call emitEvent("countChanged", [value]) whenever a
     // wire-visible state transition happens, which is more explicit
     // than auto-introspecting QObject signals.
@@ -125,7 +125,7 @@ private:
     // subscriptionId, target, signalName) tuples; events arrive
     // via broadcastEvent() rather than auto-introspected Qt
     // signal connections (which clashed with Q_OBJECT moc-generated
-    // qt_metacall — see the explicit-broadcast rationale in
+    // qt_metacall, see the explicit-broadcast rationale in
     // IpcTarget::emitEvent).
     struct Subscription
     {

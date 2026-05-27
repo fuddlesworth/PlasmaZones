@@ -92,6 +92,9 @@ QJsonObject findFunction(const QJsonObject& schema, const QString& name)
 class TestPhosphorIpcSchema : public QObject
 {
     Q_OBJECT
+public:
+    Q_DISABLE_COPY_MOVE(TestPhosphorIpcSchema)
+    TestPhosphorIpcSchema() = default;
 private Q_SLOTS:
     void nullObject_emitsEmptyArrays();
     void boolean_param();

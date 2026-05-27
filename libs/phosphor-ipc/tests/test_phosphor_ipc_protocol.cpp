@@ -7,12 +7,16 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTest>
+#include <QtCore/qtclasshelpermacros.h>
 
 using namespace PhosphorIpc;
 
 class TestPhosphorIpcProtocol : public QObject
 {
     Q_OBJECT
+public:
+    Q_DISABLE_COPY_MOVE(TestPhosphorIpcProtocol)
+    TestPhosphorIpcProtocol() = default;
 private Q_SLOTS:
     void parseRequest_acceptsValidCall();
     void parseRequest_acceptsList();

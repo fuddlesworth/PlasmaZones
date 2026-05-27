@@ -13,26 +13,26 @@
 Modern Wayland shells (DMS, Noctalia, Quickshell) all ship a typed
 CLI: a single socket, JSON-shaped requests, schema-described
 targets. `phosphor-ipc` is Phosphor's equivalent. It sits **alongside**
-the existing D-Bus adaptors — service libraries in Phase 2 register
+the existing D-Bus adaptors. Service libraries in Phase 2 register
 both an IPC target and (where appropriate) a D-Bus method for each
 callable.
 
 The library owns:
 
-- **`IpcRouter`** — central dispatcher backed by a `QLocalServer`
+- **`IpcRouter`**: central dispatcher backed by a `QLocalServer`
   listening on `$XDG_RUNTIME_DIR/phosphor.sock`. Registers QObject
   "targets" by name, walks their `QMetaObject` to generate JSON
   schemas, dispatches sync calls via `QMetaMethod::invoke`, and
   routes signal-broadcast events to per-target subscribers.
-- **`IpcTarget`** — QML element. Plugin authors declare one per
+- **`IpcTarget`**: QML element. Plugin authors declare one per
   exposed verb namespace and put `Q_INVOKABLE`-style functions on it
   directly. `IpcTarget.emitEvent("name", [args])` pushes a JSON
   event to every subscriber on (target, name).
-- **`IpcSchemaGenerator`** — `QMetaObject` → JSON Schema. Every
+- **`IpcSchemaGenerator`**: `QMetaObject` → JSON Schema. Every
   documented QMetaType maps to a JSON Schema fragment; unknown types
   degrade to `{"description": "<QMetaType::name>"}` without a `type`
   constraint.
-- **`IpcEngine::install`** — small bridge that stashes the
+- **`IpcEngine::install`**: small bridge that stashes the
   application's `IpcRouter` on the `QQmlEngine` so `IpcTarget`
   instances find it in `componentComplete`.
 
@@ -67,7 +67,7 @@ between CMake and the header).
 {"type":"list","id":43}
 // Schema for one target
 {"type":"schema","id":44,"target":"greet"}
-// Subscribe to a signal — server streams events tagged with this id
+// Subscribe to a signal. Server streams events tagged with this id
 // until unsubscribe / disconnect
 {"type":"subscribe","id":45,"target":"count","signal":"countChanged"}
 // Cancel a subscription
@@ -103,7 +103,7 @@ engine.loadFromModule(...);  // shell QML
 ```
 
 The shell QML can now declare `IpcTarget` instances anywhere in the
-component tree — each one auto-registers via the router stashed on
+component tree; each one auto-registers via the router stashed on
 the engine.
 
 ### QML side
@@ -144,7 +144,7 @@ Socket-path priority: `--socket PATH` > `$PHOSPHOR_SOCKET` >
 
 `examples/phosphor-ipc-demo/` is the canonical end-to-end exercise.
 The demo window includes a live event-log panel that mirrors the
-broadcast stream — running `phosphorctl call count.increment` from a
+broadcast stream: running `phosphorctl call count.increment` from a
 single sidecar terminal makes events appear in the demo window in
 real time, no separate `phosphorctl subscribe` terminal needed:
 
@@ -163,7 +163,7 @@ phosphorctl subscribe count.countChanged   # optional: same events on stdout
   target is a no-op + `qWarning`. First registration wins.
 - **Signal name validated at subscribe.** Subscribe rejects with
   `NO_SUCH_SIGNAL` if the signal isn't declared on the target's
-  metaobject — typos surface immediately instead of silently
+  metaobject. Typos surface immediately instead of silently
   ignoring later `emitEvent` calls.
 - **Subscription scope is per-socket.** A subscription id is unique
   per connection, not globally. The wire identity is `(socket,
@@ -176,7 +176,7 @@ phosphorctl subscribe count.countChanged   # optional: same events on stdout
   and `listen()` retries. A live listener is left alone (start
   fails cleanly rather than clobbering).
 - **No subscribe auto-broadcast from Qt signals.** Plugin authors
-  call `IpcTarget.emitEvent` explicitly. This is by design —
+  call `IpcTarget.emitEvent` explicitly. This is by design:
   introspecting arbitrary Qt signals via `qt_metacall` clashes with
   Q_OBJECT moc-generated code, and explicit `emitEvent` matches the
   "wire-visible state transitions are an explicit contract" model.
@@ -184,17 +184,17 @@ phosphorctl subscribe count.countChanged   # optional: same events on stdout
 ## Dependencies
 
 - `QtCore` (always)
-- `QtGui` (for `IpcTarget` QML registration — no GUI work in C++)
+- `QtGui` (transitive, only via the static QML plugin `PhosphorIpcQml`. The runtime library has no QtGui usage.)
 - `QtQml` (for `IpcTarget` QML registration)
 - `QtNetwork` (for `QLocalServer` / `QLocalSocket`)
 
 ## See also
 
-- `cli/phosphorctl/` — typed CLI shipped alongside the library.
-- `examples/phosphor-ipc-demo/` — acceptance harness. Three
+- `cli/phosphorctl/`: typed CLI shipped alongside the library.
+- `examples/phosphor-ipc-demo/`: acceptance harness. Three
   `IpcTarget` instances (greet / count / set-value) exercise the
   full call / list / schema / subscribe wire surface.
-- `docs/phosphor-shell-design/04-implementation-plan.md` Phase 1.4
-  — this library's roadmap entry.
-- `docs/phosphor-shell-design/03-component-map.md#typed-ipc--phosphorctl`
-  — original design discussion.
+- `docs/phosphor-shell-design/04-implementation-plan.md` Phase 1.4:
+  this library's roadmap entry.
+- `docs/phosphor-shell-design/03-component-map.md#typed-ipc--phosphorctl`:
+  original design discussion.

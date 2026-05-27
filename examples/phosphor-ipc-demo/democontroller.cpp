@@ -33,14 +33,24 @@ DemoController::~DemoController() = default;
 
 bool DemoController::start(const QString& socketPath)
 {
+    const QString previousSocketPath = m_router ? m_router->socketPath() : QString();
+    const QString previousStatus = m_status;
     const bool ok = m_router->start(socketPath);
     if (ok) {
         m_status = QStringLiteral("listening on %1").arg(m_router->socketPath());
     } else {
         m_status = QStringLiteral("router failed to start (see logs)");
     }
-    Q_EMIT socketPathChanged();
-    Q_EMIT statusChanged();
+    // CLAUDE.md rule: only emit when the value actually changed.
+    // Idempotent restarts on the same path would otherwise spam
+    // bindings on every call.
+    const QString currentSocketPath = m_router ? m_router->socketPath() : QString();
+    if (currentSocketPath != previousSocketPath) {
+        Q_EMIT socketPathChanged();
+    }
+    if (m_status != previousStatus) {
+        Q_EMIT statusChanged();
+    }
     return ok;
 }
 
@@ -87,16 +97,24 @@ void DemoController::recordEvent(const QString& targetName, const QString& signa
 void DemoController::onTargetRegistered(const QString& name)
 {
     const QStringList ids = m_router->listTargets();
-    m_status = QStringLiteral("listening on %1; targets: %2 (registered '%3')")
-                   .arg(m_router->socketPath(), ids.join(QStringLiteral(", ")), name);
+    const QString next = QStringLiteral("listening on %1; targets: %2 (registered '%3')")
+                             .arg(m_router->socketPath(), ids.join(QStringLiteral(", ")), name);
+    if (next == m_status) {
+        return;
+    }
+    m_status = next;
     Q_EMIT statusChanged();
 }
 
 void DemoController::onTargetUnregistered(const QString& name)
 {
     const QStringList ids = m_router->listTargets();
-    m_status = QStringLiteral("listening on %1; targets: %2 (unregistered '%3')")
-                   .arg(m_router->socketPath(), ids.join(QStringLiteral(", ")), name);
+    const QString next = QStringLiteral("listening on %1; targets: %2 (unregistered '%3')")
+                             .arg(m_router->socketPath(), ids.join(QStringLiteral(", ")), name);
+    if (next == m_status) {
+        return;
+    }
+    m_status = next;
     Q_EMIT statusChanged();
 }
 

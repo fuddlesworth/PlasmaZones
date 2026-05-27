@@ -43,7 +43,7 @@ void signalHandler(int /*signum*/)
     const int savedErrno = errno;
     char byte = 1;
     // Write end is non-blocking (see installSignalHandlers): if
-    // the pipe is full the byte is dropped, which is fine — even
+    // the pipe is full the byte is dropped, which is fine, even
     // one pending byte is enough to wake the loop. EINTR is the
     // only condition we retry on.
     while (::write(g_signalFd[1], &byte, sizeof(byte)) == -1 && errno == EINTR) {
@@ -147,11 +147,17 @@ int runSubscribe(QStringList args, QString socketPath)
     }
 
     QLocalSocket* socket = client.socket();
-    QByteArray buffer;
+    // Seed the local buffer with any bytes Client::request() saw
+    // AFTER the subscribe ack but BEFORE returning. Without this,
+    // any event the server broadcast in the same readyRead burst
+    // as the subscribe ack would be silently dropped. takePendingBytes
+    // is a one-shot handoff.
+    QByteArray buffer = client.takePendingBytes();
     bool serverDisconnected = false;
+    constexpr qint64 UnsubscribeRequestId = 2;
+    constexpr int UnsubscribeFlushMs = 500;
 
-    QObject::connect(socket, &QLocalSocket::readyRead, [socket, &buffer, &out, &err]() {
-        buffer.append(socket->readAll());
+    auto consumeBuffer = [&buffer, &out, &err]() {
         while (true) {
             const int nl = buffer.indexOf('\n');
             if (nl < 0) {
@@ -180,6 +186,15 @@ int runSubscribe(QStringList args, QString socketPath)
             out << QString::fromUtf8(doc.toJson(QJsonDocument::Compact)) << "\n";
             out.flush();
         }
+    };
+
+    // Flush any frames that landed during the request() call (one
+    // or more events from the same readyRead burst as the ack).
+    consumeBuffer();
+
+    QObject::connect(socket, &QLocalSocket::readyRead, [socket, &buffer, &consumeBuffer]() {
+        buffer.append(socket->readAll());
+        consumeBuffer();
     });
 
     QObject::connect(socket, &QLocalSocket::disconnected, [&serverDisconnected]() {
@@ -198,19 +213,30 @@ int runSubscribe(QStringList args, QString socketPath)
         QJsonObject unsub;
         unsub.insert(QString::fromUtf8(PhosphorIpc::Field::Type),
                      QString::fromUtf8(PhosphorIpc::RequestType::Unsubscribe));
-        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::Id), 2);
-        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::SubscriptionId), 1);
+        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::Id), static_cast<double>(UnsubscribeRequestId));
+        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::SubscriptionId), static_cast<double>(SubscriptionId));
         socket->write(PhosphorIpc::writeLine(unsub));
         // QLocalSocket::flush is non-blocking on Linux. A short
         // waitForBytesWritten actually drains the kernel buffer
         // so the server receives the unsubscribe before we exit.
         // Without this the unsubscribe is best-effort: the kernel
         // discards the pending write if the process exits first.
-        socket->waitForBytesWritten(500);
+        socket->waitForBytesWritten(UnsubscribeFlushMs);
         QCoreApplication::quit();
     });
 
-    const int rc = QCoreApplication::exec();
+    // If the server disconnected between the subscribe ack and
+    // here (e.g. the daemon shut down mid-flight), the disconnected
+    // lambda above would call quit() BEFORE exec() entered, leaving
+    // the loop stuck waiting for an event that already happened.
+    // Short-circuit that race by checking state up front; otherwise
+    // run the loop.
+    int rc = 0;
+    if (socket->state() != QLocalSocket::ConnectedState) {
+        serverDisconnected = true;
+    } else {
+        rc = QCoreApplication::exec();
+    }
     if (rc != 0) {
         return rc;
     }

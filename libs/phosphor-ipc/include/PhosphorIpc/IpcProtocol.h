@@ -18,7 +18,7 @@
 // bin/phosphorctl (client); both link this library so the constants
 // and parsers stay in lockstep. Mirrors the
 // libs/phosphor-protocol/{WindowTypes.h,WindowMarshalling.h} split
-// precedent — JSON is self-describing so we ship the type constants
+// precedent, JSON is self-describing so we ship the type constants
 // only, no Qt-marshalling boilerplate.
 //
 // Wire shape: one JSON object per line, '\n'-terminated, UTF-8.
@@ -40,7 +40,7 @@ static_assert(PHOSPHOR_IPC_PROTOCOL_VERSION == ProtocolVersion,
 
 // Field names used across the wire. Declared as constexpr string
 // literals so usage sites can pass them to QJsonObject without
-// constructing QString — and the compiler catches typos at the
+// constructing QString, and the compiler catches typos at the
 // definition site instead of letting them silently land in the
 // wire format.
 namespace Field {
@@ -74,7 +74,7 @@ constexpr auto Error = "error"; // request-correlated failure
 } // namespace ResponseType
 
 // Error `code` strings the server returns. Stable across protocol
-// version 1 — adding new codes is safe; renaming or removing one
+// version 1, adding new codes is safe; renaming or removing one
 // is a protocol break.
 namespace ErrorCode {
 constexpr auto NoSuchTarget = "NO_SUCH_TARGET";
@@ -87,7 +87,7 @@ constexpr auto MalformedRequest = "MALFORMED_REQUEST";
 constexpr auto ProtocolMismatch = "PROTOCOL_MISMATCH";
 } // namespace ErrorCode
 
-// Parsed request shape — populated by parseRequest from a single
+// Parsed request shape, populated by parseRequest from a single
 // JSON line. All fields are optional and only set when present;
 // callers should inspect type and validate the corresponding fields.
 struct PHOSPHORIPC_EXPORT Request
@@ -97,9 +97,9 @@ struct PHOSPHORIPC_EXPORT Request
     QString target;
     QString fn;
     // Spelled `signalName` (not just `signal`) because `signal` is
-    // a Qt macro that vanishes under `-DQT_NO_KEYWORDS` builds —
-    // the rename keeps the field accessible regardless of keyword
-    // mode and avoids confusing Qt-pseudo-keyword shadowing.
+    // a Qt macro that vanishes under `-DQT_NO_KEYWORDS` builds; the
+    // rename keeps the field accessible regardless of keyword mode
+    // and avoids confusing Qt-pseudo-keyword shadowing.
     QString signalName;
     qint64 subscriptionId = 0;
     QVariantList args;
@@ -111,14 +111,14 @@ struct PHOSPHORIPC_EXPORT Request
 // reply with a MALFORMED_REQUEST error.
 [[nodiscard]] PHOSPHORIPC_EXPORT std::optional<Request> parseRequest(const QByteArray& line, QString* parseError);
 
-// Encoders — build the QJsonObject body for each response variant.
+// Encoders, build the QJsonObject body for each response variant.
 // The router serialises the object to bytes via writeLine() below.
 [[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildReply(qint64 id, const QJsonValue& result);
 [[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildEvent(qint64 subscriptionId, const QJsonValue& args);
 [[nodiscard]] PHOSPHORIPC_EXPORT QJsonObject buildError(qint64 id, const QString& code, const QString& message,
                                                         const QJsonObject& detail = {});
 
-// Serialise a QJsonObject to a single NDJSON line — compact JSON
+// Serialise a QJsonObject to a single NDJSON line, compact JSON
 // followed by '\n'. Output is UTF-8 bytes ready to push into a
 // QLocalSocket.
 [[nodiscard]] PHOSPHORIPC_EXPORT QByteArray writeLine(const QJsonObject& obj);

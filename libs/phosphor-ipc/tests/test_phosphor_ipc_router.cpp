@@ -57,6 +57,9 @@ private:
 class TestPhosphorIpcRouter : public QObject
 {
     Q_OBJECT
+public:
+    Q_DISABLE_COPY_MOVE(TestPhosphorIpcRouter)
+    TestPhosphorIpcRouter() = default;
 private Q_SLOTS:
     void register_addsAndEmits();
     void register_duplicateRejected();
@@ -228,7 +231,7 @@ void TestPhosphorIpcRouter::invoke_argTypeCoercion()
     FakeTarget t;
     router.registerTarget(QStringLiteral("math"), &t);
     QString err;
-    // add expects int; pass a string-shaped int — QVariant::convert
+    // add expects int; pass a string-shaped int, QVariant::convert
     // promotes "3" → 3 via QString::toInt, so this should succeed.
     const QVariant r = router.invoke(QStringLiteral("math"), QStringLiteral("add"),
                                      QVariantList{QStringLiteral("3"), QStringLiteral("4")}, nullptr, &err);
