@@ -26,7 +26,7 @@
 
 namespace {
 
-constexpr const char* kCpuMeterQml = R"(
+constexpr const char* CpuMeterQml = R"(
 import QtQuick
 
 Rectangle {
@@ -112,7 +112,7 @@ public:
         // compilation worker thread to post its statusChanged
         // signal back to us.
         QQmlComponent component(engine);
-        component.setData(QByteArray(kCpuMeterQml), QUrl(QStringLiteral("inline:cpu-meter")));
+        component.setData(QByteArray(CpuMeterQml), QUrl(QStringLiteral("inline:cpu-meter")));
         if (component.isLoading()) {
             QEventLoop loop;
             QObject::connect(&component, &QQmlComponent::statusChanged, &loop, &QEventLoop::quit);
