@@ -20,7 +20,9 @@
 #include <QStringList>
 #include <QTextStream>
 
+#include <cerrno>
 #include <csignal>
+#include <fcntl.h>
 #include <unistd.h>
 
 namespace Phosphorctl {
@@ -28,18 +30,26 @@ namespace Phosphorctl {
 namespace {
 
 // Self-pipe used by the SIGINT / SIGTERM handler to wake the Qt
-// event loop. signal() handlers can't safely touch Qt state, but
-// they can write a byte to a pipe; the QSocketNotifier on the
+// event loop. Signal handlers can't safely touch Qt state, but
+// they can write a byte to the pipe; the QSocketNotifier on the
 // read end wakes the loop and lets us call QCoreApplication::quit
 // from a normal Qt slot.
 int g_signalFd[2] = {-1, -1};
 
 void signalHandler(int /*signum*/)
 {
+    // Async-signal-safety rule: save+restore errno so handlers
+    // don't corrupt errno on the interrupted thread mid-syscall.
+    const int savedErrno = errno;
     char byte = 1;
-    // Intentionally unchecked write — handler-safe.
-    ssize_t r = ::write(g_signalFd[1], &byte, sizeof(byte));
-    Q_UNUSED(r);
+    // Write end is non-blocking (see installSignalHandlers): if
+    // the pipe is full the byte is dropped, which is fine — even
+    // one pending byte is enough to wake the loop. EINTR is the
+    // only condition we retry on.
+    while (::write(g_signalFd[1], &byte, sizeof(byte)) == -1 && errno == EINTR) {
+        // Retry on EINTR; ignore EAGAIN (pipe full = already woken).
+    }
+    errno = savedErrno;
 }
 
 bool installSignalHandlers()
@@ -47,17 +57,46 @@ bool installSignalHandlers()
     if (::pipe(g_signalFd) != 0) {
         return false;
     }
-    std::signal(SIGINT, signalHandler);
-    std::signal(SIGTERM, signalHandler);
+    // FD_CLOEXEC on both ends so the pipe doesn't leak into a
+    // future exec'd child; O_NONBLOCK on the write end so the
+    // handler can never block in ::write.
+    for (int fd : g_signalFd) {
+        const int flags = ::fcntl(fd, F_GETFD);
+        if (flags != -1) {
+            ::fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+        }
+    }
+    const int writeFlags = ::fcntl(g_signalFd[1], F_GETFL);
+    if (writeFlags != -1) {
+        ::fcntl(g_signalFd[1], F_SETFL, writeFlags | O_NONBLOCK);
+    }
+    // sigaction over std::signal: std::signal's re-arm semantics
+    // are implementation-defined (BSD vs SysV historical split).
+    // sigaction is portable. SA_RESTART avoids interrupting
+    // syscalls in the main thread when SIGINT fires.
+    struct sigaction sa;
+    sa.sa_handler = signalHandler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    if (::sigaction(SIGINT, &sa, nullptr) != 0) {
+        return false;
+    }
+    if (::sigaction(SIGTERM, &sa, nullptr) != 0) {
+        return false;
+    }
     return true;
 }
 
 } // namespace
 
-int runSubscribe(const QStringList& args, const QString& socketPath)
+int runSubscribe(QStringList args, QString socketPath)
 {
     QTextStream out(stdout);
     QTextStream err(stderr);
+    const QString lateSocket = stripSocketFlag(args);
+    if (!lateSocket.isEmpty()) {
+        socketPath = lateSocket;
+    }
 
     if (args.size() != 1) {
         err << "phosphorctl subscribe: expects exactly one argument: <target>.<signal>\n";
@@ -78,39 +117,35 @@ int runSubscribe(const QStringList& args, const QString& socketPath)
         return 2;
     }
 
-    // Send the subscribe request. The server replies once with a
-    // {"type":"reply"} confirming the subscription is live; then
-    // streams events tagged with subscriptionId == request id
-    // until either side disconnects.
     constexpr qint64 SubscriptionId = 1;
     QJsonObject req;
-    req.insert(QStringLiteral("type"), QString::fromUtf8(PhosphorIpc::RequestType::Subscribe));
-    req.insert(QStringLiteral("id"), SubscriptionId);
-    req.insert(QStringLiteral("target"), target);
-    req.insert(QStringLiteral("signal"), signalName);
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Type), QString::fromUtf8(PhosphorIpc::RequestType::Subscribe));
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Id), static_cast<double>(SubscriptionId));
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Target), target);
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Signal), signalName);
 
     const auto firstResp = client.request(req);
     if (!firstResp.has_value()) {
         err << "phosphorctl subscribe: " << client.errorMessage() << "\n";
         return 2;
     }
-    if (firstResp->value(QStringLiteral("type")).toString() == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl subscribe: " << firstResp->value(QStringLiteral("code")).toString() << ": "
-            << firstResp->value(QStringLiteral("message")).toString() << "\n";
+    if (firstResp->value(QString::fromUtf8(PhosphorIpc::Field::Type)).toString()
+        == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
+        err << "phosphorctl subscribe: " << firstResp->value(QString::fromUtf8(PhosphorIpc::Field::Code)).toString()
+            << ": " << firstResp->value(QString::fromUtf8(PhosphorIpc::Field::Message)).toString() << "\n";
         return 3;
     }
-    // First response is the subscription-acknowledged reply; from
-    // here on, we just print event payloads as they arrive.
 
     if (!installSignalHandlers()) {
-        err << "phosphorctl subscribe: failed to install signal handlers\n";
-        return 2;
+        err << "phosphorctl subscribe: failed to install signal handlers (errno=" << errno << ")\n";
+        return 4;
     }
 
     QLocalSocket* socket = client.socket();
     QByteArray buffer;
+    bool serverDisconnected = false;
 
-    QObject::connect(socket, &QLocalSocket::readyRead, [socket, &buffer, &out]() {
+    QObject::connect(socket, &QLocalSocket::readyRead, [socket, &buffer, &out, &err]() {
         buffer.append(socket->readAll());
         while (true) {
             const int nl = buffer.indexOf('\n');
@@ -125,43 +160,58 @@ int runSubscribe(const QStringList& args, const QString& socketPath)
             if (line.isEmpty()) {
                 continue;
             }
-            // Pretty-print events one-per-line so the output stream
-            // can be piped through `jq` or grepped without further
-            // framing. Errors mid-stream (e.g. server pushing an
-            // {"type":"error",...} mid-subscription) also print
-            // here; the user can spot them by the "type":"error"
+            QJsonParseError parseErr{};
+            const QJsonDocument doc = QJsonDocument::fromJson(line, &parseErr);
+            if (parseErr.error != QJsonParseError::NoError || !doc.isObject()) {
+                err << "phosphorctl subscribe: ignoring malformed line: " << parseErr.errorString() << "\n";
+                err.flush();
+                continue;
+            }
+            // Pretty-print events one-per-line so the stream can
+            // be piped through `jq` or grepped without further
+            // framing. Mid-stream {"type":"error",...} frames also
+            // print here; the user spots them by the "type":"error"
             // shape.
-            const QJsonDocument doc = QJsonDocument::fromJson(line);
             out << QString::fromUtf8(doc.toJson(QJsonDocument::Compact)) << "\n";
             out.flush();
         }
     });
 
-    QObject::connect(socket, &QLocalSocket::disconnected, []() {
+    QObject::connect(socket, &QLocalSocket::disconnected, [&serverDisconnected]() {
+        serverDisconnected = true;
         QCoreApplication::quit();
     });
 
-    // Wake the loop when SIGINT/SIGTERM fires, send a clean
-    // unsubscribe, then quit.
+    // Wake the loop on SIGINT/SIGTERM, send a clean unsubscribe,
+    // wait for the kernel buffer to drain so the server actually
+    // receives it, then quit.
     QSocketNotifier signalNotifier(g_signalFd[0], QSocketNotifier::Read);
-    QObject::connect(&signalNotifier, &QSocketNotifier::activated, [&client, socket]() {
+    QObject::connect(&signalNotifier, &QSocketNotifier::activated, [socket]() {
         char drain[16];
-        ssize_t r = ::read(g_signalFd[0], drain, sizeof(drain));
-        Q_UNUSED(r);
+        // Drain whatever the handler queued; ignore EAGAIN/EWOULDBLOCK.
+        while (::read(g_signalFd[0], drain, sizeof(drain)) > 0) { }
         QJsonObject unsub;
-        unsub.insert(QStringLiteral("type"), QString::fromUtf8(PhosphorIpc::RequestType::Unsubscribe));
-        unsub.insert(QStringLiteral("id"), 2);
-        unsub.insert(QStringLiteral("subscriptionId"), 1);
+        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::Type),
+                     QString::fromUtf8(PhosphorIpc::RequestType::Unsubscribe));
+        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::Id), 2);
+        unsub.insert(QString::fromUtf8(PhosphorIpc::Field::SubscriptionId), 1);
         socket->write(PhosphorIpc::writeLine(unsub));
-        socket->flush();
-        // Give the server a tick to process the unsubscribe before
-        // quitting; not strictly required (socket disconnect would
-        // do it) but cleaner.
+        // QLocalSocket::flush is non-blocking on Linux. A short
+        // waitForBytesWritten actually drains the kernel buffer
+        // so the server receives the unsubscribe before we exit.
+        // Without this the unsubscribe is best-effort: the kernel
+        // discards the pending write if the process exits first.
+        socket->waitForBytesWritten(500);
         QCoreApplication::quit();
-        Q_UNUSED(client);
     });
 
-    return QCoreApplication::exec();
+    const int rc = QCoreApplication::exec();
+    if (rc != 0) {
+        return rc;
+    }
+    // Server-initiated disconnect exits 2 so scripts driving us
+    // can distinguish "Ctrl+C clean stop" from "server died".
+    return serverDisconnected ? 2 : 0;
 }
 
 } // namespace Phosphorctl

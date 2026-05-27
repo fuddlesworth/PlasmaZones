@@ -22,75 +22,9 @@
 #include <QString>
 #include <QVariant>
 
-#include <functional>
-
 namespace PhosphorIpc {
 
 namespace {
-
-// Convert a QVariant — typically a sync invoke() return value or a
-// signal argument — into a JSON value. Recursive on QVariantList /
-// QVariantMap. Falls back to toString() for unknown types so the
-// wire never contains an opaque "QObject*" placeholder. Returns a
-// QJsonValue::Null when the input is invalid (no return value /
-// void-returning function).
-QJsonValue variantToJson(const QVariant& v)
-{
-    if (!v.isValid()) {
-        return QJsonValue::Null;
-    }
-    switch (v.typeId()) {
-    case QMetaType::Bool:
-        return v.toBool();
-    case QMetaType::Int:
-    case QMetaType::UInt:
-    case QMetaType::Long:
-    case QMetaType::ULong:
-    case QMetaType::Short:
-    case QMetaType::UShort:
-    case QMetaType::LongLong:
-        return static_cast<double>(v.toLongLong());
-    case QMetaType::ULongLong:
-        return static_cast<double>(v.toULongLong());
-    case QMetaType::Double:
-    case QMetaType::Float:
-        return v.toDouble();
-    case QMetaType::QString:
-        return v.toString();
-    case QMetaType::QStringList: {
-        QJsonArray arr;
-        for (const QString& s : v.toStringList()) {
-            arr.append(s);
-        }
-        return arr;
-    }
-    case QMetaType::QVariantList: {
-        QJsonArray arr;
-        for (const QVariant& item : v.toList()) {
-            arr.append(variantToJson(item));
-        }
-        return arr;
-    }
-    case QMetaType::QVariantMap: {
-        QJsonObject obj;
-        const QVariantMap map = v.toMap();
-        for (auto it = map.begin(); it != map.end(); ++it) {
-            obj.insert(it.key(), variantToJson(it.value()));
-        }
-        return obj;
-    }
-    case QMetaType::QJsonValue:
-        return v.toJsonValue();
-    case QMetaType::QJsonObject:
-        return v.toJsonObject();
-    case QMetaType::QJsonArray:
-        return v.toJsonArray();
-    default:
-        // Unknown type — emit the string-shaped fallback so the
-        // wire doesn't gain undocumented JSON shapes per metatype.
-        return v.toString();
-    }
-}
 
 // Resolve the default socket path. $XDG_RUNTIME_DIR/phosphor.sock
 // when XDG_RUNTIME_DIR is set, otherwise empty (caller logs and
@@ -129,29 +63,23 @@ QMetaMethod findInvokableMethod(const QMetaObject* meta, const QString& fnName)
 }
 
 // Find a signal by name. Same shape as findInvokableMethod, but
-// filters to signals only. The subscribe path uses this to look
-// up the signal whose args we'll route.
-QMetaMethod findSignal(const QMetaObject* meta, const QString& signalName, int* outIndex)
+// filters to signals only. The subscribe path uses this for
+// existence validation (typo'd signal names return NO_SUCH_SIGNAL
+// at subscribe time instead of silently never delivering events).
+// Walks the full inheritance chain so a signal declared on a base
+// class is still resolvable.
+QMetaMethod findSignal(const QMetaObject* meta, const QString& signalName)
 {
-    if (outIndex) {
-        *outIndex = -1;
-    }
     if (!meta) {
         return {};
     }
     const QByteArray needle = signalName.toUtf8();
-    // Search across the inheritance chain — Q_OBJECT-declared
-    // signals on a derived class start at methodOffset(), but a
-    // user might subscribe to a signal defined on a base class.
     for (int i = 0; i < meta->methodCount(); ++i) {
         const QMetaMethod m = meta->method(i);
         if (m.methodType() != QMetaMethod::Signal) {
             continue;
         }
         if (m.name() == needle) {
-            if (outIndex) {
-                *outIndex = i;
-            }
             return m;
         }
     }
@@ -189,12 +117,26 @@ bool IpcRouter::start(const QString& socketPath)
     // (refuse to start). This avoids the "clobber a live listener
     // on the same path" bug a blind unlink would cause.
     m_server = std::make_unique<QLocalServer>(this);
+    // We do NOT use setSocketOptions(UserAccessOption) here: that
+    // option makes QLocalServer auto-unlink any existing socket
+    // file before binding, which would silently clobber another
+    // live listener on the same path. Instead we listen() against
+    // the bare path and chmod the resulting socket file manually
+    // below — same 0600 security outcome, but our stale-detection
+    // path stays in control of unlink decisions.
     if (!m_server->listen(resolved)) {
+        const QString initialError = m_server->errorString();
         bool removedStale = false;
         if (QFile::exists(resolved)) {
+            // Probe via a fresh QLocalSocket: if a live router is
+            // listening, the kernel-level connect handshake
+            // completes near-instantly. If nothing's listening,
+            // connect returns ECONNREFUSED and waitForConnected
+            // reports false — only THEN do we unlink the stale
+            // file and retry.
             QLocalSocket probe;
             probe.connectToServer(resolved);
-            const bool aliveListener = probe.waitForConnected(100);
+            const bool aliveListener = probe.waitForConnected(200);
             probe.abort();
             if (!aliveListener) {
                 QFile::remove(resolved);
@@ -203,11 +145,20 @@ bool IpcRouter::start(const QString& socketPath)
         }
         if (!removedStale || !m_server->listen(resolved)) {
             qWarning("PhosphorIpc::IpcRouter::start: listen() failed for '%s': %s", qPrintable(resolved),
-                     qPrintable(m_server->errorString()));
+                     qPrintable(removedStale ? m_server->errorString() : initialError));
             m_server.reset();
             return false;
         }
     }
+    // Restrict the socket to the owning user. $XDG_RUNTIME_DIR is
+    // already 0700, but the socket file's own mode controls who
+    // can connect; 0600 prevents an unprivileged co-tenant on the
+    // same machine (e.g. a sidecar container sharing the runtime
+    // dir) from connecting and invoking arbitrary registered
+    // targets. Done after listen() rather than via
+    // setSocketOptions(UserAccessOption) so our stale-detect path
+    // remains the only thing that can unlink the file.
+    QFile::setPermissions(resolved, QFile::ReadOwner | QFile::WriteOwner);
     m_socketPath = resolved;
     QObject::connect(m_server.get(), &QLocalServer::newConnection, this, &IpcRouter::handleNewConnection);
     return true;
@@ -238,9 +189,18 @@ void IpcRouter::registerTarget(const QString& name, QObject* object)
         qWarning("PhosphorIpc::IpcRouter::registerTarget: null object for '%s' ignored", qPrintable(name));
         return;
     }
-    if (m_targets.contains(name) && m_targets.value(name)) {
-        qWarning("PhosphorIpc::IpcRouter::registerTarget: duplicate target '%s' ignored", qPrintable(name));
-        return;
+    if (m_targets.contains(name)) {
+        if (m_targets.value(name)) {
+            qWarning("PhosphorIpc::IpcRouter::registerTarget: duplicate target '%s' ignored", qPrintable(name));
+            return;
+        }
+        // Prior QObject was destroyed out from under us; the
+        // QPointer has cleared. Treat the slot as vacant so the
+        // caller can re-register a fresh QObject under the same
+        // name. We still need to emit targetUnregistered so any
+        // observer counts stay balanced.
+        m_targets.remove(name);
+        Q_EMIT targetUnregistered(name);
     }
     m_targets.insert(name, QPointer<QObject>(object));
     Q_EMIT targetRegistered(name);
@@ -283,42 +243,44 @@ QJsonObject IpcRouter::schemaFor(const QString& targetName) const
     return IpcSchemaGenerator::schemaFor(targetName, obj);
 }
 
-QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const QVariantList& args, QString* errorOut)
+QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const QVariantList& args,
+                           InvokeOutcome* outcome, QString* errorMessage)
 {
-    QObject* obj = target(targetName);
-    if (!obj) {
-        if (errorOut) {
-            *errorOut = QStringLiteral("unknown target '%1'").arg(targetName);
+    auto fail = [&](InvokeOutcome code, const QString& msg) -> QVariant {
+        if (outcome) {
+            *outcome = code;
+        }
+        if (errorMessage) {
+            *errorMessage = msg;
         }
         return {};
+    };
+
+    QObject* obj = target(targetName);
+    if (!obj) {
+        return fail(InvokeOutcome::NoSuchTarget, QStringLiteral("unknown target '%1'").arg(targetName));
     }
     const QMetaMethod method = findInvokableMethod(obj->metaObject(), fn);
     if (!method.isValid()) {
-        if (errorOut) {
-            *errorOut = QStringLiteral("target '%1' has no invokable method '%2'").arg(targetName, fn);
-        }
-        return {};
+        return fail(InvokeOutcome::NoSuchFn,
+                    QStringLiteral("target '%1' has no invokable method '%2'").arg(targetName, fn));
     }
     if (method.parameterCount() != args.size()) {
-        if (errorOut) {
-            *errorOut = QStringLiteral("argument count mismatch: '%1.%2' expects %3, got %4")
-                            .arg(targetName, fn)
-                            .arg(method.parameterCount())
-                            .arg(args.size());
-        }
-        return {};
+        return fail(InvokeOutcome::ArgCountMismatch,
+                    QStringLiteral("argument count mismatch: '%1.%2' expects %3, got %4")
+                        .arg(targetName, fn)
+                        .arg(method.parameterCount())
+                        .arg(args.size()));
     }
 
-    // Build the arg array. Up to 10 args (Qt's invokeMethod limit
-    // for QGenericArgument-based dispatch; QML-declared functions
-    // rarely exceed this in practice). For each arg, coerce the
-    // incoming QVariant to the method's expected parameter type.
-    constexpr int kMaxArgs = 10;
-    if (args.size() > kMaxArgs) {
-        if (errorOut) {
-            *errorOut = QStringLiteral("argument count exceeds dispatch limit of %1").arg(kMaxArgs);
-        }
-        return {};
+    // Build the arg array. Qt's invokeMethod uses 10
+    // QGenericArgument slots; QML-declared functions rarely exceed
+    // this in practice. For each arg, coerce the incoming QVariant
+    // to the method's expected parameter type.
+    constexpr int MaxArgs = 10;
+    if (args.size() > MaxArgs) {
+        return fail(InvokeOutcome::ArgCountMismatch,
+                    QStringLiteral("argument count exceeds dispatch limit of %1").arg(MaxArgs));
     }
     QVariantList coerced;
     coerced.reserve(args.size());
@@ -327,19 +289,17 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
         const QMetaType expected(method.parameterType(i));
         if (v.metaType() != expected) {
             if (!v.convert(expected)) {
-                if (errorOut) {
-                    *errorOut =
-                        QStringLiteral("arg %1 for '%2.%3': cannot convert %4 to %5")
-                            .arg(i)
-                            .arg(targetName, fn, QLatin1String(args.at(i).typeName()), QLatin1String(expected.name()));
-                }
-                return {};
+                return fail(
+                    InvokeOutcome::ArgConvertFailed,
+                    QStringLiteral("arg %1 for '%2.%3': cannot convert %4 to %5")
+                        .arg(i)
+                        .arg(targetName, fn, QLatin1String(args.at(i).typeName()), QLatin1String(expected.name())));
             }
         }
         coerced.append(std::move(v));
     }
 
-    QGenericArgument g[kMaxArgs];
+    QGenericArgument g[MaxArgs];
     for (int i = 0; i < coerced.size(); ++i) {
         g[i] = QGenericArgument(coerced.at(i).typeName(), coerced.at(i).constData());
     }
@@ -356,11 +316,12 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
     const bool ok =
         method.invoke(obj, Qt::DirectConnection, ret, g[0], g[1], g[2], g[3], g[4], g[5], g[6], g[7], g[8], g[9]);
     if (!ok) {
-        if (errorOut) {
-            *errorOut =
-                QStringLiteral("invocation of '%1.%2' failed (QMetaMethod::invoke returned false)").arg(targetName, fn);
-        }
-        return {};
+        return fail(
+            InvokeOutcome::InvokeFailed,
+            QStringLiteral("invocation of '%1.%2' failed (QMetaMethod::invoke returned false)").arg(targetName, fn));
+    }
+    if (outcome) {
+        *outcome = InvokeOutcome::Ok;
     }
     return returnValue;
 }
@@ -442,21 +403,30 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
         return;
     }
     if (req.type == QLatin1String(RequestType::Call)) {
+        InvokeOutcome outcome = InvokeOutcome::Ok;
         QString invokeError;
-        const QVariant result = invoke(req.target, req.fn, req.args, &invokeError);
-        if (!invokeError.isEmpty()) {
-            // Distinguish "no target" so the CLI can produce a
-            // sharper exit code. Other invocation failures
-            // (arg-type mismatch, invoke false) collapse under
-            // INVALID_ARG / INVOCATION_FAILED.
+        const QVariant result = invoke(req.target, req.fn, req.args, &outcome, &invokeError);
+        if (outcome != InvokeOutcome::Ok) {
+            // Structured outcome -> wire error code. No string
+            // matching: a future tweak to the diagnostic message
+            // can't silently misclassify the error.
             QString code = QString::fromUtf8(ErrorCode::InvocationFailed);
-            if (!target(req.target)) {
+            switch (outcome) {
+            case InvokeOutcome::NoSuchTarget:
                 code = QString::fromUtf8(ErrorCode::NoSuchTarget);
-            } else if (invokeError.contains(QStringLiteral("no invokable method"))) {
+                break;
+            case InvokeOutcome::NoSuchFn:
                 code = QString::fromUtf8(ErrorCode::NoSuchFn);
-            } else if (invokeError.contains(QStringLiteral("cannot convert"))
-                       || invokeError.contains(QStringLiteral("argument count"))) {
+                break;
+            case InvokeOutcome::ArgCountMismatch:
+            case InvokeOutcome::ArgConvertFailed:
                 code = QString::fromUtf8(ErrorCode::InvalidArg);
+                break;
+            case InvokeOutcome::InvokeFailed:
+                code = QString::fromUtf8(ErrorCode::InvocationFailed);
+                break;
+            case InvokeOutcome::Ok:
+                Q_UNREACHABLE();
             }
             socket->write(writeLine(buildError(req.id, code, invokeError)));
             return;
@@ -465,7 +435,7 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
         return;
     }
     if (req.type == QLatin1String(RequestType::Subscribe)) {
-        handleSubscribe(socket, req.id, req.target, req.signal);
+        handleSubscribe(socket, req.id, req.target, req.signalName);
         return;
     }
     if (req.type == QLatin1String(RequestType::Unsubscribe)) {
@@ -495,7 +465,7 @@ void IpcRouter::handleSubscribe(QLocalSocket* socket, qint64 id, const QString& 
     // here is advisory: broadcastEvent dispatches by string name,
     // not by metaobject index, so a future signal added via QML
     // dynamic property would also work even without recompiling.
-    if (!findSignal(obj->metaObject(), signalName, nullptr).isValid()) {
+    if (!findSignal(obj->metaObject(), signalName).isValid()) {
         socket->write(
             writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchSignal),
                                  QStringLiteral("target '%1' has no signal '%2'").arg(targetName, signalName))));

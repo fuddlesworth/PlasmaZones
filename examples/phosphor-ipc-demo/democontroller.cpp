@@ -54,7 +54,7 @@ PhosphorIpc::IpcRouter* DemoController::router() const
 void DemoController::onTargetRegistered(const QString& name)
 {
     const QStringList ids = m_router->listTargets();
-    m_status = QStringLiteral("listening on %1 — targets: %2 (registered '%3')")
+    m_status = QStringLiteral("listening on %1; targets: %2 (registered '%3')")
                    .arg(m_router->socketPath(), ids.join(QStringLiteral(", ")), name);
     Q_EMIT statusChanged();
 }
@@ -62,7 +62,7 @@ void DemoController::onTargetRegistered(const QString& name)
 void DemoController::onTargetUnregistered(const QString& name)
 {
     const QStringList ids = m_router->listTargets();
-    m_status = QStringLiteral("listening on %1 — targets: %2 (unregistered '%3')")
+    m_status = QStringLiteral("listening on %1; targets: %2 (unregistered '%3')")
                    .arg(m_router->socketPath(), ids.join(QStringLiteral(", ")), name);
     Q_EMIT statusChanged();
 }

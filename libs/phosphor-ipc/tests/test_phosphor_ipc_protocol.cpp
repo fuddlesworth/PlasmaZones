@@ -28,6 +28,9 @@ private Q_SLOTS:
     void buildError_shape();
     void buildError_omitsZeroId();
     void writeLine_appendsNewline();
+    void parseRequest_rejectsNonNumericId();
+    void parseRequest_acceptsUnsubscribe();
+    void variantToJson_basics();
 };
 
 void TestPhosphorIpcProtocol::parseRequest_acceptsValidCall()
@@ -67,7 +70,7 @@ void TestPhosphorIpcProtocol::parseRequest_acceptsSubscribe()
     QVERIFY(r.has_value());
     QCOMPARE(r->type, QStringLiteral("subscribe"));
     QCOMPARE(r->target, QStringLiteral("count"));
-    QCOMPARE(r->signal, QStringLiteral("countChanged"));
+    QCOMPARE(r->signalName, QStringLiteral("countChanged"));
 }
 
 void TestPhosphorIpcProtocol::parseRequest_rejectsMissingType()
@@ -153,6 +156,44 @@ void TestPhosphorIpcProtocol::writeLine_appendsNewline()
     const QByteArray bytes = writeLine(obj);
     QVERIFY(bytes.endsWith('\n'));
     QVERIFY(!bytes.left(bytes.size() - 1).contains('\n'));
+}
+
+void TestPhosphorIpcProtocol::parseRequest_rejectsNonNumericId()
+{
+    QString err;
+    QVERIFY(!parseRequest(R"({"type":"call","id":"forty-two","target":"x","fn":"y"})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("'id'")));
+}
+
+void TestPhosphorIpcProtocol::parseRequest_acceptsUnsubscribe()
+{
+    const auto r = parseRequest(R"({"type":"unsubscribe","id":3,"subscriptionId":42})", nullptr);
+    QVERIFY(r.has_value());
+    QCOMPARE(r->type, QStringLiteral("unsubscribe"));
+    QCOMPARE(r->id, 3);
+    QCOMPARE(r->subscriptionId, 42);
+}
+
+void TestPhosphorIpcProtocol::variantToJson_basics()
+{
+    QCOMPARE(variantToJson(QVariant()), QJsonValue(QJsonValue::Null));
+    QCOMPARE(variantToJson(QVariant(true)), QJsonValue(true));
+    QCOMPARE(variantToJson(QVariant(42)).toInt(), 42);
+    QCOMPARE(variantToJson(QVariant(1.5)).toDouble(), 1.5);
+    QCOMPARE(variantToJson(QVariant(QStringLiteral("hi"))).toString(), QStringLiteral("hi"));
+
+    QVariantList list;
+    list.append(1);
+    list.append(QStringLiteral("two"));
+    const QJsonArray arr = variantToJson(list).toArray();
+    QCOMPARE(arr.size(), 2);
+    QCOMPARE(arr.at(0).toInt(), 1);
+    QCOMPARE(arr.at(1).toString(), QStringLiteral("two"));
+
+    QVariantMap map;
+    map.insert(QStringLiteral("k"), QStringLiteral("v"));
+    const QJsonObject obj = variantToJson(map).toObject();
+    QCOMPARE(obj.value(QStringLiteral("k")).toString(), QStringLiteral("v"));
 }
 
 QTEST_MAIN(TestPhosphorIpcProtocol)

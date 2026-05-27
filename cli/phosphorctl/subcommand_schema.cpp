@@ -15,10 +15,15 @@
 
 namespace Phosphorctl {
 
-int runSchema(const QStringList& args, const QString& socketPath)
+int runSchema(QStringList args, QString socketPath)
 {
     QTextStream out(stdout);
     QTextStream err(stderr);
+    const QString lateSocket = stripSocketFlag(args);
+    if (!lateSocket.isEmpty()) {
+        socketPath = lateSocket;
+    }
+
     if (args.size() != 1) {
         err << "phosphorctl schema: expects exactly one argument: <target>\n";
         return 1;
@@ -32,20 +37,22 @@ int runSchema(const QStringList& args, const QString& socketPath)
     }
 
     QJsonObject req;
-    req.insert(QStringLiteral("type"), QString::fromUtf8(PhosphorIpc::RequestType::Schema));
-    req.insert(QStringLiteral("id"), 1);
-    req.insert(QStringLiteral("target"), target);
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Type), QString::fromUtf8(PhosphorIpc::RequestType::Schema));
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Id), 1);
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Target), target);
 
     const auto resp = client.request(req);
     if (!resp.has_value()) {
         err << "phosphorctl schema: " << client.errorMessage() << "\n";
         return 2;
     }
-    if (resp->value(QStringLiteral("type")).toString() == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl schema: server error: " << resp->value(QStringLiteral("message")).toString() << "\n";
+    if (resp->value(QString::fromUtf8(PhosphorIpc::Field::Type)).toString()
+        == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
+        err << "phosphorctl schema: server error: "
+            << resp->value(QString::fromUtf8(PhosphorIpc::Field::Message)).toString() << "\n";
         return 3;
     }
-    const QJsonObject schema = resp->value(QStringLiteral("result")).toObject();
+    const QJsonObject schema = resp->value(QString::fromUtf8(PhosphorIpc::Field::Result)).toObject();
     out << QString::fromUtf8(QJsonDocument(schema).toJson(QJsonDocument::Indented));
     return 0;
 }

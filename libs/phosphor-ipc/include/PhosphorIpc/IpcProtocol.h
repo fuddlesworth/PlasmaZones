@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
+#include <QVariant>
 #include <QVariantList>
 
 #include <optional>
@@ -95,7 +96,11 @@ struct PHOSPHORIPC_EXPORT Request
     qint64 id = 0;
     QString target;
     QString fn;
-    QString signal;
+    // Spelled `signalName` (not just `signal`) because `signal` is
+    // a Qt macro that vanishes under `-DQT_NO_KEYWORDS` builds —
+    // the rename keeps the field accessible regardless of keyword
+    // mode and avoids confusing Qt-pseudo-keyword shadowing.
+    QString signalName;
     qint64 subscriptionId = 0;
     QVariantList args;
 };
@@ -117,5 +122,14 @@ struct PHOSPHORIPC_EXPORT Request
 // followed by '\n'. Output is UTF-8 bytes ready to push into a
 // QLocalSocket.
 [[nodiscard]] PHOSPHORIPC_EXPORT QByteArray writeLine(const QJsonObject& obj);
+
+// Convert a QVariant to a JSON value. Recursive on QVariantList /
+// QVariantMap. Numeric / bool / string / list / map types map
+// naturally; QJsonValue / QJsonObject / QJsonArray pass through;
+// invalid QVariant maps to null; any other metatype degrades to
+// the toString() representation. Shared between the router's
+// call-return path and IpcTarget's emitEvent broadcast path so
+// the wire JSON shape stays identical across the two.
+[[nodiscard]] PHOSPHORIPC_EXPORT QJsonValue variantToJson(const QVariant& v);
 
 } // namespace PhosphorIpc

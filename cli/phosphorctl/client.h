@@ -40,12 +40,17 @@ public:
     [[nodiscard]] static QString resolveSocketPath(const QString& cliArg);
 
     // Connect to socketPath. Returns false on failure (timeout,
-    // refused). errorMessage populated.
+    // refused). errorMessage populated. Aborts any prior open
+    // socket first so retry-after-failure paths don't leak a
+    // half-open connection.
     [[nodiscard]] bool connectTo(const QString& socketPath, int timeoutMs = 2000);
 
-    // Send a request, await a single response line. Returns the
-    // parsed response object, or std::nullopt on read timeout /
-    // disconnect. errorMessage populated on failure.
+    // Send a request, await a single response line with a matching
+    // `id`. Frames whose id doesn't match (e.g. a stray event from
+    // an unrelated subscription on the same connection) are
+    // discarded. Returns the parsed response object, or
+    // std::nullopt on read timeout / disconnect / parse error.
+    // errorMessage populated on failure.
     [[nodiscard]] std::optional<QJsonObject> request(const QJsonObject& req, int timeoutMs = 2000);
 
     [[nodiscard]] QString errorMessage() const;

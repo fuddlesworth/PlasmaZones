@@ -7,6 +7,9 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QLatin1String>
+#include <QMetaType>
+#include <QVariantList>
+#include <QVariantMap>
 
 namespace PhosphorIpc {
 
@@ -36,20 +39,33 @@ std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
         }
         return std::nullopt;
     }
-    // `id` is non-negative integer for client-correlated requests.
-    // Server-initiated events have no id. JSON's lack of distinct
-    // int/double types means we accept any numeric and cast to
-    // qint64; non-numeric values become 0.
+    // `id` correlates request to response. Absent → 0 (clients
+    // that don't care about correlation can omit it, e.g. one-
+    // shot CLI invocations). Present-but-non-numeric is a
+    // malformed request, not a silent fallback to 0 — otherwise
+    // clients that send a bogus id type get error frames with
+    // mysteriously-missing ids (id=0 collides with the omission
+    // sentinel in buildError).
     const QJsonValue idValue = obj.value(QLatin1String(Field::Id));
     if (idValue.isDouble()) {
         req.id = static_cast<qint64>(idValue.toDouble());
+    } else if (!idValue.isUndefined() && !idValue.isNull()) {
+        if (parseError) {
+            *parseError = QStringLiteral("'id' must be a number if present");
+        }
+        return std::nullopt;
     }
     req.target = obj.value(QLatin1String(Field::Target)).toString();
     req.fn = obj.value(QLatin1String(Field::Fn)).toString();
-    req.signal = obj.value(QLatin1String(Field::Signal)).toString();
+    req.signalName = obj.value(QLatin1String(Field::Signal)).toString();
     const QJsonValue subIdValue = obj.value(QLatin1String(Field::SubscriptionId));
     if (subIdValue.isDouble()) {
         req.subscriptionId = static_cast<qint64>(subIdValue.toDouble());
+    } else if (!subIdValue.isUndefined() && !subIdValue.isNull()) {
+        if (parseError) {
+            *parseError = QStringLiteral("'subscriptionId' must be a number if present");
+        }
+        return std::nullopt;
     }
     // Args may be missing entirely (for no-arg calls) or an array.
     // Anything else is a malformed-request signal.
@@ -103,6 +119,64 @@ QByteArray writeLine(const QJsonObject& obj)
     QByteArray bytes = QJsonDocument(obj).toJson(QJsonDocument::Compact);
     bytes.append('\n');
     return bytes;
+}
+
+QJsonValue variantToJson(const QVariant& v)
+{
+    if (!v.isValid()) {
+        return QJsonValue::Null;
+    }
+    switch (v.typeId()) {
+    case QMetaType::Bool:
+        return v.toBool();
+    case QMetaType::Int:
+    case QMetaType::UInt:
+    case QMetaType::Long:
+    case QMetaType::ULong:
+    case QMetaType::Short:
+    case QMetaType::UShort:
+    case QMetaType::LongLong:
+        return static_cast<double>(v.toLongLong());
+    case QMetaType::ULongLong:
+        return static_cast<double>(v.toULongLong());
+    case QMetaType::Double:
+    case QMetaType::Float:
+        return v.toDouble();
+    case QMetaType::QString:
+        return v.toString();
+    case QMetaType::QStringList: {
+        QJsonArray arr;
+        for (const QString& s : v.toStringList()) {
+            arr.append(s);
+        }
+        return arr;
+    }
+    case QMetaType::QVariantList: {
+        QJsonArray arr;
+        for (const QVariant& item : v.toList()) {
+            arr.append(variantToJson(item));
+        }
+        return arr;
+    }
+    case QMetaType::QVariantMap: {
+        QJsonObject obj;
+        const QVariantMap map = v.toMap();
+        for (auto it = map.begin(); it != map.end(); ++it) {
+            obj.insert(it.key(), variantToJson(it.value()));
+        }
+        return obj;
+    }
+    case QMetaType::QJsonValue:
+        return v.toJsonValue();
+    case QMetaType::QJsonObject:
+        return v.toJsonObject();
+    case QMetaType::QJsonArray:
+        return v.toJsonArray();
+    default:
+        // Unknown type — emit the string-shaped fallback so the
+        // wire doesn't gain undocumented JSON shapes per metatype.
+        return v.toString();
+    }
 }
 
 } // namespace PhosphorIpc

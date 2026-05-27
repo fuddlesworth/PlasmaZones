@@ -72,6 +72,8 @@ private Q_SLOTS:
     void invoke_unknownFnError();
     void invoke_argCountMismatchError();
     void invoke_argTypeCoercion();
+    void invoke_argTypeCoercionFailure();
+    void invoke_outcomeOkOnSuccess();
     void schemaFor_unknownReturnsEmpty();
     void schemaFor_listsFunctions();
 };
@@ -155,8 +157,8 @@ void TestPhosphorIpcRouter::invoke_returnsStringResult()
     FakeTarget t;
     router.registerTarget(QStringLiteral("greet"), &t);
     QString err;
-    const QVariant r =
-        router.invoke(QStringLiteral("greet"), QStringLiteral("sayHello"), QVariantList{QStringLiteral("nate")}, &err);
+    const QVariant r = router.invoke(QStringLiteral("greet"), QStringLiteral("sayHello"),
+                                     QVariantList{QStringLiteral("nate")}, nullptr, &err);
     QVERIFY(err.isEmpty());
     QCOMPARE(r.toString(), QStringLiteral("Hello, nate"));
 }
@@ -167,7 +169,7 @@ void TestPhosphorIpcRouter::invoke_returnsIntResult()
     FakeTarget t;
     router.registerTarget(QStringLiteral("math"), &t);
     QString err;
-    const QVariant r = router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{3, 4}, &err);
+    const QVariant r = router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{3, 4}, nullptr, &err);
     QVERIFY(err.isEmpty());
     QCOMPARE(r.toInt(), 7);
 }
@@ -179,11 +181,12 @@ void TestPhosphorIpcRouter::invoke_voidReturnSucceeds()
     router.registerTarget(QStringLiteral("store"), &t);
     QString err;
     const QVariant r = router.invoke(QStringLiteral("store"), QStringLiteral("noReturn"),
-                                     QVariantList{QStringLiteral("payload")}, &err);
+                                     QVariantList{QStringLiteral("payload")}, nullptr, &err);
     QVERIFY(err.isEmpty());
     QVERIFY(!r.isValid()); // void return → invalid QVariant
     // Verify the side effect happened.
-    const QVariant r2 = router.invoke(QStringLiteral("store"), QStringLiteral("readLast"), QVariantList{}, &err);
+    const QVariant r2 =
+        router.invoke(QStringLiteral("store"), QStringLiteral("readLast"), QVariantList{}, nullptr, &err);
     QCOMPARE(r2.toString(), QStringLiteral("payload"));
 }
 
@@ -191,7 +194,7 @@ void TestPhosphorIpcRouter::invoke_unknownTargetError()
 {
     IpcRouter router;
     QString err;
-    const QVariant r = router.invoke(QStringLiteral("ghost"), QStringLiteral("fn"), {}, &err);
+    const QVariant r = router.invoke(QStringLiteral("ghost"), QStringLiteral("fn"), {}, nullptr, &err);
     QVERIFY(!r.isValid());
     QVERIFY(err.contains(QStringLiteral("unknown target")));
 }
@@ -202,7 +205,7 @@ void TestPhosphorIpcRouter::invoke_unknownFnError()
     FakeTarget t;
     router.registerTarget(QStringLiteral("greet"), &t);
     QString err;
-    const QVariant r = router.invoke(QStringLiteral("greet"), QStringLiteral("ghostFn"), {}, &err);
+    const QVariant r = router.invoke(QStringLiteral("greet"), QStringLiteral("ghostFn"), {}, nullptr, &err);
     QVERIFY(!r.isValid());
     QVERIFY(err.contains(QStringLiteral("no invokable method")));
 }
@@ -214,7 +217,7 @@ void TestPhosphorIpcRouter::invoke_argCountMismatchError()
     router.registerTarget(QStringLiteral("math"), &t);
     QString err;
     // add() expects 2 args; pass 1.
-    const QVariant r = router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{1}, &err);
+    const QVariant r = router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{1}, nullptr, &err);
     QVERIFY(!r.isValid());
     QVERIFY(err.contains(QStringLiteral("argument count")));
 }
@@ -228,9 +231,36 @@ void TestPhosphorIpcRouter::invoke_argTypeCoercion()
     // add expects int; pass a string-shaped int — QVariant::convert
     // promotes "3" → 3 via QString::toInt, so this should succeed.
     const QVariant r = router.invoke(QStringLiteral("math"), QStringLiteral("add"),
-                                     QVariantList{QStringLiteral("3"), QStringLiteral("4")}, &err);
+                                     QVariantList{QStringLiteral("3"), QStringLiteral("4")}, nullptr, &err);
     QVERIFY(err.isEmpty());
     QCOMPARE(r.toInt(), 7);
+}
+
+void TestPhosphorIpcRouter::invoke_argTypeCoercionFailure()
+{
+    // Negative path for arg coercion: passing a non-convertible
+    // QVariant for an int-typed param surfaces ArgConvertFailed,
+    // which the wire dispatcher maps to INVALID_ARG.
+    IpcRouter router;
+    FakeTarget t;
+    router.registerTarget(QStringLiteral("math"), &t);
+    QString err;
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    const QVariant r =
+        router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{QVariantMap{}, 4}, &outcome, &err);
+    QVERIFY(!r.isValid());
+    QVERIFY(err.contains(QStringLiteral("cannot convert")));
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::ArgConvertFailed);
+}
+
+void TestPhosphorIpcRouter::invoke_outcomeOkOnSuccess()
+{
+    IpcRouter router;
+    FakeTarget t;
+    router.registerTarget(QStringLiteral("math"), &t);
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::InvokeFailed;
+    router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{1, 2}, &outcome);
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::Ok);
 }
 
 void TestPhosphorIpcRouter::schemaFor_unknownReturnsEmpty()

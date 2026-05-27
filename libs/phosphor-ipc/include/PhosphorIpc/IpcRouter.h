@@ -89,12 +89,24 @@ public:
     // targets.
     [[nodiscard]] QJsonObject schemaFor(const QString& target) const;
 
+    // Structured outcome of an invoke() call. The wire dispatcher
+    // maps these onto IpcProtocol::ErrorCode strings without
+    // string-matching the human-readable message.
+    enum class InvokeOutcome {
+        Ok,
+        NoSuchTarget,
+        NoSuchFn,
+        ArgCountMismatch,
+        ArgConvertFailed,
+        InvokeFailed,
+    };
+
     // Synchronously invoke target.fn(args). Returns the function's
-    // return value as a QVariant; on failure, populates errorOut
-    // with a human-readable diagnostic and returns an invalid
-    // QVariant. errorOut may be nullptr if the caller doesn't need
-    // the message.
-    QVariant invoke(const QString& target, const QString& fn, const QVariantList& args, QString* errorOut);
+    // return value as a QVariant; on failure returns an invalid
+    // QVariant and populates the optional outcome / message
+    // out-params. Pass nullptr if the caller doesn't need them.
+    QVariant invoke(const QString& target, const QString& fn, const QVariantList& args,
+                    InvokeOutcome* outcome = nullptr, QString* errorMessage = nullptr);
 
     // Broadcast a JSON event to every connected subscriber that has
     // subscribed to (target, signalName). The IpcTarget QML type's

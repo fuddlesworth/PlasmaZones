@@ -24,7 +24,6 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
-#include <QLoggingCategory>
 #include <QString>
 
 int main(int argc, char* argv[])
@@ -63,19 +62,15 @@ int main(int argc, char* argv[])
         socketPath = QStringLiteral(PHOSPHOR_IPC_DEMO_SOCKET);
     }
 #endif
-    // Qt suppresses qInfo by default; the demo's startup log is
-    // user-facing (operators need to see which socket the router
-    // bound), so enable the info-and-above categories before any
-    // qInfo runs.
-    QLoggingCategory::setFilterRules(QStringLiteral("default.info=true"));
-
     const bool routerOk = demoController.start(socketPath);
-    if (routerOk) {
-        qInfo("phosphor-ipc-demo: router listening on '%s'", qPrintable(demoController.socketPath()));
-    } else {
+    if (!routerOk) {
         qWarning("phosphor-ipc-demo: router failed to start on '%s' — see preceding log",
                  qPrintable(demoController.socketPath()));
     }
+    // Startup banner is left to the QML status panel rather than a
+    // qInfo. Qt suppresses qInfo by default and forcing
+    // QLoggingCategory::setFilterRules here would clobber the
+    // user's QT_LOGGING_RULES.
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("demoController"), &demoController);

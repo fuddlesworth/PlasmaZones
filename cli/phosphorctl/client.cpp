@@ -42,6 +42,12 @@ bool Client::connectTo(const QString& socketPath, int timeoutMs)
         m_errorMessage = QStringLiteral("no socket path resolved (set --socket, PHOSPHOR_SOCKET, or XDG_RUNTIME_DIR)");
         return false;
     }
+    // Reset any prior connection so retry-after-failure callers
+    // don't leak a half-open socket. abort() is QLocalSocket's
+    // documented hard-reset.
+    if (m_socket.state() != QLocalSocket::UnconnectedState) {
+        m_socket.abort();
+    }
     m_socket.connectToServer(socketPath);
     if (!m_socket.waitForConnected(timeoutMs)) {
         m_errorMessage = QStringLiteral("connect to '%1' failed: %2").arg(socketPath, m_socket.errorString());
@@ -57,20 +63,54 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
         return std::nullopt;
     }
 
+    // Extract the request id once so we can correlate the matching
+    // response. A response whose id doesn't match (e.g. a stray
+    // event from an unrelated subscription that landed before our
+    // reply) is dropped and we keep reading.
+    const qint64 expectedId = static_cast<qint64>(req.value(QString::fromUtf8(PhosphorIpc::Field::Id)).toDouble(0));
+
     // QLocalSocket::waitForReadyRead on Linux doesn't reliably pump
     // the peer's accept / write loop. Use an explicit QEventLoop
     // with a QTimer deadline (same pattern as the e2e tests).
     QByteArray buffer;
+    std::optional<QJsonObject> matched;
     QEventLoop loop;
     QTimer timeout;
     timeout.setSingleShot(true);
     QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-    auto onReadyRead = QObject::connect(&m_socket, &QLocalSocket::readyRead, &loop, [&] {
+
+    auto drain = [&]() {
         buffer.append(m_socket.readAll());
-        if (buffer.contains('\n')) {
-            loop.quit();
+        while (true) {
+            const int nl = buffer.indexOf('\n');
+            if (nl < 0) {
+                return;
+            }
+            QByteArray line = buffer.left(nl);
+            buffer.remove(0, nl + 1);
+            while (!line.isEmpty() && line.endsWith('\r')) {
+                line.chop(1);
+            }
+            if (line.isEmpty()) {
+                continue;
+            }
+            QJsonParseError err{};
+            const QJsonDocument doc = QJsonDocument::fromJson(line, &err);
+            if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+                continue;
+            }
+            const QJsonObject obj = doc.object();
+            const qint64 respId = static_cast<qint64>(obj.value(QString::fromUtf8(PhosphorIpc::Field::Id)).toDouble(0));
+            if (respId == expectedId) {
+                matched = obj;
+                loop.quit();
+                return;
+            }
+            // Non-matching id: discard and keep reading.
         }
-    });
+    };
+
+    auto onReadyRead = QObject::connect(&m_socket, &QLocalSocket::readyRead, &loop, drain);
     auto onDisconnected = QObject::connect(&m_socket, &QLocalSocket::disconnected, &loop, &QEventLoop::quit);
 
     m_socket.write(PhosphorIpc::writeLine(req));
@@ -81,7 +121,7 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
     QObject::disconnect(onReadyRead);
     QObject::disconnect(onDisconnected);
 
-    if (!buffer.contains('\n')) {
+    if (!matched) {
         if (m_socket.state() != QLocalSocket::ConnectedState) {
             m_errorMessage = QStringLiteral("server disconnected before responding");
         } else {
@@ -89,18 +129,7 @@ std::optional<QJsonObject> Client::request(const QJsonObject& req, int timeoutMs
         }
         return std::nullopt;
     }
-    const int nl = buffer.indexOf('\n');
-    QByteArray line = buffer.left(nl);
-    while (!line.isEmpty() && line.endsWith('\r')) {
-        line.chop(1);
-    }
-    QJsonParseError err{};
-    const QJsonDocument doc = QJsonDocument::fromJson(line, &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        m_errorMessage = QStringLiteral("malformed response: %1").arg(err.errorString());
-        return std::nullopt;
-    }
-    return doc.object();
+    return matched;
 }
 
 QString Client::errorMessage() const

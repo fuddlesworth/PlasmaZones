@@ -15,10 +15,18 @@
 
 namespace Phosphorctl {
 
-int runList(const QStringList& args, const QString& socketPath)
+int runList(QStringList args, QString socketPath)
 {
     QTextStream out(stdout);
     QTextStream err(stderr);
+
+    // Allow `phosphorctl list --socket /path` in addition to the
+    // top-level position — useful when alias-chaining.
+    const QString lateSocket = stripSocketFlag(args);
+    if (!lateSocket.isEmpty()) {
+        socketPath = lateSocket;
+    }
+
     if (!args.isEmpty()) {
         err << "phosphorctl list: takes no arguments\n";
         return 1;
@@ -31,19 +39,21 @@ int runList(const QStringList& args, const QString& socketPath)
     }
 
     QJsonObject req;
-    req.insert(QStringLiteral("type"), QString::fromUtf8(PhosphorIpc::RequestType::List));
-    req.insert(QStringLiteral("id"), 1);
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Type), QString::fromUtf8(PhosphorIpc::RequestType::List));
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Id), 1);
 
     const auto resp = client.request(req);
     if (!resp.has_value()) {
         err << "phosphorctl list: " << client.errorMessage() << "\n";
         return 2;
     }
-    if (resp->value(QStringLiteral("type")).toString() == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl list: server error: " << resp->value(QStringLiteral("message")).toString() << "\n";
+    if (resp->value(QString::fromUtf8(PhosphorIpc::Field::Type)).toString()
+        == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
+        err << "phosphorctl list: server error: "
+            << resp->value(QString::fromUtf8(PhosphorIpc::Field::Message)).toString() << "\n";
         return 3;
     }
-    const QJsonArray names = resp->value(QStringLiteral("result")).toArray();
+    const QJsonArray names = resp->value(QString::fromUtf8(PhosphorIpc::Field::Result)).toArray();
     QStringList sorted;
     for (const QJsonValue& v : names) {
         sorted.append(v.toString());

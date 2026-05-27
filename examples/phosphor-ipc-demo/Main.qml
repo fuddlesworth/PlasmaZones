@@ -34,31 +34,44 @@ ApplicationWindow {
     // signal is declared so the schema generator can advertise it
     // as subscribable; emitEvent pushes the JSON-shaped event to
     // every subscriber on the wire.
+    //
+    // The state field is named `current` rather than `value` to
+    // avoid colliding with the QML-auto-generated `valueChanged()`
+    // notifier — a stray `property int value` would publish a
+    // zero-arg `valueChanged` signal alongside the explicit
+    // `countChanged(int v)` and confuse the schema output.
     IpcTarget {
         id: countTarget
 
-        property int value: 0
+        property int current: 0
 
         target: "count"
 
         signal countChanged(int v)
 
         function increment(): int {
-            countTarget.value++;
-            countTarget.countChanged(countTarget.value);
-            countTarget.emitEvent("countChanged", [countTarget.value]);
-            return countTarget.value;
+            countTarget.current++;
+            countTarget.countChanged(countTarget.current);
+            countTarget.emitEvent("countChanged", [countTarget.current]);
+            return countTarget.current;
         }
         function reset(): int {
-            countTarget.value = 0;
-            countTarget.countChanged(countTarget.value);
-            countTarget.emitEvent("countChanged", [countTarget.value]);
-            return countTarget.value;
+            countTarget.current = 0;
+            countTarget.countChanged(countTarget.current);
+            countTarget.emitEvent("countChanged", [countTarget.current]);
+            return countTarget.current;
         }
     }
 
-    // Target 3: key/value store with a two-arg valueChanged signal.
+    // Target 3: key/value store with a two-arg entryChanged signal.
     // Exercises subscribe payloads with more than one parameter.
+    //
+    // The signal is explicitly named `entryChanged` rather than
+    // `valueChanged` so it doesn't shadow the QML-auto-generated
+    // `storeChanged()` notifier emitted from `property var store`.
+    // Subscribers wire onto `entryChanged`; the auto-`storeChanged`
+    // shape is benign noise the schema surfaces but no caller
+    // subscribes to.
     IpcTarget {
         id: storeTarget
 
@@ -66,12 +79,12 @@ ApplicationWindow {
 
         target: "set-value"
 
-        signal valueChanged(string key, string value)
+        signal entryChanged(string key, string value)
 
         function set(key: string, value: string): bool {
             storeTarget.store[key] = value;
-            storeTarget.valueChanged(key, value);
-            storeTarget.emitEvent("valueChanged", [key, value]);
+            storeTarget.entryChanged(key, value);
+            storeTarget.emitEvent("entryChanged", [key, value]);
             return true;
         }
         function get(key: string): string {
@@ -163,7 +176,7 @@ ApplicationWindow {
                 color: Theme.on_surface
                 font.family: "monospace"
                 font.pixelSize: Tokens.font_size_body_s
-                text: qsTr("# In another terminal:\nexport PHOSPHOR_SOCKET=") + demoController.socketPath + qsTr("\nphosphorctl list\nphosphorctl schema count | jq\nphosphorctl call greet.sayHello --arg name=nate\nphosphorctl call count.increment\nphosphorctl call set-value.set --arg k=mood --arg v=happy\nphosphorctl subscribe count.countChanged   # streams events on count.increment\nphosphorctl subscribe set-value.valueChanged")
+                text: qsTr("# In another terminal:\nexport PHOSPHOR_SOCKET=") + demoController.socketPath + qsTr("\nphosphorctl list\nphosphorctl schema count | jq\nphosphorctl call greet.sayHello --arg name=nate\nphosphorctl call count.increment\nphosphorctl call set-value.set --arg k=mood --arg v=happy\nphosphorctl subscribe count.countChanged   # streams events on count.increment\nphosphorctl subscribe set-value.entryChanged")
                 textFormat: Text.PlainText
                 verticalAlignment: Text.AlignTop
                 wrapMode: Text.WordWrap

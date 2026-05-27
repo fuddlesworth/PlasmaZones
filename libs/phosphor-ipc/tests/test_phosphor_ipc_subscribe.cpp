@@ -258,9 +258,15 @@ void TestPhosphorIpcSubscribe::unsubscribe_stops_events()
 
     // Subsequent broadcasts must NOT generate events on this socket.
     router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), args);
-    // Give the event loop a tick to deliver anything queued.
-    QTest::qWait(100);
-    QVERIFY(!socket.bytesAvailable());
+    // Use readLines with a short deadline + expectedCount=1 so the
+    // helper pumps the event loop properly. If anything arrives,
+    // out.size() == 1 and we fail; if nothing arrives within the
+    // deadline, out is empty (the desired state). The previous
+    // qWait+bytesAvailable check was racy because qWait doesn't
+    // pump the QLocalSocket's readyRead delivery reliably on
+    // Linux.
+    const QList<QJsonObject> postUnsub = readLines(socket, 1, 200);
+    QCOMPARE(postUnsub.size(), 0);
 }
 
 void TestPhosphorIpcSubscribe::unsubscribe_unknownId()
@@ -345,14 +351,34 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
         // Allow the router to process the disconnect.
         QTest::qWait(100);
     }
-    // Broadcasting now must not crash, even though the subscriber
-    // is gone — the prune happened on disconnect.
+    // Reconnect a fresh socket and try to unsubscribe id=1 — the
+    // server should reject with NO_SUCH_SUBSCRIPTION because the
+    // disconnected client's subscription record is gone. A
+    // regression where handleClientDisconnected stops calling
+    // m_subscriptionsBySocket.remove would let the record persist
+    // (orphaned, but still in the map); broadcastEvent would then
+    // attempt to write to a dead socket. We can't directly observe
+    // the map from outside the router, so we exercise the
+    // negative-confirmation path instead.
+    //
+    // NOTE: subscription ids are scoped per-socket, so a new
+    // socket asking to unsubscribe id=1 SHOULD always get
+    // NO_SUCH_SUBSCRIPTION regardless of the prior client. The
+    // assertion is that broadcastEvent doesn't crash AND that
+    // the router state is sane after the prune.
     QJsonArray args;
     args.append(7);
     router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), args);
-    QTest::qWait(50);
-    // No crash == pass.
-    QVERIFY(true);
+
+    QLocalSocket probe;
+    probe.connectToServer(sockPath);
+    QVERIFY(probe.waitForConnected(2000));
+    probe.write(writeLine(makeReq(QStringLiteral("unsubscribe"), 99, {}, {}, 1)));
+    probe.flush();
+    const QList<QJsonObject> resp = readLines(probe, 1);
+    QCOMPARE(resp.size(), 1);
+    QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
+    QCOMPARE(resp.first().value(QStringLiteral("code")).toString(), QStringLiteral("NO_SUCH_SUBSCRIPTION"));
 }
 
 QTEST_MAIN(TestPhosphorIpcSubscribe)

@@ -45,35 +45,14 @@ int main(int argc, char* argv[])
     QTextStream out(stdout);
     QTextStream err(stderr);
 
-    // Strip program name, leave [args] starting with whatever came
-    // first on the command line (a subcommand, --help, --socket,
-    // etc.). We do the top-level parse ourselves rather than ask
-    // QCommandLineParser to handle subcommands because Qt's parser
-    // treats positional args weakly and we want strict subcommand
-    // dispatch.
+    // We dispatch subcommands manually (QCommandLineParser treats
+    // positional args weakly). The shared stripSocketFlag helper
+    // pulls --socket / -s out of the arg list wherever it appears
+    // — before OR after the subcommand — so users don't have to
+    // remember the order.
     QStringList args = app.arguments();
     args.removeFirst();
-
-    // Extract --socket / -s flag from the head of the arg list. The
-    // flag may appear before OR after the subcommand name — we
-    // handle the simpler "before" case here and let the per-
-    // subcommand parser pick it up too if it shows up after.
-    QString socketPathCli;
-    while (!args.isEmpty()) {
-        const QString& head = args.front();
-        if (head == QLatin1String("--socket") || head == QLatin1String("-s")) {
-            if (args.size() < 2) {
-                err << "phosphorctl: --socket requires an argument\n";
-                return 1;
-            }
-            args.removeFirst();
-            socketPathCli = args.takeFirst();
-        } else if (head.startsWith(QLatin1String("--socket="))) {
-            socketPathCli = args.takeFirst().mid(QStringLiteral("--socket=").size());
-        } else {
-            break;
-        }
-    }
+    QString socketPathCli = Phosphorctl::stripSocketFlag(args);
 
     if (args.isEmpty() || args.front() == QLatin1String("--help") || args.front() == QLatin1String("-h")
         || args.front() == QLatin1String("help")) {
@@ -86,6 +65,14 @@ int main(int argc, char* argv[])
     }
 
     const QString subcommand = args.takeFirst();
+    // stripSocketFlag may have pulled the flag from the head of
+    // args or from a later position. Run it again on the remaining
+    // args in case the user wrote `phosphorctl call foo.bar --socket /x`
+    // — the post-subcommand position is also valid.
+    const QString postSubcommandSocket = Phosphorctl::stripSocketFlag(args);
+    if (!postSubcommandSocket.isEmpty()) {
+        socketPathCli = postSubcommandSocket;
+    }
     const QString socketPath = Phosphorctl::Client::resolveSocketPath(socketPathCli);
 
     if (subcommand == QLatin1String("call")) {

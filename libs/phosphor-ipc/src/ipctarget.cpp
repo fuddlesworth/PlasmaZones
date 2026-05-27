@@ -4,6 +4,7 @@
 #include <PhosphorIpc/IpcTarget.h>
 
 #include <PhosphorIpc/IpcEngine.h>
+#include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcRouter.h>
 
 #include <QJsonArray>
@@ -62,14 +63,17 @@ void IpcTarget::emitEvent(const QString& signalName, const QVariantList& args)
         qWarning("PhosphorIpc::IpcTarget::emitEvent: empty signalName ignored");
         return;
     }
-    // Serialise QVariantList → QJsonArray. We use QJsonArray's
-    // fromVariantList helper which mirrors the variantToJson rules
-    // in IpcRouter for the call-return path (modulo custom QMetaType
-    // fallbacks which would degrade to null here — for the call
-    // path they degrade to toString fallback. Symmetry is good
-    // enough for Phase 1.4; revisit if anyone hits a custom type
-    // on a subscription path).
-    m_router->broadcastEvent(m_target, signalName, QJsonArray::fromVariantList(args));
+    // Walk args through the shared variantToJson so subscription
+    // payloads match the JSON shape sync calls emit for return
+    // values. (QJsonArray::fromVariantList would drop unknown
+    // metatypes to null where the call path drops them to
+    // toString — keeping a single converter is the only way to
+    // avoid drift.)
+    QJsonArray jsonArgs;
+    for (const QVariant& v : args) {
+        jsonArgs.append(variantToJson(v));
+    }
+    m_router->broadcastEvent(m_target, signalName, jsonArgs);
 }
 
 void IpcTarget::componentComplete()

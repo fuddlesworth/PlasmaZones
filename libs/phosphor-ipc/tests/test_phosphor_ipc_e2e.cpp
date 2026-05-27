@@ -220,8 +220,6 @@ void TestPhosphorIpcE2e::roundtrip_malformedRequest()
 
     // Use the same QEventLoop pattern as roundtrip(); raw byte
     // payload bypasses writeLine.
-    QJsonObject reqShape; // unused — sent raw below
-    Q_UNUSED(reqShape);
     QLocalSocket socket;
     QByteArray buffer;
     QEventLoop loop;
@@ -257,11 +255,31 @@ void TestPhosphorIpcE2e::start_failsWhenPathConflict()
     const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
 
     IpcRouter routerA;
+    EchoTarget echo;
+    routerA.registerTarget(QStringLiteral("echo"), &echo);
     QVERIFY(routerA.start(sockPath));
 
     IpcRouter routerB;
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("listen\\(\\) failed")));
     QVERIFY(!routerB.start(sockPath));
+
+    // Critical assertion: routerA must still serve traffic. A
+    // regression where start() unlinks the live socket file and
+    // re-binds (clobbering routerA) would pass the "B fails"
+    // check above but break this roundtrip. Send a real call
+    // and assert the reply lands.
+    QJsonObject req;
+    req.insert(QStringLiteral("type"), QStringLiteral("call"));
+    req.insert(QStringLiteral("id"), 1);
+    req.insert(QStringLiteral("target"), QStringLiteral("echo"));
+    req.insert(QStringLiteral("fn"), QStringLiteral("echo"));
+    QJsonArray args;
+    args.append(QStringLiteral("alive"));
+    req.insert(QStringLiteral("args"), args);
+
+    const QJsonObject resp = roundtrip(sockPath, req);
+    QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+    QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("alive"));
 }
 
 void TestPhosphorIpcE2e::stop_idempotent()

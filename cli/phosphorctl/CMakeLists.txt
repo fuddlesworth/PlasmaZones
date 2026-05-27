@@ -16,6 +16,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Network)
 add_executable(phosphorctl
     main.cpp
     client.cpp
+    subcommands_common.cpp
     subcommand_call.cpp
     subcommand_list.cpp
     subcommand_schema.cpp

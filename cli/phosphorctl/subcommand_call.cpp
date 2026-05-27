@@ -19,12 +19,14 @@ namespace Phosphorctl {
 
 namespace {
 
-// Parse one --arg value=... pair into a QJsonValue. JSON-typed
+// Parse one --arg value=... value into a QJsonValue. JSON-typed
 // values use their natural shape (123, 1.5, true, "hello", [1,2],
 // {"k":1}); anything that doesn't parse as JSON degrades to a
 // string. Lets the user write `--arg count=42` AND
 // `--arg payload={"k":1}` AND `--arg name=nate` without quoting
-// hell.
+// hell. Caveats: the bare token `null` becomes a JSON null (use
+// `"null"` to force a string); an unterminated `[1,2` falls back
+// to the literal string.
 QJsonValue parseArgValue(const QString& raw)
 {
     const QByteArray bytes = raw.toUtf8();
@@ -50,10 +52,14 @@ QJsonValue parseArgValue(const QString& raw)
 
 } // namespace
 
-int runCall(const QStringList& args, const QString& socketPath)
+int runCall(QStringList args, QString socketPath)
 {
     QTextStream out(stdout);
     QTextStream err(stderr);
+    const QString lateSocket = stripSocketFlag(args);
+    if (!lateSocket.isEmpty()) {
+        socketPath = lateSocket;
+    }
 
     if (args.isEmpty()) {
         err << "phosphorctl call: expects <target>.<fn> [--arg name=value ...]\n";
@@ -104,28 +110,31 @@ int runCall(const QStringList& args, const QString& socketPath)
     }
 
     QJsonObject req;
-    req.insert(QStringLiteral("type"), QString::fromUtf8(PhosphorIpc::RequestType::Call));
-    req.insert(QStringLiteral("id"), 1);
-    req.insert(QStringLiteral("target"), target);
-    req.insert(QStringLiteral("fn"), fn);
-    req.insert(QStringLiteral("args"), jsonArgs);
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Type), QString::fromUtf8(PhosphorIpc::RequestType::Call));
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Id), 1);
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Target), target);
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Fn), fn);
+    req.insert(QString::fromUtf8(PhosphorIpc::Field::Args), jsonArgs);
 
     const auto resp = client.request(req);
     if (!resp.has_value()) {
         err << "phosphorctl call: " << client.errorMessage() << "\n";
         return 2;
     }
-    if (resp->value(QStringLiteral("type")).toString() == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl call: " << resp->value(QStringLiteral("code")).toString() << ": "
-            << resp->value(QStringLiteral("message")).toString() << "\n";
+    if (resp->value(QString::fromUtf8(PhosphorIpc::Field::Type)).toString()
+        == QString::fromUtf8(PhosphorIpc::ResponseType::Error)) {
+        err << "phosphorctl call: " << resp->value(QString::fromUtf8(PhosphorIpc::Field::Code)).toString() << ": "
+            << resp->value(QString::fromUtf8(PhosphorIpc::Field::Message)).toString() << "\n";
         return 3;
     }
 
-    const QJsonValue result = resp->value(QStringLiteral("result"));
+    const QJsonValue result = resp->value(QString::fromUtf8(PhosphorIpc::Field::Result));
     // Pretty-print object / array results; emit primitive results
     // raw (no surrounding quotes for strings — easier to pipe).
-    if (result.isObject() || result.isArray()) {
-        out << QString::fromUtf8(QJsonDocument::fromVariant(result.toVariant()).toJson(QJsonDocument::Indented));
+    if (result.isObject()) {
+        out << QString::fromUtf8(QJsonDocument(result.toObject()).toJson(QJsonDocument::Indented));
+    } else if (result.isArray()) {
+        out << QString::fromUtf8(QJsonDocument(result.toArray()).toJson(QJsonDocument::Indented));
     } else if (result.isString()) {
         out << result.toString() << "\n";
     } else if (result.isNull()) {
