@@ -13,8 +13,9 @@ if(COMMAND qt_policy)
     qt_policy(SET QTP0004 NEW)
 endif()
 
-add_executable(phosphor-settings-ui-minimal
-    main.cpp
+add_executable(phosphor-settings-ui-minimal main.cpp)
+
+set(phosphor_settings_ui_minimal_QML_TYPE_SOURCES
     demoapp.cpp
     demoapp.h
     generalpage.cpp
@@ -31,6 +32,13 @@ qt_add_qml_module(phosphor-settings-ui-minimal
     URI org.phosphor.settings.ui.examples.minimal
     VERSION 1.0
     RESOURCE_PREFIX /qt/qml
+    # SOURCES lists the C++ types Qt should register into the QML
+    # module — without this, qmltyperegistrar misses DemoApp /
+    # GeneralPage's QML_NAMED_ELEMENT markers on clean builds that
+    # disable global AUTOMOC, and consumers get a runtime
+    # "GeneralPage is not a type" failure. Mirrors the parent lib's
+    # CMakeLists pattern.
+    SOURCES ${phosphor_settings_ui_minimal_QML_TYPE_SOURCES}
     QML_FILES ${phosphor_settings_ui_minimal_qml_FILES}
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/phosphor/settings/ui/examples/minimal
 )

@@ -42,16 +42,18 @@ Item {
         anchors.fill: parent
         active: root.currentEntry !== null
         source: root.currentEntry ? root.currentEntry.qmlSource : ""
+        // Fade is on the LOADER's opacity, not the loaded item's. The
+        // prior shape did `item.opacity = 0` from onLoaded — an
+        // imperative assignment that broke any declarative `opacity`
+        // binding the page declared on its root (e.g. an
+        // enabled-state opacity dim). Animating the Loader keeps the
+        // loaded item's own binding intact while still producing the
+        // page-swap fade.
+        opacity: 0
         onLoaded: {
             if (!item)
                 return;
 
-            // Pin opacity to 0 BEFORE the animation starts. Without this,
-            // the new item's default opacity is 1 for the first paint
-            // frame between item construction and the first PhosphorMotion
-            // tick — produces a brief at-full-opacity flash before the
-            // fade-in actually begins.
-            item.opacity = 0;
             const pageController = root.controller.registry.controller(root.controller.currentPageId);
             // Pages that already have their own readonly `controller`
             // binding (e.g. `readonly property var controller:
@@ -78,18 +80,17 @@ Item {
                 }
             }
 
-            // Fade in the freshly-loaded page from opacity 0. The
-            // animation starts immediately because the Loader has just
-            // finished synchronously instantiating its item; the
-            // restart() resets `from: 0` even when the previous
-            // animation was mid-flight (rapid page switches).
+            // Fade in the freshly-loaded page. The Loader's own
+            // opacity (pinned at 0 above) is what we animate — the
+            // loaded item's opacity is untouched so its declarative
+            // bindings survive.
             pageFadeIn.restart();
         }
 
         PhosphorMotionAnimation {
             id: pageFadeIn
 
-            target: pageLoader.item
+            target: pageLoader
             properties: "opacity"
             from: 0
             to: 1

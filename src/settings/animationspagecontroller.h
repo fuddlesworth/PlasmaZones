@@ -429,6 +429,13 @@ private:
     /// overwrite the first's retained map, producing inconsistent
     /// disk state. Mirrors ApplicationController::m_applying.
     bool m_asyncRevertInFlight = false;
+    /// Last observed value of hasPendingChanges() seen by the
+    /// pendingChangesChanged → dirtyChanged forwarder. CLAUDE.md:
+    /// "Only emit signals when value actually changes". Several call
+    /// sites emit pendingChangesChanged unconditionally; gating the
+    /// forward on this cached state keeps the framework's dirty
+    /// Q_PROPERTY NOTIFY contract honest.
+    bool m_lastHadPendingChanges = false;
     /// Set to true while a controller-owned setter is mutating the
     /// shader profile tree on m_settings. The shaderProfileTreeChanged
     /// handler uses this to distinguish our own writes (which keep

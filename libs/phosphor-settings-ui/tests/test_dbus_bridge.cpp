@@ -142,10 +142,16 @@ private Q_SLOTS:
 
         QDBusMessage reply;
         QThread worker;
-        QObject context;
-        context.moveToThread(&worker);
-        QObject::connect(&worker, &QThread::started, &context, [&]() {
+        // Heap-allocate the context QObject so its destruction is
+        // deferred via deleteLater() running on the WORKER thread
+        // (the thread it lives on). A stack `QObject context` would
+        // be destroyed on the main thread after worker.wait() returns
+        // — destruction off-affinity is UB and trips ASan/TSan.
+        QObject* context = new QObject;
+        context->moveToThread(&worker);
+        QObject::connect(&worker, &QThread::started, context, [&, context]() {
             reply = bridge.callOn(QStringLiteral("org.example.Other"), QStringLiteral("m"));
+            context->deleteLater();
             worker.quit();
         });
         worker.start();

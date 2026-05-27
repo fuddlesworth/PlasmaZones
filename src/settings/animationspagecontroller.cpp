@@ -162,8 +162,21 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
     // Forward the existing pendingChangesChanged() signal to the
     // framework's dirtyChanged() so ApplicationController picks up
     // animation-page edits as part of the global dirty flag.
-    connect(this, &AnimationsPageController::pendingChangesChanged, this,
-            &PhosphorSettingsUi::StagingDomain::dirtyChanged);
+    //
+    // CLAUDE.md: "Only emit signals when value actually changes." A
+    // handful of internal call sites emit pendingChangesChanged
+    // unconditionally (revertPending / asyncRevertPending /
+    // setShaderOverride no-op branches). Gating the forwarder on the
+    // observed state-flip keeps the dirty Q_PROPERTY's NOTIFY contract
+    // honest — downstream listeners only re-evaluate on real changes.
+    m_lastHadPendingChanges = hasPendingChanges();
+    connect(this, &AnimationsPageController::pendingChangesChanged, this, [this]() {
+        const bool current = hasPendingChanges();
+        if (current == m_lastHadPendingChanges)
+            return;
+        m_lastHadPendingChanges = current;
+        Q_EMIT dirtyChanged();
+    });
     // Forward the snapshot helper as a callable so the sub-services can
     // capture pre-edit content without coupling to the controller's
     // m_pendingFileSnapshots layout.

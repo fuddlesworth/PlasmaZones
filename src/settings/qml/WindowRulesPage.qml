@@ -181,6 +181,21 @@ SettingsFlickable {
         target: settingsController
     }
 
+    // Surface asyncCommit failures (force-save daemon errors, partial-
+    // drop rejections) to the user. The controller's applyResult fires
+    // for every asyncCommit invocation; we only want to toast on
+    // failure — the success path is covered by the chrome's footer
+    // state.
+    Connections {
+        function onApplyResult(ok, error) {
+            if (!ok) {
+                window.showToast(error.length > 0 ? error : i18n("Failed to save window rules."));
+            }
+        }
+
+        target: page.controller
+    }
+
     AddRuleWizard {
         id: addRuleWizard
 
@@ -264,9 +279,14 @@ SettingsFlickable {
                     icon.name: "document-save"
                     text: i18n("Overwrite")
                     onTriggered: {
+                        // Use the async path (asyncCommit dispatches
+                        // setAllRules via QDBusPendingCallWatcher) so a
+                        // stuck daemon doesn't freeze the chrome.
+                        // applyResult fires later with the outcome —
+                        // surface a toast on failure via the one-shot
+                        // wiring below.
                         forceSaveConfirm.close();
-                        if (!page.controller.forceCommit())
-                            window.showToast(i18n("Force-save failed — see the daemon log for details."));
+                        page.controller.asyncCommit(true);
                     }
                 }
             ]

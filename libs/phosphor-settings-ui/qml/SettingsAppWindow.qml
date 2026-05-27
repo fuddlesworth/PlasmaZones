@@ -51,8 +51,17 @@ Kirigami.ApplicationWindow {
      *  silently re-prompted with the same dialog on the next close
      *  attempt. Carries the unresolved page ids (best-effort: walks
      *  the registry and collects each PageController whose isDirty()
-     *  is still true). */
-    signal applyOnCloseFailed(var dirtyPageIds)
+     *  is still true) AND the per-domain error strings collected by
+     *  the async batch — consumers can use either: page-id list for
+     *  "still unsaved on X, Y" framing, errors list for "%1 said: %2"
+     *  framing with the actual D-Bus / file-IO message. */
+    signal applyOnCloseFailed(var dirtyPageIds, var errors)
+    /** Emitted when an async Discard initiated by the close-prompt
+     *  failed (at least one staging domain reported discardResult ok
+     *  = false). Consumers can surface the per-domain error strings;
+     *  the window still closes because the user explicitly chose to
+     *  throw away changes. */
+    signal discardOnCloseFailed(var errors)
 
     /// Walk the registry and return the ids of every page whose
     /// controller is still dirty. Used by applyOnCloseFailed above so
@@ -98,9 +107,26 @@ Kirigami.ApplicationWindow {
     // pageStack to render nothing there.
     pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
     onClosing: function (close) {
+        // Bypass the dirty prompt when the closeFlow is in its
+        // "force close" phase — the user has already confirmed
+        // Apply/Discard, the async batch landed, and the close was
+        // re-issued via Qt.callLater(root.close). Without this gate,
+        // a controller that briefly re-dirtied between applyAllComplete
+        // and the deferred close (e.g. a daemon broadcast firing
+        // mid-close) re-fires the prompt and the user gets stuck in
+        // a close-loop.
+        if (closeFlow.forceClosing) {
+            return;
+        }
         if (root.controller.dirty) {
             close.accepted = false;
-            discardDialog.open();
+            // Don't double-open if the dialog is already visible (the
+            // user double-clicked the X, or a previous close is still
+            // unwinding) — Kirigami.PromptDialog tolerates this but
+            // resetting waitingApply / waitingDiscard would silently
+            // re-arm the close flow against a stale batch.
+            if (!discardDialog.visible && !closeFlow.waitingApply && !closeFlow.waitingDiscard)
+                discardDialog.open();
         }
     }
 
@@ -108,12 +134,15 @@ Kirigami.ApplicationWindow {
     // triggered by the close-prompt's Apply / Discard action — the
     // applyAllComplete / discardAllComplete handlers below close the
     // window only when this is set, so a normal footer-driven Save
-    // doesn't accidentally close the window.
+    // doesn't accidentally close the window. forceClosing flips true
+    // during the deferred close so onClosing bypasses its dirty
+    // prompt for the second close-event the deferral generates.
     QtObject {
         id: closeFlow
 
         property bool waitingApply: false
         property bool waitingDiscard: false
+        property bool forceClosing: false
     }
 
     DiscardChangesDialog {
@@ -150,13 +179,16 @@ Kirigami.ApplicationWindow {
                 // more staging domains refused or failed to commit).
                 // Surface to the consumer instead of silently re-
                 // prompting the discard dialog on the next close
-                // attempt.
+                // attempt. Pass both the page ids AND the per-domain
+                // error strings the async batch collected so the
+                // consumer toast can render either.
                 const dirtyIds = root.collectDirtyPageIds();
-                root.applyOnCloseFailed(dirtyIds);
+                root.applyOnCloseFailed(dirtyIds, errors);
                 return;
             }
             if (discardDialog.visible)
                 discardDialog.close();
+            closeFlow.forceClosing = true;
             Qt.callLater(root.close);
         }
 
@@ -166,10 +198,14 @@ Kirigami.ApplicationWindow {
 
             closeFlow.waitingDiscard = false;
             // A failed discard still progresses the close — the user
-            // explicitly said "throw away changes"; the failure
-            // surfaces in the log + a future toast wire.
+            // explicitly said "throw away changes" — but surface the
+            // error list so the consumer can toast the user before
+            // the window disappears.
+            if (!ok && errors && errors.length > 0)
+                root.discardOnCloseFailed(errors);
             if (discardDialog.visible)
                 discardDialog.close();
+            closeFlow.forceClosing = true;
             Qt.callLater(root.close);
         }
 

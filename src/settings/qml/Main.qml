@@ -147,7 +147,7 @@ PhosphorUi.SettingsAppWindow {
         // re-prompted with the same discard dialog. The lib hands us
         // the ids of pages still dirty after applyAll(); resolve them
         // to titles via the registry for a readable message.
-        function onApplyOnCloseFailed(dirtyPageIds) {
+        function onApplyOnCloseFailed(dirtyPageIds, errors) {
             const reg = settingsController.app.registry;
             const titles = [];
             for (let i = 0; i < dirtyPageIds.length; ++i) {
@@ -157,10 +157,23 @@ PhosphorUi.SettingsAppWindow {
                 else if (dirtyPageIds[i])
                     titles.push(dirtyPageIds[i]);
             }
-            if (titles.length === 0)
+            // Prefer the per-domain error string when the controller
+            // surfaced one — "permission denied on /etc/foo" is more
+            // actionable than "page X failed". Fall back to the page
+            // titles list when the error array is empty (older
+            // domains that don't emit per-domain text).
+            if (errors && errors.length > 0)
+                window.showToast(i18n("Save did not complete: %1", errors.join("; ")));
+            else if (titles.length === 0)
                 window.showToast(i18n("Save did not complete — some pages remain dirty."));
             else
                 window.showToast(i18n("Save did not complete — still unsaved on: %1", titles.join(", ")));
+        }
+
+        function onDiscardOnCloseFailed(errors) {
+            // Toast before the deferred close fires so the user sees
+            // the message even though the window is about to close.
+            window.showToast(i18n("Discard did not complete: %1", errors.join("; ")));
         }
 
         target: window

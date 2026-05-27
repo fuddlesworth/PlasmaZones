@@ -141,6 +141,14 @@ QVariantList TilingAlgorithmController::customParamsForAlgorithm(const QString& 
                 const QStringList options = paramMap.value(ParamDefKeys::EnumOptions).toStringList();
                 paramMap[ParamDefKeys::Value] =
                     options.contains(str) ? QVariant(str) : paramMap.value(ParamDefKeys::DefaultValue);
+            } else if (type == ParamTypes::Bool) {
+                // Coerce to bool so a saved string "true"/"false" (older
+                // schema or hand-edited config) round-trips into QML as
+                // a bool — QML switches/checkboxes read string values
+                // as truthy regardless of the content, which would
+                // silently turn a `"false"` storage entry into a
+                // checked switch in the UI.
+                paramMap[ParamDefKeys::Value] = saved.toBool();
             } else {
                 paramMap[ParamDefKeys::Value] = saved;
             }

@@ -34,7 +34,7 @@ Rectangle {
 
     /// Fired when the user dismisses the overlay (Esc key, background
     /// click). Consumers flip their toggle false.
-    signal dismiss()
+    signal dismiss
 
     anchors.fill: parent
     color: root.overlayBg
@@ -64,8 +64,7 @@ Rectangle {
         // should dismiss.
         MouseArea {
             anchors.fill: parent
-            onClicked: {
-            }
+            onClicked: {}
         }
 
         ColumnLayout {
@@ -87,22 +86,35 @@ Rectangle {
             }
 
             Repeater {
-                model: [{
-                    "key": "Meta+Shift+P",
-                    "action": i18n("Open PlasmaZones Settings")
-                }, {
-                    "key": "Meta+Shift+E",
-                    "action": i18n("Open Zone Editor")
-                }, {
-                    "key": "Ctrl+PgUp",
-                    "action": i18n("Previous page")
-                }, {
-                    "key": "Ctrl+PgDown",
-                    "action": i18n("Next page")
-                }, {
-                    "key": "?",
-                    "action": i18n("Toggle this overlay")
-                }]
+                // The two global shortcuts (Open Settings, Open Editor)
+                // are user-rebindable via SettingsController — read
+                // the live values so the overlay stays truthful after
+                // the user remaps them. Ctrl+PgUp/Down and "?" are
+                // local to this window (not user-configurable), so
+                // their literals stay inline. Falls back to the
+                // legacy default only if the setting is empty.
+                model: [
+                    {
+                        "key": (appSettings.openSettingsShortcut && appSettings.openSettingsShortcut.length > 0) ? appSettings.openSettingsShortcut : "Meta+Shift+P",
+                        "action": i18n("Open PlasmaZones Settings")
+                    },
+                    {
+                        "key": (appSettings.openEditorShortcut && appSettings.openEditorShortcut.length > 0) ? appSettings.openEditorShortcut : "Meta+Shift+E",
+                        "action": i18n("Open Zone Editor")
+                    },
+                    {
+                        "key": "Ctrl+PgUp",
+                        "action": i18n("Previous page")
+                    },
+                    {
+                        "key": "Ctrl+PgDown",
+                        "action": i18n("Next page")
+                    },
+                    {
+                        "key": "?",
+                        "action": i18n("Toggle this overlay")
+                    }
+                ]
 
                 delegate: RowLayout {
                     Layout.fillWidth: true
@@ -128,11 +140,8 @@ Rectangle {
                             text: modelData.key
                             font: Kirigami.Theme.smallFont
                         }
-
                     }
-
                 }
-
             }
 
             Kirigami.Separator {
@@ -145,9 +154,7 @@ Rectangle {
                 Layout.alignment: Qt.AlignHCenter
                 font: Kirigami.Theme.smallFont
             }
-
         }
-
     }
 
     Behavior on opacity {
@@ -155,7 +162,5 @@ Rectangle {
             profile: root.shown ? "widget.fadeIn" : "widget.fadeOut"
             durationOverride: 200
         }
-
     }
-
 }

@@ -180,16 +180,29 @@ void WindowRuleController::apply()
 
 void WindowRuleController::discard()
 {
-    // revert() is already async (QDBusPendingCallWatcher) and emits
-    // revertFinished(ok). Map that to the StagingDomain
-    // discardResult contract via a one-shot connection — single-fire
-    // so a future re-revert doesn't accumulate stale handlers.
-    auto* conn = new QMetaObject::Connection;
-    *conn = connect(this, &WindowRuleController::revertFinished, this, [this, conn](bool success) {
-        Q_EMIT discardResult(success, success ? QString() : tr("Failed to fetch the daemon's rule set."));
-        disconnect(*conn);
-        delete conn;
-    });
+    // Re-entrant guard: a second discard() while the first revert is
+    // in flight would register a second one-shot lambda on
+    // revertFinished — both fire on the next reply and emit
+    // discardResult twice, breaking the StagingDomain contract that
+    // promises one terminal signal per discard() invocation.
+    if (m_discardInFlight) {
+        Q_EMIT discardResult(false, QStringLiteral("Discard already in flight"));
+        return;
+    }
+    m_discardInFlight = true;
+    // Qt::SingleShotConnection self-disconnects on first fire — no
+    // heap-allocated QMetaObject::Connection* needed (the prior
+    // pattern leaked when ~WindowRuleController ran before
+    // revertFinished arrived). The companion destroyed() guard would
+    // be redundant here: the lambda's receiver IS `this`, so Qt
+    // auto-removes the connection on `this` destruction.
+    connect(
+        this, &WindowRuleController::revertFinished, this,
+        [this](bool success) {
+            m_discardInFlight = false;
+            Q_EMIT discardResult(success, success ? QString() : tr("Failed to fetch the daemon's rule set."));
+        },
+        Qt::SingleShotConnection);
     revert();
 }
 
@@ -302,7 +315,7 @@ bool WindowRuleController::pushToDaemonAsync(const QList<WindowRule>& rules)
     return true;
 }
 
-void WindowRuleController::fetchAndLoad()
+void WindowRuleController::fetchAndLoad(bool fromRevert)
 {
     // Asynchronous `getAllRules` — the reply handler repopulates the model.
     // Bound to `this` for parent, so a controller teardown before the reply
@@ -311,21 +324,9 @@ void WindowRuleController::fetchAndLoad()
         PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::WindowRules),
                                                    QStringLiteral("getAllRules")),
         this);
-    // Tag THIS watcher with whether the call originated from revert(). A
-    // counter-only scheme would let an in-flight initial-load watcher A
-    // wrongly claim a revert tag posted by a concurrent watcher B — whichever
-    // reply lands first decrements the counter regardless of which watcher
-    // posted the increment. Capturing the bool by value at watcher
-    // construction time binds the tag to the specific caller path.
-    const bool fromRevert = m_pendingRevertFetches > 0;
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, fromRevert](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         QDBusPendingReply<QString> reply = *w;
-        // Decrement *before* emitting so a chained revert→revertFinished→commit
-        // handler sees the counter at the correct value.
-        if (fromRevert) {
-            --m_pendingRevertFetches;
-        }
         if (reply.isError()) {
             // Daemon unreachable or method missing — leave the model and the
             // dirty bit untouched so a staged-but-unsavable edit isn't silently
@@ -342,15 +343,29 @@ void WindowRuleController::fetchAndLoad()
         setDaemonReachable(true);
         const QString json = reply.value();
         WindowRuleSet set;
+        bool jsonOk = true;
         if (!json.isEmpty()) {
             QJsonParseError err;
             const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
             if (err.error == QJsonParseError::NoError && doc.isObject()) {
                 set = WindowRuleSet::fromJson(doc.object()).value_or(WindowRuleSet{});
+            } else {
+                // Malformed JSON — daemon answered but with a corrupt store.
+                // Do NOT stomp the existing model with an empty set: a single
+                // corrupt reply could otherwise wipe the user's view of their
+                // rules. Treat as transient transport error parallel to
+                // reply.isError() above so the model stays intact and the
+                // user can retry.
+                qCWarning(lcConfig) << "WindowRuleController::fetchAndLoad: malformed daemon JSON —"
+                                    << err.errorString();
+                jsonOk = false;
             }
-            // Malformed JSON — daemon answered but with a corrupt store. Fall
-            // through to the empty set so the page paints rather than holding
-            // stale rules; the daemon log will carry the parse error.
+        }
+        if (!jsonOk) {
+            if (fromRevert) {
+                Q_EMIT revertFinished(false);
+            }
+            return;
         }
         // If the user staged edits between dispatch and reply (e.g. an
         // initial-load fetch that races a fast user action), do not stomp
@@ -464,12 +479,15 @@ void WindowRuleController::revert()
     // the page dirty (and `daemonReachable` false) rather than silently
     // dropping the staged edits.
     //
-    // Tag this fetch so the reply handler can emit `revertFinished(success)`.
-    // SettingsController::load() listens once so it can re-add the
-    // "window-rules" entry to the dirty-pages set on a failed revert (its
-    // surrounding setNeedsSave(false) blanket-clears every page unconditionally).
-    ++m_pendingRevertFetches;
-    fetchAndLoad();
+    // Tag this fetch explicitly as fromRevert=true so the reply handler
+    // emits revertFinished. SettingsController::load() listens once so
+    // it can re-add the "window-rules" entry to the dirty-pages set on
+    // a failed revert (its surrounding setNeedsSave(false) blanket-clears
+    // every page unconditionally). The prior counter-based tagging was
+    // spoofable by a concurrent daemon broadcast: a reload() arriving
+    // mid-revert would read m_pendingRevertFetches > 0 and tag itself
+    // as fromRevert, emitting a spurious revertFinished(true).
+    fetchAndLoad(/*fromRevert=*/true);
 }
 
 void WindowRuleController::renormalizePriorities()

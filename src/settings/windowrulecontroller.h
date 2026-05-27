@@ -383,7 +383,14 @@ private:
     /// cleared and the staged model is left untouched. The public `reload()`
     /// slot guards on the dirty bit so a daemon broadcast can't stomp staged
     /// edits; `revert()` calls this directly to bypass that guard.
-    void fetchAndLoad();
+    /// @p fromRevert tags this fetch as originating from an explicit
+    /// revert() (true) vs. ctor/reload() (false). The reply handler
+    /// only emits revertFinished when fromRevert is true. Passing
+    /// the bool explicitly instead of inferring from
+    /// `m_pendingRevertFetches > 0` prevents a concurrent daemon
+    /// broadcast (reload path) from spoofing a `revertFinished(true)`
+    /// when a real revert is in flight on a sibling watcher.
+    void fetchAndLoad(bool fromRevert = false);
 
     /// Push @p rules to the daemon via `setAllRules`. Returns true only if the
     /// daemon accepted every rule (no partial drop).
@@ -412,14 +419,13 @@ private:
     /// the subscription when the daemon comes up after a failed initial
     /// connect (e.g. the daemon was down when the controller was built).
     bool m_rulesChangedSubscribed = false;
-    /// Counts in-flight `fetchAndLoad()` calls that originated from a
-    /// `revert()` (Discard). Tracked separately from the initial / broadcast
-    /// fetch flow so the reply handler can emit `revertFinished(success)` only
-    /// when the caller is actually a revert — a stray daemon broadcast that
-    /// arrives concurrently with a revert must not spoof the signal. Counter
-    /// (not a bool) tolerates user-mashing Discard repeatedly: every revert
-    /// reply emits exactly once.
-    int m_pendingRevertFetches = 0;
+    /// In-flight guard for the StagingDomain discard() entry point.
+    /// Set true on discard() dispatch, cleared in the one-shot
+    /// revertFinished handler. A second discard() while the first
+    /// revert is still in flight is rejected with a failed
+    /// discardResult so the framework's wait-counter ticks down
+    /// rather than the chrome stalling.
+    bool m_discardInFlight = false;
     /// Split lookups: monitorOverview's tile picks one based on the rule's
     /// engineMode, so a SetSnappingLayout with a UUID-shaped value can't
     /// accidentally hit the tiling-algorithm path and vice versa.
