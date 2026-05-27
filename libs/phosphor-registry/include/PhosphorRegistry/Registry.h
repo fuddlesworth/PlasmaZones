@@ -2,14 +2,17 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
+#include <PhosphorRegistry/IFactoryBase.h>
 #include <PhosphorRegistry/RegistryNotifier.h>
 
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QtGlobal> // qWarning, qPrintable
 
 #include <functional>
 #include <memory>
+#include <type_traits>
 
 namespace PhosphorRegistry {
 
@@ -21,8 +24,11 @@ namespace PhosphorRegistry {
 // Lifetime / threading
 //   - Owned by the composition root. Not a singleton; tests can build
 //     their own Registry locally and tear down cleanly.
-//   - Single-threaded (GUI thread). Mirror the established phosphor-*
-//     contract: no internal locking, callers stay on one thread.
+//   - Single-threaded. The Registry must be constructed and used on
+//     one thread (typically the GUI thread). RegistryNotifier inherits
+//     that thread affinity; consumers connecting to its signals get
+//     Qt::AutoConnection semantics relative to whatever thread they
+//     hand the Registry off to.
 //
 // Signals
 //   - factoryRegistered / factoryUnregistered fire on the
@@ -35,16 +41,14 @@ namespace PhosphorRegistry {
 template<typename Factory>
 class Registry
 {
-    static_assert(std::is_class_v<Factory>, "Factory must be a class type");
+    static_assert(std::is_base_of_v<IFactoryBase, Factory>,
+                  "Registry<T> requires T to derive from PhosphorRegistry::IFactoryBase");
 
 public:
     Registry() = default;
     ~Registry() = default;
 
-    Registry(const Registry&) = delete;
-    Registry& operator=(const Registry&) = delete;
-    Registry(Registry&&) = delete;
-    Registry& operator=(Registry&&) = delete;
+    Q_DISABLE_COPY_MOVE(Registry)
 
     // Add factory to the registry under factory->id(). Rejected with
     // a no-op + qWarning if a factory with the same id is already
@@ -69,7 +73,7 @@ public:
             return;
         }
         m_factories.insert(id, std::move(factory));
-        Q_EMIT m_notifier.factoryRegistered(id);
+        m_notifier.notifyRegistered(id);
     }
 
     // Remove the factory at id, if any. No-op (silent) if id is
@@ -80,7 +84,7 @@ public:
     void unregisterFactory(const QString& id)
     {
         if (m_factories.remove(id) > 0) {
-            Q_EMIT m_notifier.factoryUnregistered(id);
+            m_notifier.notifyUnregistered(id);
         }
     }
 
@@ -106,8 +110,8 @@ public:
     // any QHash iteration contract).
     void forEach(const std::function<void(const std::shared_ptr<Factory>&)>& visitor) const
     {
-        for (const auto& factory : m_factories) {
-            visitor(factory);
+        for (const auto& entry : m_factories) {
+            visitor(entry);
         }
     }
 
@@ -131,7 +135,7 @@ public:
     }
 
     // Number of currently-registered factories.
-    [[nodiscard]] int size() const
+    [[nodiscard]] qsizetype size() const
     {
         return m_factories.size();
     }

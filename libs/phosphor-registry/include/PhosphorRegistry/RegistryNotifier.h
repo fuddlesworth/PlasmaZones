@@ -14,11 +14,20 @@ namespace PhosphorRegistry {
 // is a template, and Qt's moc cannot template-process a Q_OBJECT
 // class. The standard workaround is to put Q_OBJECT machinery on a
 // non-template helper that the template owns and forwards through.
-// Consumers get factoryRegistered / factoryUnregistered signals via
-// registry.notifier(), with the factory id as the payload (the
-// concrete factory instance is then looked up via factory(id) if the
-// consumer needs it; passing the typed pointer through a QObject
-// signal would require Q_DECLARE_METATYPE for every factory subclass).
+//
+// Registry<T> calls notifyRegistered / notifyUnregistered (the public
+// emit forwarders below) rather than emitting the signals directly.
+// Qt's `Q_SIGNALS:` access level (currently `public:` in Qt 6) is an
+// implementation detail Qt does not commit to keep public, so a
+// template invoking Q_EMIT m_notifier.factoryRegistered(...) would be
+// fragile under future Qt strictness. The forwarder pattern keeps
+// the access-level contract under our control.
+//
+// Consumers connect to factoryRegistered / factoryUnregistered via
+// registry.notifier(), with the factory id as the payload. The
+// concrete factory instance is looked up via factory(id) if needed
+// (passing the typed pointer through a QObject signal would require
+// Q_DECLARE_METATYPE for every factory subclass).
 class PHOSPHORREGISTRY_EXPORT RegistryNotifier : public QObject
 {
     Q_OBJECT
@@ -26,6 +35,20 @@ public:
     explicit RegistryNotifier(QObject* parent = nullptr);
     ~RegistryNotifier() override;
     Q_DISABLE_COPY_MOVE(RegistryNotifier)
+
+    // Public emit forwarders. Registry<T> calls these from its template
+    // body so the Q_EMIT macro lives next to the signal declaration
+    // (whose access level Qt controls), not inside a template
+    // (whose Q_EMIT call would be fragile against future Qt access-
+    // level tightening of `Q_SIGNALS:`).
+    void notifyRegistered(const QString& id)
+    {
+        Q_EMIT factoryRegistered(id);
+    }
+    void notifyUnregistered(const QString& id)
+    {
+        Q_EMIT factoryUnregistered(id);
+    }
 
 Q_SIGNALS:
     // Fired after a factory has been added to the registry.
@@ -35,12 +58,6 @@ Q_SIGNALS:
     // factory is already gone by the time this signal arrives; do
     // not attempt to look it up via factory(id).
     void factoryUnregistered(const QString& id);
-
-    // Friend declaration scope. Registry<T> needs to invoke Q_EMIT on
-    // the signals above. Templates and friend declarations don't
-    // compose cleanly across translation units, so the signals are
-    // public and called as plain member functions (Q_EMIT is just a
-    // marker macro, no access enforcement).
 };
 
 } // namespace PhosphorRegistry

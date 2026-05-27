@@ -1,0 +1,6 @@
+{
+    "id": "id-mismatch-plugin",
+    "displayName": "Fake Plugin Id Mismatch",
+    "abi": 1,
+    "capabilities": ["bar.widget"]
+}

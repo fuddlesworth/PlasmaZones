@@ -15,6 +15,13 @@ namespace PhosphorRegistry {
 
 namespace {
 
+// Refuse to read manifest files larger than this. A legit phosphor
+// plugin manifest is well under 1 KiB; capping at 64 KiB tolerates
+// unusually verbose capabilities lists and future schema fields
+// without giving a malicious or corrupted .json the chance to
+// balloon process RSS.
+constexpr qint64 kManifestMaxBytes = 64 * 1024;
+
 Manifest invalid(const QString& reason)
 {
     Manifest m;
@@ -23,11 +30,39 @@ Manifest invalid(const QString& reason)
     return m;
 }
 
+// Reject id fields that could escape the plugin root via directory
+// traversal, or that would later be used as a path segment without
+// safety review. The id is used as a registry key only in Phase
+// 1.3, but the Phase-5 sandbox plans to derive on-disk caches /
+// IPC socket names from it; tightening at the gate keeps every
+// downstream consumer safe.
+bool isSafeId(const QString& id)
+{
+    if (id.isEmpty()) {
+        return false;
+    }
+    if (id.startsWith(QLatin1Char('.'))) {
+        return false; // disallow hidden / parent-relative ids
+    }
+    if (id.contains(QLatin1Char('/')) || id.contains(QLatin1Char('\\'))) {
+        return false; // no path separators
+    }
+    if (id.contains(QLatin1String(".."))) {
+        return false; // no traversal sequences anywhere in the name
+    }
+    return true;
+}
+
 QString readJsonFile(const QString& path, QString& parseError)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         parseError = QStringLiteral("cannot open manifest: %1").arg(file.errorString());
+        return {};
+    }
+    const qint64 size = file.size();
+    if (size > kManifestMaxBytes) {
+        parseError = QStringLiteral("manifest exceeds %1-byte cap (was %2)").arg(kManifestMaxBytes).arg(size);
         return {};
     }
     const QByteArray bytes = file.readAll();
@@ -68,6 +103,11 @@ Manifest Manifest::parseObject(const QJsonObject& obj, const QString& pluginDir)
 
     if (idField.isEmpty()) {
         return invalid(QStringLiteral("missing or empty 'id'"));
+    }
+    if (!isSafeId(idField)) {
+        return invalid(
+            QStringLiteral("'id' contains unsafe characters (path separators, traversal, or hidden prefix): '%1'")
+                .arg(idField));
     }
     if (displayNameField.isEmpty()) {
         return invalid(QStringLiteral("missing or empty 'displayName'"));

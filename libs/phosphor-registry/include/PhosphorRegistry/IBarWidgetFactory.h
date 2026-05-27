@@ -5,6 +5,8 @@
 #include <PhosphorRegistry/IFactoryBase.h>
 #include <PhosphorRegistry/phosphorregistry_export.h>
 
+#include <QtCore/qtclasshelpermacros.h>
+
 QT_BEGIN_NAMESPACE
 class QObject;
 class QQmlEngine;
@@ -25,12 +27,22 @@ namespace PhosphorRegistry {
 class PHOSPHORREGISTRY_EXPORT IBarWidgetFactory : public IFactoryBase
 {
 public:
+    IBarWidgetFactory() = default;
+    ~IBarWidgetFactory() override = default;
+    Q_DISABLE_COPY_MOVE(IBarWidgetFactory)
+
     // Construct a new QQuickItem for this factory.
     //
-    // engine is the QML engine the widget should be instantiated
-    // against (typically the shell's engine; passing a different
-    // engine is a programming error). parent becomes the item's
-    // QObject parent so the bar host's destruction cascades through.
+    // engine MUST NOT be null. The contract is "the shell's QML
+    // engine the widget should be instantiated against" — callers
+    // that lose their engine (e.g., during shutdown) must skip the
+    // createWidget call rather than pass nullptr. Factories may
+    // qWarning + return nullptr defensively, but the call-site
+    // contract is non-null.
+    //
+    // parent becomes the item's QObject parent so the bar host's
+    // destruction cascades through. The factory does not retain
+    // ownership — the returned item lives under parent.
     //
     // Returns nullptr if the factory cannot construct a widget right
     // now (e.g., a required external service is unavailable). The

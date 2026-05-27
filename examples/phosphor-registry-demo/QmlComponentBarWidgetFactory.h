@@ -8,6 +8,7 @@
 #include <QString>
 #include <QStringList>
 #include <QUrl>
+#include <QtCore/qtclasshelpermacros.h>
 
 namespace PhosphorRegistryDemo {
 
@@ -25,6 +26,8 @@ class QmlComponentBarWidgetFactory : public PhosphorRegistry::IBarWidgetFactory
 {
 public:
     QmlComponentBarWidgetFactory(QString id, QString displayName, QUrl qmlUrl, QStringList capabilities = {});
+    ~QmlComponentBarWidgetFactory() override = default;
+    Q_DISABLE_COPY_MOVE(QmlComponentBarWidgetFactory)
 
     [[nodiscard]] QString id() const override;
     [[nodiscard]] QString displayName() const override;

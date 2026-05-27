@@ -24,9 +24,26 @@ class WatchedDirectorySet;
 namespace PhosphorRegistry {
 
 // Fixed factory-creation entry point a plugin .so must export. The
-// loader resolves this symbol via QPluginLoader::resolve and calls
-// it once per load. The returned factory's lifetime belongs to the
-// loader (kept alive in m_plugins until unload).
+// loader resolves this symbol via QLibrary::resolve and calls it
+// exactly once per .so load.
+//
+// ABI contract (the plugin author MUST honour all of these):
+//   1. The returned pointer must be a fresh heap allocation
+//      (`new MyFactory()`). The loader takes ownership and deletes
+//      via std::shared_ptr's deleter. Returning a pointer to a
+//      static / stack object is undefined behaviour.
+//   2. Returning nullptr is a recoverable failure — the loader
+//      logs a warning, unloads the .so, and skips the plugin
+//      directory.
+//   3. The returned factory's id() must equal the manifest's id
+//      field (case-sensitive); the loader rejects mismatches.
+//   4. The function must not throw. Exceptions crossing the C ABI
+//      boundary are undefined behaviour. Catch internally and
+//      return nullptr if construction can fail.
+//   5. The function must be safe to call once per .so mapping.
+//      The loader never calls it twice on the same QLibrary; a
+//      hot-reload involves a fresh QLibrary instance pointing at
+//      a different path.
 //
 // Phase 1.3 wires this entry point for IBarWidgetFactory only. When
 // the four other surfaces (control-center tile, launcher provider,
@@ -48,11 +65,25 @@ using PluginFactoryEntry = PhosphorRegistry::IBarWidgetFactory* (*)();
 //     The Registry must outlive the PluginLoader, since every
 //     plugin's unload calls Registry::unregisterFactory.
 //   - The PluginLoader owns the .so + the factory shared_ptr for
-//     every loaded plugin. Unload is gated on usage refcount: if a
-//     widget produced by this plugin is still alive, the unload is
-//     deferred until the last widget destructs. This avoids the
-//     "destroy a vtable that live objects still point at" crash
-//     class.
+//     every loaded plugin. On removal (plugin directory disappears
+//     between rescans), the .so is moved into m_pinnedLibraries
+//     and kept mapped for the PluginLoader's lifetime so that any
+//     still-parented widget produced by the now-gone factory keeps
+//     working until its parent tears it down. This is the Phase-1.3
+//     trade-off discussed in pluginloader.cpp: simple to implement,
+//     "no .so ever unmapped during the process lifetime" is the
+//     price, Phase 5's sandbox will replace it with a proper
+//     refcount-gated unload.
+//
+// Hot-reload contract
+//   - Add: new plugin directory under the root is loaded on the next
+//     rescan cycle.
+//   - Remove: plugin directory disappearing is honoured — the factory
+//     is unregistered from the Registry and the .so pinned.
+//   - In-place .so edit: NOT honoured in Phase 1.3. POSIX dlopen
+//     refcounts loads by path; reloading the same path returns the
+//     prior mapping. Use rename-the-directory or restart-the-process
+//     for now.
 //
 // Thread affinity
 //   - GUI thread only. Mirrors WatchedDirectorySet's contract.
@@ -105,16 +136,17 @@ Q_SIGNALS:
     // Fired when a plugin is loaded into the registry.
     void pluginLoaded(const QString& id);
 
-    // Fired when a plugin is unloaded from the registry. May be
-    // delayed past the rescan that triggered the unload if widgets
-    // produced by the plugin are still alive — emitted only when
-    // the refcount actually drops to zero and the unload completes.
+    // Fired when a plugin is unloaded from the registry (i.e. its
+    // directory was removed from disk between rescans). The .so
+    // remains mapped — see the class-level Lifetime contract — so
+    // widgets the plugin produced before removal stay valid until
+    // their parents tear them down.
     void pluginUnloaded(const QString& id);
 
 private:
-    // Tracks one loaded plugin's state. Holds the QPluginLoader for
-    // the .so, the factory the loader returned, and the live-widget
-    // refcount that gates unload.
+    // Tracks one loaded plugin's state. Holds the QLibrary for
+    // the .so and the factory the loader returned. See
+    // pluginloader.cpp for the full unload-strategy rationale.
     struct LoadedPlugin;
     class ScanStrategyImpl;
 
@@ -133,10 +165,6 @@ private:
     QStringList performScanCycle(const QStringList& directoriesInScanOrder);
 
     void loadPluginFromDir(const QString& pluginDir);
-    void scheduleUnload(const QString& pluginId);
-    void completeUnloadIfQuiesced(const QString& pluginId);
-    void onWidgetCreated(const QString& pluginId, QObject* widget);
-    void onWidgetDestroyed(const QString& pluginId);
 
     // Non-owning. Caller guarantees lifetime per the ctor contract.
     // Cannot use QPointer because Registry<T> is not a QObject (the

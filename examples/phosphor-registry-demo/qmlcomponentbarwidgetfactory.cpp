@@ -58,15 +58,26 @@ QQuickItem* QmlComponentBarWidgetFactory::createWidget(QQmlEngine* engine, QObje
         return nullptr;
     }
     item->setParent(parent);
-    if (auto* parentItem = qobject_cast<QQuickItem*>(parent)) {
+    auto* parentItem = qobject_cast<QQuickItem*>(parent);
+    if (parentItem) {
         item->setParentItem(parentItem);
+    } else {
+        // Without a QQuickItem parent, the widget has no scene-graph
+        // hookup — it is QObject-parented (so it won't leak) but
+        // will never render. Surfaces always pass a QQuickItem in
+        // practice; an !parentItem path here is a wiring bug worth
+        // surfacing rather than letting the bar silently miss a
+        // widget.
+        qWarning() << "QmlComponentBarWidgetFactory: parent is not a QQuickItem for" << m_id
+                   << "— widget will be invisible";
     }
-    // JavaScript ownership lets a future QML caller .destroy() the
-    // widget. The Repeater-driven bar layout we ship today does not
-    // need this (delegate parent-cascade handles destruction), but
-    // surfaces / plugin authors copying the pattern shouldn't have
-    // to relearn the QObject ownership rule.
-    QQmlEngine::setObjectOwnership(item, QQmlEngine::JavaScriptOwnership);
+    // Default ownership (CppOwnership) is the right model here: the
+    // widget is C++-owned via the QObject parent we just set, and
+    // its destruction cascades when the parent dies. Mixing in
+    // JavaScriptOwnership would create dual-ownership UB (the GC
+    // and the parent both believe they're authoritative). Plugin
+    // authors who need QML-destroyable widgets must do that opt-in
+    // explicitly inside their own factory.
     return item;
 }
 

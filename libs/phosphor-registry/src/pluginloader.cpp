@@ -24,28 +24,24 @@ namespace PhosphorRegistry {
 // just unregisters from the Registry; the QLibrary mapping survives
 // until PluginLoader::~PluginLoader.
 //
-// Hot-reload of a modified .so works by loading the new .so under
-// the same id (the QLibrary's filename is the absolute path which
-// hasn't changed unless the user renamed the file). QLibrary load()
-// is refcounted; calling it twice on the same path bumps the count.
-// The "old factory" stays in memory but is no longer in the
-// registry; new widgets come from the new factory. Old widgets
-// created by the prior factory keep working because their .so
-// (same path, same mapping) is still in.
+// In-place .so REPLACEMENT (writing new bytes to the same path) is
+// NOT a supported hot-reload path in Phase 1.3. The reason: POSIX
+// dlopen refcounts loads by path. After scheduleUnload pins the old
+// QLibrary, a subsequent QLibrary::load() on the same path returns
+// the same mapping — so an "mtime changed" loop would re-register
+// the OLD code, not the new bytes. Supported hot-reload is
+// add/remove of plugin DIRECTORIES (or rename + re-add), not
+// in-place .so writes. Plugin authors iterating in development can
+// rename their plugin directory or restart the demo.
 //
-// Phase 5 will revisit this with a usage-refcount + safe-unload
-// design when the plugin sandbox lands.
+// Phase 5's sandbox work will revisit with a versioned-path scheme
+// (copy the .so to .so.<hash> before loading) so in-place edits can
+// be honoured without re-using the prior dlopen mapping.
 struct PluginLoader::LoadedPlugin
 {
     Manifest manifest;
     std::unique_ptr<QLibrary> library;
     std::shared_ptr<IBarWidgetFactory> factory;
-    // mtime of the .so at load time. On rescan, an mtime shift
-    // triggers a reload (new factory replaces the registered one;
-    // the QLibrary stays in m_pinnedLibraries below to keep the
-    // mapping valid for any widgets still alive from the old
-    // factory).
-    qint64 loadedSoMtime = 0;
 };
 
 // Bridge between WatchedDirectorySet's IScanStrategy interface and
@@ -78,28 +74,37 @@ PluginLoader::PluginLoader(Registry<IBarWidgetFactory>* registry, const QString&
     }
     m_strategy = std::make_unique<ScanStrategyImpl>(this);
     m_watcher = std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy);
+    // Qt::AutoConnection (the default) is correct here: both ends
+    // live on the same thread (GUI thread per the class contract),
+    // which AutoConnection resolves to direct-call semantics
+    // already. Explicit Qt::DirectConnection adds no safety and
+    // would silently lie about cross-thread support if either end
+    // moves threads in the future.
     QObject::connect(m_watcher.get(), &PhosphorFsLoader::WatchedDirectorySet::rescanCompleted, this,
-                     &PluginLoader::rescanCompleted, Qt::DirectConnection);
+                     &PluginLoader::rescanCompleted);
 }
 
 PluginLoader::~PluginLoader()
 {
     // Drop the watcher first so no rescan races our teardown.
     m_watcher.reset();
-    // Unregister every plugin from the Registry. Factory shared_ptr
-    // refs may still be held by surfaces; the registry's drop is
-    // ordering-only. QLibrary mappings persist via the LoadedPlugin
-    // entries until they go out of scope below.
+    // Snapshot the id list BEFORE iterating: unregisterFactory
+    // fires the registry's factoryUnregistered signal, and a slot
+    // wired to it (e.g. the demo controller) is fully entitled to
+    // mutate Registry / PluginLoader state in response. Iterating
+    // m_plugins directly while signals can rebound into us is a
+    // QHash-iterator-invalidation hazard.
     if (m_registry) {
-        for (auto it = m_plugins.begin(); it != m_plugins.end(); ++it) {
-            m_registry->unregisterFactory(it.key());
+        const QList<QString> ids = m_plugins.keys();
+        for (const QString& id : ids) {
+            m_registry->unregisterFactory(id);
         }
     }
     m_plugins.clear();
-    // Pinned libraries from prior reloads — drop them too. Same
+    // Pinned libraries from prior removals — drop them too. Same
     // ordering: registry was already cleared so no surface can have
-    // gotten a fresh factory from a since-reloaded plugin in the
-    // window between the loop above and this clear.
+    // gotten a factory from a since-pinned plugin in the window
+    // between the loop above and this clear.
     m_pinnedLibraries.clear();
 }
 
@@ -194,34 +199,15 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             }
             discoveredIds.insert(m.id);
 
-            const auto existing = m_plugins.constFind(m.id);
-            if (existing == m_plugins.constEnd()) {
-                loadPluginFromDir(pluginDir);
+            // Already loaded? Phase 1.3 does NOT honour in-place .so
+            // replacement (see LoadedPlugin's design note for the
+            // POSIX-dlopen-refcount rationale). The supported hot-
+            // reload path is directory add/remove. Subsequent
+            // rescans of an unchanged plugin are no-ops.
+            if (m_plugins.contains(m.id)) {
                 continue;
             }
-
-            // Existing plugin — check if the .so mtime shifted
-            // (hot-reload trigger).
-            QDir pluginDirObj(pluginDir);
-            const QStringList soFiles =
-                pluginDirObj.entryList(QStringList() << QStringLiteral("*.so"), QDir::Files | QDir::Readable);
-            if (soFiles.isEmpty()) {
-                continue;
-            }
-            const QString candidate = pluginDirObj.absoluteFilePath(soFiles.first());
-            const qint64 candidateMtime = QFileInfo(candidate).lastModified().toMSecsSinceEpoch();
-            if (candidateMtime != existing->get()->loadedSoMtime) {
-                // .so changed on disk. Pin the old library so its
-                // mapping survives, drop the old factory from the
-                // registry, and load the new one in its place.
-                m_pinnedLibraries.push_back(std::move(existing->get()->library));
-                if (m_registry) {
-                    m_registry->unregisterFactory(m.id);
-                }
-                m_plugins.remove(m.id);
-                Q_EMIT pluginUnloaded(m.id);
-                loadPluginFromDir(pluginDir);
-            }
+            loadPluginFromDir(pluginDir);
         }
     }
 
@@ -295,7 +281,6 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
     entry_record->factory.reset(rawFactory, [](IBarWidgetFactory* p) {
         delete p;
     });
-    entry_record->loadedSoMtime = QFileInfo(libraryPath).lastModified().toMSecsSinceEpoch();
 
     const QString pluginId = manifest.id;
     m_plugins.insert(pluginId, entry_record);
@@ -304,44 +289,6 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
     }
 
     Q_EMIT pluginLoaded(pluginId);
-}
-
-void PluginLoader::scheduleUnload(const QString& pluginId)
-{
-    // Phase 1.3: synchronous unload (registry drop only; .so pinned).
-    auto it = m_plugins.find(pluginId);
-    if (it == m_plugins.end()) {
-        return;
-    }
-    auto entry = std::move(*it);
-    m_pinnedLibraries.push_back(std::move(entry->library));
-    m_plugins.erase(it);
-    if (m_registry) {
-        m_registry->unregisterFactory(pluginId);
-    }
-    Q_EMIT pluginUnloaded(pluginId);
-}
-
-void PluginLoader::completeUnloadIfQuiesced(const QString& pluginId)
-{
-    // No-op in Phase 1.3. The Phase-5 sandbox will reintroduce
-    // refcount-gated completion here.
-    Q_UNUSED(pluginId);
-}
-
-void PluginLoader::onWidgetCreated(const QString& pluginId, QObject* widget)
-{
-    // Phase 1.3: widget tracking is not wired (the .so stays pinned
-    // for process lifetime, so per-widget refcount adds no safety).
-    // Phase 5 will hook this up via a proxy factory that intercepts
-    // createWidget calls.
-    Q_UNUSED(pluginId);
-    Q_UNUSED(widget);
-}
-
-void PluginLoader::onWidgetDestroyed(const QString& pluginId)
-{
-    Q_UNUSED(pluginId);
 }
 
 } // namespace PhosphorRegistry

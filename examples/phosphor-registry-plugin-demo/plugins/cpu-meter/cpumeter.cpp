@@ -78,19 +78,29 @@ public:
     QQuickItem* createWidget(QQmlEngine* engine, QObject* parent) override
     {
         if (!engine) {
+            qWarning("CpuMeterFactory: null engine");
             return nullptr;
         }
-        // Qt 6.5+ uses a worker thread pool for QML compilation;
-        // setData can leave the component in Loading state, and a
-        // subsequent create() warns "Component is not ready" and
-        // returns nullptr. Construct with the engine-only ctor
-        // (the URL-overload-with-empty-URL is rejected as "Invalid
-        // empty URL" on some Qt builds), then pump a nested event
-        // loop until statusChanged fires. Re-entry concerns are
-        // minimal here: this runs from a Repeater delegate's
-        // Component.onCompleted (synchronous on the GUI thread),
-        // no user-event re-entry expected before the compile
-        // finishes.
+        // Qt 6.5+ farms QML compilation out to a worker thread pool;
+        // QQmlComponent::setData returns while the component is
+        // still in Loading state, and a subsequent create() warns
+        // "Component is not ready" + returns nullptr.
+        //
+        // PreferSynchronous would be the canonical fix but every
+        // QQmlComponent ctor that accepts a CompilationMode requires
+        // a URL or filename — there is no setData-with-mode overload
+        // — so we cannot supply PreferSynchronous to the inline-QML
+        // path. The pragmatic workaround is to wait on the Loading→
+        // Ready transition via a nested QEventLoop.
+        //
+        // Re-entry hazard: any queued event delivered while the
+        // event loop spins will run before this function returns.
+        // Mitigations: (a) createWidget is invoked from a Repeater
+        // delegate's Component.onCompleted on the GUI thread, where
+        // no user input is in flight during the bar's initial
+        // composition; (b) the loop's only exit condition is
+        // statusChanged, so even a re-entered call cannot leak the
+        // event loop past compilation completion.
         QQmlComponent component(engine);
         component.setData(QByteArray(kCpuMeterQml), QUrl(QStringLiteral("inline:cpu-meter")));
         if (component.isLoading()) {
@@ -109,6 +119,7 @@ public:
         QObject* obj = component.create(engine->rootContext());
         auto* item = qobject_cast<QQuickItem*>(obj);
         if (!item) {
+            qWarning("CpuMeterFactory: component is not a QQuickItem");
             if (obj) {
                 obj->deleteLater();
             }
@@ -117,15 +128,13 @@ public:
         item->setParent(parent);
         if (auto* parentItem = qobject_cast<QQuickItem*>(parent)) {
             item->setParentItem(parentItem);
+        } else {
+            qWarning("CpuMeterFactory: parent is not a QQuickItem — widget will be invisible");
         }
-        // Flag as JavaScript-owned so a future call site that wants
-        // to destroy the widget from QML can do so without hitting
-        // "Invalid attempt to destroy() an indestructible object".
-        // The Repeater-driven bar layout we ship today does not
-        // need this (parent-cascade handles destruction), but plugin
-        // authors copying this pattern shouldn't have to relearn the
-        // ownership rule.
-        QQmlEngine::setObjectOwnership(item, QQmlEngine::JavaScriptOwnership);
+        // Default CppOwnership matches the QObject parent-cascade
+        // we just established. Mixing JavaScriptOwnership in here
+        // would create dual ownership with the parent and is the
+        // wrong default for a factory-created child.
         return item;
     }
 };

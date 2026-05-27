@@ -24,8 +24,20 @@ class DemoController : public QObject
     Q_OBJECT
     Q_PROPERTY(QStringList factoryIds READ factoryIds NOTIFY factoryIdsChanged)
 public:
-    explicit DemoController(QQmlEngine* engine, QObject* parent = nullptr);
+    explicit DemoController(QObject* parent = nullptr);
     ~DemoController() override;
+    Q_DISABLE_COPY_MOVE(DemoController)
+
+    // Set the QML engine the controller will hand to factories when
+    // they need to compile QML. Called from main() AFTER both this
+    // controller and the engine are constructed, so the controller
+    // can be declared on the stack BEFORE the engine — which makes
+    // C++ reverse-order destruction tear the engine down first
+    // (clearing every QML binding to the context property) before
+    // this controller dies. The QPointer goes null when the engine
+    // dies; createWidgetFor's null-check handles the race-free case
+    // where QML somehow re-enters during teardown.
+    void setEngine(QQmlEngine* engine);
 
     // QML calls this from the bar's Component.onCompleted with a
     // host Item it wants child widgets parented under. For each

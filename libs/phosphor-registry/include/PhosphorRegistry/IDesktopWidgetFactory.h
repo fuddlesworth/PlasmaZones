@@ -5,6 +5,8 @@
 #include <PhosphorRegistry/IFactoryBase.h>
 #include <PhosphorRegistry/phosphorregistry_export.h>
 
+#include <QtCore/qtclasshelpermacros.h>
+
 QT_BEGIN_NAMESPACE
 class QObject;
 class QQmlEngine;
@@ -23,9 +25,14 @@ namespace PhosphorRegistry {
 class PHOSPHORREGISTRY_EXPORT IDesktopWidgetFactory : public IFactoryBase
 {
 public:
-    // Construct a widget QQuickItem rooted at parent. Same lifetime
-    // contract as IBarWidgetFactory::createWidget. Returning nullptr
-    // means the widget is unavailable in the current environment.
+    IDesktopWidgetFactory() = default;
+    ~IDesktopWidgetFactory() override = default;
+    Q_DISABLE_COPY_MOVE(IDesktopWidgetFactory)
+
+    // Construct a widget QQuickItem rooted at parent. engine MUST
+    // NOT be null. Same lifetime contract as
+    // IBarWidgetFactory::createWidget. Returning nullptr means the
+    // widget is unavailable in the current environment.
     [[nodiscard]] virtual QQuickItem* createWidget(QQmlEngine* engine, QObject* parent) = 0;
 };
 

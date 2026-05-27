@@ -37,6 +37,7 @@ QStringList QmlComponentBarWidgetFactory::capabilities() const
 QQuickItem* QmlComponentBarWidgetFactory::createWidget(QQmlEngine* engine, QObject* parent)
 {
     if (!engine) {
+        qWarning() << "QmlComponentBarWidgetFactory: null engine for" << m_id;
         return nullptr;
     }
     QQmlComponent component(engine, m_qmlUrl);
@@ -47,16 +48,27 @@ QQuickItem* QmlComponentBarWidgetFactory::createWidget(QQmlEngine* engine, QObje
     QObject* obj = component.create(engine->rootContext());
     auto* item = qobject_cast<QQuickItem*>(obj);
     if (!item) {
+        qWarning() << "QmlComponentBarWidgetFactory: component is not a QQuickItem for" << m_id;
         if (obj) {
             obj->deleteLater();
         }
         return nullptr;
     }
     item->setParent(parent);
-    if (auto* parentItem = qobject_cast<QQuickItem*>(parent)) {
+    auto* parentItem = qobject_cast<QQuickItem*>(parent);
+    if (parentItem) {
         item->setParentItem(parentItem);
+    } else {
+        // No scene-graph parent — see the in-process registry demo
+        // factory for the longer-form rationale. Without a
+        // QQuickItem parent the widget renders nowhere.
+        qWarning() << "QmlComponentBarWidgetFactory: parent is not a QQuickItem for" << m_id
+                   << "— widget will be invisible";
     }
-    QQmlEngine::setObjectOwnership(item, QQmlEngine::JavaScriptOwnership);
+    // Default CppOwnership matches the QObject parent-cascade
+    // model already established above; JavaScriptOwnership here
+    // would create dual ownership with the parent and is the
+    // wrong default for a factory-created child.
     return item;
 }
 

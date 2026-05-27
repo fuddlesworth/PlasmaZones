@@ -5,6 +5,8 @@
 #include <PhosphorRegistry/IFactoryBase.h>
 #include <PhosphorRegistry/phosphorregistry_export.h>
 
+#include <QtCore/qtclasshelpermacros.h>
+
 QT_BEGIN_NAMESPACE
 class QObject;
 class QQmlEngine;
@@ -25,11 +27,16 @@ namespace PhosphorRegistry {
 class PHOSPHORREGISTRY_EXPORT IControlCenterTileFactory : public IFactoryBase
 {
 public:
-    // Construct a tile QQuickItem rooted at parent. Same lifetime
-    // contract as IBarWidgetFactory::createWidget (parent owns;
-    // factory does not retain). Returning nullptr is allowed and
-    // means "this tile is unavailable in the current environment"
-    // (no underlying service, missing hardware, etc.).
+    IControlCenterTileFactory() = default;
+    ~IControlCenterTileFactory() override = default;
+    Q_DISABLE_COPY_MOVE(IControlCenterTileFactory)
+
+    // Construct a tile QQuickItem rooted at parent. engine MUST NOT
+    // be null (same contract as IBarWidgetFactory::createWidget).
+    // Same lifetime contract: parent owns; factory does not retain.
+    // Returning nullptr is allowed and means "this tile is
+    // unavailable in the current environment" (no underlying
+    // service, missing hardware, etc.).
     [[nodiscard]] virtual QQuickItem* createTile(QQmlEngine* engine, QObject* parent) = 0;
 };
 

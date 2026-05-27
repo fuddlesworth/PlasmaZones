@@ -23,17 +23,16 @@ int main(int argc, char* argv[])
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    QQmlApplicationEngine engine;
+    // demoController is declared BEFORE the engine so C++ reverse-
+    // order destruction tears the engine down first. The engine
+    // teardown re-evaluates QML bindings; if demoController died
+    // first, those re-evaluations would dereference a dangling
+    // context-property pointer and log "Cannot read property X of
+    // null" errors. Mirrors phosphor-popout-demo's precedent.
+    PhosphorRegistryDemo::DemoController demoController;
 
-    // Constructed AFTER the engine so its forward connections to
-    // the engine's QQmlComponent are valid. Owned by `app`'s root
-    // so it outlives the engine? No — the engine is destroyed first
-    // (declared before this on the stack in reverse-order
-    // destruction). The same precedent as phosphor-popout-demo:
-    // create controller AFTER the engine, but bind the controller's
-    // lifetime to a stack ahead of the engine via reverse-order
-    // destruction.
-    PhosphorRegistryDemo::DemoController demoController(&engine);
+    QQmlApplicationEngine engine;
+    demoController.setEngine(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("demoController"), &demoController);
 
     engine.loadFromModule(QStringLiteral("Phosphor.RegistryDemo"), QStringLiteral("Main"));

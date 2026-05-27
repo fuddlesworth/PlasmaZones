@@ -32,6 +32,31 @@ set_target_properties(phosphor_registry_test_fake_plugin PROPERTIES
 configure_file(fake_plugin/manifest.json
                ${CMAKE_CURRENT_BINARY_DIR}/fake_plugin/manifest.json COPYONLY)
 
+# ─── Fake plugin with id-mismatch fixture ──────────────────────────────────────
+#
+# Identical shape to the canonical fixture, but the factory returns
+# id="fake-other" while the manifest says id="id-mismatch-plugin".
+# Used by test_phosphor_registry_pluginloader::rejectsFactoryIdMismatch.
+add_library(phosphor_registry_test_fake_plugin_idmismatch MODULE
+    fake_plugin_idmismatch/fakeplugin_idmismatch.cpp
+)
+target_link_libraries(phosphor_registry_test_fake_plugin_idmismatch
+    PRIVATE
+        PhosphorRegistry::PhosphorRegistry
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+)
+set_target_properties(phosphor_registry_test_fake_plugin_idmismatch PROPERTIES
+    PREFIX "lib"
+    SUFFIX ".so"
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/fake_plugin_idmismatch
+    UNITY_BUILD OFF
+)
+configure_file(fake_plugin_idmismatch/manifest.json
+               ${CMAKE_CURRENT_BINARY_DIR}/fake_plugin_idmismatch/manifest.json COPYONLY)
+
 function(phosphorregistry_add_test name)
     add_executable(${name} ${name}.cpp)
     # Core / Gui / Qml propagate PUBLIC from PhosphorRegistry. Qt6::Test
@@ -46,6 +71,7 @@ function(phosphorregistry_add_test name)
     target_compile_definitions(${name}
         PRIVATE
             PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR="${CMAKE_CURRENT_BINARY_DIR}/fake_plugin"
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/fake_plugin_idmismatch"
     )
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
@@ -56,4 +82,6 @@ phosphorregistry_add_test(test_phosphor_registry_manifest)
 phosphorregistry_add_test(test_phosphor_registry_pluginloader)
 
 # test_phosphor_registry_pluginloader needs the fixture .so built before it runs.
-add_dependencies(test_phosphor_registry_pluginloader phosphor_registry_test_fake_plugin)
+add_dependencies(test_phosphor_registry_pluginloader
+    phosphor_registry_test_fake_plugin
+    phosphor_registry_test_fake_plugin_idmismatch)

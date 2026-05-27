@@ -26,9 +26,15 @@ include(GenerateExportHeader)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml)
 # WatchedDirectorySet + IScanStrategy live in phosphor-fsloader. The
-# plugin loader hot-reload path consumes both directly.
+# plugin loader hot-reload path consumes both directly. REQUIRED is
+# load-bearing: target_link_libraries below names the imported target
+# unconditionally, so a missing dependency MUST fail configure rather
+# than fail link with a confusing "target not found" error. The
+# `if(NOT TARGET)` guard handles the in-tree case where phosphor-
+# fsloader is built as a sibling subdir and the target is already in
+# scope — there the find_package call is skipped, not silenced.
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
-    find_package(PhosphorFsLoader CONFIG QUIET)
+    find_package(PhosphorFsLoader CONFIG REQUIRED)
 endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

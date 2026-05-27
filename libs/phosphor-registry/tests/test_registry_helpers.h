@@ -9,6 +9,7 @@
 #include <QQuickItem>
 #include <QString>
 #include <QStringList>
+#include <QtCore/qtclasshelpermacros.h>
 
 // FakeBarWidgetFactory — concrete IBarWidgetFactory for unit tests.
 // Returns a fresh QQuickItem on createWidget; lets tests assert
@@ -23,6 +24,8 @@ public:
         , m_capabilities(std::move(capabilities))
     {
     }
+    ~FakeBarWidgetFactory() override = default;
+    Q_DISABLE_COPY_MOVE(FakeBarWidgetFactory)
 
     [[nodiscard]] QString id() const override
     {

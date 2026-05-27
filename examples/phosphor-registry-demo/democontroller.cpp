@@ -14,9 +14,8 @@ using namespace PhosphorRegistry;
 
 namespace PhosphorRegistryDemo {
 
-DemoController::DemoController(QQmlEngine* engine, QObject* parent)
+DemoController::DemoController(QObject* parent)
     : QObject(parent)
-    , m_engine(engine)
     , m_registry(std::make_unique<Registry<IBarWidgetFactory>>())
 {
     // Forward the registry's add/remove signals as a single
@@ -32,6 +31,11 @@ DemoController::DemoController(QQmlEngine* engine, QObject* parent)
 
 DemoController::~DemoController() = default;
 
+void DemoController::setEngine(QQmlEngine* engine)
+{
+    m_engine = engine;
+}
+
 void DemoController::registerBuiltins()
 {
     m_registry->registerFactory(std::make_shared<QmlComponentBarWidgetFactory>(
@@ -46,6 +50,11 @@ void DemoController::registerBuiltins()
 
 QQuickItem* DemoController::createWidgetFor(const QString& id, QQuickItem* parent)
 {
+    if (!m_engine) {
+        // Engine torn down (e.g. shutdown re-entry) — refuse the
+        // call rather than crash inside the factory.
+        return nullptr;
+    }
     auto factory = m_registry->factory(id);
     if (!factory) {
         return nullptr;

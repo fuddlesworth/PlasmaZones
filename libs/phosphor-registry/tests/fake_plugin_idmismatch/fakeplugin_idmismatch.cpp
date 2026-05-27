@@ -1,0 +1,41 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+// Test fixture for PluginLoader's factory-id-vs-manifest-id mismatch
+// detection path. The factory returned here claims id "fake-other";
+// the accompanying manifest.json claims id "id-mismatch-plugin". The
+// loader must reject the load on mismatch.
+
+#include <PhosphorRegistry/IBarWidgetFactory.h>
+
+#include <QQuickItem>
+
+namespace {
+
+class FakePluginIdMismatchFactory : public PhosphorRegistry::IBarWidgetFactory
+{
+public:
+    QString id() const override
+    {
+        return QStringLiteral("fake-other");
+    }
+    QString displayName() const override
+    {
+        return QStringLiteral("Fake Plugin Id Mismatch");
+    }
+    QStringList capabilities() const override
+    {
+        return {QStringLiteral("bar.widget")};
+    }
+    QQuickItem* createWidget(QQmlEngine* /*engine*/, QObject* parent) override
+    {
+        return new QQuickItem(qobject_cast<QQuickItem*>(parent));
+    }
+};
+
+} // namespace
+
+extern "C" Q_DECL_EXPORT PhosphorRegistry::IBarWidgetFactory* phosphor_registry_create_factory()
+{
+    return new FakePluginIdMismatchFactory();
+}

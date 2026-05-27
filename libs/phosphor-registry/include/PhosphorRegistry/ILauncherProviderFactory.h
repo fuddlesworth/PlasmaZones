@@ -5,6 +5,8 @@
 #include <PhosphorRegistry/IFactoryBase.h>
 #include <PhosphorRegistry/phosphorregistry_export.h>
 
+#include <QtCore/qtclasshelpermacros.h>
+
 QT_BEGIN_NAMESPACE
 class QObject;
 QT_END_NAMESPACE
@@ -30,6 +32,10 @@ namespace PhosphorRegistry {
 class PHOSPHORREGISTRY_EXPORT ILauncherProviderFactory : public IFactoryBase
 {
 public:
+    ILauncherProviderFactory() = default;
+    ~ILauncherProviderFactory() override = default;
+    Q_DISABLE_COPY_MOVE(ILauncherProviderFactory)
+
     // Construct a provider QObject rooted at parent. The launcher
     // surface will Q_INVOKABLE / qobject_cast to the concrete
     // provider interface once that interface is defined (Phase 4.2).

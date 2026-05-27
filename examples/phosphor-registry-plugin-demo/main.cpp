@@ -39,8 +39,6 @@ int main(int argc, char* argv[])
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    QQmlApplicationEngine engine;
-
     // Resolve the plugin root in priority order:
     //   1. --plugin-root from the CLI (CI + manual testing override)
     //   2. PHOSPHOR_REGISTRY_PLUGIN_DEMO_DEFAULT_ROOT injected at
@@ -56,7 +54,15 @@ int main(int argc, char* argv[])
         pluginRoot = QStringLiteral(PHOSPHOR_REGISTRY_PLUGIN_DEMO_DEFAULT_ROOT);
     }
 #endif
-    PhosphorRegistryPluginDemo::DemoController demoController(&engine, pluginRoot);
+
+    // demoController is declared BEFORE the engine so C++ reverse-
+    // order destruction tears the engine down first. Mirrors
+    // phosphor-popout-demo's precedent — see the in-process registry
+    // demo for the longer-form rationale.
+    PhosphorRegistryPluginDemo::DemoController demoController(pluginRoot);
+
+    QQmlApplicationEngine engine;
+    demoController.setEngine(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("demoController"), &demoController);
 
     engine.loadFromModule(QStringLiteral("Phosphor.RegistryPluginDemo"), QStringLiteral("Main"));

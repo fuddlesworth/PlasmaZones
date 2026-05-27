@@ -14,9 +14,8 @@ using namespace PhosphorRegistry;
 
 namespace PhosphorRegistryPluginDemo {
 
-DemoController::DemoController(QQmlEngine* engine, QString pluginRoot, QObject* parent)
+DemoController::DemoController(QString pluginRoot, QObject* parent)
     : QObject(parent)
-    , m_engine(engine)
     , m_pluginRoot(std::move(pluginRoot))
     , m_registry(std::make_unique<Registry<IBarWidgetFactory>>())
 {
@@ -28,20 +27,29 @@ DemoController::DemoController(QQmlEngine* engine, QString pluginRoot, QObject* 
     registerBuiltins();
 
     m_loader = std::make_unique<PluginLoader>(m_registry.get(), m_pluginRoot);
-    // PluginLoader resolves an empty input to the XDG default; mirror
-    // that into our own m_pluginRoot so the QML status footer shows
-    // the path actually being scanned rather than the original
-    // (possibly empty) constructor argument.
+    // PluginLoader resolves an empty input to the XDG default; sync
+    // the final resolved path back into m_pluginRoot so the QML
+    // pluginRoot Q_PROPERTY reflects the path the loader is actually
+    // scanning. CONSTANT-property contract holds because no QML
+    // engine has been wired up yet (setEngine() is called from
+    // main() AFTER ctor returns); QML only sees the post-resolution
+    // value.
     m_pluginRoot = m_loader->pluginRoot();
+    // scanAndLoad already drives an initial synchronous scan via
+    // WatchedDirectorySet::registerDirectory. The previous code
+    // followed it with an explicit rescanNow() to "force a sync
+    // first paint" — but the registerDirectory call is itself
+    // synchronous, so the double-call was a redundant second sweep
+    // of the same plugin root. One call is enough.
     m_loader->scanAndLoad();
-    // Synchronous initial rescan so the bar's first paint has the
-    // plugin set already populated. Without this the bar would
-    // start with only the built-ins and the plugin would pop in
-    // ~50 ms later via the watcher's debounced first event.
-    m_loader->rescanNow();
 }
 
 DemoController::~DemoController() = default;
+
+void DemoController::setEngine(QQmlEngine* engine)
+{
+    m_engine = engine;
+}
 
 void DemoController::registerBuiltins()
 {
@@ -57,6 +65,11 @@ void DemoController::registerBuiltins()
 
 QQuickItem* DemoController::createWidgetFor(const QString& id, QQuickItem* parent)
 {
+    if (!m_engine) {
+        // Engine torn down — refuse the call rather than crash
+        // inside the factory.
+        return nullptr;
+    }
     auto factory = m_registry->factory(id);
     if (!factory) {
         return nullptr;

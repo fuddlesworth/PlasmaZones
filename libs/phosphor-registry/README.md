@@ -31,11 +31,16 @@ once per UI seam.
   factory.
 - **Hot-reload on disk change.** A `WatchedDirectorySet` (from
   phosphor-fsloader) watches the plugin root with a 50 ms debounced
-  rescan. Added directories load, removed directories unregister,
-  changed `.so` files reload. Phase 1.3 keeps the prior `.so` mapping
-  pinned so widgets the old factory created keep working until they
-  destruct naturally; Phase 5 will add refcounted safe-unload alongside
-  the sandbox.
+  rescan. Added plugin directories load; removed directories
+  unregister. In-place `.so` replacement (writing new bytes to the
+  same path) is NOT honoured in Phase 1.3 because POSIX `dlopen`
+  refcounts loads by path — reloading the same path returns the
+  prior mapping. Plugin authors iterating in development rename the
+  plugin directory or restart the process. Removed plugins keep
+  their `.so` mapping pinned for the loader's lifetime so widgets
+  the old factory created keep working until they destruct
+  naturally; Phase 5 will add a versioned-path scheme + refcounted
+  safe-unload alongside the sandbox.
 - **Capabilities are advisory in Phase 1.3.** Each factory declares a
   `capabilities()` list (also mirrored into the plugin manifest); the
   enforcement layer lands in Phase 5.
@@ -118,8 +123,13 @@ loader enforces this so on-disk layout and registry keys stay aligned.
 ## Arbitration / lifecycle
 
 - **Duplicate id rejected.** `registerFactory` of an id already in the
-  registry is a no-op (the first registration wins). The plugin loader
-  refuses to register a plugin whose id collides with an existing one.
+  registry is a no-op + qWarning (the first registration wins). The
+  plugin loader hits the same path for any plugin whose id collides
+  with an existing one.
+- **Factory id must match manifest id.** The loader cross-checks the
+  factory's `id()` against the manifest's `id` field; mismatch is a
+  refused load with a clear log message. This prevents a renamed
+  plugin from quietly taking over another's slot.
 - **Unload is registry-drop only in Phase 1.3.** Removing a plugin from
   disk unregisters its factory from the registry but pins the `QLibrary`
   mapping for the loader's lifetime. Widgets the now-gone plugin
