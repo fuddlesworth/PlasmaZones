@@ -159,6 +159,23 @@ ColumnLayout {
         // model-role name. The delegate (SidebarRow.qml) consumes it
         // as `required property string pageId` — `id` would shadow
         // the QML id: directive and trips up qmlformat's parser.
+        //
+        // CONSUMER ROLE CONTRACT
+        // ──────────────────────
+        // Roles emitted here are the public model schema the trailing
+        // delegate consumes via its `modelData.<role>` reads. Naming
+        // conventions:
+        //   - `pageId`, `title`, `iconSource`, `hasQmlSource` — plain
+        //     camelCase, the page identity surface.
+        //   - `_depth`, `_isCollapsibleHeader`, `_isDrillParent`,
+        //     `_isExpanded`, `_isDivider` — underscore-prefixed
+        //     LAYOUT/STATE hints. The prefix signals "treat as
+        //     view-internal detail" (don't store, don't compute
+        //     derived values from), but they're part of the public
+        //     model contract because the consumer's trailingDelegate
+        //     must read them to render badges / active stripes
+        //     correctly. Renaming any of these is a BREAKING change
+        //     for downstream consumers (PlasmaZones Main.qml etc.).
         if (root.searchText.length === 0) {
             const out = [];
             const seen = Object.create(null);

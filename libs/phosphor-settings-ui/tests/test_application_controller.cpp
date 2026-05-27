@@ -649,6 +649,50 @@ private Q_SLOTS:
         QVERIFY(app.isDirty());
     }
 
+    void applyAndDiscardAreMutuallyExclusive()
+    {
+        // Pin the cross-batch mutex: applyAllAsync must refuse when
+        // discardAllAsync is already in flight (and vice versa).
+        // Without the guard both batches would share m_inTransaction
+        // and per-domain outstanding sets, corrupting either book.
+        // Test via a domain that holds discardResult indefinitely so
+        // m_discarding stays true while applyAllAsync attempts to
+        // start a parallel batch.
+        ApplicationController app;
+        auto* a = new StubPage(QStringLiteral("a"));
+        app.registerPage(a, {}, QStringLiteral("A"), QUrl());
+
+        // Suppress applyResult AND override discard() to skip the
+        // discardResult emit too — keeps both batches "in flight"
+        // from the controller's view, but with a tight timeout so
+        // the test doesn't hang.
+        a->setEmitApplyResult(false);
+        app.setAsyncBatchTimeoutMs(100);
+        a->setDirty(true);
+
+        QSignalSpy applyCompleteSpy(&app, &ApplicationController::applyAllComplete);
+        // First, start applyAllAsync (which won't complete because
+        // m_emitApplyResult=false and timeout is 100ms).
+        app.applyAllAsync();
+        QVERIFY(app.isApplying());
+
+        // While apply is in flight, discardAllAsync must no-op.
+        QSignalSpy discardCompleteSpy(&app, &ApplicationController::discardAllComplete);
+        app.discardAllAsync();
+        QCOMPARE(discardCompleteSpy.count(), 0);
+        QVERIFY(!app.isDiscarding());
+        QVERIFY(app.isApplying());
+
+        // Same in reverse: sync applyAll while apply is in flight
+        // should refuse without crashing.
+        app.applyAll(); // refused, no-op
+        QVERIFY(app.isApplying());
+
+        // Let the timeout fire so the test cleans up.
+        QVERIFY(applyCompleteSpy.wait(2000));
+        QVERIFY(!app.isApplying());
+    }
+
     void applyAllOnPartialFailureKeepsDirty()
     {
         // Pin the documented best-effort semantics: a domain whose

@@ -502,13 +502,16 @@ void ApplicationController::forceResetAsyncState()
     // new value and bail — without the bump, a stale fire after
     // reset would corrupt whatever state-machine state happens to be
     // live (the NEXT batch's counters, most likely).
-    // Reset apply FIRST, then discard, in lockstep using if/else if so
-    // the apply path's completeApplyIfDone clears m_inTransaction
-    // before the discard branch runs. Documented limitation: cross-
-    // batch concurrency (m_applying && m_discarding both true) is
-    // unsupported — the applyAll/discardAll mutual-exclusion guards
-    // upstream prevent it, but if a future caller bypasses those
-    // guards, this function still recovers each batch in isolation.
+    // Mutually-exclusive `if / else if` rather than two sequential
+    // if-blocks: applyAllAsync/discardAllAsync upstream guards forbid
+    // both flags being true concurrently, so in a healthy state at
+    // most one branch can fire. If a future caller bypassed those
+    // guards (or a regression let both flags survive), running BOTH
+    // branches in one call would have applyOnly clear m_inTransaction
+    // before discardOnly inherited the same shared flag — cascading
+    // recomputeDirty walks where the documented contract is "one
+    // recompute per terminal batch". Recover one wedge per call;
+    // callers wanting both reset run forceResetAsyncState twice.
     if (m_applying) {
         ++m_applyGeneration;
         m_applyPending = 0;
@@ -516,8 +519,7 @@ void ApplicationController::forceResetAsyncState()
         if (m_applyErrors.isEmpty())
             m_applyErrors.append(QStringLiteral("Async apply state force-reset"));
         completeApplyIfDone();
-    }
-    if (m_discarding) {
+    } else if (m_discarding) {
         ++m_discardGeneration;
         m_discardPending = 0;
         m_discardOutstanding.clear();
