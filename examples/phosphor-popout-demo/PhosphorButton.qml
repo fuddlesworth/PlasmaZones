@@ -3,7 +3,7 @@
 // Demo-only Button skin. Wraps QtQuick.Controls Button with chrome
 // driven by Phosphor.Theme tokens so the demo doesn't look like
 // stock Qt against the rest of the Phosphor surface. A real shell
-// would consume a PhosphorButton from a Phosphor.UI library; this
+// would consume a PhosphorButton from a Phosphor.UI library. This
 // inline copy exists so the popout demo stays self-contained.
 
 import Phosphor.Theme
@@ -11,14 +11,20 @@ import QtQuick
 import QtQuick.Controls
 
 Button {
+    // Optional accent override. When set, the button fills with the
+    // accent color and adapts its label color to the accent's
+    // contrast pair via `labelColor`. When unset, the button uses
+    // the surface ramp like a regular tonal button.
+
     id: root
 
-    // Optional accent override. When set, the button fills with the
-    // accent color and adapts its label color to the accent's `on_*`
-    // pair. When null, the button uses the surface ramp like a
-    // regular tonal button.
+    // The label property is named `labelColor` rather than
+    // `onAccentColor`. QML grammar reserves identifiers starting
+    // with `on` for signal-handler shorthand, so a property called
+    // `onAccentColor` is silently parsed as a handler for the
+    // `accentColorChanged` signal at every call site.
     property color accentColor: "transparent"
-    property color onAccentColor: Theme.on_surface
+    property color labelColor: Theme.on_surface
     readonly property bool _accented: accentColor.a > 0
     readonly property color _fill: {
         if (root.down)
@@ -29,7 +35,7 @@ Button {
 
         return root._accented ? root.accentColor : Theme.surface_container;
     }
-    readonly property color _label: root._accented ? root.onAccentColor : Theme.on_surface
+    readonly property color _label: root._accented ? root.labelColor : Theme.on_surface
 
     padding: Tokens.spacing_m
     leftPadding: Tokens.spacing_l

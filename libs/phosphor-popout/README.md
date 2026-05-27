@@ -91,23 +91,33 @@ sees the same arbiter. The example below assumes the singleton is
 registered as `Popouts`.
 
 ```qml
+import QtQuick
+import QtQuick.Controls
 import Phosphor.Popout
 
 ToolButton {
     text: qsTr("Toggle calendar")
-    property popoutRequest calendarRequest: ({
-        popoutId: "calendar",
-        content: calendarComponent,
-        anchor: Anchor.BarCenter,
-        exclusive: ExclusiveMode.Cooperative
-    })
-    onClicked: Popouts.toggle(calendarRequest)
+
+    Component {
+        id: calendarComponent
+        Rectangle { implicitWidth: 320; implicitHeight: 220; color: "white" }
+    }
+
+    onClicked: {
+        let req = popoutRequest();
+        req.popoutId = "calendar";
+        req.content = calendarComponent;
+        req.anchor = Anchor.BarCenter;
+        req.exclusive = ExclusiveMode.Cooperative;
+        Popouts.toggle(req);
+    }
 }
 ```
 
 The `popoutRequest` value type, `Anchor`, and `ExclusiveMode` enums
 are all visible to QML through the registrations described in the
-key-types table above.
+key-types table above. `popoutRequest()` is the value type's default
+constructor; field assignment uses regular property syntax.
 
 ## Arbitration
 

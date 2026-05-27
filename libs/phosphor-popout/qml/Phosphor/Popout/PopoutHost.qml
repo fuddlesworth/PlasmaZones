@@ -32,10 +32,17 @@ Item {
     // may want a translucent dim. Modal popouts want an opaque scrim.
     // Detached popouts want transparent.
     property color backdropColor: "transparent"
+    // Tracks whether dismissed has already fired. The signal is
+    // edge-triggered; consumers like the transport key bookkeeping
+    // off the first fire. Component.onDestruction emits dismissed
+    // if neither the close-animation timer nor a previous handler
+    // fired it first.
+    property bool _dismissedFired: false
 
     // Emitted once the close animation finishes. Transport callers
     // wire this to their bookkeeping so the IPopoutTransport's
-    // dismissed callback fires only after the visual finishes.
+    // dismissed callback fires only after the visual finishes. Fires
+    // at most once per host instance.
     signal dismissed()
 
     // Public dismiss helper for content. Content delegates that want
@@ -54,28 +61,31 @@ Item {
     // popouts. `parent ?? null` keeps the binding well-formed when
     // root is instantiated at top level with no parent yet.
     anchors.fill: parent ?? null
+    // Open going false starts the close-animation timer. The timer
+    // emits dismissed when the longest Behavior duration above has
+    // had time to settle. Open going true cancels a pending close.
     onOpenChanged: {
-        // Track the previously-bound contentItem so a swap (or a
-        // clear) can detach the old one from contentFrame before the
-        // new one parents in. Without this, switching contentItem
-        // leaves both items parented to contentFrame and both stay
-        // visible.
         if (!open)
             dismissEmitter.start();
         else
             dismissEmitter.stop();
     }
+    // contentItem reassignments after construction re-parent the new
+    // item under contentFrame and detach the previous one.
+    // Component.onCompleted covers the case where contentItem was
+    // assigned before the host finished construction.
     onContentItemChanged: contentFrame.rebindContentItem()
-    Component.onCompleted: {
-        contentFrame.rebindContentItem();
-        contentFrame._lastBound = contentItem;
-    }
-    // If the host is destroyed mid-close, ensure dismissed still
-    // fires so the transport's bookkeeping does not leak the handle.
-    // Component.onDestruction runs synchronously during teardown.
+    Component.onCompleted: contentFrame.rebindContentItem()
+    // If the host is destroyed before the close-animation timer
+    // emits dismissed (mid-close, or destroyed in open state by a
+    // transport that bypasses the animation), emit dismissed here so
+    // the transport's bookkeeping never leaks a handle. The fired
+    // flag guards against a double fire when the timer also pumps
+    // during teardown.
     Component.onDestruction: {
-        if (!root.open && dismissEmitter.running) {
+        if (!_dismissedFired) {
             dismissEmitter.stop();
+            _dismissedFired = true;
             root.dismissed();
         }
     }
@@ -189,9 +199,19 @@ Item {
     Timer {
         id: dismissEmitter
 
-        interval: Motion.duration_medium_2
+        // Interval matches the longest Behavior duration above
+        // (Motion.duration_medium_2 for content opacity and scale;
+        // backdrop opacity uses duration_short_4 which is shorter).
+        // Computing the max keeps the timer aligned even if the
+        // backdrop duration is ever retuned above the content's.
+        interval: Math.max(Motion.duration_medium_2, Motion.duration_short_4)
         repeat: false
-        onTriggered: root.dismissed()
+        onTriggered: {
+            if (!root._dismissedFired) {
+                root._dismissedFired = true;
+                root.dismissed();
+            }
+        }
     }
 
 }

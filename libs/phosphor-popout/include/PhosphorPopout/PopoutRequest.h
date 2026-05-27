@@ -15,10 +15,11 @@
 namespace PhosphorPopout {
 
 // Namespace metaobject so QML can see the Anchor and ExclusiveMode
-// enums by name. Pair with QML_NAMESPACE registration on the namespace
-// itself via Q_NAMESPACE so consumers write `Anchor.BarCenter` and
+// enums by name. QML_ELEMENT publishes the namespace to QML under the
+// module URI, so consumers write `Anchor.BarCenter` and
 // `ExclusiveMode.Cooperative` from QML after `import Phosphor.Popout`.
 Q_NAMESPACE_EXPORT(PHOSPHORPOPOUT_EXPORT)
+QML_ELEMENT
 
 // Anchor on the host screen where the popout should appear. BarLeft,
 // BarCenter, and BarRight are convenience names tied to the bar

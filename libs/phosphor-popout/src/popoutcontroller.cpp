@@ -20,6 +20,35 @@ struct Entry
     ExclusiveMode exclusive;
 };
 
+// Save-and-restore RAII guard for the bool re-entrancy flag. A blind
+// set-to-true / set-to-false pair (the obvious shape) breaks under
+// re-entrancy. The inner call's restore clears the outer caller's
+// guard while the outer is still mid-mutation, opening the very
+// double-emit window the guard exists to close. The RAII form stores
+// the prior value and restores it, so nested teardown windows nest
+// instead of clobbering each other.
+class ScopedTrue
+{
+public:
+    explicit ScopedTrue(bool& flag)
+        : m_flag(flag)
+        , m_prev(flag)
+    {
+        m_flag = true;
+    }
+    ~ScopedTrue()
+    {
+        m_flag = m_prev;
+    }
+
+    ScopedTrue(const ScopedTrue&) = delete;
+    ScopedTrue& operator=(const ScopedTrue&) = delete;
+
+private:
+    bool& m_flag;
+    bool m_prev;
+};
+
 } // namespace
 
 struct PopoutController::Impl
@@ -65,10 +94,37 @@ struct PopoutController::Impl
         return {};
     }
 
-    // Remove an entry, tell the transport, fire the closed signal, and
-    // update modal bookkeeping. Single source of truth for the three
-    // teardown call sites. emitClosed allows closeAll to defer signal
-    // emission to a final pass if it ever needs to.
+    // Drop an entry from our tables and fire the closed signals
+    // without telling the transport. Used by the dismissed callback
+    // where the transport already knows the surface is gone. The
+    // modal-count invariant check and the signal sequence match
+    // removeEntry.
+    void removeEntryQuiet(const QString& handle)
+    {
+        const auto it = entries.constFind(handle);
+        if (it == entries.constEnd()) {
+            return;
+        }
+        const Entry copy = it.value();
+        entries.erase(it);
+
+        const bool wasModal = (copy.exclusive == ExclusiveMode::Modal);
+        if (wasModal) {
+            Q_ASSERT(modalCount > 0);
+            --modalCount;
+        }
+
+        Q_EMIT self->popoutClosed(copy.popoutId, handle);
+        if (wasModal && modalCount == 0) {
+            Q_EMIT self->modalActiveChanged();
+        }
+    }
+
+    // Caller-initiated teardown. Single source of truth for every
+    // close call site. close, closeCooperativeInScope,
+    // closeAllCooperatives, and closeAll all route through here so
+    // the remove-then-close ordering, the modal-count invariant, and
+    // the signal sequence stay consistent.
     void removeEntry(const QString& handle)
     {
         const auto it = entries.constFind(handle);
@@ -79,7 +135,7 @@ struct PopoutController::Impl
 
         // Drop from our table BEFORE telling the transport so any
         // queued dismissed callback for this handle finds no entry
-        // and no-ops. Matches the close() pattern documented at
+        // and no-ops. Matches the contract documented at
         // IPopoutTransport.h.
         entries.erase(it);
 
@@ -96,10 +152,10 @@ struct PopoutController::Impl
         }
     }
 
-    // Close every Cooperative entry. Used when the first Modal opens to
-    // suppress prior Cooperative popouts across all scopes. Snapshot
-    // the handles before iterating so removeEntry's mutation of
-    // entries does not invalidate the loop.
+    // Close every Cooperative entry. Used when the first Modal opens
+    // to suppress prior Cooperative popouts across all scopes.
+    // Snapshot the handles before iterating so removeEntry's mutation
+    // of entries does not invalidate the loop.
     void closeAllCooperatives()
     {
         QStringList victims;
@@ -114,8 +170,8 @@ struct PopoutController::Impl
     }
 
     // Close the existing Cooperative entry in `scope`, if any. Used
-    // when a new Cooperative request is accepted: the prior one in the
-    // same scope must vacate before the new one opens.
+    // when a new Cooperative request is accepted. The prior one in
+    // the same scope must vacate before the new one opens.
     void closeCooperativeInScope(const QString& scope)
     {
         QString victim;
@@ -148,21 +204,11 @@ PopoutController::PopoutController(IPopoutTransport* transport, QObject* parent)
         if (d->inSelfTeardown) {
             return;
         }
-        const auto it = d->entries.constFind(handle);
-        if (it == d->entries.constEnd()) {
-            return;
-        }
-        const Entry copy = it.value();
-        d->entries.erase(it);
-        const bool wasModal = (copy.exclusive == ExclusiveMode::Modal);
-        if (wasModal) {
-            Q_ASSERT(d->modalCount > 0);
-            --d->modalCount;
-        }
-        Q_EMIT popoutClosed(copy.popoutId, handle);
-        if (wasModal && d->modalCount == 0) {
-            Q_EMIT modalActiveChanged();
-        }
+        // Route through removeEntryQuiet (no transport call) since
+        // the transport already knows the surface is gone. The
+        // signal sequence and modal-count invariant match the
+        // caller-initiated removeEntry path.
+        d->removeEntryQuiet(handle);
     });
 }
 
@@ -190,34 +236,31 @@ QString PopoutController::open(const PopoutRequest& request)
         return {};
     }
 
-    // Set the re-entrancy guard for the arbitration phase below.
-    // closeAllCooperatives and closeCooperativeInScope iterate
-    // entries while removeEntry mutates the same table. A transport
-    // that violates the IPopoutTransport contract by firing the
-    // dismissed callback synchronously from closeSurface would
-    // otherwise re-enter this function and double-emit popoutClosed
-    // for an already-removed handle.
-    d->inSelfTeardown = true;
-
     // Arbitration. Detached requests skip the scope-and-modal checks
     // entirely. Modals close existing cooperatives. Cooperatives are
     // rejected while a modal is up and swap any same-scope sibling.
+    // The re-entrancy guard wraps each branch that actually mutates
+    // entries. Branches that don't mutate (Detached and the rejected
+    // Cooperative) skip the guard so a same-thread re-entrant slot
+    // can't observe an unnecessary self-teardown state.
     switch (request.exclusive) {
     case ExclusiveMode::Detached:
         break;
-    case ExclusiveMode::Modal:
+    case ExclusiveMode::Modal: {
+        ScopedTrue guard(d->inSelfTeardown);
         d->closeAllCooperatives();
         break;
+    }
     case ExclusiveMode::Cooperative:
         if (d->isModalActive()) {
-            d->inSelfTeardown = false;
             return {};
         }
-        d->closeCooperativeInScope(request.scope);
+        {
+            ScopedTrue guard(d->inSelfTeardown);
+            d->closeCooperativeInScope(request.scope);
+        }
         break;
     }
-
-    d->inSelfTeardown = false;
 
     const QString handle = d->transport->openSurface(request);
     if (handle.isEmpty()) {
@@ -269,23 +312,16 @@ bool PopoutController::isOpen(const QString& popoutId) const
 
 void PopoutController::closeAll()
 {
-    d->inSelfTeardown = true;
+    // Route every teardown through the same removeEntry helper that
+    // close, closeCooperativeInScope, and closeAllCooperatives use.
+    // removeEntry decrements modalCount per entry and fires
+    // modalActiveChanged when the count reaches zero, so the per-row
+    // invariant (Q_ASSERT(modalCount > 0) before each decrement) is
+    // preserved during the drain.
+    ScopedTrue guard(d->inSelfTeardown);
     const auto handles = d->entries.keys();
     for (const QString& handle : handles) {
-        const auto it = d->entries.constFind(handle);
-        if (it == d->entries.constEnd()) {
-            continue;
-        }
-        const Entry copy = it.value();
-        d->entries.erase(it);
-        d->transport->closeSurface(handle);
-        Q_EMIT popoutClosed(copy.popoutId, handle);
-    }
-    const bool hadModal = d->modalCount > 0;
-    d->modalCount = 0;
-    d->inSelfTeardown = false;
-    if (hadModal) {
-        Q_EMIT modalActiveChanged();
+        d->removeEntry(handle);
     }
 }
 

@@ -459,6 +459,13 @@ void TestPopoutController::open_modalSameIdRejected()
     const QString h2 = c.open(makeRequest(QStringLiteral("alert"), ExclusiveMode::Modal));
     QVERIFY(h2.isEmpty());
     QCOMPARE(t.openLog.size(), 1);
+
+    // Rejected open must NOT bump modalCount. Closing h1 should
+    // drain the active modal state. A regression that incremented
+    // the count on the rejected path would leave isModalActive()
+    // stuck at true after this close.
+    c.close(h1);
+    QVERIFY(!c.isModalActive());
 }
 
 void TestPopoutController::open_detachedAcceptedWhileModalActive()
@@ -505,24 +512,23 @@ void TestPopoutController::close_emptyHandleNoOp()
 
 void TestPopoutController::toggle_emptyIdAlwaysOpens()
 {
-    FakeTransport t;
-    PopoutController c(&t);
-    QVERIFY(!c.toggle(makeRequest(QString())).isEmpty());
-    QVERIFY(!c.toggle(makeRequest(QString())).isEmpty());
-    // Empty-id toggle has no fixed referent, so each call opens a
-    // fresh popout rather than toggling an existing one. The two
-    // calls used distinct default scopes so the second does not
-    // close the first via cooperative-scope arbitration.
+    // Empty-id toggle has no fixed referent. Each call opens a fresh
+    // popout rather than toggling an existing one. Two toggles in
+    // distinct scopes both stay open. Two toggles in the same scope
+    // cause the second to close the first via cooperative-scope
+    // arbitration, so the second toggle still returns a non-empty
+    // handle but only one entry remains alive at the end.
     PopoutRequest a;
     a.scope = QStringLiteral("scope-a");
     PopoutRequest b;
     b.scope = QStringLiteral("scope-b");
-    FakeTransport t2;
-    PopoutController c2(&t2);
-    QVERIFY(!c2.toggle(a).isEmpty());
-    QVERIFY(!c2.toggle(b).isEmpty());
-    QCOMPARE(t2.openLog.size(), 2);
-    QCOMPARE(t2.alive.size(), 2);
+
+    FakeTransport t;
+    PopoutController c(&t);
+    QVERIFY(!c.toggle(a).isEmpty());
+    QVERIFY(!c.toggle(b).isEmpty());
+    QCOMPARE(t.openLog.size(), 2);
+    QCOMPARE(t.alive.size(), 2);
 }
 
 void TestPopoutController::handleFor_unknownIdReturnsEmpty()
@@ -537,7 +543,7 @@ void TestPopoutController::handleFor_unknownIdReturnsEmpty()
 void TestPopoutController::dismissedCallback_installedDuringConstruction()
 {
     // The controller's ctor installs exactly one callback. Sibling
-    // tests assume this; check it explicitly so a regression that
+    // tests assume this. Check it explicitly so a regression that
     // removes the install is caught here rather than as a confusing
     // failure elsewhere.
     FakeTransport t;
@@ -584,7 +590,7 @@ public:
         }
         alive.remove(handle);
         // Contract violation, on purpose. Real transports must not
-        // do this; the guard exists so a misbehaving transport
+        // do this. The guard exists so a misbehaving transport
         // cannot corrupt the controller's tables.
         if (dismissedCb) {
             dismissedCb(handle);

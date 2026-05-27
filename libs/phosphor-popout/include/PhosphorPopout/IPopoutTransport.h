@@ -11,7 +11,7 @@
 
 namespace PhosphorPopout {
 
-// Transport seam between the arbitration policy (PopoutController)
+// Transport seam between the arbitration policy in PopoutController
 // and the actual layer-shell surface stack. Production uses a
 // transport backed by phosphor-layer's SurfaceFactory. Tests inject
 // a fake.

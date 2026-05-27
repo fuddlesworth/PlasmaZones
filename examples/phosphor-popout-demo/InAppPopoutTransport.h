@@ -19,12 +19,13 @@ namespace PhosphorPopoutDemo {
 
 // In-window IPopoutTransport. Opens popouts as QQuickItems parented
 // into a host Item inside the demo's main QQuickWindow. No
-// layer-shell, no Wayland; just enough surface management to exercise
-// the controller's arbitration end-to-end with real QML animations.
+// layer-shell, no Wayland. Just enough surface management to
+// exercise the controller's arbitration end-to-end with real QML
+// animations.
 //
 // The real shell ships a LayerPopoutTransport that wraps
 // PhosphorLayer::SurfaceFactory. This in-app variant is the lib's
-// acceptance harness; swapping the transport is a follow-up.
+// acceptance harness. Swapping the transport is a follow-up.
 class InAppPopoutTransport : public QObject, public PhosphorPopout::IPopoutTransport
 {
     Q_OBJECT
@@ -61,6 +62,11 @@ private:
     {
         QPointer<QQuickItem> hostItem; // PopoutHost.qml instance
         QPointer<QQuickItem> contentItem; // delegate instantiated by us
+        // True once closeSurface has set open=false on the host.
+        // onHostDismissed uses this to skip the dismissed-callback
+        // routing back to the controller, since the controller is
+        // the one that initiated this close.
+        bool closing = false;
     };
 
     QPointer<QQuickItem> m_host;

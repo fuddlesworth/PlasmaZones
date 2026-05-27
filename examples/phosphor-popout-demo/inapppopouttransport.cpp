@@ -9,7 +9,6 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
-#include <QTimer>
 #include <QVariant>
 
 namespace PhosphorPopoutDemo {
@@ -99,9 +98,10 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // themselves. AlertPopout's Dismiss button uses this to call
     // _popoutHost.dismiss() rather than walking the parent chain.
     contentItem->setProperty("_popoutHost", QVariant::fromValue<QObject*>(hostItem));
-    // Cooperative popouts use a dim translucent backdrop; modal uses a
-    // heavier scrim; detached stays transparent. The demo wires these
-    // values directly here so the visual difference is obvious.
+    // Cooperative popouts use a dim translucent backdrop. Modal
+    // uses a heavier scrim. Detached stays transparent. The demo
+    // wires these values directly here so the visual difference
+    // is obvious.
     switch (request.exclusive) {
     case PhosphorPopout::ExclusiveMode::Cooperative:
         hostItem->setProperty("backdropColor", QColor(0, 0, 0, 60));
@@ -140,33 +140,20 @@ void InAppPopoutTransport::closeSurface(const QString& handle)
     if (it == m_entries.end()) {
         return;
     }
-    if (it->hostItem) {
-        // Trigger the close animation. The dismissed signal will
-        // fire when it finishes, but we DO NOT route it back to the
-        // controller because this close was controller-initiated.
-        // Snapshot pointers, drop the entry now, then deleteLater
-        // when the animation drains.
-        Entry copy = it.value();
+    if (!it->hostItem) {
         m_entries.erase(it);
-        copy.hostItem->setProperty("open", false);
-        // Defer the actual destroy past the animation. PopoutHost's
-        // dismiss timer is 300ms. 500ms gives slack for compositor
-        // jitter. Capture QPointers, not raw pointers, so the lambda
-        // resolves to no-ops if either item is already destroyed by
-        // the time it fires.
-        QPointer<QQuickItem> hostPtr = copy.hostItem;
-        QPointer<QQuickItem> contentPtr = copy.contentItem;
-        QTimer::singleShot(500, this, [hostPtr, contentPtr]() {
-            if (hostPtr) {
-                hostPtr->deleteLater();
-            }
-            if (contentPtr) {
-                contentPtr->deleteLater();
-            }
-        });
-    } else {
-        m_entries.erase(it);
+        return;
     }
+
+    // Mark the entry as closing and let the host's existing
+    // dismissed signal route into onHostDismissed when the close
+    // animation settles. The closing flag tells onHostDismissed to
+    // tear down resources without routing back to the controller's
+    // dismissed callback, since the controller is the one that
+    // initiated this close. This avoids duplicating PopoutHost's
+    // animation duration as a hardcoded timer interval.
+    it->closing = true;
+    it->hostItem->setProperty("open", false);
 }
 
 bool InAppPopoutTransport::isSurfaceAlive(const QString& handle) const
@@ -201,7 +188,11 @@ void InAppPopoutTransport::onHostDismissed()
     if (copy.contentItem) {
         copy.contentItem->deleteLater();
     }
-    if (m_dismissedCb) {
+    // Only fire the controller callback for self-dismisses. A
+    // controller-initiated close marks the entry with `closing` and
+    // the controller already knows the popout is gone, so firing
+    // again would loop.
+    if (!copy.closing && m_dismissedCb) {
         m_dismissedCb(handle);
     }
 }

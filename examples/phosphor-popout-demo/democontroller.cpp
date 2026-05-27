@@ -107,6 +107,11 @@ void DemoController::toggleDetached()
     req.content = m_noteComponent;
     req.exclusive = ExclusiveMode::Detached;
     req.dismissOnFocusLoss = false;
+    // NotePopout is shared with toggleCooperativeB. The `pinned` prop
+    // gives the Detached instance distinct chrome (tertiary border,
+    // different header) so the two can be on screen at the same time
+    // without looking identical.
+    req.props.insert(QStringLiteral("pinned"), true);
     m_controller->toggle(req);
 }
 

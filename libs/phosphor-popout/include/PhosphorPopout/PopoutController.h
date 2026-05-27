@@ -29,7 +29,10 @@ class IPopoutTransport;
 //   Cooperative   At most one Cooperative popout per scope. Opening a
 //                 new Cooperative request in the same scope closes the
 //                 prior one before opening the new one. Different
-//                 scopes are independent.
+//                 scopes are independent. A second open with a
+//                 popoutId that is already open is rejected with an
+//                 empty handle regardless of scope. Callers that want
+//                 to reopen by id must close first or use toggle.
 //
 //   Modal         While ANY Modal is open, every new Cooperative
 //                 request is rejected. open returns an empty string.

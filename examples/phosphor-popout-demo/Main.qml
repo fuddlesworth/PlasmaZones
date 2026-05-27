@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // phosphor-popout-demo entry QML. Window with five buttons and a
 // status bar. The host item below the buttons is where popouts get
-// parented; click outside a cooperative popout to dismiss, modals
-// block other cooperatives, detached popouts ignore the arbitration
-// entirely and stay open across modal cycles.
+// parented. Click outside a cooperative popout to dismiss it.
+// Modals block other cooperatives. Detached popouts ignore the
+// arbitration entirely and stay open across modal cycles.
 
 import Phosphor.Popout
 import Phosphor.PopoutDemo
@@ -68,28 +68,28 @@ ApplicationWindow {
             PhosphorButton {
                 text: qsTr("Cooperative A (Calendar)")
                 accentColor: demoController.openPopoutIds.indexOf("calendar") !== -1 ? Theme.primary : "transparent"
-                onAccentColor: Theme.on_primary
+                labelColor: Theme.on_primary
                 onClicked: demoController.toggleCooperativeA()
             }
 
             PhosphorButton {
                 text: qsTr("Cooperative B (Note)")
                 accentColor: demoController.openPopoutIds.indexOf("quick-note") !== -1 ? Theme.primary : "transparent"
-                onAccentColor: Theme.on_primary
+                labelColor: Theme.on_primary
                 onClicked: demoController.toggleCooperativeB()
             }
 
             PhosphorButton {
                 text: qsTr("Modal (Alert)")
                 accentColor: demoController.modalActive ? Theme.error : "transparent"
-                onAccentColor: Theme.on_error
+                labelColor: Theme.on_error
                 onClicked: demoController.toggleModal()
             }
 
             PhosphorButton {
                 text: qsTr("Detached (Pinned)")
                 accentColor: demoController.openPopoutIds.indexOf("pinned-note") !== -1 ? Theme.tertiary : "transparent"
-                onAccentColor: Theme.on_tertiary
+                labelColor: Theme.on_tertiary
                 onClicked: demoController.toggleDetached()
             }
 

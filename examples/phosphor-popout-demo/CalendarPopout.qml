@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Cooperative-scope popout. Click outside dismisses; opening a sibling
-// cooperative in the same scope swaps it out.
+// Cooperative-scope popout. Click outside dismisses. Opening a
+// sibling cooperative in the same scope swaps it out.
 
 import Phosphor.Theme
 import QtQuick

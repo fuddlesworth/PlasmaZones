@@ -128,11 +128,19 @@ endforeach()
 
 set(_phosphor_popout_qml_sources
     src/phosphorpopout_qml_plugin.cpp
-    # PopoutController header listed so AUTOMOC on the QML module
-    # target emits metatype JSON; qmltyperegistrar reads it and
-    # publishes the QML registration the plugin loads at startup.
-    # Implementation stays in PhosphorPopout.so (linked below).
+    # Headers listed so AUTOMOC on the QML module target emits
+    # metatype JSON. qmltyperegistrar reads it and publishes the QML
+    # registrations the plugin loads at startup. Implementations stay
+    # in PhosphorPopout.so (linked below).
+    #
+    # PopoutController.h carries QML_ELEMENT + QML_UNCREATABLE so the
+    # type name is visible to QML. PopoutRequest.h carries Q_NAMESPACE
+    # + Q_ENUM_NS + QML_ELEMENT (for the namespace) and Q_GADGET +
+    # QML_VALUE_TYPE(popoutRequest) on the request struct, so QML
+    # callers reach `Anchor.BarCenter`, `ExclusiveMode.Cooperative`,
+    # and the `popoutRequest` value type.
     include/PhosphorPopout/PopoutController.h
+    include/PhosphorPopout/PopoutRequest.h
 )
 
 qt_add_qml_module(PhosphorPopoutQml

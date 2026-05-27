@@ -3,9 +3,10 @@
 //
 // phosphor-popout-demo entry point.
 //
-// QGuiApplication + QQmlApplicationEngine. Constructs a DemoController
-// (which owns the PopoutController + InAppPopoutTransport), exposes it
-// to QML as a context property, and loads Main.qml.
+// QGuiApplication plus QQmlApplicationEngine. Constructs a
+// DemoController, which owns the PopoutController and the
+// InAppPopoutTransport, exposes it to QML as a context property,
+// and loads Main.qml.
 
 #include "DemoController.h"
 
@@ -28,7 +29,7 @@ int main(int argc, char* argv[])
 
     // demoController is declared BEFORE the engine so C++ reverse-order
     // destruction tears the engine down first. The engine teardown
-    // re-evaluates QML bindings; if demoController died first, those
+    // re-evaluates QML bindings. If demoController died first, those
     // re-evaluations would dereference a dangling context-property
     // pointer and log "Cannot read property X of null" errors.
     PhosphorPopoutDemo::DemoController demoController;
