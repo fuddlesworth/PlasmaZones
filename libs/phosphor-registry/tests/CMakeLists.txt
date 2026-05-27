@@ -3,59 +3,67 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Test Quick)
 
-# ─── Fake plugin fixture for test_pluginloader ─────────────────────────────────
+# ─── Fake plugin fixture helper ────────────────────────────────────────────────
 #
-# Build a tiny .so exporting the canonical Phase-1.3 plugin entry
-# point. The test_pluginloader binary copies this .so + the
-# accompanying manifest.json into a per-test temporary plugin root
-# and exercises the loader against it. Built as MODULE because we
-# load it via QLibrary, not link against it.
-add_library(phosphor_registry_test_fake_plugin MODULE
-    fake_plugin/fakeplugin.cpp
-)
-target_link_libraries(phosphor_registry_test_fake_plugin
-    PRIVATE
-        PhosphorRegistry::PhosphorRegistry
-        Qt6::Core
-        Qt6::Gui
-        Qt6::Qml
-        Qt6::Quick
-)
-set_target_properties(phosphor_registry_test_fake_plugin PROPERTIES
-    PREFIX "lib"
-    SUFFIX ".so"
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/fake_plugin
-    UNITY_BUILD OFF
-)
-# Copy the manifest next to the .so so the test fixture is
-# self-contained at one path.
-configure_file(fake_plugin/manifest.json
-               ${CMAKE_CURRENT_BINARY_DIR}/fake_plugin/manifest.json COPYONLY)
+# Builds one MODULE library + copies its templated manifest into a
+# per-fixture build directory the test binaries pick up via CMake-
+# defined preprocessor macros. Used for every plugin variant the
+# pluginloader tests need.
+#
+# Args:
+#   target  - CMake target name (also the subdir name under
+#             ${CMAKE_CURRENT_BINARY_DIR}/)
+#   source  - .cpp file relative to ${CMAKE_CURRENT_SOURCE_DIR}/
+#   linkQt  - "QT" to PRIVATE-link Qt + PhosphorRegistry (factories);
+#             "NOQT" to skip both (no-entry-point fixture; doesn't
+#             need anything beyond its own translation unit)
+function(phosphorregistry_add_fake_plugin target sourceDir source linkQt)
+    add_library(${target} MODULE ${sourceDir}/${source})
+    if(linkQt STREQUAL "QT")
+        target_link_libraries(${target}
+            PRIVATE
+                PhosphorRegistry::PhosphorRegistry
+                Qt6::Core
+                Qt6::Gui
+                Qt6::Qml
+                Qt6::Quick
+        )
+    endif()
+    # Default lib<name>.so output naming; matches the install helper
+    # in the test binary which copies fixtures by basename.
+    set_target_properties(${target} PROPERTIES
+        PREFIX "lib"
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${target}
+        UNITY_BUILD OFF
+    )
+    # Template the manifest so abi: stays locked to
+    # PhosphorRegistry::kPluginAbiVersion (mirrored from CMake via
+    # PHOSPHOR_PLUGIN_ABI_VERSION). Drift between header and fixture
+    # would silently break every pluginloader test on the next
+    # version bump.
+    set(manifestIn "${CMAKE_CURRENT_SOURCE_DIR}/${sourceDir}/manifest.json.in")
+    if(EXISTS "${manifestIn}")
+        configure_file(${manifestIn}
+                       ${CMAKE_CURRENT_BINARY_DIR}/${target}/manifest.json @ONLY)
+    endif()
+endfunction()
 
-# ─── Fake plugin with id-mismatch fixture ──────────────────────────────────────
-#
-# Identical shape to the canonical fixture, but the factory returns
-# id="fake-other" while the manifest says id="id-mismatch-plugin".
-# Used by test_phosphor_registry_pluginloader::rejectsFactoryIdMismatch.
-add_library(phosphor_registry_test_fake_plugin_idmismatch MODULE
-    fake_plugin_idmismatch/fakeplugin_idmismatch.cpp
-)
-target_link_libraries(phosphor_registry_test_fake_plugin_idmismatch
-    PRIVATE
-        PhosphorRegistry::PhosphorRegistry
-        Qt6::Core
-        Qt6::Gui
-        Qt6::Qml
-        Qt6::Quick
-)
-set_target_properties(phosphor_registry_test_fake_plugin_idmismatch PROPERTIES
-    PREFIX "lib"
-    SUFFIX ".so"
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/fake_plugin_idmismatch
-    UNITY_BUILD OFF
-)
-configure_file(fake_plugin_idmismatch/manifest.json
-               ${CMAKE_CURRENT_BINARY_DIR}/fake_plugin_idmismatch/manifest.json COPYONLY)
+phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin
+                                 fake_plugin
+                                 fakeplugin.cpp
+                                 QT)
+phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_idmismatch
+                                 fake_plugin_idmismatch
+                                 fakeplugin_idmismatch.cpp
+                                 QT)
+phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_nullfactory
+                                 fake_plugin_nullfactory
+                                 fakeplugin_nullfactory.cpp
+                                 QT)
+phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_noentry
+                                 fake_plugin_noentry
+                                 fakeplugin_noentry.cpp
+                                 NOQT)
 
 function(phosphorregistry_add_test name)
     add_executable(${name} ${name}.cpp)
@@ -70,8 +78,10 @@ function(phosphorregistry_add_test name)
     )
     target_compile_definitions(${name}
         PRIVATE
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR="${CMAKE_CURRENT_BINARY_DIR}/fake_plugin"
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/fake_plugin_idmismatch"
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin"
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_idmismatch"
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_nullfactory"
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_noentry"
     )
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
@@ -81,7 +91,10 @@ phosphorregistry_add_test(test_phosphor_registry)
 phosphorregistry_add_test(test_phosphor_registry_manifest)
 phosphorregistry_add_test(test_phosphor_registry_pluginloader)
 
-# test_phosphor_registry_pluginloader needs the fixture .so built before it runs.
+# test_phosphor_registry_pluginloader needs every fixture .so built
+# before it runs.
 add_dependencies(test_phosphor_registry_pluginloader
     phosphor_registry_test_fake_plugin
-    phosphor_registry_test_fake_plugin_idmismatch)
+    phosphor_registry_test_fake_plugin_idmismatch
+    phosphor_registry_test_fake_plugin_nullfactory
+    phosphor_registry_test_fake_plugin_noentry)

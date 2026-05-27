@@ -71,7 +71,7 @@ ApplicationWindow {
                         id: slot
 
                         required property string modelData
-                        property var widget: null
+                        property Item widget: null
 
                         implicitWidth: widget ? widget.implicitWidth : 0
                         implicitHeight: widget ? widget.implicitHeight : 0
@@ -92,7 +92,7 @@ ApplicationWindow {
         // TypeError even on early evaluation paths.
         Text {
             Layout.fillWidth: true
-            text: qsTr("Registered factories: %1").arg(demoController && demoController.factoryIds ? demoController.factoryIds.join(", ") : "")
+            text: qsTr("Registered factories: %1").arg(demoController ? demoController.factoryIds.join(", ") : "")
             color: Theme.on_surface_variant
             font.pixelSize: Tokens.font_size_body_s
             font.family: Tokens.font_family

@@ -30,7 +30,7 @@ once per UI seam.
   `QLibrary`, resolves a fixed C entry point, and registers the returned
   factory.
 - **Hot-reload on disk change.** A `WatchedDirectorySet` (from
-  phosphor-fsloader) watches the plugin root with a 50 ms debounced
+  phosphor-fsloader) watches the plugin root with a debounced
   rescan. Added plugin directories load; removed directories
   unregister. In-place `.so` replacement (writing new bytes to the
   same path) is NOT honoured in Phase 1.3 because POSIX `dlopen`

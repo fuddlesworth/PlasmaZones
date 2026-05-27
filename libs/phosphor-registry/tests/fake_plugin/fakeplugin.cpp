@@ -9,27 +9,41 @@
 #include <PhosphorRegistry/IBarWidgetFactory.h>
 
 #include <QQuickItem>
+#include <QtCore/qtclasshelpermacros.h>
 
 namespace {
 
 class FakePluginFactory : public PhosphorRegistry::IBarWidgetFactory
 {
 public:
-    QString id() const override
+    FakePluginFactory() = default;
+    ~FakePluginFactory() override = default;
+    Q_DISABLE_COPY_MOVE(FakePluginFactory)
+
+    [[nodiscard]] QString id() const override
     {
         return QStringLiteral("fake-plugin");
     }
-    QString displayName() const override
+    [[nodiscard]] QString displayName() const override
     {
         return QStringLiteral("Fake Plugin");
     }
-    QStringList capabilities() const override
+    [[nodiscard]] QStringList capabilities() const override
     {
         return {QStringLiteral("bar.widget")};
     }
-    QQuickItem* createWidget(QQmlEngine* /*engine*/, QObject* parent) override
+    [[nodiscard]] QQuickItem* createWidget(QQmlEngine* /*engine*/, QObject* parent) override
     {
-        return new QQuickItem(qobject_cast<QQuickItem*>(parent));
+        // The real bar host always passes a QQuickItem* parent. If a
+        // caller passes a non-QQuickItem QObject parent, we still
+        // return a valid item but with no scene-graph parent — the
+        // test for that path lives in test_registry.cpp.
+        auto* parentItem = qobject_cast<QQuickItem*>(parent);
+        auto* item = new QQuickItem(parentItem);
+        if (parent && !parentItem) {
+            item->setParent(parent);
+        }
+        return item;
     }
 };
 

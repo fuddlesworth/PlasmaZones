@@ -9,25 +9,30 @@
 #include <PhosphorRegistry/IBarWidgetFactory.h>
 
 #include <QQuickItem>
+#include <QtCore/qtclasshelpermacros.h>
 
 namespace {
 
 class FakePluginIdMismatchFactory : public PhosphorRegistry::IBarWidgetFactory
 {
 public:
-    QString id() const override
+    FakePluginIdMismatchFactory() = default;
+    ~FakePluginIdMismatchFactory() override = default;
+    Q_DISABLE_COPY_MOVE(FakePluginIdMismatchFactory)
+
+    [[nodiscard]] QString id() const override
     {
         return QStringLiteral("fake-other");
     }
-    QString displayName() const override
+    [[nodiscard]] QString displayName() const override
     {
         return QStringLiteral("Fake Plugin Id Mismatch");
     }
-    QStringList capabilities() const override
+    [[nodiscard]] QStringList capabilities() const override
     {
         return {QStringLiteral("bar.widget")};
     }
-    QQuickItem* createWidget(QQmlEngine* /*engine*/, QObject* parent) override
+    [[nodiscard]] QQuickItem* createWidget(QQmlEngine* /*engine*/, QObject* parent) override
     {
         return new QQuickItem(qobject_cast<QQuickItem*>(parent));
     }

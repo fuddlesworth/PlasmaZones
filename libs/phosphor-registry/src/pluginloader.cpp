@@ -148,11 +148,6 @@ int PluginLoader::liveWidgetCount(const QString& pluginId) const
 
 QString PluginLoader::resolveDefaultPluginRoot() const
 {
-    return resolveDefaultPluginRootImpl();
-}
-
-QString PluginLoader::resolveDefaultPluginRootImpl() const
-{
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return QDir(base).filePath(QStringLiteral("phosphor/plugins"));
 }
@@ -215,6 +210,15 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
     // disk — unregister it from the registry. The QLibrary stays
     // pinned so existing widgets from the now-gone factory keep
     // working until the bar tears them down.
+    //
+    // Critical ordering: move the QLibrary into m_pinnedLibraries
+    // BEFORE m_plugins.remove() drops the last shared_ptr ref to
+    // the LoadedPlugin (and thus runs the factory's deleter). The
+    // factory's destructor and any of its vtable dispatch live
+    // inside the .so; if the QLibrary were unmapped first, that
+    // destructor call would jump into freed memory and segfault.
+    // Future refactors of this block MUST preserve the library-
+    // move-before-factory-destroy ordering.
     const QList<QString> currentIds = m_plugins.keys();
     for (const QString& pluginId : currentIds) {
         if (!discoveredIds.contains(pluginId)) {
@@ -275,15 +279,21 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
         return;
     }
 
-    auto entry_record = std::make_shared<LoadedPlugin>();
-    entry_record->manifest = manifest;
-    entry_record->library = std::move(library);
-    entry_record->factory.reset(rawFactory, [](IBarWidgetFactory* p) {
+    auto entryRecord = std::make_shared<LoadedPlugin>();
+    entryRecord->manifest = manifest;
+    entryRecord->library = std::move(library);
+    // Custom deleter is non-optional: the factory was allocated by
+    // `entryFn()` inside the .so's `new`, and must be freed via the
+    // .so's `delete` operator. The std::shared_ptr's deleter captures
+    // the right `delete` because the lambda lives in the same TU as
+    // the only `new` site — they resolve to the same operator-new/
+    // delete pair.
+    entryRecord->factory.reset(rawFactory, [](IBarWidgetFactory* p) {
         delete p;
     });
 
     const QString pluginId = manifest.id;
-    m_plugins.insert(pluginId, entry_record);
+    m_plugins.insert(pluginId, entryRecord);
     if (m_registry) {
         m_registry->registerFactory(m_plugins.value(pluginId)->factory);
     }

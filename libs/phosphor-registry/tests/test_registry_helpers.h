@@ -43,8 +43,15 @@ public:
     [[nodiscard]] QQuickItem* createWidget(QQmlEngine* /*engine*/, QObject* parent) override
     {
         ++createCallCount;
-        auto* item = new QQuickItem(qobject_cast<QQuickItem*>(parent));
-        if (!parent || !qobject_cast<QQuickItem*>(parent)) {
+        // If parent is a QQuickItem, the QQuickItem(QQuickItem*) ctor
+        // sets BOTH the scene-graph parent and the QObject parent.
+        // If parent is a non-QQuickItem QObject (legitimate for tests
+        // that build a QObject-only fixture), we explicitly setParent
+        // to keep the lifetime cascade. parent==nullptr leaves the
+        // item unrooted — the test owns disposal in that case.
+        auto* parentItem = qobject_cast<QQuickItem*>(parent);
+        auto* item = new QQuickItem(parentItem);
+        if (parent && !parentItem) {
             item->setParent(parent);
         }
         return item;

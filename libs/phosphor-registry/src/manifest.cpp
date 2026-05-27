@@ -36,6 +36,14 @@ Manifest invalid(const QString& reason)
 // 1.3, but the Phase-5 sandbox plans to derive on-disk caches /
 // IPC socket names from it; tightening at the gate keeps every
 // downstream consumer safe.
+//
+// Strictness rationale: a literal ".." substring (e.g. "weather..uk")
+// is not a real traversal vector since the loader never
+// concatenates ids into paths, but allowing dots-anywhere widens
+// the attack surface for future code paths that DO build paths
+// from ids. We rule them out here and accept the small cost in
+// expressivity — plugin authors picking exotic names can use "_"
+// or "-" instead.
 bool isSafeId(const QString& id)
 {
     if (id.isEmpty()) {
@@ -53,7 +61,13 @@ bool isSafeId(const QString& id)
     return true;
 }
 
-QString readJsonFile(const QString& path, QString& parseError)
+// Read the manifest.json bytes from disk. Returns raw UTF-8 bytes
+// rather than a QString — passing the QByteArray directly to
+// QJsonDocument::fromJson preserves byte-level diagnostics for
+// invalid encodings (a QString round-trip would substitute U+FFFD
+// for malformed UTF-8 and the parser would then see the substituted
+// characters instead of failing cleanly).
+QByteArray readJsonFile(const QString& path, QString& parseError)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -65,8 +79,7 @@ QString readJsonFile(const QString& path, QString& parseError)
         parseError = QStringLiteral("manifest exceeds %1-byte cap (was %2)").arg(kManifestMaxBytes).arg(size);
         return {};
     }
-    const QByteArray bytes = file.readAll();
-    return QString::fromUtf8(bytes);
+    return file.readAll();
 }
 
 } // namespace
@@ -74,13 +87,13 @@ QString readJsonFile(const QString& path, QString& parseError)
 Manifest Manifest::parse(const QString& manifestJsonPath, const QString& pluginDir)
 {
     QString readError;
-    const QString text = readJsonFile(manifestJsonPath, readError);
+    const QByteArray bytes = readJsonFile(manifestJsonPath, readError);
     if (!readError.isEmpty()) {
         return invalid(readError);
     }
 
     QJsonParseError parseErr{};
-    const QJsonDocument doc = QJsonDocument::fromJson(text.toUtf8(), &parseErr);
+    const QJsonDocument doc = QJsonDocument::fromJson(bytes, &parseErr);
     if (parseErr.error != QJsonParseError::NoError) {
         return invalid(
             QStringLiteral("malformed JSON at offset %1: %2").arg(parseErr.offset).arg(parseErr.errorString()));

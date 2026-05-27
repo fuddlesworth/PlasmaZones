@@ -9,6 +9,7 @@
 #include <PhosphorRegistry/Registry.h>
 #include <PhosphorRegistry/RegistryNotifier.h>
 
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -31,6 +32,7 @@ private Q_SLOTS:
     void forEach_visitsEveryFactory();
     void empty_reportsState();
     void size_tracksCount();
+    void signals_fireInRegistrationOrder();
 };
 
 void TestRegistry::register_addsFactoryAndFiresSignal()
@@ -56,7 +58,7 @@ void TestRegistry::register_duplicateIdRejected()
     reg.registerFactory(first);
     QSignalSpy spy(reg.notifier(), &RegistryNotifier::factoryRegistered);
 
-    QTest::ignoreMessage(QtWarningMsg, "PhosphorRegistry::Registry::registerFactory: duplicate id 'clock' ignored");
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("duplicate id.*clock.*ignored")));
     reg.registerFactory(second);
 
     QCOMPARE(reg.size(), 1);
@@ -68,7 +70,7 @@ void TestRegistry::register_nullFactoryRejected()
 {
     Registry<IBarWidgetFactory> reg;
     QSignalSpy spy(reg.notifier(), &RegistryNotifier::factoryRegistered);
-    QTest::ignoreMessage(QtWarningMsg, "PhosphorRegistry::Registry::registerFactory: null factory ignored");
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("null factory ignored")));
     reg.registerFactory(nullptr);
     QCOMPARE(reg.size(), 0);
     QCOMPARE(spy.count(), 0);
@@ -79,7 +81,7 @@ void TestRegistry::register_emptyIdRejected()
     Registry<IBarWidgetFactory> reg;
     auto factory = std::make_shared<FakeBarWidgetFactory>(QString(), QStringLiteral("Empty"));
     QSignalSpy spy(reg.notifier(), &RegistryNotifier::factoryRegistered);
-    QTest::ignoreMessage(QtWarningMsg, "PhosphorRegistry::Registry::registerFactory: factory with empty id ignored");
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("empty id ignored")));
     reg.registerFactory(factory);
     QCOMPARE(reg.size(), 0);
     QCOMPARE(spy.count(), 0);
@@ -169,6 +171,32 @@ void TestRegistry::size_tracksCount()
     QCOMPARE(reg.size(), 2);
     reg.unregisterFactory(QStringLiteral("a"));
     QCOMPARE(reg.size(), 1);
+}
+
+void TestRegistry::signals_fireInRegistrationOrder()
+{
+    // Locks the contract that factoryRegistered / factoryUnregistered
+    // arrive in the exact order register / unregister are called.
+    // QML consumers (model facades) rely on this ordering to keep a
+    // stable row order without resorting after every signal.
+    Registry<IBarWidgetFactory> reg;
+    QSignalSpy regSpy(reg.notifier(), &RegistryNotifier::factoryRegistered);
+    QSignalSpy unregSpy(reg.notifier(), &RegistryNotifier::factoryUnregistered);
+
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("a"), QStringLiteral("A")));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("b"), QStringLiteral("B")));
+    reg.unregisterFactory(QStringLiteral("a"));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("c"), QStringLiteral("C")));
+    reg.unregisterFactory(QStringLiteral("b"));
+
+    QCOMPARE(regSpy.count(), 3);
+    QCOMPARE(regSpy.at(0).at(0).toString(), QStringLiteral("a"));
+    QCOMPARE(regSpy.at(1).at(0).toString(), QStringLiteral("b"));
+    QCOMPARE(regSpy.at(2).at(0).toString(), QStringLiteral("c"));
+
+    QCOMPARE(unregSpy.count(), 2);
+    QCOMPARE(unregSpy.at(0).at(0).toString(), QStringLiteral("a"));
+    QCOMPARE(unregSpy.at(1).at(0).toString(), QStringLiteral("b"));
 }
 
 QTEST_MAIN(TestRegistry)

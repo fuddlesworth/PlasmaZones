@@ -24,6 +24,12 @@
 #ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR
 #error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR must be defined by tests/CMakeLists.txt"
 #endif
+#ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR
+#error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR must be defined by tests/CMakeLists.txt"
+#endif
+#ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR
+#error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR must be defined by tests/CMakeLists.txt"
+#endif
 
 using namespace PhosphorRegistry;
 
@@ -39,51 +45,63 @@ private Q_SLOTS:
     void rejectsFactoryIdManifestMismatch();
     void rejectsAbiVersionMismatch();
     void rejectsPathTraversalId();
+    void rejectsNullFactoryReturn();
+    void rejectsPluginWithoutEntryPoint();
+    void rejectsCorruptSoFile();
+    void loadsNewPluginAddedOnRescan();
     void emitsRescanCompletedSignal();
+    void liveWidgetCountReturnsMinusOne();
+    void pluginRootReturnsConfiguredPath();
+    void pluginRootResolvesXdgWhenEmpty();
 
 private:
-    // Helper: install the canonical fake plugin (built as MODULE) +
-    // its manifest into pluginRoot/<subdir>. The .so is renamed to
-    // <subdir>.so so the manifest's id == directory basename rule
-    // can be satisfied. Returns the installed plugin directory path.
-    QString installFakePlugin(const QString& pluginRoot, const QString& subdir) const;
+    // Helper: install one of the templated fake-plugin fixtures into
+    // pluginRoot/<subdir>. fixtureDir is the build-tree path to the
+    // pre-built .so + manifest.json (defined by tests/CMakeLists.txt
+    // PHOSPHOR_REGISTRY_FAKE_PLUGIN_*_DIR macros). soBasename is
+    // the .so's filename WITHOUT extension (e.g.
+    // "libphosphor_registry_test_fake_plugin"). The .so is copied
+    // into the destination as <subdir>.so so the loader's manifest-
+    // id-vs-directory-basename rule resolves cleanly. Returns the
+    // installed plugin directory path.
+    QString installPluginFixture(const QString& pluginRoot, const QString& subdir, const QString& fixtureDir,
+                                 const QString& soBasename) const;
 
-    // Helper: install the id-mismatch fake plugin (factory returns
-    // id="fake-other"; manifest says id="id-mismatch-plugin"). The
-    // subdir argument MUST equal the manifest id (the manifest's
-    // dir-basename rule applies), so callers always pass
-    // "id-mismatch-plugin".
-    QString installFakePluginIdMismatch(const QString& pluginRoot) const;
+    QString installFakePlugin(const QString& pluginRoot, const QString& subdir) const
+    {
+        return installPluginFixture(pluginRoot, subdir, QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR),
+                                    QStringLiteral("libphosphor_registry_test_fake_plugin"));
+    }
+
+    QString installFakePluginIdMismatch(const QString& pluginRoot) const
+    {
+        return installPluginFixture(pluginRoot, QStringLiteral("id-mismatch-plugin"),
+                                    QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR),
+                                    QStringLiteral("libphosphor_registry_test_fake_plugin_idmismatch"));
+    }
+
+    QString installFakePluginNullFactory(const QString& pluginRoot) const
+    {
+        return installPluginFixture(pluginRoot, QStringLiteral("null-factory-plugin"),
+                                    QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR),
+                                    QStringLiteral("libphosphor_registry_test_fake_plugin_nullfactory"));
+    }
+
+    QString installFakePluginNoEntry(const QString& pluginRoot) const
+    {
+        return installPluginFixture(pluginRoot, QStringLiteral("no-entry-plugin"),
+                                    QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR),
+                                    QStringLiteral("libphosphor_registry_test_fake_plugin_noentry"));
+    }
 };
 
-QString TestPluginLoader::installFakePlugin(const QString& pluginRoot, const QString& subdir) const
+QString TestPluginLoader::installPluginFixture(const QString& pluginRoot, const QString& subdir,
+                                               const QString& fixtureDir, const QString& soBasename) const
 {
     const QString destDir = QDir(pluginRoot).absoluteFilePath(subdir);
     QDir().mkpath(destDir);
-    const QString fixtureSo = QDir(QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR))
-                                  .absoluteFilePath(QStringLiteral("libphosphor_registry_test_fake_plugin.so"));
-    const QString fixtureManifest =
-        QDir(QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR)).absoluteFilePath(QStringLiteral("manifest.json"));
-
-    const QString destSo = QDir(destDir).absoluteFilePath(subdir + QStringLiteral(".so"));
-    const QString destManifest = QDir(destDir).absoluteFilePath(QStringLiteral("manifest.json"));
-
-    QFile::copy(fixtureSo, destSo);
-    QFile::copy(fixtureManifest, destManifest);
-
-    return destDir;
-}
-
-QString TestPluginLoader::installFakePluginIdMismatch(const QString& pluginRoot) const
-{
-    const QString subdir = QStringLiteral("id-mismatch-plugin");
-    const QString destDir = QDir(pluginRoot).absoluteFilePath(subdir);
-    QDir().mkpath(destDir);
-    const QString fixtureSo =
-        QDir(QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR))
-            .absoluteFilePath(QStringLiteral("libphosphor_registry_test_fake_plugin_idmismatch.so"));
-    const QString fixtureManifest = QDir(QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR))
-                                        .absoluteFilePath(QStringLiteral("manifest.json"));
+    const QString fixtureSo = QDir(fixtureDir).absoluteFilePath(soBasename + QStringLiteral(".so"));
+    const QString fixtureManifest = QDir(fixtureDir).absoluteFilePath(QStringLiteral("manifest.json"));
 
     const QString destSo = QDir(destDir).absoluteFilePath(subdir + QStringLiteral(".so"));
     const QString destManifest = QDir(destDir).absoluteFilePath(QStringLiteral("manifest.json"));
@@ -266,6 +284,100 @@ void TestPluginLoader::rejectsPathTraversalId()
     QCOMPARE(registry.size(), 0);
 }
 
+void TestPluginLoader::rejectsNullFactoryReturn()
+{
+    // Plugin entry point returns nullptr (e.g. construction failed
+    // because a required external service was unavailable). The
+    // loader must refuse, log, and clean up the QLibrary mapping.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    installFakePluginNullFactory(pluginRoot);
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("entry point returned null")));
+    loader.scanAndLoad();
+
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+}
+
+void TestPluginLoader::rejectsPluginWithoutEntryPoint()
+{
+    // Plugin .so loads cleanly via dlopen but does not export
+    // phosphor_registry_create_factory. The loader logs a warning
+    // and unloads.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    installFakePluginNoEntry(pluginRoot);
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("missing entry point")));
+    loader.scanAndLoad();
+
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+}
+
+void TestPluginLoader::rejectsCorruptSoFile()
+{
+    // Plugin .so is structurally invalid (not an ELF). dlopen
+    // refuses; QLibrary::load returns false; the loader logs a
+    // warning and moves on.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    const QString pluginDir = QDir(pluginRoot).absoluteFilePath(QStringLiteral("corrupt-plugin"));
+    QDir().mkpath(pluginDir);
+    QFile soFile(QDir(pluginDir).absoluteFilePath(QStringLiteral("corrupt-plugin.so")));
+    QVERIFY(soFile.open(QIODevice::WriteOnly));
+    soFile.write("this is not an ELF binary");
+    soFile.close();
+    QFile mfFile(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
+    QVERIFY(mfFile.open(QIODevice::WriteOnly | QIODevice::Text));
+    mfFile.write(
+        QStringLiteral("{\"id\":\"corrupt-plugin\",\"displayName\":\"X\",\"abi\":%1}").arg(kPluginAbiVersion).toUtf8());
+    mfFile.close();
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("failed to load")));
+    loader.scanAndLoad();
+
+    QCOMPARE(registry.size(), 0);
+}
+
+void TestPluginLoader::loadsNewPluginAddedOnRescan()
+{
+    // Hot-reload's central differentiator: install a plugin AFTER
+    // the loader is armed, then trigger a rescan, expect it to be
+    // discovered + registered without any restart.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    loader.scanAndLoad();
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+
+    // Drop a plugin into the watched root.
+    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    loader.rescanNow();
+
+    QCOMPARE(loadedSpy.count(), 1);
+    QCOMPARE(loadedSpy.first().at(0).toString(), QStringLiteral("fake-plugin"));
+    QCOMPARE(registry.size(), 1);
+}
+
 void TestPluginLoader::emitsRescanCompletedSignal()
 {
     QTemporaryDir tempDir;
@@ -282,6 +394,43 @@ void TestPluginLoader::emitsRescanCompletedSignal()
 
     loader.rescanNow();
     QCOMPARE(rescanSpy.count(), 2);
+}
+
+void TestPluginLoader::liveWidgetCountReturnsMinusOne()
+{
+    // Phase 1.3 leaves widget tracking unwired; liveWidgetCount
+    // returns -1 ("untracked"). Lock the contract so a future
+    // partial Phase-5 wiring doesn't return 0 (which would imply
+    // "no live widgets" — a semantic shift) before the full refcount
+    // path lands.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    loader.scanAndLoad();
+    QCOMPARE(loader.liveWidgetCount(QStringLiteral("fake-plugin")), -1);
+    QCOMPARE(loader.liveWidgetCount(QStringLiteral("nonexistent")), -1);
+}
+
+void TestPluginLoader::pluginRootReturnsConfiguredPath()
+{
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, tempDir.path());
+    QCOMPARE(loader.pluginRoot(), tempDir.path());
+}
+
+void TestPluginLoader::pluginRootResolvesXdgWhenEmpty()
+{
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, QString());
+    const QString resolved = loader.pluginRoot();
+    QVERIFY(!resolved.isEmpty());
+    QVERIFY(resolved.endsWith(QStringLiteral("phosphor/plugins")));
 }
 
 QTEST_MAIN(TestPluginLoader)

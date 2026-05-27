@@ -26,12 +26,20 @@ private Q_SLOTS:
     void parseObject_rejectsMissingAbi();
     void parseObject_rejectsAbiMismatch();
     void parseObject_capabilitiesPopulated();
+    void parseObject_capabilitiesEmptyArray();
+    void parseObject_capabilitiesSkipsNonStringElements();
     void parseObject_capabilitiesMissingDefaultsEmpty();
     void parseObject_rejectsIdMismatchAgainstDir();
+    void parseObject_rejectsNonIntAbi();
+    void parseObject_rejectsLeadingDotId();
+    void parseObject_rejectsForwardSlashId();
+    void parseObject_rejectsBackslashId();
+    void parseObject_rejectsTraversalSubstringId();
     void parseFile_acceptsValidFile();
     void parseFile_rejectsMissingFile();
     void parseFile_rejectsMalformedJson();
     void parseFile_rejectsNonObjectRoot();
+    void parseFile_rejectsOversizedManifest();
 };
 
 namespace {
@@ -121,12 +129,80 @@ void TestManifest::parseObject_capabilitiesPopulated()
     QCOMPARE(m.capabilities, (QStringList{QStringLiteral("bar.widget"), QStringLiteral("network.read")}));
 }
 
+void TestManifest::parseObject_capabilitiesEmptyArray()
+{
+    QJsonObject obj = makeValidManifestObject();
+    obj.insert(QLatin1String("capabilities"), QJsonArray{});
+    const Manifest m = Manifest::parseObject(obj, QString());
+    QVERIFY(m.isValid);
+    QVERIFY(m.capabilities.isEmpty());
+}
+
+void TestManifest::parseObject_capabilitiesSkipsNonStringElements()
+{
+    // Non-string elements (numbers, bools, objects) are silently
+    // dropped — the rule is "string-typed entries only" so a typo
+    // in the manifest doesn't poison the capability list with
+    // garbage values.
+    QJsonObject obj = makeValidManifestObject();
+    obj.insert(QLatin1String("capabilities"),
+               QJsonArray{QStringLiteral("bar.widget"), 5, true, QJsonObject{}, QStringLiteral("network.read")});
+    const Manifest m = Manifest::parseObject(obj, QString());
+    QVERIFY(m.isValid);
+    QCOMPARE(m.capabilities, (QStringList{QStringLiteral("bar.widget"), QStringLiteral("network.read")}));
+}
+
 void TestManifest::parseObject_capabilitiesMissingDefaultsEmpty()
 {
     QJsonObject obj = makeValidManifestObject();
     const Manifest m = Manifest::parseObject(obj, QString());
     QVERIFY(m.isValid);
     QVERIFY(m.capabilities.isEmpty());
+}
+
+void TestManifest::parseObject_rejectsNonIntAbi()
+{
+    // QJsonValue::toInt(-1) returns -1 for non-int abi (e.g. string
+    // or null); same code path as the missing-abi case but the
+    // rejection-string text reuses the "invalid 'abi'" branch — lock
+    // it so a future split between missing and malformed still fails.
+    QJsonObject obj = makeValidManifestObject();
+    obj.insert(QLatin1String("abi"), QStringLiteral("one"));
+    const Manifest m = Manifest::parseObject(obj, QString());
+    QVERIFY(!m.isValid);
+    QVERIFY(m.parseError.contains(QStringLiteral("'abi'")));
+}
+
+void TestManifest::parseObject_rejectsLeadingDotId()
+{
+    QJsonObject obj = makeValidManifestObject(QStringLiteral(".hidden"));
+    const Manifest m = Manifest::parseObject(obj, QString());
+    QVERIFY(!m.isValid);
+    QVERIFY(m.parseError.contains(QStringLiteral("unsafe characters")));
+}
+
+void TestManifest::parseObject_rejectsForwardSlashId()
+{
+    QJsonObject obj = makeValidManifestObject(QStringLiteral("a/b"));
+    const Manifest m = Manifest::parseObject(obj, QString());
+    QVERIFY(!m.isValid);
+    QVERIFY(m.parseError.contains(QStringLiteral("unsafe characters")));
+}
+
+void TestManifest::parseObject_rejectsBackslashId()
+{
+    QJsonObject obj = makeValidManifestObject(QStringLiteral("a\\b"));
+    const Manifest m = Manifest::parseObject(obj, QString());
+    QVERIFY(!m.isValid);
+    QVERIFY(m.parseError.contains(QStringLiteral("unsafe characters")));
+}
+
+void TestManifest::parseObject_rejectsTraversalSubstringId()
+{
+    QJsonObject obj = makeValidManifestObject(QStringLiteral("foo..bar"));
+    const Manifest m = Manifest::parseObject(obj, QString());
+    QVERIFY(!m.isValid);
+    QVERIFY(m.parseError.contains(QStringLiteral("unsafe characters")));
 }
 
 void TestManifest::parseObject_rejectsIdMismatchAgainstDir()
@@ -186,6 +262,27 @@ void TestManifest::parseFile_rejectsNonObjectRoot()
     const Manifest m = Manifest::parse(path, dir.filePath(QStringLiteral("clock")));
     QVERIFY(!m.isValid);
     QVERIFY(m.parseError.contains(QStringLiteral("not a JSON object")));
+}
+
+void TestManifest::parseFile_rejectsOversizedManifest()
+{
+    // The 64-KiB cap (kManifestMaxBytes in manifest.cpp) is a
+    // security gate — a hostile or corrupt manifest mustn't be
+    // able to blow up process memory. Write 70 KiB of padding
+    // inside a valid-shape JSON object to trip the size check
+    // before any structural parsing runs.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QString padding;
+    padding.fill(QLatin1Char('x'), 70 * 1024);
+    const QString contents =
+        QStringLiteral("{\"id\":\"clock\",\"displayName\":\"%1\",\"abi\":%2}").arg(padding).arg(kPluginAbiVersion);
+    const QString path = writeTempManifest(dir, QStringLiteral("clock"), contents);
+    QVERIFY(!path.isEmpty());
+
+    const Manifest m = Manifest::parse(path, dir.filePath(QStringLiteral("clock")));
+    QVERIFY(!m.isValid);
+    QVERIFY(m.parseError.contains(QStringLiteral("exceeds")));
 }
 
 QTEST_MAIN(TestManifest)

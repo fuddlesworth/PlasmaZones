@@ -32,12 +32,11 @@ public:
     Q_DISABLE_COPY_MOVE(DemoController)
 
     // Set the QML engine the controller will hand to factories when
-    // they need to compile QML. Called from main() AFTER both this
-    // controller and the engine are constructed, so the controller
-    // can be declared on the stack BEFORE the engine — which makes
-    // C++ reverse-order destruction tear the engine down first
-    // (clearing every QML binding to the context property) before
-    // this controller dies.
+    // they need to compile QML. MUST be called exactly once, from
+    // main() AFTER both this controller and the engine are
+    // constructed, BEFORE setContextProperty / loadFromModule. See
+    // the in-process registry demo's DemoController for the longer-
+    // form rationale.
     void setEngine(QQmlEngine* engine);
 
     // Bar QML invokes this from rebuildBar() for each id in

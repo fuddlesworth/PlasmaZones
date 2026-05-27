@@ -15,7 +15,18 @@ namespace PhosphorRegistry {
 // manifest schema changes in a non-backwards-compatible way.
 // Plugins whose manifest declares a different abi are refused at
 // load time.
+//
+// CMake mirrors this value via the PHOSPHOR_PLUGIN_ABI_VERSION
+// compile definition so test fixture manifests can be templated
+// (configure_file PHOSPHORREGISTRY_PLUGIN_ABI_VERSION) without
+// drifting from the C++ header. The static_assert below catches
+// any future skew at build time.
 constexpr int kPluginAbiVersion = 1;
+
+#ifdef PHOSPHOR_PLUGIN_ABI_VERSION
+static_assert(PHOSPHOR_PLUGIN_ABI_VERSION == kPluginAbiVersion,
+              "CMake's PHOSPHOR_PLUGIN_ABI_VERSION must match Manifest.h's kPluginAbiVersion");
+#endif
 
 // Plain-old-data mirror of the plugin manifest.json schema. Filled
 // in by Manifest::parse() from the on-disk JSON. The struct stays
@@ -52,12 +63,18 @@ struct PHOSPHORREGISTRY_EXPORT Manifest
 
     // Parse a manifest.json from disk. The pluginDir is the directory
     // the manifest lives in; the manifest's id must match
-    // pluginDir's basename. On parse error, returns a Manifest with
-    // isValid == false and parseError populated.
+    // pluginDir's basename. pluginDir MUST be an absolute path —
+    // relative inputs are normalised against the current working
+    // directory which would couple validation to CWD. The PluginLoader
+    // always passes absolute paths (built via QDir::absoluteFilePath);
+    // tests calling parse() directly must mirror that. On parse
+    // error, returns a Manifest with isValid == false and parseError
+    // populated.
     [[nodiscard]] static Manifest parse(const QString& manifestJsonPath, const QString& pluginDir);
 
     // Test seam: parse a manifest from an in-memory QJsonObject
-    // (skips the file-read step). Used by test_manifest.cpp.
+    // (skips the file-read step). Used by test_manifest.cpp. Same
+    // absolute-path requirement on pluginDir.
     [[nodiscard]] static Manifest parseObject(const QJsonObject& obj, const QString& pluginDir);
 };
 

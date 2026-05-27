@@ -48,6 +48,8 @@ DemoController::~DemoController() = default;
 
 void DemoController::setEngine(QQmlEngine* engine)
 {
+    Q_ASSERT_X(!m_engine || m_engine == engine, "DemoController::setEngine",
+               "DemoController::setEngine must be called at most once (or with the same engine)");
     m_engine = engine;
 }
 

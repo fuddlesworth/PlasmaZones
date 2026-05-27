@@ -154,8 +154,11 @@ private:
     // unit tests. Not part of the public API.
     friend class ScanStrategyImpl;
 
-    QString resolveDefaultPluginRoot() const;
-    QString resolveDefaultPluginRootImpl() const;
+    // Resolve the default plugin root when the ctor's pluginRoot
+    // argument is empty. Always returns
+    // ${GenericDataLocation}/phosphor/plugins/ (XDG-honouring via
+    // QStandardPaths::writableLocation).
+    [[nodiscard]] QString resolveDefaultPluginRoot() const;
     bool ensurePluginRootExists() const;
 
     // Drive a single scan cycle. Called by the scan strategy after
@@ -179,11 +182,18 @@ private:
     // exclusive — only the QHash holds a ref in steady state — but
     // shared_ptr unblocks the COW path.
     QHash<QString, std::shared_ptr<LoadedPlugin>> m_plugins;
-    // QLibrary instances retained from prior reloads / unregisters.
-    // Pinned for the PluginLoader's lifetime so old widgets whose
-    // vtables live inside the .so keep working. Drains at
-    // ~PluginLoader. See pluginloader.cpp for the Phase-1.3 vs
-    // Phase-5 trade-off discussion.
+    // QLibrary instances retained from prior unregisters. Pinned for
+    // the PluginLoader's lifetime so old widgets whose vtables live
+    // inside the .so keep working. Drains at ~PluginLoader.
+    //
+    // Known bounded leak: this vector grows monotonically across the
+    // process lifetime — each plugin removed at runtime adds one
+    // QLibrary mapping that stays until shutdown. For a desktop
+    // shell session the upper bound is "user-driven plugin churn,"
+    // typically &lt;100 over a day, well within memory budget. The
+    // Phase-5 sandbox replaces this with a versioned-path scheme
+    // and refcount-gated unload. See pluginloader.cpp for the full
+    // Phase-1.3 vs Phase-5 rationale.
     std::vector<std::unique_ptr<QLibrary>> m_pinnedLibraries;
 };
 
