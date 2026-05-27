@@ -17,10 +17,15 @@ namespace PhosphorRegistry {
 // load time.
 //
 // CMake mirrors this value via the PHOSPHOR_PLUGIN_ABI_VERSION
-// compile definition so test fixture manifests can be templated
-// (configure_file PHOSPHORREGISTRY_PLUGIN_ABI_VERSION) without
-// drifting from the C++ header. The static_assert below catches
-// any future skew at build time.
+// compile definition (PUBLIC on the PhosphorRegistry target), so
+// test fixture manifests can be templated by configure_file with
+// the same @PHOSPHOR_PLUGIN_ABI_VERSION@ substitution and never
+// drift from the C++ header. The static_assert below catches skew
+// at build time for any translation unit that links
+// PhosphorRegistry (the canonical consumer path); a TU including
+// this header without linking the target will silently skip the
+// check, which is acceptable because such TUs cannot ship a real
+// plugin anyway.
 constexpr int kPluginAbiVersion = 1;
 
 #ifdef PHOSPHOR_PLUGIN_ABI_VERSION

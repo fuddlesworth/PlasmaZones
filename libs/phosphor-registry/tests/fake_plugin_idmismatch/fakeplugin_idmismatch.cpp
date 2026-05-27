@@ -34,7 +34,17 @@ public:
     }
     [[nodiscard]] QQuickItem* createWidget(QQmlEngine* /*engine*/, QObject* parent) override
     {
-        return new QQuickItem(qobject_cast<QQuickItem*>(parent));
+        // Never actually reached — the loader rejects this fixture
+        // on the id-mismatch check before any widget can be built.
+        // Mirror the parent-handling shape of the canonical fake
+        // plugin so a future test that DOES exercise this path
+        // doesn't get a surprise.
+        auto* parentItem = qobject_cast<QQuickItem*>(parent);
+        auto* item = new QQuickItem(parentItem);
+        if (parent && !parentItem) {
+            item->setParent(parent);
+        }
+        return item;
     }
 };
 

@@ -190,7 +190,7 @@ private:
     // process lifetime — each plugin removed at runtime adds one
     // QLibrary mapping that stays until shutdown. For a desktop
     // shell session the upper bound is "user-driven plugin churn,"
-    // typically &lt;100 over a day, well within memory budget. The
+    // typically <100 over a day, well within memory budget. The
     // Phase-5 sandbox replaces this with a versioned-path scheme
     // and refcount-gated unload. See pluginloader.cpp for the full
     // Phase-1.3 vs Phase-5 rationale.

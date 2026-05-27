@@ -50,7 +50,8 @@ private Q_SLOTS:
     void rejectsCorruptSoFile();
     void loadsNewPluginAddedOnRescan();
     void emitsRescanCompletedSignal();
-    void liveWidgetCountReturnsMinusOne();
+    void liveWidgetCountReturnsMinusOneForLoadedPlugin();
+    void liveWidgetCountReturnsMinusOneForUnknownPlugin();
     void pluginRootReturnsConfiguredPath();
     void pluginRootResolvesXdgWhenEmpty();
 
@@ -273,7 +274,7 @@ void TestPluginLoader::rejectsPathTraversalId()
     QDir().mkpath(pluginDir);
     QFile mf(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
     QVERIFY(mf.open(QIODevice::WriteOnly | QIODevice::Text));
-    mf.write(QStringLiteral("{\"id\":\"foo..bar\",\"displayName\":\"X\",\"abi\":1}").toUtf8());
+    mf.write(QStringLiteral("{\"id\":\"foo..bar\",\"displayName\":\"X\",\"abi\":%1}").arg(kPluginAbiVersion).toUtf8());
     mf.close();
 
     Registry<IBarWidgetFactory> registry;
@@ -396,7 +397,7 @@ void TestPluginLoader::emitsRescanCompletedSignal()
     QCOMPARE(rescanSpy.count(), 2);
 }
 
-void TestPluginLoader::liveWidgetCountReturnsMinusOne()
+void TestPluginLoader::liveWidgetCountReturnsMinusOneForLoadedPlugin()
 {
     // Phase 1.3 leaves widget tracking unwired; liveWidgetCount
     // returns -1 ("untracked"). Lock the contract so a future
@@ -412,6 +413,19 @@ void TestPluginLoader::liveWidgetCountReturnsMinusOne()
     PluginLoader loader(&registry, pluginRoot);
     loader.scanAndLoad();
     QCOMPARE(loader.liveWidgetCount(QStringLiteral("fake-plugin")), -1);
+}
+
+void TestPluginLoader::liveWidgetCountReturnsMinusOneForUnknownPlugin()
+{
+    // Distinct from the loaded-plugin case: an unknown id today also
+    // returns -1 because the implementation is unconditional, but a
+    // future Phase-5 implementation might split "untracked" (-1)
+    // from "unknown plugin" (0 or some other sentinel). Pin both
+    // separately so the next implementer sees both cases explicitly.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, tempDir.path());
     QCOMPARE(loader.liveWidgetCount(QStringLiteral("nonexistent")), -1);
 }
 

@@ -14,16 +14,20 @@ find_package(Qt6 REQUIRED COMPONENTS Test Quick)
 #   target  - CMake target name (also the subdir name under
 #             ${CMAKE_CURRENT_BINARY_DIR}/)
 #   source  - .cpp file relative to ${CMAKE_CURRENT_SOURCE_DIR}/
-#   linkQt  - "QT" to PRIVATE-link Qt + PhosphorRegistry (factories);
-#             "NOQT" to skip both (no-entry-point fixture; doesn't
-#             need anything beyond its own translation unit)
+#   linkQt  - "FACTORY" to PRIVATE-link the full Qt + PhosphorRegistry
+#             stack (canonical fixture shape — the plugin builds a
+#             real factory subclass against the public ABI);
+#             "MINIMAL" for fixtures that only need Q_DECL_EXPORT
+#             from QtCore (e.g. the noentry fixture that exports a
+#             dummy symbol with no factory machinery)
 function(phosphorregistry_add_fake_plugin target sourceDir source linkQt)
     add_library(${target} MODULE ${sourceDir}/${source})
-    if(linkQt STREQUAL "QT")
+    # All fixtures need at least Qt6::Core for Q_DECL_EXPORT.
+    target_link_libraries(${target} PRIVATE Qt6::Core)
+    if(linkQt STREQUAL "FACTORY")
         target_link_libraries(${target}
             PRIVATE
                 PhosphorRegistry::PhosphorRegistry
-                Qt6::Core
                 Qt6::Gui
                 Qt6::Qml
                 Qt6::Quick
@@ -31,6 +35,10 @@ function(phosphorregistry_add_fake_plugin target sourceDir source linkQt)
     endif()
     # Default lib<name>.so output naming; matches the install helper
     # in the test binary which copies fixtures by basename.
+    # UNITY_BUILD OFF is load-bearing: each fixture's extern "C"
+    # entry-point symbol (phosphor_registry_create_factory) would
+    # collide with the others if they were merged into a single
+    # translation unit.
     set_target_properties(${target} PROPERTIES
         PREFIX "lib"
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${target}
@@ -51,19 +59,19 @@ endfunction()
 phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin
                                  fake_plugin
                                  fakeplugin.cpp
-                                 QT)
+                                 FACTORY)
 phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_idmismatch
                                  fake_plugin_idmismatch
                                  fakeplugin_idmismatch.cpp
-                                 QT)
+                                 FACTORY)
 phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_nullfactory
                                  fake_plugin_nullfactory
                                  fakeplugin_nullfactory.cpp
-                                 QT)
+                                 FACTORY)
 phosphorregistry_add_fake_plugin(phosphor_registry_test_fake_plugin_noentry
                                  fake_plugin_noentry
                                  fakeplugin_noentry.cpp
-                                 NOQT)
+                                 MINIMAL)
 
 function(phosphorregistry_add_test name)
     add_executable(${name} ${name}.cpp)
@@ -76,13 +84,6 @@ function(phosphorregistry_add_test name)
             Qt6::Test
             Qt6::Quick
     )
-    target_compile_definitions(${name}
-        PRIVATE
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin"
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_idmismatch"
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_nullfactory"
-            PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_noentry"
-    )
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
@@ -91,8 +92,18 @@ phosphorregistry_add_test(test_phosphor_registry)
 phosphorregistry_add_test(test_phosphor_registry_manifest)
 phosphorregistry_add_test(test_phosphor_registry_pluginloader)
 
-# test_phosphor_registry_pluginloader needs every fixture .so built
-# before it runs.
+# Plugin-loader test consumes the four MODULE fixtures via per-fixture
+# compile definitions + an explicit build-time dependency. Other test
+# binaries don't get the macros (they don't load .so files) so the
+# define surface stays minimal and parallel builds don't accidentally
+# run a test before its fixtures exist.
+target_compile_definitions(test_phosphor_registry_pluginloader
+    PRIVATE
+        PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin"
+        PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_idmismatch"
+        PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_nullfactory"
+        PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_noentry"
+)
 add_dependencies(test_phosphor_registry_pluginloader
     phosphor_registry_test_fake_plugin
     phosphor_registry_test_fake_plugin_idmismatch

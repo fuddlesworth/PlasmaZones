@@ -67,6 +67,12 @@ bool isSafeId(const QString& id)
 // invalid encodings (a QString round-trip would substitute U+FFFD
 // for malformed UTF-8 and the parser would then see the substituted
 // characters instead of failing cleanly).
+//
+// Failure modes (parseError populated, returns {}):
+//   - open() rejected (file missing, permissions, ...)
+//   - size exceeds kManifestMaxBytes
+//   - file is empty (zero bytes) — explicitly flagged so the caller
+//     doesn't see a confusing "malformed JSON at offset 0" later
 QByteArray readJsonFile(const QString& path, QString& parseError)
 {
     QFile file(path);
@@ -77,6 +83,10 @@ QByteArray readJsonFile(const QString& path, QString& parseError)
     const qint64 size = file.size();
     if (size > kManifestMaxBytes) {
         parseError = QStringLiteral("manifest exceeds %1-byte cap (was %2)").arg(kManifestMaxBytes).arg(size);
+        return {};
+    }
+    if (size == 0) {
+        parseError = QStringLiteral("manifest is empty");
         return {};
     }
     return file.readAll();

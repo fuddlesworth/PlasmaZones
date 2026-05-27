@@ -40,6 +40,7 @@ private Q_SLOTS:
     void parseFile_rejectsMalformedJson();
     void parseFile_rejectsNonObjectRoot();
     void parseFile_rejectsOversizedManifest();
+    void parseFile_rejectsEmptyFile();
 };
 
 namespace {
@@ -283,6 +284,22 @@ void TestManifest::parseFile_rejectsOversizedManifest()
     const Manifest m = Manifest::parse(path, dir.filePath(QStringLiteral("clock")));
     QVERIFY(!m.isValid);
     QVERIFY(m.parseError.contains(QStringLiteral("exceeds")));
+}
+
+void TestManifest::parseFile_rejectsEmptyFile()
+{
+    // An empty manifest.json is a configuration error (not a
+    // malformed-JSON case). The parser flags it explicitly so the
+    // caller doesn't see a confusing "malformed JSON at offset 0"
+    // diagnostic.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = writeTempManifest(dir, QStringLiteral("clock"), QString());
+    QVERIFY(!path.isEmpty());
+
+    const Manifest m = Manifest::parse(path, dir.filePath(QStringLiteral("clock")));
+    QVERIFY(!m.isValid);
+    QVERIFY(m.parseError.contains(QStringLiteral("empty")));
 }
 
 QTEST_MAIN(TestManifest)

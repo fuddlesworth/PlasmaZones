@@ -223,6 +223,12 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
     for (const QString& pluginId : currentIds) {
         if (!discoveredIds.contains(pluginId)) {
             auto entry = m_plugins.value(pluginId);
+            // m_plugins.value returns a default-constructed shared_ptr
+            // for unknown keys, but we just enumerated keys() — every
+            // id in currentIds must still exist. Assert the invariant
+            // so a future refactor that drops or inserts default
+            // entries mid-loop is caught immediately.
+            Q_ASSERT(entry);
             m_pinnedLibraries.push_back(std::move(entry->library));
             m_plugins.remove(pluginId);
             if (m_registry) {

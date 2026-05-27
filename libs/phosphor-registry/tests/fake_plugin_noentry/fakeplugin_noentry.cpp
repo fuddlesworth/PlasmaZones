@@ -8,7 +8,9 @@
 // library with no public symbols). The loader must log a warning
 // ("missing entry point") and unload the .so cleanly.
 
-extern "C" __attribute__((visibility("default"))) int phosphor_registry_noentry_marker()
+#include <QtCore/qglobal.h>
+
+extern "C" Q_DECL_EXPORT int phosphor_registry_noentry_marker()
 {
     return 0;
 }
