@@ -40,9 +40,13 @@ target_link_libraries(phosphor_popout_demo_qml
         Qt6::Quick
 )
 
+target_compile_features(phosphor_popout_demo_qml PRIVATE cxx_std_20)
+
 add_executable(phosphor-popout-demo
     main.cpp
 )
+
+target_compile_features(phosphor-popout-demo PRIVATE cxx_std_20)
 
 target_link_libraries(phosphor-popout-demo
     PRIVATE

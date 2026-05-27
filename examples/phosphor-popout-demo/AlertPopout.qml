@@ -24,6 +24,8 @@ Rectangle {
     border.color: Theme.error
     border.width: 2
     radius: Tokens.radius_l
+    Accessible.role: Accessible.AlertMessage
+    Accessible.name: qsTr("Modal alert")
 
     ColumnLayout {
         anchors.centerIn: parent

@@ -127,6 +127,10 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
         hostItem->setProperty("backdropColor", QColor(0, 0, 0, 0));
         break;
     }
+    // dismissOnFocusLoss collapses to dismissOnClickOutside inside a
+    // single window. The in-window demo has no real focus model that
+    // would distinguish them; a real layer-shell transport handles
+    // both concepts separately.
     hostItem->setProperty("dismissOnClickOutside", request.dismissOnFocusLoss);
 
     const QString handle = QStringLiteral("popout-%1").arg(++m_counter);
@@ -135,8 +139,10 @@ QString InAppPopoutTransport::openSurface(const PhosphorPopout::PopoutRequest& r
     // Wire self-dismiss. When PopoutHost emits `dismissed` after a
     // click-outside drains its close animation, route the handle to
     // the controller's registered callback and tear the wrapper down.
-    // Handle captured by value so we identify the right entry even if
-    // other popouts open and close in the meantime.
+    // SIGNAL/SLOT string form is the legitimate path here. `dismissed`
+    // is a QML-defined signal on PopoutHost.qml and the C++ side has
+    // no compile-time method pointer for it; the function-pointer
+    // connect would require forward-declaring a QML symbol.
     QObject::connect(hostItem, SIGNAL(dismissed()), this, SLOT(onHostDismissed()));
     // Stash the handle on the host so the slot can route it back.
     hostItem->setProperty("_popoutHandle", handle);
@@ -168,11 +174,6 @@ void InAppPopoutTransport::closeSurface(const QString& handle)
     // animation duration as a hardcoded timer interval.
     it->closing = true;
     it->hostItem->setProperty("open", false);
-}
-
-bool InAppPopoutTransport::isSurfaceAlive(const QString& handle) const
-{
-    return m_entries.contains(handle);
 }
 
 void InAppPopoutTransport::setSurfaceDismissedCallback(std::function<void(const QString&)> callback)

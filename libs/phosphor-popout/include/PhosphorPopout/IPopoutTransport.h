@@ -31,7 +31,9 @@ namespace PhosphorPopout {
 class PHOSPHORPOPOUT_EXPORT IPopoutTransport
 {
 public:
+    IPopoutTransport() = default;
     virtual ~IPopoutTransport() = default;
+    Q_DISABLE_COPY_MOVE(IPopoutTransport)
 
     // Create and show a popout surface for the request. Returns an
     // opaque handle the controller uses for later close and lookup.
@@ -48,17 +50,19 @@ public:
     // surfaces that close themselves.
     virtual void closeSurface(const QString& handle) = 0;
 
-    // True while a surface is still alive. The transport has not yet
-    // confirmed its destruction. Used by the controller to validate
-    // its handle cache when called from re-entrant contexts.
-    [[nodiscard]] virtual bool isSurfaceAlive(const QString& handle) const = 0;
-
     // Install a callback fired when a surface dismisses itself. The
     // controller installs exactly one callback per transport during
-    // construction. The callback receives the handle of the dismissed
-    // surface. The transport must NOT call this for surfaces closed
-    // via closeSurface. Those are caller-initiated and the controller
-    // already knows.
+    // construction and detaches it via an empty std::function in its
+    // destructor. Implementations must replace any prior callback when
+    // called, so the controller's detach-on-destruction cannot leave
+    // a dangling lambda behind. The callback receives the handle of
+    // the dismissed surface. The transport must NOT call this for
+    // surfaces closed via closeSurface. Those are caller-initiated
+    // and the controller already knows. Transports also must NOT
+    // synchronously invoke this from inside openSurface or
+    // closeSurface; the controller has a re-entrancy guard for
+    // misbehaving transports but well-behaved transports defer
+    // dismiss events to the next event-loop tick.
     virtual void setSurfaceDismissedCallback(std::function<void(const QString&)> callback) = 0;
 };
 

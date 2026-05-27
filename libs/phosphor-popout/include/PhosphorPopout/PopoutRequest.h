@@ -62,6 +62,12 @@ Q_ENUM_NS(ExclusiveMode)
 // exclusivity, and forwarded props. Q_GADGET + QML_VALUE_TYPE so QML
 // callers can build one declaratively as `PopoutRequest { ... }`.
 //
+// One-shot value type. Mutating fields after passing to
+// IPopoutService::open has no effect on the live popout; rebuild and
+// re-open if the popout state needs to change. Fields use MEMBER
+// Q_PROPERTY without NOTIFY because the request is read once at open
+// time and never re-read.
+//
 // Lifetime of `content`. The caller retains ownership of the
 // QQmlComponent. The caller must keep it alive until the corresponding
 // popoutClosed signal fires for the handle that open() returned.
@@ -83,6 +89,12 @@ class PHOSPHORPOPOUT_EXPORT PopoutRequest
     Q_PROPERTY(QVariantMap props MEMBER props)
 
 public:
+    // Default cooperative-scope identifier. Single shared instance so
+    // every default-constructed PopoutRequest reuses one refcounted
+    // QString rather than allocating a fresh "default" per construction.
+    // Shells issuing popouts on every focus change benefit from this.
+    static inline const QString DefaultScope = QStringLiteral("default");
+
     // Stable identifier for this popout. Examples are "control-center"
     // or "launcher". Used by isOpen, toggle, and closeAll. Two requests
     // with the same id are treated as the same logical popout. Toggle
@@ -105,7 +117,10 @@ public:
     Anchor anchor = Anchor::BarCenter;
 
     // Used only when anchor == Custom. Interpreted by the transport
-    // in screen-local coordinates.
+    // in screen-local coordinates. A default-constructed QPointF
+    // (0, 0) is a valid screen-origin anchor and the transport will
+    // place the popout there; callers using Anchor::Custom must
+    // populate this explicitly or accept origin placement.
     QPointF customAnchor;
 
     ExclusiveMode exclusive = ExclusiveMode::Cooperative;
@@ -115,7 +130,7 @@ public:
     // callers that don't care all share one scope. Common patterns
     // are "default" for one popout per process, or "screen-DP-1"
     // when the shell wants one cooperative popout per output.
-    QString scope = QStringLiteral("default");
+    QString scope = DefaultScope;
 
     // Whether the popout should request keyboard focus on open.
     // Modals typically yes. Cooperatives sometimes no. The bar's

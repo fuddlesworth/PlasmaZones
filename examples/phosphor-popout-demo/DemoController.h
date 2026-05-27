@@ -27,7 +27,7 @@ class InAppPopoutTransport;
 class DemoController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QStringList openPopoutIds READ openPopoutIds NOTIFY openPopoutsChanged)
+    Q_PROPERTY(QStringList openPopoutIds READ openPopoutIds NOTIFY openPopoutIdsChanged)
     Q_PROPERTY(bool modalActive READ modalActive NOTIFY modalActiveChanged)
 public:
     explicit DemoController(QObject* parent = nullptr);
@@ -52,7 +52,7 @@ public:
     [[nodiscard]] bool modalActive() const;
 
 Q_SIGNALS:
-    void openPopoutsChanged();
+    void openPopoutIdsChanged();
     void modalActiveChanged();
 
 private:

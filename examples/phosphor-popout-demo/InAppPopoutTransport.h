@@ -49,7 +49,6 @@ public:
     // IPopoutTransport.
     [[nodiscard]] QString openSurface(const PhosphorPopout::PopoutRequest& request) override;
     void closeSurface(const QString& handle) override;
-    [[nodiscard]] bool isSurfaceAlive(const QString& handle) const override;
     void setSurfaceDismissedCallback(std::function<void(const QString&)> callback) override;
 
 private Q_SLOTS:

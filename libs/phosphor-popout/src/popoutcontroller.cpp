@@ -114,10 +114,15 @@ struct PopoutController::Impl
             --modalCount;
         }
 
-        Q_EMIT self->popoutClosed(copy.popoutId, handle);
+        // modalActiveChanged fires before popoutClosed to mirror the
+        // open()-side ordering (state transition signal first, logical
+        // event signal second). A popoutClosed slot inspecting
+        // isModalActive() then sees the post-transition state with the
+        // notify having already fired.
         if (wasModal && modalCount == 0) {
             Q_EMIT self->modalActiveChanged();
         }
+        Q_EMIT self->popoutClosed(copy.popoutId, handle);
     }
 
     // Caller-initiated teardown. Single source of truth for every
@@ -146,10 +151,10 @@ struct PopoutController::Impl
         }
 
         transport->closeSurface(handle);
-        Q_EMIT self->popoutClosed(copy.popoutId, handle);
         if (wasModal && modalCount == 0) {
             Q_EMIT self->modalActiveChanged();
         }
+        Q_EMIT self->popoutClosed(copy.popoutId, handle);
     }
 
     // Close every Cooperative entry. Used when the first Modal opens
@@ -219,9 +224,12 @@ PopoutController::~PopoutController()
     // in the wrong order. Without this, any subsequent dismiss the
     // transport routes through the stale lambda dereferences a dead
     // d-pointer and crashes.
-    if (d && d->transport) {
-        d->transport->setSurfaceDismissedCallback({});
-    }
+    //
+    // d is non-null here. make_unique in the ctor either succeeded or
+    // threw, in which case the destructor never runs. transport is
+    // non-null because the ctor's Q_ASSERT_X enforces it (and a real
+    // null would have crashed at the install-callback line above).
+    d->transport->setSurfaceDismissedCallback({});
 }
 
 QString PopoutController::open(const PopoutRequest& request)

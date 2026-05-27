@@ -27,12 +27,12 @@ DemoController::DemoController(QObject* parent)
     QObject::connect(m_controller, &PopoutController::popoutOpened, this, [this](const QString& id, const QString&) {
         if (!m_openIds.contains(id)) {
             m_openIds.append(id);
-            Q_EMIT openPopoutsChanged();
+            Q_EMIT openPopoutIdsChanged();
         }
     });
     QObject::connect(m_controller, &PopoutController::popoutClosed, this, [this](const QString& id, const QString&) {
         if (m_openIds.removeAll(id) > 0) {
-            Q_EMIT openPopoutsChanged();
+            Q_EMIT openPopoutIdsChanged();
         }
     });
     QObject::connect(m_controller, &PopoutController::modalActiveChanged, this, &DemoController::modalActiveChanged);

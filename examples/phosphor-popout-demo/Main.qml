@@ -17,13 +17,13 @@ ApplicationWindow {
     id: window
 
     // Single source of truth for which popoutIds are open. Each
-    // button's accent binding reads one field. Without this, every
-    // button does its own `openPopoutIds.indexOf("...")` scan and the
-    // QML engine re-runs each indexOf on every list mutation. With
-    // four buttons that is a 4x O(n) scan per change. The object form
-    // here is hand-built rather than computed in JS so the bindings
-    // stay declarative.
-    readonly property var _openSet: {
+    // cooperative/detached button's accent binding reads one field.
+    // Without this, every button does its own
+    // `openPopoutIds.indexOf("...")` scan and the QML engine re-runs
+    // each indexOf on every list mutation. The Modal button reads
+    // demoController.modalActive directly so it isn't represented
+    // here.
+    readonly property var openSet: {
         const ids = demoController.openPopoutIds;
         return {
             "calendar": ids.indexOf("calendar") !== -1,
@@ -83,28 +83,32 @@ ApplicationWindow {
 
             PhosphorButton {
                 text: qsTr("Cooperative A (Calendar)")
-                accentColor: window._openSet["calendar"] ? Theme.primary : "transparent"
+                accented: window.openSet["calendar"]
+                accentColor: Theme.primary
                 labelColor: Theme.on_primary
                 onClicked: demoController.toggleCooperativeA()
             }
 
             PhosphorButton {
                 text: qsTr("Cooperative B (Note)")
-                accentColor: window._openSet["quick-note"] ? Theme.primary : "transparent"
+                accented: window.openSet["quick-note"]
+                accentColor: Theme.primary
                 labelColor: Theme.on_primary
                 onClicked: demoController.toggleCooperativeB()
             }
 
             PhosphorButton {
                 text: qsTr("Modal (Alert)")
-                accentColor: demoController.modalActive ? Theme.error : "transparent"
+                accented: demoController.modalActive
+                accentColor: Theme.error
                 labelColor: Theme.on_error
                 onClicked: demoController.toggleModal()
             }
 
             PhosphorButton {
                 text: qsTr("Detached (Pinned)")
-                accentColor: window._openSet["pinned-note"] ? Theme.tertiary : "transparent"
+                accented: window.openSet["pinned-note"]
+                accentColor: Theme.tertiary
                 labelColor: Theme.on_tertiary
                 onClicked: demoController.toggleDetached()
             }

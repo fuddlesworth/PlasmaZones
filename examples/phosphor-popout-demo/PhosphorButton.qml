@@ -11,25 +11,27 @@ import QtQuick
 import QtQuick.Controls
 
 Button {
-    // Optional accent override. When set, the button fills with the
-    // accent color and adapts its label color to the accent's
-    // contrast pair via `labelColor`. When unset, the button uses
-    // the surface ramp like a regular tonal button.
-
-    id: root
-
+    // Optional accent override. When `accented` is true the button
+    // fills with `accentColor` and renders its label in `labelColor`
+    // to keep contrast against the accent. When `accented` is false
+    // the button uses the surface ramp like a regular tonal button
+    // and the accentColor/labelColor values are ignored.
     // The label property is named `labelColor` rather than
     // `onAccentColor`. QML grammar reserves identifiers starting
     // with `on` for signal-handler shorthand, so a property called
     // `onAccentColor` is silently parsed as a handler for the
     // `accentColorChanged` signal at every call site.
-    property color accentColor: "transparent"
-    property color labelColor: Theme.on_surface
-    // Explicit accent toggle. Earlier this derived from accentColor.a > 0,
-    // which silently flipped to "accented" for any caller passing a
-    // semi-transparent theme color. Naming the flag here lets callers
-    // request "draw as accented" independently of the color's alpha.
-    property bool accented: accentColor != "transparent"
+
+    id: root
+
+    // `accented` is an explicit boolean rather than something derived
+    // from accentColor's alpha. Deriving it broke for callers passing
+    // semi-transparent theme colors; deriving via != "transparent"
+    // broke for callers passing Qt.rgba(r, g, b, 0). The explicit
+    // flag is the only form that doesn't surprise either case.
+    property bool accented: false
+    property color accentColor: Theme.primary
+    property color labelColor: Theme.on_primary
     readonly property color _fill: {
         if (root.down)
             return root.accented ? Qt.darker(root.accentColor, 1.15) : Theme.surface_container_highest;

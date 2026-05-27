@@ -51,6 +51,11 @@ class IPopoutTransport;
 class PHOSPHORPOPOUT_EXPORT PopoutController : public QObject, public IPopoutService
 {
     Q_OBJECT
+    // QML-bindable mirror of isModalActive(). UIs binding a "disable
+    // popout-trigger buttons while a modal is up" rule reach this
+    // directly via `Popouts.modalActive` instead of wiring an
+    // imperative onModalActiveChanged handler.
+    Q_PROPERTY(bool modalActive READ isModalActive NOTIFY modalActiveChanged)
     QML_ELEMENT
     // PopoutController requires a transport injected at construction.
     // QML cannot default-construct it. The type is registered for
@@ -67,10 +72,12 @@ public:
     explicit PopoutController(IPopoutTransport* transport, QObject* parent = nullptr);
     ~PopoutController() override;
 
-    // IPopoutService.
+    // IPopoutService. Re-declared as Q_INVOKABLE so QML callers reach
+    // them through this concrete type. The base interface has no
+    // Q_OBJECT/Q_GADGET so it cannot carry Q_INVOKABLE itself.
     [[nodiscard]] Q_INVOKABLE QString open(const PopoutRequest& request) override;
     Q_INVOKABLE void close(const QString& handle) override;
-    Q_INVOKABLE QString toggle(const PopoutRequest& request) override;
+    [[nodiscard]] Q_INVOKABLE QString toggle(const PopoutRequest& request) override;
     [[nodiscard]] Q_INVOKABLE bool isOpen(const QString& popoutId) const override;
     Q_INVOKABLE void closeAll() override;
 

@@ -21,10 +21,11 @@ consistently.
 
 - **Single arbiter, multiple transports.** The arbitration state
   machine lives in `PopoutController`. The actual layer-shell surface
-  creation is behind `IPopoutTransport`. Production wires the
-  transport to `phosphor-layer::SurfaceFactory`. Tests inject a fake
-  transport and drive the controller as pure logic with no Wayland in
-  sight.
+  creation is behind `IPopoutTransport`. A future `LayerPopoutTransport`
+  will wire to `phosphor-layer::SurfaceFactory` once the shell binary
+  needs popouts; the in-app demo transport ships today as the
+  acceptance harness. Tests inject a fake transport and drive the
+  controller as pure logic with no Wayland in sight.
 - **Three exclusivity modes.** Cooperative is the default. One per
   scope. Opening a new one swaps the previous. Modal suppresses every
   Cooperative across every scope while it's open. Detached floats
@@ -58,7 +59,8 @@ consistently.
 | `open: bool`                  | property | Drives the show/hide animation. The transport sets this true after the surface is parented and false to begin teardown |
 | `dismissOnClickOutside: bool` | property | When true, a click on the backdrop sets `open = false`. The transport wires this from `PopoutRequest.dismissOnFocusLoss` |
 | `backdropColor: color`        | property | Background dim color. The transport binds a scrim for Modal, a lighter dim for Cooperative, transparent for Detached |
-| `dismissed()`                 | signal   | Emitted after the close animation finishes. The transport's `dismissed` callback fires through here so the bookkeeping lines up with the visual |
+| `dismiss()`                   | function | Content delegates several levels deep can call this to close the popout without walking the parent chain. The transport injects a `_popoutHost` reference on the content; the content calls `_popoutHost.dismiss()` |
+| `dismissed()`                 | signal   | Emitted after the close animation finishes. Fires once per open-then-close cycle, so transports that reuse a single host across many popouts get a fresh dismissed each time. The transport's `dismissed` callback fires through here so the bookkeeping lines up with the visual |
 
 ## Typical use
 
@@ -69,7 +71,7 @@ consistently.
 
 using namespace PhosphorPopout;
 
-MyLayerShellTransport transport(...);             // implements IPopoutTransport
+MyPopoutTransport transport(...);                 // implements IPopoutTransport
 PopoutController controller(&transport);          // transport must outlive the controller
 
 QObject::connect(&controller, &PopoutController::popoutOpened,
@@ -148,6 +150,12 @@ constructor. Field assignment uses regular property syntax.
 - The Qt module `Phosphor.Theme`. PopoutHost.qml binds `Motion`
   durations and easings for its animation timing. The C++ core has
   no Phosphor link-time dependency.
+- Consumers building against `find_package(PhosphorPopout)` must
+  also link the PhosphorTheme QML plugin so the runtime `import
+  Phosphor.Theme` inside PopoutHost.qml resolves. When PhosphorTheme
+  is available the library's CMake links it transitively through
+  `PhosphorPopout::PhosphorPopoutQml`, so a consumer that links the
+  Qml target gets the theme plugin for free.
 
 ## See also
 

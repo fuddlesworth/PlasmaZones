@@ -27,10 +27,18 @@ namespace PhosphorPopout {
 // base. No signal/slot machinery exposed at the abstract layer.
 // Concrete implementations bring their own QObject when notifications
 // are needed.
+//
+// Alternate implementations must re-mark their overrides as Q_INVOKABLE
+// (the macro can only attach to a Q_OBJECT or Q_GADGET, neither of
+// which this interface uses) if QML callers are to reach them through
+// a context-property or singleton handle. The default concrete
+// implementation, PopoutController, does this.
 class PHOSPHORPOPOUT_EXPORT IPopoutService
 {
 public:
+    IPopoutService() = default;
     virtual ~IPopoutService() = default;
+    Q_DISABLE_COPY_MOVE(IPopoutService)
 
     // Open a popout per the request. Returns an opaque handle on
     // success. Returns an empty string when the request was rejected
@@ -51,7 +59,7 @@ public:
     // it per the request. Returns the handle of the newly opened
     // popout. Returns empty string if the call closed an existing
     // popout, or if the open was rejected by policy.
-    virtual QString toggle(const PopoutRequest& request) = 0;
+    [[nodiscard]] virtual QString toggle(const PopoutRequest& request) = 0;
 
     // True if any popout with this popoutId is currently open. Note
     // that "open" is independent of "visible to the user". A

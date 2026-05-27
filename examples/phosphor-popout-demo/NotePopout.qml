@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Doubles as cooperative-B and detached. The transport sets `pinned`
 // via PopoutRequest.props so the two instances render with distinct
-// chrome and copy. Pinned mode uses a heavier border, a different
-// header label, and shifts off center so a simultaneously-open
-// cooperative does not stack directly behind it.
+// chrome and copy. Pinned mode uses a heavier border and a different
+// header label so a simultaneously-open cooperative is visually
+// distinct from the pinned variant.
 
 import Phosphor.Theme
 import QtQuick
+import QtQuick.Layouts
 
 Rectangle {
     id: root
@@ -25,13 +26,15 @@ Rectangle {
     border.color: root.pinned ? Theme.tertiary : Theme.primary
     border.width: root.pinned ? 3 : 1
     radius: Tokens.radius_l
+    Accessible.role: Accessible.Dialog
+    Accessible.name: root.pinned ? qsTr("Pinned note popout") : qsTr("Quick note popout")
 
-    Column {
+    ColumnLayout {
         anchors.centerIn: parent
         spacing: Tokens.spacing_s
 
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
             text: root.pinned ? qsTr("Pinned Note") : qsTr("Quick Note")
             color: root.pinned ? Theme.tertiary : Theme.on_surface
             font.pixelSize: Tokens.font_size_title_m
@@ -40,7 +43,7 @@ Rectangle {
         }
 
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
             text: root.pinned ? qsTr("Stays open across modal cycles") : qsTr("Pin me with the Detached button")
             color: Theme.on_surface_variant
             font.pixelSize: Tokens.font_size_body_s

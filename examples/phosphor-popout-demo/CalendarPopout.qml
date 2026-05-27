@@ -5,6 +5,7 @@
 
 import Phosphor.Theme
 import QtQuick
+import QtQuick.Layouts
 
 Rectangle {
     id: root
@@ -15,13 +16,15 @@ Rectangle {
     border.color: Theme.outline_variant
     border.width: 1
     radius: Tokens.radius_l
+    Accessible.role: Accessible.Dialog
+    Accessible.name: qsTr("Calendar popout")
 
-    Column {
+    ColumnLayout {
         anchors.centerIn: parent
         spacing: Tokens.spacing_s
 
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
             text: qsTr("Calendar")
             color: Theme.on_surface
             font.pixelSize: Tokens.font_size_title_l
@@ -30,7 +33,7 @@ Rectangle {
         }
 
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
             text: qsTr("Cooperative scope: default")
             color: Theme.on_surface_variant
             font.pixelSize: Tokens.font_size_body_s
@@ -38,7 +41,7 @@ Rectangle {
         }
 
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
+            Layout.alignment: Qt.AlignHCenter
             text: qsTr("Click outside to dismiss")
             color: Theme.on_surface_variant
             font.pixelSize: Tokens.font_size_label_m

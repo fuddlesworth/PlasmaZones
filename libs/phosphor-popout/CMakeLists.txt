@@ -28,6 +28,14 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
+# PopoutHost.qml imports Phosphor.Theme for Motion timing tokens. The
+# QML import scanner (qmllint, qmlcachegen) needs the registered theme
+# module visible at build time, and consumers need the runtime plugin
+# linked so the import resolves. find PhosphorTheme from a sibling
+# subproject build first, then fall back to an installed package.
+if(NOT TARGET PhosphorTheme::PhosphorThemeQml)
+    find_package(PhosphorTheme CONFIG QUIET)
+endif()
 
 # Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
 # module resource prefix. The `qt_policy` command is what we actually
@@ -147,6 +155,11 @@ qt_add_qml_module(PhosphorPopoutQml
     URI Phosphor.Popout
     VERSION 1.0
     STATIC
+    # PopoutHost.qml uses Motion tokens from Phosphor.Theme. Declaring
+    # the import here lets qmllint and qmlcachegen resolve symbols
+    # at build time. The runtime registration is handled by the
+    # PhosphorThemeQmlplugin link below.
+    IMPORTS Phosphor.Theme
     SOURCES ${_phosphor_popout_qml_sources}
     QML_FILES ${_phosphor_popout_qml_files}
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Popout
@@ -171,6 +184,19 @@ target_link_libraries(PhosphorPopoutQml
         Qt6::Qml
         Qt6::Quick
 )
+
+# Link the PhosphorTheme QML plugin and module when available so
+# consumers don't have to wire it themselves. PopoutHost.qml's
+# import resolves through the linked plugin's runtime registration.
+# In-tree builds always have these targets; out-of-tree consumers
+# get a clear failure mode (missing target) instead of a runtime
+# "module not found" from QML.
+if(TARGET PhosphorTheme::PhosphorThemeQml)
+    target_link_libraries(PhosphorPopoutQml PUBLIC PhosphorTheme::PhosphorThemeQml)
+endif()
+if(TARGET PhosphorThemeQmlplugin)
+    target_link_libraries(PhosphorPopoutQml PUBLIC PhosphorThemeQmlplugin)
+endif()
 
 set_target_properties(PhosphorPopoutQml PROPERTIES
     VERSION ${PHOSPHORPOPOUT_VERSION}
@@ -228,6 +254,9 @@ install(FILES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if(CMAKE_PROJECT_NAME STREQUAL "PhosphorPopout" OR BUILD_TESTING)
+    # enable_testing() is a no-op when KDECMakeSettings already
+    # included CTest at the top level. The redundant call lets a
+    # standalone build of this subproject still discover ctest.
     enable_testing()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
         add_subdirectory(tests)
