@@ -14,6 +14,7 @@
 
 #include <PhosphorRegistry/IBarWidgetFactory.h>
 
+#include <QEventLoop>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -79,15 +80,24 @@ public:
         if (!engine) {
             return nullptr;
         }
-        // Force synchronous compilation: QQmlComponent default mode
-        // can leave the component in Loading state after setData on
-        // certain Qt 6.x builds, which then makes create() warn
-        // "Component is not ready" and return nullptr. The QUrl-
-        // overload of the ctor accepts a CompilationMode arg; passing
-        // an empty QUrl plus PreferSynchronous gives synchronous
-        // compilation for setData calls.
+        // QQmlComponent's PreferSynchronous mode is a hint, not a
+        // guarantee. Qt 6.5+ uses a worker thread pool for QML
+        // compilation; setData can leave the component in Loading
+        // state even with PreferSynchronous, then create() warns
+        // "Component is not ready" and returns nullptr.
+        // The reliable pattern is to wait for the statusChanged
+        // signal via a nested event loop. Re-entry concerns are
+        // minimal here: this runs from a Repeater delegate's
+        // Component.onCompleted (synchronous on the GUI thread),
+        // no user-event re-entry expected before the QML compile
+        // finishes.
         QQmlComponent component(engine, QUrl(), QQmlComponent::PreferSynchronous);
         component.setData(QByteArray(kCpuMeterQml), QUrl(QStringLiteral("inline:cpu-meter")));
+        if (component.isLoading()) {
+            QEventLoop loop;
+            QObject::connect(&component, &QQmlComponent::statusChanged, &loop, &QEventLoop::quit);
+            loop.exec();
+        }
         if (component.isError()) {
             qWarning("CpuMeterFactory: component error %s", qPrintable(component.errorString()));
             return nullptr;
