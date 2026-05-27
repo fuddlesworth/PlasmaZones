@@ -170,16 +170,16 @@ ColumnLayout {
             }
         }
 
-        // Direction is read inline at the moment the Behavior fires:
-        // PhosphorMotionAnimation.profile is evaluated when the
-        // animation starts (the property assignment is a one-shot at
-        // animation kickoff, not a live binding into the running
-        // animation), so picking up `controller.dirty` HERE captures
-        // the just-flipped state without the slot-ordering trap a
-        // cached `_slideProfile` had (the cache update slot and the
-        // `expansion` binding both fire on dirtyChanged; Qt invokes
-        // them in connection order, which left the Behavior reading
-        // a stale cache on the first leg of every transition).
+        // `profile` is a live binding on controller.dirty: PhosphorMotionAnimation::setProfile
+        // re-applies easing + duration on every dirty flip. Qt's running
+        // QPropertyAnimation caches its easing/duration at start-time and
+        // doesn't retarget mid-flight, so a dirty flip DURING a slide
+        // doesn't rubber-band the running animation — the new profile
+        // only takes effect on the next Behavior kickoff. That is the
+        // property we want here: the leg's direction is captured cleanly
+        // at the moment it starts, and a stale-cache slot-ordering trap
+        // (the prior `_slideProfile` cache + Connections handler shape
+        // tripped on Qt's binding-vs-Connections wiring order) is gone.
         Behavior on expansion {
             PhosphorMotionAnimation {
                 profile: root.controller.dirty ? "widget.accordionExpand" : "widget.accordionCollapse"

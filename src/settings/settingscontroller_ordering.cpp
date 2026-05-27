@@ -155,14 +155,21 @@ void SettingsController::moveTilingAlgorithm(int fromIndex, int toIndex)
 
 void SettingsController::resetSnappingOrder()
 {
-    // Only emit + dirty when the staged optional ACTUALLY transitions
-    // to an empty list. Calling reset twice (or right after a load()
-    // where it's already nullopt → being set to empty IS a transition,
-    // but a second call from {} → {} is a no-op) would otherwise emit
-    // a spurious stagedSnappingOrderChanged + setNeedsSave(true), re-
-    // dirtying the page for nothing. Matches the emit-on-change
-    // discipline in CLAUDE.md.
-    if (m_stagedSnappingOrder.has_value() && m_stagedSnappingOrder->isEmpty()) {
+    // Skip the staged-empty write + NOTIFY + dirty-flag when the
+    // effective order is ALREADY empty — there's no observable user-
+    // facing change. Two cases:
+    //   (a) staged optional is engaged-empty: a re-Reset is a no-op,
+    //   (b) staged optional is nullopt AND settings-layer order is
+    //       also empty: a Reset on a fresh page where the user
+    //       never customised would otherwise stamp nullopt→{} into
+    //       staged (which IS a state change for the optional) AND
+    //       call setNeedsSave(true) — surfacing an unsaved-changes
+    //       indicator with nothing actually unsaved.
+    // Both cases short-circuit; only a Reset that ACTUALLY transitions
+    // a non-empty effective order to an empty one falls through.
+    const bool stagedEmpty = m_stagedSnappingOrder.has_value() && m_stagedSnappingOrder->isEmpty();
+    const bool settingsEmpty = !m_stagedSnappingOrder.has_value() && m_settings.snappingLayoutOrder().isEmpty();
+    if (stagedEmpty || settingsEmpty) {
         return;
     }
     m_stagedSnappingOrder = QStringList{};
@@ -172,8 +179,10 @@ void SettingsController::resetSnappingOrder()
 
 void SettingsController::resetTilingOrder()
 {
-    // Same emit-on-change rationale as resetSnappingOrder above.
-    if (m_stagedTilingOrder.has_value() && m_stagedTilingOrder->isEmpty()) {
+    // Same effective-order short-circuit as resetSnappingOrder above.
+    const bool stagedEmpty = m_stagedTilingOrder.has_value() && m_stagedTilingOrder->isEmpty();
+    const bool settingsEmpty = !m_stagedTilingOrder.has_value() && m_settings.tilingAlgorithmOrder().isEmpty();
+    if (stagedEmpty || settingsEmpty) {
         return;
     }
     m_stagedTilingOrder = QStringList{};
