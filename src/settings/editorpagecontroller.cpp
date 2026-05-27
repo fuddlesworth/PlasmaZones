@@ -6,16 +6,12 @@
 #include "../config/configdefaults.h"
 #include "../config/settings.h"
 
-#include <QtGlobal>
-
 namespace PlasmaZones {
 
-EditorPageController::EditorPageController(Settings* settings, QObject* parent)
+EditorPageController::EditorPageController(Settings& settings, QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("editor"), parent)
-    , m_settings(settings)
+    , m_settings(&settings)
 {
-    Q_ASSERT(m_settings);
-
     // Forward each Settings NOTIFY to the local Q_PROPERTY NOTIFY + the
     // generic `changed()` signal. The shared Settings instance is the source
     // of truth; the sub-controller is a pure facade. Each forward re-emits

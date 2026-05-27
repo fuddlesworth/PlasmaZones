@@ -20,7 +20,7 @@ namespace {
 // returns an empty QDBusMessage in sync mode; reject explicitly so
 // the programmer error surfaces in the log instead of buried in a
 // no-op return.
-bool validateEndpoint(const DBusEndpoint& endpoint, const QString& interface, const QString& method,
+bool validateEndpoint(const DBusEndpoint& endpoint, const QString& interfaceName, const QString& method,
                       const char* callSite)
 {
     if (endpoint.service.isEmpty()) {
@@ -31,7 +31,7 @@ bool validateEndpoint(const DBusEndpoint& endpoint, const QString& interface, co
         qWarning() << callSite << ": refusing call — empty objectPath";
         return false;
     }
-    if (interface.isEmpty()) {
+    if (interfaceName.isEmpty()) {
         qWarning() << callSite << ": refusing call — empty interface";
         return false;
     }
@@ -57,6 +57,17 @@ DBusBridge::DBusBridge(DBusEndpoint endpoint, QObject* parent)
                    << "— clamping to default" << kDefaultSyncTimeoutMs << "ms";
         m_endpoint.syncTimeoutMs = kDefaultSyncTimeoutMs;
     }
+    // Surface programmer errors (forgot to fill in the endpoint) at the
+    // construction site rather than via N per-call warnings later. Empty
+    // interfaceName is tolerated here because consumers that always pass
+    // an explicit interface to callOn() / asyncCallOn() have no use for a
+    // default.
+    if (m_endpoint.service.isEmpty() || m_endpoint.objectPath.isEmpty()) {
+        qWarning() << "PhosphorSettingsUi::DBusBridge: endpoint has empty service or objectPath —"
+                      "every call() will be rejected. service="
+                   << m_endpoint.service << "objectPath=" << m_endpoint.objectPath
+                   << "interfaceName=" << m_endpoint.interfaceName;
+    }
 }
 
 DBusBridge::~DBusBridge() = default;
@@ -68,15 +79,15 @@ DBusEndpoint DBusBridge::endpoint() const
 
 QDBusMessage DBusBridge::call(const QString& method, const QVariantList& args) const
 {
-    return callOn(m_endpoint.interface, method, args);
+    return callOn(m_endpoint.interfaceName, method, args);
 }
 
-QDBusMessage DBusBridge::callOn(const QString& interface, const QString& method, const QVariantList& args) const
+QDBusMessage DBusBridge::callOn(const QString& interfaceName, const QString& method, const QVariantList& args) const
 {
-    if (!validateEndpoint(m_endpoint, interface, method, "PhosphorSettingsUi::DBusBridge::callOn")) {
+    if (!validateEndpoint(m_endpoint, interfaceName, method, "PhosphorSettingsUi::DBusBridge::callOn")) {
         return QDBusMessage::createError(QDBusError::InvalidArgs, QStringLiteral("DBusBridge: invalid call inputs"));
     }
-    QDBusMessage msg = QDBusMessage::createMethodCall(m_endpoint.service, m_endpoint.objectPath, interface, method);
+    QDBusMessage msg = QDBusMessage::createMethodCall(m_endpoint.service, m_endpoint.objectPath, interfaceName, method);
     if (!args.isEmpty()) {
         msg.setArguments(args);
     }
@@ -85,23 +96,27 @@ QDBusMessage DBusBridge::callOn(const QString& interface, const QString& method,
 
 void DBusBridge::asyncCall(const QString& method, const QVariantList& args) const
 {
-    asyncCallOn(m_endpoint.interface, method, args);
+    asyncCallOn(m_endpoint.interfaceName, method, args);
 }
 
-void DBusBridge::asyncCallOn(const QString& interface, const QString& method, const QVariantList& args) const
+void DBusBridge::asyncCallOn(const QString& interfaceName, const QString& method, const QVariantList& args) const
 {
-    if (!validateEndpoint(m_endpoint, interface, method, "PhosphorSettingsUi::DBusBridge::asyncCallOn")) {
+    if (!validateEndpoint(m_endpoint, interfaceName, method, "PhosphorSettingsUi::DBusBridge::asyncCallOn")) {
         return;
     }
     // QDBusConnection::sessionBus() returns a per-thread connection; the
     // watcher's deleteLater() relies on the event loop on the thread that
     // owns it. Calling asyncCallOn from a worker thread would attach the
     // watcher to that thread's loop — usually unintended for a settings-app
-    // bridge that expects single-threaded UI usage. Assert in debug builds
-    // so misuse surfaces before it leaks watchers in production.
-    Q_ASSERT_X(thread() == QThread::currentThread(), "PhosphorSettingsUi::DBusBridge::asyncCallOn",
-               "asyncCallOn must be called from the bridge's owning thread");
-    QDBusMessage msg = QDBusMessage::createMethodCall(m_endpoint.service, m_endpoint.objectPath, interface, method);
+    // bridge that expects single-threaded UI usage. Reject explicitly so a
+    // release build doesn't silently leak watchers or trigger Qt's
+    // cross-thread-parent warning.
+    if (thread() != QThread::currentThread()) {
+        qWarning() << "PhosphorSettingsUi::DBusBridge::asyncCallOn: refused —"
+                      "called from a thread other than the bridge's owning thread";
+        return;
+    }
+    QDBusMessage msg = QDBusMessage::createMethodCall(m_endpoint.service, m_endpoint.objectPath, interfaceName, method);
     if (!args.isEmpty()) {
         msg.setArguments(args);
     }
@@ -119,10 +134,10 @@ void DBusBridge::asyncCallOn(const QString& interface, const QString& method, co
     // mutation of the bridge.
     auto* watcher = new QDBusPendingCallWatcher(pending, const_cast<DBusBridge*>(this));
     QObject::connect(
-        watcher, &QDBusPendingCallWatcher::finished, watcher, [interface, method](QDBusPendingCallWatcher* w) {
+        watcher, &QDBusPendingCallWatcher::finished, watcher, [interfaceName, method](QDBusPendingCallWatcher* w) {
             QDBusPendingReply<> reply = *w;
             if (reply.isError()) {
-                qWarning() << "PhosphorSettingsUi::DBusBridge::asyncCallOn: D-Bus error on" << interface << method
+                qWarning() << "PhosphorSettingsUi::DBusBridge::asyncCallOn: D-Bus error on" << interfaceName << method
                            << "—" << reply.error().name() << reply.error().message();
             }
             w->deleteLater();

@@ -46,6 +46,12 @@ Item {
             if (!item)
                 return ;
 
+            // Pin opacity to 0 BEFORE the animation starts. Without this,
+            // the new item's default opacity is 1 for the first paint
+            // frame between item construction and the first PhosphorMotion
+            // tick — produces a brief at-full-opacity flash before the
+            // fade-in actually begins.
+            item.opacity = 0;
             const pageController = root.controller.registry.controller(root.controller.currentPageId);
             if (item.hasOwnProperty("controller"))
                 item.controller = pageController;

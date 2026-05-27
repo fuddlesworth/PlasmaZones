@@ -80,6 +80,16 @@ QList<ScreenInfo> fetchScreens()
                         QJsonObject geom = jsonObj[JsonKeys::Geometry].toObject();
                         info.width = geom[::PhosphorZones::ZoneJsonKeys::Width].toInt();
                         info.height = geom[::PhosphorZones::ZoneJsonKeys::Height].toInt();
+                        // Surface the missing-key edge so a corrupted daemon
+                        // reply doesn't silently produce a 0×0 picker tile.
+                        // QJsonValue::toInt() of an absent key is 0; a
+                        // legitimately-0 dimension would mean the screen is
+                        // dimensionless, which the daemon never reports.
+                        if (info.width <= 0 || info.height <= 0) {
+                            qCWarning(lcConfig) << "ScreenProvider: daemon screen" << screenName
+                                                << "returned non-positive geometry width=" << info.width
+                                                << "height=" << info.height << "— picker tile will render as 0×0";
+                        }
                     }
                     if (jsonObj.contains(::PhosphorZones::ZoneJsonKeys::Name))
                         info.connectorName = jsonObj[::PhosphorZones::ZoneJsonKeys::Name].toString();

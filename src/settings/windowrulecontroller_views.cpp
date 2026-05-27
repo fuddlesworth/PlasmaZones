@@ -110,7 +110,20 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     };
     QHash<QString, Summary> byScreen;
 
-    for (const WindowRule& rule : m_model.rules()) {
+    // Sort rules by descending priority before accumulation. Multiple
+    // matching context-only rules on the same screen all contribute, but
+    // the "first non-empty wins" guards below (s.engineMode.isEmpty(),
+    // s.snappingLayout.isEmpty(), s.tilingAlgorithm.isEmpty()) mean the
+    // FIRST rule visited pins each slot. Without sorting that's "first
+    // in rule-iteration order"; with sorting it's "highest priority" —
+    // which matches the daemon's own resolution order for the same rule
+    // set.
+    QList<WindowRule> sortedRules = m_model.rules();
+    std::stable_sort(sortedRules.begin(), sortedRules.end(), [](const WindowRule& a, const WindowRule& b) {
+        return a.priority > b.priority;
+    });
+
+    for (const WindowRule& rule : sortedRules) {
         // Only context-only rules that pin a monitor count toward a tile.
         if (!rule.match.isContextOnly()) {
             continue;
@@ -160,16 +173,22 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         // they live in independent slots) the engine mode decides which
         // one is actually visible. Without an explicit engine mode we
         // prefer the snapping layout (the more common case) and fall back
-        // to the algorithm so the tile is never blank when only one is
-        // set.
+        // to the algorithm only when no snapping layout is set AT ALL —
+        // crucially we DON'T cross-mix kinds: when the engine mode is
+        // "snapping" but no snapping layout was provided, we leave the
+        // label empty rather than showing a misleading autotile name.
         QString layoutLabel;
-        if (summary.engineMode == QLatin1String("autotile") && !summary.tilingAlgorithm.isEmpty()) {
+        if (summary.engineMode == QLatin1String("autotile")) {
+            // Autotile engine pinned: only show tiling-algorithm tokens.
             layoutLabel = summary.tilingAlgorithm;
-        } else if (summary.engineMode == QLatin1String("snapping") && !summary.snappingLayout.isEmpty()) {
+        } else if (summary.engineMode == QLatin1String("snapping")) {
+            // Snapping engine pinned: only show snapping-layout tokens.
             layoutLabel = summary.snappingLayout;
         } else if (!summary.snappingLayout.isEmpty()) {
+            // No engine pin: prefer the snapping layout (more common).
             layoutLabel = summary.snappingLayout;
         } else {
+            // Last resort: a tiling-algorithm-only rule with no engine pin.
             layoutLabel = summary.tilingAlgorithm;
         }
         // The token is the raw layoutId / algorithm name from the rule's

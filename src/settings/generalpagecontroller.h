@@ -43,7 +43,11 @@ class GeneralPageController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
 
 public:
-    explicit GeneralPageController(Settings* settings, QObject* parent = nullptr);
+    /// Reference parameter, not pointer: the Settings instance is required
+    /// at construction time (to snapshot the current rendering backend) and
+    /// must not be null. Taking it by reference makes the precondition a
+    /// compile-time guarantee.
+    explicit GeneralPageController(Settings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {

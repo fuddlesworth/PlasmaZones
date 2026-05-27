@@ -419,7 +419,11 @@ private:
     bool m_mutatingShaderTree = false;
     /// Memoised eventSections() result — taxonomy is static for the
     /// process lifetime so subsequent QML rebinds reuse the same list.
-    /// Populated lazily on first call.
+    /// Populated lazily on first call. NOTE: if `ProfilePaths::
+    /// allBuiltInPaths()` ever becomes dynamic (e.g. plugin-discovered
+    /// event paths), this cache needs a clear() trigger — currently
+    /// there's nothing to invalidate it because the source is
+    /// compile-time static.
     mutable QVariantList m_eventSectionsCache;
 };
 

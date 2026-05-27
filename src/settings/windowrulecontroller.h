@@ -370,6 +370,12 @@ private:
     bool m_dirty = false;
     bool m_daemonReachable = false;
     bool m_daemonChangedWhileDirty = false;
+    /// Tracks whether the `rulesChanged` D-Bus subscription is currently
+    /// active. Set true on a successful subscribeRulesChanged(), false on
+    /// failure / disconnect. setDaemonReachable() consults this to retry
+    /// the subscription when the daemon comes up after a failed initial
+    /// connect (e.g. the daemon was down when the controller was built).
+    bool m_rulesChangedSubscribed = false;
     /// Counts in-flight `fetchAndLoad()` calls that originated from a
     /// `revert()` (Discard). Tracked separately from the initial / broadcast
     /// fetch flow so the reply handler can emit `revertFinished(success)` only

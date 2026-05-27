@@ -19,14 +19,14 @@ private Q_SLOTS:
         DBusEndpoint ep;
         ep.service = QStringLiteral("org.example.svc");
         ep.objectPath = QStringLiteral("/Path");
-        ep.interface = QStringLiteral("org.example.Iface");
+        ep.interfaceName = QStringLiteral("org.example.Iface");
         ep.syncTimeoutMs = 1234;
 
         DBusBridge bridge(ep);
         const auto out = bridge.endpoint();
         QCOMPARE(out.service, ep.service);
         QCOMPARE(out.objectPath, ep.objectPath);
-        QCOMPARE(out.interface, ep.interface);
+        QCOMPARE(out.interfaceName, ep.interfaceName);
         QCOMPARE(out.syncTimeoutMs, 1234);
     }
 
@@ -38,7 +38,7 @@ private Q_SLOTS:
         DBusEndpoint ep;
         ep.service = QStringLiteral("org.example.svc");
         ep.objectPath = QStringLiteral("/Path");
-        ep.interface = QStringLiteral("org.example.Iface");
+        ep.interfaceName = QStringLiteral("org.example.Iface");
         ep.syncTimeoutMs = 0;
 
         DBusBridge bridge(ep);
@@ -58,7 +58,7 @@ private Q_SLOTS:
         DBusEndpoint ep;
         ep.service = QString();
         ep.objectPath = QStringLiteral("/Path");
-        ep.interface = QStringLiteral("org.example.Iface");
+        ep.interfaceName = QStringLiteral("org.example.Iface");
         DBusBridge bridge(ep);
 
         const auto reply = bridge.call(QStringLiteral("anyMethod"));
@@ -70,7 +70,7 @@ private Q_SLOTS:
         DBusEndpoint ep;
         ep.service = QStringLiteral("org.example.svc");
         ep.objectPath = QStringLiteral("/Path");
-        ep.interface = QStringLiteral("org.example.Iface");
+        ep.interfaceName = QStringLiteral("org.example.Iface");
         DBusBridge bridge(ep);
 
         const auto reply = bridge.call(QString());
@@ -82,7 +82,7 @@ private Q_SLOTS:
         DBusEndpoint ep;
         ep.service = QStringLiteral("org.example.svc");
         ep.objectPath = QStringLiteral("/Path");
-        ep.interface = QStringLiteral("org.example.Default");
+        ep.interfaceName = QStringLiteral("org.example.Default");
         DBusBridge bridge(ep);
 
         // Override the interface with empty — same rejection path.
@@ -98,7 +98,7 @@ private Q_SLOTS:
         DBusEndpoint ep;
         ep.service = QStringLiteral("org.example.svc");
         ep.objectPath = QString();
-        ep.interface = QStringLiteral("org.example.Iface");
+        ep.interfaceName = QStringLiteral("org.example.Iface");
         DBusBridge bridge(ep);
 
         const auto reply = bridge.call(QStringLiteral("anyMethod"));

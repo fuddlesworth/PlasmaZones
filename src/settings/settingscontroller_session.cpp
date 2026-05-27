@@ -217,15 +217,25 @@ void SettingsController::onVirtualDesktopsChanged()
 {
     refreshVirtualDesktops();
 
-    // Prune both per-mode disabled-desktop lists — see start.cpp comment re:
-    // mid-range renumbering limitation. The per-mode disabledDesktopsChanged
-    // signal is forwarded from m_settings (see ctor); no manual emit here.
+    // Prune both per-mode disabled-desktop lists. This is driven by a
+    // KDE virtual-desktop count change (external system event), not by
+    // the user clicking on the active page — target the "overview" page
+    // (where MonitorStatePage.qml owns the per-mode disabled lists) so
+    // dirty state attaches to the right tab regardless of where the user
+    // is currently looking. Pattern mirrors the window-rules handler in
+    // settingscontroller.cpp.
+    bool prunedAny = false;
     for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
         QStringList disabled = m_settings.disabledDesktops(mode);
         if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
             m_settings.setDisabledDesktops(mode, disabled);
-            setNeedsSave(true);
+            prunedAny = true;
         }
+    }
+    if (prunedAny) {
+        beginExternalEdit(QStringLiteral("overview"));
+        setNeedsSave(true);
+        endExternalEdit();
     }
 
     Q_EMIT virtualDesktopsChanged();
@@ -235,7 +245,10 @@ void SettingsController::onActivitiesChanged()
 {
     refreshActivities();
 
-    // Prune disabled-activity entries that reference removed activities
+    // Prune disabled-activity entries that reference removed activities.
+    // External event (KDE activity change) — see onVirtualDesktopsChanged
+    // above for the beginExternalEdit rationale.
+    bool prunedAny = false;
     if (!m_activities.isEmpty()) {
         QSet<QString> validIds;
         for (const QVariant& v : std::as_const(m_activities)) {
@@ -245,14 +258,18 @@ void SettingsController::onActivitiesChanged()
                 validIds.insert(id);
             }
         }
-        // Per-mode signal forwarded from m_settings (see ctor) — no manual emit.
         for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
             QStringList disabledActs = m_settings.disabledActivities(mode);
             if (pruneDisabledActivityEntries(disabledActs, validIds)) {
                 m_settings.setDisabledActivities(mode, disabledActs);
-                setNeedsSave(true);
+                prunedAny = true;
             }
         }
+    }
+    if (prunedAny) {
+        beginExternalEdit(QStringLiteral("overview"));
+        setNeedsSave(true);
+        endExternalEdit();
     }
 
     Q_EMIT activitiesChanged();
@@ -355,7 +372,11 @@ bool SettingsController::exportAllSettings(const QString& filePath)
         return false;
     }
     // Flush current in-memory settings to disk so the exported file reflects
-    // the actual current state, not the last-saved snapshot.
+    // the actual current state, not the last-saved snapshot. Settings::save
+    // is void-returning so we can't surface a failure as a return-false
+    // here; the diagnostic log lets a maintainer correlate a stale export
+    // with the underlying flush failure in the journal.
+    qCInfo(PlasmaZones::lcCore) << "exportAllSettings: flushing in-memory config to disk before copy";
     m_settings.save();
     const QString configPath = PlasmaZones::ConfigDefaults::configFilePath();
     if (!QFile::exists(configPath)) {

@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QUrl>
 #include <QVariantList>
@@ -24,14 +25,16 @@ class PageController;
  * Top-level pages (parentId empty) are the entries the sidebar root
  * displays; child pages are listed under their parent for drill-down.
  *
- * The registry stores raw weak references to PageController objects —
- * ownership lives with whoever constructed them (typically the
- * ApplicationController owning a parent QObject chain). Registry entries
- * are never moved or removed at runtime; the catalogue is built at
- * application start and is read-only thereafter. Dynamic page registration
- * (post-startup `registerPage` calls) is supported and fires
- * `pageRegistered`; dynamic removal is intentionally NOT — apps that need
- * plugin-style hot-unload should rebuild the controller.
+ * The registry stores QPointer<PageController> weak references — ownership
+ * lives with whoever constructed the controller (typically the
+ * ApplicationController owning a parent QObject chain), and lookups via
+ * controller(id) return nullptr if the controller has been destroyed
+ * out-of-order. Registry entries are never removed at runtime; the
+ * catalogue is built at application start and is read-only thereafter.
+ * Dynamic page registration (post-startup `registerPage` calls) is
+ * supported and fires `pageRegistered`; dynamic removal is intentionally
+ * NOT — apps that need plugin-style hot-unload should rebuild the
+ * controller.
  */
 class PHOSPHORSETTINGSUI_EXPORT PageRegistry : public QObject
 {
@@ -47,7 +50,10 @@ public:
         QString title; // already translated by caller
         QString iconSource; // freedesktop icon name or QML asset URL; optional
         QUrl qmlSource; // page QML file URL
-        PageController* controller = nullptr;
+        // QPointer guards against dangling lookups if a consumer destroys
+        // the controller out-of-order relative to the registry. Symmetric
+        // with ApplicationController::m_domains.
+        QPointer<PageController> controller;
         /// When true, the Sidebar renders this entry as an inline-expandable
         /// category header rather than a drill-down target — its children
         /// appear indented under it (toggleable) instead of replacing the
@@ -65,14 +71,20 @@ public:
     explicit PageRegistry(QObject* parent = nullptr);
     ~PageRegistry() override;
 
-    /** Register a page. Emits `pageRegistered(id)` on success. Warns
-     *  and silently skips the entry on any of: empty id, duplicate id,
-     *  unknown parentId, null controller. The intent is to surface
+    /** Register a page. Emits `pageRegistered(id)` and returns `true` on
+     *  success. Warns and returns `false` on any of: empty id, duplicate
+     *  id, unknown parentId, null controller. The intent is to surface
      *  programmer errors in the log without aborting startup; the
      *  PageRegistry's tree just won't contain the misconfigured
      *  entry — downstream Sidebar / Breadcrumbs / page-router lookups
-     *  for it will return empty. */
-    void registerPage(Entry entry);
+     *  for it will return empty.
+     *
+     *  Callers that perform additional bookkeeping per registered page
+     *  (e.g. ApplicationController tracking the page as a staging domain)
+     *  must gate that bookkeeping on the returned bool — otherwise a
+     *  rejected page leaks into half-registered state where downstream
+     *  systems mutate it but the UI cannot see it. */
+    bool registerPage(Entry entry);
 
     Q_INVOKABLE bool hasPage(const QString& id) const;
     Q_INVOKABLE PhosphorSettingsUi::PageController* controller(const QString& id) const;

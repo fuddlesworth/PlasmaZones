@@ -68,6 +68,13 @@ void SnappingShadersPageController::connectLayoutSignals()
     const QSet<PhosphorZones::Layout*> live(layouts.cbegin(), layouts.cend());
     for (auto it = m_wiredLayouts.begin(); it != m_wiredLayouts.end();) {
         auto* tracked = qobject_cast<PhosphorZones::Layout*>(*it);
+        // `tracked` may be null when the qobject_cast fails — the underlying
+        // QObject* (*it) was already partially destroyed and Qt's runtime
+        // type info is gone. We still need to disconnect the destroyed()
+        // signal via the raw QObject*, but the typed shaderIdChanged
+        // disconnect is skipped because we have no live Layout* to pass.
+        // Qt's disconnect-on-nullptr-tracked is a no-op (safe), so this is
+        // an intentional asymmetry rather than a missing branch.
         if (!tracked || !live.contains(tracked)) {
             disconnect(*it, &QObject::destroyed, this, &SnappingShadersPageController::onWiredLayoutDestroyed);
             if (tracked)

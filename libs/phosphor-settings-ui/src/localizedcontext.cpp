@@ -7,6 +7,15 @@
 
 namespace PhosphorSettingsUi {
 
+namespace {
+// Hard ceiling on the per-instance disambiguation cache. QML pages typically
+// reuse a small set of disambiguation keys ("ButtonLabel", "MenuItem"); a
+// large value (e.g. 1000) would mask a caller bug that synthesises unique
+// disambiguations per binding. Once the cache fills, cachedDisambiguation
+// falls back to per-call encoding rather than evicting.
+constexpr int kMaxDisambiguationCacheEntries = 128;
+} // namespace
+
 LocalizedContext::LocalizedContext(QObject* parent)
     : QObject(parent)
 {
@@ -39,6 +48,25 @@ QByteArray LocalizedContext::cachedEffectiveContext() const
     return m_effectiveContextCache;
 }
 
+QByteArray LocalizedContext::cachedDisambiguation(const QString& context) const
+{
+    // Same hot-path rationale as cachedEffectiveContext — disambiguation
+    // strings come from a small named set in practice. constFind avoids
+    // detach on the read path; insertion only happens for new keys.
+    const auto it = m_disambiguationCache.constFind(context);
+    if (it != m_disambiguationCache.constEnd()) {
+        return it.value();
+    }
+    if (m_disambiguationCache.size() >= kMaxDisambiguationCacheEntries) {
+        // Don't grow without bound — a caller synthesising unique keys
+        // per binding would silently leak memory. Encode without caching.
+        return context.toUtf8();
+    }
+    QByteArray encoded = context.toUtf8();
+    m_disambiguationCache.insert(context, encoded);
+    return encoded;
+}
+
 LocalizedContext::~LocalizedContext() = default;
 
 QString LocalizedContext::translationContext() const
@@ -67,7 +95,8 @@ QString LocalizedContext::i18n(const QString& text) const
 QString LocalizedContext::i18nc(const QString& context, const QString& text) const
 {
     const QByteArray ctx = cachedEffectiveContext();
-    return QCoreApplication::translate(ctx.constData(), text.toUtf8().constData(), context.toUtf8().constData());
+    const QByteArray disambiguation = cachedDisambiguation(context);
+    return QCoreApplication::translate(ctx.constData(), text.toUtf8().constData(), disambiguation.constData());
 }
 
 namespace {
@@ -95,6 +124,15 @@ QString LocalizedContext::i18np(const QString& singular, const QString& plural, 
     // against the raw `singular` would mistake the miss for a hit.
     // Compare against the source with %n pre-substituted, then fall
     // back to picking singular/plural by English rules.
+    //
+    // KNOWN LIMITATION: when a translator legitimately translates an
+    // English source string into the same English form (common for
+    // en_GB↔en_US identical entries, proper nouns, single-word terms),
+    // `translated == srcWithN` produces a false negative and we fall
+    // back to the English binary rule. The CLDR-correct plural is then
+    // lost. This is acceptable for the lib's intended audience (Qt-only
+    // apps without KLocalizedContext); apps that need bulletproof plural
+    // selection should depend on KF6CoreAddons KLocalizedContext.
     const QByteArray ctx = cachedEffectiveContext();
     const QByteArray src = singular.toUtf8();
     const QString translated = QCoreApplication::translate(ctx.constData(), src.constData(), nullptr, n);
@@ -107,9 +145,10 @@ QString LocalizedContext::i18np(const QString& singular, const QString& plural, 
 
 QString LocalizedContext::i18ncp(const QString& context, const QString& singular, const QString& plural, int n) const
 {
+    // Same catalog-hit caveat as i18np above.
     const QByteArray ctx = cachedEffectiveContext();
     const QByteArray src = singular.toUtf8();
-    const QByteArray disambiguation = context.toUtf8();
+    const QByteArray disambiguation = cachedDisambiguation(context);
     const QString translated =
         QCoreApplication::translate(ctx.constData(), src.constData(), disambiguation.constData(), n);
     const QString srcWithN = substitutePlaceholderN(singular, n);

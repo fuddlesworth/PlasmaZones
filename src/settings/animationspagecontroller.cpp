@@ -297,15 +297,14 @@ void AnimationsPageController::commitPending()
 
 void AnimationsPageController::revertPending()
 {
-    // Shader tree changes are reverted by the subsequent m_settings.load()
-    // call in SettingsController, not by this method. Do not call
-    // revertPending() without a following load(). m_shaderTreeDirty is
-    // intentionally NOT cleared here — the on-load shaderProfileTreeChanged
-    // handler in the ctor clears it once the canonical tree has been
-    // reloaded. Clearing here would let hasPendingChanges() report a
-    // not-dirty state in the window between this return and the load()
-    // call landing — if any consumer checks dirty in that window, it
-    // sees a falsely clean state for the shader-tree axis.
+    // discard() / revertPending() is the StagingDomain contract for "undo
+    // everything since the last apply". It MUST leave hasPendingChanges()
+    // false on success, regardless of whether the caller pairs us with
+    // a follow-up load() (StagingDomain consumers do; future direct callers
+    // might not). Clear the shader-tree dirty flag at the end of the
+    // successful restore path; the subsequent load()-driven
+    // shaderProfileTreeChanged handler in the ctor sets m_lastShaderTree
+    // for the next diff-check baseline.
     using namespace PhosphorAnimation;
     using namespace PhosphorAnimationShaders;
 
@@ -363,6 +362,14 @@ void AnimationsPageController::revertPending()
         }
     }
     m_pendingFileSnapshots = std::move(retained);
+
+    // Clear shader-tree dirty when (and only when) every file snapshot was
+    // successfully restored. If `retained` is non-empty, some restores
+    // failed and the caller may retry — leave the dirty flag so the
+    // retry path still sees hasPendingChanges()==true.
+    if (m_pendingFileSnapshots.isEmpty()) {
+        m_shaderTreeDirty = false;
+    }
 
     // Bulk emit so QML sub-pages refresh exactly the rows that moved.
     for (const QString& path : overrideEvents)
@@ -620,13 +627,17 @@ bool AnimationsPageController::setOverride(const QString& path, const QVariantMa
 
 bool AnimationsPageController::clearOverride(const QString& path)
 {
-    const bool wasPending = hasPendingChanges();
     if (!isValidEventPath(path))
         return false;
     const QString filePath = profileFilePath(path);
     QFile file(filePath);
     if (!file.exists())
         return false;
+    // Capture dirty state AFTER the cheap validity / file.exists() guards
+    // so an invalid path or no-op clear doesn't pay for a
+    // hasPendingChanges() walk. Mirrors setOverride() ordering above so
+    // a future refactor doesn't see two divergent capture-point shapes.
+    const bool wasPending = hasPendingChanges();
     // Mirror setOverride's snapshot-rollback symmetry: capture whether
     // this call is the first to touch the file, snapshot, and on
     // remove() failure roll the snapshot back so hasPendingChanges()

@@ -3,6 +3,8 @@
 
 #include "shaderpackinstaller.h"
 
+#include "../core/logging.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -107,8 +109,18 @@ Result install(const QString& sourceUrl, const QString& userShaderDir)
     // to a path whose canonical form differs from its absolute form, and
     // following the link smuggles in arbitrary content under the linked
     // parent's resolved location. Reject when canonical != absolute.
-    if (sourceInfo.canonicalFilePath() != sourceInfo.absoluteFilePath())
+    //
+    // KNOWN EDGE: case-insensitive filesystems (FAT/exFAT/HFS+ via FUSE)
+    // can also cause canonical/absolute mismatch via case normalisation
+    // — a user drop from a USB stick may trip this even though no
+    // symlink exists. Log both forms so a maintainer can distinguish the
+    // case-normalisation false positive from a real symlink rejection.
+    if (sourceInfo.canonicalFilePath() != sourceInfo.absoluteFilePath()) {
+        qCWarning(lcConfig) << "ShaderPackInstaller: rejecting source — canonical/absolute mismatch (symlinked"
+                               " ancestor or case-insensitive filesystem). canonical="
+                            << sourceInfo.canonicalFilePath() << "absolute=" << sourceInfo.absoluteFilePath();
         return Result::InvalidSource;
+    }
     const QString sourceBasename = sourceInfo.fileName();
     if (sourceBasename.isEmpty())
         return Result::InvalidSource;

@@ -28,10 +28,14 @@ class StagingDomain;
  * fires, drives applyAll() / discardAll() across all domains, and dispatches
  * a per-page resetToDefaults() to the current page only.
  *
- * Apps typically subclass this to declare their pages in the constructor:
+ * Apps typically subclass this to declare their pages in the constructor.
+ * Note that titles passed to registerPage must already be translated by
+ * the caller (the subclass uses its own QObject::tr() context — this
+ * library deliberately does not provide a translation context for app
+ * strings):
  *
  *   auto *page = new MyPage(this);
- *   registerPage(page, {}, tr("My Page"), QUrl("qrc:/MyPage.qml"));
+ *   registerPage(page, {}, MyApp::tr("My Page"), QUrl("qrc:/MyPage.qml"));
  */
 class PHOSPHORSETTINGSUI_EXPORT ApplicationController : public QObject
 {

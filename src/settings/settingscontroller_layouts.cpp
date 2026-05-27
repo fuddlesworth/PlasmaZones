@@ -293,24 +293,23 @@ void SettingsController::openLayoutsFolder()
     QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
 
-namespace {
-// Path validation for import/export dialogs. User-driven calls come
-// from QFileDialog (already canonical), but the methods are
-// Q_INVOKABLE so a compromised page resource — or a future --page
-} // namespace
-
-// Static — promoted out of the anonymous namespace so the cross-TU
+// Path validation for import/export dialogs. Promoted out of an
+// anonymous namespace and into a static member so the cross-TU
 // `settingscontroller_session.cpp` (import/export-all-settings) can
-// reuse the same defence-in-depth path sanitiser. Definition mirrors
-// the prior file-local helper.
+// reuse the same defence-in-depth path sanitiser.
 //
-// CLI flag — could pass arbitrary strings. Defence-in-depth:
+// User-driven calls come from QFileDialog (already canonical), but the
+// methods are Q_INVOKABLE so a compromised page resource — or a future
+// `--page` CLI flag — could pass arbitrary strings. Defence-in-depth:
 //   * Reject paths containing NUL (POSIX path corruption / D-Bus
 //     marshalling break).
-//   * Reject relative-traversal segments AFTER cleanPath so
-//     `/home/x/../../etc/passwd` doesn't survive normalisation.
 //   * Reject paths beginning with `~` (untilde resolution is QML's
 //     responsibility, not ours).
+//   * Reject relative-traversal segments AFTER cleanPath so
+//     `/home/x/../../etc/passwd` doesn't survive normalisation, AND
+//     also reject leading-`..` shapes (`../foo`, plain `..`) that
+//     cleanPath preserves verbatim — those are filesystem-root-escape
+//     attempts that the QFileDialog path never produces.
 // Returns the canonical path or empty on rejection. Caller logs.
 QString SettingsController::sanitizeIOPath(const QString& raw)
 {
@@ -325,6 +324,12 @@ QString SettingsController::sanitizeIOPath(const QString& raw)
     // `..` as a segment (which means the path started outside any
     // resolvable filesystem root, e.g. relative `../../etc/passwd`).
     if (clean.contains(QStringLiteral("/../")) || clean.endsWith(QStringLiteral("/.."))) {
+        return {};
+    }
+    // cleanPath doesn't strip leading-`..` shapes (`..`, `../foo`,
+    // `../../bar`) — they're still relative-traversal escape attempts
+    // even after canonicalisation.
+    if (clean == QStringLiteral("..") || clean.startsWith(QStringLiteral("../"))) {
         return {};
     }
     return clean;

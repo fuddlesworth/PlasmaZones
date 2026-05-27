@@ -8,11 +8,9 @@
 
 namespace PlasmaZones {
 
-GeneralPageController::GeneralPageController(Settings* settings, QObject* parent)
+GeneralPageController::GeneralPageController(Settings& settings, QObject* parent)
     : PhosphorSettingsUi::PageController(QStringLiteral("general"), parent)
 {
-    Q_ASSERT(settings);
-
     // Translate rendering backend display names once at construction.
     for (const auto& name : ConfigDefaults::renderingBackendDisplayNames()) {
         m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
@@ -20,7 +18,7 @@ GeneralPageController::GeneralPageController(Settings* settings, QObject* parent
 
     // Snapshot current backend so the QML "restart required" message
     // survives page recreation.
-    m_startupRenderingBackend = settings->renderingBackend();
+    m_startupRenderingBackend = settings.renderingBackend();
 }
 
 } // namespace PlasmaZones

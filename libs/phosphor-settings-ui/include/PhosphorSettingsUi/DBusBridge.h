@@ -31,20 +31,18 @@ inline constexpr int kDefaultSyncTimeoutMs = 500;
  * The struct is a POD passed across the lib boundary by value, so it is
  * exported for visibility-hidden builds — downstream consumers need typeinfo
  * symbols to construct, copy, and pass DBusEndpoint instances cleanly.
+ *
+ * The `interface` member is named `interfaceName` rather than `interface`
+ * because Windows MSVC `<objbase.h>` defines `interface` as a `struct`
+ * macro, which collides with field-access syntax. Renaming the field is
+ * less fragile than `#undef interface` in a public header (which would
+ * pollute every consumer's translation unit downstream of the include).
  */
-// Windows MSVC `<objbase.h>` defines `interface` as a `struct` macro.
-// We don't currently build on Windows but the lib is meant to be
-// portable — undef defensively so a future Windows consumer doesn't
-// hit "expected member name" on this declaration.
-#ifdef interface
-#undef interface
-#endif
-
 struct PHOSPHORSETTINGSUI_EXPORT DBusEndpoint
 {
     QString service;
     QString objectPath;
-    QString interface;
+    QString interfaceName;
     int syncTimeoutMs = kDefaultSyncTimeoutMs;
 };
 
@@ -79,13 +77,13 @@ public:
 
     /** Synchronous call on a specified interface (for services with
      *  multiple interfaces on the same object path). */
-    QDBusMessage callOn(const QString& interface, const QString& method, const QVariantList& args = {}) const;
+    QDBusMessage callOn(const QString& interfaceName, const QString& method, const QVariantList& args = {}) const;
 
     /** Fire-and-forget call on the endpoint's default interface. */
     void asyncCall(const QString& method, const QVariantList& args = {}) const;
 
     /** Fire-and-forget call on a specified interface. */
-    void asyncCallOn(const QString& interface, const QString& method, const QVariantList& args = {}) const;
+    void asyncCallOn(const QString& interfaceName, const QString& method, const QVariantList& args = {}) const;
 
 private:
     DBusEndpoint m_endpoint;

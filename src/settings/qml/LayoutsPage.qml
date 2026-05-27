@@ -22,7 +22,11 @@ ColumnLayout {
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
 
-    // m-15: Extract URL-to-path helper to avoid duplicating regex in FileDialogs
+    // Extract URL-to-path helper to avoid duplicating regex in FileDialogs.
+    // Linux/POSIX only — file:///path → /path. A Windows-style
+    // file:///C:/path would become /C:/path here, which is wrong, but
+    // PlasmaZones is Wayland-only (per CLAUDE.md) so the regex is
+    // intentionally limited to the POSIX URI shape.
     function filePathFromUrl(url) {
         return url.toString().replace(/^file:\/\/+/, "/");
     }
@@ -410,9 +414,11 @@ ColumnLayout {
         }
     }
 
-    // KZones import result notification — uses Main.qml's toast
+    // KZones import result notification — uses Main.qml's toast.
+    // The signal carries (count, message); the toast text already
+    // includes the count from the C++ side, so we only show `message`.
     Connections {
-        function onKzonesImportFinished(count, message) {
+        function onKzonesImportFinished(_count, message) {
             if (window && window.showToast)
                 window.showToast(message);
 

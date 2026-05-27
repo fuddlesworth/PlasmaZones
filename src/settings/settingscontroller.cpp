@@ -146,18 +146,20 @@ SettingsController::SettingsController(QObject* parent)
     connect(m_localLayoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
         recalcLocalLayouts();
         QVariantList localLayouts = localLayoutPreviews();
-        if (!localLayouts.isEmpty()) {
-            SettingsController::sortMergedLayoutList(localLayouts);
-            m_layouts = std::move(localLayouts);
-            // Suppress the local-path emit while a D-Bus getLayoutList
-            // call is in flight — the async reply lambda will emit once
-            // it replaces m_layouts with the daemon-enriched view. If the
-            // daemon is unreachable or the call errors, the gate is
-            // cleared in the reply lambda's head and subsequent local
-            // emits run normally (fallback behaviour).
-            if (!m_awaitingDaemonLayouts) {
-                Q_EMIT layoutsChanged();
-            }
+        // Assign unconditionally: when the user deletes every layout we
+        // want m_layouts to reflect the empty state. Previously this
+        // path guarded on `!localLayouts.isEmpty()`, which left stale
+        // entries in m_layouts after a wipe when the daemon was down.
+        SettingsController::sortMergedLayoutList(localLayouts);
+        m_layouts = std::move(localLayouts);
+        // Suppress the local-path emit while a D-Bus getLayoutList
+        // call is in flight — the async reply lambda will emit once
+        // it replaces m_layouts with the daemon-enriched view. If the
+        // daemon is unreachable or the call errors, the gate is
+        // cleared in the reply lambda's head and subsequent local
+        // emits run normally (fallback behaviour).
+        if (!m_awaitingDaemonLayouts) {
+            Q_EMIT layoutsChanged();
         }
     });
 
@@ -321,7 +323,7 @@ SettingsController::SettingsController(QObject* parent)
     // Editor + fill-on-drop settings lack Q_PROPERTY on Settings, so the
     // meta-object loop above misses them. EditorPageController forwards each
     // NOTIFY to QML and emits changed() which drives dirty tracking here.
-    m_editorPage = new EditorPageController(&m_settings, this);
+    m_editorPage = new EditorPageController(m_settings, this);
     connect(m_editorPage, &EditorPageController::changed, this, &SettingsController::onSettingsPropertyChanged);
 
     // Snapping→Behavior + Tiling→Behavior page sub-controllers. Their
@@ -364,7 +366,7 @@ SettingsController::SettingsController(QObject* parent)
     // animation bounds. Its startup backend snapshot is captured at ctor
     // time, so this must run AFTER m_settings is fully initialised (which
     // is guaranteed since m_settings is the first member declared).
-    m_generalPage = new GeneralPageController(&m_settings, this);
+    m_generalPage = new GeneralPageController(m_settings, this);
 
     // Animation shader registry — settings-side mirror of the daemon's.
     // Both processes scan the same XDG dirs independently; FS watching
@@ -400,8 +402,17 @@ SettingsController::SettingsController(QObject* parent)
     // becomes false (commit/revert do that explicitly) — that would
     // race with `setNeedsSave(false)` in load()/save().
     connect(m_animationsPage, &AnimationsPageController::pendingChangesChanged, this, [this]() {
-        if (!m_loading && !m_saving && m_animationsPage->hasPendingChanges())
-            setNeedsSave(true);
+        if (m_loading || m_saving || !m_animationsPage->hasPendingChanges())
+            return;
+        // An animations pending-change flip can fire from a daemon-side
+        // profile-file watcher or registry repopulation, not just from the
+        // user viewing the animations page — target the page explicitly
+        // so dirty state attaches to the right tab even when the user is
+        // currently viewing a different page. Symmetric with the
+        // window-rules handler below.
+        beginExternalEdit(QStringLiteral("animations-general"));
+        setNeedsSave(true);
+        endExternalEdit();
     });
 
     // Window Rules page sub-controller — the unified rule surface. It owns

@@ -75,8 +75,9 @@ WindowRuleController::WindowRuleController(QObject* parent)
     const bool subscribed = subscribeRulesChanged();
     if (!subscribed) {
         qCWarning(lcConfig) << "WindowRuleController: failed to subscribe to org.plasmazones.WindowRules.rulesChanged "
-                               "— page will not refresh on daemon-side writes";
+                               "— will retry when the daemon becomes reachable";
     }
+    m_rulesChangedSubscribed = subscribed;
     // Kick off the initial fetch immediately — the call is asynchronous
     // (QDBusPendingCallWatcher), so the constructor returns without
     // blocking and the settings page can finish loading. The reply
@@ -109,6 +110,7 @@ void WindowRuleController::unsubscribeRulesChanged()
     const auto args = rulesChangedSubscriptionArgs();
     QDBusConnection::sessionBus().disconnect(args.service, args.objectPath, args.interface, args.signalName, this,
                                              SLOT(reload()));
+    m_rulesChangedSubscribed = false;
 }
 
 void WindowRuleController::setScreenLookup(WindowRuleModel::LabelLookup fn)
@@ -169,6 +171,18 @@ void WindowRuleController::setDaemonReachable(bool reachable)
         return;
     }
     m_daemonReachable = reachable;
+    // Retry the rulesChanged subscription if a previous attempt failed.
+    // Covers the "controller built before the daemon was up" scenario:
+    // the initial subscribe() in the ctor returned false, but once the
+    // daemon arrives the next setDaemonReachable(true) reattaches the
+    // signal so subsequent daemon-side writes refresh the page.
+    if (reachable && !m_rulesChangedSubscribed) {
+        if (subscribeRulesChanged()) {
+            m_rulesChangedSubscribed = true;
+            qCInfo(lcConfig)
+                << "WindowRuleController: rulesChanged subscription attached after daemon became reachable";
+        }
+    }
     Q_EMIT daemonReachableChanged();
 }
 

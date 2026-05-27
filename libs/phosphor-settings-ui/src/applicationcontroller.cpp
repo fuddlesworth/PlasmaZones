@@ -3,11 +3,11 @@
 
 #include "PhosphorSettingsUi/ApplicationController.h"
 
-#include <QDebug>
-
 #include "PhosphorSettingsUi/PageController.h"
 #include "PhosphorSettingsUi/PageRegistry.h"
 #include "PhosphorSettingsUi/StagingDomain.h"
+
+#include <QDebug>
 
 namespace PhosphorSettingsUi {
 
@@ -68,7 +68,13 @@ void ApplicationController::registerPage(PageController* page, const QString& pa
     entry.controller = page;
     entry.isCollapsible = isCollapsible;
     entry.hasDividerAfter = hasDividerAfter;
-    m_registry->registerPage(std::move(entry));
+    // Only track the page as a staging domain if the registry accepted
+    // it. A rejected registration (empty id, duplicate, unknown parent)
+    // must not leak into m_domains — otherwise the page contributes to
+    // global dirty / applyAll / discardAll while the UI cannot see it.
+    if (!m_registry->registerPage(std::move(entry))) {
+        return;
+    }
 
     trackDomain(page);
 }
@@ -236,17 +242,27 @@ void ApplicationController::onDomainDirtyChanged()
 
 void ApplicationController::recomputeDirty()
 {
-    // Compact null QPointers — a domain that was destroyed while tracked
-    // leaves a null entry in m_domains. The contract is "domains outlive
-    // the controller" but a poorly-ordered teardown shouldn't leak entries
-    // across the lifetime of a long-running app.
-    m_domains.removeAll(QPointer<StagingDomain>(nullptr));
+    // Single pass: compact null QPointers and compute the dirty fold
+    // together. A domain that was destroyed while tracked leaves a null
+    // entry in m_domains; the contract is "domains outlive the controller"
+    // but a poorly-ordered teardown shouldn't leak entries across the
+    // lifetime of a long-running app.
     bool any = false;
-    for (const auto& domain : m_domains) {
-        if (domain && domain->isDirty()) {
-            any = true;
-            break;
+    auto writeIt = m_domains.begin();
+    for (auto readIt = m_domains.begin(); readIt != m_domains.end(); ++readIt) {
+        if (!*readIt) {
+            continue;
         }
+        if ((*readIt)->isDirty()) {
+            any = true;
+        }
+        if (writeIt != readIt) {
+            *writeIt = *readIt;
+        }
+        ++writeIt;
+    }
+    if (writeIt != m_domains.end()) {
+        m_domains.erase(writeIt, m_domains.end());
     }
     if (any == m_dirty) {
         return;

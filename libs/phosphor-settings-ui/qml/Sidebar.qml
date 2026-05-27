@@ -394,7 +394,17 @@ ColumnLayout {
                 onClicked: root.drillOut()
 
                 background: Rectangle {
-                    color: backButton.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
+                    id: backButtonBackground
+
+                    // Default Rectangle color is white — without an initial
+                    // assignment the Behavior would tint from white to
+                    // "transparent" on the very first paint (binding eval).
+                    // Gate the Behavior on completion so the first eval
+                    // lands without animation.
+                    property bool _behaviorReady: false
+
+                    Component.onCompleted: _behaviorReady = true
+                    color: backButton.hovered ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : Qt.rgba(0, 0, 0, 0)
                     radius: Kirigami.Units.smallSpacing
 
                     // Legacy back-button bottom separator — a 1-dp line
@@ -411,6 +421,8 @@ ColumnLayout {
                     }
 
                     Behavior on color {
+                        enabled: backButtonBackground._behaviorReady
+
                         PhosphorMotionAnimation {
                             profile: "widget.tint.fast"
                         }
@@ -574,6 +586,15 @@ ColumnLayout {
                     }
 
                     background: Rectangle {
+                        id: delegateBackground
+
+                        // Default Rectangle color is white; gate the
+                        // tint Behavior on Component.completed so the
+                        // first paint lands without an animated
+                        // white→transparent flash.
+                        property bool _behaviorReady: false
+
+                        Component.onCompleted: _behaviorReady = true
                         // Active row: highlight tinted at 12% — same
                         // tint legacy used so the visual weight matches
                         // KCM modules. Hover: 6% textColor for a
@@ -584,7 +605,7 @@ ColumnLayout {
                             // Dividers paint nothing — the Separator
                             // child below provides their only visual.
                             if (itemDelegate._isDivider)
-                                return "transparent";
+                                return Qt.rgba(0, 0, 0, 0);
 
                             if (itemDelegate.isCurrent)
                                 return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12);
@@ -592,7 +613,7 @@ ColumnLayout {
                             if (itemDelegate.hovered)
                                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06);
 
-                            return "transparent";
+                            return Qt.rgba(0, 0, 0, 0);
                         }
                         radius: Kirigami.Units.smallSpacing
 
@@ -626,6 +647,8 @@ ColumnLayout {
                         }
 
                         Behavior on color {
+                            enabled: delegateBackground._behaviorReady
+
                             PhosphorMotionAnimation {
                                 profile: "widget.tint.fast"
                             }

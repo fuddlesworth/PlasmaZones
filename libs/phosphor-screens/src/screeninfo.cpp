@@ -27,8 +27,12 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
         }
         if (!s.screenId.isEmpty())
             map[QStringLiteral("screenId")] = s.screenId;
+        // Always emit the flag — QML consumers that test
+        // `map.isVirtualScreen` would otherwise see `undefined` for
+        // physical screens (a key that's absent reads as undefined,
+        // not false) and have to write `=== true` instead.
+        map[QStringLiteral("isVirtualScreen")] = s.isVirtualScreen;
         if (s.isVirtualScreen) {
-            map[QStringLiteral("isVirtualScreen")] = true;
             map[QStringLiteral("virtualIndex")] = s.virtualIndex;
             if (!s.virtualDisplayName.isEmpty())
                 map[QStringLiteral("virtualDisplayName")] = s.virtualDisplayName;

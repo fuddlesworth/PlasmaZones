@@ -15,6 +15,11 @@ int main(int argc, char* argv[])
     app.setApplicationName(QStringLiteral("phosphor-settings-ui-minimal"));
     app.setOrganizationName(QStringLiteral("phosphor"));
 
+    // On systems without qqc2-desktop-style installed the org.kde.desktop
+    // style fails to load and Qt silently falls back to the Default style
+    // — the demo still runs but looks out-of-place against a KDE-themed
+    // sample. KDE-distribution users will already have the style; in any
+    // other test rig, install `qqc2-desktop-style` to match the screenshot.
     QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
 
     PhosphorSettingsUiExamplesMinimal::DemoApp controller;

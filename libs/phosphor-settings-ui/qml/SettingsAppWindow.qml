@@ -43,11 +43,14 @@ Kirigami.ApplicationWindow {
      *  collapsed rail) by reassigning the property. */
     property bool sidebarCompact: width < Kirigami.Units.gridUnit * 50
 
-    // Legacy PlasmaZones default geometry — wide enough to keep the
-    // sidebar out of compact mode (50 * 18 = 900px threshold) with
-    // breathing room for tall pages. Consumers can override.
-    width: 1200
-    height: 800
+    // Default geometry sized in gridUnits so HiDPI displays (gridUnit ~24-36)
+    // scale the window proportionally — staying above the compact-rail
+    // threshold (50 gridUnits) at every DPI. At 1× DPR (gridUnit ~18)
+    // this is ~1206×792, matching the legacy PlasmaZones default; at
+    // HiDPI it grows to keep the same visual weight. Consumers can
+    // override.
+    width: Kirigami.Units.gridUnit * 67
+    height: Kirigami.Units.gridUnit * 44
     // Floor sizes so the chrome stays usable: the compact rail keeps
     // 3 gridUnits, breadcrumb row needs room for the page label, and
     // a too-short window crushes the unsaved-changes footer.
@@ -151,6 +154,15 @@ Kirigami.ApplicationWindow {
 
                     Loader {
                         id: headerExtrasLoader
+
+                        // Sizes from the loaded item's implicitWidth/Height so
+                        // the slot contract is "consumer Component must declare
+                        // implicitWidth/Height" rather than the silent "renders
+                        // as 0×0 if missing" pre-fix behaviour. Layout.alignment
+                        // matches the Breadcrumbs centering above.
+                        Layout.preferredWidth: item ? item.implicitWidth : 0
+                        Layout.preferredHeight: item ? item.implicitHeight : 0
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
                 }

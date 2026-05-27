@@ -177,6 +177,20 @@ bool AnimationsPageController::setShaderOverride(const QString& path, const QStr
     if (!m_settings || path.isEmpty())
         return false;
 
+    // Cheap sanity check on effectId BEFORE the registry-membership gate
+    // below — the registry gate is skipped during the "registry not yet
+    // populated" startup window, so without this guard a stray Q_INVOKABLE
+    // caller could smuggle a NUL byte, a path separator, or a multi-KB
+    // string into the shader-profile tree where it would surface much
+    // later as a corrupt resolve. 256 chars is well above any legitimate
+    // effect id length and well below the cost of letting garbage through.
+    if (!effectId.isEmpty()
+        && (effectId.size() > 256 || effectId.contains(QLatin1Char('/')) || effectId.contains(QLatin1Char('\0')))) {
+        qCWarning(lcConfig) << "setShaderOverride: rejecting effectId with illegal length/character; size="
+                            << effectId.size();
+        return false;
+    }
+
     // Reject writes on paths the daemon's overlay service doesn't
     // consume as a shader-leg surface. Defence in depth: the QML UI
     // gates the picker via `supportsShaderLeg`, but a Q_INVOKABLE is

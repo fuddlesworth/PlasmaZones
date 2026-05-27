@@ -3,9 +3,9 @@
 
 #include "PhosphorSettingsUi/PageRegistry.h"
 
-#include <QDebug>
-
 #include "PhosphorSettingsUi/PageController.h"
+
+#include <QDebug>
 
 namespace PhosphorSettingsUi {
 
@@ -16,20 +16,20 @@ PageRegistry::PageRegistry(QObject* parent)
 
 PageRegistry::~PageRegistry() = default;
 
-void PageRegistry::registerPage(Entry entry)
+bool PageRegistry::registerPage(Entry entry)
 {
     if (entry.id.isEmpty()) {
         qWarning() << "PageRegistry::registerPage: refusing to register page with empty id";
-        return;
+        return false;
     }
     if (m_indexById.contains(entry.id)) {
         qWarning() << "PageRegistry::registerPage: duplicate page id" << entry.id << "— ignoring registration";
-        return;
+        return false;
     }
     if (!entry.parentId.isEmpty() && !m_indexById.contains(entry.parentId)) {
         qWarning() << "PageRegistry::registerPage: page" << entry.id << "references unknown parent" << entry.parentId
                    << "— ignoring registration";
-        return;
+        return false;
     }
     // ApplicationController::resetCurrentPage() and any consumer of
     // PageRegistry::controller(id) will deref the controller pointer;
@@ -37,13 +37,14 @@ void PageRegistry::registerPage(Entry entry)
     // than at first use.
     if (!entry.controller) {
         qWarning() << "PageRegistry::registerPage: page" << entry.id << "has null controller — ignoring registration";
-        return;
+        return false;
     }
 
     const QString id = entry.id;
     m_indexById.insert(id, m_pages.size());
     m_pages.append(std::move(entry));
     Q_EMIT pageRegistered(id);
+    return true;
 }
 
 bool PageRegistry::hasPage(const QString& id) const
@@ -57,7 +58,9 @@ PageController* PageRegistry::controller(const QString& id) const
     if (it == m_indexById.constEnd()) {
         return nullptr;
     }
-    return m_pages.at(it.value()).controller;
+    // QPointer::data() returns nullptr if the controller was destroyed
+    // out-of-order — callers that deref the result must null-check.
+    return m_pages.at(it.value()).controller.data();
 }
 
 PageRegistry::Entry PageRegistry::entry(const QString& id) const
@@ -97,17 +100,32 @@ QList<PageRegistry::Entry> PageRegistry::allPages() const
 }
 
 namespace {
+// QVariantMap key names shipped to QML via topLevelPagesData / childPagesData
+// / pageData. Centralised so QML consumers (Sidebar.qml, Breadcrumbs.qml)
+// and a future test/typed-binding generator can reference the same canonical
+// strings without typos surviving until runtime.
+namespace EntryKeys {
+inline constexpr QLatin1String Id{"id"};
+inline constexpr QLatin1String ParentId{"parentId"};
+inline constexpr QLatin1String Title{"title"};
+inline constexpr QLatin1String IconSource{"iconSource"};
+inline constexpr QLatin1String QmlSource{"qmlSource"};
+inline constexpr QLatin1String IsCollapsible{"isCollapsible"};
+inline constexpr QLatin1String HasDividerAfter{"hasDividerAfter"};
+inline constexpr QLatin1String HasQmlSource{"hasQmlSource"};
+} // namespace EntryKeys
+
 QVariantMap entryToVariant(const PageRegistry::Entry& e)
 {
     QVariantMap m;
-    m.insert(QStringLiteral("id"), e.id);
-    m.insert(QStringLiteral("parentId"), e.parentId);
-    m.insert(QStringLiteral("title"), e.title);
-    m.insert(QStringLiteral("iconSource"), e.iconSource);
-    m.insert(QStringLiteral("qmlSource"), e.qmlSource);
-    m.insert(QStringLiteral("isCollapsible"), e.isCollapsible);
-    m.insert(QStringLiteral("hasDividerAfter"), e.hasDividerAfter);
-    m.insert(QStringLiteral("hasQmlSource"), !e.qmlSource.isEmpty());
+    m.insert(EntryKeys::Id, e.id);
+    m.insert(EntryKeys::ParentId, e.parentId);
+    m.insert(EntryKeys::Title, e.title);
+    m.insert(EntryKeys::IconSource, e.iconSource);
+    m.insert(EntryKeys::QmlSource, e.qmlSource);
+    m.insert(EntryKeys::IsCollapsible, e.isCollapsible);
+    m.insert(EntryKeys::HasDividerAfter, e.hasDividerAfter);
+    m.insert(EntryKeys::HasQmlSource, !e.qmlSource.isEmpty());
     return m;
 }
 } // namespace

@@ -54,7 +54,11 @@ class EditorPageController : public PhosphorSettingsUi::PageController
         int fillOnDropModifier READ fillOnDropModifier WRITE setFillOnDropModifier NOTIFY fillOnDropModifierChanged)
 
 public:
-    explicit EditorPageController(Settings* settings, QObject* parent = nullptr);
+    /// Reference parameter, not pointer: the Settings instance is required
+    /// for every method on this controller and must not be null. Taking it
+    /// by reference makes the precondition a compile-time guarantee instead
+    /// of a Q_ASSERT that compiles away in release builds.
+    explicit EditorPageController(Settings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {

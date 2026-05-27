@@ -18,15 +18,24 @@ import org.phosphor.settings.ui as PhosphorUi
 // Discard/Keep prompt), the toast, the shortcut overlay, and the
 // What's-New banner that pops on first launch after an update.
 PhosphorUi.SettingsAppWindow {
+    // Aspect-ratio labels consumed by the layout context menu's
+    // submenu — kept at window scope rather than inside the Menu so
+    // future consumers (Per-Screen Override picker, Layouts page) can
+    // bind to the same canonical i18n strings without duplicating them.
+
     id: window
 
     // ── Public API used by per-page QML files ───────────────────────
     // Pages reach the layout-context popup via window.layoutContextMenu.
     readonly property alias layoutContextMenu: layoutContextMenu
-    // Aspect-ratio labels consumed by the layout context menu's
-    // submenu — kept at window scope rather than inside the Menu so
-    // future consumers (Per-Screen Override picker, Layouts page) can
-    // bind to the same canonical i18n strings without duplicating them.
+    // KNOWN LIMITATION: object-literal `i18n()` calls evaluate once at
+    // object construction. If the user switches the system locale while
+    // this window is open, the menu shows stale strings until restart.
+    // The "super-ultrawide" key contains a hyphen so a QtObject with
+    // bindable properties can't host all keys without renaming the wire
+    // protocol — accepting the stale-on-locale-change tradeoff is the
+    // less-invasive option and matches the fact that the rest of the
+    // settings app expects an app restart on locale change anyway.
     readonly property var aspectRatioLabels: ({
         "any": i18n("All Monitors"),
         "standard": i18n("Standard (16:9)"),
@@ -145,20 +154,25 @@ PhosphorUi.SettingsAppWindow {
     }
 
     // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
-    // Guarded: page navigation must not fire while any of the modal
-    // sub-dialogs is open (whatsNewDialog, resetConfirmDialog,
-    // defaultsConfirmDialog, shortcut overlay). Without the guard the
-    // user can mutate the underlying page state while interacting
-    // with a confirm prompt.
+    // Guarded: page navigation must not fire while any of the inline
+    // confirm dialogs (whatsNewDialog, resetConfirmDialog,
+    // defaultsConfirmDialog), the shortcut overlay, OR a native child
+    // window (QtQuick FileDialog, system color picker, etc.) is open.
+    // The `window.active` check covers native child windows — when
+    // they grab focus the main window goes inactive. The inline-dialog
+    // checks cover Kirigami.PromptDialog overlays that don't change
+    // the window's active state. Without the combined guard the user
+    // could navigate the underlying page state while interacting with
+    // any of these prompts.
     Shortcut {
         sequence: "Ctrl+PgUp"
-        enabled: !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
+        enabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
         onActivated: settingsController.app.gotoPreviousPage()
     }
 
     Shortcut {
         sequence: "Ctrl+PgDown"
-        enabled: !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
+        enabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
         onActivated: settingsController.app.gotoNextPage()
     }
 
@@ -224,7 +238,32 @@ PhosphorUi.SettingsAppWindow {
         // header comment warns about. The bindings still react to
         // `settingsController.screensChanged` so multi-monitor
         // hotplug is handled.
-        readonly property var _aspectRatioOptions: [["any", window.aspectRatioLabels["any"], 0], ["standard", window.aspectRatioLabels["standard"], 1], ["ultrawide", window.aspectRatioLabels["ultrawide"], 2], ["super-ultrawide", window.aspectRatioLabels["super-ultrawide"], 3], ["portrait", window.aspectRatioLabels["portrait"], 4]]
+        // Named-key object form so the Repeater delegate below can refer
+        // to `modelData.key` / `modelData.label` / `modelData.index`
+        // instead of positional `modelData[0]` / `[1]` / `[2]` — a future
+        // edit that adds a field to one entry won't silently shift index
+        // meanings on the others.
+        readonly property var _aspectRatioOptions: [{
+            "key": "any",
+            "label": window.aspectRatioLabels["any"],
+            "index": 0
+        }, {
+            "key": "standard",
+            "label": window.aspectRatioLabels["standard"],
+            "index": 1
+        }, {
+            "key": "ultrawide",
+            "label": window.aspectRatioLabels["ultrawide"],
+            "index": 2
+        }, {
+            "key": "super-ultrawide",
+            "label": window.aspectRatioLabels["super-ultrawide"],
+            "index": 3
+        }, {
+            "key": "portrait",
+            "label": window.aspectRatioLabels["portrait"],
+            "index": 4
+        }]
         // Memoise the screen list result. The getter still re-runs on
         // `settingsController.screensChanged`, but doesn't re-run on
         // each popup() / every `_screenItemsModel.length` read.
@@ -455,14 +494,14 @@ PhosphorUi.SettingsAppWindow {
 
             delegate: ItemDelegate {
                 required property var modelData
-                readonly property string _arKey: (modelData && modelData[0]) ? modelData[0] : ""
-                readonly property int _arIndex: (modelData && modelData[2] !== undefined) ? modelData[2] : 0
+                readonly property string _arKey: (modelData && modelData.key) ? modelData.key : ""
+                readonly property int _arIndex: (modelData && modelData.index !== undefined) ? modelData.index : 0
                 readonly property bool isSelected: {
                     var current = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
                     return _arKey === current;
                 }
 
-                text: (modelData && modelData[1]) ? modelData[1] : ""
+                text: (modelData && modelData.label) ? modelData.label : ""
                 icon.name: isSelected ? "checkmark" : ""
                 Accessible.name: text
                 onClicked: {

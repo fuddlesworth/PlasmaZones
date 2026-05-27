@@ -3,6 +3,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QtQml/qqmlregistration.h>
@@ -67,8 +68,17 @@ private:
     /// Mutable because the cache is lazily filled from a const accessor.
     QByteArray cachedEffectiveContext() const;
 
+    /// Cache UTF-8 encodings of disambiguation strings used by i18nc /
+    /// i18ncp. QML pages reuse a small set ("ButtonLabel", "MenuItem"),
+    /// so encoding once and re-looking-up by QString key avoids the per-
+    /// binding toUtf8 cost. Capped (see kMaxDisambiguationCacheEntries)
+    /// to keep pathological caller bugs from growing the cache without
+    /// bound; once full, falls back to encoding on every call.
+    QByteArray cachedDisambiguation(const QString& context) const;
+
     QString m_context;
     mutable QByteArray m_effectiveContextCache;
+    mutable QHash<QString, QByteArray> m_disambiguationCache;
 };
 
 } // namespace PhosphorSettingsUi
