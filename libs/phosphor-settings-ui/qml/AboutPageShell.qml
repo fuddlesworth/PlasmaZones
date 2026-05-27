@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import "LoaderHelpers.js" as PhosphorLoaderHelpers
 
 /**
  * Standard "About this application" page scaffold.
@@ -108,13 +109,9 @@ Kirigami.ScrollablePage {
             sourceComponent: root.topContent
             // The loaded item's parent is the Loader; bind its width
             // to the Loader's width so child layouts can stretch.
-            onLoaded: {
-                if (item)
-                    item.width = Qt.binding(() => {
-                    return topLoader.width;
-                });
-
-            }
+            // Helper documents the consumer-Layout.fillWidth override
+            // caveat in one place.
+            onLoaded: PhosphorLoaderHelpers.bindItemWidthToLoader(topLoader)
         }
 
         Kirigami.Separator {
@@ -149,9 +146,7 @@ Kirigami.ScrollablePage {
                     text: root.appVersion
                     opacity: 0.7
                 }
-
             }
-
         }
 
         QQC2.Label {
@@ -209,7 +204,5 @@ Kirigami.ScrollablePage {
         Item {
             Layout.fillHeight: true
         }
-
     }
-
 }

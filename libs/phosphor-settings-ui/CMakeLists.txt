@@ -171,6 +171,13 @@ set(phosphorsettingsui_qml_FILES
     qml/AboutPageShell.qml
 )
 
+# JS helpers shared by the QML chrome — kept separate from QML_FILES
+# because qt_add_qml_module's qmltc / qmlcachegen pipeline expects
+# `.qml`/`.mjs` for QML_FILES and `.js` for RESOURCES.
+set(phosphorsettingsui_qml_RESOURCES
+    qml/LoaderHelpers.js
+)
+
 qt_add_qml_module(PhosphorSettingsUiQml
     URI org.phosphor.settings.ui
     VERSION 1.0
@@ -180,6 +187,7 @@ qt_add_qml_module(PhosphorSettingsUiQml
         ${phosphorsettingsui_public_HDRS}
         ${phosphorsettingsui_SRCS}
     QML_FILES ${phosphorsettingsui_qml_FILES}
+    RESOURCES ${phosphorsettingsui_qml_RESOURCES}
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/phosphor/settings/ui
 )
 
