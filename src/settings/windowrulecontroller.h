@@ -78,11 +78,17 @@ public:
     /// the parent calls `WindowRuleModel::refreshLabels()` on the model to
     /// invalidate the cached label cells — re-installing the lookups would
     /// just churn the closures without changing behaviour.
+    ///
+    /// All FOUR lookups (screen + activity + snappingLayout +
+    /// tilingAlgorithm) must be wired for the model to render rich
+    /// `matchSummary` / `actionSummary` cells — a missing lookup falls
+    /// back to printing the raw id/UUID. SettingsController is the
+    /// single intended caller and installs all four during page
+    /// registration. The legacy `setLayoutLookup(fn)` wires the same
+    /// resolver into BOTH snappingLayout and tilingAlgorithm; new
+    /// callers should prefer the typed pair below.
     void setScreenLookup(WindowRuleModel::LabelLookup fn);
     void setActivityLookup(WindowRuleModel::LabelLookup fn);
-    /// Back-compat: wires the same resolver into BOTH the snapping-layout
-    /// and tiling-algorithm lookups. New callers should prefer the typed
-    /// pair below.
     void setLayoutLookup(WindowRuleModel::LabelLookup fn);
     /// layoutId UUID → display label resolver for SetSnappingLayout actions.
     void setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn);

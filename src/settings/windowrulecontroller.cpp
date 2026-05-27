@@ -20,6 +20,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QHash>
+#include <QSet>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -662,23 +663,22 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
     // — the matchSummary will distinguish the clone in that case (and the
     // user typically renames immediately on duplicate anyway).
     if (!source.name.isEmpty()) {
-        // Walk existing rules and pick a free suffix so three duplicates
-        // of the same source land as "X (copy)", "X (copy) 2", "X (copy) 3"
-        // instead of three identical "X (copy)" labels the user can't
-        // distinguish.
+        // Walk existing rules ONCE into a name → present set, then
+        // probe candidate names against the set so duplicating into a
+        // list with M existing duplicates is O(N + M) instead of
+        // O(N · M) (the prior shape walked all N rules per candidate
+        // probe). Three duplicates of the same source still land as
+        // "X (copy)", "X (copy) 2", "X (copy) 3".
+        QSet<QString> takenNames;
+        const auto& existing = m_model.rules();
+        takenNames.reserve(existing.size());
+        for (const WindowRule& r : existing)
+            takenNames.insert(r.name);
         const QString base = PzI18n::tr("%1 (copy)").arg(source.name);
         QString candidate = base;
         int n = 2;
-        const auto nameTaken = [this](const QString& s) {
-            for (const WindowRule& r : m_model.rules()) {
-                if (r.name == s)
-                    return true;
-            }
-            return false;
-        };
-        while (nameTaken(candidate)) {
+        while (takenNames.contains(candidate))
             candidate = base + QStringLiteral(" %1").arg(n++);
-        }
         clone.name = candidate;
     }
     // Locate the source's slot ONCE and insert the clone directly into
