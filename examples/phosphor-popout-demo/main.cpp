@@ -26,9 +26,14 @@ int main(int argc, char* argv[])
     // keeps the controls out of our token-driven retint path.
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    QQmlApplicationEngine engine;
-
+    // demoController is declared BEFORE the engine so C++ reverse-order
+    // destruction tears the engine down first. The engine teardown
+    // re-evaluates QML bindings; if demoController died first, those
+    // re-evaluations would dereference a dangling context-property
+    // pointer and log "Cannot read property X of null" errors.
     PhosphorPopoutDemo::DemoController demoController;
+
+    QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("demoController"), &demoController);
 
     engine.loadFromModule(QStringLiteral("Phosphor.PopoutDemo"), QStringLiteral("Main"));

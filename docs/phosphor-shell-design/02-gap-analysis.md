@@ -149,6 +149,8 @@ Ordered for value delivery, not architectural purity. Each milestone is independ
 ### M0: Foundations (foundational gaps #1-#5)
 Theme tokens, PopoutService, widget registries, IPC + `phosphorctl`, `PerScreen` helper. **No new user-visible surfaces**, but everything after gets built on these. ~4-6 weeks.
 
+*Partial progress as of 2026-05-26: theme tokens shipped (PR #534), PopoutService shipped (PR #535). Widget registries, IPC, and PerScreen helper remain.*
+
 ### M1: Bar parity
 Connected-corner bar canvas, widget catalog (workspaces / focused-app / clock / metrics / battery / tray / media), `IBarWidgetFactory` working end-to-end. Migrates the current TopPanel to the new model. **Visible win: bar feels alive and distinct from any existing Wayland shell.**
 

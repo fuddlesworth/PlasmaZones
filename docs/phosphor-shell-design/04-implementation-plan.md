@@ -77,23 +77,26 @@ Token store, matugen runner, template engine.
 
 **Effort:** M (estimated ~2 weeks; actual ~1 session)
 
-### 1.2: `phosphor-popout`
+### 1.2: `phosphor-popout` *(shipped, 2026-05-26, PR #535)*
 
-Centralized popout coordinator (DMS pattern, lifted into C++).
+Centralized popout coordinator. Single arbiter for popout lifetime, focus,
+and exclusivity policy across every transient surface in the shell.
 
-| Deliverable                                                         | Notes                                                                                              |
-|---------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
-| `libs/phosphor-popout/` (C++)                                       | `IPopoutService`, `PopoutController`, popout lifecycle / focus / screen affinity / exclusive-zone arbitration. |
-| `qml/Phosphor/Helpers/PopoutHost.qml`                               | Layer-shell surface that hosts the active popout component.                                        |
-| `examples/phosphor-popout-demo/`                                    | Window with 3 buttons (A/B/C). Each opens a different popout. Demonstrates: cooperative (auto-close other), modal (suppress all), detached (stays put). Animates open/close via Motion tokens. |
+| Deliverable                                                         | Status | Notes                                                                                              |
+|---------------------------------------------------------------------|--------|----------------------------------------------------------------------------------------------------|
+| `libs/phosphor-popout/` (C++)                                       | ✓ shipped | `PopoutRequest` (value type), `ExclusiveMode` enum (`Cooperative` / `Modal` / `Detached`), `Anchor` enum, `IPopoutService`, `IPopoutTransport` (surface-creation seam), `PopoutController` (arbitration state machine, registered as `QML_UNCREATABLE` element). |
+| `qml/Phosphor/Popout/PopoutHost.qml`                                | ✓ shipped | Transport-agnostic wrapper for popout content. Owns the open/close opacity-plus-scale animation via `phosphor-theme` Motion's emphasized M3 curve, the backdrop dim, and click-outside dismiss. Lives in `Phosphor.Popout` not `Phosphor.Helpers` so the lib's QML module is self-contained. |
+| `examples/phosphor-popout-demo/`                                    | ✓ shipped | Five toggle buttons (Cooperative A, Cooperative B, Modal, Detached, Close all) plus a status bar binding to `openPopoutIds` and `modalActive`. Ships an `InAppPopoutTransport` that opens popouts as `QQuickItem`s inside the window's host item, no Wayland dependency. The layer-shell-backed transport (`LayerPopoutTransport` wrapping `phosphor-layer::SurfaceFactory`) lands when the shell binary first needs popouts; swapping is a single dependency-injection flip. |
+| `libs/phosphor-popout/tests/`                                       | ✓ shipped | 19 cases in `test_popoutcontroller` (21 with init/cleanup). FakeTransport mocks the surface layer so the arbitration state machine is exercised as pure logic. Covers cooperative-per-scope replacement, scope independence, modal suppression and stacking, detached independence, same-id no-op, transport refusal, toggle behavior, closeAll-clears-modal-count, dismissed-callback routing, and the `modalActiveChanged` edge contract. |
+| `libs/phosphor-popout/README.md`                                    | ✓ shipped | Canonical phosphor-* library README style: responsibility, key types table, typical-use blocks, arbitration rules, dependencies. |
 
 **Acceptance:**
-- Only one cooperative popout open per scope
-- Modal popout suppresses cooperative popouts on every screen
-- Popouts dismiss on focus loss when configured
-- Open/close animations use M3 emphasized curves from `phosphor-theme`
+- [x] Only one cooperative popout open per scope (test + demo verified)
+- [x] Modal popout suppresses cooperative popouts on every screen (test + demo verified)
+- [x] Popouts dismiss on focus loss when configured (`dismissOnFocusLoss` flag plumbs through to the transport's click-outside MouseArea)
+- [x] Open/close animations use M3 emphasized curves from `phosphor-theme` (PopoutHost.qml's Behaviors bind `Motion.easing_emphasized`)
 
-**Effort:** M (~2 weeks)
+**Effort:** M (estimated ~2 weeks; actual ~1 session for the arbitration core + in-window transport. LayerPopoutTransport deferred until the shell binary needs it.)
 
 ### 1.3: `phosphor-registry`
 
@@ -141,12 +144,12 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
 
-**Phase 1 progress (as of 2026-05-26):** 1 / 5 libs shipped.
+**Phase 1 progress (as of 2026-05-26):** 2 / 5 libs shipped.
 
 | Lib                   | Status                                                  |
 |-----------------------|---------------------------------------------------------|
 | `phosphor-theme`      | ✓ shipped (PR #534)                                     |
-| `phosphor-popout`     | not started                                             |
+| `phosphor-popout`     | ✓ shipped (PR #535)                                     |
 | `phosphor-registry`   | not started                                             |
 | `phosphor-ipc`        | not started                                             |
 | `PerScreen` helper    | not started                                             |
