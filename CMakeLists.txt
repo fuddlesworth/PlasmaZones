@@ -612,6 +612,13 @@ install(FILES ${_plasmazones_light_icons}
 add_subdirectory(examples/phosphor-theme-demo)
 add_subdirectory(examples/phosphor-theme-cli)
 
+# phosphor-popout-demo. Acceptance harness for libs/phosphor-popout.
+# Same gating logic as the theme demos: built unconditionally so a
+# popout developer doesn't need BUILD_PHOSPHOR_SHELL=ON to exercise
+# the arbitration. The demo links only phosphor-popout, phosphor-theme,
+# and base Qt; no Wayland dependency.
+add_subdirectory(examples/phosphor-popout-demo)
+
 if(BUILD_PHOSPHOR_SHELL)
     # Build the bundled example shell as a Qt QML module so qmlcachegen
     # and qmlsc run at build time. The resulting static module gets linked

@@ -27,7 +27,15 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
+
+# Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
+# module resource prefix. The `qt_policy` command is what we actually
+# need; it's available on every Qt CMake build new enough to publish
+# the QTP0001 policy.
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -91,6 +99,74 @@ set_target_properties(PhosphorPopout PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     UNITY_BUILD OFF
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QML module, STATIC (in-tree linkable)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# C++ side: PopoutController carries QML_ELEMENT so QML callers can
+# instantiate it. The PopoutHost.qml component lives alongside as a
+# transport-agnostic wrapper that any popout host (in-app for the demo,
+# layer-shell for the shell) parents content into.
+
+set(_phosphor_popout_qml_files
+    qml/Phosphor/Popout/PopoutHost.qml
+)
+
+# qt_add_qml_module nests QML_FILES under their source-relative path
+# beneath the module URI prefix. Pin the resource alias to the basename
+# so import resolution doesn't see a doubled `qml/Phosphor/Popout/`
+# segment. Same pattern as PhosphorTheme.
+foreach(_qml_file IN LISTS _phosphor_popout_qml_files)
+    get_filename_component(_qml_basename ${_qml_file} NAME)
+    set_source_files_properties(${_qml_file}
+        PROPERTIES
+            QT_RESOURCE_ALIAS ${_qml_basename}
+    )
+endforeach()
+
+set(_phosphor_popout_qml_sources
+    src/phosphorpopout_qml_plugin.cpp
+    # PopoutController header listed so AUTOMOC on the QML module
+    # target emits metatype JSON; qmltyperegistrar reads it and
+    # publishes the QML registration the plugin loads at startup.
+    # Implementation stays in PhosphorPopout.so (linked below).
+    include/PhosphorPopout/PopoutController.h
+)
+
+qt_add_qml_module(PhosphorPopoutQml
+    URI Phosphor.Popout
+    VERSION 1.0
+    STATIC
+    SOURCES ${_phosphor_popout_qml_sources}
+    QML_FILES ${_phosphor_popout_qml_files}
+    OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/Phosphor/Popout
+)
+
+add_library(PhosphorPopout::PhosphorPopoutQml ALIAS PhosphorPopoutQml)
+
+target_include_directories(PhosphorPopoutQml
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+)
+
+target_compile_features(PhosphorPopoutQml PUBLIC cxx_std_20)
+
+target_link_libraries(PhosphorPopoutQml
+    PUBLIC
+        PhosphorPopout::PhosphorPopout
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Qml
+        Qt6::Quick
+)
+
+set_target_properties(PhosphorPopoutQml PROPERTIES
+    VERSION ${PHOSPHORPOPOUT_VERSION}
+    SOVERSION 0
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
