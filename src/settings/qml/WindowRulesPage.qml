@@ -29,8 +29,7 @@ SettingsFlickable {
     // screen / activity match-leaf editors) all see the same object.
     // LayoutComboBox reads `layouts` + the `default*` ids from this; the leaf
     // pickers read `screens` and `activities`.
-    readonly property QtObject
-    _editorAppSettings: QtObject {
+    readonly property QtObject _editorAppSettings: QtObject {
         readonly property var layouts: settingsController.layouts
         readonly property var screens: settingsController.screens
         readonly property var activities: settingsController.activities
@@ -76,9 +75,9 @@ SettingsFlickable {
         // Touch the revision so the binding re-evaluates on any model change.
         var rev = page.modelRevision;
         var snapshot = page.controller.rulesSnapshot();
-        var buckets = {
-        };
-        for (var s = 0; s < page.sectionDescriptors.length; ++s) buckets[page.sectionDescriptors[s].value] = []
+        var buckets = {};
+        for (var s = 0; s < page.sectionDescriptors.length; ++s)
+            buckets[page.sectionDescriptors[s].value] = [];
         var search = page.searchText.toLowerCase();
         for (var i = 0; i < snapshot.length; ++i) {
             var entry = snapshot[i];
@@ -91,7 +90,6 @@ SettingsFlickable {
                 var hay = (entry.name + " " + entry.matchSummary + " " + entry.actionSummary).toLowerCase();
                 if (hay.indexOf(search) < 0)
                     continue;
-
             }
             // Monitor filter — keep only rules whose ScreenId predicate(s)
             // name the selected monitor (an exact id match, not a substring
@@ -99,11 +97,9 @@ SettingsFlickable {
             if (page.monitorFilter.length > 0) {
                 if (!entry.screenIds || entry.screenIds.indexOf(page.monitorFilter) < 0)
                     continue;
-
             }
             if (buckets[entry.section] !== undefined)
                 buckets[entry.section].push(entry);
-
         }
         var out = [];
         for (var so = 0; so < page.sectionDescriptors.length; ++so) {
@@ -156,12 +152,12 @@ SettingsFlickable {
             // silently dropping legitimate updates.
             if (!roles || roles.length === 0) {
                 page.modelRevision++;
-                return ;
+                return;
             }
             for (var i = 0; i < roles.length; ++i) {
                 if (page._summaryRoles.indexOf(roles[i]) >= 0) {
                     page.modelRevision++;
-                    return ;
+                    return;
                 }
             }
         }
@@ -190,7 +186,7 @@ SettingsFlickable {
 
         controller: page.controller
         appSettings: page._editorAppSettings
-        onRuleSaved: function(ruleJson) {
+        onRuleSaved: function (ruleJson) {
             page.controller.addRuleFromJson(ruleJson);
         }
     }
@@ -209,7 +205,7 @@ SettingsFlickable {
 
         controller: page.controller
         appSettings: page._editorAppSettings
-        onRuleSaved: function(ruleJson) {
+        onRuleSaved: function (ruleJson) {
             page.controller.updateRuleFromJson(ruleJson);
         }
     }
@@ -232,6 +228,48 @@ SettingsFlickable {
             type: Kirigami.MessageType.Warning
             visible: page.controller.daemonChangedWhileDirty
             text: i18n("The window rules changed on disk while you were editing — saving now will overwrite those changes. Review your edits before saving, or discard them to reload.")
+            // Escape hatch — the controller's normal commit() refuses
+            // when daemonChangedWhileDirty is set so the user doesn't
+            // silently overwrite. forceCommit() bypasses the guard for
+            // the "I know, save anyway" path; mirrors the SettingsCard
+            // confirm-prompt UX so the user has to acknowledge the
+            // overwrite explicitly.
+            actions: [
+                Kirigami.Action {
+                    icon.name: "document-save"
+                    text: i18n("Save anyway")
+                    onTriggered: forceSaveConfirm.open()
+                },
+                Kirigami.Action {
+                    icon.name: "edit-undo"
+                    text: i18n("Discard and reload")
+                    onTriggered: page.controller.revert()
+                }
+            ]
+        }
+
+        Kirigami.PromptDialog {
+            id: forceSaveConfirm
+
+            title: i18n("Overwrite daemon-side changes?")
+            subtitle: i18n("Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.")
+            standardButtons: Kirigami.Dialog.NoButton
+            customFooterActions: [
+                Kirigami.Action {
+                    icon.name: "dialog-cancel"
+                    text: i18n("Cancel")
+                    onTriggered: forceSaveConfirm.close()
+                },
+                Kirigami.Action {
+                    icon.name: "document-save"
+                    text: i18n("Overwrite")
+                    onTriggered: {
+                        forceSaveConfirm.close();
+                        if (!page.controller.forceCommit())
+                            window.showToast(i18n("Force-save failed — see the daemon log for details."));
+                    }
+                }
+            ]
         }
 
         // ── Monitor overview strip ──
@@ -252,7 +290,7 @@ SettingsFlickable {
                 return page.controller.monitorOverview(settingsController.screens);
             }
             selectedScreenId: page.monitorFilter
-            onMonitorSelected: function(screenId) {
+            onMonitorSelected: function (screenId) {
                 page.monitorFilter = screenId;
             }
         }
@@ -275,7 +313,6 @@ SettingsFlickable {
                 Accessible.name: i18n("Add a new window rule")
                 onClicked: addRuleWizard.open()
             }
-
         }
 
         // ── Filter chips ──
@@ -291,10 +328,12 @@ SettingsFlickable {
             Repeater {
                 // "All" chip prepended to the controller's section list — the
                 // section labels and order come from C++, not hardcoded here.
-                model: [{
-                    "value": -1,
-                    "label": i18n("All")
-                }].concat(page.sectionDescriptors)
+                model: [
+                    {
+                        "value": -1,
+                        "label": i18n("All")
+                    }
+                ].concat(page.sectionDescriptors)
 
                 delegate: Button {
                     required property var modelData
@@ -305,13 +344,11 @@ SettingsFlickable {
                     Accessible.name: i18n("Filter rules: %1", modelData.label)
                     onClicked: page.chipFilter = modelData.value
                 }
-
             }
 
             Item {
                 Layout.fillWidth: true
             }
-
         }
 
         // ── Empty state ──
@@ -397,7 +434,7 @@ SettingsFlickable {
                             matchFieldOptions: page.matchFieldOptions
                             actionTypeOptions: page.actionTypeOptions
                             appSettings: page._editorAppSettings
-                            onToggleRequested: function(en) {
+                            onToggleRequested: function (en) {
                                 page.controller.setRuleEnabled(ruleId, en);
                             }
                             onEditRequested: {
@@ -410,7 +447,6 @@ SettingsFlickable {
                                 page.controller.removeRule(ruleId);
                             }
                         }
-
                     }
 
                     // Animation section — manual-positioning drag container,
@@ -469,7 +505,6 @@ SettingsFlickable {
                                     if (from < to) {
                                         if (index > from && index <= to)
                                             return -animationOrderContainer.rowHeight;
-
                                     } else if (index >= to && index < from) {
                                         return animationOrderContainer.rowHeight;
                                     }
@@ -528,7 +563,7 @@ SettingsFlickable {
                                                 // layout position before the
                                                 // controller mutation reorders
                                                 // the underlying snapshot.
-                                                animDelegateRoot.y = Qt.binding(function() {
+                                                animDelegateRoot.y = Qt.binding(function () {
                                                     return animDelegateRoot.baseY + animDelegateRoot.visualOffset;
                                                 });
                                                 if (from >= 0 && to >= 0 && from !== to && from < rules.length && to < rules.length) {
@@ -547,7 +582,6 @@ SettingsFlickable {
                                                     if (from < to) {
                                                         if (to + 1 < rules.length)
                                                             beforeId = rules[to + 1].ruleId;
-
                                                     } else {
                                                         beforeId = rules[to].ruleId;
                                                     }
@@ -560,11 +594,9 @@ SettingsFlickable {
                                                     var targetIndex = Math.max(0, Math.min(animationOrderContainer.rules.length - 1, Math.floor(centerY / animationOrderContainer.rowHeight)));
                                                     if (targetIndex !== animationOrderContainer.dropTargetIndex)
                                                         animationOrderContainer.dropTargetIndex = targetIndex;
-
                                                 }
                                             }
                                         }
-
                                     }
 
                                     WindowRuleRow {
@@ -593,7 +625,7 @@ SettingsFlickable {
                                         // button still opens the full
                                         // editor for inspecting the match.
                                         expandable: false
-                                        onToggleRequested: function(en) {
+                                        onToggleRequested: function (en) {
                                             page.controller.setRuleEnabled(animDelegateRoot.modelData.ruleId, en);
                                         }
                                         onEditRequested: {
@@ -606,7 +638,6 @@ SettingsFlickable {
                                             page.controller.removeRule(animDelegateRoot.modelData.ruleId);
                                         }
                                     }
-
                                 }
 
                                 Behavior on y {
@@ -616,21 +647,12 @@ SettingsFlickable {
                                         profile: "widget.reorder"
                                         durationOverride: Kirigami.Units.longDuration
                                     }
-
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

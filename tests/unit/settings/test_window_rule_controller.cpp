@@ -44,6 +44,7 @@ private Q_SLOTS:
     void matchIsContextOnlyClassifies();
     void validationIssuesForJsonFlags();
     void defaultPayloadForSeedsParams();
+    void forceCommitIsInvokable();
 };
 
 void TestWindowRuleController::newEmptyRuleShapesBySubject()
@@ -457,6 +458,20 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     const QVariantMap unknownPayload = controller.defaultPayloadFor(QStringLiteral("bogusActionType"));
     QCOMPARE(unknownPayload.value(QStringLiteral("type")).toString(), QStringLiteral("bogusActionType"));
     QCOMPARE(unknownPayload.size(), 1);
+}
+
+void TestWindowRuleController::forceCommitIsInvokable()
+{
+    // Pin the F#3 contract — forceCommit must be Q_INVOKABLE so QML's
+    // "Save anyway" button on the daemonChangedWhileDirty banner can
+    // call it. Verified via the meta-object so a refactor that drops
+    // the macro silently is caught at the unit-test layer rather than
+    // surfacing as a QML "function is not a method of object" at
+    // runtime.
+    WindowRuleController controller;
+    const QMetaObject* mo = controller.metaObject();
+    QVERIFY2(mo->indexOfMethod("forceCommit()") >= 0,
+             "WindowRuleController::forceCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
 }
 
 QTEST_MAIN(TestWindowRuleController)
