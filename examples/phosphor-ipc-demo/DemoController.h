@@ -6,6 +6,8 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
+#include <QVariantList>
 #include <QtCore/qtclasshelpermacros.h>
 
 #include <memory>
@@ -21,6 +23,12 @@ class DemoController : public QObject
     Q_OBJECT
     Q_PROPERTY(QString socketPath READ socketPath NOTIFY socketPathChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
+    // Live event log — newest first. Each IpcTarget in Main.qml
+    // calls recordEvent() alongside its emitEvent() so the demo
+    // window shows events flowing as they're broadcast. Bounded to
+    // the most recent 20 entries so a long phosphorctl call session
+    // doesn't grow the property unbounded.
+    Q_PROPERTY(QStringList eventLog READ eventLog NOTIFY eventLogChanged)
 public:
     explicit DemoController(QObject* parent = nullptr);
     ~DemoController() override;
@@ -34,13 +42,22 @@ public:
 
     [[nodiscard]] QString socketPath() const;
     [[nodiscard]] QString status() const;
+    [[nodiscard]] QStringList eventLog() const;
 
     // Exposed for IpcEngine::install in main().
     [[nodiscard]] PhosphorIpc::IpcRouter* router() const;
 
+    // Append "<target>.<signal>([args])" to the eventLog. Called
+    // from QML alongside IpcTarget.emitEvent so the demo window
+    // visualises the same event stream wire subscribers receive —
+    // no need to open a separate `phosphorctl subscribe` terminal
+    // to see what subscribe delivers.
+    Q_INVOKABLE void recordEvent(const QString& targetName, const QString& signalName, const QVariantList& args);
+
 Q_SIGNALS:
     void socketPathChanged();
     void statusChanged();
+    void eventLogChanged();
 
 private:
     void onTargetRegistered(const QString& name);
@@ -48,6 +65,7 @@ private:
 
     std::unique_ptr<PhosphorIpc::IpcRouter> m_router;
     QString m_status;
+    QStringList m_eventLog;
 };
 
 } // namespace PhosphorIpcDemo

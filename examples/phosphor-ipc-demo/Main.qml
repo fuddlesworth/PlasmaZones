@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
-// phosphor-ipc-demo entry QML. Three IpcTargets — greet (sync only),
-// count (sync + signal), set-value (sync + 2-arg signal) — plus a
-// status panel that mirrors the router's registered-targets list
-// and the most recent socket path.
+// phosphor-ipc-demo entry QML. Three IpcTargets (greet / count /
+// set-value) plus a live event-log panel showing the same events
+// `phosphorctl subscribe` would stream — so a single demo window
+// covers the entire acceptance walkthrough without the user
+// having to open a separate subscribe terminal.
 
 import Phosphor.Ipc
 import Phosphor.Theme
@@ -14,14 +15,14 @@ import QtQuick.Layouts
 ApplicationWindow {
     id: window
 
-    width: 720
-    height: 480
+    width: 820
+    height: 640
     visible: true
     title: qsTr("Phosphor IPC Demo")
     color: Theme.background
 
     // Target 1: synchronous greet. `phosphorctl call greet.sayHello --arg name=nate`
-    // returns "Hello, nate".
+    // returns "Hello, nate". No event broadcast — sync only.
     IpcTarget {
         target: "greet"
 
@@ -30,16 +31,12 @@ ApplicationWindow {
         }
     }
 
-    // Target 2: integer counter with a countChanged signal. The
-    // signal is declared so the schema generator can advertise it
-    // as subscribable; emitEvent pushes the JSON-shaped event to
-    // every subscriber on the wire.
+    // Target 2: integer counter with a countChanged signal.
     //
-    // The state field is named `current` rather than `value` to
-    // avoid colliding with the QML-auto-generated `valueChanged()`
-    // notifier — a stray `property int value` would publish a
-    // zero-arg `valueChanged` signal alongside the explicit
-    // `countChanged(int v)` and confuse the schema output.
+    // State field named `current` rather than `value` to avoid
+    // colliding with the QML-auto-generated `valueChanged()`
+    // notifier that `property int value` would emit alongside the
+    // explicit countChanged(int) and confuse the schema output.
     IpcTarget {
         id: countTarget
 
@@ -53,12 +50,14 @@ ApplicationWindow {
             countTarget.current++;
             countTarget.countChanged(countTarget.current);
             countTarget.emitEvent("countChanged", [countTarget.current]);
+            demoController.recordEvent("count", "countChanged", [countTarget.current]);
             return countTarget.current;
         }
         function reset(): int {
             countTarget.current = 0;
             countTarget.countChanged(countTarget.current);
             countTarget.emitEvent("countChanged", [countTarget.current]);
+            demoController.recordEvent("count", "countChanged", [countTarget.current]);
             return countTarget.current;
         }
     }
@@ -66,12 +65,10 @@ ApplicationWindow {
     // Target 3: key/value store with a two-arg entryChanged signal.
     // Exercises subscribe payloads with more than one parameter.
     //
-    // The signal is explicitly named `entryChanged` rather than
-    // `valueChanged` so it doesn't shadow the QML-auto-generated
-    // `storeChanged()` notifier emitted from `property var store`.
-    // Subscribers wire onto `entryChanged`; the auto-`storeChanged`
-    // shape is benign noise the schema surfaces but no caller
-    // subscribes to.
+    // Signal explicitly named `entryChanged` so it doesn't shadow
+    // the QML-auto-generated `storeChanged()` notifier emitted from
+    // `property var store`. Subscribers wire onto `entryChanged`;
+    // `storeChanged` is benign schema noise no caller subscribes to.
     IpcTarget {
         id: storeTarget
 
@@ -85,6 +82,7 @@ ApplicationWindow {
             storeTarget.store[key] = value;
             storeTarget.entryChanged(key, value);
             storeTarget.emitEvent("entryChanged", [key, value]);
+            demoController.recordEvent("set-value", "entryChanged", [key, value]);
             return true;
         }
         function get(key: string): string {
@@ -110,14 +108,43 @@ ApplicationWindow {
             color: Theme.on_surface_variant
             font.family: Tokens.font_family
             font.pixelSize: Tokens.font_size_body_m
-            text: qsTr("Drive this demo from another terminal with phosphorctl. The status panel below mirrors the router's registered-targets list.")
+            text: qsTr("Drive the targets from another terminal with phosphorctl. The Live events panel below shows the same events `phosphorctl subscribe` would stream — no separate subscribe terminal needed.")
             wrapMode: Text.WordWrap
         }
 
-        // Status panel — live router state.
+        // Cheat sheet — promoted above the status / event panels
+        // because it's what the user is most likely reaching for
+        // when they open the demo. Subscribe is listed first to
+        // emphasise the live-events flow.
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Tokens.spacing_xxxl * 3
+            Layout.preferredHeight: Tokens.spacing_xxxl * 4
+            border.color: Theme.outline_variant
+            border.width: 1
+            color: Theme.surface_container
+            radius: Tokens.radius_m
+
+            Text {
+                anchors.fill: parent
+                anchors.margins: Tokens.spacing_l
+                color: Theme.on_surface
+                font.family: "monospace"
+                font.pixelSize: Tokens.font_size_body_s
+                text: qsTr("# In another terminal — events from these calls\n# appear in the Live events panel below.\nexport PHOSPHOR_SOCKET=") + demoController.socketPath + qsTr("\nphosphorctl call count.increment              # one event per call\nphosphorctl call set-value.set --arg k=mood --arg v=happy\nphosphorctl call greet.sayHello --arg name=nate    # sync, no event\nphosphorctl list\nphosphorctl schema count | jq")
+                textFormat: Text.PlainText
+                verticalAlignment: Text.AlignTop
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        // Live event log — newest-first list of broadcast events.
+        // The demo records into this list directly from QML, so the
+        // panel shows exactly the events any external subscriber
+        // would receive over the socket. Lets a single demo window
+        // replace the would-be three-terminal acceptance flow.
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
             border.color: Theme.outline_variant
             border.width: 1
             color: Theme.surface
@@ -133,54 +160,47 @@ ApplicationWindow {
                     font.family: Tokens.font_family
                     font.pixelSize: Tokens.font_size_body_s
                     font.weight: Tokens.font_weight_medium
-                    text: qsTr("Socket")
+                    text: qsTr("Live events (newest first; matches `phosphorctl subscribe` output)")
                 }
-                Text {
+                ListView {
+                    id: eventList
+
+                    Layout.fillHeight: true
                     Layout.fillWidth: true
-                    color: Theme.on_surface_variant
-                    elide: Text.ElideLeft
-                    font.family: "monospace"
-                    font.pixelSize: Tokens.font_size_body_s
-                    text: demoController.socketPath !== "" ? demoController.socketPath : qsTr("(not running)")
-                }
-                Text {
-                    color: Theme.on_surface
-                    font.family: Tokens.font_family
-                    font.pixelSize: Tokens.font_size_body_s
-                    font.weight: Tokens.font_weight_medium
-                    text: qsTr("Status")
-                }
-                Text {
-                    Layout.fillWidth: true
-                    color: Theme.on_surface_variant
-                    font.family: Tokens.font_family
-                    font.pixelSize: Tokens.font_size_body_s
-                    text: demoController.status
-                    wrapMode: Text.WordWrap
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+                    model: demoController.eventLog
+
+                    delegate: Text {
+                        required property string modelData
+
+                        color: Theme.on_surface
+                        font.family: "monospace"
+                        font.pixelSize: Tokens.font_size_body_s
+                        text: modelData
+                        width: eventList.width
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        color: Theme.on_surface_variant
+                        font.family: Tokens.font_family
+                        font.pixelSize: Tokens.font_size_body_s
+                        text: qsTr("(no events yet — run `phosphorctl call count.increment` from a terminal)")
+                        visible: eventList.count === 0
+                    }
                 }
             }
         }
 
-        // Cheat sheet — copies of the commands a user would run.
-        Rectangle {
+        // Socket + router status footer (compact).
+        Text {
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            border.color: Theme.outline_variant
-            border.width: 1
-            color: Theme.surface_container
-            radius: Tokens.radius_m
-
-            Text {
-                anchors.fill: parent
-                anchors.margins: Tokens.spacing_l
-                color: Theme.on_surface
-                font.family: "monospace"
-                font.pixelSize: Tokens.font_size_body_s
-                text: qsTr("# In another terminal:\nexport PHOSPHOR_SOCKET=") + demoController.socketPath + qsTr("\nphosphorctl list\nphosphorctl schema count | jq\nphosphorctl call greet.sayHello --arg name=nate\nphosphorctl call count.increment\nphosphorctl call set-value.set --arg k=mood --arg v=happy\nphosphorctl subscribe count.countChanged   # streams events on count.increment\nphosphorctl subscribe set-value.entryChanged")
-                textFormat: Text.PlainText
-                verticalAlignment: Text.AlignTop
-                wrapMode: Text.WordWrap
-            }
+            color: Theme.on_surface_variant
+            elide: Text.ElideLeft
+            font.family: "monospace"
+            font.pixelSize: Tokens.font_size_body_s
+            text: qsTr("socket: %1 — %2").arg(demoController.socketPath !== "" ? demoController.socketPath : qsTr("(not running)")).arg(demoController.status)
         }
     }
 }

@@ -140,6 +140,23 @@ phosphorctl subscribe theme.modeChanged    # stays connected, streams events
 Socket-path priority: `--socket PATH` > `$PHOSPHOR_SOCKET` >
 `$XDG_RUNTIME_DIR/phosphor.sock`.
 
+### Acceptance harness
+
+`examples/phosphor-ipc-demo/` is the canonical end-to-end exercise.
+The demo window includes a live event-log panel that mirrors the
+broadcast stream — running `phosphorctl call count.increment` from a
+single sidecar terminal makes events appear in the demo window in
+real time, no separate `phosphorctl subscribe` terminal needed:
+
+```
+# terminal 1
+./bin/phosphor-ipc-demo --socket /tmp/p.sock
+# terminal 2
+export PHOSPHOR_SOCKET=/tmp/p.sock
+phosphorctl call count.increment        # demo's event log gains an entry
+phosphorctl subscribe count.countChanged   # optional: same events on stdout
+```
+
 ## Arbitration / lifecycle
 
 - **Duplicate target id rejected.** Registering an already-known
