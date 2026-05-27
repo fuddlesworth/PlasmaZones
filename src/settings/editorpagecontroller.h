@@ -8,7 +8,7 @@
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Editor" settings page.
 ///
@@ -58,7 +58,7 @@ public:
     /// for every method on this controller and must not be null. Taking it
     /// by reference makes the precondition a compile-time guarantee instead
     /// of a Q_ASSERT that compiles away in release builds.
-    explicit EditorPageController(Settings& settings, QObject* parent = nullptr);
+    explicit EditorPageController(ISettings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {
@@ -116,7 +116,7 @@ Q_SIGNALS:
     void changed();
 
 private:
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
 };
 
 } // namespace PlasmaZones

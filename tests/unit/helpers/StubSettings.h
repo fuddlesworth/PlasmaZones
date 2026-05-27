@@ -851,6 +851,130 @@ public:
         // unit-test paths today.
         return QStringLiteral("loadColorsFromFile: stub not supported");
     }
+
+    // Editor settings — round-trip the stub members so a test can
+    // exercise the EditorPageController setter/getter contract.
+    QString editorDuplicateShortcut() const override
+    {
+        return m_editorDuplicateShortcut;
+    }
+    void setEditorDuplicateShortcut(const QString& s) override
+    {
+        if (m_editorDuplicateShortcut == s)
+            return;
+        m_editorDuplicateShortcut = s;
+        Q_EMIT editorDuplicateShortcutChanged();
+    }
+    QString editorSplitHorizontalShortcut() const override
+    {
+        return m_editorSplitHorizontalShortcut;
+    }
+    void setEditorSplitHorizontalShortcut(const QString& s) override
+    {
+        if (m_editorSplitHorizontalShortcut == s)
+            return;
+        m_editorSplitHorizontalShortcut = s;
+        Q_EMIT editorSplitHorizontalShortcutChanged();
+    }
+    QString editorSplitVerticalShortcut() const override
+    {
+        return m_editorSplitVerticalShortcut;
+    }
+    void setEditorSplitVerticalShortcut(const QString& s) override
+    {
+        if (m_editorSplitVerticalShortcut == s)
+            return;
+        m_editorSplitVerticalShortcut = s;
+        Q_EMIT editorSplitVerticalShortcutChanged();
+    }
+    QString editorFillShortcut() const override
+    {
+        return m_editorFillShortcut;
+    }
+    void setEditorFillShortcut(const QString& s) override
+    {
+        if (m_editorFillShortcut == s)
+            return;
+        m_editorFillShortcut = s;
+        Q_EMIT editorFillShortcutChanged();
+    }
+    bool editorGridSnappingEnabled() const override
+    {
+        return m_editorGridSnappingEnabled;
+    }
+    void setEditorGridSnappingEnabled(bool e) override
+    {
+        if (m_editorGridSnappingEnabled == e)
+            return;
+        m_editorGridSnappingEnabled = e;
+        Q_EMIT editorGridSnappingEnabledChanged();
+    }
+    bool editorEdgeSnappingEnabled() const override
+    {
+        return m_editorEdgeSnappingEnabled;
+    }
+    void setEditorEdgeSnappingEnabled(bool e) override
+    {
+        if (m_editorEdgeSnappingEnabled == e)
+            return;
+        m_editorEdgeSnappingEnabled = e;
+        Q_EMIT editorEdgeSnappingEnabledChanged();
+    }
+    qreal editorSnapIntervalX() const override
+    {
+        return m_editorSnapIntervalX;
+    }
+    void setEditorSnapIntervalX(qreal v) override
+    {
+        if (qFuzzyCompare(m_editorSnapIntervalX, v))
+            return;
+        m_editorSnapIntervalX = v;
+        Q_EMIT editorSnapIntervalXChanged();
+    }
+    qreal editorSnapIntervalY() const override
+    {
+        return m_editorSnapIntervalY;
+    }
+    void setEditorSnapIntervalY(qreal v) override
+    {
+        if (qFuzzyCompare(m_editorSnapIntervalY, v))
+            return;
+        m_editorSnapIntervalY = v;
+        Q_EMIT editorSnapIntervalYChanged();
+    }
+    int editorSnapOverrideModifier() const override
+    {
+        return m_editorSnapOverrideModifier;
+    }
+    void setEditorSnapOverrideModifier(int m) override
+    {
+        if (m_editorSnapOverrideModifier == m)
+            return;
+        m_editorSnapOverrideModifier = m;
+        Q_EMIT editorSnapOverrideModifierChanged();
+    }
+    bool fillOnDropEnabled() const override
+    {
+        return m_fillOnDropEnabled;
+    }
+    void setFillOnDropEnabled(bool e) override
+    {
+        if (m_fillOnDropEnabled == e)
+            return;
+        m_fillOnDropEnabled = e;
+        Q_EMIT fillOnDropEnabledChanged();
+    }
+    int fillOnDropModifier() const override
+    {
+        return m_fillOnDropModifier;
+    }
+    void setFillOnDropModifier(int m) override
+    {
+        if (m_fillOnDropModifier == m)
+            return;
+        m_fillOnDropModifier = m;
+        Q_EMIT fillOnDropModifierChanged();
+    }
     QStringList lockedScreens() const override
     {
         return {};
@@ -915,6 +1039,17 @@ private:
     QStringList m_animationExcludedApplications;
     QStringList m_animationExcludedWindowClasses;
     QVariantMap m_autotilePerAlgorithmSettings;
+    QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
+    QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();
+    QString m_editorSplitVerticalShortcut = ConfigDefaults::editorSplitVerticalShortcut();
+    QString m_editorFillShortcut = ConfigDefaults::editorFillShortcut();
+    bool m_editorGridSnappingEnabled = ConfigDefaults::editorGridSnappingEnabled();
+    bool m_editorEdgeSnappingEnabled = ConfigDefaults::editorEdgeSnappingEnabled();
+    qreal m_editorSnapIntervalX = ConfigDefaults::editorSnapIntervalX();
+    qreal m_editorSnapIntervalY = ConfigDefaults::editorSnapIntervalY();
+    int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
+    bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
+    int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
 };
 
 } // namespace PlasmaZones

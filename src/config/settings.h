@@ -1014,28 +1014,28 @@ public:
     // Editor Settings (shared [Editor] group in config.json)
     // PhosphorConfig::Store-backed.
     // ═══════════════════════════════════════════════════════════════════════════
-    QString editorDuplicateShortcut() const;
-    void setEditorDuplicateShortcut(const QString& shortcut);
-    QString editorSplitHorizontalShortcut() const;
-    void setEditorSplitHorizontalShortcut(const QString& shortcut);
-    QString editorSplitVerticalShortcut() const;
-    void setEditorSplitVerticalShortcut(const QString& shortcut);
-    QString editorFillShortcut() const;
-    void setEditorFillShortcut(const QString& shortcut);
-    bool editorGridSnappingEnabled() const;
-    void setEditorGridSnappingEnabled(bool enabled);
-    bool editorEdgeSnappingEnabled() const;
-    void setEditorEdgeSnappingEnabled(bool enabled);
-    qreal editorSnapIntervalX() const;
-    void setEditorSnapIntervalX(qreal interval);
-    qreal editorSnapIntervalY() const;
-    void setEditorSnapIntervalY(qreal interval);
-    int editorSnapOverrideModifier() const;
-    void setEditorSnapOverrideModifier(int mod);
-    bool fillOnDropEnabled() const;
-    void setFillOnDropEnabled(bool enabled);
-    int fillOnDropModifier() const;
-    void setFillOnDropModifier(int mod);
+    QString editorDuplicateShortcut() const override;
+    void setEditorDuplicateShortcut(const QString& shortcut) override;
+    QString editorSplitHorizontalShortcut() const override;
+    void setEditorSplitHorizontalShortcut(const QString& shortcut) override;
+    QString editorSplitVerticalShortcut() const override;
+    void setEditorSplitVerticalShortcut(const QString& shortcut) override;
+    QString editorFillShortcut() const override;
+    void setEditorFillShortcut(const QString& shortcut) override;
+    bool editorGridSnappingEnabled() const override;
+    void setEditorGridSnappingEnabled(bool enabled) override;
+    bool editorEdgeSnappingEnabled() const override;
+    void setEditorEdgeSnappingEnabled(bool enabled) override;
+    qreal editorSnapIntervalX() const override;
+    void setEditorSnapIntervalX(qreal interval) override;
+    qreal editorSnapIntervalY() const override;
+    void setEditorSnapIntervalY(qreal interval) override;
+    int editorSnapOverrideModifier() const override;
+    void setEditorSnapOverrideModifier(int mod) override;
+    bool fillOnDropEnabled() const override;
+    void setFillOnDropEnabled(bool enabled) override;
+    int fillOnDropModifier() const override;
+    void setFillOnDropModifier(int mod) override;
 
     // Old inline accessors replaced above — kept anchors below so the second
     // half of the replaced region can be collapsed in one edit pass.

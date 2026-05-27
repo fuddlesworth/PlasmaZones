@@ -183,6 +183,31 @@ public:
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
 
+    // Editor settings — used by EditorPageController. Editor-scope rather
+    // than Snapping/Tiling-scope, so they don't fit any sub-interface.
+    virtual QString editorDuplicateShortcut() const = 0;
+    virtual void setEditorDuplicateShortcut(const QString& shortcut) = 0;
+    virtual QString editorSplitHorizontalShortcut() const = 0;
+    virtual void setEditorSplitHorizontalShortcut(const QString& shortcut) = 0;
+    virtual QString editorSplitVerticalShortcut() const = 0;
+    virtual void setEditorSplitVerticalShortcut(const QString& shortcut) = 0;
+    virtual QString editorFillShortcut() const = 0;
+    virtual void setEditorFillShortcut(const QString& shortcut) = 0;
+    virtual bool editorGridSnappingEnabled() const = 0;
+    virtual void setEditorGridSnappingEnabled(bool enabled) = 0;
+    virtual bool editorEdgeSnappingEnabled() const = 0;
+    virtual void setEditorEdgeSnappingEnabled(bool enabled) = 0;
+    virtual qreal editorSnapIntervalX() const = 0;
+    virtual void setEditorSnapIntervalX(qreal interval) = 0;
+    virtual qreal editorSnapIntervalY() const = 0;
+    virtual void setEditorSnapIntervalY(qreal interval) = 0;
+    virtual int editorSnapOverrideModifier() const = 0;
+    virtual void setEditorSnapOverrideModifier(int mod) = 0;
+    virtual bool fillOnDropEnabled() const = 0;
+    virtual void setFillOnDropEnabled(bool enabled) = 0;
+    virtual int fillOnDropModifier() const = 0;
+    virtual void setFillOnDropModifier(int mod) = 0;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen overrides — category-keyed maps of setting key → value that
     // live alongside the global setting. Defaults are no-op bodies so backends
@@ -340,6 +365,18 @@ Q_SIGNALS:
     void perScreenSnappingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
+    // Editor
+    void editorDuplicateShortcutChanged();
+    void editorSplitHorizontalShortcutChanged();
+    void editorSplitVerticalShortcutChanged();
+    void editorFillShortcutChanged();
+    void editorGridSnappingEnabledChanged();
+    void editorEdgeSnappingEnabledChanged();
+    void editorSnapIntervalXChanged();
+    void editorSnapIntervalYChanged();
+    void editorSnapOverrideModifierChanged();
+    void fillOnDropEnabledChanged();
+    void fillOnDropModifierChanged();
     // Shader effects
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
