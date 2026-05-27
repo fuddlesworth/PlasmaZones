@@ -10,6 +10,7 @@
 #include <PhosphorIpc/IpcRouter.h>
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
 #include <QJsonArray>
@@ -357,8 +358,18 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
         sock.flush();
         readLines(sock, 1); // ack
         sock.disconnectFromServer();
-        QTest::qWait(100); // let router process the disconnect
+        // Wait for the disconnected signal to actually fire (and
+        // therefore for handleClientDisconnected to prune the
+        // subscription record). QTRY_VERIFY pumps the event loop
+        // until the predicate holds or it times out, replacing the
+        // race-prone QTest::qWait(100) that assumed a fixed timing.
+        QTRY_VERIFY(sock.state() == QLocalSocket::UnconnectedState);
     }
+    // Pump the event loop one more time so the server-side
+    // handleClientDisconnected slot, queued from the peer's
+    // disconnect, gets a chance to run before the second subscriber
+    // observes broadcast fan-out.
+    QCoreApplication::processEvents();
 
     // Second subscriber on a fresh connection. Subscribe + broadcast
     // 3 events + assert all 3 land. If the disconnected first

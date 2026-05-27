@@ -59,16 +59,20 @@ bool installSignalHandlers()
     }
     // FD_CLOEXEC on both ends so the pipe doesn't leak into a
     // future exec'd child; O_NONBLOCK on the write end so the
-    // handler can never block in ::write.
+    // handler can never block in ::write. Treat any fcntl failure
+    // as fatal so the comment on signalHandler() above stays
+    // accurate; if O_NONBLOCK fails to apply, the handler is no
+    // longer guaranteed non-blocking and a full pipe could deadlock
+    // a signal-interrupted thread.
     for (int fd : g_signalFd) {
         const int flags = ::fcntl(fd, F_GETFD);
-        if (flags != -1) {
-            ::fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+        if (flags == -1 || ::fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1) {
+            return false;
         }
     }
     const int writeFlags = ::fcntl(g_signalFd[1], F_GETFL);
-    if (writeFlags != -1) {
-        ::fcntl(g_signalFd[1], F_SETFL, writeFlags | O_NONBLOCK);
+    if (writeFlags == -1 || ::fcntl(g_signalFd[1], F_SETFL, writeFlags | O_NONBLOCK) == -1) {
+        return false;
     }
     // sigaction over std::signal: std::signal's re-arm semantics
     // are implementation-defined (BSD vs SysV historical split).

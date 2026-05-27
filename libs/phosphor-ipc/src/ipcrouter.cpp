@@ -641,12 +641,30 @@ void IpcRouter::broadcastEvent(const QString& targetName, const QString& signalN
         }
     }
 
+    // Write-side cap, symmetric to the read-side MaxLineBytes guard
+    // in handleClientReadyRead. A subscriber that never read from its
+    // socket would otherwise let the per-socket pending-write queue
+    // grow unbounded as broadcast events pile up. 16 MiB is the cap
+    // (16x the read cap because event payloads can legitimately be
+    // larger than request lines, and a slow consumer is more common
+    // than a malformed client). When exceeded, force-close the
+    // subscriber. handleClientDisconnected prunes its subscription
+    // entries.
+    constexpr qint64 MaxBytesToWrite = 16 * 1024 * 1024;
     for (const PendingSend& p : pending) {
         QLocalSocket* sock = p.socket.data();
         // Socket may have disconnected mid-broadcast (a prior send's
         // flush in this loop fired a chained disconnected; the
         // QPointer auto-cleared). Skip without trying to write.
         if (!sock || sock->state() != QLocalSocket::ConnectedState) {
+            continue;
+        }
+        if (sock->bytesToWrite() > MaxBytesToWrite) {
+            qWarning(
+                "PhosphorIpc::IpcRouter::broadcastEvent: subscriber on '%s/%s' is %lld bytes behind; "
+                "closing the connection",
+                qPrintable(targetName), qPrintable(signalName), static_cast<long long>(sock->bytesToWrite()));
+            sock->abort();
             continue;
         }
         sock->write(writeLine(buildEvent(p.subscriptionId, args)));
