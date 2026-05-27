@@ -47,6 +47,13 @@ class PHOSPHORPOPOUT_EXPORT PopoutController : public QObject, public IPopoutSer
 {
     Q_OBJECT
     QML_ELEMENT
+    // PopoutController requires a transport injected at construction.
+    // QML cannot default-construct it, so the type is registered for
+    // type-annotation visibility only. Production wiring uses
+    // qmlRegisterSingletonInstance from C++ to publish a pre-built
+    // instance to QML; the demo uses a context property.
+    QML_UNCREATABLE(
+        "Construct PopoutController in C++ with an IPopoutTransport, then expose via qmlRegisterSingletonInstance")
 
 public:
     explicit PopoutController(IPopoutTransport* transport, QObject* parent = nullptr);

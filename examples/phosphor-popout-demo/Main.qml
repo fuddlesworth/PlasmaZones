@@ -21,7 +21,7 @@ ApplicationWindow {
     title: qsTr("Phosphor Popout Demo")
     color: Theme.background
     Component.onCompleted: {
-        demoController.wire(popoutHost, popoutHostTemplate, _qmlEngine);
+        demoController.wire(popoutHost, popoutHostTemplate);
     }
 
     // PopoutHost.qml from Phosphor.Popout, instantiated per-popout by

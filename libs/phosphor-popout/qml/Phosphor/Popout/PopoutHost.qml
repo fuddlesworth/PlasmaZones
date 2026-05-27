@@ -93,9 +93,20 @@ Item {
         opacity: root.open ? 1 : 0
         scale: root.open ? 1 : 0.96
         // Reparent a pre-built contentItem into the frame. The transport
-        // owns the item's lifetime; the host only re-parents on demand.
+        // owns the item's lifetime; the host re-parents whenever the
+        // contentItem property changes. The transport typically sets it
+        // AFTER Component.onCompleted has already run, so a one-shot
+        // onCompleted handler would miss the assignment entirely.
         onParentChanged: rebindContentItem()
         Component.onCompleted: rebindContentItem()
+
+        Connections {
+            function onContentItemChanged() {
+                contentFrame.rebindContentItem();
+            }
+
+            target: root
+        }
 
         // Inline component instantiation when contentComponent is set.
         // Loader keeps the lifecycle simple. Pre-built contentItem

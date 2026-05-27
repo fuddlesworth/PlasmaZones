@@ -15,7 +15,6 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QString>
-#include <QVariant>
 
 int main(int argc, char* argv[])
 {
@@ -31,10 +30,6 @@ int main(int argc, char* argv[])
 
     PhosphorPopoutDemo::DemoController demoController;
     engine.rootContext()->setContextProperty(QStringLiteral("demoController"), &demoController);
-    // Expose the engine pointer so Main.qml can pass it back into
-    // DemoController::wire(). QML doesn't get the engine by default.
-    engine.rootContext()->setContextProperty(QStringLiteral("_qmlEngine"),
-                                             QVariant::fromValue(static_cast<QQmlEngine*>(&engine)));
 
     engine.loadFromModule(QStringLiteral("Phosphor.PopoutDemo"), QStringLiteral("Main"));
     if (engine.rootObjects().isEmpty()) {

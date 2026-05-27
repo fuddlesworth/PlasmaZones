@@ -34,10 +34,11 @@ public:
     ~DemoController() override;
 
     // Wire QML side after the engine and root window exist. The demo's
-    // main.cpp calls this from a Component.onCompleted handler. The
-    // host item is where popouts get parented; the host component is
-    // the lib's PopoutHost.qml the transport instantiates per popout.
-    Q_INVOKABLE void wire(QQuickItem* hostItem, QQmlComponent* hostComponent, QQmlEngine* engine);
+    // Main.qml calls this from Component.onCompleted. The QML engine
+    // is resolved from the host item via qmlEngine() so QML doesn't
+    // need to hand us a raw engine pointer (which QML can't pass
+    // through anyway, QQmlEngine isn't a registered QML type).
+    Q_INVOKABLE void wire(QQuickItem* hostItem, QQmlComponent* hostComponent);
 
     // Demo actions. Each toggles one popout of the named flavour. The
     // QML side maps these to button onClicked handlers.

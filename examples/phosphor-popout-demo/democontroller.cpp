@@ -42,9 +42,9 @@ DemoController::DemoController(QObject* parent)
 
 DemoController::~DemoController() = default;
 
-void DemoController::wire(QQuickItem* hostItem, QQmlComponent* hostComponent, QQmlEngine* engine)
+void DemoController::wire(QQuickItem* hostItem, QQmlComponent* hostComponent)
 {
-    m_engine = engine;
+    m_engine = hostItem ? qmlEngine(hostItem) : nullptr;
     m_transport->setHostItem(hostItem);
     m_transport->setHostComponent(hostComponent);
 }
