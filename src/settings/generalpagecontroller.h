@@ -26,7 +26,14 @@ class ISettings;
 /// top-level app actions that touch every page, not a "General" concern.
 ///
 /// Pure CONSTANT facade — no per-page staged state; isDirty/apply/discard
-/// are no-ops. Dirty tracking is global through SettingsController.
+/// are no-ops. Dirty tracking is global through SettingsController's
+/// meta-object loop on Settings's Q_PROPERTYs: any rendering-backend
+/// selection that calls `m_settings.setRenderingBackend` trips the
+/// Q_PROPERTY NOTIFY, which SettingsController's `onSettingsPropertyChanged`
+/// slot maps to the active page (or the explicit `m_externalEditPage`).
+/// The "General" page therefore participates in dirty tracking via
+/// the Settings property surface, not via this controller's own
+/// signals.
 class GeneralPageController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT

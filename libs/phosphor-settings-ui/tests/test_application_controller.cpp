@@ -69,6 +69,10 @@ public:
         m_emitApplyResult = emit;
     }
 
+    // Public counters for tests to observe — deliberately not m_-prefixed
+    // so test sites read as `stub.applyCount` (assertion style) rather
+    // than `stub.m_applyCount`, which would suggest direct private-state
+    // poking. Private state below follows the project's m_ convention.
     int applyCount = 0;
     int discardCount = 0;
     int resetCount = 0;
@@ -314,8 +318,8 @@ private Q_SLOTS:
         ApplicationController app;
         auto* collapsible = new StubPage(QStringLiteral("cat"));
         auto* drillIn = new StubPage(QStringLiteral("drill"));
-        app.registerPage(collapsible, {}, QStringLiteral("Cat"), QUrl(), QStringLiteral(""), /*isCollapsible=*/true);
-        app.registerPage(drillIn, {}, QStringLiteral("Drill"), QUrl(), QStringLiteral(""), /*isCollapsible=*/false);
+        app.registerPage(collapsible, {}, QStringLiteral("Cat"), QUrl(), QString(), /*isCollapsible=*/true);
+        app.registerPage(drillIn, {}, QStringLiteral("Drill"), QUrl(), QString(), /*isCollapsible=*/false);
 
         const auto cat = app.registry()->entry(QStringLiteral("cat"));
         const auto drill = app.registry()->entry(QStringLiteral("drill"));
@@ -331,7 +335,7 @@ private Q_SLOTS:
     {
         ApplicationController app;
         auto* divPage = new StubPage(QStringLiteral("div"));
-        app.registerPage(divPage, {}, QStringLiteral("Div"), QUrl(), QStringLiteral(""), /*isCollapsible=*/false,
+        app.registerPage(divPage, {}, QStringLiteral("Div"), QUrl(), QString(), /*isCollapsible=*/false,
                          /*hasDividerAfter=*/true);
 
         const auto entry = app.registry()->entry(QStringLiteral("div"));

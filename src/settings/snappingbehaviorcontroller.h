@@ -29,6 +29,13 @@ class ISettings;
 /// therefore only needs to forward NOTIFY signals to QML — no additional
 /// `changed()` bridging (the editor-page case needed it because its
 /// properties are NOT Q_PROPERTY on Settings).
+///
+/// `alwaysActivateOnDrag` is DERIVED from the trigger list (the
+/// AlwaysActive sentinel modifier is the master-toggle proxy). The
+/// WRITE setter routes through `m_settings->setDragActivationTriggers`
+/// — a Q_PROPERTY — so the meta-loop still catches the dirty flip
+/// even though `alwaysActivateOnDrag` itself isn't a Q_PROPERTY on
+/// Settings. Same trick for TilingBehaviorController::alwaysReinsertIntoStack.
 class SnappingBehaviorController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT

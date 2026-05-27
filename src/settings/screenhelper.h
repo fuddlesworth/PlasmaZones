@@ -38,10 +38,8 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void screensChanged();
-    // Note: there is no disabledMonitorsChanged here. The canonical source is
-    // ISettings::disabledMonitorsChanged(Mode), which Settings emits on every
-    // write (in-process or via load() reparse). SettingsController forwards
-    // that signal to QML; ScreenHelper only needs to mark dirty via needsSave().
+    // Disabled-monitor changes route via ISettings::disabledMonitorsChanged(Mode);
+    // ScreenHelper only marks dirty via needsSave().
     void needsSave();
 
 private:
