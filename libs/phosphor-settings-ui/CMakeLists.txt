@@ -235,6 +235,84 @@ set_target_properties(PhosphorSettingsUiQml PROPERTIES
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# QML Module — SHARED (install-only runtime plugin)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# The STATIC PhosphorSettingsUiQml target above is fine for in-tree
+# consumers (PlasmaZones + examples/minimal) — they link it directly
+# and Qt's plugin registration runs at link time. Out-of-tree
+# consumers using `find_package(PhosphorSettingsUi)` get the C++
+# target via the export set, but cannot consume STATIC QML modules:
+# Qt only loads QML modules from the QML module search path
+# (KDE_INSTALL_QMLDIR/org/phosphor/settings/ui/), which requires a
+# SHARED plugin .so. Mirror phosphor-animation's pattern — build a
+# parallel SHARED target gated behind PHOSPHOR_SETTINGS_UI_QML_INSTALL
+# so packagers can opt in to shipping the QML module separately from
+# in-tree consumers that don't need it.
+
+option(PHOSPHOR_SETTINGS_UI_QML_INSTALL
+    "Also build a SHARED variant of org.phosphor.settings.ui and install it"
+    OFF)
+
+if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
+    qt_add_qml_module(PhosphorSettingsUiQmlShared
+        URI org.phosphor.settings.ui
+        VERSION 1.0
+        SHARED
+        SOURCES
+            ${phosphorsettingsui_public_HDRS}
+            ${phosphorsettingsui_SRCS}
+        QML_FILES ${phosphorsettingsui_qml_FILES}
+        RESOURCES ${phosphorsettingsui_qml_RESOURCES}
+        OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml_install/org/phosphor/settings/ui
+    )
+
+    target_include_directories(PhosphorSettingsUiQmlShared
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+            $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+    )
+
+    # The SHARED variant compiles the same sources under a different
+    # target name; set the export define so PHOSPHORSETTINGSUI_EXPORT
+    # resolves to visibility("default") on the SHARED build too.
+    target_compile_definitions(PhosphorSettingsUiQmlShared PRIVATE
+        PhosphorSettingsUi_EXPORTS
+        PHOSPHORSETTINGSUI_VERSION_STR="${PHOSPHORSETTINGSUI_VERSION}"
+    )
+
+    target_compile_features(PhosphorSettingsUiQmlShared PUBLIC cxx_std_20)
+
+    target_link_libraries(PhosphorSettingsUiQmlShared
+        PUBLIC
+            PhosphorSettingsUi::PhosphorSettingsUi
+            PhosphorAnimation::PhosphorAnimationQml
+            Qt6::Core
+            Qt6::DBus
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+    )
+
+    set_target_properties(PhosphorSettingsUiQmlShared PROPERTIES
+        VERSION ${PHOSPHORSETTINGSUI_VERSION}
+        SOVERSION 0
+    )
+
+    set(_phosphor_settings_ui_qml_shared_plugin_target PhosphorSettingsUiQmlSharedplugin)
+
+    # The QML plugin and its backing PhosphorSettingsUiQmlShared library
+    # install side-by-side in the QML module directory, which is not on
+    # the linker's default search path. $ORIGIN on the plugin's
+    # INSTALL_RPATH resolves the sibling library at runtime and during
+    # dpkg-shlibdeps packaging scans.
+    set_target_properties(${_phosphor_settings_ui_qml_shared_plugin_target} PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+    )
+endif()
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Examples — opt-in via -DBUILD_PHOSPHOR_SETTINGS_UI_EXAMPLES=ON
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -299,6 +377,30 @@ install(DIRECTORY include/PhosphorSettingsUi/
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorsettingsui_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorSettingsUi
 )
+
+# QML module install (SHARED variant) — gated behind the option above.
+if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
+    if(NOT DEFINED KDE_INSTALL_QMLDIR)
+        # Without ECM the QML dir falls back to a Qt-side install
+        # location. Match the freedesktop convention so the consumer
+        # can drop the lib under any standard prefix.
+        set(KDE_INSTALL_QMLDIR ${KDE_INSTALL_LIBDIR}/qt6/qml)
+    endif()
+    set(_phosphor_settings_ui_qml_install_dir "${KDE_INSTALL_QMLDIR}/org/phosphor/settings/ui")
+
+    install(TARGETS PhosphorSettingsUiQmlShared ${_phosphor_settings_ui_qml_shared_plugin_target}
+        EXPORT PhosphorSettingsUiQmlTargets
+        RUNTIME DESTINATION ${_phosphor_settings_ui_qml_install_dir}
+        LIBRARY DESTINATION ${_phosphor_settings_ui_qml_install_dir}
+        ARCHIVE DESTINATION ${_phosphor_settings_ui_qml_install_dir}
+    )
+
+    install(FILES
+            ${CMAKE_BINARY_DIR}/qml_install/org/phosphor/settings/ui/qmldir
+            ${CMAKE_BINARY_DIR}/qml_install/org/phosphor/settings/ui/PhosphorSettingsUiQmlShared.qmltypes
+        DESTINATION ${_phosphor_settings_ui_qml_install_dir}
+    )
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Tests
