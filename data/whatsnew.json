@@ -1,6 +1,13 @@
 {
     "releases": [
         {
+            "version": "3.0.14",
+            "date": "2026-05-27",
+            "highlights": [
+                "Fixed intermittent DPMS-wake autotile orphan reassignment on dual-monitor setups — KWin's screenAdded/screenRemoved signals now latch the screen-change-in-progress flag early enough to catch the per-window outputChanged race (#527, #536)"
+            ]
+        },
+        {
             "version": "3.0.13",
             "date": "2026-05-26",
             "highlights": [

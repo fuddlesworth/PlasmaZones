@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.14] - 2026-05-27
+
+### Fixed
+
+- **DPMS-wake autotile orphan reassignment still triggered intermittently** ([#527](https://github.com/fuddlesworth/PlasmaZones/discussions/527), [#536](https://github.com/fuddlesworth/PlasmaZones/pull/536)): 3.0.13 closed the dropped-monitor case but missed the dual-monitor wake-up where the second output coming back simply shifts the first output's x-offset. With no output actually removed, `oldScreenStillConnected` stayed true, and `isScreenChangeInProgress()` hadn't flipped on yet because KWin emits the per-window `outputChanged` *before* the `virtualScreenGeometryChanged` that the screen-change debounce listens for — the orphan reached the autotile-delegation guard with both legs of the check false. `screenAdded` and `screenRemoved` are now also wired into the screen-change handler, latching the pending-change flag at the earliest point KWin tells us the output set is changing. The settle path that runs once `virtualScreenGeometryChanged` catches up is unchanged.
+
 ## [3.0.13] - 2026-05-26
 
 ### Fixed
@@ -1425,7 +1431,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.14...HEAD
+[3.0.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...v3.0.14
 [3.0.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.12...v3.0.13
 [3.0.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.11...v3.0.12
 [3.0.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.10...v3.0.11
