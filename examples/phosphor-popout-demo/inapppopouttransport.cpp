@@ -181,6 +181,31 @@ void InAppPopoutTransport::setSurfaceDismissedCallback(std::function<void(const 
     m_dismissedCb = std::move(callback);
 }
 
+void InAppPopoutTransport::shutdown()
+{
+    // Disarm the dismissed callback first. Any subsequent host-item
+    // destruction must not route through the (likely already
+    // disconnected) controller.
+    m_dismissedCb = {};
+
+    // Snapshot, clear, then delete with the dismissed signal
+    // disconnected so Component.onDestruction's emit cannot re-enter
+    // onHostDismissed. Same erase-before-delete invariant the
+    // destructor maintains, but run now while the QML engine is
+    // still alive to handle the QQuickItem teardown cleanly.
+    const auto victims = m_entries.values();
+    m_entries.clear();
+    for (const auto& entry : victims) {
+        if (entry.hostItem) {
+            QObject::disconnect(entry.hostItem.data(), nullptr, this, nullptr);
+            delete entry.hostItem.data();
+        }
+        // contentItem is a QObject child of hostItem (Qt's
+        // QQmlComponent::beginCreate sets the parent), so it was
+        // deleted by the line above. The QPointer is null here.
+    }
+}
+
 void InAppPopoutTransport::onHostDismissed()
 {
     QObject* s = sender();

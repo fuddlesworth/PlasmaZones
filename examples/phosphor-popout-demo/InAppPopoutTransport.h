@@ -51,6 +51,16 @@ public:
     void closeSurface(const QString& handle) override;
     void setSurfaceDismissedCallback(std::function<void(const QString&)> callback) override;
 
+    // Synchronously drain every host item. Called from
+    // DemoController::shutdown (which fires from
+    // QGuiApplication::aboutToQuit) so the items are torn down while
+    // the QQmlEngine is still alive. Without this, the engine's
+    // destructor runs AFTER our transport's destructor, and by the
+    // time we try to delete hostItems their QML metadata is gone,
+    // producing "pure virtual method called" when QQuickItem
+    // destruction calls back into engine-invalidated bindings.
+    void shutdown();
+
 private Q_SLOTS:
     // Routed from PopoutHost's dismissed signal. The sender's
     // `_popoutHandle` dynamic property identifies which entry to drop.

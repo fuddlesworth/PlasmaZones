@@ -122,17 +122,24 @@ void DemoController::closeAll()
 
 void DemoController::shutdown()
 {
-    if (!m_controller) {
-        return;
-    }
     // Disconnect this object's slots from the controller's signals
     // before draining so the close storm doesn't re-enter Q_PROPERTY
     // notify handlers that bind into QML objects the engine is about
     // to destroy. After this point, openPopoutIds / modalActive stop
     // reflecting reality; the demo is shutting down so no consumer
     // cares.
-    m_controller->disconnect(this);
-    m_controller->closeAll();
+    if (m_controller) {
+        m_controller->disconnect(this);
+        m_controller->closeAll();
+    }
+    // Synchronously delete the transport's host items while the QML
+    // engine is still alive. The transport's own destructor runs
+    // AFTER the engine in stack-unwind order; deferring teardown
+    // there crashes with "pure virtual method called" once the
+    // engine has invalidated the host items' QML metadata.
+    if (m_transport) {
+        m_transport->shutdown();
+    }
 }
 
 QStringList DemoController::openPopoutIds() const
