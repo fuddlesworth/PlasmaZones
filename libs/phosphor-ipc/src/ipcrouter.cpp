@@ -20,6 +20,7 @@
 #include <QMetaType>
 #include <QProcessEnvironment>
 #include <QString>
+#include <QThread>
 #include <QVariant>
 
 #include <sys/stat.h> // umask
@@ -36,6 +37,27 @@ namespace {
 // of args+target+fn payload) and well under any kernel send/recv
 // buffer ceiling.
 constexpr qint64 MaxLineBytes = 1024 * 1024;
+
+// Cap on frames dispatched per readyRead() invocation. A peer that
+// pipelines thousands of frames in a single TCP segment would
+// otherwise let the dispatch loop monopolise the event loop and
+// starve other connections. When the cap is hit and more bytes
+// remain, the readyRead handler schedules itself again via a queued
+// invocation, yielding to the event loop between batches.
+constexpr int MaxFramesPerReadyRead = 64;
+
+// Per-socket malformed-frame cap. Without this a peer can send an
+// unbounded sequence of garbage lines: each one parses, fails,
+// gets a MALFORMED_REQUEST error frame written back, and the
+// connection stays open. Closing the connection after a small run
+// of consecutive parse failures bounds the DoS surface.
+constexpr int MaxMalformedFrames = 16;
+
+// Per-socket subscription cap. Without this a client can subscribe
+// to the same (target, signal) thousands of times and amplify each
+// event into thousands of write attempts, multiplying broadcast
+// cost and write-buffer pressure.
+constexpr int MaxSubscriptionsPerSocket = 256;
 
 // Resolve the default socket path. $XDG_RUNTIME_DIR/phosphor.sock
 // when XDG_RUNTIME_DIR is set, otherwise empty (caller logs and
@@ -63,30 +85,46 @@ QString resolveDefaultSocketPath()
     return QObject::staticMetaObject.methodCount();
 }
 
-// Find a Q_INVOKABLE method by name. Returns an invalid QMetaMethod
-// if none match. Doesn't disambiguate by arity, the invoke path
-// matches arg count against the metamethod's parameterCount.
+// Find a Q_INVOKABLE method by name AND arity. When the target has
+// overloaded methods (same name, different arities) the wire dispatch
+// needs to pick the overload whose parameterCount matches the
+// caller's args.size(); picking the first match by name alone would
+// surface ArgCountMismatch even though a matching overload exists.
 // Walks the full inheritance chain above QObject's built-ins so a
 // method declared on a base class above QObject is still invocable.
-QMetaMethod findInvokableMethod(const QMetaObject* meta, const QString& fnName)
+// Filters to Public access only: protected Q_INVOKABLE methods are
+// a "subclass-only" marker by convention; exposing them on the wire
+// would defeat that.
+QMetaMethod findInvokableMethod(const QMetaObject* meta, const QString& fnName, int expectedArity)
 {
     if (!meta) {
         return {};
     }
     const QByteArray needle = fnName.toUtf8();
+    QMetaMethod nameOnlyFallback;
     for (int i = qobjectMethodCount(); i < meta->methodCount(); ++i) {
         const QMetaMethod m = meta->method(i);
         if (m.methodType() == QMetaMethod::Signal) {
             continue;
         }
-        if (m.access() == QMetaMethod::Private) {
+        if (m.access() != QMetaMethod::Public) {
             continue;
         }
-        if (m.name() == needle) {
+        if (m.name() != needle) {
+            continue;
+        }
+        if (m.parameterCount() == expectedArity) {
             return m;
         }
+        // Stash the first non-matching-arity overload so the caller
+        // can still surface a precise ArgCountMismatch with the
+        // metamethod's expected parameter count when no overload's
+        // arity lines up.
+        if (!nameOnlyFallback.isValid()) {
+            nameOnlyFallback = m;
+        }
     }
-    return {};
+    return nameOnlyFallback;
 }
 
 // Find a signal by name. Same shape as findInvokableMethod, but
@@ -95,7 +133,9 @@ QMetaMethod findInvokableMethod(const QMetaObject* meta, const QString& fnName)
 // at subscribe time instead of silently never delivering events).
 // Walks the full chain above QObject's built-ins so signals
 // declared on a base class are still resolvable while QObject's
-// destroyed / objectNameChanged remain filtered out.
+// destroyed / objectNameChanged remain filtered out. Filters to
+// Public-access signals only; protected/private signal access keeps
+// them out of the wire subscribe surface.
 QMetaMethod findSignal(const QMetaObject* meta, const QString& signalName)
 {
     if (!meta) {
@@ -105,6 +145,9 @@ QMetaMethod findSignal(const QMetaObject* meta, const QString& signalName)
     for (int i = qobjectMethodCount(); i < meta->methodCount(); ++i) {
         const QMetaMethod m = meta->method(i);
         if (m.methodType() != QMetaMethod::Signal) {
+            continue;
+        }
+        if (m.access() != QMetaMethod::Public) {
             continue;
         }
         if (m.name() == needle) {
@@ -128,6 +171,7 @@ IpcRouter::~IpcRouter()
 
 bool IpcRouter::start(const QString& socketPath)
 {
+    Q_ASSERT(thread() == QThread::currentThread());
     if (m_server) {
         qWarning("PhosphorIpc::IpcRouter::start: already started on '%s'", qPrintable(m_socketPath));
         return false;
@@ -152,9 +196,13 @@ bool IpcRouter::start(const QString& socketPath)
     // the bare path with an umask scope that forces the
     // newly-created socket file to be mode 0600 atomically, no
     // chmod-after-listen window where the socket exists at the
-    // umask-default mode. Restore the prior umask after listen()
-    // returns so we don't affect later file creations on the
-    // same thread.
+    // umask-default mode. ::umask() is process-global (NOT
+    // thread-local), so any other thread creating files during the
+    // narrow scope below inherits the 0177 mask. The router
+    // contract (GUI thread only, Q_ASSERT'd above) plus the
+    // microsecond-scale scope makes the race window negligible in
+    // practice; a future move to fchmod(socketDescriptor(), 0600)
+    // after listen would remove the global mutation entirely.
     const mode_t prevUmask = ::umask(0177);
     const bool initialBound = m_server->listen(resolved);
     ::umask(prevUmask);
@@ -195,10 +243,11 @@ bool IpcRouter::start(const QString& socketPath)
     }
     // Socket file is at mode 0600 by construction (the umask
     // scope above forced the create-time permissions); no
-    // post-listen chmod needed. $XDG_RUNTIME_DIR's own 0700
-    // restricts the directory; the socket file mode adds
-    // defense-in-depth against a sidecar container with the
-    // same uid sharing the runtime dir.
+    // post-listen chmod needed. $XDG_RUNTIME_DIR is conventionally
+    // 0700 on systemd systems (per the systemd-logind spec); a
+    // non-systemd setup that points XDG_RUNTIME_DIR at /tmp would
+    // not get that directory-level protection, which is why the
+    // 0600 socket file mode is independent defense-in-depth.
     m_socketPath = resolved;
     QObject::connect(m_server.get(), &QLocalServer::newConnection, this, &IpcRouter::handleNewConnection);
     return true;
@@ -206,6 +255,7 @@ bool IpcRouter::start(const QString& socketPath)
 
 void IpcRouter::stop()
 {
+    Q_ASSERT(thread() == QThread::currentThread());
     // Clear subscription state BEFORE tearing down the server. The
     // server's reset destroys child sockets, which fire
     // disconnected() synchronously; that re-enters
@@ -214,6 +264,7 @@ void IpcRouter::stop()
     // first makes the disconnect-driven removes into safe no-ops
     // (the hash is empty already).
     m_subscriptionsBySocket.clear();
+    m_malformedCountBySocket.clear();
     if (m_server) {
         m_server->close();
         m_server.reset();
@@ -226,20 +277,28 @@ QString IpcRouter::socketPath() const
     return m_socketPath;
 }
 
-void IpcRouter::registerTarget(const QString& name, QObject* object)
+bool IpcRouter::registerTarget(const QString& name, QObject* object)
 {
+    Q_ASSERT(thread() == QThread::currentThread());
     if (name.isEmpty()) {
         qWarning("PhosphorIpc::IpcRouter::registerTarget: empty name ignored");
-        return;
+        return false;
     }
     if (!object) {
         qWarning("PhosphorIpc::IpcRouter::registerTarget: null object for '%s' ignored", qPrintable(name));
-        return;
+        return false;
     }
     if (m_targets.contains(name)) {
-        if (m_targets.value(name)) {
+        QObject* existing = m_targets.value(name).data();
+        if (existing == object) {
+            // Same name + same object is idempotent; treat as success
+            // so a caller calling registerTarget twice (or two
+            // wrappers wrapping the same QObject) doesn't bounce.
+            return true;
+        }
+        if (existing) {
             qWarning("PhosphorIpc::IpcRouter::registerTarget: duplicate target '%s' ignored", qPrintable(name));
-            return;
+            return false;
         }
         // Prior QObject was destroyed out from under us; the
         // QPointer auto-cleared without emitting targetUnregistered
@@ -254,20 +313,36 @@ void IpcRouter::registerTarget(const QString& name, QObject* object)
     }
     m_targets.insert(name, QPointer<QObject>(object));
     Q_EMIT targetRegistered(name);
+    return true;
 }
 
-void IpcRouter::unregisterTarget(const QString& name)
+void IpcRouter::unregisterTarget(const QString& name, QObject* object)
 {
-    if (m_targets.remove(name) > 0) {
-        Q_EMIT targetUnregistered(name);
+    Q_ASSERT(thread() == QThread::currentThread());
+    const auto it = m_targets.constFind(name);
+    if (it == m_targets.constEnd()) {
+        return;
     }
+    // Ownership check: if the caller passed a specific QObject,
+    // only unregister when the registry still binds `name` to that
+    // object. A target whose registerTarget was rejected (duplicate
+    // name) MUST NOT be able to tear down the legitimate owner's
+    // binding when it gets destroyed. Passing nullptr opts out of
+    // the check (administrative unregister path).
+    if (object && it.value().data() != object) {
+        return;
+    }
+    m_targets.erase(it);
+    Q_EMIT targetUnregistered(name);
 }
 
 QStringList IpcRouter::listTargets() const
 {
     QStringList ids;
     ids.reserve(m_targets.size());
-    for (auto it = m_targets.begin(); it != m_targets.end(); ++it) {
+    // cbegin/cend (not begin/end) so the implicitly-shared QHash
+    // doesn't detach on a const accessor in the hot path.
+    for (auto it = m_targets.cbegin(); it != m_targets.cend(); ++it) {
         if (it.value()) {
             ids.append(it.key());
         }
@@ -286,16 +361,21 @@ QObject* IpcRouter::target(const QString& name) const
 
 QJsonObject IpcRouter::schemaFor(const QString& targetName) const
 {
-    QObject* obj = target(targetName);
-    if (!obj) {
-        return {};
-    }
-    return IpcSchemaGenerator::schemaFor(targetName, obj);
+    // Delegate fully to the schema generator so router-direct callers
+    // and the wire path agree on the unknown-target contract: an
+    // unknown target returns the empty-shaped {target, functions:[],
+    // signals:[]} document, not a bare {}. The wire dispatcher still
+    // sends a NO_SUCH_TARGET error frame for `schema` requests on
+    // unknown targets (see dispatch()); the convenience accessor
+    // exposes the same shape callers would see by walking a real
+    // registered target.
+    return IpcSchemaGenerator::schemaFor(targetName, target(targetName));
 }
 
 QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const QVariantList& args,
                            InvokeOutcome* outcome, QString* errorMessage)
 {
+    Q_ASSERT(thread() == QThread::currentThread());
     auto fail = [&](InvokeOutcome code, const QString& msg) -> QVariant {
         if (outcome) {
             *outcome = code;
@@ -310,7 +390,11 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
     if (!obj) {
         return fail(InvokeOutcome::NoSuchTarget, QStringLiteral("unknown target '%1'").arg(targetName));
     }
-    const QMetaMethod method = findInvokableMethod(obj->metaObject(), fn);
+    // Pick the overload whose arity matches args.size(). When no
+    // overload's arity lines up, findInvokableMethod still returns a
+    // name-only fallback so we can surface a precise
+    // ArgCountMismatch citing the actual expected arity.
+    const QMetaMethod method = findInvokableMethod(obj->metaObject(), fn, static_cast<int>(args.size()));
     if (!method.isValid()) {
         return fail(InvokeOutcome::NoSuchFn,
                     QStringLiteral("target '%1' has no invokable method '%2'").arg(targetName, fn));
@@ -419,23 +503,34 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
     // Hard cap on the unframed accumulation. canReadLine() only
     // returns true once a '\n' arrives; until then bytes accumulate
     // in the QLocalSocket's userspace buffer (bounded by
-    // setReadBufferSize(MaxLineBytes) on accept). Once bytesAvailable
-    // reaches the cap without a newline, no more bytes will be
-    // delivered to userspace and there's no way for a valid line to
-    // arrive on this connection. Force the socket closed with a
-    // MALFORMED_REQUEST diagnostic; handleClientDisconnected will
-    // clean up the subscription state. The check is `>=`, not `>`,
-    // because Qt caps userspace at MaxLineBytes exactly, so `>` would
-    // never trigger.
+    // setReadBufferSize(MaxLineBytes) on accept; the kernel-side
+    // receive buffer may transiently hold a bit more before Qt
+    // notices). Once bytesAvailable reaches the cap without a
+    // newline, no more bytes will be delivered to userspace and
+    // there's no way for a valid line to arrive on this connection.
+    // Force the socket closed with a MALFORMED_REQUEST diagnostic;
+    // handleClientDisconnected will clean up the subscription state.
     if (!socket->canReadLine() && socket->bytesAvailable() >= MaxLineBytes) {
         socket->write(writeLine(
             buildError(0, QString::fromUtf8(ErrorCode::MalformedRequest),
                        QStringLiteral("request line exceeds %1 bytes; closing connection").arg(MaxLineBytes))));
-        socket->flush();
+        // waitForBytesWritten gives the diagnostic frame a chance to
+        // land in the kernel send buffer before abort() resets the
+        // socket; abort() discards any pending writes by design.
+        socket->waitForBytesWritten(100);
         socket->abort();
         return;
     }
+    int frames = 0;
     while (socket->canReadLine()) {
+        // A prior dispatch() in this readyRead burst may have force-
+        // closed the socket via abort() (oversize line, malformed-frame
+        // cap). canReadLine() can still return true off bytes that
+        // were buffered before the close; stop iterating so we don't
+        // keep parsing into a torn-down connection.
+        if (socket->state() != QLocalSocket::ConnectedState) {
+            return;
+        }
         QByteArray line = socket->readLine();
         if (line.size() > MaxLineBytes) {
             // Defense-in-depth: readLine returned a line that's
@@ -445,7 +540,7 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
             socket->write(writeLine(
                 buildError(0, QString::fromUtf8(ErrorCode::MalformedRequest),
                            QStringLiteral("request line exceeds %1 bytes; closing connection").arg(MaxLineBytes))));
-            socket->flush();
+            socket->waitForBytesWritten(100);
             socket->abort();
             return;
         }
@@ -458,6 +553,26 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
             continue;
         }
         dispatch(socket, line);
+        if (++frames >= MaxFramesPerReadyRead) {
+            // Yield to the event loop so other connections (and the
+            // event loop itself) aren't starved by a pipelining peer.
+            // Reschedule ourselves only if data remains; readyRead
+            // does NOT re-fire until new bytes arrive, so without
+            // the queued kick the leftover frames would sit in the
+            // buffer indefinitely.
+            if (socket->canReadLine()) {
+                QPointer<QLocalSocket> guarded(socket);
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, guarded]() {
+                        if (guarded) {
+                            handleClientReadyRead(guarded.data());
+                        }
+                    },
+                    Qt::QueuedConnection);
+            }
+            return;
+        }
     }
 }
 
@@ -468,8 +583,11 @@ void IpcRouter::handleClientDisconnected(QLocalSocket* socket)
     }
     // Drop the socket's subscription list, broadcastEvent skips
     // disconnected sockets anyway, but we explicitly free the
-    // record so memory doesn't grow with churn.
+    // record so memory doesn't grow with churn. The malformed-frame
+    // counter is the same shape; clear it too so the per-socket
+    // map size stays bounded by live connections.
     m_subscriptionsBySocket.remove(socket);
+    m_malformedCountBySocket.remove(socket);
     socket->deleteLater();
 }
 
@@ -480,8 +598,23 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
     if (!reqOpt) {
         const QJsonObject err = buildError(0, QString::fromUtf8(ErrorCode::MalformedRequest), parseError);
         socket->write(writeLine(err));
+        // Increment per-socket malformed-frame counter. If the peer
+        // keeps streaming garbage past MaxMalformedFrames in a row,
+        // close the connection so the router doesn't keep echoing
+        // errors indefinitely.
+        int& count = m_malformedCountBySocket[socket];
+        if (++count > MaxMalformedFrames) {
+            qWarning("PhosphorIpc::IpcRouter::dispatch: socket exceeded %d malformed frames; closing",
+                     MaxMalformedFrames);
+            socket->waitForBytesWritten(100);
+            socket->abort();
+        }
         return;
     }
+    // A well-formed frame clears the malformed counter; we only
+    // close on CONSECUTIVE garbage, not on a one-off bad line in
+    // an otherwise-healthy stream.
+    m_malformedCountBySocket.remove(socket);
     const Request& req = *reqOpt;
 
     if (req.type == QLatin1String(RequestType::List)) {
@@ -572,6 +705,35 @@ void IpcRouter::handleSubscribe(QLocalSocket* socket, qint64 id, const QString& 
         return;
     }
 
+    // Per-socket cap on subscriptions. A misbehaving client can't
+    // pin amplification factor on broadcastEvent by stacking
+    // thousands of subscriptions; reject past the cap with a
+    // MALFORMED_REQUEST (the closest existing code that fits "your
+    // request was structurally fine but exceeded a server-side
+    // resource limit"; adding a dedicated code would be a wire
+    // break in this protocol version).
+    QList<Subscription>& subs = m_subscriptionsBySocket[socket];
+    if (subs.size() >= MaxSubscriptionsPerSocket) {
+        socket->write(writeLine(
+            buildError(id, QString::fromUtf8(ErrorCode::MalformedRequest),
+                       QStringLiteral("subscription cap of %1 per socket exceeded").arg(MaxSubscriptionsPerSocket))));
+        return;
+    }
+    // Reject duplicate (target, signal) subscriptions on the same
+    // socket. Each subscribe call gets a distinct subscriptionId
+    // (the request id), so without this guard a client that calls
+    // subscribe N times for the same signal receives N copies of
+    // every event and inflates the write-side cost N-fold.
+    for (const Subscription& existing : subs) {
+        if (existing.target == targetName && existing.signalName == signalName) {
+            socket->write(writeLine(
+                buildError(id, QString::fromUtf8(ErrorCode::MalformedRequest),
+                           QStringLiteral("already subscribed to '%1.%2' on this connection (subscriptionId %3)")
+                               .arg(targetName, signalName)
+                               .arg(existing.subscriptionId))));
+            return;
+        }
+    }
     // Subscription id == request id; clients use that on subsequent
     // unsubscribe and to demultiplex inbound events. The router
     // doesn't enforce uniqueness across all clients, id is scoped
@@ -581,7 +743,7 @@ void IpcRouter::handleSubscribe(QLocalSocket* socket, qint64 id, const QString& 
     sub.subscriptionId = id;
     sub.target = targetName;
     sub.signalName = signalName;
-    m_subscriptionsBySocket[socket].append(sub);
+    subs.append(sub);
 
     // Acknowledge the subscription is live so the client knows to
     // start streaming events.
@@ -610,6 +772,7 @@ void IpcRouter::handleUnsubscribe(QLocalSocket* socket, qint64 id, qint64 subscr
 
 void IpcRouter::broadcastEvent(const QString& targetName, const QString& signalName, const QJsonArray& args)
 {
+    Q_ASSERT(thread() == QThread::currentThread());
     // Snapshot the matching (socket, subscriptionId) pairs BEFORE
     // any write/flush. QLocalSocket::write or flush can synchronously
     // emit errorOccurred / disconnected (peer closed the socket
@@ -667,8 +830,19 @@ void IpcRouter::broadcastEvent(const QString& targetName, const QString& signalN
             sock->abort();
             continue;
         }
+        // Write without per-send flush(). QLocalSocket::flush() can
+        // synchronously emit disconnected() and errorOccurred(), which
+        // re-enter handleClientDisconnected and mutate
+        // m_subscriptionsBySocket while broadcastEvent's outer loop is
+        // still iterating; even with the pending-list snapshot, a
+        // re-entrant broadcastEvent (e.g. a target slot wired to a
+        // property change reached via the synchronous error/disconnect
+        // emit) would observe inconsistent state. Without flush(), Qt
+        // drains the writes on the next event-loop return; ordering is
+        // preserved (QLocalSocket is FIFO per socket) and the latency
+        // cost is one event-loop iteration per burst, acceptable for
+        // wire-event delivery in a UI shell.
         sock->write(writeLine(buildEvent(p.subscriptionId, args)));
-        sock->flush();
     }
 }
 

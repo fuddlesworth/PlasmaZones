@@ -48,12 +48,24 @@ int runSchema(QStringList args, QString socketPath)
     }
     if (resp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
         == QLatin1String(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl schema: server error: "
-            << resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString() << "\n";
+        err << "phosphorctl schema: "
+            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
+            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
         return 3;
     }
-    const QJsonObject schema = resp->value(QLatin1String(PhosphorIpc::Field::Result)).toObject();
-    out << QString::fromUtf8(QJsonDocument(schema).toJson(QJsonDocument::Indented));
+    const QJsonValue resultValue = resp->value(QLatin1String(PhosphorIpc::Field::Result));
+    if (!resultValue.isObject()) {
+        // Defensive: server contract is `result` is the schema
+        // object. A non-object result is a protocol violation that
+        // would otherwise pretty-print as `{}` with exit 0,
+        // silently misleading. Exit 3 so scripts can tell.
+        err << "phosphorctl schema: protocol error: server returned non-object result\n";
+        return 3;
+    }
+    // QJsonDocument::toJson escapes ASCII control bytes per the JSON
+    // spec, so the indented output is terminal-safe without further
+    // sanitisation.
+    out << QString::fromUtf8(QJsonDocument(resultValue.toObject()).toJson(QJsonDocument::Indented));
     return 0;
 }
 

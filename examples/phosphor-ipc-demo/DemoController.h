@@ -62,6 +62,11 @@ Q_SIGNALS:
 private:
     void onTargetRegistered(const QString& name);
     void onTargetUnregistered(const QString& name);
+    // Rebuild m_status from the router's live registry. Called from
+    // start() and from the targetRegistered / targetUnregistered
+    // slots; consolidates the format string so the steady-state
+    // status never carries stale "registered/unregistered" suffixes.
+    void refreshStatus();
 
     std::unique_ptr<PhosphorIpc::IpcRouter> m_router;
     QString m_status;

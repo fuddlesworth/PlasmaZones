@@ -78,6 +78,43 @@ std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
         }
         return std::nullopt;
     }
+    // Per-type required-field validation. The router's dispatchers
+    // would reject most of these with the correct error code at
+    // runtime, but validating at parse-time surfaces them as
+    // MALFORMED_REQUEST (the accurate shape) instead of e.g.
+    // NO_SUCH_TARGET for an empty target string.
+    if ((req.type == QLatin1String(RequestType::Call) || req.type == QLatin1String(RequestType::Schema)
+         || req.type == QLatin1String(RequestType::Subscribe))
+        && req.target.isEmpty()) {
+        if (parseError) {
+            *parseError = QStringLiteral("'%1' requires a non-empty 'target'").arg(req.type);
+        }
+        return std::nullopt;
+    }
+    if (req.type == QLatin1String(RequestType::Call) && req.fn.isEmpty()) {
+        if (parseError) {
+            *parseError = QStringLiteral("'call' requires a non-empty 'fn'");
+        }
+        return std::nullopt;
+    }
+    if (req.type == QLatin1String(RequestType::Subscribe) && req.signalName.isEmpty()) {
+        if (parseError) {
+            *parseError = QStringLiteral("'subscribe' requires a non-empty 'signal'");
+        }
+        return std::nullopt;
+    }
+    // Unsubscribe requires a non-zero `subscriptionId`. id=0 is the
+    // protocol's "absent" sentinel; without this check an unsubscribe
+    // with a missing field would parse successfully and reach the
+    // dispatcher, which would then report NO_SUCH_SUBSCRIPTION for
+    // "unknown subscriptionId 0" — accurate but the actual fault is
+    // a malformed request.
+    if (req.type == QLatin1String(RequestType::Unsubscribe) && req.subscriptionId == 0) {
+        if (parseError) {
+            *parseError = QStringLiteral("'unsubscribe' requires a non-zero 'subscriptionId'");
+        }
+        return std::nullopt;
+    }
     // Args may be missing entirely (for no-arg calls) or an array.
     // Anything else is a malformed-request signal.
     const QJsonValue argsValue = obj.value(QLatin1String(Field::Args));
@@ -149,14 +186,23 @@ QJsonValue variantToJson(const QVariant& v)
     case QMetaType::Bool:
         return v.toBool();
     case QMetaType::Int:
-    case QMetaType::UInt:
-    case QMetaType::Long:
-    case QMetaType::ULong:
     case QMetaType::Short:
     case QMetaType::UShort:
+    case QMetaType::Long:
     case QMetaType::LongLong:
+        // Signed up to 64 bits. JSON numbers are IEEE 754 doubles
+        // with 53 bits of integer precision; values above 2^53 lose
+        // precision on the wire, but the lossless cast covers
+        // everything below.
         return static_cast<double>(v.toLongLong());
+    case QMetaType::UInt:
+    case QMetaType::ULong:
     case QMetaType::ULongLong:
+        // Unsigned variants must NOT route through toLongLong: on
+        // LP64 systems ULong is 64-bit unsigned, and values above
+        // LLONG_MAX wrap to negative when cast to qint64. Route
+        // through the unsigned converter so the magnitude survives
+        // (subject to the same 2^53 JSON precision ceiling).
         return static_cast<double>(v.toULongLong());
     case QMetaType::Double:
     case QMetaType::Float:

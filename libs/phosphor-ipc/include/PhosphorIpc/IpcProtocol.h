@@ -84,7 +84,6 @@ constexpr auto NoSuchSubscription = "NO_SUCH_SUBSCRIPTION";
 constexpr auto InvalidArg = "INVALID_ARG";
 constexpr auto InvocationFailed = "INVOCATION_FAILED";
 constexpr auto MalformedRequest = "MALFORMED_REQUEST";
-constexpr auto ProtocolMismatch = "PROTOCOL_MISMATCH";
 } // namespace ErrorCode
 
 // Parsed request shape, populated by parseRequest from a single

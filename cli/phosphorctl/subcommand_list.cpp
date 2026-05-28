@@ -49,19 +49,31 @@ int runList(QStringList args, QString socketPath)
     }
     if (resp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
         == QLatin1String(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl list: server error: " << resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()
-            << "\n";
+        err << "phosphorctl list: "
+            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
+            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
         return 3;
     }
     const QJsonArray names = resp->value(QLatin1String(PhosphorIpc::Field::Result)).toArray();
     QStringList sorted;
+    sorted.reserve(names.size());
     for (const QJsonValue& v : names) {
+        if (!v.isString()) {
+            // Server contract is string[]; non-string entries are a
+            // protocol violation, log to stderr but keep going so a
+            // partial list still surfaces.
+            err << "phosphorctl list: ignoring non-string entry in result array\n";
+            continue;
+        }
         sorted.append(v.toString());
     }
     // Stable output regardless of QHash insertion order.
     sorted.sort();
     for (const QString& name : sorted) {
-        out << name << "\n";
+        // Target names come from server-side QString registrations
+        // and are theoretically attacker-controlled in adversarial
+        // setups. Sanitise to match the call/subscribe paths.
+        out << sanitiseForTerminal(name) << "\n";
     }
     return 0;
 }

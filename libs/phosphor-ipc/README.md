@@ -53,10 +53,13 @@ subcommands.
 ## Wire protocol
 
 One JSON object per line, `\n`-terminated, UTF-8. Same NDJSON shape
-as niri-ipc and hyprland-ipc. Stable across protocol version 1
-(advertised via the `PHOSPHOR_IPC_PROTOCOL_VERSION` compile
-definition; the static_assert in `IpcProtocol.h` enforces sync
-between CMake and the header).
+as niri-ipc and hyprland-ipc. Stable across protocol version 1.
+The version is a build-time invariant only (the
+`PHOSPHOR_IPC_PROTOCOL_VERSION` compile definition is cross-checked
+by a `static_assert` in `IpcProtocol.h`); it is NOT transmitted on
+the wire and there is currently no version-negotiation handshake.
+Incompatible bumps surface as malformed-request errors against an
+older peer.
 
 ### Requests (client → server)
 
@@ -84,7 +87,7 @@ between CMake and the header).
 
 Error codes: `NO_SUCH_TARGET`, `NO_SUCH_FN`, `NO_SUCH_SIGNAL`,
 `NO_SUCH_SUBSCRIPTION`, `INVALID_ARG`, `INVOCATION_FAILED`,
-`MALFORMED_REQUEST`, `PROTOCOL_MISMATCH`.
+`MALFORMED_REQUEST`.
 
 ## Typical use
 

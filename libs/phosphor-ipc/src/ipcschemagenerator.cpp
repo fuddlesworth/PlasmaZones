@@ -3,6 +3,8 @@
 
 #include <PhosphorIpc/IpcSchemaGenerator.h>
 
+#include <PhosphorIpc/IpcTarget.h>
+
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLatin1String>
@@ -107,15 +109,26 @@ QJsonObject schemaFor(const QString& targetName, const QObject* object)
         return root;
     }
     const QMetaObject* meta = object->metaObject();
-    // Start above QObject's built-ins (destroyed, objectNameChanged,
-    // deleteLater, etc.) so the schema mirrors what
-    // IpcRouter::findInvokableMethod / findSignal actually expose on
-    // the wire. Methods declared on any user-defined base class above
-    // QObject still surface.
-    const int firstUserMethod = QObject::staticMetaObject.methodCount();
+    // Start above the introspection floor that matches what
+    // IpcRouter::findInvokableMethod / findSignal expose on the
+    // wire. For a plain QObject-derived target, the floor is
+    // QObject's own method count (filters destroyed,
+    // objectNameChanged, deleteLater, etc.). For QML-instantiated
+    // IpcTarget wrappers (the common case), the floor is
+    // IpcTarget's method count so the wrapper's own emitEvent
+    // Q_INVOKABLE and targetChanged signal don't leak into the
+    // wire-visible schema; only the user's QML-declared functions
+    // and signals on the IpcTarget item surface.
+    const int firstUserMethod = qobject_cast<const IpcTarget*>(object) ? IpcTarget::staticMetaObject.methodCount()
+                                                                       : QObject::staticMetaObject.methodCount();
     for (int i = firstUserMethod; i < meta->methodCount(); ++i) {
         const QMetaMethod m = meta->method(i);
-        if (m.access() == QMetaMethod::Private) {
+        // Filter to Public-access methods/signals: protected/private
+        // Q_INVOKABLE methods are subclass-only by convention;
+        // exposing them on the wire defeats that. Matches the
+        // findInvokableMethod / findSignal filter so the schema
+        // never advertises what the router would refuse to dispatch.
+        if (m.access() != QMetaMethod::Public) {
             continue;
         }
         if (m.methodType() == QMetaMethod::Signal) {

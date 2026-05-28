@@ -2,17 +2,20 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
-#include <PhosphorIpc/IpcRouter.h>
 #include <PhosphorIpc/phosphoripc_export.h>
 
 #include <QObject>
 #include <QPointer>
 #include <QQmlParserStatus>
 #include <QString>
+#include <QVariantList>
 #include <QtCore/qtclasshelpermacros.h>
 #include <QtQml/qqmlregistration.h>
 
 namespace PhosphorIpc {
+
+// Pointer-only member; full definition only needed in the .cpp.
+class IpcRouter;
 
 // QML-side declarative wrapper for IpcRouter target registration.
 // Instantiated by user QML; auto-registers with the application's
@@ -26,10 +29,15 @@ namespace PhosphorIpc {
 // qWarning at componentComplete and stays inert (no registration);
 // the rest of the QML tree continues to work.
 //
-// Lifetime: registration is dropped automatically on QObject
-// destruction (the router's QPointer cleanup handles this) but
-// IpcTarget also explicitly unregisters in its destructor to
-// guarantee the registry signal-out is paired.
+// Lifetime: the router's QHash<QString, QPointer<QObject>> entry
+// auto-clears when this QObject is destroyed, but IpcTarget also
+// explicitly unregisters in its destructor so the registry's
+// targetUnregistered signal fires. The destructor passes `this` to
+// `unregisterTarget(name, obj)` so the router can reject the call
+// if the registration was rejected (duplicate name) and a different
+// target now owns the registry slot. Without that ownership check
+// a duplicate-rejected IpcTarget would tear down the legitimate
+// owner's binding on destruction.
 class PHOSPHORIPC_EXPORT IpcTarget : public QObject, public QQmlParserStatus
 {
     Q_OBJECT

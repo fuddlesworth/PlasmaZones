@@ -123,13 +123,13 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 |-------------------------------------------------------------------|---------------|--------------------------------------------------------------------------------------|
 | `libs/phosphor-ipc/` (C++)                                        | in PR #539    | `IpcRouter` + `IpcTarget` (`QML_ELEMENT`, not attached property) + `IpcSchemaGenerator` (`QMetaObject` to JSON Schema) + `IpcEngine::install` engine-property bridge. NDJSON wire protocol over `QLocalServer` / `QLocalSocket` on `$XDG_RUNTIME_DIR/phosphor.sock`. Subscribe is in scope (typed signal streaming). |
 | `cli/phosphorctl/` (C++ / Qt6)                                    | in PR #539    | Standalone binary linking Qt6::Core + Qt6::Network only (no QML, no GUI). Subcommands: `call`, `list`, `schema`, `subscribe`. Source lives in `cli/phosphorctl/` rather than `bin/phosphorctl/` because `bin/` is the project's runtime output dir; a same-named source subdir would collide with the binary's final path. |
-| `examples/phosphor-ipc-demo/`                                     | in PR #539    | App registers 3 IPC targets (`greet`, `count`, `set-value`). `phosphorctl call greet.sayHello --arg name=nate` works end-to-end; the demo window mirrors the broadcast stream in a live-events panel so a single sidecar terminal exercises the full surface. |
-| `libs/phosphor-ipc/tests/`                                        | in PR #539    | 5 test binaries (protocol parser, router invoke / register / schema, e2e socket roundtrip, subscribe / broadcast / disconnect-prune) for ~75 cases including stale-socket recovery, live-listener-not-clobbered, multi-subscriber fan-out. |
+| `examples/phosphor-ipc-demo/`                                     | in PR #539    | QML declares 3 IpcTargets (`greet`, `count`, `set-value`); they self-register via `IpcEngine::install`. `phosphorctl call greet.sayHello --arg name=nate` works end-to-end; the demo window mirrors the broadcast stream in a live-events panel so a single sidecar terminal exercises the full surface. |
+| `libs/phosphor-ipc/tests/`                                        | in PR #539    | 6 test binaries (protocol parser, router invoke / register / schema, schema-generator type table, e2e socket roundtrip, subscribe / broadcast / disconnect-prune, engine install / uninstall / replace) for ~75 cases including stale-socket recovery, live-listener-not-clobbered, multi-subscriber fan-out. |
 
 **Acceptance:**
 - [ ] `phosphorctl list` enumerates registered targets
 - [ ] `phosphorctl schema <target>` dumps JSON schema with arg types
-- [ ] Typed args validated server-side (`QVariant::convert`); errors are structured (`NO_SUCH_TARGET`, `NO_SUCH_FN`, `INVALID_ARG`, `INVOCATION_FAILED`, `MALFORMED_REQUEST`, `NO_SUCH_SIGNAL`, `NO_SUCH_SUBSCRIPTION`)
+- [ ] Typed args validated server-side (`QVariant::convert`); errors are structured (`NO_SUCH_TARGET`, `NO_SUCH_FN`, `NO_SUCH_SIGNAL`, `NO_SUCH_SUBSCRIPTION`, `INVALID_ARG`, `INVOCATION_FAILED`, `MALFORMED_REQUEST`)
 - [ ] `phosphorctl subscribe <target>.<signal>` streams JSON events until Ctrl+C, with a clean unsubscribe handshake
 - [ ] Wraps (does not replace) existing D-Bus adaptors. Phase 2 service libs register both an IPC target and a D-Bus method for each callable.
 

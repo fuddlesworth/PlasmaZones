@@ -39,7 +39,7 @@ namespace PhosphorIpc {
 //     registration (QPointer tracking handles dangling-pointer paths
 //     defensively, but the contract is "drop the registration before
 //     destroying the QObject").
-//   - Subscribers are tracked per-(target, signal-index, socket)
+//   - Subscribers are tracked per-(target, signal-name, socket)
 //     tuple. Socket disconnect auto-prunes the subscriber set.
 //
 // Errors
@@ -70,11 +70,24 @@ public:
     // start() has not been called or failed.
     [[nodiscard]] QString socketPath() const;
 
-    // Register / unregister target QObjects. Re-registering an
-    // existing target name is a no-op + qWarning (first registration
-    // wins).
-    void registerTarget(const QString& name, QObject* object);
-    void unregisterTarget(const QString& name);
+    // Register a target QObject under a name. Returns true if the
+    // registry now binds `name` to `object` (a fresh registration,
+    // OR an idempotent re-register of the same object under the same
+    // name — silent success, no warning). Returns false when the
+    // call is rejected (empty name, null object, or a different
+    // object already owns the name; the latter emits a qWarning).
+    // Marked nodiscard because callers that must pair register with
+    // unregister (e.g. IpcTarget's componentComplete/destructor
+    // pairing) NEED the result to know whether the registration is
+    // theirs to undo.
+    [[nodiscard]] bool registerTarget(const QString& name, QObject* object);
+    // Unregister the entry under `name` only if it currently binds
+    // to `object`. Mismatched calls are silently ignored so a target
+    // whose registration was rejected (duplicate name) cannot
+    // accidentally tear down the legitimate owner's binding on
+    // destruction. Pass nullptr to drop the entry unconditionally
+    // (administrative use, e.g. the shell's shutdown path).
+    void unregisterTarget(const QString& name, QObject* object = nullptr);
 
     [[nodiscard]] QStringList listTargets() const;
 
@@ -148,6 +161,11 @@ private:
     // Per-socket subscription list; lets disconnect cleanup walk one
     // socket's subscriptions without scanning the whole router.
     QHash<QLocalSocket*, QList<Subscription>> m_subscriptionsBySocket;
+    // Per-socket consecutive malformed-frame counter. Reset to zero
+    // on a successfully-parsed frame; closes the connection when the
+    // count exceeds MaxMalformedFrames so a peer can't pin the
+    // router on parse failures indefinitely.
+    QHash<QLocalSocket*, int> m_malformedCountBySocket;
 };
 
 } // namespace PhosphorIpc

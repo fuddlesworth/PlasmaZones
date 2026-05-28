@@ -63,10 +63,12 @@ public:
 private Q_SLOTS:
     void register_addsAndEmits();
     void register_duplicateRejected();
+    void register_idempotentSameObjectReturnsTrue();
     void register_nullObjectRejected();
     void register_emptyNameRejected();
     void unregister_removesAndEmits();
     void unregister_unknownNoOp();
+    void unregister_ownershipCheckPreservesIncumbent();
     void listTargets_filtersDeletedObjects();
     void invoke_returnsStringResult();
     void invoke_returnsIntResult();
@@ -86,7 +88,7 @@ void TestPhosphorIpcRouter::register_addsAndEmits()
     IpcRouter router;
     QSignalSpy spy(&router, &IpcRouter::targetRegistered);
     FakeTarget t;
-    router.registerTarget(QStringLiteral("greet"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("greet"), &t));
     QCOMPARE(router.listTargets(), QStringList{QStringLiteral("greet")});
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.first().at(0).toString(), QStringLiteral("greet"));
@@ -97,18 +99,35 @@ void TestPhosphorIpcRouter::register_duplicateRejected()
     IpcRouter router;
     FakeTarget t1;
     FakeTarget t2;
-    router.registerTarget(QStringLiteral("greet"), &t1);
+    QVERIFY(router.registerTarget(QStringLiteral("greet"), &t1));
     QTest::ignoreMessage(QtWarningMsg, "PhosphorIpc::IpcRouter::registerTarget: duplicate target 'greet' ignored");
-    router.registerTarget(QStringLiteral("greet"), &t2);
+    // Duplicate-name registration returns false; the existing
+    // binding is preserved (first registration wins).
+    QVERIFY(!router.registerTarget(QStringLiteral("greet"), &t2));
     QCOMPARE(router.listTargets().size(), 1);
     QCOMPARE(router.target(QStringLiteral("greet")), &t1);
+}
+
+void TestPhosphorIpcRouter::register_idempotentSameObjectReturnsTrue()
+{
+    // Re-registering the SAME QObject under the SAME name is a
+    // silent idempotent success (no warning, no signal re-emit).
+    // The bool return is documented to be true on this path so a
+    // wrapper like IpcTarget can blindly re-call register and treat
+    // the result as authoritative ownership.
+    IpcRouter router;
+    QSignalSpy spy(&router, &IpcRouter::targetRegistered);
+    FakeTarget t;
+    QVERIFY(router.registerTarget(QStringLiteral("greet"), &t));
+    QVERIFY(router.registerTarget(QStringLiteral("greet"), &t));
+    QCOMPARE(spy.count(), 1); // exactly one register emit, not two
 }
 
 void TestPhosphorIpcRouter::register_nullObjectRejected()
 {
     IpcRouter router;
     QTest::ignoreMessage(QtWarningMsg, "PhosphorIpc::IpcRouter::registerTarget: null object for 'greet' ignored");
-    router.registerTarget(QStringLiteral("greet"), nullptr);
+    QVERIFY(!router.registerTarget(QStringLiteral("greet"), nullptr));
     QVERIFY(router.listTargets().isEmpty());
 }
 
@@ -117,7 +136,7 @@ void TestPhosphorIpcRouter::register_emptyNameRejected()
     IpcRouter router;
     FakeTarget t;
     QTest::ignoreMessage(QtWarningMsg, "PhosphorIpc::IpcRouter::registerTarget: empty name ignored");
-    router.registerTarget(QString(), &t);
+    QVERIFY(!router.registerTarget(QString(), &t));
     QVERIFY(router.listTargets().isEmpty());
 }
 
@@ -125,12 +144,41 @@ void TestPhosphorIpcRouter::unregister_removesAndEmits()
 {
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("greet"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("greet"), &t));
     QSignalSpy spy(&router, &IpcRouter::targetUnregistered);
     router.unregisterTarget(QStringLiteral("greet"));
     QVERIFY(router.listTargets().isEmpty());
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.first().at(0).toString(), QStringLiteral("greet"));
+}
+
+void TestPhosphorIpcRouter::unregister_ownershipCheckPreservesIncumbent()
+{
+    // unregisterTarget(name, obj) must only tear down the binding
+    // when the registry currently binds `name` to `obj`. This is
+    // the safety net used by IpcTarget's destructor when its own
+    // registerTarget was rejected as a duplicate; without it,
+    // destruction would unregister the legitimate owner.
+    IpcRouter router;
+    FakeTarget t1;
+    FakeTarget t2;
+    QVERIFY(router.registerTarget(QStringLiteral("greet"), &t1));
+    QTest::ignoreMessage(QtWarningMsg, "PhosphorIpc::IpcRouter::registerTarget: duplicate target 'greet' ignored");
+    QVERIFY(!router.registerTarget(QStringLiteral("greet"), &t2));
+
+    // Pretend t2 "thinks" it owns the slot and unregisters by name+ptr.
+    // The registry must reject the call (mismatched ownership) and
+    // keep t1's binding intact.
+    QSignalSpy spy(&router, &IpcRouter::targetUnregistered);
+    router.unregisterTarget(QStringLiteral("greet"), &t2);
+    QCOMPARE(spy.count(), 0);
+    QCOMPARE(router.target(QStringLiteral("greet")), &t1);
+
+    // The 1-arg administrative overload (or 2-arg with nullptr)
+    // tears down unconditionally.
+    router.unregisterTarget(QStringLiteral("greet"));
+    QCOMPARE(spy.count(), 1);
+    QVERIFY(router.listTargets().isEmpty());
 }
 
 void TestPhosphorIpcRouter::unregister_unknownNoOp()
@@ -146,19 +194,22 @@ void TestPhosphorIpcRouter::listTargets_filtersDeletedObjects()
     IpcRouter router;
     {
         FakeTarget t;
-        router.registerTarget(QStringLiteral("scoped"), &t);
+        QVERIFY(router.registerTarget(QStringLiteral("scoped"), &t));
         QCOMPARE(router.listTargets().size(), 1);
     }
     // t went out of scope; the QPointer auto-clears so listTargets
-    // should report 0.
+    // should report 0. Also pin the target() accessor to nullptr
+    // so a future refactor that caches names independently of the
+    // QPointer state would be caught.
     QVERIFY(router.listTargets().isEmpty());
+    QCOMPARE(router.target(QStringLiteral("scoped")), nullptr);
 }
 
 void TestPhosphorIpcRouter::invoke_returnsStringResult()
 {
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("greet"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("greet"), &t));
     QString err;
     const QVariant r = router.invoke(QStringLiteral("greet"), QStringLiteral("sayHello"),
                                      QVariantList{QStringLiteral("nate")}, nullptr, &err);
@@ -170,7 +221,7 @@ void TestPhosphorIpcRouter::invoke_returnsIntResult()
 {
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("math"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("math"), &t));
     QString err;
     const QVariant r = router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{3, 4}, nullptr, &err);
     QVERIFY(err.isEmpty());
@@ -181,7 +232,7 @@ void TestPhosphorIpcRouter::invoke_voidReturnSucceeds()
 {
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("store"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("store"), &t));
     QString err;
     const QVariant r = router.invoke(QStringLiteral("store"), QStringLiteral("noReturn"),
                                      QVariantList{QStringLiteral("payload")}, nullptr, &err);
@@ -195,41 +246,50 @@ void TestPhosphorIpcRouter::invoke_voidReturnSucceeds()
 
 void TestPhosphorIpcRouter::invoke_unknownTargetError()
 {
+    // Assert on the structured InvokeOutcome rather than the
+    // human-readable message. Message text is i18n / refactor
+    // surface; the enum is the wire contract.
     IpcRouter router;
     QString err;
-    const QVariant r = router.invoke(QStringLiteral("ghost"), QStringLiteral("fn"), {}, nullptr, &err);
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    const QVariant r = router.invoke(QStringLiteral("ghost"), QStringLiteral("fn"), {}, &outcome, &err);
     QVERIFY(!r.isValid());
-    QVERIFY(err.contains(QStringLiteral("unknown target")));
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::NoSuchTarget);
+    QVERIFY(!err.isEmpty()); // message is populated, but content not asserted
 }
 
 void TestPhosphorIpcRouter::invoke_unknownFnError()
 {
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("greet"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("greet"), &t));
     QString err;
-    const QVariant r = router.invoke(QStringLiteral("greet"), QStringLiteral("ghostFn"), {}, nullptr, &err);
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    const QVariant r = router.invoke(QStringLiteral("greet"), QStringLiteral("ghostFn"), {}, &outcome, &err);
     QVERIFY(!r.isValid());
-    QVERIFY(err.contains(QStringLiteral("no invokable method")));
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::NoSuchFn);
+    QVERIFY(!err.isEmpty());
 }
 
 void TestPhosphorIpcRouter::invoke_argCountMismatchError()
 {
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("math"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("math"), &t));
     QString err;
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
     // add() expects 2 args; pass 1.
-    const QVariant r = router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{1}, nullptr, &err);
+    const QVariant r = router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{1}, &outcome, &err);
     QVERIFY(!r.isValid());
-    QVERIFY(err.contains(QStringLiteral("argument count")));
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::ArgCountMismatch);
+    QVERIFY(!err.isEmpty());
 }
 
 void TestPhosphorIpcRouter::invoke_argTypeCoercion()
 {
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("math"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("math"), &t));
     QString err;
     // add expects int; pass a string-shaped int, QVariant::convert
     // promotes "3" → 3 via QString::toInt, so this should succeed.
@@ -246,21 +306,21 @@ void TestPhosphorIpcRouter::invoke_argTypeCoercionFailure()
     // which the wire dispatcher maps to INVALID_ARG.
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("math"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("math"), &t));
     QString err;
     IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
     const QVariant r =
         router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{QVariantMap{}, 4}, &outcome, &err);
     QVERIFY(!r.isValid());
-    QVERIFY(err.contains(QStringLiteral("cannot convert")));
     QCOMPARE(outcome, IpcRouter::InvokeOutcome::ArgConvertFailed);
+    QVERIFY(!err.isEmpty());
 }
 
 void TestPhosphorIpcRouter::invoke_outcomeOkOnSuccess()
 {
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("math"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("math"), &t));
     IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::InvokeFailed;
     router.invoke(QStringLiteral("math"), QStringLiteral("add"), QVariantList{1, 2}, &outcome);
     QCOMPARE(outcome, IpcRouter::InvokeOutcome::Ok);
@@ -268,15 +328,25 @@ void TestPhosphorIpcRouter::invoke_outcomeOkOnSuccess()
 
 void TestPhosphorIpcRouter::schemaFor_unknownReturnsEmpty()
 {
+    // Unknown target produces the empty-shaped schema document:
+    // {target: "<name>", functions: [], signals: []}. Same contract
+    // IpcSchemaGenerator::schemaFor(name, nullptr) honors, so
+    // router-direct callers and the schema generator agree on the
+    // shape (the wire dispatcher still returns NO_SUCH_TARGET error
+    // frames for `schema` requests on unknown targets; see the
+    // dispatcher tests).
     IpcRouter router;
-    QCOMPARE(router.schemaFor(QStringLiteral("ghost")), QJsonObject());
+    const QJsonObject s = router.schemaFor(QStringLiteral("ghost"));
+    QCOMPARE(s.value(QStringLiteral("target")).toString(), QStringLiteral("ghost"));
+    QCOMPARE(s.value(QStringLiteral("functions")).toArray().size(), 0);
+    QCOMPARE(s.value(QStringLiteral("signals")).toArray().size(), 0);
 }
 
 void TestPhosphorIpcRouter::schemaFor_listsFunctions()
 {
     IpcRouter router;
     FakeTarget t;
-    router.registerTarget(QStringLiteral("greet"), &t);
+    QVERIFY(router.registerTarget(QStringLiteral("greet"), &t));
     const QJsonObject schema = router.schemaFor(QStringLiteral("greet"));
     QCOMPARE(schema.value(QStringLiteral("target")).toString(), QStringLiteral("greet"));
     QVERIFY(schema.value(QStringLiteral("functions")).isArray());

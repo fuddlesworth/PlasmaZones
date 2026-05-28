@@ -14,6 +14,17 @@ namespace Phosphorctl {
 // AND `phosphorctl call ... --socket /x` both work.
 [[nodiscard]] QString stripSocketFlag(QStringList& args);
 
+// Sanitise a server-supplied string for safe stdout printing.
+// Server-side targets may return / broadcast strings that originated
+// from untrusted sources (window titles, app-ids, user input
+// reflected back). Writing those raw to a terminal would allow
+// ANSI escape injection (cursor moves, OSC title rewrites, screen
+// clears). Replaces ASCII control characters (0x00-0x1F, 0x7F)
+// except '\t' and '\n' with their `\xNN` two-digit hex escape,
+// preserving the visible text payload while neutralising the
+// terminal-attack vector.
+[[nodiscard]] QString sanitiseForTerminal(const QString& s);
+
 // Subcommand entry points. Each takes the post-subcommand argument
 // list (after the subcommand name itself), plus the resolved socket
 // path. Returns the process exit code:

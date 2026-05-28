@@ -52,6 +52,31 @@ void signalHandler(int /*signum*/)
     errno = savedErrno;
 }
 
+// Tear down anything installSignalHandlers may have set up
+// partway, used as the failure-path cleanup so we don't leak fds
+// or leave sigaction half-installed when an init step fails.
+void teardownSignalHandlers(bool sigintInstalled, bool sigtermInstalled)
+{
+    if (sigintInstalled) {
+        struct sigaction sa{};
+        sa.sa_handler = SIG_DFL;
+        sigemptyset(&sa.sa_mask);
+        ::sigaction(SIGINT, &sa, nullptr);
+    }
+    if (sigtermInstalled) {
+        struct sigaction sa{};
+        sa.sa_handler = SIG_DFL;
+        sigemptyset(&sa.sa_mask);
+        ::sigaction(SIGTERM, &sa, nullptr);
+    }
+    for (int& fd : g_signalFd) {
+        if (fd != -1) {
+            ::close(fd);
+            fd = -1;
+        }
+    }
+}
+
 bool installSignalHandlers()
 {
     if (::pipe(g_signalFd) != 0) {
@@ -67,11 +92,13 @@ bool installSignalHandlers()
     for (int fd : g_signalFd) {
         const int flags = ::fcntl(fd, F_GETFD);
         if (flags == -1 || ::fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1) {
+            teardownSignalHandlers(false, false);
             return false;
         }
     }
     const int writeFlags = ::fcntl(g_signalFd[1], F_GETFL);
     if (writeFlags == -1 || ::fcntl(g_signalFd[1], F_SETFL, writeFlags | O_NONBLOCK) == -1) {
+        teardownSignalHandlers(false, false);
         return false;
     }
     // sigaction over std::signal: std::signal's re-arm semantics
@@ -88,9 +115,13 @@ bool installSignalHandlers()
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     if (::sigaction(SIGINT, &sa, nullptr) != 0) {
+        teardownSignalHandlers(false, false);
         return false;
     }
     if (::sigaction(SIGTERM, &sa, nullptr) != 0) {
+        // SIGINT install succeeded; restore it to default before
+        // returning so the partial install doesn't leak.
+        teardownSignalHandlers(true, false);
         return false;
     }
     return true;
@@ -140,8 +171,9 @@ int runSubscribe(QStringList args, QString socketPath)
     }
     if (firstResp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
         == QLatin1String(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl subscribe: " << firstResp->value(QLatin1String(PhosphorIpc::Field::Code)).toString() << ": "
-            << firstResp->value(QLatin1String(PhosphorIpc::Field::Message)).toString() << "\n";
+        err << "phosphorctl subscribe: "
+            << sanitiseForTerminal(firstResp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
+            << sanitiseForTerminal(firstResp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
         return 3;
     }
 
@@ -158,8 +190,14 @@ int runSubscribe(QStringList args, QString socketPath)
     // is a one-shot handoff.
     QByteArray buffer = client.takePendingBytes();
     bool serverDisconnected = false;
+    // Set to true by the SIGINT/SIGTERM handler before we send
+    // unsubscribe so the eventual exit code reflects "user asked
+    // to stop" rather than "server died" if both fire in the same
+    // dispatch (Ctrl+C immediately followed by a server shutdown).
+    bool userRequestedQuit = false;
     constexpr qint64 UnsubscribeRequestId = 2;
     constexpr int UnsubscribeFlushMs = 500;
+    constexpr int UnsubscribeReplyWaitMs = 200;
 
     auto consumeBuffer = [&buffer, &out, &err]() {
         while (true) {
@@ -186,7 +224,11 @@ int runSubscribe(QStringList args, QString socketPath)
             // be piped through `jq` or grepped without further
             // framing. Mid-stream {"type":"error",...} frames also
             // print here; the user spots them by the "type":"error"
-            // shape.
+            // shape. QJsonDocument::toJson escapes control bytes per
+            // the JSON spec, so the wire payload is terminal-safe
+            // even when the payload contains attacker-controlled
+            // strings (no separate sanitiseForTerminal call needed
+            // for the compact JSON path).
             out << QString::fromUtf8(doc.toJson(QJsonDocument::Compact)) << "\n";
             out.flush();
         }
@@ -201,8 +243,15 @@ int runSubscribe(QStringList args, QString socketPath)
         consumeBuffer();
     });
 
-    QObject::connect(socket, &QLocalSocket::disconnected, [&serverDisconnected]() {
-        serverDisconnected = true;
+    QObject::connect(socket, &QLocalSocket::disconnected, [&serverDisconnected, &userRequestedQuit]() {
+        // Only flag "server died" when the disconnect arrives
+        // BEFORE the user requested a quit. The Ctrl+C path also
+        // observes a disconnect (after we send unsubscribe and the
+        // server cleanly closes), and we don't want that to be
+        // reported as a server-side death.
+        if (!userRequestedQuit) {
+            serverDisconnected = true;
+        }
         QCoreApplication::quit();
     });
 
@@ -217,10 +266,31 @@ int runSubscribe(QStringList args, QString socketPath)
     // wait for the kernel buffer to drain so the server actually
     // receives it, then quit.
     QSocketNotifier signalNotifier(g_signalFd[0], QSocketNotifier::Read);
-    QObject::connect(&signalNotifier, &QSocketNotifier::activated, [socket]() {
+    QObject::connect(&signalNotifier, &QSocketNotifier::activated, [socket, &userRequestedQuit]() {
+        // Set userRequestedQuit BEFORE anything else can fire the
+        // disconnected slot. Even the signal-pipe drain below pumps
+        // no events on its own, but the disconnected slot can be
+        // delivered asynchronously by a peer close that happened
+        // before we got here; without this ordering, that
+        // disconnect would set serverDisconnected=true and the
+        // exit code would mis-report a Ctrl+C as "server died".
+        userRequestedQuit = true;
         char drain[16];
-        // Drain whatever the handler queued; ignore EAGAIN/EWOULDBLOCK.
-        while (::read(g_signalFd[0], drain, sizeof(drain)) > 0) { }
+        // Drain whatever the handler queued. Retry on EINTR (a
+        // syscall interrupted by a signal during the drain is a
+        // transient condition, not a stop signal); exit the loop
+        // on EAGAIN/EWOULDBLOCK (pipe empty) or any other terminal
+        // error.
+        while (true) {
+            const ssize_t n = ::read(g_signalFd[0], drain, sizeof(drain));
+            if (n > 0) {
+                continue;
+            }
+            if (n == -1 && errno == EINTR) {
+                continue;
+            }
+            break;
+        }
         QJsonObject unsub;
         unsub.insert(QLatin1String(PhosphorIpc::Field::Type), QLatin1String(PhosphorIpc::RequestType::Unsubscribe));
         unsub.insert(QLatin1String(PhosphorIpc::Field::Id), static_cast<double>(UnsubscribeRequestId));
@@ -232,6 +302,12 @@ int runSubscribe(QStringList args, QString socketPath)
         // Without this the unsubscribe is best-effort: the kernel
         // discards the pending write if the process exits first.
         socket->waitForBytesWritten(UnsubscribeFlushMs);
+        // Briefly wait for the server's unsubscribe reply so the
+        // server sees a clean protocol exchange rather than a
+        // best-effort write followed by an immediate close. The
+        // wait is bounded; if the reply doesn't arrive we still
+        // quit (the unsubscribe was already delivered above).
+        socket->waitForReadyRead(UnsubscribeReplyWaitMs);
         QCoreApplication::quit();
     });
 

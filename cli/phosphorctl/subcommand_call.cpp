@@ -15,6 +15,8 @@
 #include <QStringList>
 #include <QTextStream>
 
+#include <cmath>
+
 namespace Phosphorctl {
 
 namespace {
@@ -123,28 +125,50 @@ int runCall(QStringList args, QString socketPath)
     }
     if (resp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
         == QLatin1String(PhosphorIpc::ResponseType::Error)) {
-        err << "phosphorctl call: " << resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString() << ": "
-            << resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString() << "\n";
+        err << "phosphorctl call: "
+            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
+            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString());
+        const QJsonValue detail = resp->value(QLatin1String(PhosphorIpc::Field::Detail));
+        if (detail.isObject() && !detail.toObject().isEmpty()) {
+            // Detail payload is structured JSON the server may have
+            // attached (e.g. arg-index for INVALID_ARG). Emit it as
+            // a parenthesised JSON blob so scripts can grep it. JSON
+            // serialisation escapes control bytes, so no extra
+            // sanitisation needed here.
+            err << " (detail: " << QString::fromUtf8(QJsonDocument(detail.toObject()).toJson(QJsonDocument::Compact))
+                << ")";
+        }
+        err << "\n";
         return 3;
     }
 
     const QJsonValue result = resp->value(QLatin1String(PhosphorIpc::Field::Result));
     // Pretty-print object / array results; emit primitive results
     // raw (no surrounding quotes for strings, easier to pipe).
+    // Object / array paths route through QJsonDocument::toJson
+    // which already escapes control bytes per JSON spec; raw string
+    // results bypass JSON serialisation and need explicit
+    // sanitisation against terminal escape injection before reaching
+    // stdout.
     if (result.isObject()) {
         out << QString::fromUtf8(QJsonDocument(result.toObject()).toJson(QJsonDocument::Indented));
     } else if (result.isArray()) {
         out << QString::fromUtf8(QJsonDocument(result.toArray()).toJson(QJsonDocument::Indented));
     } else if (result.isString()) {
-        out << result.toString() << "\n";
+        out << sanitiseForTerminal(result.toString()) << "\n";
     } else if (result.isNull()) {
         // void return, print nothing.
     } else if (result.isBool()) {
         out << (result.toBool() ? QStringLiteral("true") : QStringLiteral("false")) << "\n";
     } else if (result.isDouble()) {
-        // Avoid trailing .0 on integer-valued doubles.
+        // Avoid trailing .0 on integer-valued doubles. Guard against
+        // out-of-range doubles before casting to qint64: a result
+        // beyond +-2^63 would be UB on cast. isfinite() and the
+        // range check together cover NaN, +/-inf, and overflow.
         const double d = result.toDouble();
-        if (d == static_cast<double>(static_cast<qint64>(d))) {
+        constexpr double Int64Min = -9223372036854775808.0;
+        constexpr double Int64Max = 9223372036854775808.0; // 2^63, one past max
+        if (std::isfinite(d) && d >= Int64Min && d < Int64Max && d == static_cast<double>(static_cast<qint64>(d))) {
             out << static_cast<qint64>(d) << "\n";
         } else {
             out << d << "\n";

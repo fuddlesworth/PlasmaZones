@@ -21,7 +21,15 @@ IpcTarget::IpcTarget(QObject* parent)
 IpcTarget::~IpcTarget()
 {
     if (m_registered && m_router) {
-        m_router->unregisterTarget(m_target);
+        // Pass `this` so the router rejects the call when a
+        // different QObject now owns the `m_target` slot. This
+        // matters when an IpcTarget's registerTarget was REJECTED
+        // (duplicate name): m_registered was never set true on
+        // that path, so we'd skip this branch entirely; but if
+        // some future path ever sets m_registered without verifying
+        // ownership, the ownership check below keeps the
+        // legitimate owner's binding intact.
+        m_router->unregisterTarget(m_target, this);
     }
 }
 
@@ -55,8 +63,11 @@ void IpcTarget::classBegin()
 
 void IpcTarget::emitEvent(const QString& signalName, const QVariantList& args)
 {
-    if (!m_router) {
-        qWarning("PhosphorIpc::IpcTarget::emitEvent: no router (target '%s' wasn't registered)", qPrintable(m_target));
+    if (!m_router || !m_registered) {
+        qWarning(
+            "PhosphorIpc::IpcTarget::emitEvent: target '%s' is not registered (router missing or registration "
+            "rejected)",
+            qPrintable(m_target));
         return;
     }
     if (signalName.isEmpty()) {
@@ -94,14 +105,19 @@ void IpcTarget::componentComplete()
         return;
     }
     m_router = router;
-    // Flip m_registered BEFORE registerTarget so any slot that
-    // reacts to targetRegistered (which the router emits
-    // synchronously) and re-enters this instance via emitEvent or
-    // setTarget sees a consistent "fully registered" state. The
-    // pair (m_router, m_registered) is the contract for emitEvent
-    // and the destructor's unregister symmetry.
+    // registerTarget returns false when the registry already binds
+    // `m_target` to a different object (first-registration-wins).
+    // Only flip m_registered on success so the destructor's
+    // unregisterTarget call doesn't tear down the legitimate
+    // owner's binding when this IpcTarget is destroyed. emitEvent
+    // also checks m_registered before broadcasting so duplicate-
+    // rejected targets can't fire events under the wire-name that
+    // a different object owns.
+    if (!router->registerTarget(m_target, this)) {
+        m_router.clear();
+        return;
+    }
     m_registered = true;
-    router->registerTarget(m_target, this);
 }
 
 } // namespace PhosphorIpc

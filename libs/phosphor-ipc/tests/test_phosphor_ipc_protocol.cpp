@@ -100,8 +100,11 @@ void TestPhosphorIpcProtocol::parseRequest_rejectsNonObjectRoot()
 
 void TestPhosphorIpcProtocol::parseRequest_rejectsNonArrayArgs()
 {
+    // Provide target/fn so the parser doesn't bail on the
+    // per-type required-field check first; this test exists to
+    // exercise the args-type validation branch specifically.
     QString err;
-    QVERIFY(!parseRequest(R"({"type":"call","id":1,"args":42})", &err).has_value());
+    QVERIFY(!parseRequest(R"({"type":"call","id":1,"target":"t","fn":"f","args":42})", &err).has_value());
     QVERIFY(err.contains(QStringLiteral("'args'")));
 }
 

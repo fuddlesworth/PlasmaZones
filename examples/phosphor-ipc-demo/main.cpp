@@ -63,8 +63,13 @@ int main(int argc, char* argv[])
 #endif
     const bool routerOk = demoController.start(socketPath);
     if (!routerOk) {
+        // socketPath is the path the user / CMake injection
+        // REQUESTED; demoController.socketPath() is empty when start
+        // fails (IpcRouter::socketPath documents "Empty if start()
+        // has not been called or failed"). Log the requested path so
+        // the diagnostic actually carries useful context.
         qWarning("phosphor-ipc-demo: router failed to start on '%s' (see preceding log)",
-                 qPrintable(demoController.socketPath()));
+                 qPrintable(socketPath.isEmpty() ? QStringLiteral("<XDG default>") : socketPath));
     }
     // Startup banner is left to the QML status panel rather than a
     // qInfo. Qt suppresses qInfo by default and forcing

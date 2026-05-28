@@ -11,19 +11,19 @@
 
 #include <QByteArray>
 #include <QDir>
-#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QObject>
-#include <QSignalSpy>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 #include <QtCore/qtclasshelpermacros.h>
+
+#include <optional>
 
 using namespace PhosphorIpc;
 
@@ -55,7 +55,14 @@ public:
 // connection get fully processed, QLocalSocket::waitForReadyRead
 // alone doesn't reliably pump the server's accept loop on Linux,
 // which leaves the test hanging without the response.
-QJsonObject roundtrip(const QString& socketPath, const QJsonObject& request, int timeoutMs = 2000)
+//
+// Failures (connect timeout, response timeout) populate `outError`
+// and return std::nullopt. Callers QVERIFY the optional and propagate
+// the error message via QFAIL so the failure points at the actual
+// root cause rather than at a downstream QCOMPARE that just sees an
+// empty QJsonObject.
+std::optional<QJsonObject> roundtrip(const QString& socketPath, const QJsonObject& request, QString* outError,
+                                     int timeoutMs = 2000)
 {
     QLocalSocket socket;
     QByteArray buffer;
@@ -73,8 +80,10 @@ QJsonObject roundtrip(const QString& socketPath, const QJsonObject& request, int
 
     socket.connectToServer(socketPath);
     if (!socket.waitForConnected(timeoutMs)) {
-        qWarning("test e2e: connect failed: %s", qPrintable(socket.errorString()));
-        return {};
+        if (outError) {
+            *outError = QStringLiteral("connect failed: %1").arg(socket.errorString());
+        }
+        return std::nullopt;
     }
     socket.write(writeLine(request));
     socket.flush();
@@ -83,8 +92,10 @@ QJsonObject roundtrip(const QString& socketPath, const QJsonObject& request, int
     loop.exec();
 
     if (!buffer.contains('\n')) {
-        qWarning("test e2e: no response within %dms", timeoutMs);
-        return {};
+        if (outError) {
+            *outError = QStringLiteral("no response within %1ms").arg(timeoutMs);
+        }
+        return std::nullopt;
     }
     const int nl = buffer.indexOf('\n');
     QByteArray line = buffer.left(nl);
@@ -94,6 +105,21 @@ QJsonObject roundtrip(const QString& socketPath, const QJsonObject& request, int
     socket.disconnectFromServer();
     return QJsonDocument::fromJson(line).object();
 }
+
+// Convenience wrapper that calls QFAIL on roundtrip failure so the
+// failure surfaces with a precise message and at the call site
+// rather than downstream as `Compared values are different: actual:
+// "", expected: "reply"`.
+#define ROUNDTRIP_OR_FAIL(out, sockPath, req)                                                                          \
+    QJsonObject out;                                                                                                   \
+    do {                                                                                                               \
+        QString rtErr;                                                                                                 \
+        const auto rtOpt = roundtrip((sockPath), (req), &rtErr);                                                       \
+        if (!rtOpt.has_value()) {                                                                                      \
+            QFAIL(qPrintable(QStringLiteral("roundtrip failed: %1").arg(rtErr)));                                      \
+        }                                                                                                              \
+        out = *rtOpt;                                                                                                  \
+    } while (0)
 
 } // namespace
 
@@ -123,7 +149,7 @@ void TestPhosphorIpcE2e::roundtrip_call()
 
     IpcRouter router;
     EchoTarget echo;
-    router.registerTarget(QStringLiteral("echo"), &echo);
+    QVERIFY(router.registerTarget(QStringLiteral("echo"), &echo));
     QVERIFY(router.start(sockPath));
 
     QJsonObject req;
@@ -135,7 +161,7 @@ void TestPhosphorIpcE2e::roundtrip_call()
     args.append(QStringLiteral("hello"));
     req.insert(QStringLiteral("args"), args);
 
-    const QJsonObject resp = roundtrip(sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("id")).toInt(), 1);
     QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("hello"));
@@ -150,15 +176,15 @@ void TestPhosphorIpcE2e::roundtrip_list()
     IpcRouter router;
     EchoTarget a;
     EchoTarget b;
-    router.registerTarget(QStringLiteral("a"), &a);
-    router.registerTarget(QStringLiteral("b"), &b);
+    QVERIFY(router.registerTarget(QStringLiteral("a"), &a));
+    QVERIFY(router.registerTarget(QStringLiteral("b"), &b));
     QVERIFY(router.start(sockPath));
 
     QJsonObject req;
     req.insert(QStringLiteral("type"), QStringLiteral("list"));
     req.insert(QStringLiteral("id"), 2);
 
-    const QJsonObject resp = roundtrip(sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     const QJsonArray names = resp.value(QStringLiteral("result")).toArray();
     QCOMPARE(names.size(), 2);
@@ -179,7 +205,7 @@ void TestPhosphorIpcE2e::roundtrip_schema()
 
     IpcRouter router;
     EchoTarget echo;
-    router.registerTarget(QStringLiteral("echo"), &echo);
+    QVERIFY(router.registerTarget(QStringLiteral("echo"), &echo));
     QVERIFY(router.start(sockPath));
 
     QJsonObject req;
@@ -187,7 +213,7 @@ void TestPhosphorIpcE2e::roundtrip_schema()
     req.insert(QStringLiteral("id"), 3);
     req.insert(QStringLiteral("target"), QStringLiteral("echo"));
 
-    const QJsonObject resp = roundtrip(sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     const QJsonObject schema = resp.value(QStringLiteral("result")).toObject();
     QCOMPARE(schema.value(QStringLiteral("target")).toString(), QStringLiteral("echo"));
@@ -209,7 +235,7 @@ void TestPhosphorIpcE2e::roundtrip_unknownTargetError()
     req.insert(QStringLiteral("target"), QStringLiteral("ghost"));
     req.insert(QStringLiteral("fn"), QStringLiteral("fn"));
 
-    const QJsonObject resp = roundtrip(sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("error"));
     QCOMPARE(resp.value(QStringLiteral("code")).toString(), QStringLiteral("NO_SUCH_TARGET"));
 }
@@ -261,7 +287,7 @@ void TestPhosphorIpcE2e::start_failsWhenPathConflict()
 
     IpcRouter routerA;
     EchoTarget echo;
-    routerA.registerTarget(QStringLiteral("echo"), &echo);
+    QVERIFY(routerA.registerTarget(QStringLiteral("echo"), &echo));
     QVERIFY(routerA.start(sockPath));
 
     IpcRouter routerB;
@@ -282,7 +308,7 @@ void TestPhosphorIpcE2e::start_failsWhenPathConflict()
     args.append(QStringLiteral("alive"));
     req.insert(QStringLiteral("args"), args);
 
-    const QJsonObject resp = roundtrip(sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("alive"));
 }
@@ -308,7 +334,7 @@ void TestPhosphorIpcE2e::start_afterStop_succeeds()
 
     IpcRouter router;
     EchoTarget echo;
-    router.registerTarget(QStringLiteral("echo"), &echo);
+    QVERIFY(router.registerTarget(QStringLiteral("echo"), &echo));
     QVERIFY(router.start(sockPath));
     router.stop();
     QVERIFY(router.socketPath().isEmpty());
@@ -323,7 +349,7 @@ void TestPhosphorIpcE2e::start_afterStop_succeeds()
     args.append(QStringLiteral("after-restart"));
     req.insert(QStringLiteral("args"), args);
 
-    const QJsonObject resp = roundtrip(sockPath, req);
+    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
     QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
     QCOMPARE(resp.value(QStringLiteral("result")).toString(), QStringLiteral("after-restart"));
 }
@@ -352,13 +378,28 @@ void TestPhosphorIpcE2e::oversizedLineClosesConnection()
     QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
     QObject::connect(&socket, &QLocalSocket::readyRead, &loop, [&] {
         buffer.append(socket.readAll());
-        if (buffer.contains('\n')) {
+        // Quit only once BOTH the diagnostic frame has arrived AND
+        // the server has closed the connection (the router contract
+        // produces both; "either" hides regressions). Typical Qt
+        // ordering on Linux for a peer-side abort is readyRead
+        // first, then disconnected, so this gate flips at the
+        // disconnected slot below in the common path.
+        if (buffer.contains('\n') && disconnected) {
             loop.quit();
         }
     });
     QObject::connect(&socket, &QLocalSocket::disconnected, &loop, [&] {
         disconnected = true;
-        loop.quit();
+        // Drain any final bytes the kernel held when the disconnect
+        // arrived; readyRead may not re-fire post-close. Quit when
+        // we have both halves; if disconnect arrived without the
+        // diagnostic (regression we want to catch), the timer fires
+        // and the post-loop assertion at QVERIFY2(buffer.contains)
+        // pins the failure.
+        buffer.append(socket.readAll());
+        if (buffer.contains('\n')) {
+            loop.quit();
+        }
     });
 
     socket.connectToServer(sockPath);
@@ -373,16 +414,23 @@ void TestPhosphorIpcE2e::oversizedLineClosesConnection()
     timeout.start(5000);
     loop.exec();
 
-    // We expect either: (a) an error frame arrived, OR (b) the
-    // server force-closed the socket. Some Qt versions may deliver
-    // disconnected before the error frame buffer flushes, so accept
-    // either signal as evidence the cap fired.
-    const bool errorFrameArrived = buffer.contains('\n')
-        && QJsonDocument::fromJson(buffer.left(buffer.indexOf('\n'))).object().value(QStringLiteral("code")).toString()
-            == QStringLiteral("MALFORMED_REQUEST");
-    QVERIFY2(errorFrameArrived || disconnected,
-             "oversized line should produce either a MALFORMED_REQUEST frame or a server-side disconnect");
-    socket.abort();
+    // The router contract is: error frame written, brief
+    // waitForBytesWritten, then abort(). Both the frame and the
+    // disconnect MUST surface when the cap fires; accepting "either
+    // or" would hide regressions where the error path silently
+    // loses the diagnostic. Pump one more readAll in case bytes
+    // landed between the loop's last readyRead and exit.
+    buffer.append(socket.readAll());
+    QVERIFY2(buffer.contains('\n'),
+             "oversized line cap must write the MALFORMED_REQUEST diagnostic frame before closing");
+    const QByteArray firstLine = buffer.left(buffer.indexOf('\n'));
+    const QJsonObject errFrame = QJsonDocument::fromJson(firstLine).object();
+    QCOMPARE(errFrame.value(QStringLiteral("type")).toString(), QStringLiteral("error"));
+    QCOMPARE(errFrame.value(QStringLiteral("code")).toString(), QStringLiteral("MALFORMED_REQUEST"));
+    QVERIFY2(disconnected, "router must close the connection after the oversize-line diagnostic");
+    // socket is already in UnconnectedState (the disconnect
+    // assertion above verifies that); no explicit abort() needed
+    // before the QLocalSocket destructor runs.
 }
 
 QTEST_MAIN(TestPhosphorIpcE2e)

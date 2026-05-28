@@ -11,12 +11,13 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(PHOSPHORIPC_VERSION "0.1.0")
-# Wire-protocol version. The CLI sends this at handshake; mismatched
-# major versions terminate the connection cleanly. Bumped whenever the
-# JSON shape on the wire changes incompatibly. Exported as a compile
-# definition so both the library and bin/phosphorctl agree at build
-# time (mirrors PluginAbiVersion's CMake-↔-header link in phosphor-
-# registry).
+# Wire-protocol version. Build-time invariant only: there is no
+# on-wire handshake and no version-negotiation message in the
+# protocol. The constant is exported as PHOSPHOR_IPC_PROTOCOL_VERSION
+# so the static_assert in IpcProtocol.h can cross-check this CMake
+# value against the header constant at compile time. Bumped whenever
+# the JSON shape on the wire changes incompatibly; mirrors
+# PluginAbiVersion's CMake-↔-header link in phosphor-registry.
 set(PHOSPHOR_IPC_PROTOCOL_VERSION 1)
 
 if(NOT PROJECT_VERSION)

@@ -150,7 +150,7 @@ void TestPhosphorIpcSubscribe::subscribe_replies_then_streams_events()
 
     IpcRouter router;
     CounterTarget c;
-    router.registerTarget(QStringLiteral("count"), &c);
+    QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
     QVERIFY(router.start(sockPath));
 
     QLocalSocket socket;
@@ -212,7 +212,7 @@ void TestPhosphorIpcSubscribe::subscribe_unknownSignal()
 
     IpcRouter router;
     CounterTarget c;
-    router.registerTarget(QStringLiteral("count"), &c);
+    QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
     QVERIFY(router.start(sockPath));
 
     QLocalSocket socket;
@@ -236,7 +236,7 @@ void TestPhosphorIpcSubscribe::unsubscribe_stops_events()
 
     IpcRouter router;
     CounterTarget c;
-    router.registerTarget(QStringLiteral("count"), &c);
+    QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
     QVERIFY(router.start(sockPath));
 
     QLocalSocket socket;
@@ -302,7 +302,7 @@ void TestPhosphorIpcSubscribe::multipleSubscribers_eachReceiveEvent()
 
     IpcRouter router;
     CounterTarget c;
-    router.registerTarget(QStringLiteral("count"), &c);
+    QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
     QVERIFY(router.start(sockPath));
 
     QLocalSocket a;
@@ -340,7 +340,7 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
 
     IpcRouter router;
     CounterTarget c;
-    router.registerTarget(QStringLiteral("count"), &c);
+    QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
     QVERIFY(router.start(sockPath));
 
     // First subscriber connects + subscribes + disconnects. If the

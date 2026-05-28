@@ -37,9 +37,18 @@ bool DemoController::start(const QString& socketPath)
     const QString previousStatus = m_status;
     const bool ok = m_router->start(socketPath);
     if (ok) {
-        m_status = QStringLiteral("listening on %1").arg(m_router->socketPath());
+        // Defer the success-path status update to refreshStatus()
+        // (same shape onTargetRegistered/Unregistered consume) so
+        // there's exactly one status format across every code path.
+        // refreshStatus() emits statusChanged itself if the value
+        // moved; the manual emit below handles the failure-path
+        // assignment that refreshStatus() can't see.
+        refreshStatus();
     } else {
-        m_status = QStringLiteral("router failed to start (see logs)");
+        if (m_status != QStringLiteral("router failed to start (see logs)")) {
+            m_status = QStringLiteral("router failed to start (see logs)");
+            Q_EMIT statusChanged();
+        }
     }
     // CLAUDE.md rule: only emit when the value actually changed.
     // Idempotent restarts on the same path would otherwise spam
@@ -48,9 +57,10 @@ bool DemoController::start(const QString& socketPath)
     if (currentSocketPath != previousSocketPath) {
         Q_EMIT socketPathChanged();
     }
-    if (m_status != previousStatus) {
-        Q_EMIT statusChanged();
-    }
+    // Don't re-emit statusChanged here, refreshStatus() / the
+    // failure-path branch above already emitted iff the value
+    // actually changed.
+    (void)previousStatus;
     return ok;
 }
 
@@ -94,23 +104,27 @@ void DemoController::recordEvent(const QString& targetName, const QString& signa
     Q_EMIT eventLogChanged();
 }
 
-void DemoController::onTargetRegistered(const QString& name)
+void DemoController::onTargetRegistered(const QString& /*name*/)
 {
-    const QStringList ids = m_router->listTargets();
-    const QString next = QStringLiteral("listening on %1; targets: %2 (registered '%3')")
-                             .arg(m_router->socketPath(), ids.join(QStringLiteral(", ")), name);
-    if (next == m_status) {
-        return;
-    }
-    m_status = next;
-    Q_EMIT statusChanged();
+    refreshStatus();
 }
 
-void DemoController::onTargetUnregistered(const QString& name)
+void DemoController::onTargetUnregistered(const QString& /*name*/)
 {
+    refreshStatus();
+}
+
+void DemoController::refreshStatus()
+{
+    // Steady-state status reflects only the currently-live registry
+    // shape; the prior format included a transient "(registered 'x')"
+    // / "(unregistered 'x')" suffix that never cleared once any
+    // target had churned, so the UI showed misleading historical
+    // events as the persistent status.
     const QStringList ids = m_router->listTargets();
-    const QString next = QStringLiteral("listening on %1; targets: %2 (unregistered '%3')")
-                             .arg(m_router->socketPath(), ids.join(QStringLiteral(", ")), name);
+    const QString next = ids.isEmpty()
+        ? QStringLiteral("listening on %1; no targets registered yet").arg(m_router->socketPath())
+        : QStringLiteral("listening on %1; targets: %2").arg(m_router->socketPath(), ids.join(QStringLiteral(", ")));
     if (next == m_status) {
         return;
     }
