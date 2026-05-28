@@ -668,6 +668,11 @@ add_subdirectory(examples/phosphor-registry-demo)
 # Unconditional (same rationale as the other foundation-lib demos).
 add_subdirectory(examples/phosphor-ipc-demo)
 
+# phosphor-perscreen-demo. Acceptance harness for the Phosphor.Shell
+# PerScreen helper (Phase 1.5). Opens a small window per monitor;
+# hot-plug a display → window appears.
+add_subdirectory(examples/phosphor-perscreen-demo)
+
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third
 # (CPU-meter) widget builds as a separate .so + manifest.json and
