@@ -9,7 +9,7 @@
  * branch), makeContextMatch (single-leaf collapse vs makeAll vs catch-all),
  * makeAssignmentActions / makeAssignmentRule (three-action losslessness +
  * empty-field omission), makeProviderDefaultRule, makeDisableRule, and the
- * makeContextMatch → contextDimsOf / disableRuleAutotileMode round-trips.
+ * makeContextMatch → contextDimsOf / disableRuleMode round-trips.
  */
 
 #include <QTest>
@@ -197,7 +197,7 @@ private Q_SLOTS:
     void testMakeDisableRule_carriesSingleDisableEngineAction()
     {
         const WindowRule rule = CRB::makeDisableRule(QStringLiteral("Snapping off · DP-1"), QStringLiteral("DP-1"), 0,
-                                                     QString(), /*autotile=*/false);
+                                                     QString(), QStringLiteral("snapping"));
         QVERIFY(rule.isValid());
         QCOMPARE(rule.actions.size(), 1);
         QCOMPARE(rule.actions.first().type, QString(ActionType::DisableEngine));
@@ -303,46 +303,76 @@ private Q_SLOTS:
         QVERIFY(CRB::contextDimsOf(m, sid, desk, act));
     }
 
-    // ─── Round-trip: makeDisableRule → disableRuleAutotileMode ────────────
+    // ─── Round-trip: makeDisableRule → disableRuleMode ────────────────────
 
-    void testRoundTrip_disableRuleAutotileMode()
+    void testRoundTrip_disableRuleMode()
     {
-        const WindowRule snap = CRB::makeDisableRule(QStringLiteral("s"), QStringLiteral("DP-1"), 0, QString(), false);
-        const auto snapMode = CRB::disableRuleAutotileMode(snap);
+        const WindowRule snap =
+            CRB::makeDisableRule(QStringLiteral("s"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
+        const auto snapMode = CRB::disableRuleMode(snap);
         QVERIFY(snapMode.has_value());
-        QCOMPARE(*snapMode, false);
+        QCOMPARE(*snapMode, QStringLiteral("snapping"));
 
-        const WindowRule tile = CRB::makeDisableRule(QStringLiteral("t"), QStringLiteral("DP-1"), 0, QString(), true);
-        const auto tileMode = CRB::disableRuleAutotileMode(tile);
+        const WindowRule tile =
+            CRB::makeDisableRule(QStringLiteral("t"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile"));
+        const auto tileMode = CRB::disableRuleMode(tile);
         QVERIFY(tileMode.has_value());
-        QCOMPARE(*tileMode, true);
+        QCOMPARE(*tileMode, QStringLiteral("autotile"));
+
+        // The new mode token also round-trips — the bridge is open-vocabulary
+        // and defers wire-token validation to the consumer via
+        // PhosphorZones::modeFromWireString.
+        const WindowRule scroll = CRB::makeDisableRule(QStringLiteral("c"), QStringLiteral("DP-1"), 0, QString(),
+                                                       QStringLiteral("scrolling"));
+        const auto scrollMode = CRB::disableRuleMode(scroll);
+        QVERIFY(scrollMode.has_value());
+        QCOMPARE(*scrollMode, QStringLiteral("scrolling"));
     }
 
-    void testDisableRuleAutotileMode_assignmentRuleIsNotADisableRule()
+    void testDisableRuleMode_assignmentRuleIsNotADisableRule()
     {
         // An assignment rule carries no DisableEngine action — nullopt.
         const WindowRule assign = CRB::makeAssignmentRule(QStringLiteral("a"), QStringLiteral("DP-1"), 0, QString(),
                                                           false, QStringLiteral("layout-a"), QString());
-        QVERIFY(!CRB::disableRuleAutotileMode(assign).has_value());
+        QVERIFY(!CRB::disableRuleMode(assign).has_value());
     }
 
-    void testDisableRuleAutotileMode_rejectsSecondDisableAction()
+    void testDisableRuleMode_rejectsSecondDisableAction()
     {
         // Two DisableEngine actions → ambiguous, not a bridge-authored rule.
-        WindowRule rule = CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), 0, QString(), false);
+        WindowRule rule =
+            CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
         RuleAction extra;
         extra.type = QString(ActionType::DisableEngine);
         extra.params.insert(QLatin1String("mode"), QLatin1String("autotile"));
         rule.actions.append(extra);
-        QVERIFY(!CRB::disableRuleAutotileMode(rule).has_value());
+        QVERIFY(!CRB::disableRuleMode(rule).has_value());
     }
 
-    void testDisableRuleAutotileMode_rejectsUnknownModeToken()
+    void testDisableRuleMode_returnsUnknownTokenVerbatim()
     {
-        WindowRule rule = CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), 0, QString(), false);
-        // Corrupt the mode token to an unrecognised value.
+        // The bridge is open-vocabulary: it returns any non-empty mode token
+        // verbatim and defers vocabulary validation to the consumer (via
+        // PhosphorZones::modeFromWireString, which lives next to the Mode
+        // enum). A token the consumer does not recognise is therefore not
+        // the bridge's failure — the consumer drops the rule on its end.
+        WindowRule rule =
+            CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
         rule.actions.first().params.insert(QLatin1String("mode"), QLatin1String("bogus"));
-        QVERIFY(!CRB::disableRuleAutotileMode(rule).has_value());
+        const auto token = CRB::disableRuleMode(rule);
+        QVERIFY(token.has_value());
+        QCOMPARE(*token, QStringLiteral("bogus"));
+    }
+
+    void testDisableRuleMode_rejectsEmptyToken()
+    {
+        // An empty token is malformed — the bridge does treat it as a hard
+        // failure (nullopt) so callers do not need to special-case the
+        // string-vs-no-string distinction themselves.
+        WindowRule rule =
+            CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
+        rule.actions.first().params.insert(QLatin1String("mode"), QString());
+        QVERIFY(!CRB::disableRuleMode(rule).has_value());
     }
 
     // ─── assignmentRuleIdFor / disableRuleIdFor ───────────────────────────
@@ -371,15 +401,15 @@ private Q_SLOTS:
                                     /*autotile=*/true, QString(), QStringLiteral("algo-b"));
         QCOMPARE(exact.id, CRB::assignmentRuleIdFor(QStringLiteral("DP-1"), 2, QStringLiteral("act-x")));
 
-        // Disable rule — the helper must carry the autotileMode bit so the
-        // snapping- and autotile-disable rules for the same tuple stay distinct.
+        // Disable rule — the helper must carry the mode token so the
+        // per-engine disable rules for the same tuple stay distinct.
         const WindowRule disable =
-            CRB::makeDisableRule(QStringLiteral("D"), QStringLiteral("DP-1"), 2, QString(), /*autotile=*/true);
-        QCOMPARE(disable.id, CRB::disableRuleIdFor(QStringLiteral("DP-1"), 2, QString(), /*autotileMode=*/true));
+            CRB::makeDisableRule(QStringLiteral("D"), QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile"));
+        QCOMPARE(disable.id, CRB::disableRuleIdFor(QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile")));
         // And the snapping-disable for the same tuple is a different id —
-        // documents the autotileMode contribution to the v5 key.
-        QVERIFY(CRB::disableRuleIdFor(QStringLiteral("DP-1"), 2, QString(), true)
-                != CRB::disableRuleIdFor(QStringLiteral("DP-1"), 2, QString(), false));
+        // documents the mode-token contribution to the v5 key.
+        QVERIFY(CRB::disableRuleIdFor(QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile"))
+                != CRB::disableRuleIdFor(QStringLiteral("DP-1"), 2, QString(), QStringLiteral("snapping")));
     }
 
     // ─── contextAxisOf ────────────────────────────────────────────────────

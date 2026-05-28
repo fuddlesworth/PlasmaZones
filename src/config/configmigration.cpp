@@ -1421,10 +1421,11 @@ QStringList parseDisableList(const QString& csv)
 }
 
 /// Build a context rule from a v3 monitor disable-list entry (`screenId`).
-PhosphorWindowRule::WindowRule disableRuleForMonitor(const QString& screenId, bool autotile)
+PhosphorWindowRule::WindowRule disableRuleForMonitor(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode)
 {
-    const QString name = disableRulePrefixFor(autotile) + screenId;
-    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(), autotile);
+    const QString name = disableRulePrefixFor(mode) + screenId;
+    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(),
+                                                                  PhosphorZones::modeToWireString(mode));
 }
 
 /// Build a context rule from a v3 desktop disable-list entry (`screenId/N`).
@@ -1434,7 +1435,8 @@ PhosphorWindowRule::WindowRule disableRuleForMonitor(const QString& screenId, bo
 /// (split on `lastIndexOf('/')`), so a screen id with embedded slashes would be
 /// truncated. This matches the `screenId/desktop` composite-key convention used
 /// by Settings::writeDisableEntries.
-std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QString& entry, bool autotile)
+std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QString& entry,
+                                                                    PhosphorZones::AssignmentEntry::Mode mode)
 {
     const int slash = entry.lastIndexOf(QLatin1Char('/'));
     if (slash <= 0 || slash == entry.size() - 1) {
@@ -1446,8 +1448,9 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QStrin
     if (!ok || desktop <= 0) {
         return std::nullopt;
     }
-    const QString name = disableRulePrefixFor(autotile) + screenId + disableRuleDesktopSuffix(desktop);
-    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(), autotile);
+    const QString name = disableRulePrefixFor(mode) + screenId + disableRuleDesktopSuffix(desktop);
+    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(),
+                                                                  PhosphorZones::modeToWireString(mode));
 }
 
 /// Build a context rule from a v3 activity disable-list entry
@@ -1458,7 +1461,8 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QStrin
 /// screen id with embedded slashes would be truncated. This matches the
 /// `screenId/activity` composite-key convention used by
 /// Settings::writeDisableEntries.
-std::optional<PhosphorWindowRule::WindowRule> disableRuleForActivity(const QString& entry, bool autotile)
+std::optional<PhosphorWindowRule::WindowRule> disableRuleForActivity(const QString& entry,
+                                                                     PhosphorZones::AssignmentEntry::Mode mode)
 {
     const int slash = entry.indexOf(QLatin1Char('/'));
     if (slash <= 0 || slash == entry.size() - 1) {
@@ -1466,8 +1470,9 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForActivity(const QStri
     }
     const QString screenId = entry.left(slash);
     const QString activity = entry.mid(slash + 1);
-    const QString name = disableRulePrefixFor(autotile) + screenId + disableRuleActivitySuffix();
-    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity, autotile);
+    const QString name = disableRulePrefixFor(mode) + screenId + disableRuleActivitySuffix();
+    return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity,
+                                                                  PhosphorZones::modeToWireString(mode));
 }
 
 /// Parse one Assignment:* group name into (screenId, desktop, activity).
@@ -1886,34 +1891,35 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // both the snapping and autotile lists, so a stash carried forward from a
     // hand-edited or doubly-migrated config can hold the same entry twice.
     QList<PhosphorWindowRule::WindowRule> disableRules;
-    auto appendMonitorRules = [&disableRules](const QString& csv, bool autotile) {
+    auto appendMonitorRules = [&disableRules](const QString& csv, PhosphorZones::AssignmentEntry::Mode mode) {
         for (const QString& entry : parseDisableList(csv)) {
-            disableRules.append(disableRuleForMonitor(entry, autotile));
+            disableRules.append(disableRuleForMonitor(entry, mode));
         }
     };
-    auto appendDesktopRules = [&disableRules](const QString& csv, bool autotile) {
+    auto appendDesktopRules = [&disableRules](const QString& csv, PhosphorZones::AssignmentEntry::Mode mode) {
         for (const QString& entry : parseDisableList(csv)) {
-            if (const auto rule = disableRuleForDesktop(entry, autotile)) {
+            if (const auto rule = disableRuleForDesktop(entry, mode)) {
                 disableRules.append(*rule);
             }
         }
     };
-    auto appendActivityRules = [&disableRules](const QString& csv, bool autotile) {
+    auto appendActivityRules = [&disableRules](const QString& csv, PhosphorZones::AssignmentEntry::Mode mode) {
         for (const QString& entry : parseDisableList(csv)) {
-            if (const auto rule = disableRuleForActivity(entry, autotile)) {
+            if (const auto rule = disableRuleForActivity(entry, mode)) {
                 disableRules.append(*rule);
             }
         }
     };
-    appendMonitorRules(stash.value(kV3SnappingMonitorsStash).toString(), false);
-    appendMonitorRules(stash.value(kV3AutotileMonitorsStash).toString(), true);
-    appendDesktopRules(stash.value(kV3SnappingDesktopsStash).toString(), false);
-    appendDesktopRules(stash.value(kV3AutotileDesktopsStash).toString(), true);
-    appendActivityRules(stash.value(kV3SnappingActivitiesStash).toString(), false);
-    appendActivityRules(stash.value(kV3AutotileActivitiesStash).toString(), true);
+    using PhosphorZones::AssignmentEntry;
+    appendMonitorRules(stash.value(kV3SnappingMonitorsStash).toString(), AssignmentEntry::Snapping);
+    appendMonitorRules(stash.value(kV3AutotileMonitorsStash).toString(), AssignmentEntry::Autotile);
+    appendDesktopRules(stash.value(kV3SnappingDesktopsStash).toString(), AssignmentEntry::Snapping);
+    appendDesktopRules(stash.value(kV3AutotileDesktopsStash).toString(), AssignmentEntry::Autotile);
+    appendActivityRules(stash.value(kV3SnappingActivitiesStash).toString(), AssignmentEntry::Snapping);
+    appendActivityRules(stash.value(kV3AutotileActivitiesStash).toString(), AssignmentEntry::Autotile);
 
     // Collapse exact-duplicate disable rules: dedup on the semantic identity
-    // (autotile-mode, screenId, desktop, activity) so the migrated store is no
+    // (mode-token, screenId, desktop, activity) so the migrated store is no
     // noisier than necessary.
     {
         namespace CRB = PhosphorWindowRule::ContextRuleBridge;
@@ -1923,9 +1929,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             int desktop = 0;
             QString activity;
             CRB::contextDimsOf(rule.match, screenId, desktop, activity);
-            const std::optional<bool> autotileMode = CRB::disableRuleAutotileMode(rule);
-            const QString identity = (autotileMode && *autotileMode ? QLatin1String("A|") : QLatin1String("S|"))
-                + screenId + QLatin1Char('|') + QString::number(desktop) + QLatin1Char('|') + activity;
+            const std::optional<QString> modeToken = CRB::disableRuleMode(rule);
+            const QString identity = (modeToken ? *modeToken : QStringLiteral("?")) + QLatin1Char('|') + screenId
+                + QLatin1Char('|') + QString::number(desktop) + QLatin1Char('|') + activity;
             if (seen.contains(identity)) {
                 continue;
             }

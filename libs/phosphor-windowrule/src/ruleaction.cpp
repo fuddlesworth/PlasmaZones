@@ -182,13 +182,14 @@ ActionDescriptor::SlotResolver constantSlot(QLatin1StringView slot)
     };
 }
 
-/// The two engine-token wire strings DisableEngine / SetEngineMode pickers
-/// expose. `engineModeEnum()` constructs a `ParamSchema` for either action;
-/// keeping them together makes the "both pickers share the engine enum"
-/// invariant visible at the descriptor level.
+/// The engine-token wire strings DisableEngine / SetEngineMode pickers
+/// expose. Keeping them together makes the "both pickers share the engine
+/// enum" invariant visible at the descriptor level. The order mirrors
+/// `PhosphorZones::allModes()` so the editor's enum dropdown lists modes
+/// in the same order across surfaces.
 QStringList engineModeOptions()
 {
-    return {QStringLiteral("snapping"), QStringLiteral("autotile")};
+    return {QStringLiteral("snapping"), QStringLiteral("autotile"), QStringLiteral("scrolling")};
 }
 
 } // namespace
@@ -240,17 +241,22 @@ void ActionRegistry::registerBuiltins()
     });
 
     // ── engine-enable slot ──
-    // `mode` records which engine the rule disables. It must be one of the two
-    // known engine tokens — ContextRuleBridge::makeDisableRule writes exactly
-    // these and disableRuleAutotileMode reads them, so anything else is a
-    // malformed payload, not a future-extension placeholder.
+    // `mode` records which engine the rule disables. The recognised tokens
+    // are the wire vocabulary `PhosphorZones::modeFromWireString` accepts —
+    // listed verbatim here because the LGPL PhosphorWindowRule lib does not
+    // depend on PhosphorZones, and depending on it just for the string
+    // vocabulary would couple the two libs over a stable wire format. New
+    // tokens added here MUST mirror the Mode enum extension in
+    // libs/phosphor-zones/include/PhosphorZones/AssignmentEntry.h; the
+    // round-trip tests pin the contract.
     registerAction(ActionDescriptor{
         .type = QString(ActionType::DisableEngine),
         .slotFor = constantSlot(ActionSlot::EngineEnable),
         .validate =
             [](const QJsonObject& p) {
                 const QString mode = p.value(QLatin1StringView("mode")).toString();
-                return mode == QLatin1String("snapping") || mode == QLatin1String("autotile");
+                return mode == QLatin1String("snapping") || mode == QLatin1String("autotile")
+                    || mode == QLatin1String("scrolling");
             },
         .terminal = false,
         .allowedKeys = {QStringLiteral("mode")},

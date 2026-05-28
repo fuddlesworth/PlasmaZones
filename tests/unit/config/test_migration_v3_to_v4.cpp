@@ -497,11 +497,11 @@ private Q_SLOTS:
         // makeDisableRule's priority must agree with the migration output for
         // a multi-dimension entry — a screen+desktop disable rule pins 410.
         const PhosphorWindowRule::WindowRule directDesktop = CRB::makeDisableRule(
-            QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(), /*autotileMode=*/false);
+            QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(), QStringLiteral("snapping"));
         QCOMPARE(directDesktop.priority, 410);
         // A screen+activity disable rule pins 510 — activity outranks desktop.
         const PhosphorWindowRule::WindowRule directActivity = CRB::makeDisableRule(
-            QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), /*autotileMode=*/true);
+            QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), QStringLiteral("autotile"));
         QCOMPARE(directActivity.priority, 510);
         QVERIFY(directActivity.priority > directDesktop.priority);
     }
@@ -708,7 +708,7 @@ private Q_SLOTS:
         QVERIFY2(setWithUserRule.has_value(), "windowrules.json must parse as a v4 rule set");
         const PhosphorWindowRule::WindowRule userRule =
             CRB::makeDisableRule(QStringLiteral("User-authored · DP-9"), QStringLiteral("DP-9"),
-                                 /*virtualDesktop=*/0, QString(), /*autotileMode=*/false);
+                                 /*virtualDesktop=*/0, QString(), QStringLiteral("snapping"));
         const QUuid userRuleId = userRule.id;
         QVERIFY(setWithUserRule->addRule(userRule));
         QVERIFY(setWithUserRule->saveToFile(ConfigDefaults::windowRulesFilePath()));

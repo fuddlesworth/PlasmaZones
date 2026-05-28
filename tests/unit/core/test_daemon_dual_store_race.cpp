@@ -64,7 +64,7 @@ PhosphorWindowRule::WindowRule makeTestAssignmentRule()
 bool hasAssignmentRule(const PhosphorWindowRule::WindowRuleStore& store)
 {
     for (const PhosphorWindowRule::WindowRule& rule : store.ruleSet().rules()) {
-        if (!PhosphorWindowRule::ContextRuleBridge::disableRuleAutotileMode(rule)) {
+        if (!PhosphorWindowRule::ContextRuleBridge::disableRuleMode(rule)) {
             return true;
         }
     }
@@ -192,9 +192,8 @@ private Q_SLOTS:
         // Inject a disable rule directly through the daemon-owned store
         // (the path WindowRuleAdaptor takes when KCM edits a rule by id).
         const QString disabledScreen = QStringLiteral("eDP-1");
-        const auto rule = PhosphorWindowRule::ContextRuleBridge::makeDisableRule(QStringLiteral("Snapping off · eDP-1"),
-                                                                                 disabledScreen, 0, QString(),
-                                                                                 /*autotileMode=*/false);
+        const auto rule = PhosphorWindowRule::ContextRuleBridge::makeDisableRule(
+            QStringLiteral("Snapping off · eDP-1"), disabledScreen, 0, QString(), QStringLiteral("snapping"));
         QVERIFY(daemonStore->addRule(rule));
 
         // Settings reads through the same store, so the disable is visible

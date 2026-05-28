@@ -201,18 +201,29 @@ inline QUuid assignmentRuleIdFor(const QString& screenId, int virtualDesktop, co
 
 /**
  * @brief The deterministic v5 rule id @ref makeDisableRule would assign for a
- *        given (screen, desktop, activity, autotileMode) tuple.
+ *        given `(screen, desktop, activity, modeToken)` tuple.
  *
- * The disable rule's id includes the engine the rule disables — snapping and
- * autotile disables for the same context are distinct rules, so the id helper
- * mirrors that distinction.
+ * The disable rule's id includes the engine the rule disables — different
+ * engines' disables for the same context are distinct rules, so the id helper
+ * mirrors that distinction. @p modeToken is the wire string for the engine
+ * (e.g. @c "snapping" / @c "autotile" / @c "scrolling") — supplying it as a
+ * token (not a `bool`) means a future engine extends the identity key namespace
+ * without rewriting existing UUIDs (the @c "disable-snapping" and
+ * @c "disable-autotile" identity keys are preserved verbatim, so every rule
+ * already on disk keeps its id).
  */
-inline QUuid disableRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity, bool autotileMode)
+inline QUuid disableRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity,
+                              const QString& modeToken)
 {
-    return QUuid::createUuidV5(detail::namespaceUuid(),
-                               detail::contextIdentityKey(autotileMode ? QLatin1StringView("disable-autotile")
-                                                                       : QLatin1StringView("disable-snapping"),
-                                                          screenId, virtualDesktop, activity));
+    // contextIdentityKey() takes a QLatin1StringView. Materialise the
+    // "disable-<token>" identity-key tag as a QByteArray local so the view
+    // sees a stable buffer for the call duration (a dangling temporary
+    // QByteArray would expire before the createUuidV5 read).
+    const QByteArray tag = QByteArray("disable-") + modeToken.toLatin1();
+    return QUuid::createUuidV5(
+        detail::namespaceUuid(),
+        detail::contextIdentityKey(QLatin1StringView(tag.constData(), static_cast<qsizetype>(tag.size())), screenId,
+                                   virtualDesktop, activity));
 }
 
 /**
@@ -340,9 +351,16 @@ inline WindowRule makeProviderDefaultRule(const QString& name, bool autotileMode
  * @brief Build a `DisableEngine` context rule for a per-mode disable entry.
  *
  * Per-mode disable lists ("snapping is off on monitor X") become context
- * rules carrying a single `DisableEngine` action. The `mode` param records
- * which engine the rule disables ("snapping" / "autotile") so the evaluator
- * can scope the gate.
+ * rules carrying a single `DisableEngine` action. @p modeToken records which
+ * engine the rule disables (the wire string, e.g. @c "snapping" /
+ * @c "autotile" / @c "scrolling") so the evaluator can scope the gate.
+ *
+ * Validation: this helper trusts the caller to pass a token recognised by the
+ * `DisableEngine` descriptor's validator. The Settings layer routes Mode →
+ * token through `PhosphorZones::modeToWireString`, so an unrecognised token
+ * here is a programmer error and the resulting rule would be rejected at
+ * load by `RuleAction::fromJson`. Passing an empty token writes a malformed
+ * rule with action params `{mode: ""}` — also caught at load.
  *
  * The disable rule shares the cascade priority formula with assignment rules
  * — a desktop-scoped disable outranks a monitor-scoped one, mirroring the
@@ -350,13 +368,13 @@ inline WindowRule makeProviderDefaultRule(const QString& name, bool autotileMode
  * the other way (a more specific disable wins).
  */
 inline WindowRule makeDisableRule(const QString& name, const QString& screenId, int virtualDesktop,
-                                  const QString& activity, bool autotileMode)
+                                  const QString& activity, const QString& modeToken)
 {
     WindowRule rule;
     // Deterministic id — a disable rule's identity is its context tuple plus
-    // which engine it disables (snapping/autotile disables for the same
-    // context are distinct rules and must not collide).
-    rule.id = disableRuleIdFor(screenId, virtualDesktop, activity, autotileMode);
+    // which engine it disables (per-mode disables for the same context are
+    // distinct rules and must not collide).
+    rule.id = disableRuleIdFor(screenId, virtualDesktop, activity, modeToken);
     rule.name = name;
     rule.enabled = true;
     rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
@@ -364,7 +382,7 @@ inline WindowRule makeDisableRule(const QString& name, const QString& screenId, 
 
     RuleAction action;
     action.type = QString(ActionType::DisableEngine);
-    action.params.insert(QLatin1String("mode"), autotileMode ? QLatin1String("autotile") : QLatin1String("snapping"));
+    action.params.insert(QLatin1String("mode"), modeToken);
     rule.actions.append(action);
     return rule;
 }
@@ -542,7 +560,7 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
  * unrecognised `mode` token is likewise rejected rather than silently
  * coerced to "snapping".
  */
-inline std::optional<bool> disableRuleAutotileMode(const WindowRule& rule)
+inline std::optional<QString> disableRuleMode(const WindowRule& rule)
 {
     const RuleAction* disableAction = nullptr;
     for (const RuleAction& action : rule.actions) {
@@ -560,14 +578,16 @@ inline std::optional<bool> disableRuleAutotileMode(const WindowRule& rule)
         return std::nullopt;
     }
     const QString mode = disableAction->params.value(QLatin1String("mode")).toString();
-    if (mode == QLatin1String("autotile")) {
-        return true;
+    if (mode.isEmpty()) {
+        // An empty token is a malformed payload, not a recognised mode.
+        return std::nullopt;
     }
-    if (mode == QLatin1String("snapping")) {
-        return false;
-    }
-    // An unrecognised mode token — reject rather than defaulting.
-    return std::nullopt;
+    // The wire vocabulary is the open set the DisableEngine descriptor's
+    // validator recognises — Settings does the wire → Mode mapping via
+    // `PhosphorZones::modeFromWireString`, which is the authoritative
+    // recognised-tokens list. This helper stays string-typed so the
+    // PhosphorWindowRule lib does not need to depend on PhosphorZones.
+    return mode;
 }
 
 } // namespace ContextRuleBridge

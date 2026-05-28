@@ -1217,12 +1217,12 @@ QStringList Settings::disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mod
 {
     namespace CRB = PhosphorWindowRule::ContextRuleBridge;
     const auto axis = static_cast<DisableAxis>(axisInt);
-    const bool wantAutotile = isAutotileMode(mode);
+    const QString wantToken = PhosphorZones::modeToWireString(mode);
     QStringList out;
     for (const PhosphorWindowRule::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
-        const auto ruleAutotile = CRB::disableRuleAutotileMode(rule);
-        if (!ruleAutotile || *ruleAutotile != wantAutotile) {
-            continue; // not a disable rule, or scoped to the other mode
+        const auto ruleToken = CRB::disableRuleMode(rule);
+        if (!ruleToken || *ruleToken != wantToken) {
+            continue; // not a disable rule, or scoped to a different mode
         }
         QString screenId;
         int desktop = 0;
@@ -1252,7 +1252,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
 {
     namespace CRB = PhosphorWindowRule::ContextRuleBridge;
     const auto axis = static_cast<DisableAxis>(axisInt);
-    const bool autotile = isAutotileMode(mode);
+    const QString modeToken = PhosphorZones::modeToWireString(mode);
 
     // Snapshot the current entries for this (axis, mode) so a no-op write
     // does not fire a spurious changed signal. Compare canonically — both
@@ -1296,8 +1296,8 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     // this exact (axis, mode) family, then append the new entries.
     QList<PhosphorWindowRule::WindowRule> kept;
     for (const PhosphorWindowRule::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
-        const auto ruleAutotile = CRB::disableRuleAutotileMode(rule);
-        if (ruleAutotile && *ruleAutotile == autotile) {
+        const auto ruleToken = CRB::disableRuleMode(rule);
+        if (ruleToken && *ruleToken == modeToken) {
             QString screenId;
             int desktop = 0;
             QString activity;
@@ -1344,8 +1344,8 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             break;
         }
         }
-        const QString name = disableRulePrefixFor(autotile) + screenId;
-        kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, autotile));
+        const QString name = disableRulePrefixFor(mode) + screenId;
+        kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, modeToken));
     }
 
     m_windowRuleStore->setAllRules(kept);
@@ -2496,7 +2496,7 @@ void Settings::reset()
         namespace CRB = PhosphorWindowRule::ContextRuleBridge;
         QList<PhosphorWindowRule::WindowRule> kept;
         for (const PhosphorWindowRule::WindowRule& rule : m_windowRuleStore->ruleSet().rules()) {
-            if (!CRB::disableRuleAutotileMode(rule)) {
+            if (!CRB::disableRuleMode(rule)) {
                 kept.append(rule); // not a DisableEngine rule — preserve
             }
         }

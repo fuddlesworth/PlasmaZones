@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorZones/AssignmentEntry.h>
+
 #include <QString>
 
 // Macro to define a static config key accessor returning a QStringLiteral.
@@ -716,9 +718,26 @@ inline QString snappingDisableRulePrefix()
     return QStringLiteral("Snapping off · ");
 }
 
-inline QString disableRulePrefixFor(bool autotile)
+inline QString scrollingDisableRulePrefix()
 {
-    return autotile ? autotileDisableRulePrefix() : snappingDisableRulePrefix();
+    return QStringLiteral("Scrolling off · ");
+}
+
+/// Persistent label-prefix for the WindowRule::name field of a per-mode
+/// disable rule. Returning the empty string on an unknown Mode lets a stray
+/// future enum value land in storage as `" · DP-1"` (still parseable, just
+/// awkward) rather than crashing — but every defined Mode has a prefix here.
+inline QString disableRulePrefixFor(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Snapping:
+        return snappingDisableRulePrefix();
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return autotileDisableRulePrefix();
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return scrollingDisableRulePrefix();
+    }
+    return QString();
 }
 
 inline QString disableRuleDesktopSuffix(int desktop)

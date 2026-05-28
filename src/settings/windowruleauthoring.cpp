@@ -76,6 +76,9 @@ QString enumOptionLabel(QLatin1StringView type, const QString& key, const QStrin
         if (wireValue == QLatin1String("autotile")) {
             return PzI18n::tr("Autotile");
         }
+        if (wireValue == QLatin1String("scrolling")) {
+            return PzI18n::tr("Scrolling");
+        }
     }
     return wireValue;
 }
