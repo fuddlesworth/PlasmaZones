@@ -48,15 +48,18 @@ ContextHandle ContextResolver::handleFor(const QString& screenId) const
 ContextHandle ContextResolver::globalHandle() const
 {
     // No-screen handle for adaptors that only need to gate on (desktop,
-    // activity). Mode falls back to Snapping per the documented "no
-    // screen ↔ default mode" contract. Callers that need both legs of
-    // the lock check (snap + autotile) explicitly use two `handleForMode`
-    // builds — see `Daemon::isCurrentContextLocked` for the canonical
-    // pattern.
+    // activity). The mode falls through to the `IModeProvider`'s empty-
+    // screen contract (documented at `IContextInputs.h::IModeProvider::modeFor`
+    // as returning the default mode for an empty `screenId`), keeping the
+    // "default mode" decision in one place — `IModeProvider` implementations
+    // — rather than duplicating the fallback here. Callers that need both
+    // legs of the lock check explicitly compose two `handleForMode` builds
+    // — see `Daemon::isCurrentContextLocked` for the canonical pattern.
     ContextHandle handle;
+    handle.screenId = QString();
     handle.virtualDesktop = m_workspaceState->currentVirtualDesktop();
     handle.activity = m_workspaceState->currentActivity();
-    handle.mode = PhosphorZones::AssignmentEntry::Snapping;
+    handle.mode = m_modeProvider->modeFor(QString());
     return handle;
 }
 
@@ -82,9 +85,18 @@ ContextHandle ContextResolver::handleForPersisted(const QString& screenId, int v
     // autotile mode reads against the autotile disable list, matching
     // the historical `m_screenModeRouter->modeFor(screenId)` lookup in
     // saveload.cpp).
+    //
+    // The desktop value is a system-boundary input (read from JSON
+    // without prior validation). `<= 0` is the "pinned across all
+    // desktops" sentinel handled by the IContextGateSource adapter's
+    // own short-circuit (see `IContextInputs.h` IContextGateSource
+    // contract). A negative value would survive into that path and
+    // is undefined; clamp to 0 here so a hand-edited file with a
+    // negative desktop reads as "pinned" rather than reaching the
+    // settings store with a value its API does not document.
     ContextHandle handle;
     handle.screenId = screenId;
-    handle.virtualDesktop = virtualDesktop;
+    handle.virtualDesktop = virtualDesktop < 0 ? 0 : virtualDesktop;
     handle.activity = activity;
     handle.mode = m_modeProvider->modeFor(screenId);
     return handle;

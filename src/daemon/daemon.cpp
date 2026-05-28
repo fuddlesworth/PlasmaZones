@@ -1249,7 +1249,8 @@ bool Daemon::init()
             // pattern used for the mode-toggle locked feedback in connectShortcutSignals().
             const bool osdEnabled = m_settings && m_settings->showOsdOnLayoutSwitch();
             for (const auto& osd : std::as_const(osdEntries)) {
-                int mode = osd.isAutotile ? 1 : 0;
+                const int mode = static_cast<int>(osd.isAutotile ? PhosphorZones::AssignmentEntry::Autotile
+                                                                 : PhosphorZones::AssignmentEntry::Snapping);
                 if (isCurrentContextLockedForMode(osd.screenId, mode)) {
                     showLockedPreviewOsd(osd.screenId);
                 } else if (!osdEnabled) {
@@ -1681,6 +1682,29 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
     }
+
+    // Tear down the context-resolver triple before destroying the
+    // services the adapters borrow from. Order: borrowers (D-Bus
+    // adaptors) drop their non-owning resolver pointer first, then the
+    // resolver and its three adapters die, then the underlying router
+    // / VirtualDesktopManager / ActivityManager / Settings can safely
+    // reset(). Without this, a queued D-Bus method that lands between
+    // here and ~Daemon (or a shortcut-manager signal still alive on the
+    // main thread) would deref an adapter whose backing service had
+    // already been freed by the existing engine-pointer teardown below.
+    if (m_snapAdaptor) {
+        m_snapAdaptor->setContextResolver(nullptr);
+    }
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setContextResolver(nullptr);
+    }
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setContextResolver(nullptr);
+    }
+    m_contextResolver.reset();
+    m_settingsGateAdapter.reset();
+    m_screenModeAdapter.reset();
+    m_workspaceStateAdapter.reset();
 
     // Null out the router's reference before destroying it — straggler calls
     // to engineForScreen() during the shutdown window get nullptr instead of

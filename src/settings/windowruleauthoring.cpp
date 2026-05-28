@@ -95,6 +95,14 @@ QVariantList paramsForActionTypeImpl(QLatin1StringView type)
         return params;
     }
     for (const PhosphorWindowRule::ParamSchema& schema : descriptor->params) {
+        // A `ParamSchema` with an empty `key` is a misregistered descriptor
+        // — the strict-key check in `RuleAction::fromJson` would reject any
+        // payload built against it, leaving the editor with a permanently
+        // un-savable row. Skip silently: rendering the row would just
+        // expose a no-op input to the user with no recovery path.
+        if (schema.key.isEmpty()) {
+            continue;
+        }
         QVariantMap p;
         p[QStringLiteral("key")] = schema.key;
         p[QStringLiteral("kind")] = schema.kind;
@@ -343,12 +351,17 @@ QVariantList actionTypes()
 
 QVariantList paramsForActionType(const QString& typeWire)
 {
-    return paramsForActionTypeImpl(QLatin1StringView(typeWire.toLatin1()));
+    // Materialise a stable QByteArray for the QLatin1StringView backing —
+    // see the matching helper in `actionTypes()`. A temporary `toLatin1()`
+    // would dangle past the end of the full expression.
+    const QByteArray bytes = typeWire.toLatin1();
+    return paramsForActionTypeImpl(QLatin1StringView{bytes.constData(), static_cast<qsizetype>(bytes.size())});
 }
 
 QString actionTypeLabel(const QString& typeWire)
 {
-    return actionTypeLabelImpl(QLatin1StringView(typeWire.toLatin1()));
+    const QByteArray bytes = typeWire.toLatin1();
+    return actionTypeLabelImpl(QLatin1StringView{bytes.constData(), static_cast<qsizetype>(bytes.size())});
 }
 
 QString operatorLabel(int operatorValue)
@@ -368,7 +381,9 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
     QVariantMap payload;
     payload[QStringLiteral("type")] = typeWire;
 
-    const QVariantList params = paramsForActionTypeImpl(QLatin1StringView(typeWire.toLatin1()));
+    const QByteArray typeBytes = typeWire.toLatin1();
+    const QVariantList params =
+        paramsForActionTypeImpl(QLatin1StringView{typeBytes.constData(), static_cast<qsizetype>(typeBytes.size())});
     for (const QVariant& v : params) {
         const QVariantMap p = v.toMap();
         const QString key = p.value(QStringLiteral("key")).toString();
@@ -392,10 +407,24 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
                 payload[key] = first.toString();
             }
         } else if (kind == QLatin1String("number") || kind == QLatin1String("percent")) {
-            // Number/percent share the same min-anchored default — `percent`
-            // stores `display * scale`, so the min is in wire units already.
+            // `min` on the schema is expressed in *display* units (see
+            // `ParamSchema` doc in RuleAction.h). For `percent` the wire
+            // value is `display * scale` — so the default we seed must
+            // run through that same conversion or the rule lands with a
+            // wire value far outside the validator's range. SetOpacity
+            // happens to have min=0 today which is scale-invariant, but a
+            // future percent descriptor with a non-zero `min` (e.g. 50%
+            // with scale 0.01) would otherwise be seeded with 50.0 and
+            // refused at save by the descriptor validator.
             const QVariant min = p.value(QStringLiteral("min"));
-            payload[key] = min.isValid() ? min : QVariant(0);
+            if (!min.isValid()) {
+                payload[key] = QVariant(0);
+            } else if (kind == QLatin1String("percent")) {
+                const QVariant scale = p.value(QStringLiteral("scale"));
+                payload[key] = scale.isValid() ? QVariant(min.toDouble() * scale.toDouble()) : min;
+            } else {
+                payload[key] = min;
+            }
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
             // shaderEffect, curveEditor) and plain strings all start empty —

@@ -36,8 +36,15 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
 
     // 1) Disabled context (activity / desktop / monitor excluded in settings).
     //    Dead drag: no overlay, no cursor stream, no float transition.
-    if (resolver && !screenId.isEmpty()
-        && resolver->isDisabled(resolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Snapping))) {
+    //
+    //    Use `handleFor(screenId)` (live mode) — NOT `handleForMode(..., Snapping)`.
+    //    The disable lists are per-mode, so the right question is "is THIS
+    //    screen's current mode disabled?", not "is Snapping disabled here?".
+    //    Hard-coding Snapping would have routed an autotile-mode screen with
+    //    Snapping-disabled-but-Autotile-enabled into the dead-drag branch
+    //    instead of the AutotileScreen bypass below, hiding the autotile
+    //    placement behaviour the user actually configured.
+    if (resolver && !screenId.isEmpty() && resolver->isDisabled(resolver->handleFor(screenId))) {
         policy.bypassReason = PhosphorProtocol::DragBypassReason::ContextDisabled;
         return policy;
     }

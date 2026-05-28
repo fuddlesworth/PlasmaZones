@@ -207,7 +207,12 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluato
         return std::nullopt;
     }
     const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, animationQuery(windowClass));
-    const auto action = resolved.slot(QString(PhosphorWindowRule::ActionSlot::Opacity));
+    // The opacity-slot id is a constant; hoist its QString materialisation
+    // out of the per-paint hot path so each `resolveWindowOpacity` call
+    // reuses the same heap allocation. `static const` is thread-safe under
+    // C++11+ [stmt.dcl] without further synchronisation.
+    static const QString kOpacitySlot = QString(PhosphorWindowRule::ActionSlot::Opacity);
+    const auto action = resolved.slot(kOpacitySlot);
     if (!action) {
         return std::nullopt;
     }
@@ -217,7 +222,7 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluato
     // out-of-range value here. Validate at the consumer too — defence in
     // depth keeps the paint pipeline from setting a negative opacity (which
     // KWin renders as "invisible window the user can still focus through").
-    const QJsonValue raw = action->params.value(QLatin1String("value"));
+    const QJsonValue raw = action->params.value(PhosphorWindowRule::ActionParam::Value);
     if (!raw.isDouble()) {
         return std::nullopt;
     }

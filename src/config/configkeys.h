@@ -724,9 +724,12 @@ inline QString scrollingDisableRulePrefix()
 }
 
 /// Persistent label-prefix for the WindowRule::name field of a per-mode
-/// disable rule. Returning the empty string on an unknown Mode lets a stray
-/// future enum value land in storage as `" · DP-1"` (still parseable, just
-/// awkward) rather than crashing — but every defined Mode has a prefix here.
+/// disable rule. Exhaustive switch — a future `Mode` enum value added in
+/// `AssignmentEntry.h` without an entry here fires a `Q_UNREACHABLE`
+/// diagnostic rather than silently producing an empty prefix that lands
+/// in the persisted `WindowRule::name` as bare ` · DP-1` (parseable but
+/// anonymous, and identical across modes — losing the screen→mode
+/// affinity that makes the rule editor scannable).
 inline QString disableRulePrefixFor(PhosphorZones::AssignmentEntry::Mode mode)
 {
     switch (mode) {
@@ -737,6 +740,7 @@ inline QString disableRulePrefixFor(PhosphorZones::AssignmentEntry::Mode mode)
     case PhosphorZones::AssignmentEntry::Scrolling:
         return scrollingDisableRulePrefix();
     }
+    Q_UNREACHABLE();
     return QString();
 }
 

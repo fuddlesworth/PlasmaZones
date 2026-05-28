@@ -587,11 +587,14 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        // Check if screen is locked for its current mode
+        // Check if screen is locked for its current mode. Route through
+        // the resolver's `handleFor(screenId)` — it composes the live
+        // (mode, desktop, activity) tuple via the bound IModeProvider /
+        // IWorkspaceState adapters, so this site stops re-stitching the
+        // 3-step cascade the resolver was introduced to collapse.
         QString screenId = m_unifiedLayoutController->currentScreenName();
-        if (!screenId.isEmpty() && m_layoutManager) {
-            int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(screenId, mode)) {
+        if (!screenId.isEmpty() && m_contextResolver) {
+            if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
                 showLockedPreviewOsd(screenId);
                 return;
             }
@@ -608,12 +611,18 @@ void Daemon::connectShortcutSignals()
         // Screen-targeted (locks a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested above for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty() || !m_settings || !m_layoutManager) {
+        if (screenId.isEmpty() || !m_settings || !m_contextResolver) {
             return;
         }
-        int desktop = currentDesktop();
-        QString activity = currentActivity();
-        int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, desktop, activity));
+        // Read the live mode through the resolver's frozen snapshot so this
+        // site stops re-stitching (modeForScreen + Utils::contextLockKey)
+        // — the resolver already composes the same Mode-typed lock key
+        // internally via DaemonSettingsGateAdapter. We only need the
+        // wire-encoded `key` here for the existing settings.setScreenLocked
+        // mutation path, so the cast-and-compose stays — but the mode it
+        // derives from is the resolver's authoritative value.
+        const auto handle = m_contextResolver->handleFor(screenId);
+        const int mode = static_cast<int>(handle.mode);
         QString key = Utils::contextLockKey(mode, screenId);
         // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
         // and matches the KCM's screen-level lock button

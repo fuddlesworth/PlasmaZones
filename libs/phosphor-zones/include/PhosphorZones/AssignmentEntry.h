@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QList>
 #include <QString>
+#include <QtGlobal>
 
 #include <optional>
 
@@ -190,6 +191,16 @@ inline QString modeToWireString(AssignmentEntry::Mode mode)
     case AssignmentEntry::Scrolling:
         return QStringLiteral("scrolling");
     }
+    // Switch is exhaustive over `Mode`. A `static_cast<Mode>(99)` reaching
+    // this line means either (a) a future Mode enum value was added without
+    // a case here — `Q_UNREACHABLE` produces a -Wswitch diagnostic at the
+    // missing-case site, or (b) callers fabricated an out-of-range value
+    // via cast. Either way returning an empty token is a silent
+    // data-loss hazard: every `writeDisableEntries` site would build a
+    // disable rule with `mode:""`, which round-trips through
+    // `disableRuleMode` as `nullopt`, making the rule invisible to the
+    // next read.
+    Q_UNREACHABLE();
     return QString();
 }
 

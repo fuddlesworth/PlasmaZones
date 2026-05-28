@@ -367,13 +367,13 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::Opacity),
         .validate =
             [](const QJsonObject& p) {
-                const QJsonValue v = p.value(QLatin1StringView("value"));
+                const QJsonValue v = p.value(ActionParam::Value);
                 return v.isDouble() && v.toDouble() >= 0.0 && v.toDouble() <= 1.0;
             },
         .terminal = false,
-        .allowedKeys = {QStringLiteral("value")},
+        .allowedKeys = {QString(ActionParam::Value)},
         .domain = ActionDomain::Window,
-        .params = {P{.key = QStringLiteral("value"),
+        .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("percent"),
                      .min = 0.0,
                      .max = 100.0,

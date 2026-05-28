@@ -130,22 +130,15 @@ public:
 /// isAutotileScreen() returns the desired answer. The engine is constructed
 /// with null dependencies — computeDragPolicy only reads isAutotileScreen
 /// and isWindowTracked, neither of which touches layoutManager / tracker /
-/// screenManager.
-std::unique_ptr<AutotileEngine> makeEngine(bool screenIsAutotile, const QString& screenId,
-                                           const QString& trackedWindowId = {})
+/// screenManager. The fresh engine reports `isWindowTracked = false` for
+/// every windowId; the isTracked branch is covered by separate fixtures
+/// below that seed the engine state through the standard windowOpened
+/// path with a real LayoutManager.
+std::unique_ptr<AutotileEngine> makeEngine(bool screenIsAutotile, const QString& screenId)
 {
     auto engine = std::make_unique<AutotileEngine>(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
     if (screenIsAutotile) {
         engine->setAutotileScreens(QSet<QString>{screenId});
-    }
-    if (!trackedWindowId.isEmpty()) {
-        // Need the window in m_windowToStateKey for isWindowTracked to return
-        // true. The easiest way is to send it through windowOpened on an
-        // autotile screen — but that requires a LayoutManager. For the
-        // test we only need isWindowTracked to return false on an empty
-        // engine (the isTracked branch is a sub-case tested separately
-        // via the isTracked-specific fixtures below).
-        Q_UNUSED(trackedWindowId);
     }
     return engine;
 }
@@ -276,7 +269,13 @@ private Q_SLOTS:
         FakeContextResolver resolver;
         resolver.m_disabled = true;
         settings.m_snapEnabled = true;
-        settings.m_monitorDisabled = true; // legacy parity; resolver drives the disabled branch now
+        // Deliberately leave settings.m_monitorDisabled at its default (false).
+        // After C1 the policy reads the disabled-context gate exclusively
+        // through the resolver — a regression that reinstates the old
+        // ISettings::isMonitorDisabled probe would silently produce the
+        // same ContextDisabled answer here, hiding the regression. With
+        // the settings flag pinned to false, the bypass is unambiguously
+        // attributable to the resolver and the resolver alone.
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
@@ -295,7 +294,10 @@ private Q_SLOTS:
         FakeContextResolver resolver;
         resolver.m_disabled = true;
         settings.m_snapEnabled = false;
-        settings.m_monitorDisabled = true; // legacy parity; resolver drives the disabled branch now
+        // See contextDisabled_overridesAutotile — settings.m_monitorDisabled
+        // pinned to false so the resolver is the unambiguous source of the
+        // ContextDisabled bypass; a future regression that re-reads from
+        // ISettings cannot mask itself behind a duplicated-flag.
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(

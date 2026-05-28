@@ -131,15 +131,21 @@ public:
     virtual ContextHandle handleForPersisted(const QString& screenId, int virtualDesktop,
                                              const QString& activity) const = 0;
 
-    // ── Workspace-axis readers (cached at snapshot, exposed for callers
-    //    that still need the raw values during the same tick) ──────────
+    // ── Raw workspace-axis readers ─────────────────────────────────────
+    //
+    // These re-cross the bound `IWorkspaceState` on every call — they are
+    // NOT cached snapshots of an earlier `handleFor()` result. Use the
+    // matching field on a `ContextHandle` if consistency with a prior
+    // snapshot is required (e.g. when composing a (screenId, desktop,
+    // activity) tuple that must agree byte-for-byte with the disabled-
+    // context check the same tick made).
 
-    /// Convenience for callers that already have a handle and want the
-    /// snapshot's virtual-desktop axis without unpacking the struct.
-    /// Equivalent to reading `handle.virtualDesktop`.
+    /// Live read of the workspace's current virtual desktop, equivalent
+    /// to calling the bound `IWorkspaceState::currentVirtualDesktop`.
     virtual int currentVirtualDesktop() const = 0;
 
-    /// Same as @ref currentVirtualDesktop but for the activity axis.
+    /// Live read of the workspace's current activity, equivalent to
+    /// calling the bound `IWorkspaceState::currentActivity`.
     virtual QString currentActivity() const = 0;
 
     // ── Gate queries (the cascade collapse) ────────────────────────────

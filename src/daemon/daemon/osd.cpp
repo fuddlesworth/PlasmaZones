@@ -504,9 +504,39 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
         }
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
         for (const QString& screenId : effectiveIds) {
-            const auto mode =
-                m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
-            const DisabledReason why = contextDisabledReason(m_settings.get(), mode, screenId, desktop, activity);
+            // Route the disabled-context probe through the resolver so this
+            // OSD pass uses the same single snapshot façade as every other
+            // call site — the prior hand-stitched (modeFor → settings →
+            // contextDisabledReason) cascade was the exact 3-step rebuild
+            // PhosphorContext::IContextResolver was introduced to collapse.
+            // `handleForPersisted` is the right axis here because the
+            // caller already pinned the (desktop, activity) tuple the OSD
+            // reports against, while the screen's mode stays live.
+            DisabledReason why = DisabledReason::NotDisabled;
+            if (m_contextResolver) {
+                // Map PhosphorContext::DisabledReason → PlasmaZones::DisabledReason.
+                // The two enums are value-identical by intent (the LGPL lib's
+                // DisabledReason.h documents it mirrors the GPL daemon's),
+                // but the conversion is written as a switch so a future enum
+                // value added on one side surfaces here as a compile-time
+                // -Wswitch warning rather than a silent value coercion.
+                const auto reason = m_contextResolver->disabledReason(
+                    m_contextResolver->handleForPersisted(screenId, desktop, activity));
+                switch (reason) {
+                case PhosphorContext::DisabledReason::NotDisabled:
+                    why = DisabledReason::NotDisabled;
+                    break;
+                case PhosphorContext::DisabledReason::MonitorDisabled:
+                    why = DisabledReason::MonitorDisabled;
+                    break;
+                case PhosphorContext::DisabledReason::DesktopDisabled:
+                    why = DisabledReason::DesktopDisabled;
+                    break;
+                case PhosphorContext::DisabledReason::ActivityDisabled:
+                    why = DisabledReason::ActivityDisabled;
+                    break;
+                }
+            }
             if (why != DisabledReason::NotDisabled) {
                 showContextDisabledOsd(screenId, desktop, activity, why);
                 continue;
@@ -514,7 +544,7 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
-                auto* algo = m_algorithmRegistry.get()->algorithm(algoId);
+                auto* algo = m_algorithmRegistry->algorithm(algoId);
                 const QString displayName = algo ? algo->name() : algoId;
                 showLayoutOsdForAlgorithm(algoId, displayName, screenId);
             } else {
@@ -541,19 +571,33 @@ QString Daemon::currentActivity() const
 
 bool Daemon::isCurrentContextLocked(const QString& screenId) const
 {
-    // Check both snapping and tiling locks (mode-agnostic check). Two
-    // explicit handleForMode calls instead of a Mode-Any sentinel —
-    // PhosphorContext::IContextResolver is single-Mode by handle so
-    // the "any mode locked?" semantic is composed by the consumer.
-    // Resolver guards null m_settings internally.
-    return m_contextResolver->isLocked(
-               m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Snapping))
-        || m_contextResolver->isLocked(
-            m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile));
+    // Mode-agnostic check: any mode whose per-(screen, desktop, activity)
+    // lock is set counts. Composed by iterating PhosphorZones::allModes()
+    // so adding a future Mode automatically participates without editing
+    // this predicate — the previous hand-coded {Snapping, Autotile} pair
+    // silently misreported Scrolling-mode locks as unlocked.
+    //
+    // Null-guards the resolver: callers can land here during the daemon's
+    // shutdown window where m_contextResolver has been reset but other
+    // Q_OBJECT subscribers (overlay service, shortcut manager) still hold
+    // queued connections firing into the destructor. Reporting "not locked"
+    // is the safe fallback — the daemon is going away anyway.
+    if (!m_contextResolver) {
+        return false;
+    }
+    for (const PhosphorZones::AssignmentEntry::Mode mode : PhosphorZones::allModes()) {
+        if (m_contextResolver->isLocked(m_contextResolver->handleForMode(screenId, mode))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Daemon::isCurrentContextLockedForMode(const QString& screenId, int mode) const
 {
+    if (!m_contextResolver) {
+        return false;
+    }
     return m_contextResolver->isLocked(
         m_contextResolver->handleForMode(screenId, static_cast<PhosphorZones::AssignmentEntry::Mode>(mode)));
 }
