@@ -127,11 +127,11 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 | `libs/phosphor-ipc/tests/`                                        | in PR #539    | 6 test binaries (protocol parser, router invoke / register / schema, schema-generator type table, e2e socket roundtrip, subscribe / broadcast / disconnect-prune, engine install / uninstall / replace) for ~75 cases including stale-socket recovery, live-listener-not-clobbered, multi-subscriber fan-out. |
 
 **Acceptance:**
-- [ ] `phosphorctl list` enumerates registered targets
-- [ ] `phosphorctl schema <target>` dumps JSON schema with arg types
-- [ ] Typed args validated server-side (`QVariant::convert`); errors are structured (`NO_SUCH_TARGET`, `NO_SUCH_FN`, `NO_SUCH_SIGNAL`, `NO_SUCH_SUBSCRIPTION`, `INVALID_ARG`, `INVOCATION_FAILED`, `MALFORMED_REQUEST`)
-- [ ] `phosphorctl subscribe <target>.<signal>` streams JSON events until Ctrl+C, with a clean unsubscribe handshake
-- [ ] Wraps (does not replace) existing D-Bus adaptors. Phase 2 service libs register both an IPC target and a D-Bus method for each callable.
+- [x] `phosphorctl list` enumerates registered targets
+- [x] `phosphorctl schema <target>` dumps JSON schema with arg types
+- [x] Typed args validated server-side (`QVariant::convert`); errors are structured (`NO_SUCH_TARGET`, `NO_SUCH_FN`, `NO_SUCH_SIGNAL`, `NO_SUCH_SUBSCRIPTION`, `INVALID_ARG`, `INVOCATION_FAILED`, `MALFORMED_REQUEST`)
+- [x] `phosphorctl subscribe <target>.<signal>` streams JSON events until Ctrl+C, with a clean unsubscribe handshake
+- [x] Wraps (does not replace) existing D-Bus adaptors. Phase 2 service libs register both an IPC target and a D-Bus method for each callable.
 
 **Effort:** M (~2 weeks estimated; actual ~1 session for the lib + CLI + demo + tests, plus audit cycles)
 

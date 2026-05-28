@@ -172,8 +172,8 @@ int runSubscribe(QStringList args, QString socketPath)
     if (firstResp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
         == QLatin1String(PhosphorIpc::ResponseType::Error)) {
         err << "phosphorctl subscribe: "
-            << sanitiseForTerminal(firstResp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
-            << sanitiseForTerminal(firstResp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
+            << sanitiseForSingleLine(firstResp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
+            << sanitiseForSingleLine(firstResp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
         return 3;
     }
 
@@ -220,17 +220,35 @@ int runSubscribe(QStringList args, QString socketPath)
                 err.flush();
                 continue;
             }
-            // Pretty-print events one-per-line so the stream can
-            // be piped through `jq` or grepped without further
-            // framing. Mid-stream {"type":"error",...} frames also
-            // print here; the user spots them by the "type":"error"
-            // shape. QJsonDocument::toJson escapes control bytes per
-            // the JSON spec, so the wire payload is terminal-safe
-            // even when the payload contains attacker-controlled
-            // strings (no separate sanitiseForTerminal call needed
-            // for the compact JSON path).
-            out << QString::fromUtf8(doc.toJson(QJsonDocument::Compact)) << "\n";
-            out.flush();
+            const QJsonObject obj = doc.object();
+            const QString frameType = obj.value(QLatin1String(PhosphorIpc::Field::Type)).toString();
+            if (frameType == QLatin1String(PhosphorIpc::ResponseType::Event)) {
+                // Pretty-print events one-per-line so the stream
+                // can be piped through `jq` or grepped without
+                // further framing. QJsonDocument::toJson(Compact)
+                // already appends '\n', so the trimmed() form keeps
+                // exactly one newline per event line (otherwise
+                // we'd emit a double newline).
+                out << QString::fromUtf8(doc.toJson(QJsonDocument::Compact).trimmed()) << "\n";
+                out.flush();
+            } else if (frameType == QLatin1String(PhosphorIpc::ResponseType::Error)) {
+                // Mid-stream wire-level error: route to stderr with
+                // the structured Code: Message format used by the
+                // other subcommands. Don't print it as a normal
+                // event line (a downstream `jq` pipeline would
+                // choke if event-shaped objects were interleaved
+                // with error-shaped objects).
+                err << "phosphorctl subscribe: "
+                    << sanitiseForSingleLine(obj.value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
+                    << sanitiseForSingleLine(obj.value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
+                err.flush();
+            }
+            // Reply frames (e.g. the unsubscribe ack that lands
+            // during the Ctrl+C wait) are intentionally consumed
+            // and dropped: they're request/response correlated, not
+            // streaming events, and printing them as events would
+            // corrupt the event stream a downstream consumer is
+            // parsing.
         }
     };
 

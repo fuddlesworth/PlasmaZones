@@ -33,40 +33,38 @@ DemoController::~DemoController() = default;
 
 bool DemoController::start(const QString& socketPath)
 {
-    const QString previousSocketPath = m_router ? m_router->socketPath() : QString();
-    const QString previousStatus = m_status;
+    // m_router is unique_ptr-owned and set once in the ctor; it
+    // never becomes null over the DemoController's lifetime (the
+    // class is Q_DISABLE_COPY_MOVE). No null-check needed.
+    const QString previousSocketPath = m_router->socketPath();
     const bool ok = m_router->start(socketPath);
     if (ok) {
         // Defer the success-path status update to refreshStatus()
         // (same shape onTargetRegistered/Unregistered consume) so
         // there's exactly one status format across every code path.
-        // refreshStatus() emits statusChanged itself if the value
-        // moved; the manual emit below handles the failure-path
-        // assignment that refreshStatus() can't see.
+        // refreshStatus() emits statusChanged itself iff the value
+        // moved; the failure branch below handles the other case
+        // since refreshStatus() can't see "router failed to start".
         refreshStatus();
     } else {
-        if (m_status != QStringLiteral("router failed to start (see logs)")) {
-            m_status = QStringLiteral("router failed to start (see logs)");
+        const QString failureStatus = QStringLiteral("router failed to start (see logs)");
+        if (m_status != failureStatus) {
+            m_status = failureStatus;
             Q_EMIT statusChanged();
         }
     }
     // CLAUDE.md rule: only emit when the value actually changed.
     // Idempotent restarts on the same path would otherwise spam
     // bindings on every call.
-    const QString currentSocketPath = m_router ? m_router->socketPath() : QString();
-    if (currentSocketPath != previousSocketPath) {
+    if (m_router->socketPath() != previousSocketPath) {
         Q_EMIT socketPathChanged();
     }
-    // Don't re-emit statusChanged here, refreshStatus() / the
-    // failure-path branch above already emitted iff the value
-    // actually changed.
-    (void)previousStatus;
     return ok;
 }
 
 QString DemoController::socketPath() const
 {
-    return m_router ? m_router->socketPath() : QString();
+    return m_router->socketPath();
 }
 
 QString DemoController::status() const

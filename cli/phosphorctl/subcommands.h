@@ -19,11 +19,19 @@ namespace Phosphorctl {
 // from untrusted sources (window titles, app-ids, user input
 // reflected back). Writing those raw to a terminal would allow
 // ANSI escape injection (cursor moves, OSC title rewrites, screen
-// clears). Replaces ASCII control characters (0x00-0x1F, 0x7F)
-// except '\t' and '\n' with their `\xNN` two-digit hex escape,
-// preserving the visible text payload while neutralising the
-// terminal-attack vector.
+// clears). Replaces ASCII control characters (0x00-0x1F) except
+// '\t' and '\n' with their `\xNN` two-digit hex escape, preserving
+// the visible text payload while neutralising the terminal-attack
+// vector. Use this for multi-line text contexts (raw string
+// results, broadcast payloads) where newlines are semantically OK.
 [[nodiscard]] QString sanitiseForTerminal(const QString& s);
+
+// Strict single-line variant: also escapes '\n', '\r', and '\t' so
+// a server-supplied string can't break out of a one-line stderr
+// diagnostic. Used in `phosphorctl <sub>: <code>: <message>`-style
+// error reporting, where a newline in `message` would visually
+// split the error across what looks like two log entries.
+[[nodiscard]] QString sanitiseForSingleLine(const QString& s);
 
 // Subcommand entry points. Each takes the post-subcommand argument
 // list (after the subcommand name itself), plus the resolved socket

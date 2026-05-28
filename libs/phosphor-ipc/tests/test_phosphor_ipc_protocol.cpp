@@ -33,6 +33,12 @@ private Q_SLOTS:
     void buildError_omitsZeroId();
     void writeLine_appendsNewline();
     void parseRequest_rejectsNonNumericId();
+    void parseRequest_rejectsFractionalId();
+    void parseRequest_rejectsOutOfRangeId();
+    void parseRequest_rejectsEmptyTargetOnCall();
+    void parseRequest_rejectsEmptyFnOnCall();
+    void parseRequest_rejectsEmptySignalOnSubscribe();
+    void parseRequest_rejectsUnsubscribeMissingSubscriptionId();
     void parseRequest_acceptsUnsubscribe();
     void variantToJson_basics();
 };
@@ -170,6 +176,59 @@ void TestPhosphorIpcProtocol::parseRequest_rejectsNonNumericId()
     QString err;
     QVERIFY(!parseRequest(R"({"type":"call","id":"forty-two","target":"x","fn":"y"})", &err).has_value());
     QVERIFY(err.contains(QStringLiteral("'id'")));
+}
+
+void TestPhosphorIpcProtocol::parseRequest_rejectsFractionalId()
+{
+    // JSON numbers are doubles. `"id": 1.5` would silently truncate
+    // to id=1 if accepted; reject it so the wire protocol enforces
+    // the documented "id is integer" contract.
+    QString err;
+    QVERIFY(!parseRequest(R"({"type":"call","id":1.5,"target":"x","fn":"y"})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("'id'")));
+}
+
+void TestPhosphorIpcProtocol::parseRequest_rejectsOutOfRangeId()
+{
+    // 1e30 exceeds INT64_MAX and would be UB to cast. The parser
+    // must reject it as malformed, not truncate.
+    QString err;
+    QVERIFY(!parseRequest(R"({"type":"call","id":1e30,"target":"x","fn":"y"})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("'id'")));
+}
+
+void TestPhosphorIpcProtocol::parseRequest_rejectsEmptyTargetOnCall()
+{
+    // Empty target on a `call` is malformed at the wire level; the
+    // router would otherwise surface NO_SUCH_TARGET, which is the
+    // wrong shape (the fault is the request, not the registry).
+    QString err;
+    QVERIFY(!parseRequest(R"({"type":"call","id":1,"fn":"y"})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("'target'")));
+}
+
+void TestPhosphorIpcProtocol::parseRequest_rejectsEmptyFnOnCall()
+{
+    QString err;
+    QVERIFY(!parseRequest(R"({"type":"call","id":1,"target":"x"})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("'fn'")));
+}
+
+void TestPhosphorIpcProtocol::parseRequest_rejectsEmptySignalOnSubscribe()
+{
+    QString err;
+    QVERIFY(!parseRequest(R"({"type":"subscribe","id":1,"target":"x"})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("'signal'")));
+}
+
+void TestPhosphorIpcProtocol::parseRequest_rejectsUnsubscribeMissingSubscriptionId()
+{
+    // Unsubscribe with no subscriptionId (or an explicit zero) must
+    // surface as MALFORMED_REQUEST, not as NO_SUCH_SUBSCRIPTION for
+    // "unknown subscriptionId 0".
+    QString err;
+    QVERIFY(!parseRequest(R"({"type":"unsubscribe","id":1})", &err).has_value());
+    QVERIFY(err.contains(QStringLiteral("subscriptionId")));
 }
 
 void TestPhosphorIpcProtocol::parseRequest_acceptsUnsubscribe()

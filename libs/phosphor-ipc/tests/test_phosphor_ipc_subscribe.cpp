@@ -136,6 +136,7 @@ private Q_SLOTS:
     void subscribe_replies_then_streams_events();
     void subscribe_unknownTarget();
     void subscribe_unknownSignal();
+    void subscribe_duplicateRejected();
     void unsubscribe_stops_events();
     void unsubscribe_unknownId();
     void multipleSubscribers_eachReceiveEvent();
@@ -226,6 +227,50 @@ void TestPhosphorIpcSubscribe::subscribe_unknownSignal()
     QCOMPARE(resp.size(), 1);
     QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
     QCOMPARE(resp.first().value(QStringLiteral("code")).toString(), QStringLiteral("NO_SUCH_SIGNAL"));
+}
+
+void TestPhosphorIpcSubscribe::subscribe_duplicateRejected()
+{
+    // Pin the per-socket duplicate-(target, signal) rejection. A
+    // peer subscribing twice to the same (target, signal) on the
+    // same connection must get a structured error on the second
+    // call, and each broadcast must produce exactly one event on
+    // the socket (not two). The cap prevents subscribe-fan
+    // amplification.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+
+    IpcRouter router;
+    CounterTarget c;
+    QVERIFY(router.registerTarget(QStringLiteral("count"), &c));
+    QVERIFY(router.start(sockPath));
+
+    QLocalSocket socket;
+    socket.connectToServer(sockPath);
+    QVERIFY(socket.waitForConnected(2000));
+
+    socket.write(
+        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("count"), QStringLiteral("countChanged"))));
+    socket.flush();
+    readLines(socket, 1); // first ack
+
+    socket.write(
+        writeLine(makeReq(QStringLiteral("subscribe"), 2, QStringLiteral("count"), QStringLiteral("countChanged"))));
+    socket.flush();
+    const QList<QJsonObject> resp = readLines(socket, 1);
+    QCOMPARE(resp.size(), 1);
+    QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
+    QCOMPARE(resp.first().value(QStringLiteral("code")).toString(), QStringLiteral("MALFORMED_REQUEST"));
+
+    // One broadcast must yield exactly one event on the socket
+    // (the dedup ensured the second subscribe didn't append).
+    QJsonArray args;
+    args.append(7);
+    router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), args);
+    const QList<QJsonObject> events = readLines(socket, 1);
+    QCOMPARE(events.size(), 1);
+    QCOMPARE(events.first().value(QStringLiteral("subscriptionId")).toInt(), 1);
 }
 
 void TestPhosphorIpcSubscribe::unsubscribe_stops_events()

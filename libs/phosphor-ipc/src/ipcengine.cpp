@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QSet>
 #include <QVariant>
 
 namespace PhosphorIpc::IpcEngine {
@@ -15,19 +16,29 @@ namespace PhosphorIpc::IpcEngine {
 namespace {
 constexpr auto RouterPropertyName = "phosphorIpcRouter";
 
-// Per-engine handle on the destroyed-watcher install() wires, so
-// uninstall() / install()-on-replace can disconnect ONLY our wire
-// and not collaterally tear down any other code's connections that
-// happen to use `engine` as their context receiver. Without this,
-// `QObject::disconnect(router, &destroyed, engine, nullptr)` would
-// be a wildcard that drops every destroyed→engine connection in
-// the process. Keyed by engine because there's at most one router
-// installed per engine; the QObject::Connection is the precise
-// disconnect handle Qt's docs require for surgical teardown.
+// Per-engine handle on the router-destroyed watcher install() wires.
+// Keyed by engine because there's at most one router installed per
+// engine; the QObject::Connection lets uninstall() / install()-on-
+// replace disconnect ONLY our wire instead of wildcard-dropping
+// every destroyed→engine connection in the process.
 QHash<QQmlEngine*, QMetaObject::Connection>& destroyedWatchers()
 {
     static QHash<QQmlEngine*, QMetaObject::Connection> watchers;
     return watchers;
+}
+
+// Engines for which install() has already wired the engine->destroyed
+// cleanup handler. We attach that handler exactly once per engine for
+// the engine's entire lifetime, NOT once per install() call.
+// Otherwise repeated install/uninstall/install cycles (which clear
+// the destroyedWatchers entry between cycles) would each add another
+// engine-destroyed lambda, accumulating dead connections until the
+// engine dies. The set entry is dropped only by the engine-destroyed
+// handler itself.
+QSet<QQmlEngine*>& engineDestroyHandlerInstalled()
+{
+    static QSet<QQmlEngine*> engines;
+    return engines;
 }
 
 // Read the engine's dynamic property and qobject_cast it back to an
@@ -80,7 +91,6 @@ void install(QQmlEngine* engine, IpcRouter* router)
     // (UB). The engine-bound context guarantees the connection is
     // torn down when the engine dies, avoiding leaked lambdas.
     auto& watchers = destroyedWatchers();
-    const bool firstInstallOnEngine = !watchers.contains(engine);
     const QMetaObject::Connection conn = QObject::connect(router, &QObject::destroyed, engine, [engine, router]() {
         // Only clear if the engine still holds THIS router. A
         // subsequent install() may have replaced it; the
@@ -93,15 +103,19 @@ void install(QQmlEngine* engine, IpcRouter* router)
         }
         destroyedWatchers().remove(engine);
     });
-    // Engine-destroyed path: drop our QHash entry so it doesn't grow
-    // unbounded across long-running test runs / processes with many
-    // engines created and destroyed. Connected exactly once per
-    // engine; repeated install()s on the same engine reuse this
-    // same engine-destroyed handler so we don't accumulate copies.
-    if (firstInstallOnEngine) {
+    // Engine-destroyed path: drop our bookkeeping when the engine
+    // dies. The handler is attached exactly ONCE per engine across
+    // the engine's whole lifetime (gated by engineDestroyHandlerInstalled
+    // — a separate set that survives uninstall()/clearDestroyedWatcher).
+    // Otherwise repeated install/uninstall/install cycles would
+    // accumulate engine-destroyed lambdas (one per cycle).
+    auto& handlerInstalled = engineDestroyHandlerInstalled();
+    if (!handlerInstalled.contains(engine)) {
         QObject::connect(engine, &QObject::destroyed, [engine]() {
             destroyedWatchers().remove(engine);
+            engineDestroyHandlerInstalled().remove(engine);
         });
+        handlerInstalled.insert(engine);
     }
     watchers.insert(engine, conn);
 }

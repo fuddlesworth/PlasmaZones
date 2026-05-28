@@ -49,8 +49,8 @@ int runSchema(QStringList args, QString socketPath)
     if (resp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
         == QLatin1String(PhosphorIpc::ResponseType::Error)) {
         err << "phosphorctl schema: "
-            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
-            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
+            << sanitiseForSingleLine(resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
+            << sanitiseForSingleLine(resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
         return 3;
     }
     const QJsonValue resultValue = resp->value(QLatin1String(PhosphorIpc::Field::Result));
@@ -64,7 +64,9 @@ int runSchema(QStringList args, QString socketPath)
     }
     // QJsonDocument::toJson escapes ASCII control bytes per the JSON
     // spec, so the indented output is terminal-safe without further
-    // sanitisation.
+    // sanitisation. Indented mode already appends a trailing '\n',
+    // so no explicit newline suffix is needed (Compact would
+    // require one, but we use Indented here).
     out << QString::fromUtf8(QJsonDocument(resultValue.toObject()).toJson(QJsonDocument::Indented));
     return 0;
 }

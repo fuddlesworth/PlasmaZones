@@ -47,6 +47,24 @@ public:
     {
         return m_lastNoReturn;
     }
+    // Two overloads of the same name. The router must dispatch by
+    // arity (parameterCount), not by first-by-name.
+    Q_INVOKABLE QString combine(const QString& a)
+    {
+        return QStringLiteral("one:%1").arg(a);
+    }
+    Q_INVOKABLE QString combine(const QString& a, const QString& b)
+    {
+        return QStringLiteral("two:%1+%2").arg(a, b);
+    }
+
+protected:
+    // Protected Q_INVOKABLE — subclass-only convention. The router
+    // and schema generator must NOT expose this on the wire.
+    Q_INVOKABLE QString protectedSecret()
+    {
+        return QStringLiteral("forbidden");
+    }
 
 private:
     QString m_lastNoReturn;
@@ -79,8 +97,11 @@ private Q_SLOTS:
     void invoke_argTypeCoercion();
     void invoke_argTypeCoercionFailure();
     void invoke_outcomeOkOnSuccess();
+    void invoke_overloadDispatchesByArity();
+    void invoke_protectedQInvokableRejected();
     void schemaFor_unknownReturnsEmpty();
     void schemaFor_listsFunctions();
+    void schemaFor_skipsProtectedQInvokable();
 };
 
 void TestPhosphorIpcRouter::register_addsAndEmits()
@@ -351,8 +372,70 @@ void TestPhosphorIpcRouter::schemaFor_listsFunctions()
     QCOMPARE(schema.value(QStringLiteral("target")).toString(), QStringLiteral("greet"));
     QVERIFY(schema.value(QStringLiteral("functions")).isArray());
     QCOMPARE(schema.value(QStringLiteral("signals")).toArray().size(), 0);
-    // FakeTarget exposes 4 Q_INVOKABLE methods.
-    QCOMPARE(schema.value(QStringLiteral("functions")).toArray().size(), 4);
+    // Public Q_INVOKABLE methods: sayHello, add, noReturn, readLast,
+    // combine(QString), combine(QString,QString) = 6 functions. The
+    // protectedSecret method MUST NOT appear (filter-to-Public
+    // pinned by schemaFor_skipsProtectedQInvokable below).
+    QCOMPARE(schema.value(QStringLiteral("functions")).toArray().size(), 6);
+}
+
+void TestPhosphorIpcRouter::invoke_overloadDispatchesByArity()
+{
+    // FakeTarget declares Q_INVOKABLE combine(QString) and
+    // combine(QString, QString). The router picks the overload
+    // whose parameterCount matches args.size(); a regression that
+    // returned the first-by-name match would dispatch combine(a)
+    // for the 2-arg call (and surface ArgCountMismatch) or vice
+    // versa.
+    IpcRouter router;
+    FakeTarget t;
+    QVERIFY(router.registerTarget(QStringLiteral("c"), &t));
+    QString err;
+
+    const QVariant r1 = router.invoke(QStringLiteral("c"), QStringLiteral("combine"),
+                                      QVariantList{QStringLiteral("alpha")}, nullptr, &err);
+    QVERIFY(err.isEmpty());
+    QCOMPARE(r1.toString(), QStringLiteral("one:alpha"));
+
+    const QVariant r2 = router.invoke(QStringLiteral("c"), QStringLiteral("combine"),
+                                      QVariantList{QStringLiteral("alpha"), QStringLiteral("beta")}, nullptr, &err);
+    QVERIFY(err.isEmpty());
+    QCOMPARE(r2.toString(), QStringLiteral("two:alpha+beta"));
+}
+
+void TestPhosphorIpcRouter::invoke_protectedQInvokableRejected()
+{
+    // FakeTarget::protectedSecret is `protected: Q_INVOKABLE`. The
+    // router filters to QMetaMethod::Public, so it must NOT be
+    // callable on the wire even though the metaobject knows about
+    // it. The expected outcome is NoSuchFn (the wire couldn't find
+    // it among the Public methods), not InvokeFailed.
+    IpcRouter router;
+    FakeTarget t;
+    QVERIFY(router.registerTarget(QStringLiteral("t"), &t));
+    QString err;
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    const QVariant r = router.invoke(QStringLiteral("t"), QStringLiteral("protectedSecret"), {}, &outcome, &err);
+    QVERIFY(!r.isValid());
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::NoSuchFn);
+    QVERIFY(!err.isEmpty());
+}
+
+void TestPhosphorIpcRouter::schemaFor_skipsProtectedQInvokable()
+{
+    // Pin the schema-side filter: protected Q_INVOKABLE methods
+    // must not appear in the generated functions array.
+    IpcRouter router;
+    FakeTarget t;
+    QVERIFY(router.registerTarget(QStringLiteral("t"), &t));
+    const QJsonObject schema = router.schemaFor(QStringLiteral("t"));
+    const QJsonArray fns = schema.value(QStringLiteral("functions")).toArray();
+    QStringList names;
+    for (const QJsonValue& v : fns) {
+        names.append(v.toObject().value(QStringLiteral("name")).toString());
+    }
+    QVERIFY2(!names.contains(QStringLiteral("protectedSecret")),
+             "protected Q_INVOKABLE must not appear in the wire-visible schema");
 }
 
 QTEST_MAIN(TestPhosphorIpcRouter)

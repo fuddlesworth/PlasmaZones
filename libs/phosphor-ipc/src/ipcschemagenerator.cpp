@@ -139,7 +139,22 @@ QJsonObject schemaFor(const QString& targetName, const QObject* object)
         if (m.methodType() == QMetaMethod::Method || m.methodType() == QMetaMethod::Slot) {
             QJsonObject entry = describeMethod(m);
             const int retType = m.returnMetaType().id();
-            if (retType != QMetaType::Void && retType != QMetaType::UnknownType) {
+            if (retType == QMetaType::Void) {
+                // Pure void return: omit "returns" entirely.
+            } else if (retType == QMetaType::UnknownType) {
+                // Unregistered metatype: emit the same custom-type
+                // description shape the param path uses (line 71),
+                // surfacing the typeName so the CLI knows the
+                // method returns *something* even if the type is
+                // opaque on the wire. Omitting "returns" would
+                // mislead callers into thinking the method is void.
+                QJsonObject ret;
+                const QByteArray typeName = m.typeName();
+                ret.insert(QStringLiteral("description"),
+                           QStringLiteral("custom QMetaType: %1")
+                               .arg(QLatin1String(typeName.isEmpty() ? "<unknown>" : typeName.constData())));
+                entry.insert(QStringLiteral("returns"), ret);
+            } else {
                 entry.insert(QStringLiteral("returns"), typeToSchema(retType));
             }
             functions.append(entry);

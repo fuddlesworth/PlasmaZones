@@ -98,12 +98,20 @@ Error codes: `NO_SUCH_TARGET`, `NO_SUCH_FN`, `NO_SUCH_SIGNAL`,
 #include <PhosphorIpc/IpcRouter.h>
 
 PhosphorIpc::IpcRouter router;
-router.start();  // binds $XDG_RUNTIME_DIR/phosphor.sock
+if (!router.start()) {  // binds $XDG_RUNTIME_DIR/phosphor.sock
+    qWarning("IPC router failed to start (XDG_RUNTIME_DIR unset, "
+             "permission denied, or stale socket file held by another process)");
+    // Application can continue without IPC; failure is non-fatal.
+}
 
 QQmlApplicationEngine engine;
 PhosphorIpc::IpcEngine::install(&engine, &router);
 engine.loadFromModule(...);  // shell QML
 ```
+
+Declare `router` BEFORE `engine` so reverse-order destruction tears
+the engine down first; otherwise QML-side `IpcTarget` instances
+would unregister against a dead router.
 
 The shell QML can now declare `IpcTarget` instances anywhere in the
 component tree; each one auto-registers via the router stashed on
@@ -113,6 +121,7 @@ the engine.
 
 ```qml
 import Phosphor.Ipc
+import Phosphor.Theme  // for Theme singleton; omit if not needed
 
 IpcTarget {
     target: "theme"
@@ -120,9 +129,9 @@ IpcTarget {
     signal modeChanged(string mode)  // schema-visible
 
     function setMode(mode: string) {
-        Theme.mode = mode
-        modeChanged(mode)
-        emitEvent("modeChanged", [mode])  // broadcasts to subscribers
+        Theme.mode = mode           // apply state mutation
+        modeChanged(mode)           // notify in-QML observers
+        emitEvent("modeChanged", [mode])  // broadcast on the WIRE
     }
 }
 ```
@@ -130,6 +139,15 @@ IpcTarget {
 The schema generator surfaces both `Q_INVOKABLE` methods and
 declared signals, so `phosphorctl schema theme` shows the
 subscribable surface.
+
+**Calling the QML signal (e.g. `modeChanged(mode)`) does NOT
+broadcast to wire subscribers** — it only fires in-QML connections.
+Wire delivery happens through `emitEvent(name, args)` exclusively.
+The split is by design: introspecting Qt signals via `qt_metacall`
+collides with moc-generated dispatch, and explicit `emitEvent`
+matches the "wire-visible state transitions are an explicit
+contract" model. Plugin authors must call both for in-QML AND wire
+delivery.
 
 ### CLI side
 
@@ -162,8 +180,13 @@ phosphorctl subscribe count.countChanged   # optional: same events on stdout
 
 ## Arbitration / lifecycle
 
-- **Duplicate target id rejected.** Registering an already-known
-  target is a no-op + `qWarning`. First registration wins.
+- **Duplicate target id arbitrated.** Re-registering the SAME
+  `QObject` under the SAME name is a silent idempotent success (no
+  warning, no signal re-emit). Registering a DIFFERENT `QObject`
+  under an existing name is rejected with a `qWarning`; the
+  incumbent registration is preserved. `registerTarget` returns
+  `bool` so wrappers like `IpcTarget` can detect rejection and
+  skip the paired unregister on teardown.
 - **Signal name validated at subscribe.** Subscribe rejects with
   `NO_SUCH_SIGNAL` if the signal isn't declared on the target's
   metaobject. Typos surface immediately instead of silently
@@ -179,7 +202,9 @@ phosphorctl subscribe count.countChanged   # optional: same events on stdout
   and `listen()` retries. A live listener is left alone (start
   fails cleanly rather than clobbering).
 - **No subscribe auto-broadcast from Qt signals.** Plugin authors
-  call `IpcTarget.emitEvent` explicitly. This is by design:
+  call `IpcTarget.emitEvent("name", args)` explicitly. Firing the
+  QML signal (e.g. `modeChanged(...)`) only notifies in-QML
+  subscribers, NOT wire subscribers. This split is by design:
   introspecting arbitrary Qt signals via `qt_metacall` clashes with
   Q_OBJECT moc-generated code, and explicit `emitEvent` matches the
   "wire-visible state transitions are an explicit contract" model.

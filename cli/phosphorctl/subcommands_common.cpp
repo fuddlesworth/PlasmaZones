@@ -8,6 +8,16 @@
 
 namespace Phosphorctl {
 
+namespace {
+// Common control-byte escape shared by both sanitisers. Returns
+// `\xNN` for any input that should be escaped; the caller decides
+// whether to escape a given QChar.
+QString escapeControl(ushort u)
+{
+    return QStringLiteral("\\x%1").arg(u, 2, 16, QLatin1Char('0'));
+}
+} // namespace
+
 QString sanitiseForTerminal(const QString& s)
 {
     QString out;
@@ -27,7 +37,26 @@ QString sanitiseForTerminal(const QString& s)
         if (u == 0x09 || u == 0x0A) {
             out.append(c);
         } else if (u < 0x20) {
-            out.append(QStringLiteral("\\x%1").arg(u, 2, 16, QLatin1Char('0')));
+            out.append(escapeControl(u));
+        } else {
+            out.append(c);
+        }
+    }
+    return out;
+}
+
+QString sanitiseForSingleLine(const QString& s)
+{
+    QString out;
+    out.reserve(s.size());
+    for (const QChar c : s) {
+        const ushort u = c.unicode();
+        // Strict variant: escape every ASCII control byte INCLUDING
+        // tab, newline, and carriage return so a server-supplied
+        // string can't visually break out of the surrounding
+        // single-line diagnostic frame on stderr.
+        if (u < 0x20) {
+            out.append(escapeControl(u));
         } else {
             out.append(c);
         }

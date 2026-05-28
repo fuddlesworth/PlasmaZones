@@ -98,8 +98,13 @@ public:
 
     // Generate the JSON Schema for one target. Walks the target
     // QObject's metaobject; see IpcSchemaGenerator.h for the
-    // QMetaType → JSON Schema mapping. Returns {} for unknown
-    // targets.
+    // QMetaType → JSON Schema mapping. For unknown targets, returns
+    // the empty-shaped document `{target: "<name>", functions: [],
+    // signals: []}` (matches `IpcSchemaGenerator::schemaFor(name,
+    // nullptr)`). The wire dispatcher still replies with a
+    // NO_SUCH_TARGET error frame for `schema` requests on unknown
+    // targets; this convenience accessor returns the same shape a
+    // schema-generator caller would see directly.
     [[nodiscard]] QJsonObject schemaFor(const QString& target) const;
 
     // Structured outcome of an invoke() call. The wire dispatcher

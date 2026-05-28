@@ -126,17 +126,18 @@ int runCall(QStringList args, QString socketPath)
     if (resp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
         == QLatin1String(PhosphorIpc::ResponseType::Error)) {
         err << "phosphorctl call: "
-            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
-            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString());
+            << sanitiseForSingleLine(resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
+            << sanitiseForSingleLine(resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString());
         const QJsonValue detail = resp->value(QLatin1String(PhosphorIpc::Field::Detail));
         if (detail.isObject() && !detail.toObject().isEmpty()) {
             // Detail payload is structured JSON the server may have
             // attached (e.g. arg-index for INVALID_ARG). Emit it as
-            // a parenthesised JSON blob so scripts can grep it. JSON
-            // serialisation escapes control bytes, so no extra
-            // sanitisation needed here.
-            err << " (detail: " << QString::fromUtf8(QJsonDocument(detail.toObject()).toJson(QJsonDocument::Compact))
-                << ")";
+            // a parenthesised JSON blob so scripts can grep it.
+            // QJsonDocument::toJson(Compact) appends '\n', which
+            // would split the error line mid-paren; trim it so the
+            // closing ')' lands on the same line as the JSON blob.
+            err << " (detail: "
+                << QString::fromUtf8(QJsonDocument(detail.toObject()).toJson(QJsonDocument::Compact).trimmed()) << ")";
         }
         err << "\n";
         return 3;
@@ -151,6 +152,10 @@ int runCall(QStringList args, QString socketPath)
     // sanitisation against terminal escape injection before reaching
     // stdout.
     if (result.isObject()) {
+        // QJsonDocument::toJson(Indented) already appends a trailing
+        // '\n', so the output is line-terminated without an explicit
+        // "\n" suffix (Compact mode is the one that omits the
+        // trailing newline; we use Indented here).
         out << QString::fromUtf8(QJsonDocument(result.toObject()).toJson(QJsonDocument::Indented));
     } else if (result.isArray()) {
         out << QString::fromUtf8(QJsonDocument(result.toArray()).toJson(QJsonDocument::Indented));

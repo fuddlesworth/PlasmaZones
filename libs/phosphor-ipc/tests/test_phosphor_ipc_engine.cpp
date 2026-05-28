@@ -37,6 +37,8 @@ private Q_SLOTS:
     void routerFor_nullEngineReturnsNullptr();
     void routerFor_returnsNullptrAfterUninstall();
     void routerFor_returnsNullptrForForeignProperty();
+    void routerFor_returnsNullptrAfterRouterDestroyed();
+    void install_uninstall_install_doesNotLeakDestroyedWatcher();
 };
 
 void TestPhosphorIpcEngine::install_storesRouterOnEngine()
@@ -132,9 +134,54 @@ void TestPhosphorIpcEngine::routerFor_returnsNullptrForForeignProperty()
     // Simulate a different consumer scribbling something else into
     // the dynamic-property slot. routerFor must qobject_cast back to
     // IpcRouter and return nullptr on a mismatch rather than crashing.
-    QQmlEngine engine;
+    // Declare `foreign` BEFORE `engine` so destruction order has the
+    // QObject* held in the QVariant outlive the engine that holds
+    // it (defensive against any Qt-internal property cleanup that
+    // might deref the held pointer at engine teardown).
     QObject foreign;
+    QQmlEngine engine;
     engine.setProperty("phosphorIpcRouter", QVariant::fromValue<QObject*>(&foreign));
+    QCOMPARE(IpcEngine::routerFor(&engine), nullptr);
+}
+
+void TestPhosphorIpcEngine::routerFor_returnsNullptrAfterRouterDestroyed()
+{
+    // install() wires a destroyed-signal watcher on the router so
+    // that when the router dies before uninstall() is called, the
+    // engine property is auto-cleared. Without that wire, the
+    // QVariant<QObject*> would hold a dangling pointer and
+    // routerFor() would qobject_cast freed memory (UB).
+    QQmlEngine engine;
+    auto router = std::make_unique<IpcRouter>();
+    IpcEngine::install(&engine, router.get());
+    QCOMPARE(IpcEngine::routerFor(&engine), router.get());
+    router.reset(); // ~IpcRouter() fires destroyed → cleanup
+    QCOMPARE(IpcEngine::routerFor(&engine), nullptr);
+}
+
+void TestPhosphorIpcEngine::install_uninstall_install_doesNotLeakDestroyedWatcher()
+{
+    // Repeated install/uninstall/install cycles must not accumulate
+    // engine-destroyed handlers on the engine. Each cycle clears the
+    // per-engine bookkeeping; the engine-destroyed handler should be
+    // attached exactly once per engine across the engine's lifetime,
+    // not once per install() call. A regression that re-attached
+    // would still pass this test functionally (the extra lambdas
+    // are no-ops on map removal), but the leak would surface as a
+    // growing connection count we can't easily assert here. What we
+    // CAN assert: the destroyed-watcher contract continues to work
+    // after the cycle, i.e. a router destroyed post-cycle still
+    // clears the engine property.
+    QQmlEngine engine;
+    {
+        auto routerA = std::make_unique<IpcRouter>();
+        IpcEngine::install(&engine, routerA.get());
+        IpcEngine::uninstall(&engine);
+    }
+    auto routerB = std::make_unique<IpcRouter>();
+    IpcEngine::install(&engine, routerB.get());
+    QCOMPARE(IpcEngine::routerFor(&engine), routerB.get());
+    routerB.reset();
     QCOMPARE(IpcEngine::routerFor(&engine), nullptr);
 }
 

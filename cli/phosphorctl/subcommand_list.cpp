@@ -50,8 +50,8 @@ int runList(QStringList args, QString socketPath)
     if (resp->value(QLatin1String(PhosphorIpc::Field::Type)).toString()
         == QLatin1String(PhosphorIpc::ResponseType::Error)) {
         err << "phosphorctl list: "
-            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
-            << sanitiseForTerminal(resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
+            << sanitiseForSingleLine(resp->value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
+            << sanitiseForSingleLine(resp->value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
         return 3;
     }
     const QJsonArray names = resp->value(QLatin1String(PhosphorIpc::Field::Result)).toArray();
@@ -72,8 +72,10 @@ int runList(QStringList args, QString socketPath)
     for (const QString& name : sorted) {
         // Target names come from server-side QString registrations
         // and are theoretically attacker-controlled in adversarial
-        // setups. Sanitise to match the call/subscribe paths.
-        out << sanitiseForTerminal(name) << "\n";
+        // setups. Use the strict single-line variant so a name
+        // containing a stray newline can't break the line-per-
+        // target output framing.
+        out << sanitiseForSingleLine(name) << "\n";
     }
     return 0;
 }

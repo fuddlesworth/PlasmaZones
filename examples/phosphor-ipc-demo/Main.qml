@@ -65,10 +65,15 @@ ApplicationWindow {
     // Target 3: key/value store with a two-arg entryChanged signal.
     // Exercises subscribe payloads with more than one parameter.
     //
-    // Signal explicitly named `entryChanged` so it doesn't shadow
-    // the QML-auto-generated `storeChanged()` notifier emitted from
-    // `property var store`. Subscribers wire onto `entryChanged`;
-    // `storeChanged` is benign schema noise no caller subscribes to.
+    // Signal explicitly named `entryChanged` rather than overloading
+    // the QML-auto-generated `storeChanged()` notifier on
+    // `property var store`. `storeChanged` only fires when the
+    // store REFERENCE is replaced; in-place mutation
+    // (`store[key] = value` below) does not fire it. Subscribers
+    // therefore wire onto `entryChanged`; `storeChanged` appears in
+    // the schema as benign noise but never broadcasts (the QML
+    // notifier never fires, AND the broadcast path is explicit
+    // `emitEvent` either way).
     IpcTarget {
         id: storeTarget
 

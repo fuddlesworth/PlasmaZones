@@ -11,6 +11,9 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <cmath>
+#include <limits>
+
 namespace PhosphorIpc {
 
 namespace {
@@ -22,6 +25,32 @@ namespace {
 // as qsizetype to match QJsonArray::size()'s return type without
 // triggering -Wsign-compare on the bounds check.
 constexpr qsizetype MaxArgsLength = 4096;
+
+// Parse a JSON number as an integral qint64. JSON numbers are
+// doubles; we reject fractional values and out-of-range magnitudes
+// explicitly so the protocol's "id is an integer" contract is
+// honored at the parser level. Returns std::nullopt on rejection;
+// the caller produces the MALFORMED_REQUEST error frame.
+std::optional<qint64> parseIntegralJsonNumber(double d)
+{
+    if (!std::isfinite(d)) {
+        return std::nullopt;
+    }
+    // Reject anything that loses precision when round-tripped
+    // through qint64. The 2^63 bound is exclusive on the positive
+    // side (qint64 max is 2^63 - 1; the next-lower exact double is
+    // 9223372036854774784.0) and inclusive on the negative side
+    // (qint64 min is -2^63, exactly representable as double).
+    constexpr double Int64MinD = -9223372036854775808.0;
+    constexpr double Int64MaxExclusiveD = 9223372036854775808.0;
+    if (d < Int64MinD || d >= Int64MaxExclusiveD) {
+        return std::nullopt;
+    }
+    if (std::trunc(d) != d) {
+        return std::nullopt;
+    }
+    return static_cast<qint64>(d);
+}
 } // namespace
 
 std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
@@ -59,7 +88,14 @@ std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
     // sentinel in buildError).
     const QJsonValue idValue = obj.value(QLatin1String(Field::Id));
     if (idValue.isDouble()) {
-        req.id = static_cast<qint64>(idValue.toDouble());
+        const auto parsed = parseIntegralJsonNumber(idValue.toDouble());
+        if (!parsed) {
+            if (parseError) {
+                *parseError = QStringLiteral("'id' must be an integer in [INT64_MIN, INT64_MAX]");
+            }
+            return std::nullopt;
+        }
+        req.id = *parsed;
     } else if (!idValue.isUndefined() && !idValue.isNull()) {
         if (parseError) {
             *parseError = QStringLiteral("'id' must be a number if present");
@@ -71,7 +107,14 @@ std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
     req.signalName = obj.value(QLatin1String(Field::Signal)).toString();
     const QJsonValue subIdValue = obj.value(QLatin1String(Field::SubscriptionId));
     if (subIdValue.isDouble()) {
-        req.subscriptionId = static_cast<qint64>(subIdValue.toDouble());
+        const auto parsed = parseIntegralJsonNumber(subIdValue.toDouble());
+        if (!parsed) {
+            if (parseError) {
+                *parseError = QStringLiteral("'subscriptionId' must be an integer in [INT64_MIN, INT64_MAX]");
+            }
+            return std::nullopt;
+        }
+        req.subscriptionId = *parsed;
     } else if (!subIdValue.isUndefined() && !subIdValue.isNull()) {
         if (parseError) {
             *parseError = QStringLiteral("'subscriptionId' must be a number if present");
