@@ -52,5 +52,18 @@ int main(int argc, char* argv[])
         qWarning("phosphor-perscreen-demo: failed to load Phosphor.PerScreenDemo/Main.qml");
         return 1;
     }
+
+    // Tear PerScreen's delegates down BEFORE the engine starts
+    // destruction. PerScreen creates each Window with no QObject
+    // parent (the JS-Map holds the reference) so the Wayland
+    // compositor commits each as a true top-level surface; without
+    // this aboutToQuit hook the JS GC would destroy those Windows
+    // during the engine destructor and race the Wayland platform
+    // cleanup, SIGSEGV-ing at exit.
+    QObject* root = engine.rootObjects().first();
+    QObject::connect(&app, &QGuiApplication::aboutToQuit, root, [root]() {
+        QMetaObject::invokeMethod(root, "shutdownDelegates");
+    });
+
     return app.exec();
 }

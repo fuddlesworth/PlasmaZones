@@ -17,13 +17,18 @@
 // animations, open menus, accumulated graphs) intact.
 //
 // Contract for the `delegate` Component:
-//   - Receives initial properties `screen` (QScreen*), `name` (string),
-//     `index` (int), `isPrimary` (bool) on creation.
-//   - If the delegate root is a `Window`, the `screen` initial-property
-//     sets `Window.screen`, anchoring the window to the right monitor
-//     without the caller wiring geometry plumbing.
-//   - To consume the other fields, declare them as `required property`s
-//     on the delegate root.
+//   - Receives initial properties `phosphorScreen` (QScreen*), `name`
+//     (string), `index` (int), `isPrimary` (bool) on creation. Declare
+//     these as `required property`s on the delegate root to consume.
+//   - The property is named `phosphorScreen` (NOT `screen`) so it
+//     doesn't collide with the built-in `Window.screen` property —
+//     Qt 6 rejects `screen` as an initial property on Window
+//     ("Could not set initial property screen", because the
+//     underlying QWindow's screen binding is established before
+//     createObject's initialProperties phase resolves).
+//   - For Window delegates that want to open on the right monitor,
+//     bind `screen: phosphorScreen` in the delegate body — the
+//     binding is evaluated during construction in the right order.
 //   - The delegate is destroyed when its screen leaves the model.
 //
 // Lifetime: delegates are parented to the PerScreen item. Destroying
@@ -82,8 +87,23 @@ Item {
     readonly property int _roleIsPrimary: Qt.UserRole + 5
 
     Component.onCompleted: root._rebuild()
-    Component.onDestruction: root._teardownAll()
 
+    // App-shutdown teardown path. We intentionally do NOT call
+    // destroy() on the delegate instances here: the QML engine is
+    // itself mid-destruction by the time Component.onDestruction
+    // fires, and calling destroy() on JS-owned Windows races the
+    // engine's heap clearing — on Wayland this re-enters
+    // QQuickWindow's surface-teardown while PerScreen's own
+    // destruction is still in flight and SIGSEGVs. Just clear the
+    // Map; the engine's JS GC reclaims the delegate QObjects as
+    // part of its normal teardown.
+    Component.onDestruction: root._instances.clear()
+
+    // Model-switch (and explicit-teardown) path. `_teardownAll`
+    // calls destroy() on each delegate, which is safe OUTSIDE the
+    // engine-destruction window — the event loop is alive to
+    // process the deferred delete and there's no re-entrancy from
+    // the engine destructor.
     onModelChanged: {
         root._teardownAll();
         root._rebuild();
@@ -166,8 +186,20 @@ Item {
                 // `screen` and `name` are per-QScreen invariants — a
                 // given QScreen* doesn't switch identity nor rename.
             } else {
-                const inst = root.delegate.createObject(root, {
-                    "screen": screen,
+                // Construct with a NULL parent: Wayland compositors
+                // refuse to render a Window whose QObject parent is
+                // a non-Window Item (treats the surface as a child /
+                // popup and never commits it). JS ownership keeps
+                // the inst alive while the Map holds the JS reference.
+                //
+                // The matching shutdown hazard — JS GC destroying the
+                // Window mid-engine-teardown SIGSEGVs on Wayland —
+                // is handled by `shutdownDelegates()` below, which
+                // the host (typically main()) MUST connect to
+                // QGuiApplication::aboutToQuit to tear delegates down
+                // BEFORE the engine starts destruction.
+                const inst = root.delegate.createObject(null, {
+                    "phosphorScreen": screen,
                     "name": name,
                     "index": i,
                     "isPrimary": isPrimary
@@ -180,8 +212,29 @@ Item {
     }
 
     function _teardownAll() {
-        root._instances.forEach(inst => inst.destroy());
+        // Snapshot before clearing so iteration order is independent
+        // of any side effects on _instances. Calling destroy() at
+        // runtime (e.g. on a model switch) schedules the QObject for
+        // deferred delete on the next event-loop iteration; the
+        // wrapper stays valid until then.
+        const insts = Array.from(root._instances.values());
         root._instances.clear();
+        for (const inst of insts) {
+            if (inst)
+                inst.destroy();
+        }
         root.count = 0;
+    }
+
+    // Public shutdown hook. Hosts MUST connect this to
+    // QGuiApplication::aboutToQuit so the JS-owned delegate Windows
+    // are torn down BEFORE the engine starts destruction. Without
+    // this, the JS GC reclaims the Windows mid-engine-teardown and
+    // their destructors race the Wayland platform cleanup, causing
+    // a SIGSEGV at exit. Calling this from C++ is equivalent to
+    // calling _teardownAll() from JS; the public-facing name makes
+    // the host-side contract explicit and grep-able.
+    function shutdownDelegates() {
+        root._teardownAll();
     }
 }

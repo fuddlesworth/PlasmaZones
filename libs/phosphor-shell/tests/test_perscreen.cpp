@@ -60,7 +60,7 @@ namespace {
 constexpr const char* kDelegateQml = R"(
     import QtQml
     QtObject {
-        required property var screen
+        required property var phosphorScreen
         required property string name
         required property int index
         required property bool isPrimary
@@ -358,12 +358,12 @@ void TestPerScreen::delegatesReceiveScreenNameIndexIsPrimaryRequiredProps()
     QVERIFY(d2 != nullptr);
 
     // The four required properties from the contract.
-    QCOMPARE(d1->property("screen").value<QObject*>(), s1);
+    QCOMPARE(d1->property("phosphorScreen").value<QObject*>(), s1);
     QCOMPARE(d1->property("name").toString(), QStringLiteral("HDMI-1"));
     QCOMPARE(d1->property("index").toInt(), 0);
     QCOMPARE(d1->property("isPrimary").toBool(), true);
 
-    QCOMPARE(d2->property("screen").value<QObject*>(), s2);
+    QCOMPARE(d2->property("phosphorScreen").value<QObject*>(), s2);
     QCOMPARE(d2->property("name").toString(), QStringLiteral("HDMI-2"));
     QCOMPARE(d2->property("index").toInt(), 1);
     QCOMPARE(d2->property("isPrimary").toBool(), false);
