@@ -137,7 +137,7 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Deferred items:** see [`phosphor-ipc-followups.md`](phosphor-ipc-followups.md) for the defense-in-depth additions (per-process MaxConnections, idle-connection timeout, SO_PEERCRED peer auth) and the fleet-wide demo cleanups (qsTr → i18n, hard-coded monospace → Tokens) that were intentionally NOT applied in PR #539.
 
-### 1.5: `PerScreen` QML helper
+### 1.5: `PerScreen` QML helper *(shipped, 2026-05-28, PR #540)*
 
 A bare `Instantiator { model: PhosphorShell.screens }` would technically
 satisfy "one delegate per monitor", but `ScreenModel` ships hot-plug
@@ -187,7 +187,7 @@ consumer would otherwise duplicate.
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
 
-**Phase 1 progress (as of 2026-05-28):** 4 of 5 libs shipped, 1 in PR review (Phase 1.5 `PerScreen` helper, PR #540).
+**Phase 1 progress (as of 2026-05-28):** 5 of 5 libs shipped — Phase 1 gate met.
 
 | Lib                   | Status                                                  |
 |-----------------------|---------------------------------------------------------|
@@ -195,9 +195,9 @@ consumer would otherwise duplicate.
 | `phosphor-popout`     | ✓ shipped (PR #535)                                     |
 | `phosphor-registry`   | ✓ shipped (PR #538)                                     |
 | `phosphor-ipc`        | ✓ shipped (PR #539)                                     |
-| `PerScreen` helper    | in PR review (PR #540, branch `feat/phosphor-perscreen`) |
+| `PerScreen` helper    | ✓ shipped (PR #540)                                     |
 
-The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.5 lands.
+All five demos run. The `phosphor-foundations-0.1` tag is now unblocked — next action.
 
 ---
 
