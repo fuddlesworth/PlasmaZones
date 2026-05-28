@@ -35,15 +35,17 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Network for QLocalServer / QLocalSocket. Qml for IpcTarget's
-# QML_ELEMENT registration. No Gui, none of the public headers
-# (IpcRouter, IpcTarget, IpcProtocol, IpcSchemaGenerator, IpcEngine)
-# pull in any QtGui types, so linking Gui here would force CLI
-# consumers like phosphorctl to drag in the full GUI stack for no
-# reason. The QML plugin (PhosphorIpcQml) still needs Gui because
-# qmltyperegistrar's generated code transitively wants it; it's
-# declared on that target only.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Network)
+# Core: QObject / QVariant / QString. Network: QLocalServer /
+# QLocalSocket. Qml: IpcTarget's QML_ELEMENT registration. No Gui
+# here: none of the public headers (IpcRouter, IpcTarget, IpcProtocol,
+# IpcSchemaGenerator, IpcEngine) pull in any QtGui types, so linking
+# Gui at the core target would force CLI consumers like phosphorctl
+# to drag in the full GUI stack for no reason. The Gui dependency is
+# scoped onto PhosphorIpcQml below (qmltyperegistrar's generated code
+# transitively wants it). Keeping the find_package list aligned with
+# PhosphorIpcConfig.cmake.in's downstream find_dependency block so the
+# build-side dependency set doesn't drift from the install-side one.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml Network)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -62,6 +64,7 @@ set(phosphoripc_public_HDRS
 
 set(phosphoripc_SRCS
     src/ipcrouter.cpp
+    src/ipcrouterdispatch.cpp
     src/ipctarget.cpp
     src/ipcengine.cpp
     src/ipcprotocol.cpp
@@ -127,6 +130,11 @@ set_target_properties(PhosphorIpc PROPERTIES
 # PhosphorIpcQmlplugin target that qt_add_qml_module creates to get
 # the type registered in their QQmlEngine. Mirrors the PhosphorTheme
 # / PhosphorThemeQml split.
+
+# Qt6::Gui is scoped onto the QML plugin specifically; the
+# qmltyperegistrar-generated registration translation unit
+# transitively expects QGuiApplication / QQmlEngine to be in scope.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Gui)
 
 qt_add_qml_module(PhosphorIpcQml
     URI Phosphor.Ipc

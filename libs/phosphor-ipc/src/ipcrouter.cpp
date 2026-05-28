@@ -3,6 +3,8 @@
 
 #include <PhosphorIpc/IpcRouter.h>
 
+#include "ipcrouterdetail.h"
+
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcSchemaGenerator.h>
 
@@ -46,18 +48,40 @@ constexpr qint64 MaxLineBytes = 1024 * 1024;
 // invocation, yielding to the event loop between batches.
 constexpr int MaxFramesPerReadyRead = 64;
 
-// Per-socket malformed-frame cap. Without this a peer can send an
-// unbounded sequence of garbage lines: each one parses, fails,
-// gets a MALFORMED_REQUEST error frame written back, and the
-// connection stays open. Closing the connection after a small run
-// of consecutive parse failures bounds the DoS surface.
-constexpr int MaxMalformedFrames = 16;
+// Maximum number of CONSECUTIVE malformed frames a peer may send
+// before the router force-closes the connection. The (N+1)-th
+// consecutive malformed frame triggers the close (i.e. the cap is
+// "the largest run we tolerate"). A well-formed frame anywhere in
+// the stream resets the counter; we only close on sustained
+// garbage, not on a one-off bad line.
+constexpr int MaxConsecutiveMalformedFrames = 16;
 
-// Per-socket subscription cap. Without this a client can subscribe
-// to the same (target, signal) thousands of times and amplify each
-// event into thousands of write attempts, multiplying broadcast
-// cost and write-buffer pressure.
-constexpr int MaxSubscriptionsPerSocket = 256;
+// RAII scope for the ::umask process-global. We use ::umask to
+// force a 0600 mode on the socket file at create time (atomic, no
+// chmod-after-listen window). The umask is process-global and not
+// thread-local, so a leak would taint any concurrent file
+// creation; this guard ensures the restore happens even if a
+// future change inserts a throwing call between the bind and the
+// existing manual restore.
+class UmaskScope
+{
+public:
+    explicit UmaskScope(mode_t mask)
+        : m_prev(::umask(mask))
+    {
+    }
+    ~UmaskScope()
+    {
+        ::umask(m_prev);
+    }
+    UmaskScope(const UmaskScope&) = delete;
+    UmaskScope& operator=(const UmaskScope&) = delete;
+    UmaskScope(UmaskScope&&) = delete;
+    UmaskScope& operator=(UmaskScope&&) = delete;
+
+private:
+    mode_t m_prev;
+};
 
 // Resolve the default socket path. $XDG_RUNTIME_DIR/phosphor.sock
 // when XDG_RUNTIME_DIR is set, otherwise empty (caller logs and
@@ -69,92 +93,6 @@ QString resolveDefaultSocketPath()
         return {};
     }
     return QDir(xdg).filePath(QStringLiteral("phosphor.sock"));
-}
-
-// First method index above QObject's built-ins. Used as the lower
-// bound for findInvokableMethod / findSignal so QObject's own
-// destroyed / objectNameChanged / deleteLater don't leak onto the
-// wire as callable / subscribable surface, while every method
-// declared on IpcTarget or any user-defined subclass stays in
-// scope (including methods inherited from a non-QObject base
-// class, those start at QObject's methodCount, not at the leaf's
-// methodOffset). Keeps findInvokableMethod, findSignal, and the
-// schema generator in lockstep on the same visibility boundary.
-[[nodiscard]] int qobjectMethodCount()
-{
-    return QObject::staticMetaObject.methodCount();
-}
-
-// Find a Q_INVOKABLE method by name AND arity. When the target has
-// overloaded methods (same name, different arities) the wire dispatch
-// needs to pick the overload whose parameterCount matches the
-// caller's args.size(); picking the first match by name alone would
-// surface ArgCountMismatch even though a matching overload exists.
-// Walks the full inheritance chain above QObject's built-ins so a
-// method declared on a base class above QObject is still invocable.
-// Filters to Public access only: protected Q_INVOKABLE methods are
-// a "subclass-only" marker by convention; exposing them on the wire
-// would defeat that.
-QMetaMethod findInvokableMethod(const QMetaObject* meta, const QString& fnName, int expectedArity)
-{
-    if (!meta) {
-        return {};
-    }
-    const QByteArray needle = fnName.toUtf8();
-    QMetaMethod nameOnlyFallback;
-    for (int i = qobjectMethodCount(); i < meta->methodCount(); ++i) {
-        const QMetaMethod m = meta->method(i);
-        if (m.methodType() == QMetaMethod::Signal) {
-            continue;
-        }
-        if (m.access() != QMetaMethod::Public) {
-            continue;
-        }
-        if (m.name() != needle) {
-            continue;
-        }
-        if (m.parameterCount() == expectedArity) {
-            return m;
-        }
-        // Stash the first non-matching-arity overload so the caller
-        // can still surface a precise ArgCountMismatch with the
-        // metamethod's expected parameter count when no overload's
-        // arity lines up.
-        if (!nameOnlyFallback.isValid()) {
-            nameOnlyFallback = m;
-        }
-    }
-    return nameOnlyFallback;
-}
-
-// Find a signal by name. Same shape as findInvokableMethod, but
-// filters to signals only. The subscribe path uses this for
-// existence validation (typo'd signal names return NO_SUCH_SIGNAL
-// at subscribe time instead of silently never delivering events).
-// Walks the full chain above QObject's built-ins so signals
-// declared on a base class are still resolvable while QObject's
-// destroyed / objectNameChanged remain filtered out. Filters to
-// Public-access signals only; protected/private signal access keeps
-// them out of the wire subscribe surface.
-QMetaMethod findSignal(const QMetaObject* meta, const QString& signalName)
-{
-    if (!meta) {
-        return {};
-    }
-    const QByteArray needle = signalName.toUtf8();
-    for (int i = qobjectMethodCount(); i < meta->methodCount(); ++i) {
-        const QMetaMethod m = meta->method(i);
-        if (m.methodType() != QMetaMethod::Signal) {
-            continue;
-        }
-        if (m.access() != QMetaMethod::Public) {
-            continue;
-        }
-        if (m.name() == needle) {
-            return m;
-        }
-    }
-    return {};
 }
 
 } // namespace
@@ -203,9 +141,11 @@ bool IpcRouter::start(const QString& socketPath)
     // microsecond-scale scope makes the race window negligible in
     // practice; a future move to fchmod(socketDescriptor(), 0600)
     // after listen would remove the global mutation entirely.
-    const mode_t prevUmask = ::umask(0177);
-    const bool initialBound = m_server->listen(resolved);
-    ::umask(prevUmask);
+    bool initialBound = false;
+    {
+        UmaskScope guard(0177);
+        initialBound = m_server->listen(resolved);
+    }
     if (!initialBound) {
         const QString initialError = m_server->errorString();
         bool removedStale = false;
@@ -230,9 +170,8 @@ bool IpcRouter::start(const QString& socketPath)
             // Same umask scope as the initial listen so the
             // post-unlink retry also creates the socket file at
             // mode 0600 atomically.
-            const mode_t prevUmaskRetry = ::umask(0177);
+            UmaskScope guard(0177);
             retryBound = m_server->listen(resolved);
-            ::umask(prevUmaskRetry);
         }
         if (!retryBound) {
             qWarning("PhosphorIpc::IpcRouter::start: listen() failed for '%s': %s", qPrintable(resolved),
@@ -312,6 +251,21 @@ bool IpcRouter::registerTarget(const QString& name, QObject* object)
         m_targets.remove(name);
     }
     m_targets.insert(name, QPointer<QObject>(object));
+    // Auto-remove the registry entry if the target QObject is
+    // destroyed without an explicit unregisterTarget call (the
+    // documented contract is "unregister first, then destroy", but
+    // a contract violation shouldn't leak null-QPointer entries
+    // forever). Context bound to `this` so the connection is torn
+    // down when the router dies; lambda captures `name` by value
+    // because the target QObject is being destroyed, so any
+    // pointer-derived key would be stale by the time we ran.
+    QObject::connect(object, &QObject::destroyed, this, [this, name]() {
+        const auto it = m_targets.constFind(name);
+        if (it != m_targets.constEnd() && !it.value()) {
+            m_targets.erase(it);
+            Q_EMIT targetUnregistered(name);
+        }
+    });
     Q_EMIT targetRegistered(name);
     return true;
 }
@@ -394,7 +348,7 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
     // overload's arity lines up, findInvokableMethod still returns a
     // name-only fallback so we can surface a precise
     // ArgCountMismatch citing the actual expected arity.
-    const QMetaMethod method = findInvokableMethod(obj->metaObject(), fn, static_cast<int>(args.size()));
+    const QMetaMethod method = detail::findInvokableMethod(obj->metaObject(), fn, static_cast<int>(args.size()));
     if (!method.isValid()) {
         return fail(InvokeOutcome::NoSuchFn,
                     QStringLiteral("target '%1' has no invokable method '%2'").arg(targetName, fn));
@@ -486,12 +440,23 @@ void IpcRouter::handleNewConnection()
         // until canReadLine() finally returns true. handleClientReadyRead
         // also enforces the same cap at the userspace-buffer layer.
         socket->setReadBufferSize(MaxLineBytes);
-        QObject::connect(socket, &QLocalSocket::readyRead, this, [this, socket]() {
-            handleClientReadyRead(socket);
-        });
-        QObject::connect(socket, &QLocalSocket::disconnected, this, [this, socket]() {
-            handleClientDisconnected(socket);
-        });
+        // Explicit Qt::DirectConnection: both signals fire from the
+        // router's own thread (same thread as the QLocalServer), and
+        // the dispatch / disconnect paths intentionally re-enter
+        // router state synchronously. Spell it out so a future reader
+        // doesn't assume queued semantics from AutoConnection.
+        QObject::connect(
+            socket, &QLocalSocket::readyRead, this,
+            [this, socket]() {
+                handleClientReadyRead(socket);
+            },
+            Qt::DirectConnection);
+        QObject::connect(
+            socket, &QLocalSocket::disconnected, this,
+            [this, socket]() {
+                handleClientDisconnected(socket);
+            },
+            Qt::DirectConnection);
     }
 }
 
@@ -511,14 +476,8 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
     // Force the socket closed with a MALFORMED_REQUEST diagnostic;
     // handleClientDisconnected will clean up the subscription state.
     if (!socket->canReadLine() && socket->bytesAvailable() >= MaxLineBytes) {
-        socket->write(writeLine(
-            buildError(0, QString::fromUtf8(ErrorCode::MalformedRequest),
-                       QStringLiteral("request line exceeds %1 bytes; closing connection").arg(MaxLineBytes))));
-        // waitForBytesWritten gives the diagnostic frame a chance to
-        // land in the kernel send buffer before abort() resets the
-        // socket; abort() discards any pending writes by design.
-        socket->waitForBytesWritten(100);
-        socket->abort();
+        closeWithMalformedDiagnostic(
+            socket, QStringLiteral("request line exceeds %1 bytes; closing connection").arg(MaxLineBytes));
         return;
     }
     int frames = 0;
@@ -537,11 +496,8 @@ void IpcRouter::handleClientReadyRead(QLocalSocket* socket)
             // somehow larger than the cap (shouldn't happen given the
             // pre-canReadLine guard above, but Qt's behavior here is
             // documented as "up to MaxBytes" without a hard floor).
-            socket->write(writeLine(
-                buildError(0, QString::fromUtf8(ErrorCode::MalformedRequest),
-                           QStringLiteral("request line exceeds %1 bytes; closing connection").arg(MaxLineBytes))));
-            socket->waitForBytesWritten(100);
-            socket->abort();
+            closeWithMalformedDiagnostic(
+                socket, QStringLiteral("request line exceeds %1 bytes; closing connection").arg(MaxLineBytes));
             return;
         }
         // Strip the trailing newline; QJsonDocument tolerates it
@@ -588,7 +544,29 @@ void IpcRouter::handleClientDisconnected(QLocalSocket* socket)
     // map size stays bounded by live connections.
     m_subscriptionsBySocket.remove(socket);
     m_malformedCountBySocket.remove(socket);
-    socket->deleteLater();
+    // Only schedule deleteLater for sockets the router still owns
+    // as live children of m_server. When stop() resets m_server,
+    // each child socket's destructor fires disconnected() synchronously,
+    // and we'd be calling deleteLater() on a QObject already inside
+    // its destruction path — Qt logs a warning ("cannot deleteLater()
+    // an object already being destroyed"). The parent-child cleanup
+    // covers that case for us.
+    if (m_server && socket->parent() == m_server.get()) {
+        socket->deleteLater();
+    }
+}
+
+void IpcRouter::closeWithMalformedDiagnostic(QLocalSocket* socket, const QString& message)
+{
+    if (!socket) {
+        return;
+    }
+    socket->write(writeLine(buildError(0, QString::fromUtf8(ErrorCode::MalformedRequest), message)));
+    // waitForBytesWritten gives the diagnostic frame a chance to land
+    // in the kernel send buffer before abort() resets the socket;
+    // abort() discards any pending writes by design.
+    socket->waitForBytesWritten(100);
+    socket->abort();
 }
 
 void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
@@ -603,9 +581,13 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
         // close the connection so the router doesn't keep echoing
         // errors indefinitely.
         int& count = m_malformedCountBySocket[socket];
-        if (++count > MaxMalformedFrames) {
-            qWarning("PhosphorIpc::IpcRouter::dispatch: socket exceeded %d malformed frames; closing",
-                     MaxMalformedFrames);
+        if (++count > MaxConsecutiveMalformedFrames) {
+            qWarning("PhosphorIpc::IpcRouter::dispatch: socket exceeded %d consecutive malformed frames; closing",
+                     MaxConsecutiveMalformedFrames);
+            // No additional diagnostic frame here — the per-frame
+            // MALFORMED_REQUEST written just above (line %d's
+            // buildError) already told the peer; we only need to
+            // flush + abort.
             socket->waitForBytesWritten(100);
             socket->abort();
         }
@@ -677,173 +659,6 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
     }
     socket->write(writeLine(buildError(req.id, QString::fromUtf8(ErrorCode::MalformedRequest),
                                        QStringLiteral("unknown request type '%1'").arg(req.type))));
-}
-
-void IpcRouter::handleSubscribe(QLocalSocket* socket, qint64 id, const QString& targetName, const QString& signalName)
-{
-    if (targetName.isEmpty() || signalName.isEmpty()) {
-        socket->write(writeLine(buildError(id, QString::fromUtf8(ErrorCode::MalformedRequest),
-                                           QStringLiteral("subscribe requires non-empty target and signal"))));
-        return;
-    }
-    QObject* obj = target(targetName);
-    if (!obj) {
-        socket->write(writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchTarget),
-                                           QStringLiteral("unknown target '%1'").arg(targetName))));
-        return;
-    }
-    // Validate the signal name against the target's metaobject so
-    // typos surface as NO_SUCH_SIGNAL instead of silently
-    // accepting a subscription that will never fire. Signal lookup
-    // here is advisory: broadcastEvent dispatches by string name,
-    // not by metaobject index, so a future signal added via QML
-    // dynamic property would also work even without recompiling.
-    if (!findSignal(obj->metaObject(), signalName).isValid()) {
-        socket->write(
-            writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchSignal),
-                                 QStringLiteral("target '%1' has no signal '%2'").arg(targetName, signalName))));
-        return;
-    }
-
-    // Per-socket cap on subscriptions. A misbehaving client can't
-    // pin amplification factor on broadcastEvent by stacking
-    // thousands of subscriptions; reject past the cap with a
-    // MALFORMED_REQUEST (the closest existing code that fits "your
-    // request was structurally fine but exceeded a server-side
-    // resource limit"; adding a dedicated code would be a wire
-    // break in this protocol version).
-    QList<Subscription>& subs = m_subscriptionsBySocket[socket];
-    if (subs.size() >= MaxSubscriptionsPerSocket) {
-        socket->write(writeLine(
-            buildError(id, QString::fromUtf8(ErrorCode::MalformedRequest),
-                       QStringLiteral("subscription cap of %1 per socket exceeded").arg(MaxSubscriptionsPerSocket))));
-        return;
-    }
-    // Reject duplicate (target, signal) subscriptions on the same
-    // socket. Each subscribe call gets a distinct subscriptionId
-    // (the request id), so without this guard a client that calls
-    // subscribe N times for the same signal receives N copies of
-    // every event and inflates the write-side cost N-fold.
-    for (const Subscription& existing : subs) {
-        if (existing.target == targetName && existing.signalName == signalName) {
-            socket->write(writeLine(
-                buildError(id, QString::fromUtf8(ErrorCode::MalformedRequest),
-                           QStringLiteral("already subscribed to '%1.%2' on this connection (subscriptionId %3)")
-                               .arg(targetName, signalName)
-                               .arg(existing.subscriptionId))));
-            return;
-        }
-    }
-    // Subscription id == request id; clients use that on subsequent
-    // unsubscribe and to demultiplex inbound events. The router
-    // doesn't enforce uniqueness across all clients, id is scoped
-    // per-socket because the wire identity is (socket, subscriptionId).
-    Subscription sub;
-    sub.socket = socket;
-    sub.subscriptionId = id;
-    sub.target = targetName;
-    sub.signalName = signalName;
-    subs.append(sub);
-
-    // Acknowledge the subscription is live so the client knows to
-    // start streaming events.
-    socket->write(writeLine(buildReply(id, QJsonValue::Null)));
-}
-
-void IpcRouter::handleUnsubscribe(QLocalSocket* socket, qint64 id, qint64 subscriptionId)
-{
-    auto it = m_subscriptionsBySocket.find(socket);
-    if (it == m_subscriptionsBySocket.end()) {
-        socket->write(writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchSubscription),
-                                           QStringLiteral("no subscriptions on this connection"))));
-        return;
-    }
-    QList<Subscription>& subs = it.value();
-    for (int i = 0; i < subs.size(); ++i) {
-        if (subs.at(i).subscriptionId == subscriptionId) {
-            subs.removeAt(i);
-            socket->write(writeLine(buildReply(id, QJsonValue::Null)));
-            return;
-        }
-    }
-    socket->write(writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchSubscription),
-                                       QStringLiteral("unknown subscriptionId %1").arg(subscriptionId))));
-}
-
-void IpcRouter::broadcastEvent(const QString& targetName, const QString& signalName, const QJsonArray& args)
-{
-    Q_ASSERT(thread() == QThread::currentThread());
-    // Snapshot the matching (socket, subscriptionId) pairs BEFORE
-    // any write/flush. QLocalSocket::write or flush can synchronously
-    // emit errorOccurred / disconnected (peer closed the socket
-    // between accept and send, for instance); the disconnected signal
-    // re-enters handleClientDisconnected which removes the matching
-    // entry from m_subscriptionsBySocket. Iterating the hash while
-    // that mutation runs would invalidate our iterator and either
-    // crash or skip live subscribers. Materialising the dispatch
-    // list first lets the send loop tolerate concurrent prunes.
-    //
-    // Iteration is O(N subscriptions); for the expected per-process
-    // subscription count (≤ ~50 in any realistic shell deployment)
-    // the linear scan is cheaper than maintaining a secondary index.
-    struct PendingSend
-    {
-        QPointer<QLocalSocket> socket;
-        qint64 subscriptionId;
-    };
-    QList<PendingSend> pending;
-    for (auto it = m_subscriptionsBySocket.cbegin(); it != m_subscriptionsBySocket.cend(); ++it) {
-        QLocalSocket* sock = it.key();
-        if (!sock || sock->state() != QLocalSocket::ConnectedState) {
-            continue;
-        }
-        for (const Subscription& sub : it.value()) {
-            if (sub.target == targetName && sub.signalName == signalName) {
-                pending.append({QPointer<QLocalSocket>(sock), sub.subscriptionId});
-            }
-        }
-    }
-
-    // Write-side cap, symmetric to the read-side MaxLineBytes guard
-    // in handleClientReadyRead. A subscriber that never read from its
-    // socket would otherwise let the per-socket pending-write queue
-    // grow unbounded as broadcast events pile up. 16 MiB is the cap
-    // (16x the read cap because event payloads can legitimately be
-    // larger than request lines, and a slow consumer is more common
-    // than a malformed client). When exceeded, force-close the
-    // subscriber. handleClientDisconnected prunes its subscription
-    // entries.
-    constexpr qint64 MaxBytesToWrite = 16 * 1024 * 1024;
-    for (const PendingSend& p : pending) {
-        QLocalSocket* sock = p.socket.data();
-        // Socket may have disconnected mid-broadcast (a prior send's
-        // flush in this loop fired a chained disconnected; the
-        // QPointer auto-cleared). Skip without trying to write.
-        if (!sock || sock->state() != QLocalSocket::ConnectedState) {
-            continue;
-        }
-        if (sock->bytesToWrite() > MaxBytesToWrite) {
-            qWarning(
-                "PhosphorIpc::IpcRouter::broadcastEvent: subscriber on '%s/%s' is %lld bytes behind; "
-                "closing the connection",
-                qPrintable(targetName), qPrintable(signalName), static_cast<long long>(sock->bytesToWrite()));
-            sock->abort();
-            continue;
-        }
-        // Write without per-send flush(). QLocalSocket::flush() can
-        // synchronously emit disconnected() and errorOccurred(), which
-        // re-enter handleClientDisconnected and mutate
-        // m_subscriptionsBySocket while broadcastEvent's outer loop is
-        // still iterating; even with the pending-list snapshot, a
-        // re-entrant broadcastEvent (e.g. a target slot wired to a
-        // property change reached via the synchronous error/disconnect
-        // emit) would observe inconsistent state. Without flush(), Qt
-        // drains the writes on the next event-loop return; ordering is
-        // preserved (QLocalSocket is FIFO per socket) and the latency
-        // cost is one event-loop iteration per burst, acceptable for
-        // wire-event delivery in a UI shell.
-        sock->write(writeLine(buildEvent(p.subscriptionId, args)));
-    }
 }
 
 } // namespace PhosphorIpc

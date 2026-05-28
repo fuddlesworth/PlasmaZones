@@ -30,6 +30,12 @@ class IpcRouter;
 // Idempotent: calling install() twice with the same router is a
 // no-op; calling with a different router on the same engine logs
 // a qWarning and replaces the binding (test-environment use case).
+//
+// Thread affinity: install(), uninstall(), and routerFor() must be
+// called on the engine's owning thread (the GUI thread in typical
+// usage). QQmlEngine is thread-affine, and the bookkeeping globals
+// inside ipcengine.cpp are not synchronised; an off-thread call is
+// asserted against in debug builds.
 namespace IpcEngine {
 
 PHOSPHORIPC_EXPORT void install(QQmlEngine* engine, IpcRouter* router);

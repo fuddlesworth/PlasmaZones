@@ -159,6 +159,13 @@ private:
     void dispatch(QLocalSocket* socket, const QByteArray& line);
     void handleSubscribe(QLocalSocket* socket, qint64 id, const QString& targetName, const QString& signalName);
     void handleUnsubscribe(QLocalSocket* socket, qint64 id, qint64 subscriptionId);
+    // Emit a MALFORMED_REQUEST diagnostic to `socket`, give the
+    // bytes a brief window to land in the kernel send buffer, then
+    // abort() the connection. Shared by the read-side oversize-line
+    // and malformed-frame-cap paths so they stay in lockstep if the
+    // close protocol ever changes (e.g. switching from abort() to
+    // disconnectFromServer()).
+    void closeWithMalformedDiagnostic(QLocalSocket* socket, const QString& message);
 
     std::unique_ptr<QLocalServer> m_server;
     QString m_socketPath;

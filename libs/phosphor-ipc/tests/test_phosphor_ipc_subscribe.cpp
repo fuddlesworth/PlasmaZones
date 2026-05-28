@@ -1,30 +1,30 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 // Subscribe / broadcast / unsubscribe roundtrip tests. A test target
 // QObject exposes one signal-shaped surface; the router subscribes
 // a real QLocalSocket client to it; the test triggers
 // broadcastEvent and asserts events arrive on the wire in order.
 
+#include "ipctesthelpers.h"
+
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcRouter.h>
 
-#include <QByteArray>
 #include <QCoreApplication>
 #include <QDir>
-#include <QEventLoop>
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
 #include <QObject>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
-#include <QTimer>
 #include <QtCore/qtclasshelpermacros.h>
 
 using namespace PhosphorIpc;
+using PhosphorIpcTests::makeReq;
+using PhosphorIpcTests::readLines;
 
 namespace {
 
@@ -45,84 +45,19 @@ public:
     }
 
 Q_SIGNALS:
-    // Declared so subscribe's signal-existence check passes.
-    // Subscribers receive events via the router's broadcastEvent
-    // path, not via Qt's signal/slot mechanism, so this signal is
-    // never actually emitted from the C++ side; broadcastEvent is
-    // called directly in the test.
-    void countChanged(int v);
+    // Declared so subscribe's signal-existence check (findSignal
+    // against the target's metaObject) succeeds. Subscribers
+    // receive events via the router's broadcastEvent path, not via
+    // Qt's signal/slot mechanism — broadcastEvent is called
+    // directly from each test body — so this signal never actually
+    // fires from C++. Its sole purpose is to make the metaobject
+    // advertise "countChanged" as a Public signal name; the dispatch
+    // path is otherwise correct end-to-end.
+    void countChanged(int v); // NOLINT(modernize-use-trailing-return-type): Q_SIGNALS shape
 
 private:
     int m_value = 0;
 };
-
-// Connect a client and pump until N response lines arrive or
-// timeout fires. Returns the parsed objects in arrival order.
-// Drains any pre-buffered bytes upfront before entering the
-// event loop, because readyRead only fires on NEW arrivals,
-// so data that landed during an earlier readLines() call on a
-// different socket would otherwise sit unread.
-QList<QJsonObject> readLines(QLocalSocket& socket, int expectedCount, int timeoutMs = 2000)
-{
-    QList<QJsonObject> out;
-    QByteArray buffer;
-
-    auto drain = [&]() {
-        buffer.append(socket.readAll());
-        while (true) {
-            const int nl = buffer.indexOf('\n');
-            if (nl < 0) {
-                break;
-            }
-            QByteArray line = buffer.left(nl);
-            buffer.remove(0, nl + 1);
-            while (!line.isEmpty() && line.endsWith('\r')) {
-                line.chop(1);
-            }
-            if (line.isEmpty()) {
-                continue;
-            }
-            out.append(QJsonDocument::fromJson(line).object());
-        }
-    };
-
-    drain();
-    if (out.size() >= expectedCount) {
-        return out;
-    }
-
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-    QObject::connect(&socket, &QLocalSocket::readyRead, &loop, [&] {
-        drain();
-        if (out.size() >= expectedCount) {
-            loop.quit();
-        }
-    });
-    timeout.start(timeoutMs);
-    loop.exec();
-    return out;
-}
-
-QJsonObject makeReq(const QString& type, qint64 id, const QString& target = {}, const QString& signal = {},
-                    qint64 subId = 0)
-{
-    QJsonObject o;
-    o.insert(QStringLiteral("type"), type);
-    o.insert(QStringLiteral("id"), static_cast<double>(id));
-    if (!target.isEmpty()) {
-        o.insert(QStringLiteral("target"), target);
-    }
-    if (!signal.isEmpty()) {
-        o.insert(QStringLiteral("signal"), signal);
-    }
-    if (subId != 0) {
-        o.insert(QStringLiteral("subscriptionId"), static_cast<double>(subId));
-    }
-    return o;
-}
 
 } // namespace
 
@@ -137,6 +72,7 @@ private Q_SLOTS:
     void subscribe_unknownTarget();
     void subscribe_unknownSignal();
     void subscribe_duplicateRejected();
+    void subscribe_perSocketCapExceeded();
     void unsubscribe_stops_events();
     void unsubscribe_unknownId();
     void multipleSubscribers_eachReceiveEvent();
@@ -306,16 +242,20 @@ void TestPhosphorIpcSubscribe::unsubscribe_stops_events()
     QCOMPARE(unsubAck.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
 
     // Subsequent broadcasts must NOT generate events on this socket.
+    // To verify this deterministically (rather than waiting an
+    // arbitrary timeout for nothing to arrive), broadcast the event,
+    // then send a synchronous `list` request immediately after. The
+    // server processes requests in order on a given socket; if the
+    // broadcast had erroneously produced an event, it would arrive
+    // before the list reply. Read exactly one frame and assert it's
+    // the list reply, never the stray event.
     router.broadcastEvent(QStringLiteral("count"), QStringLiteral("countChanged"), args);
-    // Use readLines with a short deadline + expectedCount=1 so the
-    // helper pumps the event loop properly. If anything arrives,
-    // out.size() == 1 and we fail; if nothing arrives within the
-    // deadline, out is empty (the desired state). The previous
-    // qWait+bytesAvailable check was racy because qWait doesn't
-    // pump the QLocalSocket's readyRead delivery reliably on
-    // Linux.
-    const QList<QJsonObject> postUnsub = readLines(socket, 1, 200);
-    QCOMPARE(postUnsub.size(), 0);
+    socket.write(writeLine(makeReq(QStringLiteral("list"), 3)));
+    socket.flush();
+    const QList<QJsonObject> next = readLines(socket, 1);
+    QCOMPARE(next.size(), 1);
+    QCOMPARE(next.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+    QCOMPARE(next.first().value(QStringLiteral("id")).toInt(), 3);
 }
 
 void TestPhosphorIpcSubscribe::unsubscribe_unknownId()
@@ -445,11 +385,87 @@ void TestPhosphorIpcSubscribe::disconnect_pruneSubscriptions()
     QCOMPARE(events.at(0).value(QStringLiteral("args")).toArray().first().toInt(), 1);
     QCOMPARE(events.at(2).value(QStringLiteral("args")).toArray().first().toInt(), 3);
 
-    // No-extra-events check: give the loop a brief window to
-    // deliver any spurious fan-out from a residual subscription;
-    // assert nothing more arrives.
-    const QList<QJsonObject> extra = readLines(live, 1, 200);
-    QCOMPARE(extra.size(), 0);
+    // No-extra-events check: rather than waiting for a timeout,
+    // issue a synchronous `list` request on the live socket. The
+    // server serves requests in FIFO order per-socket. If a stray
+    // event from the disconnected first subscriber were being
+    // misrouted here, it would arrive before the list reply. Read
+    // exactly one more frame and assert it's the list reply, never
+    // an event.
+    live.write(writeLine(makeReq(QStringLiteral("list"), 99)));
+    live.flush();
+    const QList<QJsonObject> next = readLines(live, 1);
+    QCOMPARE(next.size(), 1);
+    QCOMPARE(next.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+    QCOMPARE(next.first().value(QStringLiteral("id")).toInt(), 99);
+}
+
+void TestPhosphorIpcSubscribe::subscribe_perSocketCapExceeded()
+{
+    // Pin the MaxSubscriptionsPerSocket=256 cap. After 256 successful
+    // subscriptions on a single socket, the 257th must return a
+    // MALFORMED_REQUEST diagnostic (the closest existing error code
+    // that fits "server-side resource limit hit") and the existing
+    // 256 subscriptions must remain live.
+    //
+    // To produce 257 distinct (target, signal) pairs without
+    // declaring 257 signals, we register one CounterTarget under
+    // 257 different names. The router allows the same QObject under
+    // multiple names; each (name_i, countChanged) is a unique
+    // subscription from the dedup-on-(target, signal) perspective.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+
+    IpcRouter router;
+    CounterTarget c;
+    constexpr int Cap = 256;
+    for (int i = 0; i < Cap + 1; ++i) {
+        QVERIFY(router.registerTarget(QStringLiteral("count_%1").arg(i), &c));
+    }
+    QVERIFY(router.start(sockPath));
+
+    QLocalSocket socket;
+    socket.connectToServer(sockPath);
+    QVERIFY(socket.waitForConnected(2000));
+
+    // Subscribe to the first 256 distinct (target, signal) pairs.
+    // Each subscribe issues one round-trip with the ack reply.
+    for (int i = 0; i < Cap; ++i) {
+        socket.write(writeLine(makeReq(QStringLiteral("subscribe"), i + 1, QStringLiteral("count_%1").arg(i),
+                                       QStringLiteral("countChanged"))));
+        socket.flush();
+        const QList<QJsonObject> ack = readLines(socket, 1);
+        QVERIFY2(ack.size() == 1, qPrintable(QStringLiteral("subscribe %1: no ack").arg(i)));
+        QCOMPARE(ack.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+    }
+
+    // 257th subscription: must fail with MALFORMED_REQUEST.
+    socket.write(writeLine(makeReq(QStringLiteral("subscribe"), Cap + 1, QStringLiteral("count_%1").arg(Cap),
+                                   QStringLiteral("countChanged"))));
+    socket.flush();
+    const QList<QJsonObject> resp = readLines(socket, 1);
+    QCOMPARE(resp.size(), 1);
+    QCOMPARE(resp.first().value(QStringLiteral("type")).toString(), QStringLiteral("error"));
+    QCOMPARE(resp.first().value(QStringLiteral("code")).toString(), QStringLiteral("MALFORMED_REQUEST"));
+
+    // The existing 256 subscriptions MUST still be live. Broadcast
+    // on the first target/signal pair and confirm an event arrives
+    // (its subscriptionId == 1 = the request id of the first
+    // subscribe call above). Followed by a sync `list` request so
+    // the no-stray-events invariant is held without a wall-clock
+    // wait.
+    QJsonArray args;
+    args.append(1);
+    router.broadcastEvent(QStringLiteral("count_0"), QStringLiteral("countChanged"), args);
+    socket.write(writeLine(makeReq(QStringLiteral("list"), Cap + 2)));
+    socket.flush();
+    const QList<QJsonObject> after = readLines(socket, 2);
+    QCOMPARE(after.size(), 2);
+    QCOMPARE(after.at(0).value(QStringLiteral("type")).toString(), QStringLiteral("event"));
+    QCOMPARE(after.at(0).value(QStringLiteral("subscriptionId")).toInt(), 1);
+    QCOMPARE(after.at(1).value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+    QCOMPARE(after.at(1).value(QStringLiteral("id")).toInt(), Cap + 2);
 }
 
 QTEST_MAIN(TestPhosphorIpcSubscribe)

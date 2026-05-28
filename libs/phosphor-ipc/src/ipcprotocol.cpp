@@ -12,6 +12,7 @@
 #include <QVariantMap>
 
 #include <cmath>
+#include <limits>
 
 namespace PhosphorIpc {
 
@@ -48,8 +49,13 @@ std::optional<qint64> parseIntegralJsonNumber(double d)
     // 2^63 (Int64MaxExclusiveD) IS exactly representable as a
     // double and equals the rounded value of INT64_MAX; reject it
     // and anything above as "not strictly less than qint64's
-    // positive overflow boundary".
-    constexpr double Int64MinD = -9223372036854775808.0;
+    // positive overflow boundary". INT64_MIN is exact as a double
+    // (single-bit mantissa at 2^63 with negative sign) so the
+    // static_cast lowers without precision loss; using the
+    // numeric_limits value rather than a literal sidesteps the
+    // "integer literal too large to be represented in any integer
+    // type" warning some compilers emit for `-9223372036854775808`.
+    constexpr double Int64MinD = static_cast<double>(std::numeric_limits<qint64>::min());
     constexpr double Int64MaxExclusiveD = 9223372036854775808.0;
     if (d < Int64MinD || d >= Int64MaxExclusiveD) {
         return std::nullopt;
@@ -242,10 +248,10 @@ QJsonValue variantToJson(const QVariant& v)
     case QMetaType::UShort:
     case QMetaType::Long:
     case QMetaType::LongLong:
-        // Signed up to 64 bits. JSON numbers are IEEE 754 doubles
-        // with 53 bits of integer precision; values above 2^53 lose
-        // precision on the wire, but the lossless cast covers
-        // everything below.
+        // Signed integer metatypes (≤64-bit). JSON numbers are IEEE
+        // 754 doubles with 53 bits of integer precision; values
+        // above 2^53 lose precision on the wire, but values that
+        // fit in 53 bits round-trip exactly.
         return static_cast<double>(v.toLongLong());
     case QMetaType::UInt:
     case QMetaType::ULong:
@@ -263,17 +269,18 @@ QJsonValue variantToJson(const QVariant& v)
         return v.toString();
     case QMetaType::QStringList: {
         QJsonArray arr;
-        const QStringList list = v.toStringList();
-        for (auto it = list.cbegin(); it != list.cend(); ++it) {
-            arr.append(*it);
+        // toStringList() returns an owned copy, so range-for is safe
+        // (no detach risk on a temporary).
+        for (const QString& s : v.toStringList()) {
+            arr.append(s);
         }
         return arr;
     }
     case QMetaType::QVariantList: {
         QJsonArray arr;
-        const QVariantList list = v.toList();
-        for (auto it = list.cbegin(); it != list.cend(); ++it) {
-            arr.append(variantToJson(*it));
+        // toList() returns an owned copy; range-for is safe.
+        for (const QVariant& item : v.toList()) {
+            arr.append(variantToJson(item));
         }
         return arr;
     }

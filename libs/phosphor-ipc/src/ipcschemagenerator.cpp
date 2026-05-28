@@ -17,6 +17,20 @@ namespace PhosphorIpc::IpcSchemaGenerator {
 
 namespace {
 
+// JSON Schema fragment for an unknown / unregistered QMetaType. No
+// "type" constraint (the CLI accepts any value); only a description
+// surfaces the C++ type name so callers can correlate the schema
+// to the source. Shared between the parameter / return-type paths
+// so both branches emit the identical shape if a future tweak
+// (e.g. adding a "x-meta-type" extension) lands.
+QJsonObject customTypeDescription(const char* typeName)
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("description"),
+               QStringLiteral("custom QMetaType: %1").arg(QLatin1String(typeName ? typeName : "<unknown>")));
+    return obj;
+}
+
 // Map a QMetaType ID to a JSON Schema fragment. Per IpcSchemaGenerator.h's
 // documented table. Unknown / custom types degrade to a
 // {"description": "<typename>"} fragment without a "type" constraint;
@@ -68,12 +82,8 @@ QJsonObject typeToSchema(int metaTypeId)
         // Caller (return-type path) checks this and omits the
         // "returns" field entirely.
         return obj;
-    default: {
-        const char* name = QMetaType(metaTypeId).name();
-        obj.insert(QStringLiteral("description"),
-                   QStringLiteral("custom QMetaType: %1").arg(QLatin1String(name ? name : "<unknown>")));
-        return obj;
-    }
+    default:
+        return customTypeDescription(QMetaType(metaTypeId).name());
     }
 }
 
@@ -143,17 +153,14 @@ QJsonObject schemaFor(const QString& targetName, const QObject* object)
                 // Pure void return: omit "returns" entirely.
             } else if (retType == QMetaType::UnknownType) {
                 // Unregistered metatype: emit the same custom-type
-                // description shape the param path uses (line 71),
-                // surfacing the typeName so the CLI knows the
-                // method returns *something* even if the type is
-                // opaque on the wire. Omitting "returns" would
-                // mislead callers into thinking the method is void.
-                QJsonObject ret;
+                // description shape the param path uses, surfacing
+                // the typeName so the CLI knows the method returns
+                // *something* even if the type is opaque on the wire.
+                // Omitting "returns" would mislead callers into
+                // thinking the method is void.
                 const QByteArray typeName = m.typeName();
-                ret.insert(QStringLiteral("description"),
-                           QStringLiteral("custom QMetaType: %1")
-                               .arg(QLatin1String(typeName.isEmpty() ? "<unknown>" : typeName.constData())));
-                entry.insert(QStringLiteral("returns"), ret);
+                entry.insert(QStringLiteral("returns"),
+                             customTypeDescription(typeName.isEmpty() ? nullptr : typeName.constData()));
             } else {
                 entry.insert(QStringLiteral("returns"), typeToSchema(retType));
             }

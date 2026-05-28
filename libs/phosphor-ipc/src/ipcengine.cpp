@@ -9,6 +9,7 @@
 #include <QPointer>
 #include <QQmlEngine>
 #include <QSet>
+#include <QThread>
 #include <QVariant>
 
 namespace PhosphorIpc::IpcEngine {
@@ -68,6 +69,13 @@ void install(QQmlEngine* engine, IpcRouter* router)
         qWarning("PhosphorIpc::IpcEngine::install: null engine ignored");
         return;
     }
+    // The destroyedWatchers / engineDestroyHandlerInstalled globals
+    // below are not thread-guarded; the public contract is that
+    // install / uninstall / routerFor run on the engine's owning
+    // thread (QQmlEngine is itself thread-affine, so this is the
+    // natural contract). Asserting here catches a misuse early in
+    // debug builds.
+    Q_ASSERT(engine->thread() == QThread::currentThread());
     if (!router) {
         qWarning("PhosphorIpc::IpcEngine::install: null router; call uninstall() to drop the binding explicitly");
         return;
@@ -111,7 +119,12 @@ void install(QQmlEngine* engine, IpcRouter* router)
     // accumulate engine-destroyed lambdas (one per cycle).
     auto& handlerInstalled = engineDestroyHandlerInstalled();
     if (!handlerInstalled.contains(engine)) {
-        QObject::connect(engine, &QObject::destroyed, [engine]() {
+        // Bind the lambda's invocation context to the engine itself
+        // (4-arg connect) for symmetry with the router-destroyed
+        // wiring above. The engine is also the sender here, but
+        // making the context explicit pins the thread affinity and
+        // matches the project pattern.
+        QObject::connect(engine, &QObject::destroyed, engine, [engine]() {
             destroyedWatchers().remove(engine);
             engineDestroyHandlerInstalled().remove(engine);
         });
@@ -125,6 +138,7 @@ void uninstall(QQmlEngine* engine)
     if (!engine) {
         return;
     }
+    Q_ASSERT(engine->thread() == QThread::currentThread());
     // Drop our destroyed-watcher first so an explicit uninstall
     // can't get retro-fired by the outgoing router's later
     // destruction.
@@ -137,6 +151,7 @@ IpcRouter* routerFor(QQmlEngine* engine)
     if (!engine) {
         return nullptr;
     }
+    Q_ASSERT(engine->thread() == QThread::currentThread());
     return readStoredRouter(engine);
 }
 

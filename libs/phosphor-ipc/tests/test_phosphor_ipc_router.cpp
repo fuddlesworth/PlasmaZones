@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 // In-process IpcRouter tests. Exercise registerTarget / unregisterTarget /
 // invoke / listTargets / schemaFor against a hand-built QObject "target"
@@ -98,6 +98,7 @@ private Q_SLOTS:
     void invoke_argTypeCoercionFailure();
     void invoke_outcomeOkOnSuccess();
     void invoke_overloadDispatchesByArity();
+    void invoke_overloadNoMatchingArityReturnsArgCountMismatch();
     void invoke_protectedQInvokableRejected();
     void schemaFor_unknownReturnsEmpty();
     void schemaFor_listsFunctions();
@@ -401,6 +402,28 @@ void TestPhosphorIpcRouter::invoke_overloadDispatchesByArity()
                                       QVariantList{QStringLiteral("alpha"), QStringLiteral("beta")}, nullptr, &err);
     QVERIFY(err.isEmpty());
     QCOMPARE(r2.toString(), QStringLiteral("two:alpha+beta"));
+}
+
+void TestPhosphorIpcRouter::invoke_overloadNoMatchingArityReturnsArgCountMismatch()
+{
+    // FakeTarget declares combine(QString) and combine(QString, QString)
+    // — but no 3-arg combine. A call with 3 args must surface
+    // ArgCountMismatch citing the parameter count of the name-only
+    // fallback metamethod (whichever overload findInvokableMethod
+    // returned). Pins the "no overload matches" branch so a
+    // regression that silently succeeded with arg truncation or
+    // returned NoSuchFn (the wrong code) is caught.
+    IpcRouter router;
+    FakeTarget t;
+    QVERIFY(router.registerTarget(QStringLiteral("c"), &t));
+    QString err;
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    const QVariant r =
+        router.invoke(QStringLiteral("c"), QStringLiteral("combine"),
+                      QVariantList{QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}, &outcome, &err);
+    QVERIFY(!r.isValid());
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::ArgCountMismatch);
+    QVERIFY(!err.isEmpty());
 }
 
 void TestPhosphorIpcRouter::invoke_protectedQInvokableRejected()

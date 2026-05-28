@@ -1,31 +1,38 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 // Full socket roundtrip. Spins up an IpcRouter on a temp socket
 // path, opens a QLocalSocket client in the same process, sends
 // NDJSON requests, and asserts response bytes. Exercises the same
 // wire bytes that bin/phosphorctl will produce.
 
+#include "ipctesthelpers.h"
+
 #include <PhosphorIpc/IpcProtocol.h>
 #include <PhosphorIpc/IpcRouter.h>
 
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocalSocket>
+#include <QLatin1Char>
 #include <QObject>
+#include <QRegularExpression>
+#include <QSet>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 #include <QtCore/qtclasshelpermacros.h>
 
-#include <optional>
-
 using namespace PhosphorIpc;
+using PhosphorIpcTests::makeReq;
+using PhosphorIpcTests::readLines;
+using PhosphorIpcTests::roundtrip;
 
 namespace {
 
@@ -49,67 +56,30 @@ public:
     }
 };
 
-// Helper: connect a client, send one request line, await one
-// response line, return the parsed object. Uses a QEventLoop with
-// QTimer deadline so both the client AND server sides of the
-// connection get fully processed, QLocalSocket::waitForReadyRead
-// alone doesn't reliably pump the server's accept loop on Linux,
-// which leaves the test hanging without the response.
-//
-// Failures (connect timeout, response timeout) populate `outError`
-// and return std::nullopt. Callers QVERIFY the optional and propagate
-// the error message via QFAIL so the failure points at the actual
-// root cause rather than at a downstream QCOMPARE that just sees an
-// empty QJsonObject.
-std::optional<QJsonObject> roundtrip(const QString& socketPath, const QJsonObject& request, QString* outError,
-                                     int timeoutMs = 2000)
+class BroadcastTarget : public QObject
 {
-    QLocalSocket socket;
-    QByteArray buffer;
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-
-    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-    QObject::connect(&socket, &QLocalSocket::readyRead, &loop, [&] {
-        buffer.append(socket.readAll());
-        if (buffer.contains('\n')) {
-            loop.quit();
-        }
-    });
-
-    socket.connectToServer(socketPath);
-    if (!socket.waitForConnected(timeoutMs)) {
-        if (outError) {
-            *outError = QStringLiteral("connect failed: %1").arg(socket.errorString());
-        }
-        return std::nullopt;
+    Q_OBJECT
+public:
+    explicit BroadcastTarget(QObject* parent = nullptr)
+        : QObject(parent)
+    {
     }
-    socket.write(writeLine(request));
-    socket.flush();
+    Q_DISABLE_COPY_MOVE(BroadcastTarget)
 
-    timeout.start(timeoutMs);
-    loop.exec();
+Q_SIGNALS:
+    // Existence-of-signal marker for the write-cap test. Never
+    // actually emitted from C++; broadcastEvent is called directly
+    // from the test body. Same pattern as
+    // test_phosphor_ipc_subscribe.cpp::CounterTarget::countChanged.
+    void payload(QString blob); // NOLINT(modernize-use-trailing-return-type)
+};
 
-    if (!buffer.contains('\n')) {
-        if (outError) {
-            *outError = QStringLiteral("no response within %1ms").arg(timeoutMs);
-        }
-        return std::nullopt;
-    }
-    const int nl = buffer.indexOf('\n');
-    QByteArray line = buffer.left(nl);
-    while (!line.isEmpty() && line.endsWith('\r')) {
-        line.chop(1);
-    }
-    socket.disconnectFromServer();
-    return QJsonDocument::fromJson(line).object();
-}
-
-// Convenience wrapper that calls QFAIL on roundtrip failure so the
-// failure surfaces with a precise message and at the call site
-// rather than downstream as `Compared values are different: actual:
-// "", expected: "reply"`.
+// Convenience macro: call PhosphorIpcTests::roundtrip and QFAIL with
+// a precise diagnostic on failure. The `return` inside QFAIL must be
+// lexically inside the test slot, so this stays a macro (a helper
+// function would return-void back to the slot with the failure
+// recorded but execution continuing into stale state). Kept thin —
+// the actual round-trip lives in ipctesthelpers.h.
 #define ROUNDTRIP_OR_FAIL(out, sockPath, req)                                                                          \
     QJsonObject out;                                                                                                   \
     do {                                                                                                               \
@@ -141,6 +111,8 @@ private Q_SLOTS:
     void oversizedLineClosesConnection();
     void consecutiveMalformedFramesClosesConnection();
     void pipelinedFramesAllReceiveReplies();
+    void peerDisconnectMidRequest();
+    void slowSubscriberHitsWriteCap();
 };
 
 void TestPhosphorIpcE2e::roundtrip_call()
@@ -364,6 +336,12 @@ void TestPhosphorIpcE2e::oversizedLineClosesConnection()
     // this guard a misbehaving client could pin unbounded memory in the
     // QLocalSocket internal buffer until canReadLine() finally returned
     // true.
+    //
+    // The flood is written in 64 KiB chunks with explicit flush +
+    // processEvents between chunks so the test exercises the read-side
+    // cap directly rather than depending on the kernel's AF_UNIX send-
+    // buffer sizing (a regression that added a write-timeout in the
+    // single-write path could break this test for the wrong reason).
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
@@ -374,76 +352,60 @@ void TestPhosphorIpcE2e::oversizedLineClosesConnection()
     QLocalSocket socket;
     QByteArray buffer;
     bool disconnected = false;
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-    QObject::connect(&socket, &QLocalSocket::readyRead, &loop, [&] {
+    QObject::connect(&socket, &QLocalSocket::readyRead, &socket, [&] {
         buffer.append(socket.readAll());
-        // Quit only once BOTH the diagnostic frame has arrived AND
-        // the server has closed the connection (the router contract
-        // produces both; "either" hides regressions). Typical Qt
-        // ordering on Linux for a peer-side abort is readyRead
-        // first, then disconnected, so this gate flips at the
-        // disconnected slot below in the common path.
-        if (buffer.contains('\n') && disconnected) {
-            loop.quit();
-        }
     });
-    QObject::connect(&socket, &QLocalSocket::disconnected, &loop, [&] {
+    QObject::connect(&socket, &QLocalSocket::disconnected, &socket, [&] {
         disconnected = true;
-        // Drain any final bytes the kernel held when the disconnect
-        // arrived; readyRead may not re-fire post-close. Quit when
-        // we have both halves; if disconnect arrived without the
-        // diagnostic (regression we want to catch), the timer fires
-        // and the post-loop assertion at QVERIFY2(buffer.contains)
-        // pins the failure.
         buffer.append(socket.readAll());
-        if (buffer.contains('\n')) {
-            loop.quit();
-        }
     });
 
     socket.connectToServer(sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
-    // Write 1 MiB + 1 byte without a newline. The router's 1 MiB cap
-    // should trigger MALFORMED_REQUEST + abort().
-    QByteArray flood(1024 * 1024 + 1, 'A');
-    socket.write(flood);
-    socket.flush();
+    // Write 1 MiB + 1 byte without a newline in 64 KiB chunks. The
+    // router's 1 MiB cap fires when server-side bytesAvailable
+    // reaches MaxLineBytes without a newline. Between chunks we
+    // wait for the kernel to actually accept the bytes
+    // (waitForBytesWritten) so the test exercises the read-side cap
+    // deterministically rather than depending on the kernel send
+    // buffer's ability to swallow the whole flood in one syscall.
+    constexpr int ChunkSize = 64 * 1024;
+    constexpr int TotalBytes = 1024 * 1024 + 1;
+    const QByteArray chunk(ChunkSize, 'A');
+    int written = 0;
+    while (written < TotalBytes && !disconnected) {
+        const int toWrite = qMin(ChunkSize, TotalBytes - written);
+        socket.write(chunk.constData(), toWrite);
+        socket.waitForBytesWritten(2000);
+        QCoreApplication::processEvents();
+        written += toWrite;
+    }
 
-    timeout.start(5000);
-    loop.exec();
+    // Wait for both halves of the router's response: the diagnostic
+    // frame on the wire AND the server-driven disconnect. Asserting
+    // on "either" hides regressions where the error path silently
+    // loses the diagnostic.
+    QTRY_VERIFY_WITH_TIMEOUT(disconnected && buffer.contains('\n'), 5000);
 
-    // The router contract is: error frame written, brief
-    // waitForBytesWritten, then abort(). Both the frame and the
-    // disconnect MUST surface when the cap fires; accepting "either
-    // or" would hide regressions where the error path silently
-    // loses the diagnostic. Pump one more readAll in case bytes
-    // landed between the loop's last readyRead and exit.
-    buffer.append(socket.readAll());
-    QVERIFY2(buffer.contains('\n'),
-             "oversized line cap must write the MALFORMED_REQUEST diagnostic frame before closing");
     const QByteArray firstLine = buffer.left(buffer.indexOf('\n'));
     const QJsonObject errFrame = QJsonDocument::fromJson(firstLine).object();
     QCOMPARE(errFrame.value(QStringLiteral("type")).toString(), QStringLiteral("error"));
     QCOMPARE(errFrame.value(QStringLiteral("code")).toString(), QStringLiteral("MALFORMED_REQUEST"));
-    QVERIFY2(disconnected, "router must close the connection after the oversize-line diagnostic");
-    // socket is already in UnconnectedState (the disconnect
-    // assertion above verifies that); no explicit abort() needed
-    // before the QLocalSocket destructor runs.
 }
 
 void TestPhosphorIpcE2e::consecutiveMalformedFramesClosesConnection()
 {
-    // Pin the MaxMalformedFrames=16 per-socket cap. A peer that
-    // streams 17 consecutive garbage lines must receive 16 error
-    // frames (one per malformed input) and then be force-closed on
-    // the 17th. The counter-reset-on-well-formed-frame branch in
-    // dispatch() is exercised implicitly by other tests that send
-    // valid frames after the parser would have surfaced a malformed
-    // one — this test focuses on the cap-and-close path only.
+    // Pin the MaxConsecutiveMalformedFrames=16 per-socket cap. A
+    // peer that streams 16 consecutive garbage frames must receive
+    // 16 MALFORMED_REQUEST diagnostics with the connection still
+    // open; the 17th frame triggers force-close.
+    //
+    // Driven deterministically: write one frame, pump events, drain
+    // and assert the error frame arrived, repeat. This pins the cap
+    // value at exactly 16 (the previous flake-prone 16..17 tolerance
+    // was a symptom of writing all frames at once and racing the
+    // waitForBytesWritten flush window on the close iteration).
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
@@ -452,67 +414,32 @@ void TestPhosphorIpcE2e::consecutiveMalformedFramesClosesConnection()
     QVERIFY(router.start(sockPath));
 
     QLocalSocket socket;
-    QByteArray buffer;
-    bool disconnected = false;
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-    QObject::connect(&socket, &QLocalSocket::readyRead, &loop, [&] {
-        buffer.append(socket.readAll());
-    });
-    QObject::connect(&socket, &QLocalSocket::disconnected, &loop, [&] {
-        disconnected = true;
-        buffer.append(socket.readAll());
-        loop.quit();
-    });
-
     socket.connectToServer(sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
-    // Write 17 consecutive malformed frames. The router writes an
-    // error frame per malformed line (suppressed once the cap fires
-    // and the socket is aborted). 16 are tolerated; the 17th
-    // triggers close.
-    for (int i = 0; i < 17; ++i) {
+    // Frames 1..16: each must produce a MALFORMED_REQUEST diagnostic
+    // and the connection MUST remain open. A regression that closes
+    // earlier (cap < 16) fails the connected-state assertion here.
+    constexpr int Cap = 16;
+    for (int i = 0; i < Cap; ++i) {
         socket.write("{ garbage line\n");
+        socket.flush();
+        const QList<QJsonObject> diag = readLines(socket, 1);
+        QVERIFY2(diag.size() == 1, qPrintable(QStringLiteral("frame %1: expected one diagnostic").arg(i + 1)));
+        QCOMPARE(diag.first().value(QStringLiteral("code")).toString(), QStringLiteral("MALFORMED_REQUEST"));
+        QVERIFY2(
+            socket.state() == QLocalSocket::ConnectedState,
+            qPrintable(QStringLiteral("connection closed prematurely on frame %1 (cap should fire at 17)").arg(i + 1)));
     }
+
+    // Frame 17: the router writes its diagnostic (best-effort) and
+    // aborts the connection. The router's writeBeforeAbort flush
+    // window means the 17th diagnostic may or may not land before
+    // close; we don't assert on its presence. We DO assert that the
+    // server closes the connection.
+    socket.write("{ garbage line\n");
     socket.flush();
-
-    timeout.start(5000);
-    loop.exec();
-    buffer.append(socket.readAll());
-
-    QVERIFY2(disconnected, "router must close the connection after consecutive malformed frames exceed the cap");
-    // Count MALFORMED_REQUEST error frames that landed. The cap is
-    // 16 — the 17th triggered close, so we should see ≥ 16 error
-    // frames (the writeBeforeAbort + flush order may vary slightly
-    // on the close iteration). 16 is the strict lower bound the
-    // cap guarantees.
-    int errorCount = 0;
-    int pos = 0;
-    while (true) {
-        const int nl = buffer.indexOf('\n', pos);
-        if (nl < 0) {
-            break;
-        }
-        const QByteArray line = buffer.mid(pos, nl - pos);
-        pos = nl + 1;
-        const QJsonObject obj = QJsonDocument::fromJson(line).object();
-        if (obj.value(QStringLiteral("code")).toString() == QStringLiteral("MALFORMED_REQUEST")) {
-            ++errorCount;
-        }
-    }
-    // The strict lower bound the cap guarantees is 16 (router
-    // tolerates exactly 16 consecutive malformed frames before
-    // closing on the 17th). Upper bound 17 covers the one-write-
-    // then-abort race where the 17th's diagnostic frame either
-    // does or doesn't land before the close depending on the
-    // waitForBytesWritten flush window. A regression that closes
-    // earlier (cap < 16) would fail the lower bound; a regression
-    // that never closes would fail the disconnected check above.
-    QVERIFY2(errorCount >= 16 && errorCount <= 17,
-             qPrintable(QStringLiteral("expected 16..17 MALFORMED_REQUEST frames, got %1").arg(errorCount)));
+    QTRY_VERIFY_WITH_TIMEOUT(socket.state() == QLocalSocket::UnconnectedState, 5000);
 }
 
 void TestPhosphorIpcE2e::pipelinedFramesAllReceiveReplies()
@@ -523,6 +450,13 @@ void TestPhosphorIpcE2e::pipelinedFramesAllReceiveReplies()
     // router's queued reschedule must dispatch the leftover frames
     // on a subsequent event-loop iteration. A regression that lost
     // the queued kick would leave frames 65..N stranded.
+    //
+    // The id-set assertion below pins per-frame correlation: it's
+    // not enough that 100 newlines arrive — each request's id MUST
+    // be paired to a reply with the same id, and each reply MUST be
+    // type="reply". A regression that reordered, duplicated, or
+    // dropped+padded the reply stream would pass a bare count-check
+    // but fail the id set.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
@@ -531,24 +465,12 @@ void TestPhosphorIpcE2e::pipelinedFramesAllReceiveReplies()
     QVERIFY(router.start(sockPath));
 
     QLocalSocket socket;
-    QByteArray buffer;
-    QEventLoop loop;
-    QTimer timeout;
-    timeout.setSingleShot(true);
-    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
-    constexpr int FrameCount = 100;
-    QObject::connect(&socket, &QLocalSocket::readyRead, &loop, [&] {
-        buffer.append(socket.readAll());
-        if (buffer.count('\n') >= FrameCount) {
-            loop.quit();
-        }
-    });
-
     socket.connectToServer(sockPath);
     QVERIFY(socket.waitForConnected(2000));
 
     // Pipeline FrameCount list requests in a single write so they
     // arrive as one readyRead burst on the server side.
+    constexpr int FrameCount = 100;
     QByteArray pipeline;
     for (int i = 1; i <= FrameCount; ++i) {
         QJsonObject req;
@@ -559,11 +481,138 @@ void TestPhosphorIpcE2e::pipelinedFramesAllReceiveReplies()
     socket.write(pipeline);
     socket.flush();
 
-    timeout.start(10000);
-    loop.exec();
+    const QList<QJsonObject> replies = readLines(socket, FrameCount, 10000);
+    QCOMPARE(replies.size(), FrameCount);
 
-    QCOMPARE(buffer.count('\n'), FrameCount);
+    QSet<int> seenIds;
+    for (const QJsonObject& reply : replies) {
+        QCOMPARE(reply.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+        const int id = reply.value(QStringLiteral("id")).toInt();
+        QVERIFY2(id >= 1 && id <= FrameCount, qPrintable(QStringLiteral("reply id %1 out of range").arg(id)));
+        QVERIFY2(!seenIds.contains(id), qPrintable(QStringLiteral("duplicate reply for id %1").arg(id)));
+        seenIds.insert(id);
+    }
+    QCOMPARE(seenIds.size(), FrameCount);
     socket.disconnectFromServer();
+}
+
+void TestPhosphorIpcE2e::peerDisconnectMidRequest()
+{
+    // A peer that writes a partial NDJSON line (no trailing newline)
+    // and then aborts must NOT crash, deadlock, or leak resources on
+    // the server side; subsequent clients must continue to be served
+    // normally.
+    //
+    // Internal contract being verified: handleClientDisconnected is
+    // robust against the "buffer has unconsumed bytes" state, and
+    // the per-socket subscription / malformed-counter maps get cleaned
+    // up so a fresh accept slot is ready.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+
+    IpcRouter router;
+    EchoTarget echo;
+    QVERIFY(router.registerTarget(QStringLiteral("echo"), &echo));
+    QVERIFY(router.start(sockPath));
+
+    // Client A: partial JSON, then abort. The partial frame leaves
+    // server-side state with bytes buffered but no '\n'. Note: we
+    // don't QVERIFY waitForBytesWritten here — flush() may have
+    // already pushed the small payload through the kernel
+    // synchronously, leaving bytesToWrite at zero and the wait
+    // returning false despite the bytes being on the wire.
+    {
+        QLocalSocket a;
+        a.connectToServer(sockPath);
+        QVERIFY(a.waitForConnected(2000));
+        a.write("{\"type\":\"list\",\"id\":1");
+        a.flush();
+        a.waitForBytesWritten(2000);
+        a.abort();
+    }
+
+    // Pump the event loop so the server-side disconnected signal
+    // fires and handleClientDisconnected runs.
+    QCoreApplication::processEvents();
+
+    // Client B: a normal round-trip must still succeed. If client A
+    // had wedged the router (deadlock, freed-pointer access, etc.),
+    // this round-trip would hang or fail.
+    QJsonObject req;
+    req.insert(QStringLiteral("type"), QStringLiteral("list"));
+    req.insert(QStringLiteral("id"), 42);
+    ROUNDTRIP_OR_FAIL(resp, sockPath, req);
+    QCOMPARE(resp.value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+    QCOMPARE(resp.value(QStringLiteral("id")).toInt(), 42);
+}
+
+void TestPhosphorIpcE2e::slowSubscriberHitsWriteCap()
+{
+    // Pin the write-side backpressure cap (MaxBytesToWrite = 16 MiB
+    // in broadcastEvent). A subscriber that never reads from its
+    // socket while the server broadcasts large events must be
+    // force-closed once the per-socket bytesToWrite exceeds the cap.
+    //
+    // We trigger the cap by broadcasting ~1 MiB events without
+    // pumping the subscriber's event loop between broadcasts. The
+    // kernel AF_UNIX send/recv buffer fills quickly (a few hundred
+    // KiB), then Qt accumulates the rest in its userspace write
+    // buffer, growing the server's bytesToWrite on the subscriber's
+    // socket until the cap fires.
+    //
+    // We expect the cap test to use the warning that broadcastEvent
+    // logs when force-closing the subscriber; suppress it from the
+    // test output so the run isn't confused with a real regression.
+    QTest::ignoreMessage(
+        QtWarningMsg,
+        QRegularExpression(QStringLiteral("subscriber on '.*' is .* bytes behind; closing the connection")));
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+
+    IpcRouter router;
+    BroadcastTarget t;
+    QVERIFY(router.registerTarget(QStringLiteral("bcast"), &t));
+    QVERIFY(router.start(sockPath));
+
+    QLocalSocket subscriber;
+    subscriber.connectToServer(sockPath);
+    QVERIFY(subscriber.waitForConnected(2000));
+    subscriber.write(
+        writeLine(makeReq(QStringLiteral("subscribe"), 1, QStringLiteral("bcast"), QStringLiteral("payload"))));
+    subscriber.flush();
+    const QList<QJsonObject> ack = readLines(subscriber, 1);
+    QCOMPARE(ack.size(), 1);
+    QCOMPARE(ack.first().value(QStringLiteral("type")).toString(), QStringLiteral("reply"));
+
+    // Construct a ~1 MiB payload per broadcast: 512 KiB string × 2.
+    // The JSON-encoded event payload (subscriptionId + args array)
+    // adds a few dozen bytes of framing, well under any single-
+    // broadcast budget.
+    const QString blob(512 * 1024, QLatin1Char('x'));
+    QJsonArray big;
+    big.append(blob);
+    big.append(blob);
+
+    // Broadcast until the router closes the subscriber. Cap at 64
+    // iterations to bound the test if the mechanism is broken; the
+    // expected close happens around iteration 16-18.
+    constexpr int MaxIterations = 64;
+    bool closed = false;
+    for (int i = 0; i < MaxIterations && !closed; ++i) {
+        router.broadcastEvent(QStringLiteral("bcast"), QStringLiteral("payload"), big);
+        // Pump once so socket state can propagate, but don't drain
+        // the subscriber (that would empty bytesToWrite and the cap
+        // would never fire). The router's broadcastEvent and any
+        // chained disconnect must propagate via processEvents.
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        if (subscriber.state() == QLocalSocket::UnconnectedState) {
+            closed = true;
+        }
+    }
+    QVERIFY2(closed, "router must close the subscriber once pending writes exceed the 16 MiB cap");
 }
 
 QTEST_MAIN(TestPhosphorIpcE2e)

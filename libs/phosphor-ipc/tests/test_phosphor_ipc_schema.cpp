@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 // Validates the QMetaType → JSON Schema table documented in
 // IpcSchemaGenerator.h. Each test exercises one type by registering
