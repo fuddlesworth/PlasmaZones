@@ -302,10 +302,30 @@ jobs:
           # On PRs, default checkout is the synthetic merge ref. We want
           # the PR head commit so the draft package mirrors what a tester
           # would clone from the branch.
+          # `head.sha` is supplied by GitHub from the head repo's API state
+          # (40-char hex), not from anything the PR author can write — safe
+          # to interpolate. The `|| github.sha` fallback covers
+          # workflow_dispatch where no PR exists.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Resolve build metadata
         id: meta
+        # Route every attacker-controllable input (branch ref) through env
+        # vars instead of `${{ }}` template substitution. Git ref-format
+        # allows `$`, `(`, `)`, backticks, `&`, `|` in branch names, so a
+        # malicious PR with `branch=fix$(rm -rf /)` would inject the
+        # substitution into bash when `${{ github.head_ref }}` is pasted
+        # into a double-quoted shell string. The job grants
+        # `pull-requests: write` to post the sticky comment, so a
+        # successful injection could exfiltrate GITHUB_TOKEN and abuse it
+        # against the PR. Environment variables are read by bash without
+        # re-parsing — `$BRANCH_REF` is safe even when the value contains
+        # shell metacharacters. Documented as a GHA hardening best
+        # practice; see github.com/github/actions-runner-controller#security.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+          PR_NUMBER_RAW: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -313,12 +333,26 @@ jobs:
           CMAKE_VER=$(sed -n 's/^project(PlasmaZones VERSION \([^ )]*\).*/\1/p' CMakeLists.txt)
           : "${CMAKE_VER:=0.0.0}"
 
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          # workflow_dispatch has no PR number — fall back to "ref" tag
-          # so the version still sorts but is recognisable as a manual run.
-          : "${PR_NUMBER:=manual}"
+          # workflow_dispatch has no PR number — fall back to "manual" so
+          # the version still sorts but is recognisable as a manual run.
+          PR_NUMBER="${PR_NUMBER_RAW:-manual}"
 
-          BRANCH_REF="${{ github.head_ref || github.ref_name }}"
+          # Prefer HEAD_REF (PR source branch); fall back to REF_NAME for
+          # workflow_dispatch. Both come from env (no GHA interpolation
+          # into the shell source).
+          BRANCH_REF="${HEAD_REF:-$REF_NAME}"
+
+          # Sanity-validate the branch name against the conservative
+          # subset of git ref-format we want to flow through pkgver/
+          # source URLs. Reject anything outside [A-Za-z0-9._/-]; the
+          # injection vector is closed above by env-passing, but a
+          # malformed value here would still poison pkgver and the
+          # source URL passed to `git+#branch=...`. Belt-and-suspenders.
+          if [[ ! "$BRANCH_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::Refusing to build with branch ref containing unsupported characters: $BRANCH_REF"
+            exit 1
+          fi
+
           SHORT_SHA=$(git rev-parse --short HEAD)
           COMMIT_COUNT=$(git rev-list --count HEAD)
           # pkgver schema: <cmake>.pr<num>.r<count>.g<sha>
