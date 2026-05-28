@@ -92,7 +92,7 @@ This doc is a prioritized roadmap. Each row tells you: what's missing, why it ma
 
 | Gap                                | Reference                                              | Notes                                                                                                 | Effort | Priority |
 |------------------------------------|--------------------------------------------------------|-------------------------------------------------------------------------------------------------------|--------|----------|
-| Lock surface (ext-session-lock-v1) | DMS `Modules/Lock/`, Noctalia `Modules/LockScreen/`    | The Phosphor compositor implements `ext-session-lock-v1`. PAM auth via `pam_authenticate` in `phosphor-lock`. | L | **P0** |
+| Lock surface (ext-session-lock-v1) | DMS `Modules/Lock/`, Noctalia `Modules/LockScreen/`    | The Phosphor compositor implements `ext-session-lock-v1`. PAM auth via `pam_authenticate` in `phosphor-service-lock`. | L | **P0** |
 | Theming integration                | both                                                   | Same `Theme` tokens, blurred wallpaper, media card.                                                   | S      | **P1**   |
 | Video screensaver                  | DMS `VideoScreensaver.qml`                             | Plays during idle-but-not-yet-DPMS.                                                                   | S      | **P3**   |
 | On-screen keyboard (lock-only)     | DMS lockscreen OSK                                     | Touch convertibles only.                                                                              | M      | **P3**   |

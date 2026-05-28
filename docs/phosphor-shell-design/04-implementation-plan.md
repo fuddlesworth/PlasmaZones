@@ -207,50 +207,50 @@ All five demos run. The `phosphor-foundations-0.1` tag is now unblocked — next
 
 ### Naming, layout, and the existing umbrella
 
-The existing `phosphor-services` library is an umbrella whose CMakeLists explicitly anticipates `Notifications`, `MPRIS`, `UPower`, `NetworkManager`, and `logind` as "future siblings" *inside* it. **This plan deviates from that.** Every other non-shell library in `libs/` follows a `phosphor-<purpose>` one-lib-per-concern pattern. Examples include `phosphor-dbus`, `phosphor-shortcuts`, `phosphor-audio`, `phosphor-layer`, and `phosphor-overlay`. The umbrella is the outlier. We adopt the broader pattern.
+The existing `phosphor-services` library is an umbrella whose CMakeLists explicitly anticipates `Notifications`, `MPRIS`, `UPower`, `NetworkManager`, and `logind` as "future siblings" *inside* it. **This plan deviates from that** — the umbrella gets dissolved into one lib per tenant. The new per-domain libs (both the 2.0 extractions and the 2.1-2.10 additions) all carry a `phosphor-service-*` prefix. The prefix is a group-tag: anything `phosphor-service-*` is a shell-domain integration that surfaces OS state via D-Bus / sysfs / native APIs and lets the shell drive system actions — distinct from foundation libs like `phosphor-dbus`, `phosphor-layer`, or `phosphor-rendering` that are infrastructure consumed across tiers. The split makes `ls libs/` self-documenting: foundation libs in one visual group, service libs in another.
 
 The shared "-common" already exists: **`phosphor-dbus`** is the service-agnostic DBus plumbing (`client.cpp`, error/cancel handling, custom-type marshalling). Every new service lib in this phase consumes `phosphor-dbus` instead of duplicating boilerplate.
 
 Each service follows the same shape:
-- `libs/phosphor-<domain>/` (C++), focused, one concern, depends on `phosphor-dbus` if it talks DBus
-- QML singleton `<Domain>.qml` (e.g. `Network`, `Bluetooth`)
-- `examples/phosphor-<domain>-cli/`, small binary that reads + controls the service
-- `phosphorctl` namespace (e.g. `phosphorctl call network.scan`)
+- `libs/phosphor-service-<domain>/` (C++), focused, one concern, depends on `phosphor-dbus` if it talks DBus
+- QML singleton `<Domain>.qml` (e.g. `Network`, `Bluetooth`) — the user-facing surface keeps the short name
+- `examples/phosphor-service-<domain>-cli/`, small binary that reads + controls the service
+- `phosphorctl` namespace (e.g. `phosphorctl call network.scan`) — same short name; the prefix is for the lib directory only
 
 ### 2.0: Extract existing `phosphor-services` tenants
 
 The umbrella already houses four tenants. Before adding new ones, extract these to follow the pattern (small, mostly-mechanical moves; update consumers in the same PRs):
 
-| Source                                             | New home                         | Notes                                                                          |
-|----------------------------------------------------|----------------------------------|--------------------------------------------------------------------------------|
-| `phosphor-services/src/statusnotifier/`            | `phosphor-sni/`                  | StatusNotifierItem host + watcher + dbusmenu. First-tenant historical context. |
-| `phosphor-services/src/mpris/`                     | `phosphor-mpris/`                | MPRIS client + player aggregation.                                              |
-| `phosphor-services/src/upower/`                    | `phosphor-upower/`               | Battery/power-supply readouts. (Already used by current `examples/phosphor-shell/`.) |
-| `phosphor-services/src/icontheme/` + `iconimageprovider.*` | `phosphor-icontheme/`    | Icon-theme resolution + Qt image provider. Possibly fold into `phosphor-rendering` if it's purely a Qt image provider, judgement call when extracting. |
-| `libs/phosphor-services/` umbrella                 | **deleted**                      | Once empty. No backwards-compat shim, per `feedback_no_legacy_shims`.          |
+| Source                                             | New home                                 | Notes                                                                          |
+|----------------------------------------------------|------------------------------------------|--------------------------------------------------------------------------------|
+| `phosphor-services/src/statusnotifier/`            | `phosphor-service-sni/`                  | StatusNotifierItem host + watcher + dbusmenu. First-tenant historical context. |
+| `phosphor-services/src/mpris/`                     | `phosphor-service-mpris/`                | MPRIS client + player aggregation.                                              |
+| `phosphor-services/src/upower/`                    | `phosphor-service-upower/`               | Battery/power-supply readouts. (Already used by current `examples/phosphor-shell/`.) |
+| `phosphor-services/src/icontheme/` + `iconimageprovider.*` | `phosphor-service-icontheme/`    | Icon-theme resolution + Qt image provider. Possibly fold into `phosphor-rendering` if it's purely a Qt image provider, judgement call when extracting. |
+| `libs/phosphor-services/` umbrella                 | **deleted**                              | Once empty. No backwards-compat shim, per `feedback_no_legacy_shims`.          |
 
-**Effort:** S-M total. Mechanical except for any cross-tenant helper code that needs to move into `phosphor-dbus` or a new tiny `phosphor-icontheme`. Per CLAUDE.md, every call site updates in the same PR.
+**Effort:** S-M total. Mechanical except for any cross-tenant helper code that needs to move into `phosphor-dbus` or a new tiny `phosphor-service-icontheme`. Per CLAUDE.md, every call site updates in the same PR.
 
 ### 2.1-2.10, New service libraries
 
 Naming notes:
-- `phosphor-audio` is **already taken** by the cava-spectrum lib for audio-reactive shaders. The full PipeWire mixer goes into `phosphor-pipewire` to avoid collision.
-- `phosphor-shortcuts` already exists with a `kglobalaccel/portal/dbus` backend pattern, use the same pattern for any service with multiple possible backends.
+- The full PipeWire mixer goes into `phosphor-service-pipewire` (`phosphor-audio` is unrelated — that's the cava-spectrum lib for audio-reactive shaders; the prefix makes the distinction self-evident in `libs/`).
+- `phosphor-shortcuts` already exists with a `kglobalaccel/portal/dbus` backend pattern, use the same pattern for any service with multiple possible backends. (It pre-dates the `phosphor-service-*` group and isn't renamed for backwards-compat reasons; new service libs adopt the prefix.)
 
 | #    | Library                              | Backend                                                                              | CLI demo capabilities                                          | Effort |
 |------|--------------------------------------|--------------------------------------------------------------------------------------|----------------------------------------------------------------|--------|
-| 2.1  | `phosphor-pipewire`                  | PipeWire (libpipewire) + wireplumber                                                 | list sinks/sources, set volume, set default, mute              | L      |
-| 2.2  | `phosphor-network`                   | DBus `org.freedesktop.NetworkManager` (via `phosphor-dbus`); libnm optional          | list connections, scan wifi, connect to AP                     | L      |
-| 2.3  | `phosphor-bluetooth`                 | DBus `org.bluez` (via `phosphor-dbus`)                                               | list adapters/devices, scan, pair, connect                     | M      |
-| 2.4  | `phosphor-brightness`                | `/sys/class/backlight` + `org.freedesktop.login1.Session.SetBrightness`              | get/set brightness, list devices                               | S      |
-| 2.5  | `phosphor-notifications`             | server side of `org.freedesktop.Notifications` (via `phosphor-dbus`)                 | runs as standalone daemon for demo; logs received notifications | L      |
-| 2.6  | `phosphor-polkit`                    | polkit-qt6 binding                                                                   | runs as standalone agent demo; prints auth requests, accepts a hardcoded password | M |
-| 2.7  | `phosphor-idle`                      | `idle-inhibit-unstable-v1` client + timer state machine                              | inhibit toggle, timeout config, fired-at log                   | S      |
-| 2.8  | `phosphor-clipboard`                 | `wlr-data-control` + on-disk history (cliphist-style)                                | watch / list history / copy nth entry                          | M      |
-| 2.9  | `phosphor-lock`                      | PAM (`pam_authenticate`) + coordination with ext-session-lock-v1                     | CLI demo authenticates a user and prints success/failure       | M      |
-| 2.10 | `phosphor-session`                   | DBus `org.freedesktop.login1` (logind, via `phosphor-dbus`)                          | lock, suspend, hibernate, reboot, shutdown, read available capabilities first | S |
+| 2.1  | `phosphor-service-pipewire`          | PipeWire (libpipewire) + wireplumber                                                 | list sinks/sources, set volume, set default, mute              | L      |
+| 2.2  | `phosphor-service-network`           | DBus `org.freedesktop.NetworkManager` (via `phosphor-dbus`); libnm optional          | list connections, scan wifi, connect to AP                     | L      |
+| 2.3  | `phosphor-service-bluetooth`         | DBus `org.bluez` (via `phosphor-dbus`)                                               | list adapters/devices, scan, pair, connect                     | M      |
+| 2.4  | `phosphor-service-brightness`        | `/sys/class/backlight` + `org.freedesktop.login1.Session.SetBrightness`              | get/set brightness, list devices                               | S      |
+| 2.5  | `phosphor-service-notifications`     | server side of `org.freedesktop.Notifications` (via `phosphor-dbus`)                 | runs as standalone daemon for demo; logs received notifications | L      |
+| 2.6  | `phosphor-service-polkit`            | polkit-qt6 binding                                                                   | runs as standalone agent demo; prints auth requests, accepts a hardcoded password | M |
+| 2.7  | `phosphor-service-idle`              | `idle-inhibit-unstable-v1` client + timer state machine                              | inhibit toggle, timeout config, fired-at log                   | S      |
+| 2.8  | `phosphor-service-clipboard`         | `wlr-data-control` + on-disk history (cliphist-style)                                | watch / list history / copy nth entry                          | M      |
+| 2.9  | `phosphor-service-lock`              | PAM (`pam_authenticate`) + coordination with ext-session-lock-v1                     | CLI demo authenticates a user and prints success/failure       | M      |
+| 2.10 | `phosphor-service-session`           | DBus `org.freedesktop.login1` (logind, via `phosphor-dbus`)                          | lock, suspend, hibernate, reboot, shutdown, read available capabilities first | S |
 
-(Existing `phosphor-mpris`, `phosphor-sni`, `phosphor-upower` from 2.0 cover what would have been service rows 11-13 in the prior plan.)
+(Existing `phosphor-service-mpris`, `phosphor-service-sni`, `phosphor-service-upower` from 2.0 cover what would have been service rows 11-13 in the prior plan.)
 
 **Total effort:** L-XL (8-12 weeks solo, including 2.0 extractions). Parallelizes well across 2-3 engineers, `phosphor-dbus` is the only shared dep, and it's already there.
 
@@ -303,7 +303,7 @@ The connected-corner geometry primitive, central to the visual identity.
 | Deliverable                                                  | Notes                                                                                            |
 |--------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
 | `qml/Phosphor/Notifications/ToastHost.qml` + `Toast.qml`     | Layer-shell surface per screen, stacks toasts top-right. Slide-in from edge, auto-dismiss, hover-to-pause. |
-| `examples/phosphor-toast-demo/`                              | Send a notification via `notify-send` and a toast appears. Uses `phosphor-notifications` from Phase 2.5. |
+| `examples/phosphor-toast-demo/`                              | Send a notification via `notify-send` and a toast appears. Uses `phosphor-service-notifications` from Phase 2.5. |
 
 **Acceptance:** toasts queue, dismiss correctly; rich text + image support; the per-app-rules consumption seam exists and applies any rules supplied by the rules service. The rules editor and its persistence layer belong to Phase 4.3 (Notification center) and wire into this seam without changes to ToastHost.
 
@@ -358,14 +358,14 @@ Visible win: bar feels alive and distinct.
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Lock/{LockSurface,LockClock,LockAuthField,LockMediaCard}.qml`               | L       |
-| Wired to `phosphor-lock` (Phase 2.9) + ext-session-lock-v1 from compositor                | M       |
+| Wired to `phosphor-service-lock` (Phase 2.9) + ext-session-lock-v1 from compositor        | M       |
 
 ### 4.6: Power menu
 
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Power/PowerMenu.qml` (replaces today's `MenuContent.qml` stub)              | S       |
-| Wired to `phosphor-session` (Phase 2.10)                                                   | S       |
+| Wired to `phosphor-service-session` (Phase 2.10)                                           | S       |
 
 ### 4.7: Wallpaper picker UI
 

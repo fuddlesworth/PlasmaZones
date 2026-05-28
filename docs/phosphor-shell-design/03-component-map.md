@@ -79,24 +79,25 @@ libs/                                      # C++ libraries, every concern is its
 
   # NEW integration libs (Phase 2 of 04-implementation-plan.md).
   # All DBus-based ones depend on the existing phosphor-dbus for shared plumbing.
-  # Note: phosphor-audio is already taken (cava spectrum), so the mixer is phosphor-pipewire.
-  phosphor-pipewire/                       # PipeWire mixer (sinks/sources/volume/mute)
-  phosphor-network/                        # NetworkManager (DBus org.freedesktop.NetworkManager)
-  phosphor-bluetooth/                      # BlueZ (DBus org.bluez)
-  phosphor-brightness/                     # /sys/class/backlight + logind brightness
-  phosphor-idle/                           # idle-inhibit + idle-state machine
-  phosphor-notifications/                  # org.freedesktop.Notifications daemon
-  phosphor-polkit/                         # polkit-qt6 agent
-  phosphor-clipboard/                      # wlr-data-control + cliphist-style history
-  phosphor-lock/                           # PAM + ext-session-lock-v1 coordination
-  phosphor-session/                        # logind (DBus org.freedesktop.login1)
+  # The `phosphor-service-*` prefix marks shell-domain integration services
+  # as a group, distinct from foundation libs above.
+  phosphor-service-pipewire/               # PipeWire mixer (sinks/sources/volume/mute)
+  phosphor-service-network/                # NetworkManager (DBus org.freedesktop.NetworkManager)
+  phosphor-service-bluetooth/              # BlueZ (DBus org.bluez)
+  phosphor-service-brightness/             # /sys/class/backlight + logind brightness
+  phosphor-service-idle/                   # idle-inhibit + idle-state machine
+  phosphor-service-notifications/          # org.freedesktop.Notifications daemon
+  phosphor-service-polkit/                 # polkit-qt6 agent
+  phosphor-service-clipboard/              # wlr-data-control + cliphist-style history
+  phosphor-service-lock/                   # PAM + ext-session-lock-v1 coordination
+  phosphor-service-session/                # logind (DBus org.freedesktop.login1)
 
   # EXTRACTED from the existing phosphor-services umbrella (Phase 2.0 of plan).
   # After extraction the umbrella is deleted, no compat shim.
-  phosphor-sni/                            # StatusNotifierItem host + watcher + dbusmenu
-  phosphor-mpris/                          # MPRIS controller
-  phosphor-upower/                         # battery + power-supply readouts
-  phosphor-icontheme/                      # icon-theme resolver + Qt image provider
+  phosphor-service-sni/                    # StatusNotifierItem host + watcher + dbusmenu
+  phosphor-service-mpris/                  # MPRIS controller
+  phosphor-service-upower/                 # battery + power-supply readouts
+  phosphor-service-icontheme/              # icon-theme resolver + Qt image provider
                                            #   (or folded into phosphor-rendering, decide at extraction time)
 
   # Existing libs, touched only where the surface work requires.
