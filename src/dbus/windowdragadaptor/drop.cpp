@@ -259,12 +259,17 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // This prevents auto-snapping windows that were never manually snapped by user
                     m_windowTracking->service()->recordSnapIntent(windowId, true);
 
-                    // During drag, the C++ updateSelectorPosition path updates selection
-                    // state but does NOT emit manualLayoutSelected (only the QML hover
-                    // path does, which doesn't fire during drag). Activate the selected
-                    // layout directly so snap assist uses the correct layout's empty zones.
-                    // We intentionally skip manualLayoutSelected to avoid a layout OSD
-                    // flashing briefly before snap assist appears.
+                    // The QML hover commit path is gone — ZoneSelectorContent is
+                    // `interactive: false`, so the slot's MouseAreas never fire and
+                    // selector.cpp::onZoneSelected was removed along with the
+                    // manualLayoutSelected signal it used to emit. Selection state
+                    // (m_selectedLayoutId / m_selectedZoneIndex) is now written
+                    // exclusively by the C++ updateSelectorPosition hit-test during
+                    // drag (selector.cpp). This branch is therefore the sole commit
+                    // point for a cross-layout zone-selector drop, so activate the
+                    // selected layout directly here. Doing the activation earlier on
+                    // hover would resnap every other window mid-drag — the "layouts
+                    // changing when holding alt to move window" bug.
                     if (selectedLayout) {
                         // Check lock before applying layout change from drag-drop
                         int layoutChangeDesktop = m_layoutManager->currentVirtualDesktop();

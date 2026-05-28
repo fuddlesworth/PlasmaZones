@@ -184,8 +184,10 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
                      SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
     QObject::connect(window, SIGNAL(layoutPickerSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
     QObject::connect(window, SIGNAL(layoutPickerDismissRequested()), this, SLOT(onLayoutPickerDismissRequested()));
-    QObject::connect(window, SIGNAL(zoneSelectorZoneSelected(QString, int, QVariant)), this,
-                     SLOT(onZoneSelected(QString, int, QVariant)));
+    // No zoneSelectorZoneSelected wiring: the zone-selector slot is input-
+    // transparent by design and hit-testing runs in C++ via
+    // updateSelectorPosition. See ZoneSelectorContent's `interactive: false`
+    // for the matching QML-side enforcement.
 
     // Prime the wl_surface map + Vulkan swapchain init + first-frame
     // render so the very first user-triggered slot show doesn't race

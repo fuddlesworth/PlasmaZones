@@ -485,8 +485,8 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     writeQmlProperty(slot, QStringLiteral("previewWidth"), config.previewWidth);
     writeQmlProperty(slot, QStringLiteral("previewHeight"), config.previewHeight);
     writeQmlProperty(slot, QStringLiteral("previewLockAspect"), config.previewLockAspect);
-    // zoneSelected signal wiring lives in ensurePassiveShellFor so it's
-    // installed once per shell rather than per screen-state init pass.
+    // No signal wiring: the slot is input-transparent by design — hit-testing
+    // and commit both happen in C++ (updateSelectorPosition + drop.cpp).
 }
 
 void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
@@ -688,51 +688,6 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
                 areaGeom.y() + m_selectedZoneRelGeo.y() * areaGeom.height(),
                 m_selectedZoneRelGeo.width() * areaGeom.width(), m_selectedZoneRelGeo.height() * areaGeom.height());
     return GeometryUtils::snapToRect(geom);
-}
-
-void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry)
-{
-    m_selectedLayoutId = layoutId;
-    m_selectedZoneIndex = zoneIndex;
-
-    // Convert QVariant to QVariantMap and extract relative geometry
-    QVariantMap relGeoMap = relativeGeometry.toMap();
-    qreal x = relGeoMap.value(QStringLiteral("x"), 0.0).toReal();
-    qreal y = relGeoMap.value(QStringLiteral("y"), 0.0).toReal();
-    qreal width = relGeoMap.value(QStringLiteral("width"), 0.0).toReal();
-    qreal height = relGeoMap.value(QStringLiteral("height"), 0.0).toReal();
-    m_selectedZoneRelGeo = QRectF(x, y, width, height);
-
-    // Determine which screen the zone selector is on from the sender window
-    // Primary: look up in our window-to-screen map (authoritative assignment)
-    // Fallback: use Qt's screen assignment on the window itself
-    // The zoneSelected signal is forwarded by the shell window, so
-    // sender() is the shell QQuickWindow. The shell hosts every
-    // kbd-None overlay slot for one screen; matching to its
-    // shell->shellWindow() yields the screen id.
-    QString screenId;
-    auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
-    if (senderWindow) {
-        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.value().shell && it.value().shell->shellWindow() == senderWindow) {
-                screenId = it.key();
-                break;
-            }
-        }
-        if (screenId.isEmpty() && senderWindow->screen()) {
-            screenId = Phosphor::Screens::ScreenIdentity::identifierFor(senderWindow->screen());
-        }
-    }
-
-    // Route to the correct signal based on whether this is an autotile algorithm or manual layout
-    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
-        const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
-        qCInfo(lcOverlay) << "Zone selector: autotile algorithm selected, algoId=" << algoId << "screen=" << screenId;
-        Q_EMIT autotileLayoutSelected(algoId, screenId);
-    } else {
-        qCInfo(lcOverlay) << "Zone selector: layout selected, layoutId=" << layoutId << "screen=" << screenId;
-        Q_EMIT manualLayoutSelected(layoutId, screenId);
-    }
 }
 
 void OverlayService::scrollZoneSelector(int angleDeltaY)

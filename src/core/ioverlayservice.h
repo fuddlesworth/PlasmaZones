@@ -135,14 +135,6 @@ Q_SIGNALS:
     void zoneActivated(PhosphorZones::Zone* zone);
     void multiZoneActivated(const QVector<PhosphorZones::Zone*>& zones);
     void zoneSelectorVisibilityChanged(bool visible);
-    void zoneSelectorZoneSelected(int zoneIndex);
-
-    /**
-     * @brief Emitted when a manual layout is selected from the zone selector
-     * @param layoutId The UUID of the selected manual layout
-     * @param screenId The screen where the selection was made
-     */
-    void manualLayoutSelected(const QString& layoutId, const QString& screenId);
 
     /**
      * @brief Emitted when user selects a window from Snap Assist to snap to a zone
@@ -184,13 +176,6 @@ Q_SIGNALS:
      * registration that was active for the picker's lifetime.
      */
     void layoutPickerDismissed();
-
-    /**
-     * @brief Emitted when an autotile algorithm layout is selected from the zone selector
-     * @param algorithmId The algorithm identifier (e.g. "master-stack")
-     * @param screenId The screen where the selection was made
-     */
-    void autotileLayoutSelected(const QString& algorithmId, const QString& screenId);
 };
 
 } // namespace PlasmaZones
