@@ -73,10 +73,29 @@ ScrollView {
         target: root.controller
         ignoreUnknownSignals: true
     }
-    /// Live semantic-validation pass over the working rule. Exposed so the
-    /// consumer's footer can render an inline-message + gate its Save
-    /// button — the wizard and the edit sheet both surface them.
-    readonly property var validationIssues: root.controller.validationIssuesForJson(root.workingRule)
+    /// Debounced cache of the most recent validation pass. The binding
+    /// below recomputes on every keystroke (workingRule churns through
+    /// JSON clones from `_patch`); the controller's
+    /// `validationIssuesForJson` walks the full match tree + action list
+    /// and is non-trivial on a tall rule. Debouncing through a 50 ms
+    /// Timer collapses bursts of edits (held key, fast paste) into one
+    /// validation pass without making the status-bar feel laggy.
+    property var validationIssues: []
+
+    onWorkingRuleChanged: validationTimer.restart()
+    Component.onCompleted: {
+        // Seed the cache so the consumer's footer doesn't flash a
+        // "no issues" state on first paint before the 50 ms timer fires.
+        validationIssues = root.controller.validationIssuesForJson(root.workingRule);
+    }
+
+    Timer {
+        id: validationTimer
+
+        interval: 50
+        repeat: false
+        onTriggered: root.validationIssues = root.controller.validationIssuesForJson(root.workingRule)
+    }
     /// True iff the working rule is structurally complete (≥1 action,
     /// every leaf filled) AND semantically clean (no action/match domain
     /// mismatches). The consumer's Save button binds its `enabled` to this.

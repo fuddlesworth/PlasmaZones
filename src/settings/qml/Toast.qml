@@ -30,8 +30,19 @@ Rectangle {
     /// Display `msg` immediately, replacing any in-flight toast.
     function show(msg: string) {
         root.message = msg;
-        toastShow.restart();
-        toastHide.restart();
+        // AT-SPI Notification announcements — Orca / other screen
+        // readers don't announce StaticText surfaces that aren't
+        // focused, so use Accessible.announcement to push the toast
+        // text into the AT consumer's speech queue regardless of
+        // focus state. Pairs with the Accessible.role: Notification
+        // below (Qt 6.6+).
+        root.Accessible.announcement = msg;
+        // Single SequentialAnimation — back-to-back show() calls
+        // restart() the same animation cleanly, vs. the previous
+        // shape where two concurrent animations could overlap if a
+        // new show() arrived mid-fade-out (the fade-in started while
+        // the still-running fade-out was driving opacity toward 0).
+        toastAnimation.restart();
     }
 
     anchors.horizontalCenter: parent.horizontalCenter
@@ -45,7 +56,10 @@ Rectangle {
     visible: opacity > 0
     z: 100
     // Toast is a status-message surface — announce to AT consumers.
-    Accessible.role: Accessible.StaticText
+    // Accessible.Notification (Qt 6.6+) is announced by Orca even
+    // when the toast doesn't have focus; StaticText was silent for
+    // screen-reader users because the toast never receives focus.
+    Accessible.role: Accessible.Notification
     Accessible.name: root.message
     Accessible.description: i18n("Toast notification")
 
@@ -58,21 +72,26 @@ Rectangle {
         font.weight: Font.Medium
     }
 
-    PhosphorMotionAnimation {
-        id: toastShow
-
-        target: root
-        properties: "opacity"
-        from: 0
-        to: 1
-        profile: "popup"
-        // Scales with the user's animation-speed preference / respects
-        // "reduce motion" — was a hardcoded 200ms that bypassed both.
-        durationOverride: Kirigami.Units.shortDuration
-    }
-
     SequentialAnimation {
-        id: toastHide
+        id: toastAnimation
+
+        // Fade-in → hold → fade-out as a single sequence so back-to-back
+        // show() calls interrupt cleanly via restart(). The prior shape
+        // ran two concurrent animations (toastShow + toastHide), which
+        // could overlap if a new show() arrived mid-fade-out — the new
+        // fade-in then started while the still-running fade-out was
+        // driving opacity toward 0.
+        PhosphorMotionAnimation {
+            target: root
+            properties: "opacity"
+            from: 0
+            to: 1
+            profile: "popup"
+            // Scales with the user's animation-speed preference /
+            // respects "reduce motion" — was a hardcoded 200ms that
+            // bypassed both.
+            durationOverride: Kirigami.Units.shortDuration
+        }
 
         // Kirigami.Units.veryLongDuration (≈400ms) × 5 keeps the toast
         // legible (≈2s on stock themes) while respecting the user's

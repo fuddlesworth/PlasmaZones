@@ -13,7 +13,7 @@
 
 class QDBusServiceWatcher;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -54,7 +54,7 @@ class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor, public QD
 public:
     explicit OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
                             PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
-                            Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                            PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                             QObject* parent = nullptr);
     ~OverlayAdaptor() override = default;
 
@@ -182,7 +182,7 @@ private:
     // Narrow to IZoneLayoutRegistry — overlay adaptor only reads the active
     // layout, never per-context assignments / quick slots / persistence.
     PhosphorZones::IZoneLayoutRegistry* m_layoutRegistry;
-    Phosphor::Screens::ScreenManager* m_screenManager;
+    PhosphorScreens::ScreenManager* m_screenManager;
     ISettings* m_settings; // Interface type (DIP) - for configurable constants
 
     /// Set of session-bus unique names previously verified as belonging to

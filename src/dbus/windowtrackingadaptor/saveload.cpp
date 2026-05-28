@@ -129,7 +129,7 @@ void WindowTrackingAdaptor::saveState()
             entry[QLatin1String("zoneIds")] = toJsonArray(it.value());
             entry[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(assignedScreen)
                 ? assignedScreen
-                : Phosphor::Screens::ScreenIdentity::idForName(assignedScreen);
+                : PhosphorScreens::ScreenIdentity::idForName(assignedScreen);
             entry[QLatin1String("desktop")] = desktop;
             fullAssignments.append(entry);
         }
@@ -158,7 +158,7 @@ void WindowTrackingAdaptor::saveState()
                 if (!entry.screenId.isEmpty()) {
                     entryObj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(entry.screenId)
                         ? entry.screenId
-                        : Phosphor::Screens::ScreenIdentity::idForName(entry.screenId);
+                        : PhosphorScreens::ScreenIdentity::idForName(entry.screenId);
                 }
                 if (entry.virtualDesktop > 0) {
                     entryObj[QLatin1String("desktop")] = entry.virtualDesktop;
@@ -286,7 +286,7 @@ void WindowTrackingAdaptor::saveState()
             }
             preFloatScreensObj[key] = PhosphorIdentity::VirtualScreenId::isVirtual(it.value())
                 ? it.value()
-                : Phosphor::Screens::ScreenIdentity::idForName(it.value());
+                : PhosphorScreens::ScreenIdentity::idForName(it.value());
         }
         tracking->writeString(ConfigKeys::preFloatScreenAssignmentsKey(),
                               QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
@@ -786,8 +786,8 @@ void WindowTrackingAdaptor::loadState()
                     }
                     // Virtual screen IDs are stored as-is — no connector/ID translation
                     if (!PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
-                        if (!Phosphor::Screens::ScreenIdentity::isConnectorName(storedScreen)) {
-                            QString connectorName = Phosphor::Screens::ScreenIdentity::nameForId(storedScreen);
+                        if (!PhosphorScreens::ScreenIdentity::isConnectorName(storedScreen)) {
+                            QString connectorName = PhosphorScreens::ScreenIdentity::nameForId(storedScreen);
                             if (!connectorName.isEmpty()) {
                                 storedScreen = connectorName;
                             }

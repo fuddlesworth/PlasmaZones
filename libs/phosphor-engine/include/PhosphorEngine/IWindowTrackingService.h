@@ -23,7 +23,7 @@ namespace PhosphorZones {
 class Layout;
 }
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -42,7 +42,7 @@ public:
     // interface once one exists. Acceptable for now as a stepping stone.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    virtual Phosphor::Screens::ScreenManager* screenManager() const = 0;
+    virtual PhosphorScreens::ScreenManager* screenManager() const = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Zone assignment management

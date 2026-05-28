@@ -22,10 +22,26 @@ class ISettings;
 class ScreenHelper : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool daemonUnavailable READ daemonUnavailable NOTIFY daemonUnavailableChanged)
 public:
     explicit ScreenHelper(ISettings* settings, QObject* parent = nullptr);
 
     QVariantList screens() const;
+
+    /**
+     * @brief Whether the most recent screen-list refresh fell back to Qt.
+     *
+     * `true` when the daemon's `getScreens` / `getScreenInfo` D-Bus path
+     * failed and the Qt-fallback ran. QML chrome can subscribe to the
+     * NOTIFY signal and render a banner explaining the degraded view —
+     * without this, the picker silently shows fewer columns and the user
+     * has no way to tell apart "daemon hasn't started yet" from "this
+     * screen genuinely has no EDID".
+     */
+    bool daemonUnavailable() const
+    {
+        return m_daemonUnavailable;
+    }
 
     bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName) const;
     void setMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName, bool disabled);
@@ -41,10 +57,18 @@ Q_SIGNALS:
     // Disabled-monitor changes route via ISettings::disabledMonitorsChanged(Mode);
     // ScreenHelper only marks dirty via needsSave().
     void needsSave();
+    /// Emitted when the screen list refresh transitions between daemon-served
+    /// and Qt-fallback states. QML chrome should re-read daemonUnavailable.
+    void daemonUnavailableChanged();
+    /// Emitted when setMonitorDisabled() couldn't resolve the connector name
+    /// to a canonical screen id and the toggle was rejected. QML toggle
+    /// handlers should listen on this and revert their visual state.
+    void monitorDisableFailed(const QString& screenName);
 
 private:
     ISettings* m_settings = nullptr;
     QVariantList m_screens;
+    bool m_daemonUnavailable = false;
 };
 
 } // namespace PlasmaZones

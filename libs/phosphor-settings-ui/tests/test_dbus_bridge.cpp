@@ -4,6 +4,7 @@
 #include <QTest>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QRegularExpression>
 #include <QThread>
 #include <QtDBus/QDBusMessage>
 
@@ -11,6 +12,14 @@
 
 using PhosphorSettingsUi::DBusBridge;
 using PhosphorSettingsUi::DBusEndpoint;
+
+// File-scope mutex guarding the static `g_warnings` pointer used by
+// asyncCallOnEmptyEndpointIsNoCrash's installed QtMessageHandler. The
+// handler may be invoked from any thread Qt happens to log from
+// (including worker threads in other tests run in the same process if
+// they ever land in the same TU), so the append + the test-side read
+// must be serialised.
+static QMutex g_warningsMutex;
 
 class TestDBusBridge : public QObject
 {
@@ -62,8 +71,14 @@ private Q_SLOTS:
         ep.service = QString();
         ep.objectPath = QStringLiteral("/Path");
         ep.interfaceName = QStringLiteral("org.example.Iface");
+        // The bridge ctor warns about the empty-service endpoint up
+        // front (line ~65 in dbusbridge.cpp). Assert + suppress so the
+        // warning is part of the test contract instead of CI log noise.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("empty service or objectPath")));
         DBusBridge bridge(ep);
 
+        // call() itself also warns on the rejection path.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("empty service")));
         const auto reply = bridge.call(QStringLiteral("anyMethod"));
         QCOMPARE(reply.type(), QDBusMessage::ErrorMessage);
     }
@@ -124,12 +139,21 @@ private Q_SLOTS:
         // Static-instance hand-off: QtMessageHandler is a free
         // function pointer, no captures. Stash the list in a static
         // pointer for the handler's lifetime, restore the previous
-        // handler at scope end.
+        // handler at scope end. All access to `g_warnings` and the
+        // QStringList it points at is serialised through
+        // g_warningsMutex so the handler is safe to invoke from any
+        // thread Qt happens to log from (DBus watchers, etc.).
         static QStringList* g_warnings = nullptr;
-        g_warnings = &warnings;
+        {
+            QMutexLocker locker(&g_warningsMutex);
+            g_warnings = &warnings;
+        }
         QtMessageHandler previousHandler =
             qInstallMessageHandler([](QtMsgType type, const QMessageLogContext&, const QString& msg) {
-                if (type == QtWarningMsg && g_warnings)
+                if (type != QtWarningMsg)
+                    return;
+                QMutexLocker locker(&g_warningsMutex);
+                if (g_warnings)
                     g_warnings->append(msg);
             });
 
@@ -139,14 +163,19 @@ private Q_SLOTS:
         bridge.asyncCall(QString());
 
         qInstallMessageHandler(previousHandler);
-        g_warnings = nullptr;
+        QStringList capturedWarnings;
+        {
+            QMutexLocker locker(&g_warningsMutex);
+            g_warnings = nullptr;
+            capturedWarnings = warnings;
+        }
 
         // Bridge validation must surface SOMETHING — empty endpoint
         // / empty method should produce at least one warning. The
         // exact message text is implementation detail; what matters
         // is that the rejection path actually ran (not silently
         // dispatched a malformed bus call).
-        QVERIFY2(!warnings.isEmpty(),
+        QVERIFY2(!capturedWarnings.isEmpty(),
                  "DBusBridge::asyncCall with empty endpoint/method must emit a qWarning — "
                  "silent dispatch would let malformed bus calls leak through.");
     }

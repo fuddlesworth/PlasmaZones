@@ -17,8 +17,12 @@ namespace PlasmaZones {
 class ISettings;
 
 /// Re-export of the lib's POD so PlasmaZones-internal callers don't need the
-/// `Phosphor::Screens::` prefix. Single update-site for any future renames.
-using ScreenInfo = Phosphor::Screens::ScreenInfo;
+/// `PhosphorScreens::` prefix. Single update-site for any future renames.
+// TODO(post-merge): drop this alias once the phosphor-settings-ui lift-and-
+// shift settles. Keeping it for now buys migration ergonomics — call sites
+// can adopt the lib-qualified spelling incrementally rather than in lockstep
+// with this header's churn.
+using ScreenInfo = PhosphorScreens::ScreenInfo;
 
 /**
  * @brief Fetch the list of connected screens via D-Bus (daemon) with Qt fallback
@@ -27,8 +31,15 @@ using ScreenInfo = Phosphor::Screens::ScreenInfo;
  * resolution, and the stable EDID-based screenId from the daemon. This call
  * stays in PlasmaZones because it speaks the PlasmaZones daemon's specific
  * D-Bus protocol; the generic ScreenInfo POD itself lives in phosphor-screens.
+ *
+ * @param daemonUnavailable  Optional out-pointer. When non-null, set to true
+ *                           if the daemon path failed (empty getScreens reply
+ *                           or every per-screen getScreenInfo() probe errored)
+ *                           and the Qt-fallback branch ran. Settings UIs can
+ *                           use this to render a degraded-fallback banner
+ *                           without re-doing the D-Bus probing.
  */
-QList<ScreenInfo> fetchScreens();
+QList<ScreenInfo> fetchScreens(bool* daemonUnavailable = nullptr);
 
 /**
  * @brief Check whether a given monitor is disabled in settings for the given mode
@@ -46,8 +57,13 @@ bool isMonitorDisabledFor(const ISettings* settings, PhosphorZones::AssignmentEn
  * @param screenName The connector name of the screen
  * @param disabled Whether to disable (true) or enable (false)
  * @param onChanged Callback invoked when the disabled list actually changes
+ * @return true on success, false if the screen name could not be resolved
+ *         (settings is null, screenName is empty, or the connector name
+ *         couldn't be canonicalised to a screen id). QML toggle handlers
+ *         can use this to revert visual state when the underlying write
+ *         couldn't be performed.
  */
-void setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
+bool setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
                            bool disabled, const std::function<void()>& onChanged);
 
 /**

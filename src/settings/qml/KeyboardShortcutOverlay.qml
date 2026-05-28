@@ -38,6 +38,37 @@ Rectangle {
     readonly property color subtleBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
     readonly property color keyChipBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
 
+    /// Hoisted shortcuts model — the previous shape declared the array
+    /// inline as the Repeater's `model:` binding, so every binding
+    /// re-evaluation of any nested expression rebuilt the entire
+    /// model array. Moving it to a `readonly property` keeps the
+    /// array stable across binding re-evals and only rebuilds it
+    /// when the dependent inputs (the openSettings / openEditor
+    /// shortcut strings, language change re-running i18n()) actually
+    /// change.
+    readonly property var shortcutsModel: [
+        {
+            "key": (root.appSettings.openSettingsShortcut && root.appSettings.openSettingsShortcut.length > 0) ? root.appSettings.openSettingsShortcut : "Meta+Shift+P",
+            "action": i18n("Open PlasmaZones Settings")
+        },
+        {
+            "key": (root.appSettings.openEditorShortcut && root.appSettings.openEditorShortcut.length > 0) ? root.appSettings.openEditorShortcut : "Meta+Shift+E",
+            "action": i18n("Open Zone Editor")
+        },
+        {
+            "key": "Ctrl+PgUp",
+            "action": i18n("Previous page")
+        },
+        {
+            "key": "Ctrl+PgDown",
+            "action": i18n("Next page")
+        },
+        {
+            "key": "?",
+            "action": i18n("Toggle this overlay")
+        }
+    ]
+
     /// Fired when the user dismisses the overlay (Esc key, background
     /// click). Consumers flip their toggle false.
     signal dismiss
@@ -98,28 +129,11 @@ Rectangle {
                 // local to this window (not user-configurable), so
                 // their literals stay inline. Falls back to the
                 // legacy default only if the setting is empty.
-                model: [
-                    {
-                        "key": (root.appSettings.openSettingsShortcut && root.appSettings.openSettingsShortcut.length > 0) ? root.appSettings.openSettingsShortcut : "Meta+Shift+P",
-                        "action": i18n("Open PlasmaZones Settings")
-                    },
-                    {
-                        "key": (root.appSettings.openEditorShortcut && root.appSettings.openEditorShortcut.length > 0) ? root.appSettings.openEditorShortcut : "Meta+Shift+E",
-                        "action": i18n("Open Zone Editor")
-                    },
-                    {
-                        "key": "Ctrl+PgUp",
-                        "action": i18n("Previous page")
-                    },
-                    {
-                        "key": "Ctrl+PgDown",
-                        "action": i18n("Next page")
-                    },
-                    {
-                        "key": "?",
-                        "action": i18n("Toggle this overlay")
-                    }
-                ]
+                //
+                // Backing array hoisted to `root.shortcutsModel` so a
+                // language change rebuilds the model exactly once
+                // (vs. once per binding re-eval previously).
+                model: root.shortcutsModel
 
                 delegate: RowLayout {
                     // Required `modelData` declaration — Qt 6.5+ deprecates the

@@ -16,7 +16,7 @@
 
 class QScreen;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 class IConfigStore;
 class ScreenManager;
@@ -145,4 +145,4 @@ private:
     bool m_qGuiAppSignalsWired = false;
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

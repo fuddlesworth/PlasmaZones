@@ -21,8 +21,8 @@
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 // Reserved. Additional types arrive in the lift-and-shift PRs.
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

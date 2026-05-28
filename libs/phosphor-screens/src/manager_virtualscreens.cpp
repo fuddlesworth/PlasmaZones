@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 namespace {
 /// Minimum usable dimension (pixels) for a virtual screen available area.
@@ -394,4 +394,4 @@ void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId)
     }
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

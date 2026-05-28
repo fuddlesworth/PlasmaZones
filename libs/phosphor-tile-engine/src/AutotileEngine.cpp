@@ -62,7 +62,7 @@ T* checkedCast(QObject* obj, const char* context)
 
 AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
                                PhosphorEngine::IWindowTrackingService* windowTracker,
-                               Phosphor::Screens::ScreenManager* screenManager,
+                               PhosphorScreens::ScreenManager* screenManager,
                                PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : PlacementEngineBase(parent)
     , m_layoutManager(layoutManager)
@@ -212,8 +212,8 @@ void AutotileEngine::connectSignals()
 
     // Screen geometry changes
     if (m_screenManager) {
-        connect(m_screenManager, &Phosphor::Screens::ScreenManager::availableGeometryChanged, this,
-                [this](const Phosphor::Screens::PhysicalScreen& screen, const QRect&) {
+        connect(m_screenManager, &PhosphorScreens::ScreenManager::availableGeometryChanged, this,
+                [this](const PhosphorScreens::PhysicalScreen& screen, const QRect&) {
                     if (!screen.isValid()) {
                         return;
                     }
@@ -231,7 +231,7 @@ void AutotileEngine::connectSignals()
 
         // Virtual screen reconfiguration — retile new virtual screens and
         // clean up orphaned PhosphorTiles::TilingState entries for virtual screens that no longer exist.
-        connect(m_screenManager, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
+        connect(m_screenManager, &PhosphorScreens::ScreenManager::virtualScreensChanged, this,
                 [this](const QString& physicalScreenId) {
                     const QStringList newVsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
                     const QSet<QString> newVsSet(newVsIds.begin(), newVsIds.end());
@@ -292,7 +292,7 @@ void AutotileEngine::connectSignals()
                     }
 
                     // Clean up desktop overrides for removed virtual screens on this physical screen.
-                    // Use newVsSet (freshly-computed from Phosphor::Screens::ScreenManager) rather than
+                    // Use newVsSet (freshly-computed from PhosphorScreens::ScreenManager) rather than
                     // m_autotileScreens which reflects mode assignments and may not yet be updated for the new config.
                     auto overrideIt = m_screenDesktopOverride.begin();
                     while (overrideIt != m_screenDesktopOverride.end()) {
@@ -316,7 +316,7 @@ void AutotileEngine::connectSignals()
         // its new geometry. This is the single authoritative retile for the
         // change; the Daemon's regions-only handler deliberately does NOT
         // call updateAutotileScreens so there is no second retile pass.
-        connect(m_screenManager, &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
+        connect(m_screenManager, &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
                 [this](const QString& physicalScreenId) {
                     const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
                     for (const QString& vsId : vsIds) {
@@ -2890,13 +2890,13 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     PhosphorTiles::TilingScreenInfo screenInfo;
     screenInfo.id = screenId;
     {
-        QScreen* qscreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+        QScreen* qscreen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
         if (qscreen) {
             const QRect geom = qscreen->geometry();
             screenInfo.portrait = geom.height() > geom.width();
             screenInfo.aspectRatio = geom.height() > 0 ? static_cast<qreal>(geom.width()) / geom.height() : 0.0;
         } else if (m_screenManager) {
-            // Virtual screen IDs have no QScreen — use Phosphor::Screens::ScreenManager geometry
+            // Virtual screen IDs have no QScreen — use PhosphorScreens::ScreenManager geometry
             const QRect geom = m_screenManager->screenGeometry(screenId);
             if (geom.isValid()) {
                 screenInfo.portrait = geom.height() > geom.width();
@@ -3494,7 +3494,7 @@ QString AutotileEngine::screenForWindow(const QString& rawWindowId) const
     // R6 fix: Warn when falling back to primary screen — this may indicate a
     // missing screen name in windowOpened() or a stale m_windowToStateKey entry.
     if (m_screenManager) {
-        const Phosphor::Screens::PhysicalScreen primary = m_screenManager->primaryScreen();
+        const PhosphorScreens::PhysicalScreen primary = m_screenManager->primaryScreen();
         if (primary.isValid()) {
             qCWarning(PhosphorTileEngine::lcTileEngine)
                 << "screenForWindow: window" << windowId << "not in m_windowToStateKey, falling back to primary screen";
@@ -3516,13 +3516,13 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return QRect();
     }
 
-    // Virtual screens: use Phosphor::Screens::ScreenManager's virtual-aware geometry
+    // Virtual screens: use PhosphorScreens::ScreenManager's virtual-aware geometry
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return m_screenManager->screenAvailableGeometry(screenId);
     }
 
     // Physical screens: existing behavior
-    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+    QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     if (!screen) {
         return QRect();
     }
@@ -3537,13 +3537,13 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
 bool AutotileEngine::isKnownScreen(const QString& screenId) const
 {
     if (!m_screenManager) {
-        // Without Phosphor::Screens::ScreenManager, skip validation (test environments)
+        // Without PhosphorScreens::ScreenManager, skip validation (test environments)
         return true;
     }
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return m_screenManager->screenGeometry(screenId).isValid();
     }
-    return Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
+    return PhosphorScreens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
 }
 
 void AutotileEngine::resetMaxWindowsForAlgorithmSwitch(PhosphorTiles::TilingAlgorithm* oldAlgo,
@@ -3633,7 +3633,7 @@ void AutotileEngine::retileScreen(const QString& screenId)
     // rather than proceeding — without this, the ratio change / window add
     // that triggered this retile is silently dropped, leaving stale zones.
     //
-    // Only gate on geometry when a Phosphor::Screens::ScreenManager exists (production). Without
+    // Only gate on geometry when a PhosphorScreens::ScreenManager exists (production). Without
     // one (unit tests), the existing recalculateLayout gracefully handles
     // the empty geometry as a structural no-op, not a transient failure.
     if (m_screenManager) {

@@ -17,11 +17,11 @@
 
 class QScreen;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
-namespace Phosphor::Shortcuts::Integration {
+namespace PhosphorShortcutsIntegration {
 class IAdhocRegistrar;
 }
 
@@ -62,7 +62,7 @@ class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
 public:
     explicit WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
                                PhosphorZones::LayoutRegistry* layoutManager,
-                               Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                               PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                                WindowTrackingAdaptor* windowTracking, QObject* parent = nullptr);
     ~WindowDragAdaptor() override = default;
 
@@ -94,7 +94,7 @@ public:
      * shutdown (member destruction order: unique_ptr members destruct before
      * ~QObject runs, so ShortcutManager dies before this adaptor does).
      */
-    void setShortcutRegistrar(Phosphor::Shortcuts::Integration::IAdhocRegistrar* registrar)
+    void setShortcutRegistrar(PhosphorShortcutsIntegration::IAdhocRegistrar* registrar)
     {
         m_shortcutRegistrar = registrar;
     }
@@ -349,7 +349,7 @@ private:
     QScreen* screenAtPoint(int x, int y) const;
 
     // Helper: Returns the effective (virtual-aware) screen ID for a cursor position.
-    // Prefers virtual screen resolution via Phosphor::Screens::ScreenManager, falls back to physical screen.
+    // Prefers virtual screen resolution via PhosphorScreens::ScreenManager, falls back to physical screen.
     QString effectiveScreenIdAt(int x, int y) const;
 
     // Shared preamble for drag handler methods (DRY extraction)
@@ -379,11 +379,11 @@ private:
     IOverlayService* m_overlayService;
     PhosphorZones::IZoneDetector* m_zoneDetector;
     PhosphorZones::LayoutRegistry* m_layoutManager; // Concrete type for signal connections
-    Phosphor::Screens::ScreenManager* m_screenManager;
+    PhosphorScreens::ScreenManager* m_screenManager;
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     PhosphorEngine::IPlacementEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
-    Phosphor::Shortcuts::Integration::IAdhocRegistrar* m_shortcutRegistrar =
+    PhosphorShortcutsIntegration::IAdhocRegistrar* m_shortcutRegistrar =
         nullptr; // Non-owning: owned by Daemon (ShortcutManager)
 
     // Snap-assist deferred compute state. Populated in dragStopped when snap

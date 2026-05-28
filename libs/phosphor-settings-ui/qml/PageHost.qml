@@ -42,6 +42,14 @@ Item {
 
         anchors.fill: parent
         active: root.currentEntry !== null
+        // Async loading lets the chrome stay responsive during page
+        // instantiation — important for heavy pages (motion-set list,
+        // shader catalog) whose synchronous instantiation would
+        // hitch the UI thread mid-navigation. The Loader.status gate
+        // on opacity (below) keeps the previous page hidden while
+        // the new one is still constructing instead of flashing an
+        // empty viewport.
+        asynchronous: true
         source: root.currentEntry ? root.currentEntry.qmlSource : ""
         // Fade is on the LOADER's opacity, not the loaded item's. The
         // prior shape did `item.opacity = 0` from onLoaded — an
@@ -50,7 +58,26 @@ Item {
         // enabled-state opacity dim). Animating the Loader keeps the
         // loaded item's own binding intact while still producing the
         // page-swap fade.
+        //
+        // Opacity is pinned to 0 at construction. Source changes snap
+        // it back to 0 imperatively (onSourceChanged below) so the
+        // outgoing page disappears synchronously rather than waiting
+        // for the new page to fade in over the top of it. The
+        // pageFadeIn animation below restores opacity to 1 once
+        // onLoaded fires. Combined with `asynchronous: true`, that
+        // gives a symmetric fade: outgoing page goes invisible the
+        // instant the source changes, viewport stays empty while the
+        // new page constructs in the background, then the new page
+        // fades up.
         opacity: 0
+        onSourceChanged: {
+            // Imperative reset, overriding the live `pageFadeIn`
+            // animation if one is in-flight. Without this, swapping
+            // from a fully visible page to a new source would leave
+            // opacity at 1 until onLoaded fires — long enough on an
+            // async page to read as a frozen-old-page flash.
+            opacity = 0;
+        }
         onLoaded: {
             if (!item)
                 return;

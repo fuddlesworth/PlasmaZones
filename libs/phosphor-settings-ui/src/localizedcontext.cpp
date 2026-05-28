@@ -15,6 +15,15 @@ namespace {
 // disambiguations per binding. Once the cache fills, cachedDisambiguation
 // falls back to per-call encoding rather than evicting.
 constexpr int kMaxDisambiguationCacheEntries = 128;
+// Same rationale for the source-text cache used by i18n*(). QML text
+// bindings reuse a stable set of source strings — caching the UTF-8
+// encoding once per source string avoids the per-binding toUtf8 cost
+// across every locale-change retranslate sweep. Bigger than the
+// disambiguation cap because the source-string corpus is naturally
+// larger (every translatable string in the UI) while still bounding
+// memory against the pathological case where a caller synthesises
+// unique strings per binding.
+constexpr int kMaxSourceTextCacheEntries = 256;
 } // namespace
 
 LocalizedContext::LocalizedContext(QObject* parent)
@@ -114,17 +123,46 @@ QByteArray LocalizedContext::cachedDisambiguation(const QString& context) const
     return encoded;
 }
 
+QByteArray LocalizedContext::cachedSourceText(const QString& text) const
+{
+    // Same hot-path rationale as cachedDisambiguation — every i18n()
+    // call re-encodes the source string to UTF-8 just to hand it to
+    // QCoreApplication::translate(). QML rebinds run the encoding
+    // again on every retranslate sweep (e.g. language change), so the
+    // cost compounds. Cache the encoding keyed by source QString;
+    // bounded to kMaxSourceTextCacheEntries so a caller synthesising
+    // unique strings per binding doesn't leak memory.
+    const auto it = m_sourceTextCache.constFind(text);
+    if (it != m_sourceTextCache.constEnd()) {
+        return it.value();
+    }
+    if (m_sourceTextCache.size() >= kMaxSourceTextCacheEntries) {
+        if (!m_sourceTextCacheFullWarned) {
+            m_sourceTextCacheFullWarned = true;
+            qWarning() << "LocalizedContext: source-text cache full at" << kMaxSourceTextCacheEntries
+                       << "entries — falling back to uncached UTF-8 encoding for new source strings. Likely caller "
+                          "bug: synthesising unique strings per binding.";
+        }
+        return text.toUtf8();
+    }
+    QByteArray encoded = text.toUtf8();
+    m_sourceTextCache.insert(text, encoded);
+    return encoded;
+}
+
 QString LocalizedContext::i18n(const QString& text) const
 {
     const QByteArray ctx = cachedEffectiveContext();
-    return QCoreApplication::translate(ctx.constData(), text.toUtf8().constData());
+    const QByteArray src = cachedSourceText(text);
+    return QCoreApplication::translate(ctx.constData(), src.constData());
 }
 
 QString LocalizedContext::i18nc(const QString& context, const QString& text) const
 {
     const QByteArray ctx = cachedEffectiveContext();
     const QByteArray disambiguation = cachedDisambiguation(context);
-    return QCoreApplication::translate(ctx.constData(), text.toUtf8().constData(), disambiguation.constData());
+    const QByteArray src = cachedSourceText(text);
+    return QCoreApplication::translate(ctx.constData(), src.constData(), disambiguation.constData());
 }
 
 namespace {
@@ -162,7 +200,7 @@ QString LocalizedContext::i18np(const QString& singular, const QString& plural, 
     // apps without KLocalizedContext); apps that need bulletproof plural
     // selection should depend on KF6CoreAddons KLocalizedContext.
     const QByteArray ctx = cachedEffectiveContext();
-    const QByteArray src = singular.toUtf8();
+    const QByteArray src = cachedSourceText(singular);
     const QString translated = QCoreApplication::translate(ctx.constData(), src.constData(), nullptr, n);
     const QString srcWithN = substitutePlaceholderN(singular, n);
     if (translated != srcWithN) {
@@ -175,7 +213,7 @@ QString LocalizedContext::i18ncp(const QString& context, const QString& singular
 {
     // Same catalog-hit caveat as i18np above.
     const QByteArray ctx = cachedEffectiveContext();
-    const QByteArray src = singular.toUtf8();
+    const QByteArray src = cachedSourceText(singular);
     const QByteArray disambiguation = cachedDisambiguation(context);
     const QString translated =
         QCoreApplication::translate(ctx.constData(), src.constData(), disambiguation.constData(), n);

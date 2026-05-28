@@ -71,7 +71,7 @@ namespace PlasmaZones {
 class ShaderRegistry;
 class SnapAssistThumbnailProvider;
 }
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 class QQuickWindow;
@@ -163,7 +163,7 @@ public:
     ///                 hand it through here - the singleton accessor is
     ///                 gone (Phase A3 of the architecture refactor).
     /// @param parent Qt parent.
-    explicit OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
+    explicit OverlayService(PhosphorScreens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                             PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent = nullptr);
     ~OverlayService() override;
 
@@ -216,7 +216,7 @@ public:
     /// "set-once after construction" discipline used by every other
     /// setAutotileLayoutSource call site keeps the contract uniform.
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
-    Phosphor::Screens::ScreenManager* screenManager() const
+    PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
     }
@@ -587,7 +587,7 @@ private:
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
     ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives service
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)
-    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     QList<QPointer<PhosphorZones::Layout>> m_observedLayouts; ///< Layouts we watch for live edits
 
     // Precise disconnect handles for signal sources whose slots are lambdas

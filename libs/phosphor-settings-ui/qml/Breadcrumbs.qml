@@ -25,6 +25,13 @@ RowLayout {
     id: root
 
     required property ApplicationController controller
+    /** Per-segment maximum width budget. Long localised crumbs
+     *  (Spanish / German with deep nesting) push the headerExtras
+     *  Loader off-screen — clamp each crumb to this budget and elide
+     *  with a middle ellipsis so both ends (parent context + leaf
+     *  name) stay readable. Consumers can override for tighter or
+     *  wider chrome. */
+    property real maxSegmentWidth: Kirigami.Units.gridUnit * 20
     //  Cycle guard EXTENDS ApplicationController::parentChainFor's
     //  kMaxParentChainHops with a seen-set: the C++ guard catches an
     //  N-hop cycle after 32 hops + warns; the QML guard breaks on
@@ -113,17 +120,36 @@ RowLayout {
 
                 // Long localised crumbs (e.g. "Mostrar configuración
                 // avanzada de personalización") would otherwise push the
-                // headerExtras Loader off-screen — clamp to a sensible
-                // budget and elide with a middle ellipsis so both ends
-                // (parent context + leaf name) stay readable.
-                Layout.preferredWidth: Math.min(segmentLabel.implicitWidth, Kirigami.Units.gridUnit * 20)
+                // headerExtras Loader off-screen — clamp to the
+                // consumer-controllable maxSegmentWidth budget and
+                // elide with a middle ellipsis so both ends (parent
+                // context + leaf name) stay readable.
+                Layout.preferredWidth: Math.min(segmentLabel.implicitWidth, root.maxSegmentWidth)
                 Layout.preferredHeight: segmentLabel.implicitHeight
                 activeFocusOnTab: segmentRow.clickable
                 Accessible.name: segmentLabel.text
                 Accessible.role: segmentRow.clickable ? Accessible.Link : Accessible.StaticText
-                Keys.onReturnPressed: segmentItem._activate()
-                Keys.onEnterPressed: segmentItem._activate()
-                Keys.onSpacePressed: segmentItem._activate()
+                // Accept the event only for clickable segments —
+                // the trailing (current-page) segment is inert, so
+                // Return / Enter / Space should bubble up to the
+                // parent (e.g. an outer Shortcut handler) rather
+                // than being silently swallowed by a Link role that
+                // has no activation to perform.
+                Keys.onReturnPressed: function (event) {
+                    event.accepted = segmentRow.clickable;
+                    if (segmentRow.clickable)
+                        segmentItem._activate();
+                }
+                Keys.onEnterPressed: function (event) {
+                    event.accepted = segmentRow.clickable;
+                    if (segmentRow.clickable)
+                        segmentItem._activate();
+                }
+                Keys.onSpacePressed: function (event) {
+                    event.accepted = segmentRow.clickable;
+                    if (segmentRow.clickable)
+                        segmentItem._activate();
+                }
 
                 QQC2.Label {
                     id: segmentLabel

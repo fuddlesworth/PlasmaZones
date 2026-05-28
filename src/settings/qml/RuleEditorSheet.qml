@@ -117,7 +117,21 @@ Kirigami.OverlaySheet {
         // which broke the binding on first edit and stuck subsequent
         // openFor calls on the previously-edited rule).
         workingRule: sheet._workingRule
-        onWorkingRuleEdited: next => sheet._workingRule = next
+        // Guard against a ref-equality echo loop: the body's `_patch`
+        // shallow-clones `workingRule`, so every emit hands us a NEW
+        // object even when the resulting JSON is identical to the
+        // current staged state (e.g. a TextField onEditingFinished
+        // that re-fires with the same string). Without this guard,
+        // assigning the clone bumps the binding generation, the body
+        // re-reads `workingRule`, validation re-runs through the
+        // tree — all on the same logical value. JSON.stringify is
+        // O(rule-size) but the rule is small (≪1 KB even on the
+        // largest authored rules) and the savings on validation /
+        // tree re-eval dominate.
+        onWorkingRuleEdited: next => {
+            if (JSON.stringify(sheet._workingRule) !== JSON.stringify(next))
+                sheet._workingRule = next;
+        }
     }
 
     footer: ColumnLayout {

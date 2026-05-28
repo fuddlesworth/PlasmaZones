@@ -137,12 +137,12 @@ SnapResult SnapEngine::calculateSnapToAppRule(const QString& windowId, const QSt
     } else {
         const auto screens = QGuiApplication::screens();
         for (auto* s : screens) {
-            screenIds.append(Phosphor::Screens::ScreenIdentity::identifierFor(s));
+            screenIds.append(PhosphorScreens::ScreenIdentity::identifierFor(s));
         }
     }
 
     for (const QString& screenId : std::as_const(screenIds)) {
-        if (Phosphor::Screens::ScreenIdentity::screensMatch(screenId, windowScreenName)) {
+        if (PhosphorScreens::ScreenIdentity::screensMatch(screenId, windowScreenName)) {
             continue;
         }
 
@@ -208,7 +208,7 @@ SnapResult SnapEngine::calculateSnapToLastZone(const QString& windowId, const QS
 
     // Don't cross-screen snap
     if (!windowScreenId.isEmpty() && !effectiveScreenId.isEmpty()
-        && !Phosphor::Screens::ScreenIdentity::screensMatch(windowScreenId, effectiveScreenId)) {
+        && !PhosphorScreens::ScreenIdentity::screensMatch(windowScreenId, effectiveScreenId)) {
         return SnapResult::noSnap();
     }
 
@@ -368,7 +368,7 @@ SnapResult SnapEngine::calculateRestoreFromSession(const QString& windowId, cons
     // Use stored screen from the pending restore entry, falling back to the caller's
     // screenId. If both are empty, resolveEffectiveScreenId returns it unchanged and
     // downstream resolveZoneGeometry falls back to the primary screen via
-    // Phosphor::Screens::ScreenManager::resolvePhysicalScreen.
+    // PhosphorScreens::ScreenManager::resolvePhysicalScreen.
     QString savedScreen = entry.screenId.isEmpty() ? screenId : entry.screenId;
 
     // E7: Validate virtual screen still exists — configuration may have changed since save.

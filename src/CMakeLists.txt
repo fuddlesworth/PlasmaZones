@@ -72,7 +72,7 @@ set(plasmazones_core_SRCS
     core/single_instance_service.h
     # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
     # lifted to libs/phosphor-screens. Daemon consumers take
-    # Phosphor::Screens::ScreenManager* via constructor injection -
+    # PhosphorScreens::ScreenManager* via constructor injection -
     # no service-locator intermediary.
     core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
     # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShaders

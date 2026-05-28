@@ -9,7 +9,6 @@
 
 #include <QDebug>
 #include <QScopeGuard>
-#include <QTimer>
 
 namespace PhosphorSettingsUi {
 
@@ -67,6 +66,16 @@ void ApplicationController::registerPage(PageController* page, const QString& pa
         qWarning() << "ApplicationController::registerPage: null page";
         return;
     }
+    // Probe thread affinity BEFORE the registry accepts the entry and
+    // BEFORE setParent. Cross-thread tracking would later be refused
+    // by trackDomain, leaving the registry holding a page whose
+    // parent + dirty-tracking are out of sync. Surface the failure
+    // here so the caller sees a single rejection point.
+    if (page->thread() != this->thread()) {
+        qWarning() << "ApplicationController::registerPage: cross-thread page refused (controller in thread"
+                   << this->thread() << ", page in thread" << page->thread() << ")";
+        return;
+    }
 
     PageRegistry::Entry entry;
     entry.id = page->id();
@@ -98,6 +107,16 @@ void ApplicationController::registerDomain(StagingDomain* domain)
         qWarning() << "ApplicationController::registerDomain: null domain";
         return;
     }
+    // Probe thread affinity BEFORE setParent / trackDomain — same
+    // rationale as registerPage above. trackDomain would refuse the
+    // domain later anyway, but failing here keeps registration
+    // atomic: either every side effect (reparent, m_domains insert,
+    // dirty wiring) lands, or none does.
+    if (domain->thread() != this->thread()) {
+        qWarning() << "ApplicationController::registerDomain: cross-thread domain refused (controller in thread"
+                   << this->thread() << ", domain in thread" << domain->thread() << ")";
+        return;
+    }
     // No PageRegistry-side validation gate for headless domains — but
     // trackDomain refuses duplicates with a warning. Only reparent if
     // tracking actually accepted the domain (i.e. it wasn't already
@@ -110,6 +129,14 @@ void ApplicationController::registerDomain(StagingDomain* domain)
     }
 }
 
+// NOTE: applyAll is the LEGACY sync slot. It drives each dirty domain's
+// apply() inline and discards the applyResult signal — failures must be
+// surfaced by the domain via its own `isDirty()` (kept true on failure)
+// so the global dirty flag holds and the user can retry. Modern callers
+// should prefer applyAllAsync(), which collects every applyResult into a
+// single applyAllComplete(ok, errors) terminal signal. The sync entry
+// point exists for QML callers that don't bind a Q_INVOKABLE result
+// signal.
 void ApplicationController::applyAll()
 {
     // Refuse the sync entry point while the async batch is in flight
@@ -158,6 +185,9 @@ void ApplicationController::applyAll()
     recomputeDirty();
 }
 
+// NOTE: discardAll is the LEGACY sync slot — see applyAll above for the
+// rationale. Discards each dirty domain's discardResult signal; callers
+// that want a terminal completion signal should use discardAllAsync().
 void ApplicationController::discardAll()
 {
     if (m_discarding) {
@@ -183,364 +213,23 @@ void ApplicationController::discardAll()
     recomputeDirty();
 }
 
-void ApplicationController::applyAllAsync()
-{
-    // Already in flight — second click is a no-op rather than starting
-    // a parallel batch. UnsavedChangesFooter's Save button is gated on
-    // !applying so a user shouldn't reach this in practice, but the
-    // guard keeps the contract clean for QML callers that bypass the
-    // chrome.
-    if (m_applying || m_discarding) {
-        // Same mutual-exclusion rationale as the sync paths — both
-        // async batches share m_inTransaction and per-domain
-        // outstanding sets; running them concurrently would corrupt
-        // either book.
-        return;
-    }
-    // Count dirty domains and snapshot the iteration target to survive
-    // any synchronous m_domains mutation during apply (same rationale
-    // as applyAll above).
-    const QList<QPointer<StagingDomain>> snapshot = m_domains;
-    QList<StagingDomain*> dirty;
-    dirty.reserve(snapshot.size());
-    for (const auto& domain : snapshot) {
-        if (domain && domain->isDirty())
-            dirty.append(domain.data());
-    }
-    if (dirty.isEmpty()) {
-        // Nothing to do — drive applyingChanged through the full
-        // false→true→false transition (matches the dirty-domain
-        // path's observable contract) so consumers binding "show
-        // toast on applyingChanged false→true" don't silently miss
-        // the no-op batch.
-        m_applying = true;
-        Q_EMIT applyingChanged();
-        m_applying = false;
-        Q_EMIT applyingChanged();
-        Q_EMIT applyAllComplete(true, QStringList{});
-        return;
-    }
-
-    m_applyErrors.clear();
-    m_applyOutstanding.clear();
-    m_applyOutstanding.reserve(dirty.size());
-    for (StagingDomain* d : dirty)
-        m_applyOutstanding.insert(d);
-    // Set pending counter from the outstanding set, not from the
-    // input list — duplicate StagingDomain pointers in `dirty`
-    // (defence-in-depth against trackDomain's contains-check) would
-    // otherwise leave the counter > set size and the batch stuck
-    // permanently mid-flight.
-    m_applyPending = m_applyOutstanding.size();
-    // Bump the generation BEFORE flipping m_applying / emitting
-    // applyingChanged so any slot that reads m_applyGeneration from
-    // the change handler sees the new value, not the previous batch's.
-    ++m_applyGeneration;
-    m_applying = true;
-    // Set m_inTransaction BEFORE applyingChanged emits so any slot
-    // that triggers domain dirtyChanged in response (cascade) takes
-    // the m_inTransaction-guarded path inside onDomainDirtyChanged
-    // instead of running a full O(N) recomputeDirty walk (the A15
-    // batching optimisation).
-    m_inTransaction = true;
-    Q_EMIT applyingChanged();
-
-    // Hard timeout — if any pending domain hasn't reported by the
-    // deadline, synthesise a failure entry per pending domain, zero
-    // the counter, and emit applyAllComplete(false, …). Without this
-    // a stuck D-Bus reply with no client-side timeout would freeze
-    // the chrome's "Saving…" indicator indefinitely.
-    //
-    // Captures the generation counter so a stale timer from a
-    // previous batch can't mistakenly fire against a new batch the
-    // user kicked off after the first one already completed.
-    const quint64 generation = m_applyGeneration;
-    QTimer::singleShot(m_asyncBatchTimeoutMs, this, [this, generation]() {
-        if (generation != m_applyGeneration)
-            return;
-        if (!m_applying || m_applyPending == 0)
-            return;
-        // Append one error per stuck domain, naming each by its
-        // objectName when set (consumers can stamp this in their
-        // constructor) so the chrome's toast can list which page
-        // wedged instead of N identical strings.
-        for (StagingDomain* stuck : m_applyOutstanding) {
-            const QString name = stuck ? stuck->objectName() : QString();
-            m_applyErrors.append(
-                name.isEmpty() ? QStringLiteral("Domain did not report apply completion within timeout")
-                               : QStringLiteral("Domain %1 did not report apply completion within timeout").arg(name));
-        }
-        m_applyPending = 0;
-        completeApplyIfDone();
-    });
-
-    // Per-domain lambdas share the same `generation` snapshot captured
-    // above for the timer — see the generation-counter comment in the
-    // header. Reusing the variable keeps the timer + per-domain
-    // lambdas semantically equivalent for stale-fire detection.
-    //
-    // Two-pass: connect ALL per-domain terminal handlers BEFORE
-    // calling any `apply()`. If domain N's synchronous apply() were
-    // to cascade and trigger domain N+1's `applyResult` (e.g. a
-    // shared signal bus, a cascading config-write), the single-pass
-    // form would lose that emission because N+1's lambda hadn't been
-    // connected yet — m_applyPending then never reaches 0 and the
-    // 60 s timer is the only recovery. Two-pass closes that hole.
-    for (StagingDomain* domain : dirty) {
-        // Use Qt::SingleShotConnection so the lambda self-disconnects
-        // after first fire. Avoids the prior heap-allocated
-        // QMetaObject::Connection*  pattern that leaked when a domain
-        // was destroyed mid-batch (Qt auto-disconnects on sender
-        // destruction without running the manual cleanup body).
-        //
-        // The lambda checks generation FIRST (stale-batch guard) and
-        // then removes the domain from m_applyOutstanding — if the
-        // domain isn't in the set, this is the SECOND terminal fire
-        // (applyResult ran sync then destroyed() fired, or vice-
-        // versa) and we no-op so the pending counter only ticks once
-        // per domain regardless of how many terminal signals arrive.
-        connect(
-            domain, &StagingDomain::applyResult, this,
-            [this, domain, generation](bool ok, const QString& error) {
-                if (generation != m_applyGeneration)
-                    return;
-                if (m_applyOutstanding.remove(domain) == 0)
-                    return;
-                if (!ok && !error.isEmpty())
-                    m_applyErrors.append(error);
-                else if (!ok)
-                    m_applyErrors.append(QStringLiteral("Unknown error"));
-                --m_applyPending;
-                completeApplyIfDone();
-            },
-            Qt::SingleShotConnection);
-        // Companion guard for the destroyed-mid-batch case: if the
-        // domain QObject dies before it emits applyResult, this fires
-        // and ticks the counter so m_applying doesn't stall true.
-        // Shares the generation + outstanding-set protocol with the
-        // applyResult lambda above so the two are idempotent.
-        connect(
-            domain, &QObject::destroyed, this,
-            [this, domain, generation]() {
-                if (generation != m_applyGeneration)
-                    return;
-                if (m_applyOutstanding.remove(domain) == 0)
-                    return;
-                m_applyErrors.append(QStringLiteral("Domain destroyed before apply completed"));
-                --m_applyPending;
-                completeApplyIfDone();
-            },
-            Qt::SingleShotConnection);
-    }
-    // Second pass — every lambda is wired, now drive the apply()s.
-    for (StagingDomain* domain : dirty) {
-        domain->apply();
-    }
-}
-
-void ApplicationController::discardAllAsync()
-{
-    if (m_discarding || m_applying) {
-        // Symmetric to applyAllAsync — see comment there.
-        return;
-    }
-    const QList<QPointer<StagingDomain>> snapshot = m_domains;
-    QList<StagingDomain*> dirty;
-    dirty.reserve(snapshot.size());
-    for (const auto& domain : snapshot) {
-        if (domain && domain->isDirty())
-            dirty.append(domain.data());
-    }
-    if (dirty.isEmpty()) {
-        // Drive discardingChanged through the full false→true→false
-        // transition (matches the dirty-domain path's contract).
-        m_discarding = true;
-        Q_EMIT discardingChanged();
-        m_discarding = false;
-        Q_EMIT discardingChanged();
-        Q_EMIT discardAllComplete(true, QStringList{});
-        return;
-    }
-
-    m_discardErrors.clear();
-    m_discardOutstanding.clear();
-    m_discardOutstanding.reserve(dirty.size());
-    for (StagingDomain* d : dirty)
-        m_discardOutstanding.insert(d);
-    // See applyAllAsync rationale for the from-set sizing.
-    m_discardPending = m_discardOutstanding.size();
-    ++m_discardGeneration;
-    m_discarding = true;
-    m_inTransaction = true;
-    Q_EMIT discardingChanged();
-
-    // Same hard-timeout safety net as applyAllAsync — see comment
-    // there for rationale. Generation capture protects against a
-    // stale timer firing against a subsequent batch.
-    const quint64 generation = m_discardGeneration;
-    QTimer::singleShot(m_asyncBatchTimeoutMs, this, [this, generation]() {
-        if (generation != m_discardGeneration)
-            return;
-        if (!m_discarding || m_discardPending == 0)
-            return;
-        // Same per-domain naming as the apply path so the chrome can
-        // identify the wedged page(s).
-        for (StagingDomain* stuck : m_discardOutstanding) {
-            const QString name = stuck ? stuck->objectName() : QString();
-            m_discardErrors.append(
-                name.isEmpty()
-                    ? QStringLiteral("Domain did not report discard completion within timeout")
-                    : QStringLiteral("Domain %1 did not report discard completion within timeout").arg(name));
-        }
-        m_discardPending = 0;
-        completeDiscardIfDone();
-    });
-
-    // Per-domain lambdas reuse the same `generation` snapshot above
-    // (timer + apply/destroyed lambdas all key off it for stale-fire
-    // detection). Two-pass connect-then-discard mirrors the
-    // applyAllAsync structure so cross-domain sync cascades don't
-    // lose terminal signals.
-    for (StagingDomain* domain : dirty) {
-        // Same generation + outstanding-set guard pattern as
-        // applyAllAsync above. See the rationale comment there.
-        connect(
-            domain, &StagingDomain::discardResult, this,
-            [this, domain, generation](bool ok, const QString& error) {
-                if (generation != m_discardGeneration)
-                    return;
-                if (m_discardOutstanding.remove(domain) == 0)
-                    return;
-                if (!ok && !error.isEmpty())
-                    m_discardErrors.append(error);
-                else if (!ok)
-                    m_discardErrors.append(QStringLiteral("Unknown error"));
-                --m_discardPending;
-                completeDiscardIfDone();
-            },
-            Qt::SingleShotConnection);
-        connect(
-            domain, &QObject::destroyed, this,
-            [this, domain, generation]() {
-                if (generation != m_discardGeneration)
-                    return;
-                if (m_discardOutstanding.remove(domain) == 0)
-                    return;
-                m_discardErrors.append(QStringLiteral("Domain destroyed before discard completed"));
-                --m_discardPending;
-                completeDiscardIfDone();
-            },
-            Qt::SingleShotConnection);
-    }
-    for (StagingDomain* domain : dirty) {
-        domain->discard();
-    }
-}
-
-void ApplicationController::completeApplyIfDone()
-{
-    if (m_applyPending > 0)
-        return;
-    m_inTransaction = false;
-    m_applyOutstanding.clear();
-    // State-change emission order:
-    //   1) m_applying = false (set field first so probes see it)
-    //   2) applyingChanged   (state-bit observers refresh)
-    //   3) applyAllComplete  (terminal-batch signal fires while applying
-    //                         is still observably false; a slot that
-    //                         re-invokes applyAllAsync from here starts
-    //                         a fresh batch cleanly)
-    //   4) recomputeDirty    (dirtyChanged-driven side effects can now
-    //                         observe both applying=false AND the
-    //                         terminal signal has already been emitted —
-    //                         no chance of Complete arriving AFTER a
-    //                         re-invoked batch's applyingChanged(true))
-    const bool ok = m_applyErrors.isEmpty();
-    const QStringList errors = std::move(m_applyErrors);
-    // Defensive: std::move leaves the source in a valid-but-
-    // unspecified state. The next applyAllAsync also clears, but a
-    // re-entrant applyAllComplete listener that reads m_applyErrors
-    // would otherwise see whatever the QStringList's move-from
-    // implementation left behind.
-    m_applyErrors.clear();
-    m_applying = false;
-    Q_EMIT applyingChanged();
-    Q_EMIT applyAllComplete(ok, errors);
-    recomputeDirty();
-}
-
-void ApplicationController::completeDiscardIfDone()
-{
-    if (m_discardPending > 0)
-        return;
-    m_inTransaction = false;
-    m_discardOutstanding.clear();
-    // Same Complete-before-recomputeDirty ordering as completeApplyIfDone —
-    // see the rationale comment there.
-    const bool ok = m_discardErrors.isEmpty();
-    const QStringList errors = std::move(m_discardErrors);
-    // Defensive clear after std::move (same rationale as
-    // completeApplyIfDone — see comment there).
-    m_discardErrors.clear();
-    m_discarding = false;
-    Q_EMIT discardingChanged();
-    Q_EMIT discardAllComplete(ok, errors);
-    recomputeDirty();
-}
-
-void ApplicationController::forceResetAsyncState()
-{
-    // Emergency escape hatch — recovers from a state machine that's
-    // stuck because both the terminal result signal AND the
-    // destroyed() guard failed to fire (should be unreachable but
-    // chrome buttons would be permanently disabled if it did).
-    //
-    // Bumping the generation counter is essential: the per-domain
-    // applyResult/destroyed lambdas from the wedged batch are STILL
-    // WIRED on the domains. If those domains later fire either signal
-    // after this reset, the lambdas' generation guard will see the
-    // new value and bail — without the bump, a stale fire after
-    // reset would corrupt whatever state-machine state happens to be
-    // live (the NEXT batch's counters, most likely).
-    // Mutually-exclusive `if / else if` rather than two sequential
-    // if-blocks: applyAllAsync/discardAllAsync upstream guards forbid
-    // both flags being true concurrently, so in a healthy state at
-    // most one branch can fire. If a future caller bypassed those
-    // guards (or a regression let both flags survive), running BOTH
-    // branches in one call would have applyOnly clear m_inTransaction
-    // before discardOnly inherited the same shared flag — cascading
-    // recomputeDirty walks where the documented contract is "one
-    // recompute per terminal batch". Recover one wedge per call;
-    // callers wanting both reset run forceResetAsyncState twice.
-    if (m_applying) {
-        ++m_applyGeneration;
-        m_applyPending = 0;
-        m_applyOutstanding.clear();
-        if (m_applyErrors.isEmpty())
-            m_applyErrors.append(QStringLiteral("Async apply state force-reset"));
-        completeApplyIfDone();
-    } else if (m_discarding) {
-        ++m_discardGeneration;
-        m_discardPending = 0;
-        m_discardOutstanding.clear();
-        if (m_discardErrors.isEmpty())
-            m_discardErrors.append(QStringLiteral("Async discard state force-reset"));
-        completeDiscardIfDone();
-    }
-}
-
-void ApplicationController::setAsyncBatchTimeoutMs(int ms)
-{
-    if (ms <= 0) {
-        qWarning() << "ApplicationController::setAsyncBatchTimeoutMs: refusing non-positive value" << ms
-                   << "— keeping current" << m_asyncBatchTimeoutMs;
-        return;
-    }
-    m_asyncBatchTimeoutMs = ms;
-}
+// NOTE: applyAllAsync / discardAllAsync / completeApplyIfDone /
+// completeDiscardIfDone / forceResetAsyncState / asyncBatchTimeoutMs
+// (READ/WRITE) live in applicationcontroller_async.cpp — same class,
+// separate TU, split out to keep this file under the 800-line cap
+// (CLAUDE.md).
 
 void ApplicationController::resetCurrentPage()
 {
+    // NOTE: this is a sync, best-effort entry point. A page whose
+    // resetToDefaults() implementation does asynchronous work (e.g.
+    // D-Bus round-trip to fetch factory values) will return before
+    // the reset actually completes — the contract is "fire and
+    // forget" with no terminal signal. A future resetCurrentPageAsync
+    // (Q_INVOKABLE returning via a resetComplete signal) is reserved
+    // for the first consumer that needs to observe completion;
+    // current callers (chrome footer button) treat reset as best-effort
+    // and rely on dirtyChanged to reflect the eventual outcome.
     if (m_currentPageId.isEmpty()) {
         return;
     }
@@ -600,20 +289,22 @@ QString ApplicationController::gotoNextPage()
 
 QStringList ApplicationController::parentChainFor(const QString& id) const
 {
-    // Cycle guard for parent-id graph walks. 32 hops is well above any
-    // realistic sidebar nesting (typical settings apps cap at 3-4 levels)
-    // and well below the cost of any pathological cycle.
+    // Nesting-depth cap. 32 hops is well above any realistic sidebar
+    // nesting (typical settings apps cap at 3-4 levels). PageRegistry::
+    // registerPage refuses an entry whose parentId isn't already
+    // registered, which makes registry-internal cycles structurally
+    // impossible — so this cap is purely a nesting-depth limit.
     constexpr int kMaxParentChainHops = 32;
 
     QStringList chain;
     QString cursor = id;
-    // Walk parent links upward; cap at kMaxParentChainHops as a cycle guard.
+    // Walk parent links upward; cap at kMaxParentChainHops to bound depth.
     for (int i = 0; i < kMaxParentChainHops; ++i) {
         if (!m_registry->hasPage(cursor)) {
             // Unknown id is a legitimate query path (QML probing during
             // bootstrap before pages are registered). Return whatever
             // we've collected so far without warning — the warning below
-            // is reserved for actual cycle / depth-exceeded cases.
+            // is reserved for actual depth-exceeded cases.
             return chain;
         }
         const QString parent = m_registry->entry(cursor).parentId;
@@ -624,11 +315,11 @@ QStringList ApplicationController::parentChainFor(const QString& id) const
         cursor = parent;
     }
     // Reached the hop cap on a known starting id without hitting a root —
-    // indicates a cycle in the registry's parentId graph (programmer
-    // error). Warn so the bug surfaces instead of silently producing a
-    // truncated chain.
-    qWarning() << "ApplicationController::parentChainFor: cycle in registry, or depth exceeded the"
-               << kMaxParentChainHops << "hop cap walking up from id" << id;
+    // indicates the parent chain is nested deeper than the cap allows.
+    // Warn so the bug surfaces instead of silently producing a truncated
+    // chain.
+    qWarning() << "ApplicationController::parentChainFor: page nested deeper than" << kMaxParentChainHops
+               << "levels walking up from id" << id;
     return chain;
 }
 
@@ -685,12 +376,27 @@ void ApplicationController::recomputeDirty()
     // dirtyChanged from inside its getter would route through
     // onDomainDirtyChanged into recomputeDirty while the outer call
     // still holds iterators into m_domains — UB on QList erase.
+    //
+    // When the guard rejects a re-entrant call, record that a
+    // cascaded recompute was requested so we can replay it on the
+    // next event-loop turn. Without this, the outer walk would
+    // observe pre-cascade `isDirty()` values and the cascaded dirty
+    // edge would never be reflected in m_dirty (silently swallowed).
     if (m_recomputingDirty) {
+        m_recomputeDirtyPending = true;
         return;
     }
     m_recomputingDirty = true;
     auto guard = qScopeGuard([this]() {
         m_recomputingDirty = false;
+        // Replay a deferred recompute on the next event-loop turn
+        // if any was requested while we were running. Queued so the
+        // call stack unwinds first — direct dispatch here would
+        // re-arm the guard recursively.
+        if (m_recomputeDirtyPending) {
+            m_recomputeDirtyPending = false;
+            QMetaObject::invokeMethod(this, &ApplicationController::recomputeDirty, Qt::QueuedConnection);
+        }
     });
 
     // Single pass: compact null QPointers and compute the dirty fold

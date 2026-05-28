@@ -105,7 +105,7 @@ placementEngineRouter.bind("autotile", autotile);
 - [`phosphor-tiles`](../phosphor-tiles/README.md) — `TilingAlgorithm`, `TilingState`, `ITileAlgorithmRegistry`, `AutotileConstants`
 - [`phosphor-zones`](../phosphor-zones/README.md) — `Layout`, `LayoutRegistry`
 - [`phosphor-layout-api`](../phosphor-layout-api/README.md) — `EdgeGaps`
-- [`phosphor-screens`](../phosphor-screens/README.md) — `Phosphor::Screens::ScreenManager`
+- [`phosphor-screens`](../phosphor-screens/README.md) — `PhosphorScreens::ScreenManager`
 - [`phosphor-identity`](../phosphor-identity/README.md) — window IDs (private link)
 
 ## See also

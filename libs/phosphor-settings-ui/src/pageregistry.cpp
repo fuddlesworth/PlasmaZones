@@ -89,6 +89,10 @@ PageRegistry::Entry PageRegistry::entry(const QString& id) const
 QList<PageRegistry::Entry> PageRegistry::topLevelPages() const
 {
     QList<Entry> out;
+    // Worst-case sizing: every registered page is top-level. Cheap upper
+    // bound matches the pattern used by allPagesData() so the variant
+    // and entry forms have the same allocation profile.
+    out.reserve(m_pages.size());
     for (const Entry& e : m_pages) {
         if (e.parentId.isEmpty()) {
             out.append(e);
@@ -100,6 +104,9 @@ QList<PageRegistry::Entry> PageRegistry::topLevelPages() const
 QList<PageRegistry::Entry> PageRegistry::childPages(const QString& parentId) const
 {
     QList<Entry> out;
+    // Worst-case sizing: every registered page is a child of parentId.
+    // Same upper-bound rationale as topLevelPages above.
+    out.reserve(m_pages.size());
     for (const Entry& e : m_pages) {
         if (e.parentId == parentId) {
             out.append(e);

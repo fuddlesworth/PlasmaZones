@@ -14,7 +14,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -79,8 +79,7 @@ public:
      *        registry divergence doesn't silently re-route D-Bus queries.
      * @param parent Parent QObject (typically the daemon)
      */
-    explicit AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine,
-                             Phosphor::Screens::ScreenManager* screenManager,
+    explicit AutotileAdaptor(PhosphorTileEngine::AutotileEngine* engine, PhosphorScreens::ScreenManager* screenManager,
                              PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileAdaptor() override = default;
 
@@ -373,7 +372,7 @@ private Q_SLOTS:
     /**
      * @brief Flush any windowOpened events that were deferred waiting for panel geometry
      *
-     * Connected to Phosphor::Screens::ScreenManager::panelGeometryReady. See the rationale comment on
+     * Connected to PhosphorScreens::ScreenManager::panelGeometryReady. See the rationale comment on
      * windowsOpenedBatch() for why deferral is needed.
      */
     void flushPendingWindowOpens();
@@ -412,12 +411,12 @@ private:
     bool deferUntilPanelReady();
 
     PhosphorTileEngine::AutotileEngine* m_engine = nullptr;
-    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
 
     // Window-opened events received before the first panel D-Bus query completed.
     // Processing them immediately would compute zones against the unreserved screen rect
-    // (the s_availableGeometryCache in Phosphor::Screens::ScreenManager is still empty), so we queue them
+    // (the s_availableGeometryCache in PhosphorScreens::ScreenManager is still empty), so we queue them
     // until panelGeometryReady fires. Non-blocking — no nested event loops, no reentrancy.
     PhosphorProtocol::WindowOpenedList m_pendingOpens;
     bool m_pendingOpensListenerInstalled = false;

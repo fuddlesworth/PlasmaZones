@@ -62,6 +62,11 @@ QQC2.ItemDelegate {
     // skip them rather than reading "Button".
     Accessible.name: rowItem._isDivider ? "" : rowItem.title
     Accessible.role: rowItem._isDivider ? Accessible.Separator : Accessible.Button
+    // Active row reads as "checked" to AT tools (matches the visual
+    // accent + bold label affordance). Dividers stay
+    // un-checkable — they're ornament with role Separator.
+    Accessible.checkable: !rowItem._isDivider
+    Accessible.checked: !rowItem._isDivider && rowItem.isCurrent
     // Dividers are visual ornament — disable click routing and any
     // focus/hover state so the cursor doesn't change passing over them.
     enabled: !rowItem._isDivider
@@ -74,13 +79,15 @@ QQC2.ItemDelegate {
     leftPadding: rowItem.compact ? 0 : (Kirigami.Units.smallSpacing + (rowItem._depth * Kirigami.Units.gridUnit))
     rightPadding: rowItem.compact ? 0 : Kirigami.Units.smallSpacing
     // Tooltip surfaces the row label when compact mode has hidden it.
-    // 300ms delay matches legacy. Held off for divider rows because
-    // they have no label. `QtQuick.Controls` is imported as QQC2 so
-    // the attached property has to be namespaced too — unqualified
-    // `ToolTip.x` reads as a non-existent attached object.
+    // Delay uses the Kirigami platform unit so theming / accessibility
+    // overrides (slow-motion mode, high-feedback profiles) flow
+    // through. Held off for divider rows because they have no label.
+    // `QtQuick.Controls` is imported as QQC2 so the attached property
+    // has to be namespaced too — unqualified `ToolTip.x` reads as a
+    // non-existent attached object.
     QQC2.ToolTip.visible: rowItem.compact && rowItem.hovered && !rowItem._isDivider
     QQC2.ToolTip.text: rowItem.title
-    QQC2.ToolTip.delay: 300
+    QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
     onClicked: {
         if (rowItem._isDivider)
             return;

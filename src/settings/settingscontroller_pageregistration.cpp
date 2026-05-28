@@ -79,6 +79,17 @@ void SettingsController::buildApplicationController()
                QStringLiteral("view-split-left-right"));
     regVirtual(QStringLiteral("tiling"), QString(), PzI18n::tr("Tiling"), QString(), QStringLiteral("window-duplicate"),
                /*collapsible=*/false, /*divider=*/true);
+    // FIXME(audit): m_animationsPage carries PageController id "animations"
+    // (see AnimationsPageController ctor — animationspagecontroller.cpp:159)
+    // which is ALSO the navigation-parent id we redirect to
+    // "animations-general" via parentPageRedirects(). The round-trip works
+    // today because setActivePage resolves the parent before storing
+    // m_activePage, but the dual role means QML or D-Bus callers can't
+    // distinguish "navigate to the Animations parent (and land on its first
+    // child)" from "address the staging controller's own id". Consider
+    // splitting: keep the parent navigation handle as "animations" and
+    // rename the controller id to something like "animations-staging" so
+    // the two surfaces are independent.
     regPage(m_animationsPage, QString(), PzI18n::tr("Animations"), QString(), QStringLiteral("media-playback-start"));
     regVirtual(QStringLiteral("rules"), QString(), PzI18n::tr("Rules"), QString(), QStringLiteral("view-list-details"),
                /*collapsible=*/true, /*divider=*/true);
@@ -333,14 +344,48 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general")};
     static const QSet<QString> kAnimationsAllLeaves =
         kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
+    // Mid-level *-cat collapsible category headers under the top-level
+    // snapping / tiling parents. Sidebar.qml renders these as collapsible
+    // section headers; when COLLAPSED the trailing-row delegate at
+    // Main.qml:836-840 calls isPageDirty(<*-cat>) to decide whether to
+    // light the badge. Without these entries that lookup would always
+    // return false even when a leaf inside the collapsed section is
+    // dirty (mirrors the snapping/tiling parent entries above, just one
+    // level deeper). Keep in sync with the regVirtual *-cat registrations
+    // in buildApplicationController() above.
+    static const QSet<QString> kSnappingVisualChildren{
+        QStringLiteral("snapping-appearance"),
+        QStringLiteral("snapping-effects"),
+        QStringLiteral("snapping-shaders"),
+    };
+    static const QSet<QString> kSnappingBehaviorChildren{
+        QStringLiteral("snapping-behavior"),
+        QStringLiteral("snapping-zoneselector"),
+    };
+    static const QSet<QString> kSnappingConfigChildren{
+        QStringLiteral("snapping-ordering"),
+        QStringLiteral("snapping-shortcuts"),
+    };
+    static const QSet<QString> kTilingVisualChildren{
+        QStringLiteral("tiling-appearance"),
+    };
+    static const QSet<QString> kTilingBehaviorChildren{
+        QStringLiteral("tiling-behavior"),
+        QStringLiteral("tiling-algorithm"),
+    };
+    static const QSet<QString> kTilingConfigChildren{
+        QStringLiteral("tiling-ordering"),
+        QStringLiteral("tiling-shortcuts"),
+    };
     static const QHash<QString, QSet<QString>> groups{
-        {QStringLiteral("snapping"),
-         {QStringLiteral("snapping-appearance"), QStringLiteral("snapping-effects"), QStringLiteral("snapping-shaders"),
-          QStringLiteral("snapping-behavior"), QStringLiteral("snapping-zoneselector"),
-          QStringLiteral("snapping-ordering"), QStringLiteral("snapping-shortcuts")}},
-        {QStringLiteral("tiling"),
-         {QStringLiteral("tiling-appearance"), QStringLiteral("tiling-behavior"), QStringLiteral("tiling-algorithm"),
-          QStringLiteral("tiling-ordering"), QStringLiteral("tiling-shortcuts")}},
+        {QStringLiteral("snapping"), kSnappingVisualChildren + kSnappingBehaviorChildren + kSnappingConfigChildren},
+        {QStringLiteral("tiling"), kTilingVisualChildren + kTilingBehaviorChildren + kTilingConfigChildren},
+        {QStringLiteral("snapping-visual-cat"), kSnappingVisualChildren},
+        {QStringLiteral("snapping-behavior-cat"), kSnappingBehaviorChildren},
+        {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
+        {QStringLiteral("tiling-visual-cat"), kTilingVisualChildren},
+        {QStringLiteral("tiling-behavior-cat"), kTilingBehaviorChildren},
+        {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-surfaces"), kAnimationsSurfacesChildren},
         {QStringLiteral("animations-library"), kAnimationsLibraryChildren},

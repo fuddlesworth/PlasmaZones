@@ -29,11 +29,46 @@ endif()
 
 include(GenerateExportHeader)
 
+# Hoist GNUInstallDirs + the KDE_INSTALL_* fallbacks here so every
+# install(...) / target_include_directories(... INSTALL_INTERFACE) block
+# below has the variables defined unconditionally. Previously this was
+# included lazily in three places (around the lib target, around the
+# QML install block, and at the start of the install section), each
+# guarded by a separate `if(NOT DEFINED ...)` — easy to reorder a way
+# that left INSTALL_INTERFACE with an empty path until the third
+# include fired.
+include(GNUInstallDirs)
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+endif()
+if(NOT DEFINED KDE_INSTALL_LIBDIR)
+    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+endif()
+if(NOT DEFINED KDE_INSTALL_BINDIR)
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
+
+# Shared-vs-static lib type. SHARED is the LGPL-friendly default: an
+# end-user can relink against a modified copy of this library without
+# also having to relink the consuming application, satisfying the
+# LGPL-2.1's dynamic-linking exemption. Override to OFF only for
+# embedded / single-binary builds where the LGPL relinking obligation
+# is handled out-of-band (e.g. shipping the .o files alongside the
+# binary). Mirrors libs/phosphor-config's pattern.
+option(PHOSPHOR_SETTINGS_UI_BUILD_SHARED
+    "Build phosphor-settings-ui as a shared library (LGPL relinking-friendly)"
+    ON)
+if(PHOSPHOR_SETTINGS_UI_BUILD_SHARED)
+    set(_phosphor_settings_ui_lib_type SHARED)
+else()
+    set(_phosphor_settings_ui_lib_type STATIC)
+endif()
 
 # Qt 6.5+ QML policies:
 #   QTP0001 — use `:/qt/qml/` as the QML module resource prefix (NEW).
@@ -66,11 +101,27 @@ set(phosphorsettingsui_SRCS
     src/pagecontroller.cpp
     src/pageregistry.cpp
     src/applicationcontroller.cpp
+    # Async state-machine half of ApplicationController — split out so
+    # applicationcontroller.cpp stays under the 800-line cap (CLAUDE.md).
+    # Same class, separate TU, no API change.
+    src/applicationcontroller_async.cpp
     src/localizedcontext.cpp
     src/dbusbridge.cpp
 )
 
-add_library(PhosphorSettingsUi SHARED
+# NOTE: three near-identical targets (PhosphorSettingsUi C++ lib +
+# PhosphorSettingsUiQml STATIC QML module + optional
+# PhosphorSettingsUiQmlShared install-only plugin) compile the same
+# source files three times. This mirrors phosphor-animation and is
+# intentional defence-in-depth — unifying them risks Qt's
+# qmltyperegistrar emitting clashing type registrations into multiple
+# targets that the linker would then resolve in a generator-dependent
+# order. WATCH FOR: a "Type already registered" warning at QML import
+# time if anyone ever adds a `qmlRegisterUncreatableType()` (or any
+# side-effecting registration) to one of the shared sources — that
+# would surface the triple-registration footgun and need plumbing
+# (split source between targets, or a single-target install path).
+add_library(PhosphorSettingsUi ${_phosphor_settings_ui_lib_type}
     ${phosphorsettingsui_public_HDRS}
     ${phosphorsettingsui_SRCS}
 )
@@ -81,13 +132,6 @@ generate_export_header(PhosphorSettingsUi
     EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/phosphorsettingsui_export.h
     EXPORT_MACRO_NAME PHOSPHORSETTINGSUI_EXPORT
 )
-
-# Resolve KDE_INSTALL_INCLUDEDIR locally so INSTALL_INTERFACE can reference
-# it. Mirrors the pattern in libs/phosphor-config/CMakeLists.txt.
-if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
-endif()
 
 target_include_directories(PhosphorSettingsUi
     PUBLIC
@@ -102,8 +146,22 @@ target_link_libraries(PhosphorSettingsUi
     PUBLIC
         Qt6::Core
         Qt6::DBus
-        Qt6::Gui
+        # Qt6::Qml is PUBLIC because the public headers include
+        # `<qqmlregistration.h>` (QML_NAMED_ELEMENT etc.) — consumers
+        # need the Qml include path at compile time even if they don't
+        # use the registration macros themselves.
         Qt6::Qml
+    PRIVATE
+        # Qt6::Gui is PRIVATE: moc-generated code on the implementation
+        # side may reference QColor/QPalette/etc. through Qt5 compat
+        # headers, but the public API in include/PhosphorSettingsUi/
+        # exposes no Gui types (QObject + QString + QUrl + QList only).
+        # Leaving Gui PUBLIC would force every consumer to link
+        # Qt6::Gui even when only the headless ApplicationController/
+        # PageController/StagingDomain surface is used (e.g. headless
+        # tests). The QML targets below explicitly add Gui PUBLIC for
+        # QML consumers that DO need it.
+        Qt6::Gui
 )
 
 set_target_properties(PhosphorSettingsUi PROPERTIES
@@ -255,6 +313,22 @@ option(PHOSPHOR_SETTINGS_UI_QML_INSTALL
     "Also build a SHARED variant of org.phosphor.settings.ui and install it"
     OFF)
 
+# Ordering invariant: the function must be defined BEFORE the
+# cmake_language(DEFER CALL ...) inside the if-block below schedules it.
+# DEFER captures the function name now but resolves the body at end-of-
+# directory; if the function were declared after the if(), CMake would
+# error with "Function _phosphor_settings_ui_apply_plugin_rpath not
+# found" because the deferred call runs after the if() block has
+# already evaluated.
+function(_phosphor_settings_ui_apply_plugin_rpath plugin_target)
+    if(NOT TARGET ${plugin_target})
+        message(WARNING "phosphor-settings-ui: plugin target ${plugin_target} not found at install-rpath set time"
+                        " — packaging may need LD_LIBRARY_PATH for the QML module directory.")
+        return()
+    endif()
+    set_target_properties(${plugin_target} PROPERTIES INSTALL_RPATH "$ORIGIN")
+endfunction()
+
 if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
     qt_add_qml_module(PhosphorSettingsUiQmlShared
         URI org.phosphor.settings.ui
@@ -318,19 +392,6 @@ if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
         ${_phosphor_settings_ui_qml_shared_plugin_target})
 endif()
 
-# Helper invoked via cmake_language(DEFER) above so the plugin target
-# is fully realised by Qt's finalizer before we touch it. Defined here
-# (after the if block) so it's visible to the DEFER call which executes
-# at end of dir scope.
-function(_phosphor_settings_ui_apply_plugin_rpath plugin_target)
-    if(NOT TARGET ${plugin_target})
-        message(WARNING "phosphor-settings-ui: plugin target ${plugin_target} not found at install-rpath set time"
-                        " — packaging may need LD_LIBRARY_PATH for the QML module directory.")
-        return()
-    endif()
-    set_target_properties(${plugin_target} PROPERTIES INSTALL_RPATH "$ORIGIN")
-endfunction()
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Examples — opt-in via -DBUILD_PHOSPHOR_SETTINGS_UI_EXAMPLES=ON
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -347,16 +408,10 @@ endif()
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
-
-if(NOT DEFINED KDE_INSTALL_LIBDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
-    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
-endif()
-
-if(NOT DEFINED KDE_INSTALL_BINDIR)
-    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
-endif()
+#
+# KDE_INSTALL_* variables are resolved at the top of this file via the
+# hoisted include(GNUInstallDirs) block — no per-section fallback
+# include needed here.
 
 install(TARGETS PhosphorSettingsUi
     EXPORT PhosphorSettingsUiTargets
@@ -380,7 +435,13 @@ configure_package_config_file(
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorSettingsUiConfigVersion.cmake"
     VERSION ${PHOSPHORSETTINGSUI_VERSION}
-    COMPATIBILITY SameMajorVersion
+    # SameMinorVersion is the pre-1.0 compatibility contract: a
+    # find_package(PhosphorSettingsUi 0.1) call accepts 0.1.x patch
+    # releases only — bumping to 0.2 is treated as breaking because
+    # we still expect API/ABI to churn freely under 1.0. Switch this
+    # back to SameMajorVersion once we hit 1.0 (when the API is
+    # stabilised and we promise within-major back-compat).
+    COMPATIBILITY SameMinorVersion
 )
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorSettingsUiConfig.cmake"
@@ -413,11 +474,26 @@ if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
     # an export set that was never installed via `install(EXPORT ...)`,
     # which left a dangling reference for any consumer that tried to
     # use the QML targets through CMake.
-    install(TARGETS PhosphorSettingsUiQmlShared ${_phosphor_settings_ui_qml_shared_plugin_target}
+    install(TARGETS PhosphorSettingsUiQmlShared
         RUNTIME DESTINATION ${_phosphor_settings_ui_qml_install_dir}
         LIBRARY DESTINATION ${_phosphor_settings_ui_qml_install_dir}
         ARCHIVE DESTINATION ${_phosphor_settings_ui_qml_install_dir}
     )
+    # The plugin target is created lazily by Qt's qt_finalize_target()
+    # finalizer — on some Qt 6.6.x configurations it isn't realised at
+    # the point this install() runs, in which case the variable still
+    # holds the expected name but `install(TARGETS ...)` would error
+    # out with "given target ... which does not exist". Gate on TARGET
+    # existence so the lib install succeeds even if the plugin target
+    # hasn't materialised (the rpath helper above logs a WARNING in
+    # the same condition, so the failure mode is visible).
+    if(TARGET ${_phosphor_settings_ui_qml_shared_plugin_target})
+        install(TARGETS ${_phosphor_settings_ui_qml_shared_plugin_target}
+            RUNTIME DESTINATION ${_phosphor_settings_ui_qml_install_dir}
+            LIBRARY DESTINATION ${_phosphor_settings_ui_qml_install_dir}
+            ARCHIVE DESTINATION ${_phosphor_settings_ui_qml_install_dir}
+        )
+    endif()
 
     install(FILES
             ${CMAKE_BINARY_DIR}/qml_install/org/phosphor/settings/ui/qmldir

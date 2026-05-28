@@ -10,7 +10,7 @@
 #include <QObject>
 #include <QString>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Pluggable persistence for virtual-screen configurations.
@@ -85,4 +85,4 @@ Q_SIGNALS:
     void changed();
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

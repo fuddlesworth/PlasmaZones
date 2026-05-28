@@ -7,7 +7,7 @@
 
 #include <QString>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 class IConfigStore;
 
@@ -93,4 +93,4 @@ private:
     IConfigStore* m_store;
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

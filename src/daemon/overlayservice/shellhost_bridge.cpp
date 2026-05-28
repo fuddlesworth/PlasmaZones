@@ -58,7 +58,7 @@ void OverlayService::ensureOsdScreenAddedConnected()
             return;
         }
         auto* mgr2 = m_screenManager;
-        const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
         const QStringList ids = mgr2 ? mgr2->virtualScreenIdsFor(physId) : QStringList{physId};
         for (const QString& sid : ids) {
             ensurePassiveShellFor(sid, screen);

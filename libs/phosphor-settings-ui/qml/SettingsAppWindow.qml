@@ -23,10 +23,39 @@ Kirigami.ApplicationWindow {
     required property ApplicationController controller
     //* Optional extra content shown in the header toolbar (e.g. global search).
     property alias headerExtras: headerExtrasLoader.sourceComponent
-    /** Public alias on the chrome Sidebar — consumers use this to restore
-     *  drill state on startup (`sidebar.drillInto(parentId)`), toggle
-     *  collapsible categories programmatically, or react to navigation. */
-    property alias sidebar: sidebar
+    /** Public façade onto the chrome Sidebar — exposes the documented
+     *  navigation API and the two consumer slots without leaking
+     *  internal properties (`_isExpanded`, `_refreshModel`,
+     *  `_suppressAccordion`, etc.). Consumers configure the sidebar
+     *  through this object:
+     *
+     *      window.sidebar.drillInto(parentId)
+     *      window.sidebar.drillOut()
+     *      window.sidebar.toggleCategory(id)
+     *      window.sidebar.currentParentId  // read
+     *      window.sidebar.footerContent: Component { ... }
+     *      window.sidebar.trailingDelegate: Component { ... }
+     *
+     *  Direct access to the underlying Sidebar item is intentionally
+     *  unavailable — any feature the chrome wants to expose should be
+     *  added to this façade so the contract is explicit. */
+    readonly property QtObject sidebar: QtObject {
+        property alias currentParentId: sidebarItem.currentParentId
+        property alias footerContent: sidebarItem.footerContent
+        property alias trailingDelegate: sidebarItem.trailingDelegate
+
+        function drillInto(parentId) {
+            sidebarItem.drillInto(parentId);
+        }
+
+        function drillOut() {
+            sidebarItem.drillOut();
+        }
+
+        function toggleCategory(id) {
+            sidebarItem.toggleCategory(id);
+        }
+    }
     /** When true, the close-confirmation prompt offers an Apply action
      *  (Apply / Discard / Cancel) in addition to Discard / Keep Editing.
      *  Defaults false; flip on for apps whose preferred answer to "you
@@ -187,6 +216,15 @@ Kirigami.ApplicationWindow {
     // The same applyAllComplete / discardAllComplete signals also fire
     // for footer-driven Saves / Discards — those leave the close
     // flags false and these handlers no-op.
+    //
+    // NOTE: DiscardChangesDialog's Apply / Discard / Keep actions
+    // already call `root.close()` on themselves in onTriggered — so
+    // by the time these completion handlers fire, the dialog is
+    // already in its teardown animation. We do NOT re-close it here;
+    // the second `discardDialog.close()` is redundant and (depending
+    // on Kirigami.PromptDialog's internal state machine) can fire a
+    // duplicate `aboutToHide` cycle that causes the underlying
+    // QQuickWindow to lose focus mid-deferred-close.
     Connections {
         function onApplyAllComplete(ok, errors) {
             if (!closeFlow.waitingApply)
@@ -205,8 +243,6 @@ Kirigami.ApplicationWindow {
                 root.applyOnCloseFailed(dirtyIds, errors);
                 return;
             }
-            if (discardDialog.visible)
-                discardDialog.close();
             closeFlow.forceClosing = true;
             Qt.callLater(root.close);
         }
@@ -222,8 +258,6 @@ Kirigami.ApplicationWindow {
             // the window disappears.
             if (!ok && errors && errors.length > 0)
                 root.discardOnCloseFailed(errors);
-            if (discardDialog.visible)
-                discardDialog.close();
             closeFlow.forceClosing = true;
             Qt.callLater(root.close);
         }
@@ -240,7 +274,16 @@ Kirigami.ApplicationWindow {
             spacing: 0
 
             Sidebar {
-                id: sidebar
+                // `sidebarItem` (not `sidebar`) — the root has a
+                // `readonly property QtObject sidebar` façade above,
+                // and JS scope chain would resolve a bare `sidebar`
+                // identifier inside the façade's methods to the root
+                // property (returning the façade itself) before
+                // resolving it as a QML id. Naming the underlying
+                // Sidebar item `sidebarItem` removes the collision so
+                // the façade's `sidebarItem.drillInto(...)` etc. land
+                // on the actual Sidebar.
+                id: sidebarItem
 
                 // Single intermediate property drives all three Layout
                 // width hints — one Behavior+animation runs per

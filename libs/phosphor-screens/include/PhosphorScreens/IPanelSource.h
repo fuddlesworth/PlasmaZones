@@ -9,7 +9,7 @@
 
 class QScreen;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Pluggable producer of panel-reservation offsets per screen.
@@ -101,4 +101,4 @@ Q_SIGNALS:
     void requeryCompleted();
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

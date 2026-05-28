@@ -24,6 +24,38 @@ SettingsFlickable {
 
     readonly property var controller: settingsController.windowRulesPage
     readonly property var ruleModel: controller.model
+    /// True while any rule-authoring modal owned by this page is open
+    /// — read by Main.qml's `_navShortcutsEnabled` guard so Ctrl+PgUp /
+    /// Ctrl+PgDown can't drag the user off the page while they have an
+    /// unsaved rule edit, picker selection, or force-save prompt open.
+    /// `forceSaveConfirm` lives below mainCol and binds back through
+    /// `_forceSaveConfirmOpen` to avoid a forward reference here. The
+    /// `onAnyModalOpenChanged` handler republishes the value into the
+    /// chrome-level `window._pageOwnedModalOpen` flag that Main.qml's
+    /// nav-shortcut guard reads (the framework's PageHost Loader keeps
+    /// the page item private, so a direct binding can't reach it).
+    readonly property bool anyModalOpen: addRuleWizard.opened || windowPickerDialog.opened || ruleEditorSheet.opened || page._forceSaveConfirmOpen
+    /// Internal bridge updated by `forceSaveConfirm.onVisibleChanged` so
+    /// `anyModalOpen` can read it without forward-referencing an id that
+    /// is declared further down in the file.
+    property bool _forceSaveConfirmOpen: false
+
+    onAnyModalOpenChanged: {
+        // Defensive truthy-check: this page can be hosted by consumers
+        // (KCM, future preview) that don't define `window` or the
+        // `_pageOwnedModalOpen` cross-cut. The full settings app does;
+        // standalone hosts ignore the publish.
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = anyModalOpen;
+    }
+    Component.onDestruction: {
+        // Clear the flag on page swap — the destructor fires when the
+        // PageHost Loader swaps source, and a stale `true` would
+        // permanently disable Ctrl+PgUp/PgDown on the page we navigated
+        // to.
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = false;
+    }
     // Composite "appSettings" surface threaded into the rule editor so the
     // picker components (LayoutComboBox for snapping/tiling actions, and the
     // screen / activity match-leaf editors) all see the same object.
@@ -282,6 +314,14 @@ SettingsFlickable {
         Kirigami.PromptDialog {
             id: forceSaveConfirm
 
+            // Bridge open-state to page-level `_forceSaveConfirmOpen` so
+            // Main.qml's `_navShortcutsEnabled` can include this dialog
+            // in its modal-open guard. Forward-reference avoidance: the
+            // `anyModalOpen` binding is declared at the top of the file
+            // and `forceSaveConfirm` is nested several scopes deep, so a
+            // direct id reference up there is brittle.
+            onOpened: page._forceSaveConfirmOpen = true
+            onClosed: page._forceSaveConfirmOpen = false
             title: i18n("Overwrite daemon-side changes?")
             subtitle: i18n("Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.")
             standardButtons: Kirigami.Dialog.NoButton
@@ -558,8 +598,15 @@ SettingsFlickable {
                                 // still receive focus on their own — this
                                 // only enables row-level focus for the
                                 // reorder handler.
+                                //
+                                // No `focus: true` — Repeater rebuilds the
+                                // delegate on every model change, and a
+                                // `focus: true` delegate yanks focus from
+                                // wherever the user was (an edit dialog
+                                // button, a text field, etc.) on every
+                                // rebuild. activeFocusOnTab gives the row
+                                // its own tab stop without stealing focus.
                                 activeFocusOnTab: true
-                                focus: true
                                 Accessible.role: Accessible.ListItem
                                 Accessible.name: i18nc("Accessible row label for an animation rule", "Animation rule %1 of %2: %3", animDelegateRoot.index + 1, animationOrderContainer.rules.length, animDelegateRoot.modelData.name)
 

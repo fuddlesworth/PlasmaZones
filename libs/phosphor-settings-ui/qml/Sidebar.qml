@@ -46,12 +46,6 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  *     status + enable/disable toggle.
  */
 ColumnLayout {
-    // Flip relative to the *displayed* state — _isExpanded() treats
-    // an absent id as expanded (the rail starts open), so the
-    // toggle must respect that view. The earlier ternary form
-    // mapped undefined → true (no-op for the user) and required a
-    // second click to actually collapse a never-toggled category.
-
     id: root
 
     required property ApplicationController controller
@@ -126,6 +120,13 @@ ColumnLayout {
     }
 
     function toggleCategory(id) {
+        // Flip relative to the *displayed* state — _isExpanded()
+        // treats an absent id as expanded (the rail starts open),
+        // so the toggle must respect that view. A prior ternary
+        // form mapped `undefined → true` (no-op for the user) and
+        // required a second click to actually collapse a
+        // never-toggled category.
+        //
         // Clone target is `Object.create(null)` to preserve the
         // prototype-less invariant on the property (see
         // expandedCategories docstring above).
@@ -151,7 +152,12 @@ ColumnLayout {
     // longer ring). Without these caps a search keystroke would
     // freeze the UI thread infinitely-recursing through the cycle.
     // Mirrors the same guard pattern Breadcrumbs.qml uses for the
-    // current-page → root walk.
+    // current-page → root walk; the constant here is intentionally
+    // larger (64 vs Breadcrumbs' 32) because the sidebar walk
+    // descends a tree (depth scales with nesting) while Breadcrumbs
+    // walks a single parent chain (length bounded by hierarchy
+    // depth). The C++ side keeps Breadcrumbs in lockstep at 32 hops
+    // (`kMaxParentChainHops`); the sidebar's value is QML-internal.
     readonly property int _maxWalkDepth: 64
 
     function _visibleItems() {
@@ -178,13 +184,30 @@ ColumnLayout {
         //     for downstream consumers (PlasmaZones Main.qml etc.).
         if (root.searchText.length === 0) {
             const out = [];
-            const seen = Object.create(null);
+            // Flat seen-set tracks every visited page id (parent AND
+            // child) so a misregistered tree where the same id appears
+            // as a sibling under multiple parents — or as both parent
+            // AND child of itself one level apart — can't drive
+            // infinite recursion. A parent-id-only guard would miss
+            // sibling-level duplicates because each parent walk
+            // starts with its own seen-marker for itself only.
+            const seen = new Set();
             const walk = function walk(parentId, depth, kids) {
-                if (depth > root._maxWalkDepth || seen[parentId])
+                if (depth > root._maxWalkDepth || seen.has(parentId))
                     return;
-                seen[parentId] = true;
+                seen.add(parentId);
                 for (let i = 0; i < kids.length; ++i) {
                     const child = kids[i];
+                    // Skip duplicate child ids — a malformed registry
+                    // can list the same page twice under one parent,
+                    // or under multiple parents that both appear in
+                    // the current scope; without this guard the
+                    // delegate's required-property bindings see two
+                    // rows with identical pageIds and ListView's
+                    // diff against visibleModel goes sideways.
+                    if (seen.has(child.id))
+                        continue;
+
                     // Single _scopeChildren call per child — used for
                     // the hasChildren predicate AND (when expanded)
                     // the recursion. Two `childPagesData(child.id)`
@@ -232,7 +255,10 @@ ColumnLayout {
         }
         const needle = root.searchText.toLowerCase();
         const matches = [];
-        const seen = Object.create(null);
+        // Same flat seen-set semantics as the no-search branch above:
+        // catches sibling-level dupes and self-referencing children
+        // that a parent-id-only guard would miss.
+        const seen = new Set();
         // Recursively walk down from a parent until a navigable
         // (hasQmlSource) descendant is found — used to route a
         // category-title search match to its first reachable leaf so
@@ -255,12 +281,17 @@ ColumnLayout {
             return null;
         };
         const collect = function collect(parentId, breadcrumb, depth) {
-            if (depth > root._maxWalkDepth || seen[parentId])
+            if (depth > root._maxWalkDepth || seen.has(parentId))
                 return;
-            seen[parentId] = true;
+            seen.add(parentId);
             const kids = root._scopeChildren(parentId);
             for (let i = 0; i < kids.length; ++i) {
                 const child = kids[i];
+                // Sibling-level / self-loop dupe guard (mirrors the
+                // no-search branch above).
+                if (seen.has(child.id))
+                    continue;
+
                 const grand = root._hasChildren(child.id);
                 const childBreadcrumb = breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title;
                 // Always recurse so descendants can match.
@@ -415,9 +446,19 @@ ColumnLayout {
 
         property string pendingParentId: ""
 
-        ScriptAction {
-            script: root._suppressAccordion = true
-        }
+        // Suppress-flag invariant is held by onStarted / onStopped
+        // rather than ScriptAction bookends inside the sequence. The
+        // sequence ScriptActions only fired when the animation ran
+        // its sequence to completion — if `complete()` were called
+        // externally (e.g. a stop+restart on a rapid double-drill,
+        // or a window-close mid-animation), the trailing ScriptAction
+        // never ran and `_suppressAccordion` stayed true forever,
+        // freezing all subsequent accordion / row Transitions. The
+        // animation's lifecycle signals fire on EVERY start/stop
+        // path (including stop(), complete(), restart()), so the
+        // invariant holds across all paths.
+        onStarted: root._suppressAccordion = true
+        onStopped: root._suppressAccordion = false
 
         PhosphorMotionAnimation {
             target: listColumn
@@ -435,10 +476,6 @@ ColumnLayout {
             properties: "opacity"
             to: 1
             profile: "panel.fadeIn"
-        }
-
-        ScriptAction {
-            script: root._suppressAccordion = false
         }
     }
 
@@ -575,6 +612,16 @@ ColumnLayout {
     Loader {
         id: footerLoader
 
+        // True iff the loaded item declares a `compact` property —
+        // signals that the consumer Component is compact-aware. Unaware
+        // consumers (no `compact` property) get the default suppression
+        // behaviour (`visible: false` in compact mode); aware consumers
+        // stay visible and receive the live `compact` value through
+        // the injectIfAssignable below. Read with `hasOwnProperty` so
+        // a runtime `undefined` value (consumer declared but didn't
+        // initialise) still counts as compact-aware.
+        readonly property bool _consumerIsCompactAware: item ? item.hasOwnProperty("compact") : false
+
         Layout.fillWidth: true
         // Layout.preferredWidth: 0 stops the loaded item's
         // implicitWidth (a Pane wrapping a RowLayout of dot + label +
@@ -585,8 +632,36 @@ ColumnLayout {
         Layout.preferredWidth: 0
         Layout.preferredHeight: item ? item.implicitHeight : 0
         active: root.footerContent !== null
-        visible: active
+        // Compact-mode policy: hide unaware consumers (most consumer
+        // slots are wide pill surfaces that don't fit a 3-gridUnit
+        // rail), but stay visible for compact-aware consumers — they
+        // opt in by declaring a `property bool compact: false` on
+        // their Component's root, and we feed `root.compact` into it
+        // (onLoaded + the Connections block below). Mirrors
+        // SidebarRow's compact-suppression pattern.
+        visible: active && (!root.compact || _consumerIsCompactAware)
         sourceComponent: root.footerContent
-        onLoaded: PhosphorLoaderHelpers.bindItemWidthToLoader(footerLoader)
+        onLoaded: {
+            PhosphorLoaderHelpers.bindItemWidthToLoader(footerLoader);
+            // Opt-in compact awareness: assign root.compact onto the
+            // loaded item only when the consumer declared the
+            // property. Avoids polluting unaware consumers and
+            // silently fails for ones that don't care.
+            PhosphorLoaderHelpers.injectIfAssignable(footerLoader.item, "compact", root.compact);
+        }
+
+        // Keep the loaded item's compact property in sync with the
+        // sidebar's compact state — the onLoaded handler runs once,
+        // but compact can toggle live (window resize crosses the
+        // 50-gridUnit threshold). Same injectIfAssignable contract:
+        // no-op for unaware consumers.
+        Connections {
+            function onCompactChanged() {
+                if (footerLoader.item)
+                    PhosphorLoaderHelpers.injectIfAssignable(footerLoader.item, "compact", root.compact);
+            }
+
+            target: root
+        }
     }
 }

@@ -62,9 +62,9 @@ class AutotileConfig;
 
 class NavigationController;
 class PerScreenConfigResolver;
-// Phosphor::Screens::ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
+// PhosphorScreens::ScreenManager moved to libs/phosphor-screens (PhosphorScreens::ScreenManager).
 } // namespace PhosphorTileEngine
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -97,7 +97,7 @@ class PHOSPHORTILEENGINE_EXPORT AutotileEngine : public PhosphorEngine::Placemen
 public:
     explicit AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
                             PhosphorEngine::IWindowTrackingService* windowTracker,
-                            Phosphor::Screens::ScreenManager* screenManager,
+                            PhosphorScreens::ScreenManager* screenManager,
                             PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileEngine() override;
 
@@ -1130,7 +1130,7 @@ private:
     QRect screenGeometry(const QString& screenId) const;
 
     /// Check if a screen ID refers to a known (connected) screen.
-    /// Virtual screen IDs are validated via Phosphor::Screens::ScreenManager geometry;
+    /// Virtual screen IDs are validated via PhosphorScreens::ScreenManager geometry;
     /// physical IDs via QScreen lookup.
     bool isKnownScreen(const QString& screenId) const;
 
@@ -1343,7 +1343,7 @@ private:
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
-    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     PhosphorEngine::IWindowRegistry* m_windowRegistry = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;
@@ -1399,7 +1399,7 @@ private:
     QHash<PhosphorEngine::TilingStateKey, QSet<QString>> m_savedFloatingWindows;
 
     // Pre-seeded window order for snapping → autotile transitions.
-    // Keyed by stable EDID-based screen ID (Phosphor::Screens::ScreenIdentity::identifierFor).
+    // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
     // Consumed by insertWindow() as windows arrive; also cleaned up by
     // removeWindow() if a pre-seeded window closes before arriving.
     QHash<QString, QStringList> m_pendingInitialOrders;

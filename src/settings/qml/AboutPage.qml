@@ -172,10 +172,19 @@ PhosphorUi.AboutPageShell {
         // local file:// or other unintended scheme.
         onClicked: {
             const u = linkButton.url;
-            if (u.startsWith("https://") || u.startsWith("http://"))
+            if (u.startsWith("https://") || u.startsWith("http://")) {
                 Qt.openUrlExternally(u);
-            else
-                console.warn("AboutPage.LinkButton: refusing to open non-http(s) URL:", u);
+                return;
+            }
+            // Surface the rejection via a toast in addition to the
+            // console.warn — a silent console message is invisible to
+            // the user clicking the button. Defensive truthy-check on
+            // `window` + `showToast` mirrors the AboutPage's other
+            // call sites: the standalone phosphor-settings-ui demo
+            // mounts this page without the chrome's toast.
+            console.warn("AboutPage.LinkButton: refusing to open non-http(s) URL:", u);
+            if (typeof window !== "undefined" && window && window.showToast)
+                window.showToast(i18n("Cannot open this link"));
         }
 
         contentItem: RowLayout {

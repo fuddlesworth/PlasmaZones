@@ -167,8 +167,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             // match windows stored on that physical screen OR on any of its
             // virtual children — belongsToPhysicalScreen handles both cases.
             const bool match = PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
-                ? Phosphor::Screens::ScreenIdentity::screensMatch(screenId, screenFilter)
-                : Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(screenId, screenFilter);
+                ? PhosphorScreens::ScreenIdentity::screensMatch(screenId, screenFilter)
+                : PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(screenId, screenFilter);
             if (!match) {
                 continue;
             }
@@ -205,8 +205,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
             if (screenFilter.isEmpty())
                 return true;
             return PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
-                ? Phosphor::Screens::ScreenIdentity::screensMatch(screen, screenFilter)
-                : Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(screen, screenFilter);
+                ? PhosphorScreens::ScreenIdentity::screensMatch(screen, screenFilter)
+                : PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(screen, screenFilter);
         };
         for (auto it = zoneAssignments.constBegin(); it != zoneAssignments.constEnd(); ++it) {
             QString screen = screenAssignments.value(it.key());
@@ -438,7 +438,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateRotation(bool clockwise, const
         QString screenId = screenAssignments.value(it.key());
 
         // When a screen filter is set, only include windows on that screen
-        if (!screenFilter.isEmpty() && !Phosphor::Screens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
+        if (!screenFilter.isEmpty() && !PhosphorScreens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
             continue;
         }
 

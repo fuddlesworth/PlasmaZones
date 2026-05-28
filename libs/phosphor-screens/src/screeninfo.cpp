@@ -1,12 +1,22 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "PhosphorScreens/ScreenInfo.h"
+// QML payload shape — three changes consumers should audit:
+//   1. `width` / `height` keys are emitted independently when only one
+//      dimension is positive (previously: all-or-nothing).
+//   2. `resolution` is only emitted when BOTH width and height are positive.
+//   3. `isVirtualScreen` is ALWAYS present in every map (previously:
+//      only when true).
+// QML consumers relying on `Object.keys(map).includes('isVirtualScreen')`
+// semantics for physical-vs-virtual disambiguation must be audited; see
+// libs/phosphor-screens/CHANGES.md for full rationale.
 
-#include <QDebug>
+#include "PhosphorScreens/ScreenInfo.h"
+#include "screenslogging.h"
+
 #include <QStringList>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
 {
@@ -24,16 +34,14 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
 
     for (const ScreenInfo& s : screens) {
         // Sanity-check the virtual identity payload. The producer
-        // contract is virtualIndex ≥ 0 when isVirtualScreen is true
+        // contract is virtualIndex >= 0 when isVirtualScreen is true
         // (header docstring). A negative index plus the truthy flag
         // surfaces as "VS0" via `virtualIndex + 1`, which is
         // misleading; warn so producers find the regression instead
         // of silently shipping a wrong tile label.
         if (s.isVirtualScreen && s.virtualIndex < 0) {
-            qWarning(
-                "Phosphor::Screens::screenInfoListToVariantList: virtual screen with virtualIndex < 0 (= %d) — "
-                "label will report VS%d",
-                s.virtualIndex, s.virtualIndex + 1);
+            qCWarning(lcPhosphorScreens) << Q_FUNC_INFO << "virtual screen with virtualIndex < 0 (=" << s.virtualIndex
+                                         << ") — label will report VS" << (s.virtualIndex + 1);
         }
 
         QVariantMap map;
@@ -93,4 +101,4 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
     return list;
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

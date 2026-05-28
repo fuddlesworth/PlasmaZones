@@ -20,7 +20,7 @@
 
 using PhosphorWayland::LayerSurface;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 ScreenManager::ScreenManager(ScreenManagerConfig cfg, QObject* parent)
     : QObject(parent)
@@ -774,4 +774,4 @@ void ScreenManager::onProviderScreenGeometryChanged(const PhysicalScreen& screen
     Q_EMIT screenGeometryChanged(screen);
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

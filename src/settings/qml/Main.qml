@@ -33,6 +33,18 @@ PhosphorUi.SettingsAppWindow {
     // delegate looks up by aspect-ratio key). Reading any value here
     // forces the dependent binding via the QtObject's per-property
     // bindings, so locale changes still propagate.
+    //
+    // WARNING: Consumers MUST NOT cache the object literal into a
+    // local `var` and then read fields off the cache — the cache
+    // captures the QtObject member values at the moment of
+    // assignment and is NOT re-evaluated when the user changes
+    // language. Read fields off `window.aspectRatioLabels` directly
+    // (or call `window.aspectRatioLabel(key)`) at the point of use so
+    // QML's property-binding machinery sees the dependency and
+    // re-evaluates when the underlying i18n() strings refresh. The
+    // outer `readonly property var` IS itself a binding, so reading
+    // it inline is fine; caching it into a non-binding context is
+    // not.
     readonly property var aspectRatioLabels: ({
             "any": aspectRatioLabelsObject.allMonitors,
             "standard": aspectRatioLabelsObject.standard,
@@ -43,6 +55,15 @@ PhosphorUi.SettingsAppWindow {
     // Keyboard-shortcut overlay state.
     property bool _showShortcuts: false
 
+    // ── Public functions (called from per-page QML): ───────────────
+    //   - aspectRatioLabel(key): translate an aspect-ratio key to its
+    //     localized label (mirrors the `aspectRatioLabels` lookup map
+    //     for consumers that prefer the function form).
+    //   - showWhatsNew(): pop the WhatsNewPage dialog. Used by the
+    //     AboutPage "What's New" link and by post-update auto-pop.
+    //   - showToast(msg): surface a transient pill notification at
+    //     the bottom of the window. Used by every page for inline
+    //     success / failure feedback.
     function aspectRatioLabel(key) {
         switch (key) {
         case "any":
@@ -223,18 +244,35 @@ PhosphorUi.SettingsAppWindow {
     // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
     // Guarded: page navigation must not fire while any of the inline
     // confirm dialogs (whatsNewDialog, resetConfirmDialog,
-    // defaultsConfirmDialog), the shortcut overlay, OR a native child
-    // window (QtQuick FileDialog, system color picker, etc.) is open.
-    // The `window.active` check covers native child windows — when
-    // they grab focus the main window goes inactive. The inline-dialog
-    // checks cover Kirigami.PromptDialog overlays that don't change
-    // the window's active state. Without the combined guard the user
-    // could navigate the underlying page state while interacting with
-    // any of these prompts.
+    // defaultsConfirmDialog, sectionToggleDiscardConfirm), the shortcut
+    // overlay, the active page's own modal stack (WindowRulesPage's
+    // forceSaveConfirm / addRuleWizard / ruleEditorSheet /
+    // windowPickerDialog), OR a native child window (QtQuick FileDialog,
+    // system color picker, etc.) is open. The `window.active` check
+    // covers native child windows — when they grab focus the main window
+    // goes inactive. The inline-dialog checks cover Kirigami.PromptDialog
+    // overlays that don't change the window's active state. Without the
+    // combined guard the user could navigate the underlying page state
+    // while interacting with any of these prompts.
+    //
+    // Page-level modals are surfaced via an optional `anyModalOpen`
+    // property on the active page item — the active page lives inside
+    // the framework-owned PageHost Loader, so we read it via the
+    // settingsApp activeFocusItem chain. Pages that haven't opted into
+    // the property contribute false; the guard stays correct.
     // Shared enable-guard for page-navigation shortcuts. Hoisted from
     // the two identical inline expressions so a future dialog addition
     // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !window._showShortcuts
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen
+    /// Cross-cutting flag that pages opt into by writing through
+    /// `window._pageOwnedModalOpen` when they open / close their own
+    /// modal stack. WindowRulesPage publishes its
+    /// addRuleWizard / windowPickerDialog / ruleEditorSheet /
+    /// forceSaveConfirm aggregate state here so page-navigation
+    /// shortcuts (Ctrl+PgUp / PgDown) cannot drag the user off the
+    /// page while a destructive modal is open. Pages without modals
+    /// never touch this property and contribute false by default.
+    property bool _pageOwnedModalOpen: false
 
     Shortcut {
         sequence: "Ctrl+PgUp"
@@ -501,14 +539,24 @@ PhosphorUi.SettingsAppWindow {
             onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
         }
 
+        // Sentinel separators that flank the aspect-ratio submenu's
+        // insert position. showForLayout() inserts the submenu between
+        // them (after `aspectRatioMarker`) in snap mode and removes it
+        // in autotile mode. Gate visibility on both `!isAutotile` AND
+        // the actual reconciled menu kind tracked in
+        // `_aspectRatioMenuKind` — relying solely on `!isAutotile`
+        // would show two empty separators during the brief window
+        // between layout assignment and showForLayout()'s
+        // insertMenu/removeMenu reconciliation when the menu rebuilds
+        // (e.g. a layout swap in-place).
         MenuSeparator {
             id: aspectRatioMarker
 
-            visible: !layoutContextMenu.isAutotile
+            visible: !layoutContextMenu.isAutotile && layoutContextMenu._aspectRatioMenuKind === "snap"
         }
 
         MenuSeparator {
-            visible: !layoutContextMenu.isAutotile
+            visible: !layoutContextMenu.isAutotile && layoutContextMenu._aspectRatioMenuKind === "snap"
         }
 
         MenuItem {
@@ -667,6 +715,56 @@ PhosphorUi.SettingsAppWindow {
                 text: i18n("Cancel")
                 icon.name: "dialog-cancel"
                 onTriggered: defaultsConfirmDialog.close()
+            }
+        ]
+    }
+
+    // Confirm dialog for the sidebar's inline snapping/tiling toggle when
+    // the relevant page has unsaved edits. Disabling the section through
+    // beginExternalEdit/endExternalEdit commits the *_Enabled flag plus
+    // whatever the page has staged dirty — without this gate the user
+    // could silently apply a partial edit by flipping the sidebar toggle.
+    Kirigami.PromptDialog {
+        id: sectionToggleDiscardConfirm
+
+        // Set by the trailing-delegate SettingsSwitch before open(); the
+        // confirm action reads them to know which section to commit and
+        // what value to set.
+        property string pendingSection: ""
+        property bool pendingValue: false
+
+        title: i18n("Discard unsaved changes?")
+        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?")
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Discard and Disable")
+                icon.name: "edit-undo"
+                onTriggered: {
+                    const section = sectionToggleDiscardConfirm.pendingSection;
+                    const value = sectionToggleDiscardConfirm.pendingValue;
+                    sectionToggleDiscardConfirm.close();
+                    // Discard the dirty page first, THEN flip the enable
+                    // flag — otherwise the inline beginExternalEdit /
+                    // endExternalEdit pair would surface the still-staged
+                    // edits alongside the disable. PageRegistry.controller
+                    // returns the StagingDomain whose discard() slot
+                    // reloads the backing store and clears the dirty flag.
+                    const ctrl = settingsController.app.registry.controller(section);
+                    if (ctrl)
+                        ctrl.discard();
+                    settingsController.beginExternalEdit(section);
+                    if (section === "snapping")
+                        appSettings.snappingEnabled = value;
+                    else
+                        appSettings.autotileEnabled = value;
+                    settingsController.endExternalEdit();
+                }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: sectionToggleDiscardConfirm.close()
             }
         ]
     }
@@ -860,10 +958,29 @@ PhosphorUi.SettingsAppWindow {
 
             // ── Snapping / Tiling toggle ────────────────────────────
             SettingsSwitch {
+                id: sectionToggle
+
                 visible: trailingRow.isSnapping || trailingRow.isTiling
                 checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : false)
                 accessibleName: trailingRow.entry ? trailingRow.entry.title : ""
                 onToggled: function (newValue) {
+                    // Disabling from the sidebar is a destructive shortcut
+                    // when the page underneath has unsaved edits — those
+                    // edits would silently apply through the
+                    // beginExternalEdit/endExternalEdit pair (which commits
+                    // the snapping/tiling enable flag plus whatever dirty
+                    // state the page has staged). Prompt before clobbering.
+                    // Enabling is safe — it doesn't discard anything — so
+                    // we only gate the disable path.
+                    if (!newValue && trailingRow.entry && settingsController.isPageDirty(trailingRow.entry.pageId)) {
+                        sectionToggleDiscardConfirm.pendingSection = trailingRow.isSnapping ? "snapping" : "tiling";
+                        sectionToggleDiscardConfirm.pendingValue = newValue;
+                        sectionToggleDiscardConfirm.open();
+                        // Snap the toggle visual back to its checked state
+                        // — the binding to appSettings.* keeps it in sync
+                        // automatically once the user makes a decision.
+                        return;
+                    }
                     settingsController.beginExternalEdit(trailingRow.isSnapping ? "snapping" : "tiling");
                     if (trailingRow.isSnapping)
                         appSettings.snappingEnabled = newValue;

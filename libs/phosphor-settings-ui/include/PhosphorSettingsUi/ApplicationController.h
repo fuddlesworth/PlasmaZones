@@ -110,8 +110,6 @@ public Q_SLOTS:
     void applyAll();
     void discardAll();
     void resetCurrentPage();
-
-public:
     /// Async variant of applyAll — collects each dirty domain's
     /// applyResult signal and emits applyAllComplete(ok, errors) when
     /// all responses have landed. Chrome should prefer this over
@@ -120,32 +118,25 @@ public:
     /// applyResult immediately, so they complete on the same event-
     /// loop turn — the async path degenerates to "sync + one tail
     /// signal" for them.
-    ///
-    /// Q_INVOKABLE (not slot) — async-batch state is too stateful for
-    /// arbitrary signal wiring; QML calls it directly and that's the
-    /// only intended caller surface. The sync slots above accept
-    /// signal wiring for legacy compatibility.
-    Q_INVOKABLE void applyAllAsync();
+    void applyAllAsync();
     /// Symmetric to applyAllAsync; emits discardAllComplete(ok, errors).
-    Q_INVOKABLE void discardAllAsync();
+    void discardAllAsync();
     /// Force-reset the async-batch state machine to idle.
     /// Recovers from the (hopefully-impossible) case where a domain
     /// failed to emit applyResult/discardResult AND its destroyed()
     /// signal also never fired (e.g. an exception unwound past Qt's
     /// child-deletion). Emits the matching *Complete signal with
     /// ok=false so observers are notified. QML escape hatch.
-    Q_INVOKABLE void forceResetAsyncState();
+    void forceResetAsyncState();
 
+public:
     /// Async-batch timeout in milliseconds. Default 60 000 ms is
     /// generous for typical D-Bus chains (~500 ms replies) but tight
     /// enough to surface a wedged backend instead of pinning the
     /// chrome's "Saving…" state indefinitely. Consumers with shorter
     /// SLOs (interactive feedback within 5 s) or longer migrations
     /// can adjust before the first applyAllAsync. Must be > 0.
-    int asyncBatchTimeoutMs() const
-    {
-        return m_asyncBatchTimeoutMs;
-    }
+    int asyncBatchTimeoutMs() const;
     void setAsyncBatchTimeoutMs(int ms);
 
 Q_SIGNALS:
@@ -196,6 +187,10 @@ private:
     // dirtyChanged from inside its isDirty() virtual would otherwise
     // recursively re-enter the QList::erase loop, undefined behaviour.
     bool m_recomputingDirty = false;
+    // Set when recomputeDirty is rejected by the re-entrancy guard;
+    // the outer call replays the recompute via a queued invokeMethod
+    // so a cascaded dirty edge isn't silently swallowed.
+    bool m_recomputeDirtyPending = false;
 
     // Async batch state. m_*Pending counts how many domains still
     // owe an applyResult / discardResult; m_*Errors collects user-
@@ -231,6 +226,16 @@ private:
     // post-destroyed entries are harmless.
     QSet<StagingDomain*> m_applyOutstanding;
     QSet<StagingDomain*> m_discardOutstanding;
+    // Per-batch connection handles for the applyResult / destroyed
+    // (apply path) and discardResult / destroyed (discard path) lambdas.
+    // Cleared and disconnected at terminal emit in completeApplyIfDone /
+    // completeDiscardIfDone so dead lambdas don't accumulate on domains
+    // that completed this batch but never participate in subsequent
+    // batches. Qt::SingleShotConnection self-disconnects only on actual
+    // fire; the destroyed() lambda for a long-lived domain would
+    // otherwise stay wired across every batch's lifetime.
+    QList<QMetaObject::Connection> m_applyConnections;
+    QList<QMetaObject::Connection> m_discardConnections;
     /// Hard-cap on how long an async batch waits for terminal result
     /// signals before synthesising a failure entry per still-pending
     /// domain. Default 60 seconds (see asyncBatchTimeoutMs() /

@@ -5,11 +5,12 @@ find_package(Qt6 REQUIRED COMPONENTS Test DBus)
 
 function(phosphorsettingsui_add_test name)
     add_executable(${name} ${name}.cpp)
-    # `Qt6::Gui` was previously listed here for QGuiApplication, but
-    # every existing test extends QObject (not QGuiApplication) — the
-    # offscreen-QPA env var is enough. Dropped to keep the test
-    # binaries headless and to skip the platform plugin's startup
-    # cost on CI runners.
+    # Qt6::Gui is still pulled in transitively by Qt6::Test (which
+    # links Qt6::Gui in its INTERFACE) AND by Qt6::Quick via the
+    # lib's QML target chain, so we don't need it explicitly. The
+    # tests run under QT_QPA_PLATFORM=offscreen so the platform
+    # plugin loads without a display, but no test creates a
+    # QGuiApplication — they're all QObject-based fixtures.
     target_link_libraries(${name}
         PRIVATE
             PhosphorSettingsUi::PhosphorSettingsUi
@@ -17,8 +18,13 @@ function(phosphorsettingsui_add_test name)
             Qt6::DBus
             Qt6::Test
     )
+    # LABELS lets `ctest -L phosphor-settings-ui` filter to just this
+    # lib's tests in a workspace that runs many ctest suites.
     add_test(NAME ${name} COMMAND ${name})
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    set_tests_properties(${name} PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        LABELS "phosphor-settings-ui"
+    )
 endfunction()
 
 phosphorsettingsui_add_test(test_page_registry)

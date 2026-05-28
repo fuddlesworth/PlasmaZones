@@ -28,6 +28,14 @@ set(plasmazones_settings_SRCS
     # apply/remove/stage variants). Split out of _session.cpp to
     # keep that TU under the 800-line cap (CLAUDE.md).
     settingscontroller_virtualscreens.cpp
+    # D-Bus subscription wiring (wireDaemonSubscriptions + reloadLocal
+    # RuleStore) — extracted from settingscontroller.cpp so the central
+    # TU stays under the 800-line cap (CLAUDE.md).
+    settingscontroller_dbuswire.cpp
+    # RAII begin/endExternalEdit wrapper — extracted from
+    # settingscontroller.h so the header stays under the 800-line cap.
+    externaleditscope.h
+    externaleditscope.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
     # exposing the Q_PROPERTY surface for a single settings page each.
     animationspagecontroller.h

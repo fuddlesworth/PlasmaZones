@@ -295,7 +295,7 @@ void SettingsController::duplicateLayout(const QString& layoutId)
 QVariantMap SettingsController::physicalScreenResolution(const QString& screenId) const
 {
     QVariantMap result;
-    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+    QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
     if (screen) {
         result[QStringLiteral("width")] = screen->geometry().width();
         result[QStringLiteral("height")] = screen->geometry().height();

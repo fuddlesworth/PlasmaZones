@@ -93,12 +93,32 @@ private Q_SLOTS:
 
     void rejectsUnknownParent()
     {
+        // Stack-order matters: originalParent declared BEFORE reg so it
+        // outlives reg's destruction (RAII destroys in reverse decl
+        // order). The child is parented to originalParent — if the
+        // registry's rejection path is buggy and re-parents on failure,
+        // child would end up owned by reg and originalParent's stack
+        // destruction wouldn't reach it. With the bug, double-delete
+        // would also happen on reg destruction. We assert parent
+        // didn't change before either gets destroyed.
+        QObject originalParent;
         PageRegistry reg;
-        auto* child = new StubPage(QStringLiteral("child"), &reg);
+        auto* child = new StubPage(QStringLiteral("child"), &originalParent);
+
+        QSignalSpy spy(&reg, &PageRegistry::pageRegistered);
         reg.registerPage(
             {QStringLiteral("child"), QStringLiteral("ghost-parent"), QStringLiteral("Child"), {}, QUrl(), child});
 
         QVERIFY(!reg.hasPage(QStringLiteral("child")));
+        // pageRegistered must NOT fire on a rejection path — a
+        // regression that emitted the signal pre-validation would
+        // surface here.
+        QCOMPARE(spy.count(), 0);
+        // The controller's QObject parent must be untouched on the
+        // rejection path. A regression where the registry reparents
+        // before validating the parentId would surface here as
+        // child->parent() == &reg.
+        QCOMPARE(child->parent(), &originalParent);
     }
 
     void exposesChildPages()

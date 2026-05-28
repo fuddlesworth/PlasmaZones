@@ -399,7 +399,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    const QString resolvedId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
+    const QString resolvedId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
     QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();

@@ -61,16 +61,22 @@ Kirigami.Dialog {
         // template/subject id so a debug log can trace which starting
         // point produced an issue, but we don't gate behaviour on it.
         root._workingRule = ruleJson;
-        // Snapshot after the binding has propagated. `editorBody.
-        // workingRule` is bound to `root._workingRule`; the same-tick
-        // assignment above hasn't yet pushed the new value down to the
-        // editor body, so snapshotting `editorBody.workingRule` here
-        // would capture the PREVIOUS run's content. Qt.callLater
-        // defers to the next event loop turn, by which time the
-        // binding has settled.
-        Qt.callLater(function () {
-            root._initialSnapshot = JSON.stringify(root._workingRule);
-        });
+        // Snapshot the picker payload directly (vs. reading
+        // `editorBody.workingRule` via Qt.callLater) — the previous
+        // shape deferred the snapshot to the next event loop turn so
+        // editorBody's binding could propagate, but the deferred read
+        // left a brief timing window during which `_isClean()` saw
+        // `_initialSnapshot == ""` while a real working rule was
+        // already staged. An Esc keystroke (or an outside click in
+        // the brief window between currentStep flip and the deferred
+        // snapshot) would bypass the dirty-discard prompt because the
+        // clean check returns true on the still-empty snapshot.
+        //
+        // Snapshotting `ruleJson` directly avoids the binding-
+        // propagation race: the picker's payload IS the staged rule,
+        // and `editorBody.workingRule` will converge to the same JSON
+        // once the binding settles.
+        root._initialSnapshot = JSON.stringify(ruleJson);
         root.currentStep = 1;
     }
 
@@ -217,7 +223,18 @@ Kirigami.Dialog {
                     // the body assign workingRule directly, breaking
                     // the binding on first edit).
                     workingRule: root._workingRule
-                    onWorkingRuleEdited: next => root._workingRule = next
+                    // Guard against a ref-equality echo loop: the body's
+                    // `_patch` shallow-clones `workingRule`, so every emit
+                    // hands us a NEW object even when the resulting JSON
+                    // is identical (e.g. a TextField onEditingFinished
+                    // that re-fires with the same string). Without this
+                    // guard, the assignment bumps the binding generation
+                    // and the body re-reads + re-validates on every
+                    // keystroke that didn't actually change content.
+                    onWorkingRuleEdited: next => {
+                        if (JSON.stringify(root._workingRule) !== JSON.stringify(next))
+                            root._workingRule = next;
+                    }
                 }
 
                 RuleEditorStatusBar {

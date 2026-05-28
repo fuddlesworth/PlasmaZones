@@ -76,6 +76,13 @@ private:
     /// bound; once full, falls back to encoding on every call.
     QByteArray cachedDisambiguation(const QString& context) const;
 
+    /// Cache UTF-8 encodings of source-text strings passed to i18n /
+    /// i18nc / i18np / i18ncp. Same rationale as cachedDisambiguation —
+    /// every QML text binding hands the same source string back on
+    /// each retranslate sweep, so encoding once removes the per-call
+    /// toUtf8 cost.
+    QByteArray cachedSourceText(const QString& text) const;
+
     QString m_context;
     mutable QByteArray m_effectiveContextCache;
     /// Explicit validity bit so an empty effective context (no
@@ -87,6 +94,10 @@ private:
     /// One-shot flag for the cache-full warning so the cliff is
     /// debuggable but doesn't spam the log on every subsequent call.
     mutable bool m_disambiguationCacheFullWarned = false;
+    mutable QHash<QString, QByteArray> m_sourceTextCache;
+    /// One-shot flag for the source-text cache-full warning, paired
+    /// with m_sourceTextCache above.
+    mutable bool m_sourceTextCacheFullWarned = false;
 };
 
 } // namespace PhosphorSettingsUi

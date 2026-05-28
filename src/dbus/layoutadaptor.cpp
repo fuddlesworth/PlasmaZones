@@ -58,7 +58,7 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* pa
 }
 
 LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, PhosphorWorkspaces::VirtualDesktopManager* vdm,
-                             Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
+                             PhosphorScreens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
     , m_virtualDesktopManager(vdm)
@@ -439,7 +439,7 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
 
 void LayoutAdaptor::applyQuickLayout(int number, const QString& screenId)
 {
-    m_layoutManager->applyQuickLayout(number, Phosphor::Screens::ScreenIdentity::idForName(screenId));
+    m_layoutManager->applyQuickLayout(number, PhosphorScreens::ScreenIdentity::idForName(screenId));
 }
 
 QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
@@ -459,7 +459,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
     // Auto-detect aspect ratio class from the primary screen (virtual-screen-aware)
     QScreen* screen = Utils::primaryScreen();
     if (screen) {
-        const QString primaryId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        const QString primaryId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
         auto* mgr = m_screenManager;
         QRect geo =
             (mgr && mgr->screenGeometry(primaryId).isValid()) ? mgr->screenGeometry(primaryId) : screen->geometry();

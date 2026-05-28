@@ -18,9 +18,11 @@
 
 namespace PlasmaZones {
 
-QList<ScreenInfo> fetchScreens()
+QList<ScreenInfo> fetchScreens(bool* daemonUnavailable)
 {
     QList<ScreenInfo> result;
+    if (daemonUnavailable)
+        *daemonUnavailable = false;
 
     // Get primary screen name from daemon
     QString primaryScreenName;
@@ -129,6 +131,14 @@ QList<ScreenInfo> fetchScreens()
     // a partial-daemon-failure where surfacing zero-geometry entries would
     // mislead the picker.
     if (result.isEmpty() || !anyInfoReplySucceeded) {
+        // Surface the degraded-fallback state to callers so a settings UI
+        // can render a banner explaining why screen metadata (EDID,
+        // virtual-screen subdivisions, etc.) is missing. Without this hint,
+        // the picker silently shows a Qt-only view that the user can't
+        // tell apart from a daemon-served view that happens to have less
+        // metadata than usual.
+        if (daemonUnavailable)
+            *daemonUnavailable = true;
         result.clear();
         QScreen* primaryScreen = QGuiApplication::primaryScreen();
         for (QScreen* screen : QGuiApplication::screens()) {
@@ -140,7 +150,7 @@ QList<ScreenInfo> fetchScreens()
             info.width = screen->geometry().width();
             info.height = screen->geometry().height();
             info.connectorName = screen->name();
-            info.screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            info.screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             result.append(info);
         }
     }
@@ -154,18 +164,28 @@ bool isMonitorDisabledFor(const ISettings* settings, PhosphorZones::AssignmentEn
     return settings && settings->isMonitorDisabled(mode, screenName);
 }
 
-void setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
+bool setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
                            bool disabled, const std::function<void()>& onChanged)
 {
-    if (!settings || screenName.isEmpty())
-        return;
+    if (!settings || screenName.isEmpty()) {
+        qCWarning(lcConfig) << "setMonitorDisabledFor: refusing to act —"
+                            << "settings null:" << (settings == nullptr) << "screenName empty:" << screenName.isEmpty();
+        return false;
+    }
 
-    QString id = Phosphor::Screens::ScreenIdentity::idForName(screenName);
+    QString id = PhosphorScreens::ScreenIdentity::idForName(screenName);
     // Empty id means the connector name couldn't be canonicalised — bail
     // rather than inserting an empty string into the disabled list (which
-    // would never round-trip back to a real screen).
-    if (id.isEmpty())
-        return;
+    // would never round-trip back to a real screen). Symmetric to the
+    // warnings emitted by fetchScreens() above so a stale screenName
+    // (referring to a screen that's since been unplugged, or never existed)
+    // surfaces in the journal instead of silently no-op'ing — the QML
+    // toggle should revert its visual state when this returns false.
+    if (id.isEmpty()) {
+        qCWarning(lcConfig) << "setMonitorDisabledFor: unknown screen name" << screenName
+                            << "— could not canonicalise to a screen id, refusing to write empty entry";
+        return false;
+    }
     QStringList list = settings->disabledMonitors(mode);
 
     if (disabled) {
@@ -195,6 +215,7 @@ void setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::
                 onChanged();
         }
     }
+    return true;
 }
 
 bool connectScreenChangeSignals(QObject* receiver)

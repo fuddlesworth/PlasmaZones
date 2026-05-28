@@ -70,7 +70,7 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor,
 public:
     explicit WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
                                    PhosphorZones::IZoneDetector* zoneDetector,
-                                   Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                   PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                                    PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager,
                                    QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override;
@@ -751,7 +751,7 @@ private Q_SLOTS:
     /**
      * @brief Handle panel geometry becoming ready
      *
-     * Called when Phosphor::Screens::ScreenManager reports panel geometry is known.
+     * Called when PhosphorScreens::ScreenManager reports panel geometry is known.
      * If there are pending restores waiting for geometry, emits pendingRestoresAvailable.
      */
     void onPanelGeometryReady();
@@ -941,7 +941,7 @@ private:
      *
      * Conditions required:
      * 1. PhosphorZones::Layout is available with pending restores
-     * 2. Panel geometry has been received by Phosphor::Screens::ScreenManager
+     * 2. Panel geometry has been received by PhosphorScreens::ScreenManager
      *
      * This prevents windows from restoring with incorrect geometry
      * before panel positions are known.

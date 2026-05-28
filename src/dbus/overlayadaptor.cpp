@@ -31,7 +31,7 @@ namespace PlasmaZones {
 
 OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
                                PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
-                               Phosphor::Screens::ScreenManager* screenManager, ISettings* settings, QObject* parent)
+                               PhosphorScreens::ScreenManager* screenManager, ISettings* settings, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
     , m_zoneDetector(detector)

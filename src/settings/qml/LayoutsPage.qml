@@ -204,8 +204,33 @@ ColumnLayout {
                     } else {
                         defaultId = root.settingsBridge.defaultLayoutId;
                     }
-                    if (defaultId)
+                    if (defaultId) {
                         selectedLayoutId = defaultId;
+                        return;
+                    }
+                    // Fall back to the first available layout id in the
+                    // current view — without this, a fresh install with
+                    // no default set leaves the grid with no card
+                    // highlighted, and the keyboard-driven edit shortcut
+                    // (Return) silently does nothing. Walk the rebuilt
+                    // model's section delegates rather than the source
+                    // list so the fallback honours the current filter
+                    // state (i.e. picks something the user can actually
+                    // see). Mirrors the snap/autotile split above so
+                    // the autotile mode doesn't accidentally select a
+                    // bare snap layout via the same fallback.
+                    const sections = layoutGrid.model || [];
+                    for (let i = 0; i < sections.length; ++i) {
+                        const items = sections[i].layouts || [];
+                        for (let j = 0; j < items.length; ++j) {
+                            const item = items[j];
+                            const itemIsAutotile = item.isAutotile === true;
+                            if ((mode === 1) === itemIsAutotile && item.id) {
+                                selectedLayoutId = String(item.id);
+                                return;
+                            }
+                        }
+                    }
                 }
 
                 function selectLayoutById(layoutId) {
@@ -354,6 +379,15 @@ ColumnLayout {
                                 cellHeight: layoutGrid.cellHeight
                                 viewMode: root.viewMode
                                 isSelected: String(modelData.id) === layoutGrid.selectedLayoutId
+                                // When LayoutsPage is hosted outside Main.qml
+                                // (KCM / future preview) `window.layoutContextMenu`
+                                // is undefined; the previous shape silently
+                                // swallowed right-clicks. Suppressing the
+                                // right-button mask on the delegate is cleaner
+                                // — the user sees no context-menu affordance
+                                // (no ghost cursor change, no eaten event) so
+                                // the missing menu doesn't pretend to exist.
+                                contextMenuEnabled: window && window.layoutContextMenu
                                 onSelected: idx => {
                                     layoutGrid.selectedLayoutId = String(modelData.id);
                                 }
@@ -369,7 +403,10 @@ ColumnLayout {
                                     // sites below use — the page can be
                                     // hosted inside other consumers (KCM,
                                     // future external preview) that don't
-                                    // attach `layoutContextMenu`.
+                                    // attach `layoutContextMenu`. With
+                                    // contextMenuEnabled bound above, this
+                                    // signal won't fire in those hosts, but
+                                    // keep the guard as a belt-and-braces.
                                     if (window && window.layoutContextMenu)
                                         window.layoutContextMenu.showForLayout(layout);
                                 }
@@ -437,8 +474,13 @@ ColumnLayout {
     // KZones import result notification — uses Main.qml's toast.
     // The signal carries (count, message); the toast text already
     // includes the count from the C++ side, so we only show `message`.
+    // `count` is unprefixed (no underscore) so the signature reads as
+    // intended — the C++ signal is `void kzonesImportFinished(int count,
+    // const QString& message)` and the QML handler should mirror the
+    // C++ parameter names for grep-friendliness even though `count`
+    // is unused in this consumer.
     Connections {
-        function onKzonesImportFinished(_count, message) {
+        function onKzonesImportFinished(count, message) {
             if (window && window.showToast)
                 window.showToast(message);
         }

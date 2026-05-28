@@ -121,8 +121,13 @@ QVariantList AnimationsPageController::shaderParameters(const QString& effectId)
 
 QString AnimationsPageController::userShaderDirectoryPath() const
 {
+    // cleanPath normalises away any stray double-slash from a future
+    // ConfigDefaults::userAnimationsSubdir() refactor that forgets to
+    // strip the leading `/` — passing a `//plasmazones/animations`
+    // path to QDir / QDesktopServices on some setups surfaces as
+    // confusing "directory not found" downstream.
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    return base + ConfigDefaults::userAnimationsSubdir();
+    return QDir::cleanPath(base + ConfigDefaults::userAnimationsSubdir());
 }
 
 bool AnimationsPageController::ensureUserShaderDirectory()
@@ -132,8 +137,18 @@ bool AnimationsPageController::ensureUserShaderDirectory()
 
 void AnimationsPageController::openUserShaderDirectory()
 {
-    ensureUserShaderDirectory();
-    QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDirectoryPath()));
+    const QString dir = userShaderDirectoryPath();
+    if (!QDir().mkpath(dir)) {
+        // mkpath failure here is rare (XDG dir not writable, full
+        // partition, etc.) but a silent swallow leaves the user with
+        // an "Open Folder" button that opens nothing — surface the
+        // reason via the chrome toast so the user knows to look at the
+        // file manager / disk permissions.
+        qCWarning(lcConfig) << "openUserShaderDirectory: mkpath failed for" << dir;
+        Q_EMIT toastRequested(PzI18n::tr("Could not create the user shader directory."));
+        return;
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
 }
 
 bool AnimationsPageController::installShaderPack(const QString& sourceUrl)
@@ -145,8 +160,14 @@ bool AnimationsPageController::installShaderPack(const QString& sourceUrl)
     // only need an audit in one place.
     const auto result = ShaderPackInstaller::install(sourceUrl, userShaderDirectoryPath());
     if (result != ShaderPackInstaller::Result::Success) {
-        qCWarning(lcConfig) << "installShaderPack:" << ShaderPackInstaller::errorMessage(result)
-                            << "— source:" << sourceUrl;
+        const QString message = ShaderPackInstaller::errorMessage(result);
+        qCWarning(lcConfig) << "installShaderPack:" << message << "— source:" << sourceUrl;
+        // Surface the reason to the user via the chrome's toast — the
+        // QML drop handler shows a generic InlineMessage, but the actual
+        // error (DestinationExists, MissingMetadata, PackTooLarge…) is
+        // useful diagnostic context that would otherwise be lost to
+        // journalctl.
+        Q_EMIT toastRequested(message);
         return false;
     }
     // The registry's filewatcher rescans on its own — no explicit poke
@@ -327,31 +348,6 @@ bool AnimationsPageController::clearShaderOverride(const QString& path)
     Q_EMIT pendingChangesChanged();
     return true;
 }
-
-namespace animations_controller_detail {
-/// Collect every override path strictly DEEPER than @p path
-/// (i.e. starting with `<path>.`). Centralises the prefix-match math
-/// so shaderOverrideDescendantCount and clearShaderOverrideDescendants
-/// share one definition of "descendant" — the trailing `.` boundary
-/// is what excludes both the path itself ("popup") and unrelated
-/// names with shared character-prefix ("popups").
-static QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
-                                                    const QString& path)
-{
-    QStringList out;
-    if (path.isEmpty()) {
-        return out;
-    }
-    const QString prefix = path + QLatin1Char('.');
-    const QStringList paths = tree.overriddenPaths();
-    for (const QString& p : paths) {
-        if (p.startsWith(prefix)) {
-            out.append(p);
-        }
-    }
-    return out;
-}
-} // namespace animations_controller_detail
 
 int AnimationsPageController::shaderOverrideDescendantCount(const QString& path) const
 {

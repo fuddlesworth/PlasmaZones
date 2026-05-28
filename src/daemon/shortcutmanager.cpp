@@ -384,10 +384,10 @@ void ShortcutManager::registerShortcuts()
     // owns lifetime — DON'T also pass `this` as Qt parent, or the
     // backend/registry end up with two owners.
     if (!m_backend) {
-        m_backend = Phosphor::Shortcuts::createBackend(Phosphor::Shortcuts::BackendHint::Auto, nullptr);
+        m_backend = PhosphorShortcuts::createBackend(PhosphorShortcuts::BackendHint::Auto, nullptr);
     }
     if (!m_registry) {
-        m_registry = std::make_unique<Phosphor::Shortcuts::Registry>(m_backend.get(), nullptr);
+        m_registry = std::make_unique<PhosphorShortcuts::Registry>(m_backend.get(), nullptr);
     }
 
     m_registrationInProgress = true;
@@ -403,7 +403,7 @@ void ShortcutManager::registerShortcuts()
     }
 
     connect(
-        m_registry.get(), &Phosphor::Shortcuts::Registry::ready, this,
+        m_registry.get(), &PhosphorShortcuts::Registry::ready, this,
         [this] {
             m_registrationInProgress = false;
             qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";

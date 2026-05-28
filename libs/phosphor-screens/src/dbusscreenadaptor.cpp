@@ -27,7 +27,7 @@
 #include <cmath>
 #include <limits>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 namespace {
 // JSON key constants matching the existing PlasmaZones wire format so
@@ -747,4 +747,4 @@ QString DBusScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId,
     return reason;
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

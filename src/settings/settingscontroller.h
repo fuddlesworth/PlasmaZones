@@ -46,6 +46,7 @@ class ShaderRegistry;
 #include <QHash>
 #include <QObject>
 #include <QSet>
+#include <QStack>
 #include <QString>
 #include <QDBusConnection>
 #include <QUrl>
@@ -59,6 +60,7 @@ class ShaderRegistry;
 #include "algorithmservice.h"
 #include "animationspagecontroller.h"
 #include "editorpagecontroller.h"
+#include "externaleditscope.h"
 #include "generalpagecontroller.h"
 #include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
@@ -175,6 +177,7 @@ public:
     ///     endExternalEdit();
     Q_INVOKABLE void beginExternalEdit(const QString& page);
     Q_INVOKABLE void endExternalEdit();
+
     bool daemonRunning() const
     {
         return m_daemonController.isRunning();
@@ -223,37 +226,23 @@ public:
     }
 
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
-    //
-    // Settings runs in its own process, separate from the daemon. The legacy
-    // path fetches the layout list over D-Bus (getLayoutList) which only
-    // works while the daemon is running. The methods below load the SAME
-    // on-disk layouts via an in-process PhosphorZones::LayoutRegistry + PhosphorZones::ZonesLayoutSource,
-    // so QML preview-rendering paths can render layouts even when the
-    // daemon isn't up (early settings launch, daemon crashed, etc.).
-    //
-    // Returns the QML-facing projection produced by
-    // PlasmaZones::toVariantMap (src/common/layoutpreviewserialize.h):
-    // id / name / zones[]{relativeGeometry{x,y,width,height},zoneNumber} /
-    // isAutotile / aspectRatioClass (string tag) / flat supports* capability
-    // flags. Intentionally different from the D-Bus getLayoutPreviewList JSON
-    // shape, which is optimised for wire transfer.
+    // Loads the on-disk layouts via an in-process LayoutRegistry +
+    // ZonesLayoutSource so QML preview paths render even when the daemon
+    // is down (early launch, crash). Returns the QML projection produced
+    // by PlasmaZones::toVariantMap — intentionally different from the
+    // D-Bus getLayoutPreviewList wire shape.
     //
     // @note Autotile preview-parameter drift: the local AlgorithmRegistry
-    // here is independent of the daemon's (see m_localAlgorithmRegistry
-    // below) — preview params (master count, split ratio, saved per-
-    // algorithm settings) configured via the daemon's D-Bus do NOT
-    // propagate to this process's registry. The fallback previews always
-    // render with the algorithm's built-in defaults rather than the
-    // user's live tuning. This only affects the daemon-independent code
-    // path; when the daemon is up the D-Bus @c getLayoutPreviewList
-    // carries the fully-tuned previews. Acceptable because the fallback
-    // is primarily a "daemon is down" safety net for early launch /
-    // crash-recovery, not a replacement for the D-Bus surface.
+    // is independent of the daemon's (see m_localAlgorithmRegistry below),
+    // so daemon-side tuning (master count, split ratio, per-algorithm
+    // settings) does NOT propagate here — fallback previews render with
+    // built-in defaults. When the daemon is up, D-Bus carries the tuned
+    // previews; the fallback is only a "daemon is down" safety net.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
     // Non-const: ILayoutSource::previewAt is non-const so implementations
     // can populate a query cache (scripted autotile algorithms would be
-    // prohibitively expensive to re-run on every picker redraw). Changing
-    // this invoker to const would silently dodge that cache.
+    // prohibitively expensive to re-run on every picker redraw). Const
+    // would silently dodge that cache.
     Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4);
 
     // Screen accessors
@@ -438,6 +427,9 @@ public:
     Q_INVOKABLE QStringList effectiveTilingOrder() const;
 
     // ── Algorithm helpers ────────────────────────────────────────────────────
+    // Q_PROPERTY for reactive QML bindings; Q_INVOKABLE retained for legacy
+    // imperative call sites (wizard preview refresh, etc).
+    Q_PROPERTY(QVariantList availableAlgorithms READ availableAlgorithms NOTIFY availableAlgorithmsChanged)
     Q_INVOKABLE QVariantList availableAlgorithms() const;
     Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
                                                       int masterCount) const;
@@ -555,6 +547,10 @@ Q_SIGNALS:
     void stagedSnappingOrderChanged();
     void stagedTilingOrderChanged();
 
+    // Internal forwarder for the Settings-NOTIFY meta-object loop —
+    // see ctor for rationale (QMetaMethod::fromSignal vs indexOfSlot).
+    void _settingsPropertyNotifyForwarder();
+
 private Q_SLOTS:
     void onExternalSettingsChanged();
     void onSettingsPropertyChanged();
@@ -577,6 +573,10 @@ private Q_SLOTS:
      * runningWindowsAvailable(list) signal.
      */
     void onRunningWindowsAvailable(const QString& json);
+
+    /// Daemon WindowRules.rulesChanged → reload m_localRuleStore so the
+    /// in-process LayoutRegistry assignment cascade sees rule edits.
+    void reloadLocalRuleStore(bool persisted);
 
 private:
     void setNeedsSave(bool needs);
@@ -627,11 +627,11 @@ private:
     ScreenHelper m_screenHelper;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
-    /// Non-empty: `setNeedsSave(true)` targets this page id instead of
-    /// `m_activePage`. Used by `beginExternalEdit` to route a
-    /// daemon-driven dirty mark to the page that actually changed
-    /// when the user is on a different tab. `endExternalEdit` clears.
-    QString m_externalEditPage;
+    /// Stack of external-edit page ids — `setNeedsSave(true)` targets
+    /// `top()` instead of `m_activePage`. Nesting-aware so an inner
+    /// begin/end pair restores the outer target on pop rather than
+    /// clearing it. See ExternalEditScope for the RAII wrapper.
+    QStack<QString> m_externalEditStack;
     bool m_saving = false;
     bool m_loading = false;
     /// Reentrancy guard for setActivePage(). A slot connected to
@@ -777,6 +777,11 @@ private:
     std::unique_ptr<PhosphorSettingsUi::ApplicationController> m_app;
 
     void buildApplicationController();
+
+    /// Wire daemon D-Bus broadcast subscriptions. Failed connects are
+    /// appended to @p failedSubscriptions for one batched ctor warning.
+    /// Defined in settingscontroller_dbuswire.cpp (800-line cap).
+    void wireDaemonSubscriptions(QStringList& failedSubscriptions);
 
     // File-scope sort helper exposed as a private static member so both
     // settingscontroller.cpp (file-watcher rebind path) and

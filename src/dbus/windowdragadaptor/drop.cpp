@@ -437,7 +437,7 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // handle it via screenId lookup inside buildEmptyZoneList itself.
     QScreen* releaseScreen = nullptr;
     for (QScreen* s : QGuiApplication::screens()) {
-        if (Phosphor::Screens::ScreenIdentity::identifierFor(s) == screenId || s->name() == screenId) {
+        if (PhosphorScreens::ScreenIdentity::identifierFor(s) == screenId || s->name() == screenId) {
             releaseScreen = s;
             break;
         }

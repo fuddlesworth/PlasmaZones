@@ -1134,11 +1134,16 @@ public:
     /// Per-axis defaults — currently share the same value as editorSnapInterval
     /// but split so future aspect-aware defaults don't require auditing every
     /// call site. Use these from resetDefaults / first-run paths.
-    static double editorSnapIntervalX()
+    ///
+    /// Return type is `qreal` to match `ISettings::editorSnapIntervalX/Y`
+    /// (qreal is `double` on every Qt6-supported target, but the type
+    /// alignment removes a category of "I forgot which one" mistakes in
+    /// callers that take the value `auto`).
+    static qreal editorSnapIntervalX()
     {
         return editorSnapInterval();
     }
-    static double editorSnapIntervalY()
+    static qreal editorSnapIntervalY()
     {
         return editorSnapInterval();
     }

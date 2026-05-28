@@ -12,7 +12,6 @@
 //   * Window-geometry persistence (QSettings entry under the
 //     organization config file, NOT the main JSON).
 //   * KZones import helpers.
-//   * Virtual-screen CRUD (D-Bus to daemon + staged-state tracking).
 //   * Ordering helpers (effective / resolved / staged snapping +
 //     tiling order).
 //
@@ -262,23 +261,24 @@ void SettingsController::onVirtualDesktopsChanged()
     // Wrap the SETTER calls (not just the trailing setNeedsSave) so the
     // synchronous NOTIFY emit from setDisabledDesktops() — which routes
     // through onSettingsPropertyChanged → setNeedsSave — finds the
-    // external-edit page set to "overview" instead of whatever leaf the
-    // user is currently viewing. Without this wrap, the dirty bit
-    // attaches to the active page and the explicit beginExternalEdit
-    // below becomes a no-op.
+    // external-edit target set to "overview" instead of whatever leaf
+    // the user is currently viewing. Without this wrap, the dirty bit
+    // attaches to the active page and the explicit setNeedsSave below
+    // becomes a no-op for the intended target.
     bool prunedAny = false;
-    beginExternalEdit(QStringLiteral("overview"));
-    for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
-        QStringList disabled = m_settings.disabledDesktops(mode);
-        if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
-            m_settings.setDisabledDesktops(mode, disabled);
-            prunedAny = true;
+    {
+        ExternalEditScope scope(*this, QStringLiteral("overview"));
+        for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+            QStringList disabled = m_settings.disabledDesktops(mode);
+            if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
+                m_settings.setDisabledDesktops(mode, disabled);
+                prunedAny = true;
+            }
+        }
+        if (prunedAny) {
+            setNeedsSave(true);
         }
     }
-    if (prunedAny) {
-        setNeedsSave(true);
-    }
-    endExternalEdit();
 
     Q_EMIT virtualDesktopsChanged();
 }
@@ -291,30 +291,33 @@ void SettingsController::onActivitiesChanged()
     // External event (KDE activity change) — see onVirtualDesktopsChanged
     // above for the same wrap-the-setters rationale (the synchronous
     // NOTIFY emit re-routes dirty bookkeeping through the meta-object
-    // loop, which needs m_externalEditPage already set to "overview").
+    // loop, which needs m_externalEditStack already top-of-stack set to
+    // "overview").
     bool prunedAny = false;
-    beginExternalEdit(QStringLiteral("overview"));
-    if (!m_activities.isEmpty()) {
-        QSet<QString> validIds;
-        for (const QVariant& v : std::as_const(m_activities)) {
-            const QVariantMap map = v.toMap();
-            const QString id = map.value(QStringLiteral("id")).toString();
-            if (!id.isEmpty()) {
-                validIds.insert(id);
+    {
+        ExternalEditScope scope(*this, QStringLiteral("overview"));
+        if (!m_activities.isEmpty()) {
+            QSet<QString> validIds;
+            for (const QVariant& v : std::as_const(m_activities)) {
+                const QVariantMap map = v.toMap();
+                const QString id = map.value(QStringLiteral("id")).toString();
+                if (!id.isEmpty()) {
+                    validIds.insert(id);
+                }
+            }
+            for (const auto mode :
+                 {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                QStringList disabledActs = m_settings.disabledActivities(mode);
+                if (pruneDisabledActivityEntries(disabledActs, validIds)) {
+                    m_settings.setDisabledActivities(mode, disabledActs);
+                    prunedAny = true;
+                }
             }
         }
-        for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
-            QStringList disabledActs = m_settings.disabledActivities(mode);
-            if (pruneDisabledActivityEntries(disabledActs, validIds)) {
-                m_settings.setDisabledActivities(mode, disabledActs);
-                prunedAny = true;
-            }
+        if (prunedAny) {
+            setNeedsSave(true);
         }
     }
-    if (prunedAny) {
-        setNeedsSave(true);
-    }
-    endExternalEdit();
 
     Q_EMIT activitiesChanged();
 }
@@ -333,11 +336,16 @@ void SettingsController::onScreenLayoutChanged(const QString& screenId, const QS
     Q_EMIT screenLayoutChanged();
 }
 
+namespace {
+
 // Parses the daemon's running-windows JSON payload into a QVariantList of
 // {windowClass, appName, caption} maps ready for QML consumption. The
 // synchronous getRunningWindows() predecessor was removed in Phase 6 of
 // refactor/dbus-performance; only onRunningWindowsAvailable calls this now.
-static QVariantList parseRunningWindowsJson(const QString& json)
+// Anonymous namespace keeps this TU-local — same convention as the
+// settingscontroller_ordering.cpp helpers so unity-build batching can't
+// produce a duplicate-symbol surprise.
+QVariantList parseRunningWindowsJson(const QString& json)
 {
     if (json.isEmpty()) {
         return {};
@@ -368,6 +376,8 @@ static QVariantList parseRunningWindowsJson(const QString& json)
     }
     return result;
 }
+
+} // namespace
 
 void SettingsController::requestRunningWindows()
 {

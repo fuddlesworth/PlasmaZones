@@ -14,14 +14,14 @@ namespace PlasmaZones {
 class Settings;
 
 /**
- * @brief Daemon-side @ref Phosphor::Screens::IConfigStore implementation
+ * @brief Daemon-side @ref PhosphorScreens::IConfigStore implementation
  *        backed by @ref Settings.
  *
  * Settings remains the single source of truth for virtual-screen
  * configurations (config file persistence, schema validation, KCM
  * round-trip). This adapter exposes that surface through the
  * library-defined IConfigStore contract so PhosphorScreens consumers
- * (Phosphor::Screens::VirtualScreenSwapper today, Phosphor::Screens::ScreenManager tomorrow) can mutate the
+ * (PhosphorScreens::VirtualScreenSwapper today, PhosphorScreens::ScreenManager tomorrow) can mutate the
  * same data without taking a hard dependency on Settings.
  *
  * Lifetime: holds a QPointer to Settings — the adapter survives Settings
@@ -32,19 +32,19 @@ class Settings;
  *
  * Signal forwarding: Settings emits `virtualScreenConfigsChanged()`
  * (parameterless) on every authoritative mutation; the adapter forwards
- * that to @ref Phosphor::Screens::IConfigStore::changed via a single
+ * that to @ref PhosphorScreens::IConfigStore::changed via a single
  * connect in the constructor.
  */
-class PLASMAZONES_EXPORT SettingsConfigStore : public Phosphor::Screens::IConfigStore
+class PLASMAZONES_EXPORT SettingsConfigStore : public PhosphorScreens::IConfigStore
 {
     Q_OBJECT
 public:
     explicit SettingsConfigStore(Settings* settings, QObject* parent = nullptr);
     ~SettingsConfigStore() override = default;
 
-    QHash<QString, Phosphor::Screens::VirtualScreenConfig> loadAll() const override;
-    Phosphor::Screens::VirtualScreenConfig get(const QString& physicalScreenId) const override;
-    bool save(const QString& physicalScreenId, const Phosphor::Screens::VirtualScreenConfig& config) override;
+    QHash<QString, PhosphorScreens::VirtualScreenConfig> loadAll() const override;
+    PhosphorScreens::VirtualScreenConfig get(const QString& physicalScreenId) const override;
+    bool save(const QString& physicalScreenId, const PhosphorScreens::VirtualScreenConfig& config) override;
     bool remove(const QString& physicalScreenId) override;
 
 private:

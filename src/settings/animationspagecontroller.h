@@ -347,6 +347,12 @@ Q_SIGNALS:
     /// commit/revert too so the slot can re-evaluate.
     void pendingChangesChanged();
 
+    /// User-facing transient notification request. QML chrome wires
+    /// this to `window.showToast()` so a failed shader-pack install
+    /// (or a mutator refused mid-discard) surfaces the underlying
+    /// reason instead of returning false silently.
+    void toastRequested(const QString& text);
+
 public:
     // ── Save / Discard integration (Phase 8) ─────────────────────────
     //
@@ -419,7 +425,11 @@ private:
     /// means "the file did not exist before this session." Mutated only
     /// from the GUI thread. Shader-tree edits don't go through this
     /// snapshot — they ride the standard Settings::load() Q_PROPERTY
-    /// re-emit path like every other settings page.
+    /// re-emit path like every other settings page. During a worker
+    /// run, two copies exist briefly (live + captured): the worker
+    /// owns a value-captured snapshot, while this member continues to
+    /// reflect GUI-thread state. Never alias them by reference —
+    /// merging is done by key set in the worker's finished handler.
     QHash<QString, std::optional<QByteArray>> m_pendingFileSnapshots;
     bool m_shaderTreeDirty = false;
     /// In-flight guard for asyncRevertPending — set true on dispatch
@@ -429,6 +439,15 @@ private:
     /// overwrite the first's retained map, producing inconsistent
     /// disk state. Mirrors ApplicationController::m_applying.
     bool m_asyncRevertInFlight = false;
+    /// Monotonic generation counter bumped on every asyncRevertPending
+    /// dispatch. The shaderProfileTreeChanged DirectConnection lambda
+    /// captures the value at connect time of each invocation — when an
+    /// external reload (Settings::load() chasing discard()) fires
+    /// shaderProfileTreeChanged mid-worker, the lambda's captured
+    /// generation no longer matches and it MUST skip clearing
+    /// `m_shaderTreeDirty`. The worker's finished handler then clears
+    /// the dirty bit as part of its terminal sequence.
+    quint64 m_asyncRevertGeneration = 0;
     /// Last observed value of hasPendingChanges() seen by the
     /// pendingChangesChanged → dirtyChanged forwarder. CLAUDE.md:
     /// "Only emit signals when value actually changes". Several call

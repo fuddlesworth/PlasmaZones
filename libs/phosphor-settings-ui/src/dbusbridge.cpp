@@ -63,7 +63,7 @@ DBusBridge::DBusBridge(DBusEndpoint endpoint, QObject* parent)
     // an explicit interface to callOn() / asyncCallOn() have no use for a
     // default.
     if (m_endpoint.service.isEmpty() || m_endpoint.objectPath.isEmpty()) {
-        qWarning() << "PhosphorSettingsUi::DBusBridge: endpoint has empty service or objectPath —"
+        qWarning() << "PhosphorSettingsUi::DBusBridge: endpoint has empty service or objectPath — "
                       "every call() will be rejected. service="
                    << m_endpoint.service << "objectPath=" << m_endpoint.objectPath
                    << "interfaceName=" << m_endpoint.interfaceName;
@@ -141,6 +141,23 @@ void DBusBridge::asyncCallOn(const QString& interfaceName, const QString& method
     // parent, a watcher whose owning thread's event loop ended before the
     // reply arrived would leak. asyncCall* are non-const because the
     // parent/child mutation is real state — const-correctness would lie.
+    //
+    // Soft-cap warning — under sustained load (the bridge issues calls
+    // faster than the bus replies), the watcher queue grows
+    // unbounded until either replies land or the bridge is destroyed.
+    // 128 in-flight calls is well above any normal settings-app burst
+    // (a save-all batch fans out ~10) but well below the point at
+    // which the queue itself becomes a memory or scheduling pressure
+    // problem. Warn once per breach so the misuse pattern is
+    // debuggable; semantics are unchanged.
+    constexpr int kPendingWatcherSoftCapWarn = 128;
+    const int outstanding = findChildren<QDBusPendingCallWatcher*>().size();
+    if (outstanding == kPendingWatcherSoftCapWarn) {
+        qWarning() << "PhosphorSettingsUi::DBusBridge::asyncCallOn: pending-watcher count reached"
+                   << kPendingWatcherSoftCapWarn
+                   << "— caller may be issuing async calls faster than the bus is replying;"
+                      " consider awaiting replies before fanning out further.";
+    }
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     QObject::connect(
         watcher, &QDBusPendingCallWatcher::finished, watcher,

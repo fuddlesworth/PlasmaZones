@@ -108,7 +108,7 @@ QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
 // overlayservice/priming.cpp to keep this translation unit under the
 // project's <800-line guideline.
 
-OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
+OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                                PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
     : IOverlayService(parent)
     , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
@@ -246,13 +246,13 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
 
     // Connect to virtual screen configuration changes
     if (auto* mgr = m_screenManager) {
-        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
+        connect(mgr, &PhosphorScreens::ScreenManager::virtualScreensChanged, this,
                 &OverlayService::onVirtualScreensChanged);
         // Regions-only changes (swap/rotate/boundary-resize) also need the
         // overlay windows destroyed and recreated with the new VS geometry.
         // The handler is heavy but only runs when overlays are visible
         // (active drag), so the cost is bounded.
-        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
+        connect(mgr, &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
                 &OverlayService::onVirtualScreensChanged);
     }
 
@@ -528,7 +528,7 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) cons
     if (!screen) {
         return m_layout;
     }
-    return resolveScreenLayout(Phosphor::Screens::ScreenIdentity::identifierFor(screen));
+    return resolveScreenLayout(PhosphorScreens::ScreenIdentity::identifierFor(screen));
 }
 
 PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
@@ -618,8 +618,8 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (!m_layoutManager) {
         return flags;
     }
-    const QString resolvedId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
-        ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+    const QString resolvedId = PhosphorScreens::ScreenIdentity::isConnectorName(screenId)
+        ? PhosphorScreens::ScreenIdentity::idForName(screenId)
         : screenId;
     if (resolvedId.isEmpty()) {
         return flags;

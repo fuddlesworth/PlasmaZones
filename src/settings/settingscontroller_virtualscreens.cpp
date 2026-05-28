@@ -61,7 +61,7 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
 
     QJsonArray screensArr;
     for (int i = 0; i < screens.size(); ++i) {
-        Phosphor::Screens::VirtualScreenDef def =
+        PhosphorScreens::VirtualScreenDef def =
             VirtualScreenUtils::variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
         if (!def.isValid()) {
             qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i

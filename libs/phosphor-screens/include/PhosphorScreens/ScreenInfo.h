@@ -2,13 +2,35 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 #pragma once
 
+// ScreenInfo — POD descriptor + QML-friendly serialiser.
+//
+// QML payload shape:
+//   QML consumers binding individual keys via QVariantMap should be aware
+//   that the variant map produced by screenInfoListToVariantList() emits
+//   `width`, `height`, `resolution`, and `isVirtualScreen` with the
+//   semantics documented in libs/phosphor-screens/CHANGES.md. In
+//   particular, `isVirtualScreen` is ALWAYS present (was: only when
+//   true); QML that uses `Object.keys(map).includes('isVirtualScreen')`
+//   to disambiguate physical-vs-virtual must be audited.
+//
+// Sentinel convention for width/height/virtualIndex:
+//   - `width` / `height` use `0` (not -1) as "unknown / not yet reported".
+//     The producer is expected to fill positive values when geometry is
+//     known. `screenInfoListToVariantList()` skips emitting a dimension
+//     when it's non-positive so a `0×0` tile doesn't render in pickers.
+//   - `virtualIndex` uses `-1` as "not a virtual screen". `isVirtualScreen`
+//     must be true and `virtualIndex >= 0` for a meaningful virtual id;
+//     the serialiser warns when this invariant is violated.
+//   Flipping these to negative-sentinel form would be API-breaking for
+//   downstream producers, so the existing convention is locked in.
+
 #include <QList>
 #include <QString>
 #include <QVariantList>
 
 #include "phosphorscreenscore_export.h"
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * Lightweight descriptor for a connected screen, suitable for passing
@@ -45,6 +67,6 @@ struct PHOSPHORSCREENSCORE_EXPORT ScreenInfo
  * pre-computed displayLabel that QML selectors / context menus can render
  * without duplicating label-building logic.
  */
-PHOSPHORSCREENSCORE_EXPORT QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens);
+[[nodiscard]] PHOSPHORSCREENSCORE_EXPORT QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens);
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

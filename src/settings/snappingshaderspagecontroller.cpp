@@ -174,8 +174,13 @@ bool SnappingShadersPageController::installShaderPack(const QString& sourceUrl)
     // verification, rollback) only need an audit in one place.
     const auto result = ShaderPackInstaller::install(sourceUrl, userShaderDirectoryPath());
     if (result != ShaderPackInstaller::Result::Success) {
-        qCWarning(lcConfig) << "installShaderPack (overlay):" << ShaderPackInstaller::errorMessage(result)
-                            << "— source:" << sourceUrl;
+        const QString message = ShaderPackInstaller::errorMessage(result);
+        qCWarning(lcConfig) << "installShaderPack (overlay):" << message << "— source:" << sourceUrl;
+        // Surface the reason via the chrome toast — the InlineMessage
+        // in the drop zone is generic; the underlying failure reason
+        // (DestinationExists, MissingMetadata, PackTooLarge…) gives
+        // the user a concrete next step.
+        Q_EMIT toastRequested(message);
         return false;
     }
     // The registry's filewatcher rescans on its own — `shadersChanged`

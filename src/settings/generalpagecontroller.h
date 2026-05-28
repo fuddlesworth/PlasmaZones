@@ -30,7 +30,7 @@ class ISettings;
 /// meta-object loop on Settings's Q_PROPERTYs: any rendering-backend
 /// selection that calls `m_settings.setRenderingBackend` trips the
 /// Q_PROPERTY NOTIFY, which SettingsController's `onSettingsPropertyChanged`
-/// slot maps to the active page (or the explicit `m_externalEditPage`).
+/// slot maps to the active page (or the top of `m_externalEditStack`).
 /// The "General" page therefore participates in dirty tracking via
 /// the Settings property surface, not via this controller's own
 /// signals.

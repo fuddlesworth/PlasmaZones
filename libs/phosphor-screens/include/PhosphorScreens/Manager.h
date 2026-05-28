@@ -18,7 +18,7 @@
 class QScreen;
 class QWindow;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 class IConfigStore;
 class IPanelSource;
@@ -357,4 +357,4 @@ private:
     void propagateIdentifierDrift(const QHash<QString, QString>& oldIds);
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

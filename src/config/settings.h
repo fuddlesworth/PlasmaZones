@@ -857,13 +857,13 @@ public:
                           bool locked) override;
 
     // Virtual screen configuration
-    QHash<QString, Phosphor::Screens::VirtualScreenConfig> virtualScreenConfigs() const;
-    void setVirtualScreenConfigs(const QHash<QString, Phosphor::Screens::VirtualScreenConfig>& configs);
+    QHash<QString, PhosphorScreens::VirtualScreenConfig> virtualScreenConfigs() const;
+    void setVirtualScreenConfigs(const QHash<QString, PhosphorScreens::VirtualScreenConfig>& configs);
     /// Returns true on success, false if the config was rejected by
-    /// Phosphor::Screens::VirtualScreenConfig::isValid (or empty physicalScreenId). An
+    /// PhosphorScreens::VirtualScreenConfig::isValid (or empty physicalScreenId). An
     /// already-current value is treated as a successful no-op.
-    bool setVirtualScreenConfig(const QString& physicalScreenId, const Phosphor::Screens::VirtualScreenConfig& config);
-    Phosphor::Screens::VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
+    bool setVirtualScreenConfig(const QString& physicalScreenId, const PhosphorScreens::VirtualScreenConfig& config);
+    PhosphorScreens::VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
 
     /// Atomically re-key a persisted VS config from @p oldPhysicalScreenId to
     /// @p newPhysicalScreenId. Used when a screen's disambiguation-aware
@@ -1251,7 +1251,7 @@ private:
     // (remaining zone selector members stored in m_store)
 
     // Virtual screen configurations (physicalScreenId -> config)
-    QHash<QString, Phosphor::Screens::VirtualScreenConfig> m_virtualScreenConfigs;
+    QHash<QString, PhosphorScreens::VirtualScreenConfig> m_virtualScreenConfigs;
 
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;

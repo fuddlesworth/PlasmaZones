@@ -30,8 +30,8 @@ Kirigami.PromptDialog {
      *  followed by closing the window. */
     property bool applyAvailable: false
 
-    signal discardConfirmed()
-    signal applyConfirmed()
+    signal discardConfirmed
+    signal applyConfirmed
 
     title: qsTr("Discard unsaved changes?")
     subtitle: root.applyAvailable ? qsTr("You have unsaved settings. Apply them now, or close without saving?") : qsTr("You have unsaved settings. Closing now will discard them.")
@@ -65,7 +65,10 @@ Kirigami.PromptDialog {
         id: discardAction
 
         text: qsTr("Discard")
-        icon.name: "dialog-cancel"
+        // `edit-undo` matches UnsavedChangesFooter's inline discard
+        // button and discard-confirm prompt — one icon for "throw
+        // away pending edits" across all of the chrome.
+        icon.name: "edit-undo"
         onTriggered: {
             root.discardConfirmed();
             root.close();
@@ -79,5 +82,4 @@ Kirigami.PromptDialog {
         icon.name: "dialog-ok"
         onTriggered: root.close()
     }
-
 }

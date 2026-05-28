@@ -31,6 +31,12 @@ Item {
     // Selection state (bound from parent GridView)
     property bool isSelected: false
     property bool isHovered: false
+    // When false, the delegate's right-click context-menu affordance is
+    // suppressed entirely (the underlying MouseArea drops RightButton
+    // from `acceptedButtons`). Hosts that have no `layoutContextMenu`
+    // wired (KCM standalone, preview) set this false to avoid a silent
+    // right-click no-op.
+    property bool contextMenuEnabled: true
 
     // Signals
     signal selected(int index)
@@ -49,7 +55,6 @@ Item {
     Keys.onDeletePressed: {
         if (!root.modelData.isSystem && !root.modelData.isAutotile)
             root.deleteRequested(root.modelData);
-
     }
 
     // HoverHandler for hover state — immune to scale transform geometry changes
@@ -62,9 +67,9 @@ Item {
 
     MouseArea {
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        acceptedButtons: root.contextMenuEnabled ? (Qt.LeftButton | Qt.RightButton) : Qt.LeftButton
         hoverEnabled: false
-        onClicked: (mouse) => {
+        onClicked: mouse => {
             if (mouse.button === Qt.RightButton) {
                 root.selected(root.index);
                 root.contextMenuRequested(root.modelData);
@@ -72,10 +77,9 @@ Item {
                 root.selected(root.index);
             }
         }
-        onDoubleClicked: (mouse) => {
+        onDoubleClicked: mouse => {
             if (mouse.button === Qt.LeftButton)
                 root.activated(root.modelData.id);
-
         }
     }
 
@@ -170,7 +174,6 @@ Item {
                             hoverEnabled: true
                             acceptedButtons: Qt.NoButton
                         }
-
                     }
 
                     Kirigami.Icon {
@@ -198,7 +201,6 @@ Item {
                             hoverEnabled: true
                             acceptedButtons: Qt.NoButton
                         }
-
                     }
 
                     Kirigami.Icon {
@@ -224,9 +226,7 @@ Item {
                             hoverEnabled: true
                             acceptedButtons: Qt.NoButton
                         }
-
                     }
-
                 }
 
                 // Top-right toggle buttons (autoAssign and hidden are independent:
@@ -288,9 +288,7 @@ Item {
                         ToolTip.visible: hovered
                         ToolTip.text: root.modelData.hiddenFromSelector ? i18n("Hidden from zone selector. Click to show.") : i18n("Visible in zone selector. Click to hide.")
                     }
-
                 }
-
             }
 
             // Info row with category and aspect ratio badges
@@ -325,7 +323,6 @@ Item {
                         hoverEnabled: true
                         acceptedButtons: Qt.NoButton
                     }
-
                 }
 
                 QFZCommon.AspectRatioBadge {
@@ -338,9 +335,7 @@ Item {
                     color: root.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
                     text: i18n("%1 zones", root.modelData.zoneCount || 0)
                 }
-
             }
-
         }
 
         Behavior on color {
@@ -348,7 +343,6 @@ Item {
                 profile: "widget.hover"
                 durationOverride: Kirigami.Units.shortDuration
             }
-
         }
 
         Behavior on border.color {
@@ -356,7 +350,6 @@ Item {
                 profile: "widget.hover"
                 durationOverride: Kirigami.Units.shortDuration
             }
-
         }
 
         transform: Scale {
@@ -370,7 +363,6 @@ Item {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration
                 }
-
             }
 
             Behavior on yScale {
@@ -378,11 +370,7 @@ Item {
                     profile: "widget.hover"
                     durationOverride: Kirigami.Units.shortDuration
                 }
-
             }
-
         }
-
     }
-
 }

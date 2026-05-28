@@ -53,7 +53,7 @@ inline QString serializeGeometryMap(const QHash<QString, PhosphorEngine::Placeme
         if (!entry.screenId.isEmpty()) {
             obj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(entry.screenId)
                 ? entry.screenId
-                : Phosphor::Screens::ScreenIdentity::idForName(entry.screenId);
+                : PhosphorScreens::ScreenIdentity::idForName(entry.screenId);
         }
         return obj;
     };
@@ -107,7 +107,7 @@ inline QString serializeGeometryMapFull(const QHash<QString, PhosphorEngine::Pla
         if (!it.value().screenId.isEmpty()) {
             obj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().screenId)
                 ? it.value().screenId
-                : Phosphor::Screens::ScreenIdentity::idForName(it.value().screenId);
+                : PhosphorScreens::ScreenIdentity::idForName(it.value().screenId);
         }
         result.append(obj);
     }

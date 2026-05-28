@@ -408,7 +408,14 @@ public:
     PZ_CONFIG_KEY(quickLayoutKeyPattern, "QuickLayout%1")
     static QString quickLayoutKey(int n)
     {
-        Q_ASSERT(n >= 1 && n <= 9);
+        Q_ASSERT_X(n >= 1 && n <= 9, "quickLayoutKey", "n out of range");
+        // Release-build guard: Q_ASSERT_X is compiled out in release builds,
+        // so an out-of-range `n` would silently yield "QuickLayout100" (or
+        // similar) and ghost the config namespace. qFatal aborts unambiguously
+        // in both build modes — the contract is "n in 1..9, no exceptions".
+        if (n < 1 || n > 9) {
+            qFatal("quickLayoutKey: n out of range: %d", n);
+        }
         return quickLayoutKeyPattern().arg(n);
     }
 
@@ -433,7 +440,12 @@ public:
     PZ_CONFIG_KEY(snapToZoneKeyPattern, "SnapToZone%1")
     static QString snapToZoneKey(int n)
     {
-        Q_ASSERT(n >= 1 && n <= 9);
+        Q_ASSERT_X(n >= 1 && n <= 9, "snapToZoneKey", "n out of range");
+        // See quickLayoutKey above for the rationale on the release-build
+        // qFatal guard — same contract, same failure mode if violated.
+        if (n < 1 || n > 9) {
+            qFatal("snapToZoneKey: n out of range: %d", n);
+        }
         return snapToZoneKeyPattern().arg(n);
     }
 
@@ -618,8 +630,36 @@ public:
         // `animationsGroup()` (v5+ runtime) MUST NOT silently retarget the v4
         // migration to a path that never existed on disk in v4-and-earlier
         // configs. Do not consolidate these two accessors.
+        //
+        // The same freeze policy applies to every accessor in this `Legacy`
+        // struct: each one names a v1/v2/v3/v4 on-disk shape the runtime no
+        // longer touches. The `v3*` group/key accessors below duplicate live
+        // ConfigDefaults literals on purpose — the v3→v4 migration must read
+        // from the path that existed in v3 configs on disk, even if a future
+        // schema bump renames the live accessor. Consolidating Legacy accessors
+        // with their live counterparts would silently retarget the migration on
+        // the next rename. Do not do it.
         PZ_CONFIG_GROUP(v4AnimationsGroup, "Animations")
         PZ_CONFIG_KEY(v4AnimationAppRulesKey, "AnimationAppRules")
+
+        // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
+        // finalizeV4Conversion. These mirror the live `displayGroup`,
+        // `defaultLayoutIdKey`, `snappingBehaviorWindowHandlingGroup`,
+        // `tilingAlgorithmGroup`, and `defaultKey` accessors but are frozen
+        // at their v3 literal so a future runtime rename cannot silently
+        // retarget the migration to a path no v3 config ever had on disk.
+        PZ_CONFIG_GROUP(v3DisplayGroup, "Display")
+        PZ_CONFIG_KEY(v3DefaultLayoutIdKey, "DefaultLayoutId")
+        PZ_CONFIG_GROUP(v3SnappingBehaviorWindowHandlingGroup, "Snapping.Behavior.WindowHandling")
+        PZ_CONFIG_GROUP(v3TilingAlgorithmGroup, "Tiling.Algorithm")
+        PZ_CONFIG_KEY(v3DefaultKey, "Default")
+
+        // v3 assignments.json field names — frozen literals from the dead
+        // v3 assignments.json schema. finalizeV4Conversion is the sole
+        // remaining reader; these are NOT live config keys.
+        PZ_CONFIG_KEY(v3AssignmentMode, "Mode")
+        PZ_CONFIG_KEY(v3AssignmentLayout, "SnappingLayout")
+        PZ_CONFIG_KEY(v3AssignmentAlgorithm, "TilingAlgorithm")
     };
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -653,6 +693,43 @@ private:
     // Non-instantiable
     ConfigKeys() = delete;
 };
+
+// ─── Disable-rule label helpers ─────────────────────────────────────────────
+// Shared between the live Settings disable-list writer
+// (Settings::writeDisableEntries) and the v3→v4 migration's disable-rule
+// builders. Both call sites must produce the same `WindowRule::name` string for
+// a given (mode, screen, desktop, activity) tuple so that resaving an existing
+// disable list (e.g. after a UI edit) doesn't fork into two slightly different
+// labels for what is otherwise the same rule.
+//
+// These are NOT translated. `WindowRule::name` is the persisted identity
+// surface in windowrules.json; running the app under different locales must
+// not change its on-disk text. The rule editor surfaces the name verbatim,
+// matching the historic behaviour.
+inline QString autotileDisableRulePrefix()
+{
+    return QStringLiteral("Autotile off · ");
+}
+
+inline QString snappingDisableRulePrefix()
+{
+    return QStringLiteral("Snapping off · ");
+}
+
+inline QString disableRulePrefixFor(bool autotile)
+{
+    return autotile ? autotileDisableRulePrefix() : snappingDisableRulePrefix();
+}
+
+inline QString disableRuleDesktopSuffix(int desktop)
+{
+    return QStringLiteral(" · Desktop ") + QString::number(desktop);
+}
+
+inline QString disableRuleActivitySuffix()
+{
+    return QStringLiteral(" · Activity");
+}
 
 } // namespace PlasmaZones
 

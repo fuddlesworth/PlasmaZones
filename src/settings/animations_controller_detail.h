@@ -12,8 +12,12 @@
 
 #include <PhosphorAnimation/AnimationShaderEffect.h>
 #include <PhosphorAnimation/ShaderProfile.h>
+#include <PhosphorAnimation/ShaderProfileTree.h>
 
+#include <QLatin1Char>
 #include <QLatin1String>
+#include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -76,6 +80,29 @@ inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
     if (profile.parameters)
         m.insert(QLatin1String("parameters"), *profile.parameters);
     return m;
+}
+
+/// Collect every override path strictly DEEPER than @p path
+/// (i.e. starting with `<path>.`). Centralises the prefix-match math
+/// so shaderOverrideDescendantCount and clearShaderOverrideDescendants
+/// share one definition of "descendant" — the trailing `.` boundary
+/// is what excludes both the path itself ("popup") and unrelated
+/// names with shared character-prefix ("popups"). Inline in this
+/// header so sibling helpers in this namespace can call it without
+/// depending on unity-build TU merging.
+inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                                                    const QString& path)
+{
+    QStringList out;
+    if (path.isEmpty())
+        return out;
+    const QString prefix = path + QLatin1Char('.');
+    const QStringList paths = tree.overriddenPaths();
+    for (const QString& p : paths) {
+        if (p.startsWith(prefix))
+            out.append(p);
+    }
+    return out;
 }
 
 } // namespace animations_controller_detail

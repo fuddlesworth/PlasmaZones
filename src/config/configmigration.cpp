@@ -1292,23 +1292,42 @@ constexpr QLatin1String kV4DisableStashKey{"_v4DisableStash"};
 // Animations group in migrateV3ToV4 so the unified rule store becomes the sole
 // home for per-window animation overrides.
 constexpr QLatin1String kV4AnimationRulesStashKey{"_v4AnimationRulesStash"};
+
+// Inner field names inside the `_v4DisableStash` object. Shared between the
+// writer (migrateV3ToV4) and the reader (finalizeV4Conversion) so a typo or
+// rename can't silently drop a disable list on conversion.
+constexpr QLatin1StringView kV3SnappingMonitorsStash{"snappingMonitors"};
+constexpr QLatin1StringView kV3AutotileMonitorsStash{"autotileMonitors"};
+constexpr QLatin1StringView kV3SnappingDesktopsStash{"snappingDesktops"};
+constexpr QLatin1StringView kV3AutotileDesktopsStash{"autotileDesktops"};
+constexpr QLatin1StringView kV3SnappingActivitiesStash{"snappingActivities"};
+constexpr QLatin1StringView kV3AutotileActivitiesStash{"autotileActivities"};
 } // namespace
 
 void ConfigMigration::migrateV3ToV4(QJsonObject& root)
 {
+    // Schema-version-migration freeze policy: this function reads the v3
+    // on-disk shape. All group/key accessors used here MUST be the frozen
+    // `ConfigKeys::Legacy::v3*` accessors, NEVER the live ConfigDefaults
+    // accessors. A future runtime rename of the live accessor would silently
+    // retarget this migration to a path no v3 config ever had on disk; the
+    // freeze decouples the migration's stable wire-format contract from the
+    // live schema. See the comment block on `v4AnimationsGroup` in
+    // configkeys.h for the same rationale applied to v4.
+    //
     // Defense-in-depth idempotency guard, mirroring the earlier steps.
     if (root.value(ConfigKeys::versionKey()).toInt(0) >= 4) {
         return;
     }
 
-    QJsonObject display = root.value(ConfigKeys::displayGroup()).toObject();
+    QJsonObject display = root.value(ConfigKeys::Legacy::v3DisplayGroup()).toObject();
 
     // Move the disable-list values out of config.json: stash the value, then
     // REMOVE the key. windowrules.json supersedes them — the runtime Settings
     // layer reads DisableEngine rules from the store now, never these keys.
     // finalizeV4Conversion consumes the stash and writes the rules.
     QJsonObject stash;
-    const auto moveDisableKey = [&display, &stash](const QString& configKey, const QString& stashKey) {
+    const auto moveDisableKey = [&display, &stash](const QString& configKey, QLatin1StringView stashKey) {
         // Only stash a value when the v3 key actually carried one — an absent
         // or empty disable list contributes no rules, so a stash entry for it
         // would just be inert noise finalizeV4Conversion has to skip.
@@ -1318,19 +1337,19 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         }
         display.remove(configKey);
     };
-    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledMonitorsKey(), QStringLiteral("snappingMonitors"));
-    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledMonitorsKey(), QStringLiteral("autotileMonitors"));
-    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledDesktopsKey(), QStringLiteral("snappingDesktops"));
-    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledDesktopsKey(), QStringLiteral("autotileDesktops"));
-    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledActivitiesKey(), QStringLiteral("snappingActivities"));
-    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledActivitiesKey(), QStringLiteral("autotileActivities"));
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledMonitorsKey(), kV3SnappingMonitorsStash);
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledMonitorsKey(), kV3AutotileMonitorsStash);
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledDesktopsKey(), kV3SnappingDesktopsStash);
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledDesktopsKey(), kV3AutotileDesktopsStash);
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledActivitiesKey(), kV3SnappingActivitiesStash);
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledActivitiesKey(), kV3AutotileActivitiesStash);
 
     // Write the stripped Display group back; drop it entirely if now empty so
     // no husk object lingers.
     if (display.isEmpty()) {
-        root.remove(ConfigKeys::displayGroup());
+        root.remove(ConfigKeys::Legacy::v3DisplayGroup());
     } else {
-        root[ConfigKeys::displayGroup()] = display;
+        root[ConfigKeys::Legacy::v3DisplayGroup()] = display;
     }
 
     // ── Stash hand-off to finalizeV4Conversion ─────────────────────────────
@@ -1404,7 +1423,7 @@ QStringList parseDisableList(const QString& csv)
 /// Build a context rule from a v3 monitor disable-list entry (`screenId`).
 PhosphorWindowRule::WindowRule disableRuleForMonitor(const QString& screenId, bool autotile)
 {
-    const QString name = (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId;
+    const QString name = disableRulePrefixFor(autotile) + screenId;
     return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(), autotile);
 }
 
@@ -1427,8 +1446,7 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QStrin
     if (!ok || desktop <= 0) {
         return std::nullopt;
     }
-    const QString name = (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId
-        + QStringLiteral(" · Desktop ") + QString::number(desktop);
+    const QString name = disableRulePrefixFor(autotile) + screenId + disableRuleDesktopSuffix(desktop);
     return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(), autotile);
 }
 
@@ -1448,8 +1466,7 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForActivity(const QStri
     }
     const QString screenId = entry.left(slash);
     const QString activity = entry.mid(slash + 1);
-    const QString name = (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId
-        + QStringLiteral(" · Activity");
+    const QString name = disableRulePrefixFor(autotile) + screenId + disableRuleActivitySuffix();
     return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity, autotile);
 }
 
@@ -1815,12 +1832,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             // "Mode" / "SnappingLayout" / "TilingAlgorithm" are intentionally
             // frozen legacy field names — they belong to the dead v3
             // assignments.json format this finalizer is the last reader of.
-            // They are NOT live config keys and have no ConfigDefaults::
-            // accessor; the literals must stay verbatim.
-            const int modeInt = grp.value(QLatin1String("Mode")).toInt(0);
+            // They are NOT live config keys; the frozen `Legacy::v3Assignment*`
+            // accessors keep the literals out of this call site so a future
+            // editor of this function can't drift them by accident.
+            const int modeInt = grp.value(ConfigKeys::Legacy::v3AssignmentMode()).toInt(0);
             const bool autotile = (modeInt == 1);
-            const QString snappingLayout = grp.value(QLatin1String("SnappingLayout")).toString();
-            const QString tilingAlgorithm = grp.value(QLatin1String("TilingAlgorithm")).toString();
+            const QString snappingLayout = grp.value(ConfigKeys::Legacy::v3AssignmentLayout()).toString();
+            const QString tilingAlgorithm = grp.value(ConfigKeys::Legacy::v3AssignmentAlgorithm()).toString();
 
             rules.append(PhosphorWindowRule::ContextRuleBridge::makeAssignmentRule(
                 assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity, autotile, snappingLayout,
@@ -1839,15 +1857,18 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // was embedded, leaving the user's snapping default off the catch-all
     // when an autotile default was also present.
     {
-        // Live v4 config keys — route group/key strings through the
-        // ConfigDefaults:: accessors (CLAUDE.md: live keys must not use inline
-        // segment literals; the v1* exemption is migration-only).
+        // Schema-migration freeze policy: read v3 on-disk paths through the
+        // frozen `ConfigKeys::Legacy::v3*` accessors, NEVER the live
+        // ConfigDefaults accessors. A future runtime rename of e.g.
+        // `snappingBehaviorWindowHandlingGroup()` MUST NOT retarget the v3→v4
+        // finalizer to a path that no v3 config ever had on disk. See
+        // configkeys.h `Legacy` struct for the policy rationale.
         const QJsonObject windowHandling =
-            groupObjectAtPath(configRoot, ConfigDefaults::snappingBehaviorWindowHandlingGroup());
-        const QString defaultLayoutId = windowHandling.value(ConfigDefaults::defaultLayoutIdKey()).toString();
+            groupObjectAtPath(configRoot, ConfigKeys::Legacy::v3SnappingBehaviorWindowHandlingGroup());
+        const QString defaultLayoutId = windowHandling.value(ConfigKeys::Legacy::v3DefaultLayoutIdKey()).toString();
 
-        const QJsonObject tilingAlgo = groupObjectAtPath(configRoot, ConfigDefaults::tilingAlgorithmGroup());
-        const QString defaultAlgorithm = tilingAlgo.value(ConfigDefaults::defaultKey()).toString();
+        const QJsonObject tilingAlgo = groupObjectAtPath(configRoot, ConfigKeys::Legacy::v3TilingAlgorithmGroup());
+        const QString defaultAlgorithm = tilingAlgo.value(ConfigKeys::Legacy::v3DefaultKey()).toString();
 
         // Engine-mode preference: pick autotile only when the user has no
         // snapping default but does have a tiling default — snapping is the
@@ -1884,12 +1905,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             }
         }
     };
-    appendMonitorRules(stash.value(QLatin1String("snappingMonitors")).toString(), false);
-    appendMonitorRules(stash.value(QLatin1String("autotileMonitors")).toString(), true);
-    appendDesktopRules(stash.value(QLatin1String("snappingDesktops")).toString(), false);
-    appendDesktopRules(stash.value(QLatin1String("autotileDesktops")).toString(), true);
-    appendActivityRules(stash.value(QLatin1String("snappingActivities")).toString(), false);
-    appendActivityRules(stash.value(QLatin1String("autotileActivities")).toString(), true);
+    appendMonitorRules(stash.value(kV3SnappingMonitorsStash).toString(), false);
+    appendMonitorRules(stash.value(kV3AutotileMonitorsStash).toString(), true);
+    appendDesktopRules(stash.value(kV3SnappingDesktopsStash).toString(), false);
+    appendDesktopRules(stash.value(kV3AutotileDesktopsStash).toString(), true);
+    appendActivityRules(stash.value(kV3SnappingActivitiesStash).toString(), false);
+    appendActivityRules(stash.value(kV3AutotileActivitiesStash).toString(), true);
 
     // Collapse exact-duplicate disable rules: dedup on the semantic identity
     // (autotile-mode, screenId, desktop, activity) so the migrated store is no

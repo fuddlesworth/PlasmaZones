@@ -6,7 +6,7 @@
 #include "IConfigStore.h"
 #include "phosphorscreenscore_export.h"
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Trivial @ref IConfigStore that holds its state in process memory.
@@ -99,4 +99,4 @@ private:
     int m_maxScreensPerPhysical; ///< 0 means "no cap". Default is DefaultMaxScreensPerPhysical.
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

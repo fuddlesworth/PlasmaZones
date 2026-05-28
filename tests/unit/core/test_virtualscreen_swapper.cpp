@@ -3,7 +3,7 @@
 
 /**
  * @file test_virtualscreen_swapper.cpp
- * @brief Integration tests for Phosphor::Screens::VirtualScreenSwapper against a real Settings.
+ * @brief Integration tests for PhosphorScreens::VirtualScreenSwapper against a real Settings.
  *
  * Tests cover:
  * - swapInDirection exchanges geometry between adjacent VSs
@@ -40,9 +40,9 @@ class TestVirtualScreenSwapper : public QObject
 
 private:
     /// Build a 2×2 grid of four VSs on a single physical monitor.
-    static Phosphor::Screens::VirtualScreenConfig makeTwoByTwoGrid(const QString& physId)
+    static PhosphorScreens::VirtualScreenConfig makeTwoByTwoGrid(const QString& physId)
     {
-        Phosphor::Screens::VirtualScreenConfig cfg;
+        PhosphorScreens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = physId;
         cfg.screens.append(makeDef(physId, 0, QStringLiteral("TL"), QRectF(0.0, 0.0, 0.5, 0.5)));
         cfg.screens.append(makeDef(physId, 1, QStringLiteral("TR"), QRectF(0.5, 0.0, 0.5, 0.5)));
@@ -52,7 +52,7 @@ private:
     }
 
 private:
-    using Result = Phosphor::Screens::VirtualScreenSwapper::Result;
+    using Result = PhosphorScreens::VirtualScreenSwapper::Result;
 
 private Q_SLOTS:
 
@@ -69,10 +69,10 @@ private Q_SLOTS:
         const QString rightId = PhosphorIdentity::VirtualScreenId::make(physId, 1);
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
-        QCOMPARE(swapper.swapInDirection(leftId, Phosphor::Screens::Direction::Right), Result::Ok);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
+        QCOMPARE(swapper.swapInDirection(leftId, PhosphorScreens::Direction::Right), Result::Ok);
 
-        const Phosphor::Screens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         QCOMPARE(after.screens.size(), 2);
         // Left VS now holds the original right region and vice versa.
         QVERIFY(qFuzzyCompare(after.screens[0].region.x(), 0.5));
@@ -92,20 +92,20 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
-        const Phosphor::Screens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         // Left VS — "left" has no sibling in that direction.
         QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0),
-                                         Phosphor::Screens::Direction::Left),
+                                         PhosphorScreens::Direction::Left),
                  Result::NoSiblingInDirection);
         // Vertical direction on a horizontal split has no sibling either.
-        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0),
-                                         Phosphor::Screens::Direction::Up),
-                 Result::NoSiblingInDirection);
+        QCOMPARE(
+            swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0), PhosphorScreens::Direction::Up),
+            Result::NoSiblingInDirection);
 
-        const Phosphor::Screens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         QCOMPARE(after, before); // unchanged
     }
 
@@ -117,8 +117,8 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
-        QCOMPARE(swapper.swapInDirection(physId, Phosphor::Screens::Direction::Right), Result::NotVirtual);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
+        QCOMPARE(swapper.swapInDirection(physId, PhosphorScreens::Direction::Right), Result::NotVirtual);
     }
 
     void swap_unknownPhysical_returnsNoSubdivision()
@@ -127,10 +127,10 @@ private Q_SLOTS:
         Settings settings; // no VS configured
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         // Looks like a virtual id, but its physical screen has no entry in
         // Settings — the helper falls through to the size-check failure.
-        QCOMPARE(swapper.swapInDirection(QStringLiteral("ghost/vs:0"), Phosphor::Screens::Direction::Right),
+        QCOMPARE(swapper.swapInDirection(QStringLiteral("ghost/vs:0"), PhosphorScreens::Direction::Right),
                  Result::NoSubdivision);
     }
 
@@ -145,10 +145,10 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         // Index 7 is out-of-range; id format still parses as virtual.
         QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 7),
-                                         Phosphor::Screens::Direction::Right),
+                                         PhosphorScreens::Direction::Right),
                  Result::UnknownVirtualScreen);
     }
 
@@ -160,7 +160,7 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0), QString()),
                  Result::InvalidDirection);
     }
@@ -173,13 +173,13 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0),
-                                         Phosphor::Screens::Direction::Right),
+                                         PhosphorScreens::Direction::Right),
                  Result::Ok);
 
         QString err;
-        QVERIFY2(Phosphor::Screens::VirtualScreenConfig::isValid(settings.virtualScreenConfig(physId), physId, 8, &err),
+        QVERIFY2(PhosphorScreens::VirtualScreenConfig::isValid(settings.virtualScreenConfig(physId), physId, 8, &err),
                  qPrintable(err));
     }
 
@@ -193,12 +193,12 @@ private Q_SLOTS:
         Settings settings;
         settings.setVirtualScreenConfig(physA, makeSplitConfig(physA));
         settings.setVirtualScreenConfig(physB, makeSplitConfig(physB));
-        const Phosphor::Screens::VirtualScreenConfig bBefore = settings.virtualScreenConfig(physB);
+        const PhosphorScreens::VirtualScreenConfig bBefore = settings.virtualScreenConfig(physB);
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physA, 0),
-                                         Phosphor::Screens::Direction::Right),
+                                         PhosphorScreens::Direction::Right),
                  Result::Ok);
 
         QCOMPARE(settings.virtualScreenConfig(physB), bBefore);
@@ -206,20 +206,20 @@ private Q_SLOTS:
 
     void reasonString_emptyForOk()
     {
-        QVERIFY(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::Ok).isEmpty());
-        QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::NoSubdivision),
+        QVERIFY(PhosphorScreens::VirtualScreenSwapper::reasonString(Result::Ok).isEmpty());
+        QCOMPARE(PhosphorScreens::VirtualScreenSwapper::reasonString(Result::NoSubdivision),
                  QStringLiteral("no_subdivision"));
-        QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::UnknownVirtualScreen),
+        QCOMPARE(PhosphorScreens::VirtualScreenSwapper::reasonString(Result::UnknownVirtualScreen),
                  QStringLiteral("unknown_vs"));
-        QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::NoSiblingInDirection),
+        QCOMPARE(PhosphorScreens::VirtualScreenSwapper::reasonString(Result::NoSiblingInDirection),
                  QStringLiteral("no_sibling"));
-        QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::NotVirtual),
+        QCOMPARE(PhosphorScreens::VirtualScreenSwapper::reasonString(Result::NotVirtual),
                  QStringLiteral("not_virtual"));
-        QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::InvalidDirection),
+        QCOMPARE(PhosphorScreens::VirtualScreenSwapper::reasonString(Result::InvalidDirection),
                  QStringLiteral("invalid_direction"));
-        QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::SwapFailed),
+        QCOMPARE(PhosphorScreens::VirtualScreenSwapper::reasonString(Result::SwapFailed),
                  QStringLiteral("swap_failed"));
-        QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::SettingsRejected),
+        QCOMPARE(PhosphorScreens::VirtualScreenSwapper::reasonString(Result::SettingsRejected),
                  QStringLiteral("settings_rejected"));
     }
 
@@ -239,16 +239,16 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
-        const Phosphor::Screens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
         const QRectF r0 = before.screens[0].region; // Left
         const QRectF r1 = before.screens[1].region; // Center
         const QRectF r2 = before.screens[2].region; // Right
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
-        const Phosphor::Screens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         // Ring order [Left, Centre, Right]; CW rotate (each inherits
         // successor's region): Left ← Centre, Centre ← Right, Right ← Left.
         QCOMPARE(after.screens[0].region, r1); // Left slot gets old Centre
@@ -266,13 +266,13 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
-        const Phosphor::Screens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
-        const Phosphor::Screens::VirtualScreenConfig afterRotate = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig afterRotate = settings.virtualScreenConfig(physId);
         QCOMPARE(afterRotate.screens[0].region, before.screens[1].region);
         QCOMPARE(afterRotate.screens[1].region, before.screens[0].region);
 
@@ -288,18 +288,18 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
-        Phosphor::Screens::VirtualScreenConfig cfg;
+        PhosphorScreens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = physId;
         cfg.screens.append(makeDef(physId, 0, QStringLiteral("Top"), QRectF(0.0, 0.0, 1.0, 0.5)));
         cfg.screens.append(makeDef(physId, 1, QStringLiteral("Bottom"), QRectF(0.0, 0.5, 1.0, 0.5)));
         settings.setVirtualScreenConfig(physId, cfg);
-        const Phosphor::Screens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
-        const Phosphor::Screens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         QCOMPARE(after.screens[0].region, before.screens[1].region);
         QCOMPARE(after.screens[1].region, before.screens[0].region);
     }
@@ -310,10 +310,10 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
-        const Phosphor::Screens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         for (int i = 0; i < 3; ++i) {
             QCOMPARE(swapper.rotate(physId, true), Result::Ok);
         }
@@ -326,10 +326,10 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
-        const Phosphor::Screens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, true), Result::Ok);
         QCOMPARE(swapper.rotate(physId, false), Result::Ok);
         QCOMPARE(settings.virtualScreenConfig(physId), before);
@@ -347,17 +347,17 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeTwoByTwoGrid(physId));
-        const Phosphor::Screens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
         const QRectF tl = before.screens[0].region; // TL
         const QRectF tr = before.screens[1].region; // TR
         const QRectF bl = before.screens[2].region; // BL
         const QRectF br = before.screens[3].region; // BR
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
-        const Phosphor::Screens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         // def[0] = TL slot; def[1] = TR slot; def[2] = BL slot; def[3] = BR slot.
         // In CW ring [TR, BR, BL, TL], CW rotate gives:
         //   TR ← BR,  BR ← BL,  BL ← TL,  TL ← TR
@@ -374,10 +374,10 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeTwoByTwoGrid(physId));
-        const Phosphor::Screens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         for (int i = 0; i < 4; ++i) {
             QCOMPARE(swapper.rotate(physId, true), Result::Ok);
         }
@@ -390,7 +390,7 @@ private Q_SLOTS:
         Settings settings; // no VS configured
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(QStringLiteral("DP-1"), true), Result::NoSubdivision);
     }
 
@@ -402,7 +402,7 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(PhosphorIdentity::VirtualScreenId::make(physId, 0), true), Result::NotVirtual);
     }
 
@@ -415,16 +415,16 @@ private Q_SLOTS:
         Settings settings;
         settings.setVirtualScreenConfig(physA, makeThreeWayConfig(physA));
         settings.setVirtualScreenConfig(physB, makeThreeWayConfig(physB));
-        const Phosphor::Screens::VirtualScreenConfig bBefore = settings.virtualScreenConfig(physB);
+        const PhosphorScreens::VirtualScreenConfig bBefore = settings.virtualScreenConfig(physB);
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physA, true), Result::Ok);
         QCOMPARE(settings.virtualScreenConfig(physB), bBefore);
     }
 
     // Regression: a 2×2 grid whose row heights differ by slightly more than
-    // Phosphor::Screens::VirtualScreenDef::Tolerance (1e-3) must take the centroid-angle path,
+    // PhosphorScreens::VirtualScreenDef::Tolerance (1e-3) must take the centroid-angle path,
     // not fall through the 1D collinear fallback. Pins the boundary so a
     // future tweak to kCollinearEpsilon can't silently collapse 2D grids
     // into left→right strips.
@@ -436,7 +436,7 @@ private Q_SLOTS:
 
         // Row heights 0.4990 + 0.5010 → row centres at y=0.2495 and y=0.7505,
         // Δy = 0.501, far outside the 1e-3 collinearity epsilon.
-        Phosphor::Screens::VirtualScreenConfig cfg;
+        PhosphorScreens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = physId;
         cfg.screens.append(makeDef(physId, 0, QStringLiteral("TL"), QRectF(0.0, 0.0, 0.5, 0.4990)));
         cfg.screens.append(makeDef(physId, 1, QStringLiteral("TR"), QRectF(0.5, 0.0, 0.5, 0.4990)));
@@ -444,14 +444,14 @@ private Q_SLOTS:
         cfg.screens.append(makeDef(physId, 3, QStringLiteral("BR"), QRectF(0.5, 0.4990, 0.5, 0.5010)));
         settings.setVirtualScreenConfig(physId, cfg);
 
-        const Phosphor::Screens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig before = settings.virtualScreenConfig(physId);
         const QRectF tl = before.screens[0].region;
         const QRectF tr = before.screens[1].region;
         const QRectF bl = before.screens[2].region;
         const QRectF br = before.screens[3].region;
 
         SettingsConfigStore swapStore(&settings);
-        Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
+        PhosphorScreens::VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
         // If the 2D centroid path was taken, the ring order is
@@ -459,7 +459,7 @@ private Q_SLOTS:
         //   TR ← BR, BR ← BL, BL ← TL, TL ← TR   (per test rotate_twoByTwoGrid_clockwiseOrder)
         // If the 1D fallback had fired instead, the order would be
         // left→right (or top→bottom) and the result would NOT match these.
-        const Phosphor::Screens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
+        const PhosphorScreens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         QCOMPARE(after.screens[0].region, tr); // TL slot gets old TR
         QCOMPARE(after.screens[1].region, br); // TR slot gets old BR
         QCOMPARE(after.screens[2].region, tl); // BL slot gets old TL

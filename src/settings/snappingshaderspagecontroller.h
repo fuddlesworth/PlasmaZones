@@ -53,11 +53,22 @@ public:
     {
         return false;
     }
+    // The read-only browser never owns staged edits, so apply()/discard()
+    // are no-ops at the storage layer. We still emit the inherited
+    // applyResult / discardResult so the framework's wait-counter ticks
+    // down — without it, a future per-page dirty flag accidentally
+    // wired here would deadlock the chrome footer ("0 of 1 pages
+    // saved" with no signal in sight). Q_ASSERT documents that we
+    // never expect a dirty-state caller to reach these bodies.
     void apply() override
     {
+        Q_ASSERT(!isDirty());
+        Q_EMIT applyResult(true, QString());
     }
     void discard() override
     {
+        Q_ASSERT(!isDirty());
+        Q_EMIT discardResult(true, QString());
     }
 
     /// @param shaderRegistry Borrowed; lifetime managed by the caller.
@@ -117,6 +128,13 @@ Q_SIGNALS:
     /// `path` MUST guard for the empty case and treat it as a full
     /// refresh trigger, not a no-op.
     void shaderProfileChanged(const QString& path);
+
+    /// User-facing transient notification request. QML chrome wires
+    /// this to `window.showToast()` so a failed shader-pack install
+    /// surfaces the underlying reason instead of returning false
+    /// silently. Mirrors the same-named signal on
+    /// AnimationsPageController.
+    void toastRequested(const QString& text);
 
 private Q_SLOTS:
     /// Slot wired (with `Qt::UniqueConnection`) to every layout's

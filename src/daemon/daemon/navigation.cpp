@@ -376,13 +376,13 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     // shortcut signals are wired, so it's always non-null on this path —
     // no per-call assertion needed.
     const auto result = m_virtualScreenSwapper->swapInDirection(screenId, dirStr);
-    const bool ok = (result == Phosphor::Screens::VirtualScreenSwapper::Result::Ok);
+    const bool ok = (result == PhosphorScreens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << static_cast<int>(result);
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
         // On success, surface the direction (the OSD style needs a string to
         // render the arrow). On failure, surface the structured reason.
-        const QString osdReason = ok ? dirStr : Phosphor::Screens::VirtualScreenSwapper::reasonString(result);
+        const QString osdReason = ok ? dirStr : PhosphorScreens::VirtualScreenSwapper::reasonString(result);
         m_overlayService->showNavigationOsd(ok, QStringLiteral("swap_vs"), osdReason, QString(), QString(), physId);
     }
 }
@@ -406,7 +406,7 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     // Swapper is always non-null on the shortcut path — see matching
     // comment in handleSwapVirtualScreen above.
     const auto result = m_virtualScreenSwapper->rotate(physId, clockwise);
-    const bool ok = (result == Phosphor::Screens::VirtualScreenSwapper::Result::Ok);
+    const bool ok = (result == PhosphorScreens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << static_cast<int>(result);
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
@@ -415,7 +415,7 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
         // rotation direction; on failure surface the structured reason so the
         // user sees "no_subdivision" instead of an ambiguous "clockwise" fail.
         const QString osdReason = ok ? (clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise"))
-                                     : Phosphor::Screens::VirtualScreenSwapper::reasonString(result);
+                                     : PhosphorScreens::VirtualScreenSwapper::reasonString(result);
         m_overlayService->showNavigationOsd(ok, QStringLiteral("rotate_vs"), osdReason, QString(), QString(), physId);
     }
 }

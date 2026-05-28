@@ -164,7 +164,7 @@ int main(int argc, char* argv[])
     // ScreenResolver wraps the daemon call + QGuiApplication::screenAt fallback
     // so we don't have to duplicate the virtual-screen-aware lookup here.
     QString targetScreen = parser.isSet(screenOption) ? parser.value(screenOption)
-                                                      : Phosphor::Screens::ScreenResolver::effectiveScreenAtCursor();
+                                                      : PhosphorScreens::ScreenResolver::effectiveScreenAtCursor();
 
     // Warn about mutually exclusive flags
     if (parser.isSet(previewOption) && parser.isSet(newLayoutOption)) {

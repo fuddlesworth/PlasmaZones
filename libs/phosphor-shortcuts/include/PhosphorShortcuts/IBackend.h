@@ -9,7 +9,7 @@
 
 #include "phosphorshortcuts_export.h"
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 /**
  * Pluggable global shortcut backend.
@@ -128,4 +128,4 @@ Q_SIGNALS:
     void ready();
 };
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

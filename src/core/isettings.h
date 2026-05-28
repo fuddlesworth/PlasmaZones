@@ -34,12 +34,30 @@ namespace PlasmaZones {
  * Note on the sub-interface NOTIFY surface: the sub-interfaces
  * (IZoneActivationSettings, IZoneSelectorSettings, etc.) are
  * deliberately non-QObject and so cannot declare Q_SIGNALS of their
- * own. All notify signals live on this ISettings level. Consumers
- * holding a `IZoneSelectorSettings*` therefore must hold an
- * `ISettings*` alongside (or back-cast via `dynamic_cast`) to wire
- * `connect(&ISettings::zoneSelectorEnabledChanged, ...)`. The
- * back-cast is safe because Settings — the only concrete subclass —
- * inherits from both.
+ * own. All notify signals live on this ISettings level. The codebase
+ * idiom is for a consumer that needs both the value AND the signal to
+ * hold BOTH pointers — `IZoneSelectorSettings*` for reads/writes,
+ * `ISettings*` (or `QObject*`) for `connect()`:
+ *
+ * @code
+ * class Consumer {
+ * public:
+ *     Consumer(ISettings* settings)
+ *         : m_settings(settings),               // for connect()
+ *           m_selector(settings)                // for value access
+ *     {
+ *         connect(m_settings, &ISettings::zoneSelectorEnabledChanged,
+ *                 this, &Consumer::onChanged);
+ *     }
+ * private:
+ *     ISettings* m_settings;
+ *     IZoneSelectorSettings* m_selector;
+ * };
+ * @endcode
+ *
+ * A `dynamic_cast<ISettings*>(zoneSelectorSettingsPtr)` also works at the
+ * call site since `Settings` (the only concrete subclass) inherits from both
+ * bases, but holding both pointers from construction is cheaper and clearer.
  */
 class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneActivationSettings,
@@ -79,13 +97,20 @@ public:
     /// True only when the zone selector is enabled AND snapping is enabled
     /// at the top level. Use this in consumers instead of
     /// zoneSelectorEnabled() unless you need the raw child flag value.
+    ///
+    /// Test-stub note: `StubSettings` (tests/unit/helpers/StubSettings.h)
+    /// defaults `snappingEnabled() == true` and `zoneSelectorEnabled() == true`,
+    /// so this returns true unless a test explicitly overrides one of the
+    /// two flags. The same applies to `isSnapAssistActive` (defaults
+    /// `snapAssistEnabled() == false` so it returns false until overridden).
     bool isZoneSelectorActive() const
     {
         return snappingEnabled() && zoneSelectorEnabled();
     }
 
     /// True only when snap assist is enabled AND snapping is enabled at
-    /// the top level. Same pattern as isZoneSelectorActive.
+    /// the top level. Same pattern as isZoneSelectorActive (see that
+    /// method's doc comment for the StubSettings default semantics).
     bool isSnapAssistActive() const
     {
         return snappingEnabled() && snapAssistEnabled();
@@ -105,6 +130,14 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Animation settings (global — applies to snapping and autotiling)
+    //
+    // FIXME(audit): consider extracting IAnimationSettings sub-interface —
+    // every method between here and `setShaderProfileTree` is purely about
+    // animation/shader-profile state. A focused sub-interface would let
+    // consumers (kwin-effect's animator, AnimationsPageController) depend on
+    // exactly that surface and remove the cross-cutting include of the full
+    // ISettings header. Deferred because it touches a large number of files;
+    // do not roll into an unrelated audit pass.
     virtual bool animationsEnabled() const = 0;
     virtual void setAnimationsEnabled(bool enabled) = 0;
     virtual int animationDuration() const = 0;
@@ -286,6 +319,16 @@ public:
     }
 
     // Persistence (unique to ISettings)
+    //
+    // Borrowed-store contract for load(): when the concrete Settings was
+    // constructed with an externally-owned `WindowRuleStore*` (e.g. the
+    // daemon's shared store), load() MUST NOT reload that store — the owner
+    // is the writer and an interleaved load() here would clobber unflushed
+    // in-memory edits. Only the owning side (or a future cross-process
+    // watcher) drives reloads on the borrowed path. Implementations that
+    // own their store (the standard constructor) reload normally. See
+    // Settings::load (settings.cpp) for the live guard against
+    // `m_ownedWindowRuleStore`.
     virtual void load() = 0;
     virtual void save() = 0;
     virtual void reset() = 0;

@@ -19,7 +19,7 @@
 #include <cmath>
 #include <limits>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 namespace {
 
@@ -273,4 +273,4 @@ QString VirtualScreenSwapper::reasonString(Result result)
     return QString();
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

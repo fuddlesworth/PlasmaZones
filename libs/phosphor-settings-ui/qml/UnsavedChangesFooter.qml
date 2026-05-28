@@ -35,14 +35,30 @@ ColumnLayout {
     /// hook a consumer could read.
     readonly property bool actionsBusy: root.controller.applying || root.controller.discarding
 
-    /** Emitted after the user confirms a discard. Consumers can hook
-     *  this to flash a toast, log telemetry, etc. — the discard
-     *  itself is already routed through `controller.discardAll()`. */
-    signal discarded
-    /** Emitted after the user clicks Save. Same wiring rationale as
-     *  `discarded()`: `controller.applyAll()` has already run by the
-     *  time consumers see this. */
-    signal saved
+    // Pin the colour set to Window so the persistent accent line +
+    // notification surfaces sample the chrome's background palette
+    // rather than inheriting whatever role-set the parent page used
+    // (View, Selection, Complementary, etc.). `inherit: false` stops
+    // a darker parent surface from dragging the footer into a
+    // mismatched tint. Matches the legacy PlasmaZones chrome's
+    // footer notification surface.
+    Kirigami.Theme.colorSet: Kirigami.Theme.Window
+    Kirigami.Theme.inherit: false
+
+    /** Emitted when the user confirms Discard in the inline prompt —
+     *  fires at the dispatch site (when `discardAllAsync` is called),
+     *  NOT when the async batch completes. Consumers that need the
+     *  completion notification (per-domain ok/errors) should connect
+     *  to `controller.discardAllComplete(ok, errors)` directly. This
+     *  signal exists for UI-only side effects (toast, telemetry) that
+     *  fire on user intent rather than commit success. */
+    signal discardRequested
+    /** Emitted when the user clicks Save — fires at the dispatch
+     *  site (when `applyAllAsync` is called), NOT when the async
+     *  batch completes. See `discardRequested()` for the rationale;
+     *  for completion notification connect to
+     *  `controller.applyAllComplete(ok, errors)`. */
+    signal saveRequested
 
     spacing: 0
 
@@ -165,7 +181,7 @@ ColumnLayout {
                         // drives the button label + a (future) toast
                         // on completion.
                         root.controller.applyAllAsync();
-                        root.saved();
+                        root.saveRequested();
                     }
                 }
             }
@@ -206,7 +222,7 @@ ColumnLayout {
                 onTriggered: {
                     confirmDiscardDialog.close();
                     root.controller.discardAllAsync();
-                    root.discarded();
+                    root.discardRequested();
                 }
             },
             Kirigami.Action {

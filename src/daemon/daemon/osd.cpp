@@ -158,7 +158,7 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
 
     // Show the visual preview OSD with lock overlay showing the current layout
     if (style == OsdStyle::Preview && m_overlayService && m_layoutManager) {
-        const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+        const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
         PhosphorZones::Layout* layout =
             m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
         if (layout) {

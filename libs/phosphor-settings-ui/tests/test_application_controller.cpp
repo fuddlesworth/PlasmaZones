@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
+#include <QThread>
 #include <QUrl>
 
 #include "PhosphorSettingsUi/ApplicationController.h"
@@ -64,9 +66,9 @@ public:
         Q_EMIT dirtyChanged();
     }
 
-    void setEmitApplyResult(bool emit)
+    void setEmitApplyResult(bool shouldEmit)
     {
-        m_emitApplyResult = emit;
+        m_emitApplyResult = shouldEmit;
     }
 
     // Public counters for tests to observe — deliberately not m_-prefixed
@@ -140,6 +142,23 @@ public:
         // surface the failure to the user, but the framework must keep
         // dirty set so a subsequent Apply retry hits this domain again.
         Q_EMIT applyResult(false, QStringLiteral("simulated apply failure"));
+    }
+};
+
+/// Stub headless domain whose discard() deliberately omits the
+/// discardResult emit, so the controller's discard batch stays pending
+/// — exercises the forceResetAsyncState() recovery path on the discard
+/// half of the state machine.
+class SilentDiscardDomain : public StubHeadlessDomain
+{
+    Q_OBJECT
+public:
+    using StubHeadlessDomain::StubHeadlessDomain;
+
+    void discard() override
+    {
+        ++discardCount;
+        // No discardResult emit — leaves m_discardPending > 0.
     }
 };
 
@@ -371,8 +390,14 @@ private Q_SLOTS:
         QVERIFY(!app.isDirty());
     }
 
-    void duplicateDomainRegistrationIsDeduped()
+    void rejectsDuplicateDomainRegistration()
     {
+        // Registry-level dedup: a domain registered first via
+        // registerPage(), then again via registerDomain() must be
+        // tracked exactly once. trackDomain's "contains check + warn"
+        // is the visible contract; this test pins the no-op return
+        // (the dirtyChanged spy fires once per logical toggle, not
+        // twice as it would if the connection was duplicated).
         ApplicationController app;
         auto* page = new StubPage(QStringLiteral("p"));
         app.registerPage(page, {}, QStringLiteral("P"), QUrl());
@@ -388,6 +413,36 @@ private Q_SLOTS:
         // toggle (one per duplicate dirtyChanged → recomputeDirty
         // edge). We require exactly one.
         QCOMPARE(spy.count(), 1);
+    }
+
+    void dedupesViaUniqueConnectionOnDoubleRegisterDomain()
+    {
+        // Defence-in-depth complement to the registry-level dedup:
+        // trackDomain() also passes Qt::UniqueConnection on the
+        // dirtyChanged → onDomainDirtyChanged hookup, so even if a
+        // future refactor accidentally skipped the m_domains contains
+        // check, the signal-side dedup would still catch it.
+        //
+        // We can't easily *bypass* the contains check without friend
+        // access, but registerDomain on a domain that was added via
+        // registerPage is the closest reachable scenario — the page's
+        // PageController is already in m_domains via registerPage's
+        // own trackDomain call, so the second registerDomain triggers
+        // BOTH layers of dedup. A regression that broke one layer
+        // would still trip the other unless both were broken.
+        ApplicationController app;
+        auto* page = new StubPage(QStringLiteral("p"));
+        app.registerPage(page, {}, QStringLiteral("P"), QUrl());
+        app.registerDomain(page);
+        app.registerDomain(page); // triple-registration for good measure
+
+        QSignalSpy spy(&app, &ApplicationController::dirtyChanged);
+        page->setDirty(true);
+        page->setDirty(false);
+        // 2 logical edges → exactly 2 dirtyChanged emissions (one per
+        // recomputeDirty's value-changed gate). A leaked duplicate
+        // connection would multiply the count.
+        QCOMPARE(spy.count(), 2);
     }
 
     void rejectsNullPageRegistration()
@@ -598,6 +653,13 @@ private Q_SLOTS:
 
         auto* silent = new StubPage(QStringLiteral("silent"));
         silent->setEmitApplyResult(false);
+        // Stamping objectName exercises the "Domain %1 did not report
+        // apply completion within timeout" branch in
+        // applicationcontroller.cpp's timeout handler — see the
+        // unnamed-vs-named arms around line 282 — instead of the
+        // generic message. Asserting the name appears in the error
+        // pins the named-domain branch.
+        silent->setObjectName(QStringLiteral("SilentDomain"));
         app.registerPage(silent, {}, QStringLiteral("Silent"), QUrl());
         silent->setDirty(true);
 
@@ -607,7 +669,15 @@ private Q_SLOTS:
         QCOMPARE(completeSpy.count(), 1);
         QCOMPARE(completeSpy.first().at(0).toBool(), false);
         const QStringList errors = completeSpy.first().at(1).toStringList();
-        QVERIFY(!errors.isEmpty());
+        QCOMPARE(errors.size(), 1);
+        // The named-domain timeout message must mention both the
+        // object name AND the word "timeout" (case-insensitive on the
+        // word "timeout" would tighten the contract further, but the
+        // current message uses lowercase).
+        QVERIFY2(errors.first().contains(QStringLiteral("timeout")),
+                 qPrintable(QStringLiteral("expected timeout in error, got: ") + errors.first()));
+        QVERIFY2(errors.first().contains(QStringLiteral("SilentDomain")),
+                 qPrintable(QStringLiteral("expected SilentDomain in error, got: ") + errors.first()));
     }
 
     void registerPageMidBatchIsSafe()
@@ -691,6 +761,155 @@ private Q_SLOTS:
         // Let the timeout fire so the test cleans up.
         QVERIFY(applyCompleteSpy.wait(2000));
         QVERIFY(!app.isApplying());
+    }
+
+    void forceResetAsyncStateClearsApplyingMidBatch()
+    {
+        // Start an apply batch that won't complete (silent stub +
+        // generous timeout), call forceResetAsyncState during, verify
+        // applying flips back to false and applyAllComplete fires with
+        // ok=false + a synthesised error.
+        ApplicationController app;
+        // Keep timeout long so the test exercises the explicit
+        // force-reset path rather than racing the timeout fire.
+        app.setAsyncBatchTimeoutMs(60'000);
+
+        auto* silent = new StubPage(QStringLiteral("silent"));
+        silent->setEmitApplyResult(false);
+        app.registerPage(silent, {}, QStringLiteral("S"), QUrl());
+        silent->setDirty(true);
+
+        QSignalSpy completeSpy(&app, &ApplicationController::applyAllComplete);
+        QSignalSpy applyingSpy(&app, &ApplicationController::applyingChanged);
+        app.applyAllAsync();
+        QVERIFY(app.isApplying());
+        QCOMPARE(applyingSpy.count(), 1); // false→true
+
+        app.forceResetAsyncState();
+        QVERIFY(!app.isApplying());
+        QCOMPARE(completeSpy.count(), 1);
+        QCOMPARE(completeSpy.first().at(0).toBool(), false);
+        const QStringList errors = completeSpy.first().at(1).toStringList();
+        QVERIFY(!errors.isEmpty());
+        // applying transitions true→false on the reset.
+        QCOMPARE(applyingSpy.count(), 2);
+    }
+
+    void forceResetAsyncStateClearsDiscardingMidBatch()
+    {
+        // Symmetric forceResetAsyncState test for the discardAllAsync
+        // half of the state machine — pins the `else if (m_discarding)`
+        // branch (around line 552 in applicationcontroller.cpp).
+        ApplicationController app;
+        app.setAsyncBatchTimeoutMs(60'000);
+
+        // SilentDiscardDomain (file-scope, defined in the anonymous
+        // namespace at top of TU) never emits discardResult, so the
+        // discard batch stays pending until force-reset.
+        auto* silent = new SilentDiscardDomain();
+        app.registerDomain(silent);
+        silent->setDirty(true);
+
+        QSignalSpy completeSpy(&app, &ApplicationController::discardAllComplete);
+        QSignalSpy discardingSpy(&app, &ApplicationController::discardingChanged);
+        app.discardAllAsync();
+        QVERIFY(app.isDiscarding());
+
+        app.forceResetAsyncState();
+        QVERIFY(!app.isDiscarding());
+        QCOMPARE(completeSpy.count(), 1);
+        QCOMPARE(completeSpy.first().at(0).toBool(), false);
+        QVERIFY(!completeSpy.first().at(1).toStringList().isEmpty());
+        QCOMPARE(discardingSpy.count(), 2);
+    }
+
+    void setAsyncBatchTimeoutMsRefusesNonPositive()
+    {
+        // Pin the qWarning + no-op return for <= 0 inputs. Without
+        // the guard a zero/negative timeout would route into QTimer
+        // and either fire-instantly or block-forever, both of which
+        // would corrupt the async batch's accounting.
+        ApplicationController app;
+        const int originalTimeout = app.asyncBatchTimeoutMs();
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing non-positive value")));
+        app.setAsyncBatchTimeoutMs(-1);
+        QCOMPARE(app.asyncBatchTimeoutMs(), originalTimeout);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing non-positive value")));
+        app.setAsyncBatchTimeoutMs(0);
+        QCOMPARE(app.asyncBatchTimeoutMs(), originalTimeout);
+
+        // Positive values are accepted — sanity check that the guard
+        // isn't over-eager.
+        app.setAsyncBatchTimeoutMs(123);
+        QCOMPARE(app.asyncBatchTimeoutMs(), 123);
+    }
+
+    void gotoNavigationOnEmptyRegistryReturnsEmpty()
+    {
+        // collectNavigable's empty-list early-return must surface as
+        // an empty QString from both navigation directions. Without
+        // the guard a regression would index into an empty list and
+        // UB.
+        ApplicationController app;
+        QCOMPARE(app.gotoPreviousPage(), QString());
+        QCOMPARE(app.gotoNextPage(), QString());
+        QVERIFY(app.currentPageId().isEmpty());
+    }
+
+    void setCurrentPageIdSameIdIsNoOp()
+    {
+        // The setter's "no change" early-return must NOT emit
+        // currentPageIdChanged. Without the guard QML bindings
+        // rebound to currentPageId would spuriously re-evaluate on
+        // every assignment, including identity assignments from
+        // Sidebar.qml's currentIndex change handlers.
+        ApplicationController app;
+        auto* page = new StubPage(QStringLiteral("p"));
+        app.registerPage(page, {}, QStringLiteral("P"), QUrl());
+
+        app.setCurrentPageId(QStringLiteral("p"));
+        QCOMPARE(app.currentPageId(), QStringLiteral("p"));
+
+        QSignalSpy spy(&app, &ApplicationController::currentPageIdChanged);
+        app.setCurrentPageId(QStringLiteral("p"));
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(app.currentPageId(), QStringLiteral("p"));
+    }
+
+    void crossThreadDomainRegistrationIsRefused()
+    {
+        // registerPage refuses pages living on a non-controller thread
+        // (cross-thread dirtyChanged → recomputeDirty would race
+        // m_domains mutation). Verify the rejection side-effect: the
+        // page is NOT in the registry, and pageRegistered did not fire.
+        ApplicationController app;
+        QThread worker;
+        worker.start();
+        auto* foreignPage = new StubPage(QStringLiteral("foreign"));
+        foreignPage->moveToThread(&worker);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("cross-thread page refused")));
+        QSignalSpy registeredSpy(app.registry(), &PhosphorSettingsUi::PageRegistry::pageRegistered);
+        app.registerPage(foreignPage, {}, QStringLiteral("F"), QUrl());
+
+        // Contract: the page-level cross-thread guard returns before
+        // any registry entry is created, so the page must not be
+        // queryable through the registry.
+        QVERIFY(!app.registry()->hasPage(QStringLiteral("foreign")));
+        QCOMPARE(registeredSpy.count(), 0);
+
+        // Tear down the foreign page on its own thread to avoid
+        // cross-thread destruction UB.
+        QMetaObject::invokeMethod(
+            foreignPage,
+            [foreignPage]() {
+                foreignPage->deleteLater();
+            },
+            Qt::QueuedConnection);
+        worker.quit();
+        worker.wait(2000);
     }
 
     void applyAllOnPartialFailureKeepsDirty()

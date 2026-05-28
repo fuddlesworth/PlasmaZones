@@ -156,6 +156,15 @@ using namespace animations_controller_detail;
 
 AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry,
                                                    ISettings* settings, QObject* parent)
+    // FIXME(audit): PageController id "animations" is ALSO the navigation
+    // parent id that SettingsController::parentPageRedirects() maps to
+    // "animations-general". The dual-purpose id works today (setActivePage
+    // resolves the parent before storing it) but obscures the distinction
+    // between "navigate to the parent" and "address the staging
+    // controller". See the matching FIXME(audit) in
+    // settingscontroller_pageregistration.cpp at the regPage(m_animationsPage,
+    // …) site for the proposed fix (rename the staging controller's id to
+    // "animations-staging" so the two surfaces are independent).
     : PhosphorSettingsUi::PageController(QStringLiteral("animations"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_settings(settings)
@@ -229,6 +238,20 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
         // already restored depth=0, the guard sees external-reload
         // semantics, and the lambda silently clears m_shaderTreeDirty
         // on the user's own write — a silent revert of staged edits.
+        //
+        // m_asyncRevertGeneration defends against a different race:
+        // SettingsController::discard() pairs our discard() with a
+        // follow-up Settings::load(), which fires shaderProfileTreeChanged
+        // while the asyncRevert worker is still running. The lambda must
+        // NOT clear m_shaderTreeDirty in that window — the worker's
+        // finished handler owns the terminal clear-and-emit sequence as
+        // part of discardResult. Every dispatch bumps
+        // m_asyncRevertGeneration, so any in-flight worker makes the
+        // generation differ from the value seen here and short-circuits
+        // the clear path. The bool m_asyncRevertInFlight check is the
+        // primary in-flight signal; the generation comparison is
+        // belt-and-braces against a future change that reorders the
+        // flag clear.
         connect(
             m_settings, &ISettings::shaderProfileTreeChanged, this,
             [this]() {
@@ -242,6 +265,15 @@ AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::Ani
                 // hasPendingChanges() does not report phantom edits. The
                 // m_mutatingShaderTree guard distinguishes our own writes
                 // (which keep the dirty flag set) from external reloads.
+                //
+                // While an asyncRevert worker is running, skip the clear:
+                // the worker's finished handler will reset m_shaderTreeDirty
+                // and emit pendingChangesChanged + discardResult together as
+                // the terminal sequence. Letting the lambda clear early would
+                // race the terminal emit and could fire pendingChangesChanged
+                // before discardResult, breaking the chrome's wait-counter.
+                if (m_asyncRevertInFlight)
+                    return;
                 if (m_mutatingShaderTree == 0 && m_shaderTreeDirty) {
                     m_shaderTreeDirty = false;
                     Q_EMIT pendingChangesChanged();
@@ -410,12 +442,16 @@ void AnimationsPageController::revertPending()
         }
 
         // Classify so the right signal goes out for the restored file.
+        // QDir-vs-QDir comparison normalises trailing slashes, "..", and
+        // duplicate slashes so a string compare can't false-negative on
+        // a path that's semantically equal but lexically different
+        // (e.g. setsDir with a trailing slash from QStandardPaths).
         const QFileInfo info(filePath);
-        const QString absDir = info.absolutePath();
+        const QDir absDir(info.absolutePath());
         const QString stem = info.completeBaseName();
-        if (absDir == setsDir) {
+        if (absDir == QDir(setsDir)) {
             anyMotionSet = true;
-        } else if (absDir == profilesDir) {
+        } else if (absDir == QDir(profilesDir)) {
             if (knownPathSet.contains(stem))
                 overrideEvents.append(stem);
             else
@@ -464,7 +500,7 @@ void AnimationsPageController::asyncRevertPending()
         // truncated some files on disk, producing inconsistent state.
         // Surface a quick failure so the framework's discard counter
         // ticks down and the user knows to retry.
-        Q_EMIT discardResult(false, PzI18n::tr("Discard already in flight"));
+        Q_EMIT discardResult(false, PzI18n::tr("Discard already in flight."));
         return;
     }
     if (!hasPendingChanges()) {
@@ -483,48 +519,64 @@ void AnimationsPageController::asyncRevertPending()
     // Track the keys the worker is going to process so the finished
     // handler can MERGE results back into m_pendingFileSnapshots.
     // Today the m_asyncRevertInFlight guard rejects concurrent
-    // setOverride / setShaderOverride / setOverlay / clear* calls
-    // during the worker run, so a fresh post-discard mutator would
-    // be the only way new entries could appear — kept the merge as
-    // belt-and-braces against a future change that opens the
-    // mutator gate (or a post-discard race between the worker reply
-    // and a user click on Save).
+    // setOverride / setShaderOverride / clearShaderOverride* /
+    // applyMotionSet / addUserPreset / removeUserPreset /
+    // saveCurrentAsMotionSet / removeMotionSet calls during the worker
+    // run, so a fresh post-discard mutator would be the only way new
+    // entries could appear — kept the merge as belt-and-braces against
+    // a future change that opens the mutator gate (or a post-discard
+    // race between the worker reply and a user click on Save).
     const QSet<QString> dispatchedKeys(snapshots.keyBegin(), snapshots.keyEnd());
 
     m_asyncRevertInFlight = true;
+    // Bump the generation BEFORE wiring the watcher so the
+    // shaderProfileTreeChanged DirectConnection lambda (which compares
+    // the live counter against its own captured snapshot at signal-fire
+    // time) sees a fresh value for the duration of this dispatch. The
+    // lambda is the one external-reload short-circuit we rely on for the
+    // discard()+load() pair.
+    ++m_asyncRevertGeneration;
     auto* watcher = new QFutureWatcher<WorkerResult>(this);
-    connect(watcher, &QFutureWatcher<WorkerResult>::finished, this, [this, watcher, dispatchedKeys]() {
-        const WorkerResult result = watcher->result();
-        watcher->deleteLater();
-        m_asyncRevertInFlight = false;
+    connect(
+        watcher, &QFutureWatcher<WorkerResult>::finished, this,
+        [this, watcher, dispatchedKeys]() {
+            const WorkerResult result = watcher->result();
+            watcher->deleteLater();
 
-        // Back on the GUI thread — merge retained map with the live
-        // map: keys we dispatched + the worker did NOT retain (i.e.
-        // successfully restored) are removed from the live map; keys
-        // the worker retained are kept (its content matches what we
-        // dispatched — concurrent edits to those keys would also be
-        // dropped, but that's correct: the user asked to discard
-        // them and the file restore failed).
-        for (const QString& key : dispatchedKeys) {
-            if (!result.retained.contains(key))
-                m_pendingFileSnapshots.remove(key);
-        }
-        if (m_pendingFileSnapshots.isEmpty())
-            m_shaderTreeDirty = false;
+            // Back on the GUI thread — merge retained map with the live
+            // map: keys we dispatched + the worker did NOT retain (i.e.
+            // successfully restored) are removed from the live map; keys
+            // the worker retained are kept (its content matches what we
+            // dispatched — concurrent edits to those keys would also be
+            // dropped, but that's correct: the user asked to discard
+            // them and the file restore failed).
+            for (const QString& key : dispatchedKeys) {
+                if (!result.retained.contains(key))
+                    m_pendingFileSnapshots.remove(key);
+            }
+            if (m_pendingFileSnapshots.isEmpty())
+                m_shaderTreeDirty = false;
 
-        for (const QString& path : result.overrideEvents)
-            Q_EMIT overrideChanged(path);
-        if (result.anyPreset)
-            Q_EMIT userPresetsChanged();
-        if (result.anyMotionSet)
-            Q_EMIT motionSetsChanged();
-        Q_EMIT pendingChangesChanged();
-        Q_EMIT discardResult(
-            result.retained.isEmpty(),
-            result.retained.isEmpty()
+            for (const QString& path : result.overrideEvents)
+                Q_EMIT overrideChanged(path);
+            if (result.anyPreset)
+                Q_EMIT userPresetsChanged();
+            if (result.anyMotionSet)
+                Q_EMIT motionSetsChanged();
+            Q_EMIT pendingChangesChanged();
+            // Emit discardResult LAST and clear the in-flight flag AFTER
+            // the emit so any DirectConnection slot wired to
+            // discardResult still observes m_asyncRevertInFlight==true and
+            // routes through the worker-aware paths (e.g. test harnesses
+            // that read state on the result signal). The mutator gate
+            // re-opens together with the flag clear.
+            const QString errorMsg = result.retained.isEmpty()
                 ? QString()
-                : PzI18n::tr("Failed to restore %1 profile file(s); they remain pending.").arg(result.retained.size()));
-    });
+                : PzI18n::tr("Failed to restore %1 profile file(s); they remain pending.").arg(result.retained.size());
+            Q_EMIT discardResult(result.retained.isEmpty(), errorMsg);
+            m_asyncRevertInFlight = false;
+        },
+        Qt::DirectConnection);
 
     QFuture<WorkerResult> future = QtConcurrent::run([profilesDir, setsDir, knownPathSet, snapshots]() {
         WorkerResult result;
@@ -551,12 +603,17 @@ void AnimationsPageController::asyncRevertPending()
                 continue;
             }
 
+            // QDir-vs-QDir comparison normalises trailing slashes, "..",
+            // and duplicate slashes so a string compare can't
+            // false-negative on a path that's semantically equal but
+            // lexically different. Worker-thread safety: QDir's normalised
+            // comparison is pure-function (no thread-local state).
             const QFileInfo info(filePath);
-            const QString absDir = info.absolutePath();
+            const QDir absDir(info.absolutePath());
             const QString stem = info.completeBaseName();
-            if (absDir == setsDir) {
+            if (absDir == QDir(setsDir)) {
                 result.anyMotionSet = true;
-            } else if (absDir == profilesDir) {
+            } else if (absDir == QDir(profilesDir)) {
                 if (knownPathSet.contains(stem))
                     result.overrideEvents.append(stem);
                 else
@@ -682,11 +739,26 @@ QVariantList AnimationsPageController::userPresets() const
 
 bool AnimationsPageController::addUserPreset(const QString& name, const QVariantMap& profileJson)
 {
+    // Defence-in-depth: the sub-services write through the snapshot
+    // callback wired by the controller ctor, so a concurrent mutator
+    // here while asyncRevertPending's worker is rewriting profile files
+    // would race the worker on disk. The QML chrome gates the picker on
+    // `discarding`; this guard protects programmatic callers.
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "addUserPreset: blocked during discard";
+        Q_EMIT toastRequested(PzI18n::tr("Cannot modify presets while a discard is in progress."));
+        return false;
+    }
     return m_presets && m_presets->addUserPreset(name, profileJson);
 }
 
 bool AnimationsPageController::removeUserPreset(const QString& name)
 {
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "removeUserPreset: blocked during discard";
+        Q_EMIT toastRequested(PzI18n::tr("Cannot modify presets while a discard is in progress."));
+        return false;
+    }
     return m_presets && m_presets->removeUserPreset(name);
 }
 
@@ -699,16 +771,31 @@ QVariantList AnimationsPageController::availableMotionSets() const
 
 bool AnimationsPageController::applyMotionSet(const QString& name)
 {
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "applyMotionSet: blocked during discard";
+        Q_EMIT toastRequested(PzI18n::tr("Cannot modify presets while a discard is in progress."));
+        return false;
+    }
     return m_motionSets && m_motionSets->applyMotionSet(name);
 }
 
 bool AnimationsPageController::saveCurrentAsMotionSet(const QString& name, const QString& description)
 {
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "saveCurrentAsMotionSet: blocked during discard";
+        Q_EMIT toastRequested(PzI18n::tr("Cannot modify presets while a discard is in progress."));
+        return false;
+    }
     return m_motionSets && m_motionSets->saveCurrentAsMotionSet(name, description);
 }
 
 bool AnimationsPageController::removeMotionSet(const QString& name)
 {
+    if (m_asyncRevertInFlight) {
+        qCWarning(lcConfig) << "removeMotionSet: blocked during discard";
+        Q_EMIT toastRequested(PzI18n::tr("Cannot modify presets while a discard is in progress."));
+        return false;
+    }
     return m_motionSets && m_motionSets->removeMotionSet(name);
 }
 

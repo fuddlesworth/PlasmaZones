@@ -35,7 +35,7 @@ void pushVirtualScreenConfigToDaemon(const QString& physicalScreenId, const QVar
 
     QJsonArray screensArr;
     for (int i = 0; i < screens.size(); ++i) {
-        Phosphor::Screens::VirtualScreenDef def =
+        PhosphorScreens::VirtualScreenDef def =
             VirtualScreenUtils::variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
         if (!def.isValid()) {
             qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i
@@ -66,7 +66,7 @@ QString StagingService::assignmentCacheKey(const QString& screen, int desktop, c
 {
     // Resolve connector names to EDID-based screen IDs so cache keys
     // match regardless of whether the caller passes "DP-3" or the full ID.
-    const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screen);
+    const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screen);
     return resolved + QChar(0x1F) + QString::number(desktop) + QChar(0x1F) + activity;
 }
 
@@ -77,7 +77,7 @@ StagingService::StagedAssignment& StagingService::assignmentEntry(const QString&
     auto it = m_assignments.find(key);
     if (it == m_assignments.end()) {
         StagedAssignment entry;
-        entry.screenId = Phosphor::Screens::ScreenIdentity::idForName(screen);
+        entry.screenId = PhosphorScreens::ScreenIdentity::idForName(screen);
         entry.virtualDesktop = desktop;
         entry.activityId = activity;
         it = m_assignments.insert(key, entry);
@@ -339,11 +339,11 @@ QVariantList StagingService::stagedVirtualScreenConfig(const QString& physicalSc
 void StagingService::flushVirtualScreensToSettings(Settings& settings)
 {
     for (auto it = m_virtualScreenConfigs.constBegin(); it != m_virtualScreenConfigs.constEnd(); ++it) {
-        Phosphor::Screens::VirtualScreenConfig vsConfig;
+        PhosphorScreens::VirtualScreenConfig vsConfig;
         vsConfig.physicalScreenId = it.key();
         if (!it.value().isEmpty()) {
             for (int i = 0; i < it.value().size(); ++i) {
-                const Phosphor::Screens::VirtualScreenDef def =
+                const PhosphorScreens::VirtualScreenDef def =
                     VirtualScreenUtils::variantMapToVirtualScreenDef(it.value()[i].toMap(), it.key(), i);
                 if (!def.isValid()) {
                     qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << it.key() << "index" << i

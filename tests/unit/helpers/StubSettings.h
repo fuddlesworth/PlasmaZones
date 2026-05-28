@@ -887,6 +887,12 @@ public:
 
     // Editor settings — round-trip the stub members so a test can
     // exercise the EditorPageController setter/getter contract.
+    //
+    // Every setter below pairs the field-specific signal with the umbrella
+    // `settingsChanged()` emit. The concrete Settings class does the same
+    // via the PZ_STORE_SET_{BOOL,STRING,INT,DOUBLE} macros (settings.cpp
+    // ~2759-2784) — the stub matches so tests can rely on `settingsChanged()`
+    // firing on any setter, regardless of which ISettings backend is wired.
     QString editorDuplicateShortcut() const override
     {
         return m_editorDuplicateShortcut;
@@ -897,6 +903,7 @@ public:
             return;
         m_editorDuplicateShortcut = s;
         Q_EMIT editorDuplicateShortcutChanged();
+        Q_EMIT settingsChanged();
     }
     QString editorSplitHorizontalShortcut() const override
     {
@@ -908,6 +915,7 @@ public:
             return;
         m_editorSplitHorizontalShortcut = s;
         Q_EMIT editorSplitHorizontalShortcutChanged();
+        Q_EMIT settingsChanged();
     }
     QString editorSplitVerticalShortcut() const override
     {
@@ -919,6 +927,7 @@ public:
             return;
         m_editorSplitVerticalShortcut = s;
         Q_EMIT editorSplitVerticalShortcutChanged();
+        Q_EMIT settingsChanged();
     }
     QString editorFillShortcut() const override
     {
@@ -930,6 +939,7 @@ public:
             return;
         m_editorFillShortcut = s;
         Q_EMIT editorFillShortcutChanged();
+        Q_EMIT settingsChanged();
     }
     bool editorGridSnappingEnabled() const override
     {
@@ -941,6 +951,7 @@ public:
             return;
         m_editorGridSnappingEnabled = e;
         Q_EMIT editorGridSnappingEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     bool editorEdgeSnappingEnabled() const override
     {
@@ -952,6 +963,7 @@ public:
             return;
         m_editorEdgeSnappingEnabled = e;
         Q_EMIT editorEdgeSnappingEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     qreal editorSnapIntervalX() const override
     {
@@ -963,6 +975,7 @@ public:
             return;
         m_editorSnapIntervalX = v;
         Q_EMIT editorSnapIntervalXChanged();
+        Q_EMIT settingsChanged();
     }
     qreal editorSnapIntervalY() const override
     {
@@ -974,6 +987,7 @@ public:
             return;
         m_editorSnapIntervalY = v;
         Q_EMIT editorSnapIntervalYChanged();
+        Q_EMIT settingsChanged();
     }
     int editorSnapOverrideModifier() const override
     {
@@ -985,6 +999,7 @@ public:
             return;
         m_editorSnapOverrideModifier = m;
         Q_EMIT editorSnapOverrideModifierChanged();
+        Q_EMIT settingsChanged();
     }
     bool fillOnDropEnabled() const override
     {
@@ -996,6 +1011,7 @@ public:
             return;
         m_fillOnDropEnabled = e;
         Q_EMIT fillOnDropEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     int fillOnDropModifier() const override
     {
@@ -1007,6 +1023,7 @@ public:
             return;
         m_fillOnDropModifier = m;
         Q_EMIT fillOnDropModifierChanged();
+        Q_EMIT settingsChanged();
     }
     QStringList lockedScreens() const override
     {
@@ -1065,10 +1082,13 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
-    bool m_animationExcludeTransientWindows = false;
-    bool m_animationExcludeNotificationsAndOsd = true;
-    int m_animationMinimumWindowWidth = 0;
-    int m_animationMinimumWindowHeight = 0;
+    // Animation-filter defaults routed through ConfigDefaults so a future
+    // tweak to the production defaults flows into tests automatically — keeps
+    // the stub from drifting into "tests pass against a stale baseline".
+    bool m_animationExcludeTransientWindows = ConfigDefaults::animationExcludeTransientWindows();
+    bool m_animationExcludeNotificationsAndOsd = ConfigDefaults::animationExcludeNotificationsAndOsd();
+    int m_animationMinimumWindowWidth = ConfigDefaults::animationMinimumWindowWidth();
+    int m_animationMinimumWindowHeight = ConfigDefaults::animationMinimumWindowHeight();
     QStringList m_animationExcludedApplications;
     QStringList m_animationExcludedWindowClasses;
     QVariantMap m_autotilePerAlgorithmSettings;

@@ -196,14 +196,13 @@ void SettingsController::save()
         // as the window-rules retry path. Without this, a failed batch
         // looks "saved" in the UI while the daemon never applied the
         // edits, so the next launch silently shows stale assignments.
-        // MUST wrap in beginExternalEdit("overview") — assignments are
-        // edited from MonitorStatePage (Overview), so re-flagging the
-        // active page would dirty whatever page the user happens to be
-        // viewing at save time, not the page that actually has the
-        // unsaved data. Same shape as the window-rules block above.
-        beginExternalEdit(QStringLiteral("overview"));
+        // MUST wrap in an external-edit envelope targeting "overview" —
+        // assignments are edited from MonitorStatePage (Overview), so
+        // re-flagging the active page would dirty whatever page the user
+        // happens to be viewing at save time, not the page that actually
+        // has the unsaved data. Same shape as the window-rules block above.
+        ExternalEditScope scope(*this, QStringLiteral("overview"));
         setNeedsSave(true);
-        endExternalEdit();
     }
     QTimer::singleShot(0, this, [this]() {
         m_saving = false;
@@ -217,14 +216,17 @@ void SettingsController::save()
 
 void SettingsController::defaults()
 {
-    // reset() deletes all config groups, syncs to disk, then calls load()
-    // internally — load()'s reflective NOTIFY emission would otherwise
-    // route through onSettingsPropertyChanged and incrementally mark the
-    // active page dirty before we overwrite m_dirtyPages below. Suppress
-    // it so we get one clean dirtyPagesChanged emit instead of two.
+    // Hold m_loading = true through the ENTIRE reset cleanup, not just
+    // the reset() call. revertPending() emits pendingChangesChanged
+    // synchronously and the staged-order reset transitions through
+    // optional<>::reset() emit NOTIFY signals — all of which route via
+    // onSettingsPropertyChanged and would otherwise re-mark the active
+    // page dirty before the trailing blanket-mark below overwrites
+    // m_dirtyPages. Keeping the gate engaged for the full body matches
+    // the load()/save() pattern and gives us one clean
+    // dirtyPagesChanged emit at the end.
     m_loading = true;
     m_settings.reset();
-    m_loading = false;
 
     m_staging.clearAll();
     // Gate the staged-order NOTIFY emits on transition (same rationale
@@ -247,6 +249,12 @@ void SettingsController::defaults()
         m_animationsPage->revertPending();
     }
 
+    // Refresh screen list — symmetric with load(), which calls this
+    // immediately after m_settings.load(). reset() can change screen
+    // assignments (per-screen overrides cleared) so QML monitor pages
+    // need a fresh snapshot too.
+    m_screenHelper.refreshScreens();
+
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
 
@@ -268,6 +276,7 @@ void SettingsController::defaults()
     // resetting them requires a separate daemon-side "reset rules" path.
     QSet<QString> fullSet = validPageNames();
     fullSet.remove(QStringLiteral("window-rules"));
+    m_loading = false;
     if (m_dirtyPages != fullSet) {
         m_dirtyPages = fullSet;
         Q_EMIT dirtyPagesChanged();

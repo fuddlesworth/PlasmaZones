@@ -8,12 +8,12 @@
 namespace PlasmaZones {
 namespace TestHelpers {
 
-/// Helper: create a Phosphor::Screens::VirtualScreenDef with the given parameters.
+/// Helper: create a PhosphorScreens::VirtualScreenDef with the given parameters.
 /// Shared across virtual screen test files to avoid duplication.
-inline Phosphor::Screens::VirtualScreenDef makeDef(const QString& physId, int index, const QString& name,
-                                                   const QRectF& region)
+inline PhosphorScreens::VirtualScreenDef makeDef(const QString& physId, int index, const QString& name,
+                                                 const QRectF& region)
 {
-    Phosphor::Screens::VirtualScreenDef def;
+    PhosphorScreens::VirtualScreenDef def;
     def.id = PhosphorIdentity::VirtualScreenId::make(physId, index);
     def.physicalScreenId = physId;
     def.displayName = name;
@@ -23,9 +23,9 @@ inline Phosphor::Screens::VirtualScreenDef makeDef(const QString& physId, int in
 }
 
 /// Helper: create a two-way 50/50 horizontal split config.
-inline Phosphor::Screens::VirtualScreenConfig makeSplitConfig(const QString& physId)
+inline PhosphorScreens::VirtualScreenConfig makeSplitConfig(const QString& physId)
 {
-    Phosphor::Screens::VirtualScreenConfig config;
+    PhosphorScreens::VirtualScreenConfig config;
     config.physicalScreenId = physId;
     config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.5, 1.0)));
     config.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1.0)));
@@ -33,9 +33,9 @@ inline Phosphor::Screens::VirtualScreenConfig makeSplitConfig(const QString& phy
 }
 
 /// Helper: create a three-way horizontal split config (33/34/33).
-inline Phosphor::Screens::VirtualScreenConfig makeThreeWayConfig(const QString& physId)
+inline PhosphorScreens::VirtualScreenConfig makeThreeWayConfig(const QString& physId)
 {
-    Phosphor::Screens::VirtualScreenConfig config;
+    PhosphorScreens::VirtualScreenConfig config;
     config.physicalScreenId = physId;
     config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.333, 1.0)));
     config.screens.append(makeDef(physId, 1, QStringLiteral("Center"), QRectF(0.333, 0, 0.334, 1.0)));

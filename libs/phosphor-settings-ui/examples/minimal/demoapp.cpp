@@ -43,19 +43,34 @@ public:
     }
 };
 
+namespace {
+// QML module path constant — the example's qt_add_qml_module() call
+// in CMakeLists.txt sets URI `org.phosphor.settings.ui.examples.minimal`
+// with RESOURCE_PREFIX `/qt/qml`, so QML files end up under this qrc
+// prefix. Centralising the prefix here means a future module rename only
+// touches one line — and the registerPage() call sites read like the
+// declarative URLs they are, not a stringly-typed copy-paste hazard.
+//
+// Out-of-tree consumers should prefer one of:
+//   * Qt.resolvedUrl("./Page.qml") from QML (relative to the calling file)
+//   * a `Q_PROPERTY(QUrl pageUrl ... CONSTANT)` on the controller, set
+//     from QML so the path stays in QML where it lives
+// — both forms keep the C++ side free of qrc layout knowledge.
+inline QUrl moduleQmlUrl(QLatin1String file)
+{
+    return QUrl(QStringLiteral("qrc:/qt/qml/org/phosphor/settings/ui/examples/minimal/qml/") + file);
+}
+} // namespace
+
 DemoApp::DemoApp(QObject* parent)
     : PhosphorSettingsUi::ApplicationController(parent)
 {
     auto* general = new GeneralPage(this);
-    registerPage(general, {}, QStringLiteral("General"),
-                 QUrl(QStringLiteral("qrc:/qt/qml/org/phosphor/settings/ui/"
-                                     "examples/minimal/qml/GeneralPage.qml")),
+    registerPage(general, {}, QStringLiteral("General"), moduleQmlUrl(QLatin1String("GeneralPage.qml")),
                  QStringLiteral("preferences-system-symbolic"));
 
     auto* about = new DemoAboutPage(this);
-    registerPage(about, {}, QStringLiteral("About"),
-                 QUrl(QStringLiteral("qrc:/qt/qml/org/phosphor/settings/ui/"
-                                     "examples/minimal/qml/AboutPage.qml")),
+    registerPage(about, {}, QStringLiteral("About"), moduleQmlUrl(QLatin1String("AboutPage.qml")),
                  QStringLiteral("help-about-symbolic"));
 
     setCurrentPageId(QStringLiteral("general"));

@@ -38,7 +38,7 @@ static constexpr auto kCancelOverlayId = QLatin1String("cancel_overlay_during_dr
 
 WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
                                      PhosphorZones::LayoutRegistry* layoutManager,
-                                     Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                     PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                                      WindowTrackingAdaptor* windowTracking, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
@@ -99,11 +99,11 @@ WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPo
     result.screenId = effectiveScreenIdAt(qRound(globalPos.x()), qRound(globalPos.y()));
     result.physicalId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(result.screenId);
     result.qscreen = m_screenManager ? m_screenManager->physicalScreenFor(result.physicalId).qscreen
-                                     : Phosphor::Screens::ScreenIdentity::findByIdOrName(result.physicalId);
+                                     : PhosphorScreens::ScreenIdentity::findByIdOrName(result.physicalId);
     if (!result.qscreen) {
         result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));
         if (result.qscreen) {
-            result.physicalId = Phosphor::Screens::ScreenIdentity::identifierFor(result.qscreen);
+            result.physicalId = PhosphorScreens::ScreenIdentity::identifierFor(result.qscreen);
             // Try virtual screen resolution before falling back to physical ID
             auto* mgr = m_screenManager;
             if (mgr && mgr->hasVirtualScreens(result.physicalId)) {
@@ -446,8 +446,7 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     }
 
     // Use virtual-aware screen ID for config lookups (falls back to physical ID)
-    const QString effectiveId =
-        screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
+    const QString effectiveId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
 
     // Use per-screen resolved config (per-screen override > global default)
     const ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(effectiveId);
@@ -654,7 +653,7 @@ void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, bool wa
         if (screenId.isEmpty()) {
             QScreen* screen = Utils::findScreenAtPosition(originalGeometry.center());
             if (screen) {
-                screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+                screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             }
         }
         m_windowTracking->snapEngine()->storeUnmanagedGeometry(windowId, originalGeometry, screenId, false);

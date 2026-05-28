@@ -249,47 +249,14 @@ SettingsController::SettingsController(QObject* parent)
 
     m_scriptLoader->scanAndRegister();
 
-    // D-Bus subscription helper. QDBusConnection::connect's API is
-    // fundamentally string-based (signal name + SLOT() signature) —
-    // it can't use the modern member-function-pointer connect syntax
-    // because D-Bus signals are dynamically named. The lambda just
-    // factors the repeated `service + objectPath` tuple out of every
-    // call site so each subscription is one line, and centralises
-    // failure logging in one place.
-    //
-    // The const-char* SLOT signature is normalised through
-    // QMetaObject::normalizedSignature inside QDBusConnection, so
-    // spacing variations between call sites are harmless — but the
-    // helper takes the un-normalised string so call sites can be
-    // grep'd consistently.
-    // Accumulate failed subscription tuples so the post-loop summary can
-    // surface ALL missing routes at once, rather than scattering one
-    // warning per failure across the boot log. Helps diagnose the
-    // "daemon not up yet at construct time" case where many signals
-    // miss together.
+    // All D-Bus broadcast subscriptions (settings reload, layout
+    // mutations, virtual desktop / activity changes, window-rules mirror)
+    // are wired in settingscontroller_dbuswire.cpp so this TU stays under
+    // the project's 800-line cap. Any subscription that returns false at
+    // construction is appended to @c failedSubscriptions so the post-ctor
+    // summary below can surface them in one batched warning.
     QStringList failedSubscriptions;
-    const auto subscribeDaemonSignal = [this, &failedSubscriptions](const QString& interfaceName,
-                                                                    const QString& signalName, const char* slot) {
-        const bool ok = QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                                              QString(PhosphorProtocol::Service::ObjectPath),
-                                                              interfaceName, signalName, this, slot);
-        if (!ok) {
-            qCWarning(PlasmaZones::lcCore)
-                << "SettingsController: failed to connect D-Bus signal" << signalName << "on" << interfaceName;
-            failedSubscriptions.append(interfaceName + QStringLiteral(".") + signalName);
-        }
-    };
-
-    // Listen for external settings changes from the daemon
-    const QString settingsIface = QString(PhosphorProtocol::Service::Interface::Settings);
-    subscribeDaemonSignal(settingsIface, QStringLiteral("settingsChanged"), SLOT(onExternalSettingsChanged()));
-
-    // Async window picker reply channel. Emitted by SettingsAdaptor whenever
-    // the KWin effect answers a runningWindowsRequested call via
-    // provideRunningWindows(). The signal carries the JSON payload directly
-    // so clients don't need a follow-up blocking fetch.
-    subscribeDaemonSignal(settingsIface, QStringLiteral("runningWindowsAvailable"),
-                          SLOT(onRunningWindowsAvailable(QString)));
+    wireDaemonSubscriptions(failedSubscriptions);
 
     // Client-side timeout for the async window picker. If the daemon
     // never fans out a runningWindowsAvailable signal (KWin effect
@@ -316,35 +283,29 @@ SettingsController::SettingsController(QObject* parent)
     });
 
     // Mark needsSave when any Settings property changes (from QML edits).
-    // Use a meta-object connection to catch all NOTIFY signals. The slot
-    // lookup is cached + asserted up front so a future rename of
-    // `onSettingsPropertyChanged()` doesn't silently turn this loop into
-    // a no-op (indexOfSlot returns -1 on miss and `method(-1)` is an
-    // invalid QMetaMethod that the connect() call ignores).
-    const int settingsChangedSlotIdx = metaObject()->indexOfSlot("onSettingsPropertyChanged()");
-    Q_ASSERT_X(settingsChangedSlotIdx >= 0, "SettingsController::ctor",
-               "onSettingsPropertyChanged() slot not found — was it renamed?");
-    if (settingsChangedSlotIdx < 0) {
-        // Release-build fallback: Q_ASSERT compiles to nothing, the
-        // metaObject()->method(-1) call returns an invalid QMetaMethod, and
-        // every connect() below would silently no-op — turning the entire
-        // dirty-tracking loop into a permanent regression with zero
-        // diagnostics. Log critically and bail so the failure is at least
-        // visible, even if the page can't dirty-track until the rename is
-        // resolved.
-        qCCritical(lcCore) << "SettingsController::ctor: onSettingsPropertyChanged() slot not found in meta-object — "
-                              "Settings NOTIFY → dirty-tracking is DISABLED. Was the slot renamed?";
-    } else {
-        const QMetaMethod settingsChangedSlot = metaObject()->method(settingsChangedSlotIdx);
-        const QMetaObject* mo = m_settings.metaObject();
-        // Walk from 0 (not propertyOffset()) so Q_PROPERTYs declared on the
-        // ISettings base or any future intermediate class are also wired —
-        // hasNotifySignal() filters out properties without NOTIFY.
-        for (int i = 0; i < mo->propertyCount(); ++i) {
-            QMetaProperty prop = mo->property(i);
-            if (prop.hasNotifySignal()) {
-                connect(&m_settings, prop.notifySignal(), this, settingsChangedSlot);
-            }
+    // Use a meta-object connection to catch all NOTIFY signals.
+    //
+    // Replaced the previous string-based `indexOfSlot("onSettings…")` lookup
+    // with `QMetaMethod::fromSignal` over a private forwarder signal:
+    // routing through a signal-to-signal hop keeps the connect(QMetaMethod,
+    // QMetaMethod) overload (the only path that lets us connect a property
+    // notifySignal — discovered reflectively — to a sink) while making the
+    // sink side PMF-typed at compile time. A future rename of
+    // `onSettingsPropertyChanged` or `_settingsPropertyNotifyForwarder`
+    // now fails compilation instead of returning -1 from indexOfSlot at
+    // runtime and silently no-op'ing the entire dirty-tracking loop.
+    static const QMetaMethod settingsChangedSink =
+        QMetaMethod::fromSignal(&SettingsController::_settingsPropertyNotifyForwarder);
+    connect(this, &SettingsController::_settingsPropertyNotifyForwarder, this,
+            &SettingsController::onSettingsPropertyChanged);
+    const QMetaObject* mo = m_settings.metaObject();
+    // Walk from 0 (not propertyOffset()) so Q_PROPERTYs declared on the
+    // ISettings base or any future intermediate class are also wired —
+    // hasNotifySignal() filters out properties without NOTIFY.
+    for (int i = 0; i < mo->propertyCount(); ++i) {
+        QMetaProperty prop = mo->property(i);
+        if (prop.hasNotifySignal()) {
+            connect(&m_settings, prop.notifySignal(), this, settingsChangedSink);
         }
     }
 
@@ -586,9 +547,12 @@ SettingsController::SettingsController(QObject* parent)
     m_snappingShadersPage =
         std::make_unique<SnappingShadersPageController>(m_overlayShaderRegistry, m_localLayoutManager.get());
 
-    // Screen helper signals
+    // Screen helper signals — wire BEFORE the initial refreshScreens()
+    // so a synchronous screensChanged emit from the refresh reaches our
+    // forwarders (and the dirty-tracking guard). Previously refreshScreens
+    // ran first and any same-tick screensChanged was lost, leaving QML
+    // bindings stale until the next external daemon-driven refresh.
     m_screenHelper.connectToDaemonSignals();
-    m_screenHelper.refreshScreens();
     connect(&m_screenHelper, &ScreenHelper::screensChanged, this, &SettingsController::screensChanged);
     connect(&m_screenHelper, &ScreenHelper::needsSave, this, [this]() {
         // A daemon-driven screen refresh that fires while load()/save() is
@@ -598,41 +562,18 @@ SettingsController::SettingsController(QObject* parent)
             return;
         setNeedsSave(true);
     });
+    m_screenHelper.refreshScreens();
 
-    // PhosphorZones::Layout load timer (debounce)
+    // PhosphorZones::Layout load timer (debounce). The corresponding D-Bus
+    // subscriptions (layoutCreated / layoutDeleted / layoutChanged /
+    // layoutPropertyChanged / layoutListChanged / screenLayoutChanged /
+    // quickLayoutSlotsChanged + virtual-desktop / activity broadcasts)
+    // are wired in settingscontroller_dbuswire.cpp::wireDaemonSubscriptions
+    // and all funnel into the 50 ms debounce slot below so signal bursts
+    // coalesce into a single loadLayoutsAsync().
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);
-
-    // Connect layout D-Bus signals for live updates — route through the 50 ms
-    // scheduleLayoutLoad() debounce slot so a burst of signals (e.g. editor
-    // save → layoutChanged + layoutListChanged together, or KCM property
-    // tweak → layoutPropertyChanged + layoutListChanged) coalesces into
-    // one loadLayoutsAsync() call instead of recomputing the full preview
-    // list + D-Bus round-trip for every hit.
-    const QString layoutIface = QString(PhosphorProtocol::Service::Interface::LayoutRegistry);
-    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutCreated"), SLOT(scheduleLayoutLoad()));
-    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutDeleted"), SLOT(scheduleLayoutLoad()));
-    // layoutChanged fires when a layout is modified (editor saves, zone changes, rename)
-    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutChanged"), SLOT(scheduleLayoutLoad()));
-    // layoutPropertyChanged fires on compact property mutations (hidden, autoAssign,
-    // aspectRatioClass) — Phase 4 of refactor/dbus-performance. The settings UI still
-    // triggers a full reload so the layout list view refreshes, but the daemon side
-    // saved a full JSON serialization per mutation by not emitting layoutChanged.
-    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutPropertyChanged"), SLOT(scheduleLayoutLoad()));
-    // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
-    subscribeDaemonSignal(layoutIface, QStringLiteral("layoutListChanged"), SLOT(scheduleLayoutLoad()));
-    // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
-    subscribeDaemonSignal(layoutIface, QStringLiteral("screenLayoutChanged"),
-                          SLOT(onScreenLayoutChanged(QString, QString, int)));
-    // quickLayoutSlotsChanged fires when quick layout slots are modified externally
-    subscribeDaemonSignal(layoutIface, QStringLiteral("quickLayoutSlotsChanged"), SIGNAL(quickLayoutSlotsChanged()));
-
-    // Connect virtual desktop / activity D-Bus signals for reactive updates
-    subscribeDaemonSignal(layoutIface, QStringLiteral("virtualDesktopCountChanged"), SLOT(onVirtualDesktopsChanged()));
-    subscribeDaemonSignal(layoutIface, QStringLiteral("virtualDesktopNamesChanged"), SLOT(onVirtualDesktopsChanged()));
-    subscribeDaemonSignal(layoutIface, QStringLiteral("activitiesChanged"), SLOT(onActivitiesChanged()));
-    subscribeDaemonSignal(layoutIface, QStringLiteral("currentActivityChanged"), SLOT(onActivitiesChanged()));
 
     // (Editor NOTIFY signals are forwarded to QML by EditorPageController
     // itself — see its constructor — so no SettingsController-side plumbing
@@ -742,14 +683,14 @@ void SettingsController::onExternalSettingsChanged()
 void SettingsController::setNeedsSave(bool needs)
 {
     // Mark the target page as dirty, or clear all dirty pages if needs ==
-    // false. The target is m_externalEditPage when set (sidebar / global
-    // widgets that mutate settings owned by a different page than the one
-    // the user is viewing), otherwise m_activePage. Parent categories
-    // ("snapping", "tiling") are never the active page — setActivePage
-    // redirects them to their first child — so the target always resolves
-    // to a concrete leaf page.
+    // false. The target is the top of the external-edit stack when set
+    // (sidebar / global widgets that mutate settings owned by a different
+    // page than the one the user is viewing), otherwise m_activePage.
+    // Parent categories ("snapping", "tiling") are never the active page —
+    // setActivePage redirects them to their first child — so the target
+    // always resolves to a concrete leaf page.
     if (needs) {
-        const QString target = m_externalEditPage.isEmpty() ? m_activePage : m_externalEditPage;
+        const QString target = m_externalEditStack.isEmpty() ? m_activePage : m_externalEditStack.top();
         Q_ASSERT(!parentPageRedirects().contains(target));
         if (!m_dirtyPages.contains(target)) {
             m_dirtyPages.insert(target);
@@ -798,27 +739,29 @@ void SettingsController::beginExternalEdit(const QString& page)
         qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: unknown page" << page;
         return;
     }
-    // Nested begin without a prior end means the previous caller leaked
-    // state — dirty tracking for subsequent changes would target the wrong
-    // page. Warn loudly (debug-assert in dev builds) and DO NOT overwrite
-    // the existing target in release builds: silently replacing it would
-    // mis-route every subsequent dirty signal until the outer caller's
-    // matching endExternalEdit fires (at which point both targets are
-    // cleared anyway). Better to drop the inner begin and keep the outer
-    // target so the next edit still lands on a coherent page.
-    if (!m_externalEditPage.isEmpty()) {
-        qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: nested call without endExternalEdit — previous target:"
-                                       << m_externalEditPage << "new target:" << resolved << "(ignoring nested begin)";
-        Q_ASSERT_X(false, "SettingsController::beginExternalEdit",
-                   "Nested call without endExternalEdit. Wrap sidebar/global edits with matched begin/end pairs.");
-        return;
-    }
-    m_externalEditPage = resolved;
+    // Push onto the stack so nested begin/end pairs restore the outer
+    // target on pop instead of clearing the wrap entirely. This is
+    // genuinely reachable: an animations-page pendingChangesChanged
+    // handler can fire synchronously while the controller is inside a
+    // window-rules-driven external-edit envelope, and the inner pair
+    // must not erase the outer target.
+    m_externalEditStack.push(resolved);
 }
 
 void SettingsController::endExternalEdit()
 {
-    m_externalEditPage.clear();
+    if (m_externalEditStack.isEmpty()) {
+        // Defence-in-depth: an unmatched end means a begin was lost or
+        // a caller is double-popping. Warn so the failure is visible
+        // instead of silently no-oping (the previous QString-clear
+        // form was equally silent, but a stack pop on empty would
+        // crash in debug builds without this guard).
+        qCWarning(PlasmaZones::lcCore) << "endExternalEdit: stack is empty — unmatched end?";
+        Q_ASSERT_X(false, "SettingsController::endExternalEdit",
+                   "endExternalEdit called with no matching beginExternalEdit on the stack.");
+        return;
+    }
+    m_externalEditStack.pop();
 }
 
 } // namespace PlasmaZones

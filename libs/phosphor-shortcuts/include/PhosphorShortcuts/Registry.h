@@ -14,7 +14,7 @@
 
 #include "phosphorshortcuts_export.h"
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 class IBackend;
 
@@ -153,4 +153,4 @@ private:
     QHash<QString, Entry> m_entries;
 };
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

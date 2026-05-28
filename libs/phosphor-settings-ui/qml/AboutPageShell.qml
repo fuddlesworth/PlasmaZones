@@ -196,12 +196,34 @@ Kirigami.ScrollablePage {
             // third-party apps that drive `homepageUrl` via Q_PROPERTY,
             // so a `javascript:` or `file:///etc/passwd` value would
             // otherwise be opened verbatim by Qt.openUrlExternally().
+            //
+            // Schemes plus a host-component length check: a stripped
+            // value like `http://` or `https:///path` has scheme but
+            // no host and Qt.openUrlExternally on it is at best a
+            // no-op, at worst a confusing toast. We treat http(s)
+            // values without at least one host character as
+            // unsafe-ish — there's nothing useful to show the user.
+            // mailto:foo@bar gets the same minimum-length treatment
+            // (an empty mailto opens a blank composer).
             readonly property bool _safeUrl: {
                 const u = root.homepageUrl;
                 if (u === "")
                     return false;
                 const lower = u.toLowerCase();
-                return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("mailto:");
+                if (lower.startsWith("http://")) {
+                    // 7 = length of "http://" prefix; require at
+                    // least one character beyond it.
+                    return lower.length > 7;
+                }
+                if (lower.startsWith("https://")) {
+                    // 8 = length of "https://".
+                    return lower.length > 8;
+                }
+                if (lower.startsWith("mailto:")) {
+                    // 7 = length of "mailto:".
+                    return lower.length > 7;
+                }
+                return false;
             }
             visible: _safeUrl
             url: root.homepageUrl

@@ -49,14 +49,32 @@ QString AnimationsPageController::profileFilePath(const QString& path) const
     // Filenames mirror the path (e.g. `editor.snapIn.json`) — same
     // convention as the daemon's shipped defaults. Validation on @p
     // path happens at every call site so this helper trusts its input;
-    // assert in debug builds so a future caller that forgets the gate
-    // crashes fast rather than producing a path-traversal file open.
-    Q_ASSERT(isValidEventPath(path));
+    // explicit early-return guards against a future caller that forgets
+    // the gate (Q_ASSERT alone is debug-only and would silently fall
+    // through to a path-traversal file open in release builds).
+    if (!isValidEventPath(path)) {
+        qCWarning(lcConfig) << "profileFilePath: refusing to compute path for invalid event path" << path;
+        return {};
+    }
     return userProfilesDir() + QLatin1Char('/') + path + QStringLiteral(".json");
 }
 
 QString AnimationsPageController::userMotionSetsDir() const
 {
+    // Test-mode layout: production places profiles at
+    //   `<XDG>/plasmazones/profiles`
+    //   `<XDG>/plasmazones/motionsets`
+    // i.e. two SIBLING dirs under a shared `plasmazones` root. The
+    // `userProfilesDirOverride()` test hook substitutes a single tmp
+    // root for the profiles dir directly (no `/profiles` suffix —
+    // tests dump profile files into `tmp.path()` so they can introspect
+    // straightforwardly), so we mirror that one-level-up layout by
+    // returning `<override>/motionsets`. The override therefore models:
+    //   `<override>`            = stand-in for `<XDG>/plasmazones/profiles`
+    //   `<override>/motionsets` = stand-in for `<XDG>/plasmazones/motionsets`
+    // Not perfectly parallel to production, but every test depends on
+    // the "profile files at tmp root" convention so restructuring would
+    // be a multi-test churn for no behavioural benefit.
     if (!m_userProfilesDirOverride.isEmpty())
         return m_userProfilesDirOverride + QStringLiteral("/motionsets");
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);

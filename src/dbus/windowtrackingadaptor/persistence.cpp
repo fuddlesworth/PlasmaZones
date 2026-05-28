@@ -125,7 +125,7 @@ PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometrie
         if (!it.value().screenId.isEmpty()) {
             entry.screenId = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().screenId)
                 ? it.value().screenId
-                : Phosphor::Screens::ScreenIdentity::idForName(it.value().screenId);
+                : PhosphorScreens::ScreenIdentity::idForName(it.value().screenId);
         }
         result.append(entry);
     }
@@ -179,7 +179,7 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
             }
         }
     } else {
-        // Fallback: no Phosphor::Screens::ScreenManager, use physical screens
+        // Fallback: no PhosphorScreens::ScreenManager, use physical screens
         for (QScreen* screen : Utils::allScreens()) {
             QRect intersection = screen->geometry().intersected(geometry);
             if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
@@ -280,19 +280,19 @@ void WindowTrackingAdaptor::tryEmitPendingRestoresAvailable()
         return;
     }
 
-    // Check if panel geometry is ready, or if Phosphor::Screens::ScreenManager doesn't exist (fallback)
-    // If Phosphor::Screens::ScreenManager instance is null, we proceed anyway with a warning - this is
+    // Check if panel geometry is ready, or if PhosphorScreens::ScreenManager doesn't exist (fallback)
+    // If PhosphorScreens::ScreenManager instance is null, we proceed anyway with a warning - this is
     // better than blocking window restoration indefinitely
     if (m_service->screenManager() && !m_service->screenManager()->isPanelGeometryReady()) {
         qCDebug(lcDbusWindow) << "pendingRestoresAvailable: cannot emit, panel geometry not ready yet";
         return;
     }
 
-    // Both conditions met (or Phosphor::Screens::ScreenManager unavailable) - emit the signal
+    // Both conditions met (or PhosphorScreens::ScreenManager unavailable) - emit the signal
     m_pendingRestoresEmitted = true;
     if (!m_service->screenManager()) {
         qCWarning(lcDbusWindow)
-            << "pendingRestoresAvailable: no Phosphor::Screens::ScreenManager, geometry may be incorrect";
+            << "pendingRestoresAvailable: no PhosphorScreens::ScreenManager, geometry may be incorrect";
     } else {
         qCInfo(lcDbusWindow) << "Pending restores: panel geometry ready, notifying effect";
     }
@@ -364,7 +364,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
             QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
                               refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));
             if (screen->geometry().contains(zoneCenter)) {
-                return Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+                return PhosphorScreens::ScreenIdentity::identifierFor(screen);
             }
         }
     }

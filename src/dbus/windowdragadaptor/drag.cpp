@@ -119,7 +119,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         if (screen) {
             QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
             if (screenId.isEmpty())
-                screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+                screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 PhosphorZones::LayoutComputeService::recalculateSync(

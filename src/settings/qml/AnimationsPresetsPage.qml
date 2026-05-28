@@ -61,7 +61,6 @@ SettingsFlickable {
             var isSpring = isSpringEntry(entry.curve);
             if (isSpring === wantSpring)
                 result.push(entry);
-
         }
         return result;
     }
@@ -82,6 +81,13 @@ SettingsFlickable {
         function onUserPresetsChanged() {
             root.userPresetsList = settingsController.animationsPage.userPresets();
             root._deletingPreset = false;
+        }
+
+        // Surface controller-emitted toast requests (e.g. removeUserPreset
+        // refused mid-discard) through the shell `window.showToast`.
+        function onToastRequested(text) {
+            if (window && window.showToast)
+                window.showToast(text);
         }
 
         target: settingsController.animationsPage
@@ -136,9 +142,7 @@ SettingsFlickable {
                             text: i18n("Use as Default")
                             onClicked: root.applyAsDefault(modelData.curve)
                         }
-
                     }
-
                 }
 
                 // User presets
@@ -210,9 +214,7 @@ SettingsFlickable {
                                 easingDeleteConfirm.close();
                             }
                         }
-
                     }
-
                 }
 
                 Label {
@@ -223,9 +225,7 @@ SettingsFlickable {
                     Layout.fillWidth: true
                     font.italic: true
                 }
-
             }
-
         }
 
         // ════════════════ SPRING PRESETS ════════════════
@@ -273,9 +273,7 @@ SettingsFlickable {
                             text: i18n("Use as Default")
                             onClicked: root.applyAsDefault("spring:" + modelData.omega.toFixed(2) + "," + modelData.zeta.toFixed(2))
                         }
-
                     }
-
                 }
 
                 // User presets
@@ -348,9 +346,7 @@ SettingsFlickable {
                                 springDeleteConfirm.close();
                             }
                         }
-
                     }
-
                 }
 
                 Label {
@@ -361,11 +357,7 @@ SettingsFlickable {
                     Layout.fillWidth: true
                     font.italic: true
                 }
-
             }
-
         }
-
     }
-
 }
