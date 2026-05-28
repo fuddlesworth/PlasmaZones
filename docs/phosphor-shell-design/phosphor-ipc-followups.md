@@ -111,18 +111,22 @@ one follow-up PR that wires `PzLocalizedContext` into every
 
 ## 5. Hardcoded `font.family: "monospace"` in QML
 
-**Where:** `examples/phosphor-ipc-demo/Main.qml:136,183,212` and
-`examples/phosphor-registry-plugin-demo/plugins/cpu-meter/cpumeter.cpp:61`.
+**Where:** as of audit pass 11, `grep -rln '"monospace"' examples/ src/`
+finds 6 sites across 3 files (line numbers shift as the files evolve;
+re-run the grep before starting the work):
+- `examples/phosphor-ipc-demo/Main.qml` (3 sites)
+- `examples/phosphor-registry-plugin-demo/plugins/cpu-meter/cpumeter.cpp` (1 site)
+- `src/editor/qml/DimensionTooltip.qml` (2 sites)
 
 **Finding:** CLAUDE.md says QML should not hardcode appearance —
 `Kirigami.Theme` for colors, `Kirigami.Units` for spacing, and (by
 project precedent) `Tokens.*` for font-family choices. There is no
 `Tokens.font_family_mono` accessor today.
 
-**Why deferred:** the missing token applies to all four call sites and
-to any future phosphor-theme consumer that needs a monospace surface.
-The fix is "add a token to `phosphor-theme/Tokens.qml`, then route
-every consumer through it" — both edits should land together.
+**Why deferred:** the missing token applies to all sites and to any
+future phosphor-theme consumer that needs a monospace surface. The
+fix is "add a token to `phosphor-theme/Tokens.qml`, then route every
+consumer through it" — both edits should land together.
 
 **Change shape:**
 - Add `readonly property string font_family_mono: "monospace"` to
@@ -130,8 +134,6 @@ every consumer through it" — both edits should land together.
 - Replace each `font.family: "monospace"` site with
   `font.family: Tokens.font_family_mono` in a single sweep:
   `grep -rln '"monospace"' examples/ src/` lists every consumer.
-
----
 
 ---
 
@@ -149,9 +151,8 @@ When `router.start()` fails, the demo launches the window anyway with
 three `IpcTarget` items that each log `"target '...' is not
 registered"` warnings on subsequent `emitEvent()` calls. The status
 panel binds to `demoController.status` which reads `"router failed to
-start (see logs)"`, and the cheat-sheet panel now shows a placeholder
-instead of an empty `export PHOSPHOR_SOCKET=` line (added in audit
-pass 10).
+start (see logs)"`, and the cheat-sheet panel shows a placeholder
+instead of an empty `export PHOSPHOR_SOCKET=` line.
 
 **Why no action:** behaviour matches `libs/phosphor-ipc/README.md:117`
 ("Application can continue without IPC; failure is non-fatal"). The
