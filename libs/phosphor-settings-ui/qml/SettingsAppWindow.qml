@@ -23,11 +23,8 @@ Kirigami.ApplicationWindow {
     required property ApplicationController controller
     //* Optional extra content shown in the header toolbar (e.g. global search).
     property alias headerExtras: headerExtrasLoader.sourceComponent
-    /** Public façade onto the chrome Sidebar — exposes the documented
-     *  navigation API and the two consumer slots without leaking
-     *  internal properties (`_isExpanded`, `_refreshModel`,
-     *  `_suppressAccordion`, etc.). Consumers configure the sidebar
-     *  through this object:
+    /** Alias onto the chrome Sidebar item so consumers can configure
+     *  the two delegate slots and drive navigation:
      *
      *      window.sidebar.drillInto(parentId)
      *      window.sidebar.drillOut()
@@ -36,26 +33,14 @@ Kirigami.ApplicationWindow {
      *      window.sidebar.footerContent: Component { ... }
      *      window.sidebar.trailingDelegate: Component { ... }
      *
-     *  Direct access to the underlying Sidebar item is intentionally
-     *  unavailable — any feature the chrome wants to expose should be
-     *  added to this façade so the contract is explicit. */
-    readonly property QtObject sidebar: QtObject {
-        property alias currentParentId: sidebarItem.currentParentId
-        property alias footerContent: sidebarItem.footerContent
-        property alias trailingDelegate: sidebarItem.trailingDelegate
-
-        function drillInto(parentId) {
-            sidebarItem.drillInto(parentId);
-        }
-
-        function drillOut() {
-            sidebarItem.drillOut();
-        }
-
-        function toggleCategory(id) {
-            sidebarItem.toggleCategory(id);
-        }
-    }
+     *  Underscore-prefixed members on the underlying Sidebar
+     *  (`_isExpanded`, `_refreshModel`, `_suppressAccordion`, …) are
+     *  private by convention — do not read or assign them from
+     *  outside. A typed QtObject façade was attempted in audit pass
+     *  45 but breaks the grouped-property assignment syntax
+     *  (`sidebar.trailingDelegate: Component { ... }`) that consumers
+     *  rely on, so the alias was kept as the contract surface. */
+    property alias sidebar: sidebarItem
     /** When true, the close-confirmation prompt offers an Apply action
      *  (Apply / Discard / Cancel) in addition to Discard / Keep Editing.
      *  Defaults false; flip on for apps whose preferred answer to "you
