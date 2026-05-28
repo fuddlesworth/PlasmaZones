@@ -117,14 +117,14 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Effort:** M (estimated ~2 weeks; actual ~1 session for the template + plugin loader + 2 demos. Four audit cycles before merge; final state 198 / 198 tests pass, 0 outstanding findings.)
 
-### 1.4: `phosphor-ipc` + `phosphorctl` *(shipping in PR #539)*
+### 1.4: `phosphor-ipc` + `phosphorctl` *(shipped, 2026-05-27, PR #539)*
 
 | Deliverable                                                       | Status        | Notes                                                                                |
 |-------------------------------------------------------------------|---------------|--------------------------------------------------------------------------------------|
-| `libs/phosphor-ipc/` (C++)                                        | in PR #539    | `IpcRouter` + `IpcTarget` (`QML_ELEMENT`, not attached property) + `IpcSchemaGenerator` (`QMetaObject` to JSON Schema) + `IpcEngine::install` engine-property bridge. NDJSON wire protocol over `QLocalServer` / `QLocalSocket` on `$XDG_RUNTIME_DIR/phosphor.sock`. Subscribe is in scope (typed signal streaming). |
-| `cli/phosphorctl/` (C++ / Qt6)                                    | in PR #539    | Standalone binary linking Qt6::Core + Qt6::Network only (no QML, no GUI). Subcommands: `call`, `list`, `schema`, `subscribe`. Source lives in `cli/phosphorctl/` rather than `bin/phosphorctl/` because `bin/` is the project's runtime output dir; a same-named source subdir would collide with the binary's final path. |
-| `examples/phosphor-ipc-demo/`                                     | in PR #539    | QML declares 3 IpcTargets (`greet`, `count`, `set-value`); they self-register via `IpcEngine::install`. `phosphorctl call greet.sayHello --arg name=nate` works end-to-end; the demo window mirrors the broadcast stream in a live-events panel so a single sidecar terminal exercises the full surface. |
-| `libs/phosphor-ipc/tests/`                                        | in PR #539    | 6 test binaries (protocol parser, router invoke / register / schema, schema-generator type table, e2e socket roundtrip, subscribe / broadcast / disconnect-prune, engine install / uninstall / replace) for ~75 cases including stale-socket recovery, live-listener-not-clobbered, multi-subscriber fan-out. |
+| `libs/phosphor-ipc/` (C++)                                        | shipped       | `IpcRouter` + `IpcTarget` (`QML_ELEMENT`, not attached property) + `IpcSchemaGenerator` (`QMetaObject` to JSON Schema) + `IpcEngine::install` engine-property bridge. NDJSON wire protocol over `QLocalServer` / `QLocalSocket` on `$XDG_RUNTIME_DIR/phosphor.sock`. Subscribe is in scope (typed signal streaming). |
+| `cli/phosphorctl/` (C++ / Qt6)                                    | shipped       | Standalone binary linking Qt6::Core + Qt6::Network only (no QML, no GUI). Subcommands: `call`, `list`, `schema`, `subscribe`. Source lives in `cli/phosphorctl/` rather than `bin/phosphorctl/` because `bin/` is the project's runtime output dir; a same-named source subdir would collide with the binary's final path. |
+| `examples/phosphor-ipc-demo/`                                     | shipped       | QML declares 3 IpcTargets (`greet`, `count`, `set-value`); they self-register via `IpcEngine::install`. `phosphorctl call greet.sayHello --arg name=nate` works end-to-end; the demo window mirrors the broadcast stream in a live-events panel so a single sidecar terminal exercises the full surface. |
+| `libs/phosphor-ipc/tests/`                                        | shipped       | 6 test binaries (protocol parser, router invoke / register / schema, schema-generator type table, e2e socket roundtrip, subscribe / broadcast / disconnect-prune, engine install / uninstall / replace) for ~75 cases including stale-socket recovery, live-listener-not-clobbered, multi-subscriber fan-out. |
 
 **Acceptance:**
 - [x] `phosphorctl list` enumerates registered targets
@@ -150,14 +150,14 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
 
-**Phase 1 progress (as of 2026-05-27):** 3 of 5 libs shipped, 1 in PR review, 1 not started.
+**Phase 1 progress (as of 2026-05-27):** 4 of 5 libs shipped, 1 not started (Phase 1.5 `PerScreen` helper).
 
 | Lib                   | Status                                                  |
 |-----------------------|---------------------------------------------------------|
 | `phosphor-theme`      | ✓ shipped (PR #534)                                     |
 | `phosphor-popout`     | ✓ shipped (PR #535)                                     |
 | `phosphor-registry`   | ✓ shipped (PR #538)                                     |
-| `phosphor-ipc`        | in PR review (PR #539, branch `feat/phosphor-ipc`)      |
+| `phosphor-ipc`        | ✓ shipped (PR #539)                                     |
 | `PerScreen` helper    | not started (Phase 1.5)                                 |
 
 The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.5 lands.
