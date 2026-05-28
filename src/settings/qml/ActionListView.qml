@@ -47,7 +47,9 @@ ColumnLayout {
     /// look like one consistent tree visualisation.
     readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
     readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
-    readonly property int _guideThickness: Math.max(2, Math.round(Screen.devicePixelRatio * 1.5))
+    // 1 physical pixel — matches MatchExpressionView's revised guide
+    // thickness. See the rationale comment there.
+    readonly property int _guideThickness: Math.max(1, Math.round(Screen.devicePixelRatio))
 
     /// Look up the `{ value, label, params }` entry for a wire type
     /// string, or null when the type isn't in the registry.
@@ -255,7 +257,11 @@ ColumnLayout {
                 // Per-parameter LABEL + value pill pairs. First param's
                 // label sits at the same absolute x as WHEN's operator
                 // column (because the type-label minWidth above
-                // matches WHEN's depth-1 field width).
+                // matches WHEN's depth-1 field width). Subsequent params
+                // (`index > 0`) drop the 8 gridUnit floor and flow at
+                // their text width so a short label like "SHADER EFFECT"
+                // doesn't push its value pill into dead space — see the
+                // index-gated `Layout.minimumWidth` on the inner Label.
                 Repeater {
                     model: actionDelegate._params
 
@@ -263,12 +269,23 @@ ColumnLayout {
                         id: paramRow
 
                         required property var modelData
+                        required property int index
 
                         spacing: Kirigami.Units.largeSpacing
 
                         Label {
                             Layout.alignment: Qt.AlignVCenter
-                            Layout.minimumWidth: Kirigami.Units.gridUnit * 8
+                            // First param keeps the 8-gridUnit floor so its
+                            // value pill lands in the same column as WHEN's
+                            // value pills (visual alignment with the operator
+                            // column above). Subsequent params shrink to
+                            // their text width — leaving the 8 gu floor on
+                            // every param turned the gap between a short
+                            // label like "SHADER EFFECT" and its value pill
+                            // into dead space because the label box itself
+                            // padded out to 8 gu before the largeSpacing to
+                            // the pill kicked in.
+                            Layout.minimumWidth: paramRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
                             text: paramRow.modelData.label
                             font.capitalization: Font.AllUppercase
                             font.pointSize: Kirigami.Theme.smallFont.pointSize

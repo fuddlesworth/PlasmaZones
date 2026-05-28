@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 import org.plasmazones.settings
@@ -80,9 +81,9 @@ ItemDelegate {
     /// and the expansion is a peek, not a persistent view mode).
     property bool expanded: false
 
-    signal editRequested()
-    signal duplicateRequested()
-    signal deleteRequested()
+    signal editRequested
+    signal duplicateRequested
+    signal deleteRequested
     // Parameter named `ruleEnabled` for symmetry with the `ruleEnabled`
     // property — using the bare name `enabled` would shadow the row's own
     // `enabled` in any handler that relies on implicit-argument scope.
@@ -102,7 +103,6 @@ ItemDelegate {
     onClicked: {
         if (row.expandable)
             row.expanded = !row.expanded;
-
     }
 
     contentItem: ColumnLayout {
@@ -123,7 +123,7 @@ ItemDelegate {
                 Layout.alignment: Qt.AlignVCenter
                 checked: row.ruleEnabled
                 accessibleName: row.ruleEnabled ? i18n("Disable rule %1", row.ruleName) : i18n("Enable rule %1", row.ruleName)
-                onToggled: function(newValue) {
+                onToggled: function (newValue) {
                     row.toggleRequested(newValue);
                 }
             }
@@ -146,7 +146,6 @@ ItemDelegate {
                 HoverHandler {
                     id: warningHover
                 }
-
             }
 
             ColumnLayout {
@@ -168,7 +167,6 @@ ItemDelegate {
                     elide: Text.ElideRight
                     visible: row.ruleName.length > 0
                 }
-
             }
 
             // "Composite" badge — paired with the conditions count for composite
@@ -195,7 +193,6 @@ ItemDelegate {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.7
                 }
-
             }
 
             // Condition-count badge for composite rules.
@@ -215,7 +212,6 @@ ItemDelegate {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.7
                 }
-
             }
 
             // Action-count badge — shown for rules carrying more than one action.
@@ -235,7 +231,6 @@ ItemDelegate {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.7
                 }
-
             }
 
             // Priority badge — sits with the other metadata badges (Composite,
@@ -261,7 +256,6 @@ ItemDelegate {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     opacity: 0.7
                 }
-
             }
 
             // Doubles as the expand-state indicator: rotates 90° clockwise when
@@ -283,9 +277,7 @@ ItemDelegate {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
-
             }
 
             // Action summary — wraps to two lines before eliding so multi-action
@@ -334,30 +326,76 @@ ItemDelegate {
                 Accessible.name: i18n("Delete rule %1", row.ruleName)
                 onClicked: row.deleteRequested()
             }
-
         }
         // ── Expansion area ───────────────────────────────────────────────
 
-        // Lazy-loaded read-only preview of the rule's full match tree.
-        // `active` gates instantiation on the row actually being expanded
-        // — collapsed rows pay zero cost. The controller's `ruleJson`
-        // returns a deep copy of the rule, so the View walks its own data
-        // and a controller-side mutation won't yank the tree mid-render.
-        Loader {
+        // Clipped container that animates the expansion in/out instead of
+        // snapping height between 0 and the full body. Mirrors SettingsCard's
+        // expand/collapse pattern: clip:true keeps the loaded body from
+        // bleeding above the row during the height interpolation, and
+        // PhosphorMotionAnimation on `Layout.preferredHeight` + `opacity`
+        // hands the timing off to the project's motion profile (so
+        // animation-speed and reduce-motion preferences propagate without
+        // a hardcoded duration). The Loader stays `active` for one extra
+        // animation cycle when collapsing so the body can fade out
+        // gracefully instead of being torn down mid-transition.
+        Item {
+            id: expansionClip
+
+            // `_active` lags `row.expanded` through the collapse animation by
+            // also gating on `Layout.preferredHeight > 0` — Qt's animation
+            // updates the height property directly during the transition,
+            // so the value is positive while interpolating from full→0 and
+            // only reaches 0 when the animation lands. Without this lag the
+            // Loader would unload synchronously on collapse-start and the
+            // user would see the viewport blank before the height finished
+            // shrinking. Re-expanding mid-collapse keeps the Loader active
+            // (no reload thrash) because the height never reaches 0.
+            property bool _active: row.expandable && row.controller !== null && (row.expanded || Layout.preferredHeight > 0)
+
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.gridUnit * 2
-            Layout.bottomMargin: row.expanded ? Kirigami.Units.smallSpacing : 0
-            active: row.expandable && row.expanded && row.controller !== null
-            visible: active
-            sourceComponent: expansionComponent
+            Layout.preferredHeight: row.expanded ? expansionLoader.implicitHeight + Kirigami.Units.smallSpacing : 0
+            clip: true
+            opacity: row.expanded ? 1 : 0
+            visible: Layout.preferredHeight > 0 || opacity > 0
+
+            Behavior on Layout.preferredHeight {
+                PhosphorMotionAnimation {
+                    profile: row.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
+                    durationOverride: Kirigami.Units.shortDuration
+                }
+            }
+
+            Behavior on opacity {
+                PhosphorMotionAnimation {
+                    profile: row.expanded ? "widget.fadeIn" : "widget.fadeOut"
+                    durationOverride: Kirigami.Units.veryShortDuration * 2
+                }
+            }
+
+            // Lazy-loaded read-only preview of the rule's full match tree.
+            // `active` gates instantiation on the row actually being expanded
+            // — collapsed rows pay zero cost. The controller's `ruleJson`
+            // returns a deep copy of the rule, so the View walks its own data
+            // and a controller-side mutation won't yank the tree mid-render.
+            Loader {
+                id: expansionLoader
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                active: expansionClip._active
+                visible: active
+                sourceComponent: expansionComponent
+            }
         }
 
         Component {
             id: expansionComponent
 
             ColumnLayout {
-                readonly property var _ruleJson: row.controller ? row.controller.ruleJson(row.ruleId) : ({
-                })
+                readonly property var _ruleJson: row.controller ? row.controller.ruleJson(row.ruleId) : ({})
 
                 spacing: Kirigami.Units.smallSpacing
 
@@ -372,20 +410,39 @@ ItemDelegate {
                 MatchExpressionView {
                     Layout.fillWidth: true
                     matchJson: parent._ruleJson.match || ({
-                        "all": []
-                    })
+                            "all": []
+                        })
                     controller: row.controller
                     matchFieldOptions: row.matchFieldOptions
                     appSettings: row.appSettings
                 }
 
-                Label {
-                    text: i18n("THEN")
-                    font.bold: true
-                    opacity: 0.7
-                    font.capitalization: Font.AllUppercase
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                Rectangle {
+                    Layout.alignment: Qt.AlignLeft
                     Layout.topMargin: Kirigami.Units.smallSpacing
+                    implicitWidth: thenLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
+                    // `smallSpacing * 2` matches the ALL/ANY/NONE pills in
+                    // MatchExpressionView so the THEN header and the WHEN
+                    // group pills carry the same vertical weight — both pill
+                    // styles use highlightColor-family tints + 0.4 fill + 0.9
+                    // border, and the matching padding keeps them readable
+                    // as one design.
+                    implicitHeight: thenLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
+                    radius: implicitHeight / 2
+                    color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
+                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
+                    border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.9)
+
+                    Label {
+                        id: thenLabel
+
+                        anchors.centerIn: parent
+                        text: i18n("THEN")
+                        font.bold: true
+                        font.capitalization: Font.AllUppercase
+                        font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        color: Kirigami.Theme.textColor
+                    }
                 }
 
                 ActionListView {
@@ -394,11 +451,7 @@ ItemDelegate {
                     actionTypeOptions: row.actionTypeOptions
                     appSettings: row.appSettings
                 }
-
             }
-
         }
-
     }
-
 }
