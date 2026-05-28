@@ -149,6 +149,14 @@ The app is single-instance — launching it again while running raises the exist
 
 Daemon startup, verbose logging, KWin minimum-size rules, and the full support-report flow: **[Troubleshooting →](https://phosphor-works.github.io/plasmazones/troubleshooting/)**.
 
+**Better Blur DX:** the force-blur mode blurs every window not on its allowlist, which catches PlasmaZones' overlay surfaces and makes the screen look blurred all the time. To fix it, open System Settings → Window Management → Desktop Effects → Better Blur DX → Configure → **Force blur** tab, select **"Blur all except matching"**, then add this line:
+
+```
+/^plasmazones/
+```
+
+The slashes are required, they put the parser into regex mode. One entry covers the daemon, editor, and settings. The "Blur all except matching" toggle is the important part. The default mode treats the list as a whitelist instead of an exclusion list.
+
 When filing a bug, attach a support report:
 
 ```bash

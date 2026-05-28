@@ -12,6 +12,11 @@ on:
     branches: [main, develop, v3]
   pull_request:
     branches: [main, v3]
+  # `workflow_dispatch` so we can hand-fire the draft-arch packaging job
+  # against an arbitrary ref (e.g. a back-ported hot-fix branch that
+  # isn't yet in a PR). The build / lint / nix jobs ignore this trigger
+  # because they're keyed off PR file diffs and push events.
+  workflow_dispatch:
 
 # Default workflow token is read-only; jobs that need writes opt in.
 permissions:
@@ -234,3 +239,379 @@ jobs:
 
       - name: Verify devShell
         run: nix develop -c echo "devShell OK"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Draft Arch Package (PR builds)
+  # ─────────────────────────────────────────────────────────────────────────
+  # On every PR (and on hand-fired workflow_dispatch), build a .pkg.tar.zst
+  # from the PR head and publish:
+  #   1) the built package (artifact `arch-draft-package`)
+  #   2) a hand-off PKGBUILD that pulls the PR branch via `git+#branch=…`
+  #      so testers without binary trust can `makepkg -si` instead
+  #      (artifact `arch-draft-pkgbuild`)
+  #   3) a sticky PR comment with one-line install commands for both paths
+  #
+  # The package uses pkgname=plasmazones-pr with provides+conflicts on
+  # plasmazones, so a tester can swap between any PR build and the stable
+  # release with a single `pacman -U` / `pacman -S plasmazones` round-trip.
+  # Version derives from the upstream pkgver + PR number + commit count +
+  # short SHA so successive force-pushes to the same PR sort monotonically.
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-arch-draft:
+    name: Draft Arch package
+    # Skips other event types (push to main, scheduled, etc). pull_request
+    # covers branch updates on the PR head; workflow_dispatch covers manual
+    # ad-hoc builds against any ref.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    permissions:
+      contents: read
+      # Required so the sticky-comment step at the end can post / edit the
+      # comment on the PR. No other write surfaces are needed.
+      pull-requests: write
+
+    steps:
+      - name: Setup build environment
+        run: |
+          set -euo pipefail
+          # Full -Syu to avoid partial-upgrade state (same reasoning as
+          # the `build` job above).
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            base-devel git sudo namcap \
+            cmake ninja extra-cmake-modules \
+            qt6-base qt6-declarative qt6-tools qt6-shadertools qt6-svg \
+            qt6-wayland wayland \
+            kwin \
+            kconfig kconfigwidgets kcmutils kglobalaccel kirigami \
+            plasma-activities \
+            vulkan-headers vulkan-icd-loader
+
+          # makepkg refuses to run as root.
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Full history so pkgver() can do `git rev-list --count HEAD`
+          # and produce a sortable version.
+          fetch-depth: 0
+          # On PRs, default checkout is the synthetic merge ref. We want
+          # the PR head commit so the draft package mirrors what a tester
+          # would clone from the branch.
+          # `head.sha` is supplied by GitHub from the head repo's API state
+          # (40-char hex), not from anything the PR author can write — safe
+          # to interpolate. The `|| github.sha` fallback covers
+          # workflow_dispatch where no PR exists.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve build metadata
+        id: meta
+        # Route every attacker-controllable input (branch ref) through env
+        # vars instead of `${{ }}` template substitution. Git ref-format
+        # allows `$`, `(`, `)`, backticks, `&`, `|` in branch names, so a
+        # malicious PR with `branch=fix$(rm -rf /)` would inject the
+        # substitution into bash when `${{ github.head_ref }}` is pasted
+        # into a double-quoted shell string. The job grants
+        # `pull-requests: write` to post the sticky comment, so a
+        # successful injection could exfiltrate GITHUB_TOKEN and abuse it
+        # against the PR. Environment variables are read by bash without
+        # re-parsing — `$BRANCH_REF` is safe even when the value contains
+        # shell metacharacters. Documented as a GHA hardening best
+        # practice; see github.com/github/actions-runner-controller#security.
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+          PR_NUMBER_RAW: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          CMAKE_VER=$(sed -n 's/^project(PlasmaZones VERSION \([^ )]*\).*/\1/p' CMakeLists.txt)
+          : "${CMAKE_VER:=0.0.0}"
+
+          # workflow_dispatch has no PR number — fall back to "manual" so
+          # the version still sorts but is recognisable as a manual run.
+          PR_NUMBER="${PR_NUMBER_RAW:-manual}"
+
+          # Prefer HEAD_REF (PR source branch); fall back to REF_NAME for
+          # workflow_dispatch. Both come from env (no GHA interpolation
+          # into the shell source).
+          BRANCH_REF="${HEAD_REF:-$REF_NAME}"
+
+          # Sanity-validate the branch name against the conservative
+          # subset of git ref-format we want to flow through pkgver/
+          # source URLs. Reject anything outside [A-Za-z0-9._/-]; the
+          # injection vector is closed above by env-passing, but a
+          # malformed value here would still poison pkgver and the
+          # source URL passed to `git+#branch=...`. Belt-and-suspenders.
+          if [[ ! "$BRANCH_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::Refusing to build with branch ref containing unsupported characters: $BRANCH_REF"
+            exit 1
+          fi
+
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          # pkgver schema: <cmake>.pr<num>.r<count>.g<sha>
+          # Sorts above plain <cmake> stable (more dot-components) and
+          # monotonically across force-pushes (count + sha bump).
+          PKGVER="${CMAKE_VER}.pr${PR_NUMBER}.r${COMMIT_COUNT}.g${SHORT_SHA}"
+
+          # KWin pin must match the version available in the build env so
+          # the kwin-effect plugin's IID matches the tester's KWin at
+          # install time. CI's Arch image always has the latest, which is
+          # also what most rolling-release testers will have.
+          KWIN_VER=$(pacman -Q kwin | awk '{print $2}' | cut -d- -f1)
+
+          {
+            echo "pkgver=$PKGVER"
+            echo "pr_number=$PR_NUMBER"
+            echo "branch_ref=$BRANCH_REF"
+            echo "short_sha=$SHORT_SHA"
+            echo "kwin_ver=$KWIN_VER"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Building plasmazones-pr $PKGVER against KWin $KWIN_VER"
+
+      - name: Generate draft PKGBUILD (local-source, CI build)
+        # The PKGBUILD makepkg consumes inside CI builds from the
+        # already-checked-out tree so we don't pay a second clone. Mirrors
+        # release.yml's PKGBUILD.ci pattern but with the PR-aware pkgname,
+        # version, and provides/conflicts so a tester can install on top
+        # of stable cleanly.
+        run: |
+          set -euo pipefail
+          mkdir -p ci-pkgbuild
+          cat > ci-pkgbuild/PKGBUILD <<'PKGBUILD_EOF'
+          # PlasmaZones draft build — generated by .github/workflows/ci.yml
+          # SPDX-FileCopyrightText: 2026 fuddlesworth
+          # SPDX-License-Identifier: GPL-3.0-or-later
+          pkgname=plasmazones-pr
+          pkgver=__PKGVER__
+          pkgrel=1
+          pkgdesc="PlasmaZones — draft build for PR #__PR_NUMBER__ (__BRANCH__@__SHORT_SHA__)"
+          arch=('x86_64')
+          url="https://github.com/fuddlesworth/PlasmaZones"
+          license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
+          depends=(
+              'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
+              'kconfig' 'kconfigwidgets' 'kirigami'
+              'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              "kwin=__KWIN_VER__"
+          )
+          makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
+          optdepends=('plasma-activities: activity-based layouts')
+          provides=("plasmazones=$pkgver")
+          conflicts=('plasmazones' 'plasmazones-git' 'plasmazones-bin')
+          source=()
+          sha256sums=()
+          install=plasmazones.install
+
+          build() {
+              cd "$startdir/.."
+              cmake -B build -G Ninja \
+                  -DCMAKE_BUILD_TYPE=Release \
+                  -DCMAKE_INSTALL_PREFIX=/usr \
+                  -DCMAKE_INSTALL_LIBDIR=lib \
+                  -DBUILD_TESTING=OFF \
+                  -Wno-dev
+              cmake --build build --parallel
+          }
+
+          package() {
+              cd "$startdir/.."
+              DESTDIR="$pkgdir" cmake --install build
+              install -Dm644 packaging/arch/kbuildsycoca.hook \
+                  "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
+              install -Dm755 packaging/arch/plasmazones-refresh-sycoca \
+                  "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
+              install -Dm644 LICENSE        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+              install -Dm644 COPYING.LESSER "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
+          }
+          PKGBUILD_EOF
+
+          # Substitute the placeholders out-of-band (heredoc 'EOF' is
+          # quoted to keep $startdir / $pkgdir literal for makepkg).
+          sed -i \
+              -e "s|__PKGVER__|${{ steps.meta.outputs.pkgver }}|" \
+              -e "s|__PR_NUMBER__|${{ steps.meta.outputs.pr_number }}|" \
+              -e "s|__BRANCH__|${{ steps.meta.outputs.branch_ref }}|" \
+              -e "s|__SHORT_SHA__|${{ steps.meta.outputs.short_sha }}|" \
+              -e "s|__KWIN_VER__|${{ steps.meta.outputs.kwin_ver }}|" \
+              ci-pkgbuild/PKGBUILD
+
+          # The pacman install hook is reused verbatim from the stable
+          # packaging tree.
+          cp packaging/arch/plasmazones.install ci-pkgbuild/
+
+      - name: Build .pkg.tar.zst
+        run: |
+          set -euo pipefail
+          chown -R builder:builder .
+          cd ci-pkgbuild
+          su builder -c "makepkg --noconfirm -sf"
+          mv ./*.pkg.tar.zst ../
+        # Surfaces non-zero exit from makepkg (e.g. cmake failure inside
+        # build()) as a job failure rather than silently producing no
+        # artifact.
+
+      - name: namcap validation
+        # Non-fatal — namcap warnings (e.g. about unrecognised licence
+        # strings or missing changelog entries on a draft build) shouldn't
+        # block the artifact, but we surface them in the job log.
+        continue-on-error: true
+        run: namcap ./*.pkg.tar.zst
+
+      - name: Generate hand-off PKGBUILD (git-source, for makepkg users)
+        # Companion PKGBUILD that pulls the PR branch directly via
+        # `git+…#branch=…`. Anyone who doesn't trust the prebuilt binary
+        # can drop this + plasmazones.install into a folder and
+        # `makepkg -si` to build from source. The pkgver() function
+        # produces a sortable version on every rebuild so a later
+        # force-push to the PR re-installs cleanly.
+        run: |
+          set -euo pipefail
+          mkdir -p draft-pkgbuild
+          BRANCH="${{ steps.meta.outputs.branch_ref }}"
+          cat > draft-pkgbuild/PKGBUILD <<PKGBUILD_EOF
+          # PlasmaZones — draft build for PR #${{ steps.meta.outputs.pr_number }}
+          # Pulls the branch directly from GitHub. To rebuild against new
+          # commits on the branch, run \`makepkg -fC -si\` in this folder.
+          # SPDX-FileCopyrightText: 2026 fuddlesworth
+          # SPDX-License-Identifier: GPL-3.0-or-later
+          pkgname=plasmazones-pr
+          # pkgver() overwrites this on every build — placeholder must
+          # already sort above the canonical stable release so a shallow
+          # clone that breaks describe still upgrades cleanly.
+          pkgver=${{ steps.meta.outputs.pkgver }}
+          pkgrel=1
+          pkgdesc="PlasmaZones — draft build for PR #${{ steps.meta.outputs.pr_number }} (${BRANCH})"
+          arch=('x86_64')
+          url="https://github.com/fuddlesworth/PlasmaZones"
+          license=('GPL-3.0-or-later' 'LGPL-2.1-or-later')
+          _kwin_ver=\$(pacman -Q kwin 2>/dev/null | awk '{print \$2}' | cut -d- -f1)
+          depends=(
+              'qt6-base' 'qt6-declarative' 'qt6-shadertools' 'qt6-svg'
+              'kconfig' 'kconfigwidgets' 'kirigami'
+              'kcmutils' 'kglobalaccel' 'qt6-wayland'
+              "kwin\${_kwin_ver:+=}\${_kwin_ver}"
+          )
+          makedepends=('git' 'cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja' 'kwin' 'wayland')
+          optdepends=('plasma-activities: activity-based layouts')
+          provides=("plasmazones=\$pkgver")
+          conflicts=('plasmazones' 'plasmazones-git' 'plasmazones-bin')
+          source=("\$pkgname::git+\$url.git#branch=${BRANCH}")
+          sha256sums=('SKIP')
+          install=plasmazones.install
+
+          pkgver() {
+              cd "\$pkgname"
+              local cmake_version describe
+              cmake_version=\$(sed -n 's/^project(PlasmaZones VERSION \([^ )]*\).*/\1/p' CMakeLists.txt)
+              : "\${cmake_version:=0.0.0}"
+              if describe=\$(git describe --long --tags 2>/dev/null) && [[ -n "\$describe" ]]; then
+                  printf '%s\n' "\$describe" | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+              else
+                  printf "%s.pr${{ steps.meta.outputs.pr_number }}.r%s.g%s" "\$cmake_version" "\$(git rev-list --count HEAD)" "\$(git rev-parse --short HEAD)"
+              fi
+          }
+
+          build() {
+              cmake -B build -S "\$pkgname" -G Ninja \\
+                  -DCMAKE_BUILD_TYPE=Release \\
+                  -DCMAKE_INSTALL_PREFIX=/usr \\
+                  -DCMAKE_INSTALL_LIBDIR=lib \\
+                  -DBUILD_TESTING=OFF -Wno-dev
+              cmake --build build --parallel
+          }
+
+          package() {
+              DESTDIR="\$pkgdir" cmake --install build
+              install -Dm644 "\$pkgname/packaging/arch/kbuildsycoca.hook" \\
+                  "\$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
+              install -Dm755 "\$pkgname/packaging/arch/plasmazones-refresh-sycoca" \\
+                  "\$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
+              install -Dm644 "\$pkgname/LICENSE"        "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE"
+              install -Dm644 "\$pkgname/COPYING.LESSER" "\$pkgdir/usr/share/licenses/\$pkgname/COPYING.LESSER"
+          }
+          PKGBUILD_EOF
+          cp packaging/arch/plasmazones.install draft-pkgbuild/
+
+      - name: Upload .pkg.tar.zst
+        uses: actions/upload-artifact@v7
+        with:
+          name: arch-draft-package
+          path: plasmazones-pr-*.pkg.tar.zst
+          # 14 days is enough for any reviewer to grab a binary; the next
+          # push to the PR re-builds anyway.
+          retention-days: 14
+
+      - name: Upload hand-off PKGBUILD
+        uses: actions/upload-artifact@v7
+        with:
+          name: arch-draft-pkgbuild
+          path: draft-pkgbuild/
+          retention-days: 14
+
+      - name: Post sticky PR comment with install instructions
+        # Only for PR events — workflow_dispatch has no PR to comment on.
+        if: github.event_name == 'pull_request'
+        # marocchino/sticky-pull-request-comment v3.0.4 — SHA-pinned for
+        # the same supply-chain reason ccache-action is pinned above.
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0
+        with:
+          # `header` keys the sticky comment so re-runs update in place
+          # instead of stacking new comments per build.
+          header: arch-draft-build
+          message: |
+            ### Draft Arch build for this PR
+
+            **Built against:** KWin `${{ steps.meta.outputs.kwin_ver }}` • commit [`${{ steps.meta.outputs.short_sha }}`](${{ github.event.pull_request.head.repo.html_url }}/commit/${{ github.event.pull_request.head.sha }}) • run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            **`pkgname=plasmazones-pr` `pkgver=${{ steps.meta.outputs.pkgver }}`** — provides+conflicts with `plasmazones`, so it cleanly replaces a stable install. Roll back with `sudo pacman -S plasmazones` (or `-git` / `-bin`).
+
+            ---
+
+            #### Option A — prebuilt binary (KWin `${{ steps.meta.outputs.kwin_ver }}` only)
+
+            The kwin-effect plugin's IID embeds KWin's upstream version, so this prebuilt only loads on systems with **`kwin=${{ steps.meta.outputs.kwin_ver }}`**.
+
+            **Anonymous download (no GitHub account needed)** via [nightly.link](https://nightly.link/), which proxies the workflow artifact:
+
+            - <https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/arch-draft-package.zip>
+
+            Or, signed in to GitHub, grab `arch-draft-package` directly from [the run's artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts).
+
+            Then:
+            ```
+            unzip arch-draft-package.zip
+            sudo pacman -U plasmazones-pr-*.pkg.tar.zst
+            systemctl --user restart plasmazones.service
+            kwin_wayland --replace &   # or just log out / back in
+            ```
+
+            #### Option B — rebuild from source (any KWin)
+
+            Anonymous download via nightly.link:
+
+            - <https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/arch-draft-pkgbuild.zip>
+
+            Or, signed in: `arch-draft-pkgbuild` from the [run's artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts).
+
+            Then:
+            ```
+            unzip arch-draft-pkgbuild.zip -d plasmazones-pr-draft
+            cd plasmazones-pr-draft
+            makepkg -si
+            systemctl --user restart plasmazones.service
+            kwin_wayland --replace &
+            ```
+            The PKGBUILD git-clones this PR branch and rebuilds locally, so the KWin pin auto-matches your installed version.
+
+            ---
+
+            <sub>Posted by `.github/workflows/ci.yml` → `build-arch-draft`. Each push to this PR rebuilds and updates this comment in place. nightly.link is a public third-party proxy; it has no special access — it reads the same artifact GitHub serves and exposes it without auth.</sub>
+

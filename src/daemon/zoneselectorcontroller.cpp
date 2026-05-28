@@ -387,11 +387,11 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     Q_EMIT layoutSelected(layoutId);
 
     // PhosphorZones::Layout application is handled by whoever connects to layoutSelected().
-    // The primary path is QML zoneSelected → OverlayService::onZoneSelected →
-    // manualLayoutSelected → daemon handler, which routes through the unified
-    // layout pipeline (per-screen assignments, mode tracking, resnap).
-    // Do NOT call m_layoutManager->setActiveLayout() here — it bypasses that
-    // pipeline and leaves per-screen state, mode tracking, and resnap out of sync.
+    // For zone-selector drag-drop the commit happens in WindowDragAdaptor's drop path
+    // (drop.cpp), which calls assignLayout + setActiveLayout directly using
+    // OverlayService::selectedLayoutId()/selectedZoneIndex(). Do NOT call
+    // m_layoutManager->setActiveLayout() here — it bypasses the unified layout
+    // pipeline (per-screen assignments, mode tracking, resnap).
 #ifdef QT_DEBUG
     if (!QObject::receivers(SIGNAL(layoutSelected(QString)))) {
         qCWarning(lcOverlay) << "selectLayout(): no receivers connected to layoutSelected signal"
