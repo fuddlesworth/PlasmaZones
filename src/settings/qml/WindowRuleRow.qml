@@ -421,7 +421,13 @@ ItemDelegate {
                     Layout.alignment: Qt.AlignLeft
                     Layout.topMargin: Kirigami.Units.smallSpacing
                     implicitWidth: thenLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
-                    implicitHeight: thenLabel.implicitHeight + Kirigami.Units.smallSpacing
+                    // `smallSpacing * 2` matches the ALL/ANY/NONE pills in
+                    // MatchExpressionView so the THEN header and the WHEN
+                    // group pills carry the same vertical weight — both pill
+                    // styles use highlightColor-family tints + 0.4 fill + 0.9
+                    // border, and the matching padding keeps them readable
+                    // as one design.
+                    implicitHeight: thenLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
                     radius: implicitHeight / 2
                     color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
                     border.width: Math.max(1, Math.round(Screen.devicePixelRatio))

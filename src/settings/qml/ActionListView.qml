@@ -257,7 +257,11 @@ ColumnLayout {
                 // Per-parameter LABEL + value pill pairs. First param's
                 // label sits at the same absolute x as WHEN's operator
                 // column (because the type-label minWidth above
-                // matches WHEN's depth-1 field width).
+                // matches WHEN's depth-1 field width). Subsequent params
+                // (`index > 0`) drop the 8 gridUnit floor and flow at
+                // their text width so a short label like "SHADER EFFECT"
+                // doesn't push its value pill into dead space — see the
+                // index-gated `Layout.minimumWidth` on the inner Label.
                 Repeater {
                     model: actionDelegate._params
 

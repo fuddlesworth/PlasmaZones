@@ -225,17 +225,16 @@ ColumnLayout {
             /// closer to the intended affordance than another low-alpha
             /// attempt — they should read as tree lines, not whispers.
             readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
-            /// Solid 2px lines on every dpr. Math.max(2, ...) so even on
-            /// non-hidpi the stroke is two physical pixels — single-pixel
-            /// strokes disappear into anti-aliased edges on dark
-            /// surfaces.
-            // 1 physical pixel — the prior `Math.max(2, Math.round(Screen
-            // .devicePixelRatio * 1.5))` was tuned against the broken
-            // `Kirigami.Units.devicePixelRatio` (which evaluated to NaN and
-            // fell through to the floor of 2). Once the underlying ratio
-            // started returning the real value, the `* 1.5` made the
-            // connectors noticeably thicker than the original visual
-            // baseline. Same one-physical-pixel hairline as borders.
+            /// One-physical-pixel hairline (`Math.max(1, ...)` so even when
+            /// devicePixelRatio rounds to zero we still draw something).
+            /// Matches the rest of the chrome's hairline conventions —
+            /// borders, separators, hover strokes. The earlier
+            /// `Math.max(2, Math.round(... * 1.5))` shape was tuned against
+            /// the broken `Kirigami.Units.devicePixelRatio` (which evaluated
+            /// to NaN and fell through to the floor of 2); once the
+            /// underlying ratio started returning the real value the
+            /// `* 1.5` made the connectors noticeably thicker than the
+            /// original visual baseline.
             readonly property int _guideThickness: Math.max(1, Math.round(Screen.devicePixelRatio))
 
             // Size delegate to the tree's available width so the
