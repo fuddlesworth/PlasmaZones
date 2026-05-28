@@ -130,6 +130,16 @@ void UpdateChecker::onRequestFinished(QNetworkReply* reply)
 
     reply->deleteLater();
 
+    // Drop the pooled SSL connection now that we're done with this one-shot
+    // request. QNetworkAccessManager otherwise keeps the underlying socket in
+    // its connection cache for ~120 s; the remote server closes its end during
+    // that window, and any subsequent activity that nudges the cache (e.g.
+    // event-loop ticks while the user navigates settings pages) triggers a
+    // `QIODevice::read (QSslSocket): device not open` warning when Qt probes
+    // the half-closed socket. Clearing the cache here makes the next check
+    // open a fresh connection instead.
+    m_networkManager->clearConnectionCache();
+
     if (reply->error() != QNetworkReply::NoError) {
         m_errorMessage = reply->errorString();
         qCWarning(lcUpdateChecker) << "Update check: failed," << m_errorMessage;
