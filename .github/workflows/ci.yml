@@ -545,26 +545,39 @@ jobs:
 
             The kwin-effect plugin's IID embeds KWin's upstream version, so this prebuilt only loads on systems with **`kwin=${{ steps.meta.outputs.kwin_ver }}`**.
 
-            1. Download **`arch-draft-package`** from [the run's artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts) and extract the `.pkg.tar.zst`.
-            2. Install:
-               ```
-               sudo pacman -U plasmazones-pr-*.pkg.tar.zst
-               systemctl --user restart plasmazones.service
-               kwin_wayland --replace &   # or just log out / back in
-               ```
+            **Anonymous download (no GitHub account needed)** via [nightly.link](https://nightly.link/), which proxies the workflow artifact:
+
+            - <https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/arch-draft-package.zip>
+
+            Or, signed in to GitHub, grab `arch-draft-package` directly from [the run's artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts).
+
+            Then:
+            ```
+            unzip arch-draft-package.zip
+            sudo pacman -U plasmazones-pr-*.pkg.tar.zst
+            systemctl --user restart plasmazones.service
+            kwin_wayland --replace &   # or just log out / back in
+            ```
 
             #### Option B — rebuild from source (any KWin)
 
-            1. Download **`arch-draft-pkgbuild`** from [the run's artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts) and extract.
-            2. `cd` into the folder and:
-               ```
-               makepkg -si
-               systemctl --user restart plasmazones.service
-               kwin_wayland --replace &
-               ```
-               The PKGBUILD git-clones this PR branch and rebuilds locally, so the KWin pin auto-matches your installed version.
+            Anonymous download via nightly.link:
+
+            - <https://nightly.link/${{ github.repository }}/actions/runs/${{ github.run_id }}/arch-draft-pkgbuild.zip>
+
+            Or, signed in: `arch-draft-pkgbuild` from the [run's artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts).
+
+            Then:
+            ```
+            unzip arch-draft-pkgbuild.zip -d plasmazones-pr-draft
+            cd plasmazones-pr-draft
+            makepkg -si
+            systemctl --user restart plasmazones.service
+            kwin_wayland --replace &
+            ```
+            The PKGBUILD git-clones this PR branch and rebuilds locally, so the KWin pin auto-matches your installed version.
 
             ---
 
-            <sub>Posted by `.github/workflows/ci.yml` → `build-arch-draft`. Each push to this PR rebuilds and updates this comment in place.</sub>
+            <sub>Posted by `.github/workflows/ci.yml` → `build-arch-draft`. Each push to this PR rebuilds and updates this comment in place. nightly.link is a public third-party proxy; it has no special access — it reads the same artifact GitHub serves and exposes it without auth.</sub>
 
