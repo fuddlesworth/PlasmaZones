@@ -43,11 +43,14 @@ QJsonObject RuleAction::toJson() const
     // with a non-empty `allowedKeys`, but free-form descriptors opt out.
     if (params.contains(kKeyType)) {
         // A free-form (`acceptAny`) action whose params carry a `"type"` key
-        // would have it silently clobbered by the insert below. Warn so the
-        // data loss is at least diagnosable.
-        qCWarning(lcWindowRule) << "RuleAction::toJson: params carry a reserved `type` key — it will be clobbered by "
-                                   "the action type. action type:"
-                                << type;
+        // would have it silently clobbered by the insert below. Log at debug
+        // level — the clobber is documented in the RuleAction.h header
+        // comments on `params` and would otherwise re-emit on every save of
+        // every store reload. `qCWarning` here turned routine persistence
+        // cycles into recurring log noise even for correctly-loaded rules.
+        qCDebug(lcWindowRule) << "RuleAction::toJson: params carry a reserved `type` key — it will be clobbered by "
+                                 "the action type. action type:"
+                              << type;
     }
     QJsonObject o = params;
     o.insert(kKeyType, type);
@@ -77,10 +80,14 @@ std::optional<RuleAction> RuleAction::fromJson(const QJsonObject& obj)
     // `allowedKeys` set opts out (free-form params).
     const auto descriptor = ActionRegistry::instance().descriptor(type);
     if (descriptor && !descriptor->allowedKeys.isEmpty()) {
-        for (const QString& key : action.params.keys()) {
-            if (!descriptor->allowedKeys.contains(key)) {
+        // Iterate via const-iterator rather than `keys()` — `QJsonObject::keys()`
+        // allocates a fresh QStringList of every key, which on the load hot
+        // path (called once per action of every rule in the store) burns a
+        // throwaway list per call. The iterator pair has zero overhead.
+        for (auto it = action.params.constBegin(); it != action.params.constEnd(); ++it) {
+            if (!descriptor->allowedKeys.contains(it.key())) {
                 qCWarning(lcWindowRule) << "Action params carry an unexpected key — dropping action. type:" << type
-                                        << "key:" << key;
+                                        << "key:" << it.key();
                 return std::nullopt;
             }
         }
@@ -377,7 +384,13 @@ void ActionRegistry::registerBuiltins()
                      .kind = QStringLiteral("percent"),
                      .min = 0.0,
                      .max = 100.0,
-                     .scale = 0.01}},
+                     .scale = 0.01,
+                     // Seed at 100% so a fresh SetOpacity rule lands at "no
+                     // visible change". `min = 0` is a valid wire value
+                     // (fully transparent) but a seeded-zero rule would save
+                     // immediately and dim the matched window to invisibility
+                     // before the user adjusted the slider.
+                     .defaultDisplay = 100.0}},
     });
 }
 

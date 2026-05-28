@@ -222,8 +222,14 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluato
     // out-of-range value here. Validate at the consumer too — defence in
     // depth keeps the paint pipeline from setting a negative opacity (which
     // KWin renders as "invisible window the user can still focus through").
+    //
+    // Accept both numeric and integer JSON encodings: a hand-edited rule
+    // saved as `"value": 1` (int literal) round-trips as a non-double
+    // QJsonValue, but `1` is still a valid wire opacity. Rejecting on
+    // `!isDouble()` alone would silently drop a legal payload — gate on
+    // `toVariant().canConvert<double>()` instead so both encodings pass.
     const QJsonValue raw = action->params.value(PhosphorWindowRule::ActionParam::Value);
-    if (!raw.isDouble()) {
+    if (raw.isNull() || raw.isUndefined() || !raw.toVariant().canConvert<double>()) {
         return std::nullopt;
     }
     const double value = raw.toDouble();

@@ -314,14 +314,25 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // SetOpacity rules describe a target opacity, not a scale factor —
     // "make Firefox 80% opaque" should land at 0.8 regardless of whatever
     // opacity another effect previously composed. Uses the shader-manager's
-    // animation rule evaluator because the SetOpacity action lives in the
-    // same animation-rules bag as OverrideAnimation{Shader,Curve,Timing} —
+    // window-rule evaluator because the SetOpacity action lives in the same
+    // effect-side rule bag as OverrideAnimation{Shader,Curve,Timing} —
     // sharing the evaluator also shares its per-window cache, so the paint
     // hot path pays at most one cascade walk per window per rule-set
     // revision.
-    if (auto opacity =
-            resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), w->windowClass(), getWindowId(w))) {
-        data.setOpacity(*opacity);
+    //
+    // Skip our own overlay/editor/snap-assist surfaces and plasma-shell
+    // panels — a user-authored rule like `WindowClass contains "plasmashell"`
+    // would otherwise dim our own UI or the system panel. The shouldHandleWindow
+    // filter rejects these from snap/tile management, and the opacity hook
+    // must follow the same exclusion to stay consistent.
+    {
+        const QString winClass = w->windowClass();
+        if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
+            if (auto opacity =
+                    resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w))) {
+                data.setOpacity(*opacity);
+            }
+        }
     }
 
     m_windowAnimator->applyTransform(w, data);

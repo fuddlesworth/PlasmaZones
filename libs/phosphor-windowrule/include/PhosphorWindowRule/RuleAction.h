@@ -103,6 +103,13 @@ struct PHOSPHORWINDOWRULE_EXPORT ParamSchema
     std::optional<double> min{}; ///< inclusive lower bound, in display units
     std::optional<double> max{}; ///< inclusive upper bound, in display units
     std::optional<double> scale{}; ///< stored = display * scale; nullopt for unscaled kinds
+    /// Initial display-unit value for the editor when a fresh rule is created.
+    /// Falls back to `min` when unset. Needed for kinds whose `min` is a valid
+    /// but undesirable starting value — e.g. SetOpacity's `min = 0` means a
+    /// fresh rule would seed at 0% (invisible window) and saveable as-is; the
+    /// descriptor instead declares `defaultDisplay = 100.0` so the user starts
+    /// at "no visible change" and must deliberately lower it.
+    std::optional<double> defaultDisplay{};
     QStringList enumWireValues{}; ///< wire values for `kind == "enum"`; empty otherwise
 };
 
@@ -239,6 +246,18 @@ inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 inline bool isAnimationOverrideAction(const QString& type)
 {
     return type == OverrideAnimationShader || type == OverrideAnimationTiming || type == OverrideAnimationCurve;
+}
+
+/// True when @p type is one of the actions the KWin effect's window-rule
+/// evaluator consumes — the three OverrideAnimation* variants plus SetOpacity.
+/// The shader-transition manager loads rules carrying any of these so the
+/// effect side can resolve them per paint; rules without one of these actions
+/// never need to reach the effect-side evaluator. Keeping the predicate
+/// alongside `isAnimationOverrideAction` ensures adding a new effect-consumed
+/// action type updates the filter list in one place.
+inline bool isEffectRuleAction(const QString& type)
+{
+    return isAnimationOverrideAction(type) || type == SetOpacity;
 }
 } // namespace ActionType
 

@@ -1540,7 +1540,7 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
                 continue;
             }
             for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
-                if (PhosphorWindowRule::ActionType::isAnimationOverrideAction(action.type)) {
+                if (PhosphorWindowRule::ActionType::isEffectRuleAction(action.type)) {
                     animationRules.append(rule);
                     break;
                 }

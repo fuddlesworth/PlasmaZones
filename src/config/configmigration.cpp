@@ -1223,7 +1223,13 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 
     // Write the duplicated lists into the new Display group. Skip empties so
     // a clean v2 config with no disabled entries doesn't grow noise keys.
-    QJsonObject v3Display = root.value(ConfigKeys::displayGroup()).toObject();
+    // Group name must come from the FROZEN v3 accessor — `displayGroup()`
+    // is the LIVE accessor that follows future renames, so using it here
+    // would silently retarget the v2→v3 step to a path no v3 config ever
+    // had on disk after a future rename. The v3→v4 step downstream
+    // (line 1323) already uses `Legacy::v3DisplayGroup()` for the same
+    // reason; this site was the outlier.
+    QJsonObject v3Display = root.value(ConfigKeys::Legacy::v3DisplayGroup()).toObject();
 
     auto writeIfNonEmpty = [&v3Display](const QString& key, const QString& value) {
         if (!value.isEmpty()) {
@@ -1258,7 +1264,9 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
     }
 
     if (!v3Display.isEmpty()) {
-        root[ConfigKeys::displayGroup()] = v3Display;
+        // Use the FROZEN v3 accessor — see comment above on the matching
+        // read at line 1226 for why the live accessor would break the chain.
+        root[ConfigKeys::Legacy::v3DisplayGroup()] = v3Display;
     }
 
     // Stamp literal 3 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
@@ -1846,13 +1854,17 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             // accessors keep the literals out of this call site so a future
             // editor of this function can't drift them by accident.
             const int modeInt = grp.value(ConfigKeys::Legacy::v3AssignmentMode()).toInt(0);
-            const bool autotile = (modeInt == 1);
+            // v3 only knew Snapping (0) and Autotile (1). modeToWireString
+            // routes any future Mode through one mapping; the migration here
+            // sees only the historical two-valued vocabulary.
+            const auto mode =
+                (modeInt == 1) ? PhosphorZones::AssignmentEntry::Autotile : PhosphorZones::AssignmentEntry::Snapping;
             const QString snappingLayout = grp.value(ConfigKeys::Legacy::v3AssignmentLayout()).toString();
             const QString tilingAlgorithm = grp.value(ConfigKeys::Legacy::v3AssignmentAlgorithm()).toString();
 
             rules.append(PhosphorWindowRule::ContextRuleBridge::makeAssignmentRule(
-                assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity, autotile, snappingLayout,
-                tilingAlgorithm));
+                assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity,
+                PhosphorZones::modeToWireString(mode), snappingLayout, tilingAlgorithm));
         }
     }
 
@@ -1884,9 +1896,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         // snapping default but does have a tiling default — snapping is the
         // historical default mode and stays selected whenever a snapping
         // layout is configured.
-        const bool autotileDefault = defaultLayoutId.isEmpty() && !defaultAlgorithm.isEmpty();
+        const auto defaultMode = (defaultLayoutId.isEmpty() && !defaultAlgorithm.isEmpty())
+            ? PhosphorZones::AssignmentEntry::Autotile
+            : PhosphorZones::AssignmentEntry::Snapping;
         rules.append(PhosphorWindowRule::ContextRuleBridge::makeProviderDefaultRule(
-            QStringLiteral("Default"), autotileDefault, defaultLayoutId, defaultAlgorithm));
+            QStringLiteral("Default"), PhosphorZones::modeToWireString(defaultMode), defaultLayoutId,
+            defaultAlgorithm));
     }
 
     // ── Disable-list rules ─────────────────────────────────────────────────

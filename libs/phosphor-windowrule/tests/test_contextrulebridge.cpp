@@ -125,8 +125,8 @@ private Q_SLOTS:
 
     void testMakeAssignmentActions_threeActionLossless()
     {
-        const QList<RuleAction> actions =
-            CRB::makeAssignmentActions(/*autotileMode=*/false, QStringLiteral("layout-a"), QStringLiteral("algo-b"));
+        const QList<RuleAction> actions = CRB::makeAssignmentActions(
+            QStringLiteral("snapping"), QStringLiteral("layout-a"), QStringLiteral("algo-b"));
         // Mode + layout + algorithm — both layout fields survive a mode flip.
         QCOMPARE(actions.size(), 3);
         QCOMPARE(modeToken(actions), QStringLiteral("snapping"));
@@ -136,19 +136,20 @@ private Q_SLOTS:
 
     void testMakeAssignmentActions_autotileModeToken()
     {
-        const QList<RuleAction> actions = CRB::makeAssignmentActions(/*autotileMode=*/true, QString(), QString());
+        const QList<RuleAction> actions = CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QString());
         QCOMPARE(modeToken(actions), QStringLiteral("autotile"));
     }
 
     void testMakeAssignmentActions_emptyFieldsOmitted()
     {
         // Mode-only entry — both layout fields empty → a single action.
-        const QList<RuleAction> modeOnly = CRB::makeAssignmentActions(true, QString(), QString());
+        const QList<RuleAction> modeOnly = CRB::makeAssignmentActions(QStringLiteral("autotile"), QString(), QString());
         QCOMPARE(modeOnly.size(), 1);
         QCOMPARE(modeOnly.first().type, QString(ActionType::SetEngineMode));
 
         // Layout but no algorithm.
-        const QList<RuleAction> layoutOnly = CRB::makeAssignmentActions(false, QStringLiteral("layout-a"), QString());
+        const QList<RuleAction> layoutOnly =
+            CRB::makeAssignmentActions(QStringLiteral("snapping"), QStringLiteral("layout-a"), QString());
         QCOMPARE(layoutOnly.size(), 2);
         QCOMPARE(actionCount(layoutOnly, ActionType::SetSnappingLayout), 1);
         QCOMPARE(actionCount(layoutOnly, ActionType::SetTilingAlgorithm), 0);
@@ -160,7 +161,7 @@ private Q_SLOTS:
     {
         const WindowRule rule =
             CRB::makeAssignmentRule(QStringLiteral("Exact rule"), QStringLiteral("DP-1"), 2, QStringLiteral("act-x"),
-                                    /*autotile=*/false, QStringLiteral("layout-a"), QStringLiteral("algo-b"));
+                                    QStringLiteral("snapping"), QStringLiteral("layout-a"), QStringLiteral("algo-b"));
         QVERIFY(rule.isValid());
         QVERIFY(!rule.id.isNull());
         QVERIFY(rule.match.isContextOnly());
@@ -173,7 +174,7 @@ private Q_SLOTS:
     void testMakeAssignmentRule_modeOnlyEntry()
     {
         const WindowRule rule = CRB::makeAssignmentRule(QStringLiteral("Display default"), QStringLiteral("HDMI-1"), 0,
-                                                        QString(), /*autotile=*/true, QString(), QString());
+                                                        QString(), QStringLiteral("autotile"), QString(), QString());
         QVERIFY(rule.isValid());
         QCOMPARE(rule.priority, 310); // screen only
         QCOMPARE(rule.actions.size(), 1);
@@ -184,8 +185,8 @@ private Q_SLOTS:
 
     void testMakeProviderDefaultRule_isCatchAllAtZero()
     {
-        const WindowRule rule = CRB::makeProviderDefaultRule(QStringLiteral("Global default"), /*autotile=*/false,
-                                                             QStringLiteral("layout-a"), QString());
+        const WindowRule rule = CRB::makeProviderDefaultRule(
+            QStringLiteral("Global default"), QStringLiteral("snapping"), QStringLiteral("layout-a"), QString());
         QVERIFY(rule.isValid());
         QVERIFY(rule.match.isCatchAll());
         QCOMPARE(rule.priority, CRB::kProviderDefaultPriority);
@@ -332,8 +333,9 @@ private Q_SLOTS:
     void testDisableRuleMode_assignmentRuleIsNotADisableRule()
     {
         // An assignment rule carries no DisableEngine action — nullopt.
-        const WindowRule assign = CRB::makeAssignmentRule(QStringLiteral("a"), QStringLiteral("DP-1"), 0, QString(),
-                                                          false, QStringLiteral("layout-a"), QString());
+        const WindowRule assign =
+            CRB::makeAssignmentRule(QStringLiteral("a"), QStringLiteral("DP-1"), 0, QString(),
+                                    QStringLiteral("snapping"), QStringLiteral("layout-a"), QString());
         QVERIFY(!CRB::disableRuleMode(assign).has_value());
     }
 
@@ -393,12 +395,12 @@ private Q_SLOTS:
         // included here — that's covered by makeProviderDefaultRule_isCatchAllAtZero.
         const WindowRule monitorOnly =
             CRB::makeAssignmentRule(QStringLiteral("Monitor"), QStringLiteral("DP-1"), 0, QString(),
-                                    /*autotile=*/false, QStringLiteral("layout-a"), QString());
+                                    QStringLiteral("snapping"), QStringLiteral("layout-a"), QString());
         QCOMPARE(monitorOnly.id, CRB::assignmentRuleIdFor(QStringLiteral("DP-1"), 0, QString()));
 
         const WindowRule exact =
             CRB::makeAssignmentRule(QStringLiteral("Exact"), QStringLiteral("DP-1"), 2, QStringLiteral("act-x"),
-                                    /*autotile=*/true, QString(), QStringLiteral("algo-b"));
+                                    QStringLiteral("autotile"), QString(), QStringLiteral("algo-b"));
         QCOMPARE(exact.id, CRB::assignmentRuleIdFor(QStringLiteral("DP-1"), 2, QStringLiteral("act-x")));
 
         // Disable rule — the helper must carry the mode token so the

@@ -118,6 +118,9 @@ QVariantList paramsForActionTypeImpl(QLatin1StringView type)
         if (schema.scale.has_value()) {
             p[QStringLiteral("scale")] = *schema.scale;
         }
+        if (schema.defaultDisplay.has_value()) {
+            p[QStringLiteral("defaultDisplay")] = *schema.defaultDisplay;
+        }
         if (!schema.enumWireValues.isEmpty()) {
             QVariantList options;
             options.reserve(schema.enumWireValues.size());
@@ -409,17 +412,19 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
                 payload[key] = first.toString();
             }
         } else if (kind == QLatin1String("number") || kind == QLatin1String("percent")) {
-            // `min` on the schema is expressed in *display* units (see
+            // Seed order: `defaultDisplay` (if the descriptor declared a
+            // safe-but-not-`min` starting value) → `min` → 0.0. `min` and
+            // `defaultDisplay` are both expressed in *display* units (see
             // `ParamSchema` doc in RuleAction.h). For `percent` the wire
-            // value is `display * scale` — so the default we seed must
-            // run through that same conversion or the rule lands with a
-            // wire value far outside the validator's range. SetOpacity
-            // happens to have min=0 today which is scale-invariant, but a
-            // future percent descriptor with a non-zero `min` (e.g. 50%
-            // with scale 0.01) would otherwise be seeded with 50.0 and
-            // refused at save by the descriptor validator.
+            // value is `display * scale` — so the seed must run through
+            // that same conversion or the rule lands with a wire value
+            // far outside the validator's range. `defaultDisplay` lets a
+            // descriptor like SetOpacity start at 100% (no visible change)
+            // instead of seeding `min = 0%` (a saveable-but-invisible rule).
+            const QVariant defaultDisplay = p.value(QStringLiteral("defaultDisplay"));
             const QVariant min = p.value(QStringLiteral("min"));
-            if (!min.isValid()) {
+            const QVariant displaySource = defaultDisplay.isValid() ? defaultDisplay : min;
+            if (!displaySource.isValid()) {
                 payload[key] = QVariant(0.0);
             } else if (kind == QLatin1String("percent")) {
                 // Percent kind requires `scale` per the ParamSchema doc
@@ -430,9 +435,9 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
                 // value, which would reintroduce the exact bug the
                 // scale multiplication was added to fix.
                 const QVariant scale = p.value(QStringLiteral("scale"));
-                payload[key] = scale.isValid() ? QVariant(min.toDouble() * scale.toDouble()) : QVariant(0.0);
+                payload[key] = scale.isValid() ? QVariant(displaySource.toDouble() * scale.toDouble()) : QVariant(0.0);
             } else {
-                payload[key] = min;
+                payload[key] = displaySource;
             }
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,

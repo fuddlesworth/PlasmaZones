@@ -54,8 +54,8 @@ namespace {
 PhosphorWindowRule::WindowRule makeTestAssignmentRule()
 {
     return PhosphorWindowRule::ContextRuleBridge::makeAssignmentRule(
-        QStringLiteral("Test assignment rule"), QStringLiteral("DP-1"), 0, QString(),
-        /*autotileMode=*/false, QUuid::createUuid().toString(), QString());
+        QStringLiteral("Test assignment rule"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"),
+        QUuid::createUuid().toString(), QString());
 }
 
 /// True iff @p store contains a rule with the assignment-action shape — i.e.,

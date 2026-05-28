@@ -422,13 +422,16 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     QCOMPARE(floatPayload.value(QStringLiteral("type")).toString(), QStringLiteral("float"));
     QCOMPARE(floatPayload.size(), 1);
 
-    // SetOpacity stores `display * scale`; the descriptor says min=0, so the
-    // seeded value is the wire-form 0.0 — the SpinBox renders that as 0%.
-    // A future bump of min would automatically flow through here.
+    // SetOpacity stores `display * scale`; the descriptor declares
+    // defaultDisplay=100 with scale=0.01, so the seeded wire value is
+    // 1.0 (100% — no visible change). A future change to the descriptor's
+    // defaultDisplay would automatically flow through here. The earlier
+    // seed-at-`min`=0 behaviour was a bug: a SetOpacity rule was savable
+    // immediately at 0% (invisible window) before the user adjusted.
     const QVariantMap opacityPayload = controller.defaultPayloadFor(QStringLiteral("setOpacity"));
     QCOMPARE(opacityPayload.value(QStringLiteral("type")).toString(), QStringLiteral("setOpacity"));
     QVERIFY(opacityPayload.contains(QStringLiteral("value")));
-    QCOMPARE(opacityPayload.value(QStringLiteral("value")).toInt(), 0);
+    QCOMPARE(opacityPayload.value(QStringLiteral("value")).toDouble(), 1.0);
 
     // SetEngineMode's `mode` is an enum — seeded to the first option's wire
     // value. The engineModeOptions list begins with snapping, so the default

@@ -15,6 +15,14 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     , m_adaptor(adaptor)
     , m_settings(settings)
 {
+    // Engine + adaptor + settings are mandatory — every public slot defends
+    // against `m_engine == nullptr` / `m_adaptor == nullptr` but a misordered
+    // Daemon wiring that constructs SnapAdaptor before its dependencies
+    // creates a silently-no-op D-Bus object that swallows every method call.
+    // Assert at construction so the wiring bug is loud during development
+    // (the runtime warning + early return below remains for release builds).
+    Q_ASSERT_X(m_engine && m_adaptor && m_settings, "SnapAdaptor::SnapAdaptor",
+               "engine / adaptor / settings dependencies must not be null");
     if (!m_engine || !adaptor) {
         qCWarning(lcDbusWindow) << "SnapAdaptor created with null engine or adaptor";
         return;

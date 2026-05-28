@@ -226,12 +226,22 @@ void WindowTrackingAdaptor::saveState()
         const auto& allGeoms = m_snapEngine->unmanagedGeometries();
         filteredGeoms.reserve(allGeoms.size());
         for (auto it = allGeoms.constBegin(); it != allGeoms.constEnd(); ++it) {
-            if (isPersistedContextDisabled(it.value().screenId, 0)) {
+            // Pre-tile geometries are persisted under the full windowId, so
+            // the entry carries an implicit per-window desktop in the live
+            // `desktopAssignments()` map. Hard-coding `0` here would only
+            // gate on the monitor-level disable list, so a window minimized
+            // or unsnapped on Desktop 2 (where snapping is disabled per
+            // desktop, not per monitor) would still have its pre-tile
+            // geometry persisted and replayed on next session restore.
+            // Mirrors the zone-assignments save filter (lines 122-145).
+            const int desktop = m_service->desktopAssignments().value(it.key(), 0);
+            if (isPersistedContextDisabled(it.value().screenId, desktop)) {
                 continue;
             }
             filteredGeoms.insert(it.key(), it.value());
         }
-        tracking->writeString(ConfigKeys::preTileGeometriesFullKey(), serializeGeometryMapFull(filteredGeoms));
+        tracking->writeString(ConfigKeys::preTileGeometriesFullKey(),
+                              serializeGeometryMapFull(filteredGeoms, m_service));
         tracking->writeString(ConfigKeys::preTileGeometriesKey(), serializeGeometryMap(filteredGeoms, m_service));
     }
 
@@ -727,7 +737,12 @@ void WindowTrackingAdaptor::loadState()
                            entry[QLatin1String("width")].toInt(), entry[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
                     QString screen = entry[QLatin1String("screen")].toString();
-                    if (isPersistedContextDisabled(screen, 0)) {
+                    // Use the persisted desktop (or 0 = all-desktops for
+                    // legacy entries) so the load gate mirrors the save gate.
+                    // Without the desktop axis, a desktop-disabled context's
+                    // entries would persist correctly but reload anyway.
+                    const int desktop = entry[QLatin1String("desktop")].toInt();
+                    if (isPersistedContextDisabled(screen, desktop)) {
                         continue;
                     }
                     unmanagedGeometries[windowId] = UnmanagedEntry{geom, screen};

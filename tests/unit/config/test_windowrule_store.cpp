@@ -45,7 +45,7 @@ private:
     PWR::WindowRule makeRule(const QString& screenId, int priorityHint = -1)
     {
         PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
-            screenId, screenId, 0, QString(), /*autotile=*/false,
+            screenId, screenId, 0, QString(), QStringLiteral("snapping"),
             QStringLiteral("{11111111-2222-3333-4444-555555555555}"), QString());
         if (priorityHint >= 0) {
             rule.priority = priorityHint;

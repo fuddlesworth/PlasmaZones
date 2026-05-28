@@ -44,7 +44,7 @@ private:
 
     static WindowRule makeRule(const QString& screenId)
     {
-        return ContextRuleBridge::makeAssignmentRule(screenId, screenId, 0, QString(), /*autotile=*/false,
+        return ContextRuleBridge::makeAssignmentRule(screenId, screenId, 0, QString(), QStringLiteral("snapping"),
                                                      QStringLiteral("{11111111-2222-3333-4444-555555555555}"),
                                                      QString());
     }

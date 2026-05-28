@@ -206,17 +206,21 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         QScreen* screen = selectorResolved.qscreen;
 
         // Block entire zone selector snap path when screen is locked for its
-        // current mode. The mode lookup still routes through the layout
-        // manager (it has the (desktop, activity) override on the
-        // assignment lookup that the resolver's modeFor wrapper doesn't);
-        // the lock + disable checks then run through the resolver with
-        // the resolved mode so the cascade is the documented one.
+        // current mode. Take a single resolver snapshot of (desktop, activity)
+        // via `handleFor`, then ask the layout manager to resolve the mode
+        // against THOSE frozen axes — using `currentVirtualDesktop()` /
+        // `currentActivity()` on the resolver re-reads workspace state on
+        // every call (per IContextResolver.h:139-141 "NOT cached snapshots
+        // of an earlier handleFor() result"), so a virtual-desktop switch
+        // between the mode lookup and the gate read would silently decouple
+        // them. The handle's existing fields are authoritative — overwriting
+        // `mode` in place keeps the gate consistent.
         bool selectorScreenLocked = false;
         PhosphorContext::ContextHandle selectorCtx;
         if (screen && m_contextResolver && m_layoutManager) {
-            const auto selectorMode = m_layoutManager->modeForScreen(
-                selectorScreenId, m_contextResolver->currentVirtualDesktop(), m_contextResolver->currentActivity());
-            selectorCtx = m_contextResolver->handleForMode(selectorScreenId, selectorMode);
+            selectorCtx = m_contextResolver->handleFor(selectorScreenId);
+            selectorCtx.mode =
+                m_layoutManager->modeForScreen(selectorScreenId, selectorCtx.virtualDesktop, selectorCtx.activity);
             selectorScreenLocked = m_contextResolver->isLocked(selectorCtx);
         }
         // Reuse the `selectorCtx` handle built above for the lock check —
@@ -286,18 +290,17 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // hover would resnap every other window mid-drag — the "layouts
                     // changing when holding alt to move window" bug.
                     if (selectedLayout) {
-                        // Check lock before applying layout change from drag-drop.
-                        // Mode is resolved through the layout manager (carries
-                        // the (desktop, activity) override on lookup) and the
-                        // gate is checked through the resolver.
-                        bool screenLocked = false;
-                        if (m_contextResolver) {
-                            const auto lcMode = m_layoutManager->modeForScreen(
-                                selectorScreenId, m_contextResolver->currentVirtualDesktop(),
-                                m_contextResolver->currentActivity());
-                            screenLocked =
-                                m_contextResolver->isLocked(m_contextResolver->handleForMode(selectorScreenId, lcMode));
-                        }
+                        // Reuse the `selectorCtx` snapshot built at the top of
+                        // this block — its (desktop, activity) is the same
+                        // frozen tuple the gate above already consulted, and
+                        // its mode was overwritten in place using the layout
+                        // manager's per-(desktop, activity) lookup. Re-reading
+                        // workspace state via the resolver's `currentVirtualDesktop()`
+                        // / `currentActivity()` would re-cross the workspace
+                        // and risk a virtual-desktop switch mid-handler
+                        // decoupling the lock check from the assignLayout
+                        // write below.
+                        const bool screenLocked = m_contextResolver && m_contextResolver->isLocked(selectorCtx);
                         PhosphorZones::Layout* currentLayout =
                             m_layoutManager->resolveLayoutForScreen(selectorScreenId);
                         if (currentLayout != selectedLayout && !screenLocked) {
@@ -306,8 +309,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                             // hidden windows and skip heavy QML property updates / LayerShell
                             // recalculations. All overlay queries are already done above.
                             hideOverlayAndSelector();
-                            m_layoutManager->assignLayout(selectorScreenId, m_layoutManager->currentVirtualDesktop(),
-                                                          m_layoutManager->currentActivity(), selectedLayout);
+                            // Pass the snapshot's (desktop, activity) so the
+                            // write lands on the same axes the gate consulted.
+                            // Routing through `m_layoutManager->currentVirtualDesktop()`
+                            // (a third, independent read) would reintroduce the
+                            // split-snapshot race the resolver was added to remove.
+                            m_layoutManager->assignLayout(selectorScreenId, selectorCtx.virtualDesktop,
+                                                          selectorCtx.activity, selectedLayout);
                             m_layoutManager->setActiveLayout(selectedLayout);
                         }
                     }

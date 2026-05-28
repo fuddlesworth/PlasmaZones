@@ -154,13 +154,18 @@ QUuid LayoutRegistry::exactContextRuleId(const QString& screenId, int virtualDes
 void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
                                           const AssignmentEntry& entry)
 {
-    const bool autotile = (entry.mode == AssignmentEntry::Autotile);
+    // Pass the entry's mode through `modeToWireString` so a future Mode
+    // (e.g. Scrolling) round-trips without collapsing to Snapping/Autotile.
+    // The earlier `bool autotile` shape silently produced "snapping" for any
+    // mode that wasn't Autotile, which would corrupt a Scrolling assignment
+    // on save and round-trip back as Snapping on load.
+    const QString modeToken = modeToWireString(entry.mode);
     // Pass an empty rule name — the settings UI renders an auto-friendly
     // title from the rule's match (with lookup-resolved screen/activity
     // labels). Stamping a raw `screenId · Desktop N · Activity` here would
     // bake connector strings and activity UUIDs into the stored rule.
     PWR::WindowRule rule = PWR::ContextRuleBridge::makeAssignmentRule(
-        QString(), screenId, virtualDesktop, activity, autotile, entry.snappingLayout, entry.tilingAlgorithm);
+        QString(), screenId, virtualDesktop, activity, modeToken, entry.snappingLayout, entry.tilingAlgorithm);
 
     const PWR::WindowRule* existing = findExactContextRule(screenId, virtualDesktop, activity);
     if (existing == nullptr) {
@@ -228,14 +233,13 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
             // Shape 1: rebuild the lossless context-action set with the dead
             // snapping reference cleared; mode + tilingAlgorithm survive.
             const AssignmentEntry entry = entryFromRuleMatchActions(rule);
-            const bool autotile = (entry.mode == AssignmentEntry::Autotile);
             const ContextDims dims = decodeDims(rule.match);
             // Track the affected (screen, desktop) for the post-update
             // layoutAssigned emit — every observer keyed on this rule's
             // context needs to refresh, whether the rule was dropped or just
             // rebuilt.
             affected.append(qMakePair(dims.screenId, dims.virtualDesktop));
-            if (!autotile && entry.tilingAlgorithm.isEmpty()) {
+            if (entry.mode == AssignmentEntry::Snapping && entry.tilingAlgorithm.isEmpty()) {
                 // Nothing meaningful remains — a bare Snapping engine-mode is
                 // the default. Drop the whole rule.
                 qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: dropped context rule" << rule.id.toString()
@@ -243,7 +247,8 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
                 continue;
             }
             PWR::WindowRule rebuilt = rule;
-            rebuilt.actions = PWR::ContextRuleBridge::makeAssignmentActions(autotile, QString(), entry.tilingAlgorithm);
+            rebuilt.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(entry.mode), QString(),
+                                                                            entry.tilingAlgorithm);
             kept.append(rebuilt);
             qCDebug(lcZonesLib) << "purgeSnappingLayoutFromAssignments: rebuilt context rule" << rule.id.toString()
                                 << "— cleared deleted snapping layout, preserved mode/tilingAlgorithm";
@@ -549,8 +554,8 @@ void LayoutRegistry::clearAutotileAssignments()
         }
         // Flip to Snapping — preserve both layout fields so re-enabling
         // autotile can restore the previous algorithm.
-        rule.actions =
-            PWR::ContextRuleBridge::makeAssignmentActions(false, entry.snappingLayout, entry.tilingAlgorithm);
+        rule.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(AssignmentEntry::Snapping),
+                                                                     entry.snappingLayout, entry.tilingAlgorithm);
         changed = true;
 
         // Recover (screen, desktop) for the layoutAssigned signal.
@@ -647,7 +652,7 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         }
         const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldEntries.value(it.key()));
         kept.append(PWR::ContextRuleBridge::makeAssignmentRule(QString(), ctx.screenId, ctx.virtualDesktop,
-                                                               ctx.activity, entry.mode == AssignmentEntry::Autotile,
+                                                               ctx.activity, modeToWireString(entry.mode),
                                                                entry.snappingLayout, entry.tilingAlgorithm));
         storedScreens.insert(ctx.screenId);
         ++count;
