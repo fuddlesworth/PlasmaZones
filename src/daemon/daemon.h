@@ -181,13 +181,17 @@ public:
     /**
      * @brief Frozen-snapshot per-screen mode + disable/lock cascade façade.
      *
-     * Borrowed by D-Bus adaptors + the OverlayService so every consumer
-     * site that used to stitch
+     * Borrowed by the three D-Bus adaptors (SnapAdaptor,
+     * WindowTrackingAdaptor, WindowDragAdaptor) and the daemon's own
+     * navigation / OSD paths so the cascade
      * `(modeFor → currentDesktop → currentActivity → isContextDisabled
-     * → isContextLocked)` by hand goes through one resolver call. The
-     * pointer is non-null after `init()` and stays non-null for the
-     * lifetime of the daemon. See @ref m_contextResolver for the
-     * declaration-order invariant.
+     * → isContextLocked)` resolves through one call instead of being
+     * hand-stitched at each site. OverlayService is NOT yet a consumer —
+     * its disabled-context gates still call the legacy
+     * `isContextDisabled(m_settings, ...)` directly; migrating it is
+     * follow-up work. The pointer is non-null after `init()` and stays
+     * non-null for the lifetime of the daemon. See @ref m_contextResolver
+     * for the declaration-order invariant.
      */
     PhosphorContext::ContextResolver* contextResolver() const
     {
@@ -676,7 +680,6 @@ private:
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;
     QString currentActivity() const;
-    bool isCurrentContextLocked(const QString& screenId) const;
     bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     /**

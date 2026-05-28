@@ -23,6 +23,8 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../core/constants.h"
 #include "../config/settings.h"
+#include <PhosphorContext/ContextHandle.h>
+#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -399,15 +401,28 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
     QString selectorScreenId = resolved.screenId;
     QScreen* screen = resolved.qscreen;
-    if (screen
-        && isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, selectorScreenId,
-                             m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
-        if (m_zoneSelectorShown) {
-            m_zoneSelectorShown = false;
-            m_zoneSelectorShownOn.clear();
-            m_overlayService->hideZoneSelector();
+    // Disable gate via single resolver snapshot, mirroring the Pass 4
+    // pattern in drop.cpp's zone-selector and layout-activation gates.
+    // The legacy `isContextDisabled(..., AssignmentEntry::Snapping, ...)` had
+    // two issues: (a) split-snapshot race — the (desktop, activity) reads
+    // were independent of the mode lookup, so a virtual-desktop switch
+    // between them decoupled them; (b) hard-coded `Snapping` consulted the
+    // wrong disable list when the screen's live mode was autotile. Take
+    // one `handleFor` snapshot so all three axes agree, override the mode
+    // in place via the layout manager's per-(desktop, activity) lookup,
+    // then gate via `isDisabled`.
+    if (screen && m_contextResolver && m_layoutManager) {
+        PhosphorContext::ContextHandle selectorCtx = m_contextResolver->handleFor(selectorScreenId);
+        selectorCtx.mode =
+            m_layoutManager->modeForScreen(selectorScreenId, selectorCtx.virtualDesktop, selectorCtx.activity);
+        if (m_contextResolver->isDisabled(selectorCtx)) {
+            if (m_zoneSelectorShown) {
+                m_zoneSelectorShown = false;
+                m_zoneSelectorShownOn.clear();
+                m_overlayService->hideZoneSelector();
+            }
+            return;
         }
-        return;
     }
 
     bool nearEdge = isNearTriggerEdge(screen, cursorX, cursorY, selectorScreenId);

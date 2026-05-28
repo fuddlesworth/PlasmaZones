@@ -66,11 +66,15 @@ private:
 /**
  * @brief `IModeProvider` impl over the daemon's `ScreenModeRouter`.
  *
- * One-line forwarder. The router is allowed to be null during early
- * shutdown — in that window the adapter falls back to
- * `AssignmentEntry::Snapping`, matching the inline `m_screenModeRouter
- * ? m_screenModeRouter->modeFor(...) : Snapping` pattern the migrated
- * call sites used.
+ * One-line forwarder. The router pointer is captured at construction and
+ * never mutated post-construction (no setter exists). Construction with
+ * a null router is permitted (headless tests) and the adapter falls back
+ * to `AssignmentEntry::Snapping`, matching the inline
+ * `m_screenModeRouter ? m_screenModeRouter->modeFor(...) : Snapping`
+ * pattern the migrated call sites used. During the daemon's `stop()`
+ * shutdown, the declared teardown order tears this adapter down before
+ * the router itself is destroyed — the adapter never sees a router that
+ * has already been freed.
  */
 class DaemonScreenModeAdapter : public PhosphorContext::IModeProvider
 {

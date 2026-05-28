@@ -569,30 +569,6 @@ QString Daemon::currentActivity() const
         : QString();
 }
 
-bool Daemon::isCurrentContextLocked(const QString& screenId) const
-{
-    // Mode-agnostic check: any mode whose per-(screen, desktop, activity)
-    // lock is set counts. Composed by iterating PhosphorZones::allModes()
-    // so adding a future Mode automatically participates without editing
-    // this predicate — the previous hand-coded {Snapping, Autotile} pair
-    // silently misreported Scrolling-mode locks as unlocked.
-    //
-    // Null-guards the resolver: callers can land here during the daemon's
-    // shutdown window where m_contextResolver has been reset but other
-    // Q_OBJECT subscribers (overlay service, shortcut manager) still hold
-    // queued connections firing into the destructor. Reporting "not locked"
-    // is the safe fallback — the daemon is going away anyway.
-    if (!m_contextResolver) {
-        return false;
-    }
-    for (const PhosphorZones::AssignmentEntry::Mode mode : PhosphorZones::allModes()) {
-        if (m_contextResolver->isLocked(m_contextResolver->handleForMode(screenId, mode))) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool Daemon::isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const
 {
     if (!m_contextResolver) {

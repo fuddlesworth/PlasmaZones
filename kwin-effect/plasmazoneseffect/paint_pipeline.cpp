@@ -325,7 +325,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // would otherwise dim our own UI or the system panel. The shouldHandleWindow
     // filter rejects these from snap/tile management, and the opacity hook
     // must follow the same exclusion to stay consistent.
-    {
+    //
+    // Short-circuit on an empty rule set — the common case for users without
+    // any effect-side rules. The animation-cascade sister consumers
+    // (window_filtering.cpp, drag_snap.cpp) follow the same `isEmpty()` gate
+    // to keep default-state cost to two pointer reads; without it, every
+    // paintWindow call churns the rule evaluator's per-window cache for
+    // zero benefit.
+    if (!m_shaderManager.animationRuleSet().isEmpty()) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
             if (auto opacity =

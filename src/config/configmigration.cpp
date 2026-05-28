@@ -1182,13 +1182,15 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
     }
 
     // Walk the canonical v2 dot-path Snapping.Behavior.Display by splitting
-    // the group accessor on '.' — this keeps the migration in lockstep with
-    // the schema instead of duplicating segment names as bare literals.
-    // The accessor still resolves to the v2 group because that group lives
-    // on past v3 (it continues to hold ShowOnAllMonitors and
-    // FilterByAspectRatio); only the three Disabled* keys move out.
+    // the FROZEN v2 accessor on '.' — this keeps the migration in lockstep
+    // with the schema instead of duplicating segment names as bare literals.
+    // Using the LIVE `snappingBehaviorDisplayGroup()` here would silently
+    // retarget the v2→v3 step to whatever path a future rename of that
+    // accessor points to, which by definition isn't where v2 configs ever
+    // wrote. This mirrors the same freeze policy applied at the v3→v4 step
+    // and at the v3-write site below.
     const QStringList v2GroupSegments =
-        ConfigKeys::snappingBehaviorDisplayGroup().split(QLatin1Char('.'), Qt::SkipEmptyParts);
+        ConfigKeys::Legacy::v2SnappingBehaviorDisplayGroup().split(QLatin1Char('.'), Qt::SkipEmptyParts);
     Q_ASSERT(v2GroupSegments.size() == 3);
     const QString& snappingSeg = v2GroupSegments[0];
     const QString& behaviorSeg = v2GroupSegments[1];

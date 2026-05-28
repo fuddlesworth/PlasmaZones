@@ -52,9 +52,9 @@ ContextHandle ContextResolver::globalHandle() const
     // screen contract (documented at `IContextInputs.h::IModeProvider::modeFor`
     // as returning the default mode for an empty `screenId`), keeping the
     // "default mode" decision in one place — `IModeProvider` implementations
-    // — rather than duplicating the fallback here. Callers that need both
-    // legs of the lock check explicitly compose two `handleForMode` builds
-    // — see `Daemon::isCurrentContextLocked` for the canonical pattern.
+    // — rather than duplicating the fallback here. Callers that need to
+    // gate on every mode iterate `PhosphorZones::allModes()` and call
+    // `handleForMode` per mode.
     ContextHandle handle;
     handle.screenId = QString();
     handle.virtualDesktop = m_workspaceState->currentVirtualDesktop();

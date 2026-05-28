@@ -585,9 +585,13 @@ public:
         // v2 legacy keys — used ONLY by migrateV2ToV3.
         // The v2 group itself (Snapping.Behavior.Display) lives on past v3 — it
         // still holds ShowOnAllMonitors and FilterByAspectRatio. Only the three
-        // disabled-* keys move out, so we name the keys with a v2 prefix; the
-        // migration walks the canonical snappingBehaviorDisplayGroup() dot-path
-        // (split on '.') to descend the JSON tree.
+        // disabled-* keys move out, so we name the keys with a v2 prefix.
+        // The migration uses the frozen `v2SnappingBehaviorDisplayGroup` group
+        // accessor to descend the JSON tree — a future rename of the LIVE
+        // `snappingBehaviorDisplayGroup()` accessor must NOT silently retarget
+        // the v2→v3 step to a path no v2 config ever had on disk (the same
+        // freeze-policy hazard the v3→v4 step avoids by using `v3DisplayGroup`).
+        PZ_CONFIG_GROUP(v2SnappingBehaviorDisplayGroup, "Snapping.Behavior.Display")
         PZ_CONFIG_KEY(v2DisabledMonitorsKey, "DisabledMonitors")
         PZ_CONFIG_KEY(v2DisabledDesktopsKey, "DisabledDesktops")
         PZ_CONFIG_KEY(v2DisabledActivitiesKey, "DisabledActivities")
