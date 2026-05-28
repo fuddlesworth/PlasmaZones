@@ -52,7 +52,12 @@ int main(int argc, char* argv[])
     // remember the order.
     QStringList args = app.arguments();
     args.removeFirst();
-    QString socketPathCli = Phosphorctl::stripSocketFlag(args);
+    QString socketErr;
+    QString socketPathCli = Phosphorctl::stripSocketFlag(args, &socketErr);
+    if (!socketErr.isEmpty()) {
+        err << "phosphorctl: " << socketErr << "\n";
+        return 1;
+    }
 
     if (args.isEmpty() || args.front() == QLatin1String("--help") || args.front() == QLatin1String("-h")
         || args.front() == QLatin1String("help")) {
@@ -69,7 +74,12 @@ int main(int argc, char* argv[])
     // args or from a later position. Run it again on the remaining
     // args in case the user wrote `phosphorctl call foo.bar --socket /x`
     //, the post-subcommand position is also valid.
-    const QString postSubcommandSocket = Phosphorctl::stripSocketFlag(args);
+    socketErr.clear();
+    const QString postSubcommandSocket = Phosphorctl::stripSocketFlag(args, &socketErr);
+    if (!socketErr.isEmpty()) {
+        err << "phosphorctl: " << socketErr << "\n";
+        return 1;
+    }
     if (!postSubcommandSocket.isEmpty()) {
         socketPathCli = postSubcommandSocket;
     }

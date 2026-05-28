@@ -198,14 +198,20 @@ ApplicationWindow {
             }
         }
 
-        // Socket + router status footer (compact).
+        // Router status footer (compact). Binds directly to
+        // demoController.status. On the success path that string
+        // starts with "listening on <socketPath>; ..." so the
+        // socket appears once; on the not-started / failed paths
+        // it shows "router not started" / "router failed to start
+        // (see logs)" respectively. Previous version prefixed an
+        // explicit "socket: " line that duplicated the path.
         Text {
             Layout.fillWidth: true
             color: Theme.on_surface_variant
             elide: Text.ElideLeft
             font.family: "monospace"
             font.pixelSize: Tokens.font_size_body_s
-            text: qsTr("socket: %1, %2").arg(demoController.socketPath !== "" ? demoController.socketPath : qsTr("(not running)")).arg(demoController.status)
+            text: demoController.status
         }
     }
 }

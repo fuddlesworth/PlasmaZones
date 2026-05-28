@@ -64,18 +64,24 @@ QString sanitiseForSingleLine(const QString& s)
     return out;
 }
 
-QString stripSocketFlag(QStringList& args)
+QString stripSocketFlag(QStringList& args, QString* errorMessage)
 {
     QString resolved;
     for (int i = 0; i < args.size();) {
         const QString& a = args.at(i);
         if (a == QLatin1String("--socket") || a == QLatin1String("-s")) {
             if (i + 1 >= args.size()) {
-                // Caller will reject the request on missing value;
-                // we leave the flag in place so the error surfaces
-                // through the subcommand parser.
-                ++i;
-                continue;
+                // Dangling flag with no value. Surface as a usage
+                // error rather than leaving the bare `--socket` in
+                // args (where the subcommand handler would otherwise
+                // treat it as a positional argument — schema would
+                // try to query target "--socket", call would error
+                // on the dot-form check, etc.).
+                if (errorMessage) {
+                    *errorMessage = QStringLiteral("'%1' requires a path argument").arg(a);
+                }
+                args.removeAt(i);
+                return {};
             }
             resolved = args.at(i + 1);
             args.removeAt(i + 1);
@@ -85,6 +91,17 @@ QString stripSocketFlag(QStringList& args)
         if (a.startsWith(QLatin1String("--socket="))) {
             resolved = a.mid(QStringLiteral("--socket=").size());
             args.removeAt(i);
+            if (resolved.isEmpty()) {
+                // `--socket=` with empty value: same usage-error
+                // surface as the dangling-flag case above. Don't
+                // silently fall through to PHOSPHOR_SOCKET / XDG
+                // defaults — the user expected the override to take
+                // effect.
+                if (errorMessage) {
+                    *errorMessage = QStringLiteral("'--socket=' requires a non-empty path");
+                }
+                return {};
+            }
             continue;
         }
         ++i;

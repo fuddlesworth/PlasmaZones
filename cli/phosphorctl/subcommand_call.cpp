@@ -58,7 +58,12 @@ int runCall(QStringList args, QString socketPath)
 {
     QTextStream out(stdout);
     QTextStream err(stderr);
-    const QString lateSocket = stripSocketFlag(args);
+    QString socketErr;
+    const QString lateSocket = stripSocketFlag(args, &socketErr);
+    if (!socketErr.isEmpty()) {
+        err << "phosphorctl call: " << socketErr << "\n";
+        return 1;
+    }
     if (!lateSocket.isEmpty()) {
         socketPath = lateSocket;
     }

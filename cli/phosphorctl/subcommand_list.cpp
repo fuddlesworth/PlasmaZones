@@ -22,7 +22,12 @@ int runList(QStringList args, QString socketPath)
 
     // Allow `phosphorctl list --socket /path` in addition to the
     // top-level position, useful when alias-chaining.
-    const QString lateSocket = stripSocketFlag(args);
+    QString socketErr;
+    const QString lateSocket = stripSocketFlag(args, &socketErr);
+    if (!socketErr.isEmpty()) {
+        err << "phosphorctl list: " << socketErr << "\n";
+        return 1;
+    }
     if (!lateSocket.isEmpty()) {
         socketPath = lateSocket;
     }

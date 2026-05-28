@@ -105,9 +105,14 @@ struct PHOSPHORIPC_EXPORT Request
 };
 
 // Parse one NDJSON line into a Request. Returns std::nullopt and
-// populates parseError on malformed input (invalid JSON, missing
-// required `type` field, non-integer `id`). Callers are expected to
-// reply with a MALFORMED_REQUEST error.
+// populates parseError on malformed input: invalid JSON, missing
+// required `type` field, missing per-type required fields (`target`
+// for call/schema/subscribe, `fn` for call, `signal` for subscribe,
+// non-zero `subscriptionId` for unsubscribe), an `id` or
+// `subscriptionId` that isn't a finite integer in the range
+// exactly representable as both a JSON double and a qint64, or an
+// `args` value that isn't an array of size ≤ 4096. Callers are
+// expected to reply with a MALFORMED_REQUEST error.
 [[nodiscard]] PHOSPHORIPC_EXPORT std::optional<Request> parseRequest(const QByteArray& line, QString* parseError);
 
 // Encoders, build the QJsonObject body for each response variant.

@@ -12,7 +12,6 @@
 #include <QVariantMap>
 
 #include <cmath>
-#include <limits>
 
 namespace PhosphorIpc {
 
@@ -31,16 +30,25 @@ constexpr qsizetype MaxArgsLength = 4096;
 // explicitly so the protocol's "id is an integer" contract is
 // honored at the parser level. Returns std::nullopt on rejection;
 // the caller produces the MALFORMED_REQUEST error frame.
+//
+// Precision boundary: doubles cover integer values exactly up to
+// 2^53. Past that, the representable values are spaced 2 apart
+// (then 4, etc.). qint64's positive range extends to 2^63 - 1, but
+// that exact integer is NOT representable as a double — the closest
+// representable value is 2^63 itself. So the practical accepted
+// range is [-2^63, 2^63 - 1024] (the largest exact double below
+// 2^63 is 9223372036854774784 = 2^63 - 1024), even though qint64
+// formally extends to 2^63 - 1. Negative bound is exact:
+// -2^63 = INT64_MIN is exactly representable as a double.
 std::optional<qint64> parseIntegralJsonNumber(double d)
 {
     if (!std::isfinite(d)) {
         return std::nullopt;
     }
-    // Reject anything that loses precision when round-tripped
-    // through qint64. The 2^63 bound is exclusive on the positive
-    // side (qint64 max is 2^63 - 1; the next-lower exact double is
-    // 9223372036854774784.0) and inclusive on the negative side
-    // (qint64 min is -2^63, exactly representable as double).
+    // 2^63 (Int64MaxExclusiveD) IS exactly representable as a
+    // double and equals the rounded value of INT64_MAX; reject it
+    // and anything above as "not strictly less than qint64's
+    // positive overflow boundary".
     constexpr double Int64MinD = -9223372036854775808.0;
     constexpr double Int64MaxExclusiveD = 9223372036854775808.0;
     if (d < Int64MinD || d >= Int64MaxExclusiveD) {
@@ -91,7 +99,7 @@ std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
         const auto parsed = parseIntegralJsonNumber(idValue.toDouble());
         if (!parsed) {
             if (parseError) {
-                *parseError = QStringLiteral("'id' must be an integer in [INT64_MIN, INT64_MAX]");
+                *parseError = QStringLiteral("'id' must be a finite integer within JSON-double-precision int64 range");
             }
             return std::nullopt;
         }
@@ -110,7 +118,8 @@ std::optional<Request> parseRequest(const QByteArray& line, QString* parseError)
         const auto parsed = parseIntegralJsonNumber(subIdValue.toDouble());
         if (!parsed) {
             if (parseError) {
-                *parseError = QStringLiteral("'subscriptionId' must be an integer in [INT64_MIN, INT64_MAX]");
+                *parseError = QStringLiteral(
+                    "'subscriptionId' must be a finite integer within JSON-double-precision int64 range");
             }
             return std::nullopt;
         }

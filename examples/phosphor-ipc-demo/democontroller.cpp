@@ -33,9 +33,13 @@ DemoController::~DemoController() = default;
 
 bool DemoController::start(const QString& socketPath)
 {
-    // m_router is unique_ptr-owned and set once in the ctor; it
-    // never becomes null over the DemoController's lifetime (the
-    // class is Q_DISABLE_COPY_MOVE). No null-check needed.
+    // m_router is initialised by make_unique in the ctor and no
+    // member function reassigns it; it never becomes null over the
+    // DemoController's lifetime. No null-check needed. (The
+    // Q_DISABLE_COPY_MOVE on the class is orthogonal — it prevents
+    // the controller itself from being moved/copied, not its
+    // members from being reassigned, but the no-reassign invariant
+    // is the real reason m_router stays valid.)
     const QString previousSocketPath = m_router->socketPath();
     const bool ok = m_router->start(socketPath);
     if (ok) {

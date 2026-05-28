@@ -139,6 +139,8 @@ private Q_SLOTS:
     void stop_idempotent();
     void start_afterStop_succeeds();
     void oversizedLineClosesConnection();
+    void consecutiveMalformedFramesClosesConnection();
+    void pipelinedFramesAllReceiveReplies();
 };
 
 void TestPhosphorIpcE2e::roundtrip_call()
@@ -431,6 +433,137 @@ void TestPhosphorIpcE2e::oversizedLineClosesConnection()
     // socket is already in UnconnectedState (the disconnect
     // assertion above verifies that); no explicit abort() needed
     // before the QLocalSocket destructor runs.
+}
+
+void TestPhosphorIpcE2e::consecutiveMalformedFramesClosesConnection()
+{
+    // Pin the MaxMalformedFrames=16 per-socket cap. A peer that
+    // streams 17 consecutive garbage lines must receive 16 error
+    // frames (one per malformed input) and then be force-closed on
+    // the 17th. The counter-reset-on-well-formed-frame branch in
+    // dispatch() is exercised implicitly by other tests that send
+    // valid frames after the parser would have surfaced a malformed
+    // one — this test focuses on the cap-and-close path only.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+
+    IpcRouter router;
+    QVERIFY(router.start(sockPath));
+
+    QLocalSocket socket;
+    QByteArray buffer;
+    bool disconnected = false;
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(&socket, &QLocalSocket::readyRead, &loop, [&] {
+        buffer.append(socket.readAll());
+    });
+    QObject::connect(&socket, &QLocalSocket::disconnected, &loop, [&] {
+        disconnected = true;
+        buffer.append(socket.readAll());
+        loop.quit();
+    });
+
+    socket.connectToServer(sockPath);
+    QVERIFY(socket.waitForConnected(2000));
+
+    // Write 17 consecutive malformed frames. The router writes an
+    // error frame per malformed line (suppressed once the cap fires
+    // and the socket is aborted). 16 are tolerated; the 17th
+    // triggers close.
+    for (int i = 0; i < 17; ++i) {
+        socket.write("{ garbage line\n");
+    }
+    socket.flush();
+
+    timeout.start(5000);
+    loop.exec();
+    buffer.append(socket.readAll());
+
+    QVERIFY2(disconnected, "router must close the connection after consecutive malformed frames exceed the cap");
+    // Count MALFORMED_REQUEST error frames that landed. The cap is
+    // 16 — the 17th triggered close, so we should see ≥ 16 error
+    // frames (the writeBeforeAbort + flush order may vary slightly
+    // on the close iteration). 16 is the strict lower bound the
+    // cap guarantees.
+    int errorCount = 0;
+    int pos = 0;
+    while (true) {
+        const int nl = buffer.indexOf('\n', pos);
+        if (nl < 0) {
+            break;
+        }
+        const QByteArray line = buffer.mid(pos, nl - pos);
+        pos = nl + 1;
+        const QJsonObject obj = QJsonDocument::fromJson(line).object();
+        if (obj.value(QStringLiteral("code")).toString() == QStringLiteral("MALFORMED_REQUEST")) {
+            ++errorCount;
+        }
+    }
+    // The strict lower bound the cap guarantees is 16 (router
+    // tolerates exactly 16 consecutive malformed frames before
+    // closing on the 17th). Upper bound 17 covers the one-write-
+    // then-abort race where the 17th's diagnostic frame either
+    // does or doesn't land before the close depending on the
+    // waitForBytesWritten flush window. A regression that closes
+    // earlier (cap < 16) would fail the lower bound; a regression
+    // that never closes would fail the disconnected check above.
+    QVERIFY2(errorCount >= 16 && errorCount <= 17,
+             qPrintable(QStringLiteral("expected 16..17 MALFORMED_REQUEST frames, got %1").arg(errorCount)));
+}
+
+void TestPhosphorIpcE2e::pipelinedFramesAllReceiveReplies()
+{
+    // Pin the MaxFramesPerReadyRead=64 yield-and-reschedule path.
+    // A peer that pipelines >64 valid frames in a single readyRead
+    // burst must eventually receive replies for ALL of them — the
+    // router's queued reschedule must dispatch the leftover frames
+    // on a subsequent event-loop iteration. A regression that lost
+    // the queued kick would leave frames 65..N stranded.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString sockPath = QDir(dir.path()).filePath(QStringLiteral("test.sock"));
+
+    IpcRouter router;
+    QVERIFY(router.start(sockPath));
+
+    QLocalSocket socket;
+    QByteArray buffer;
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    constexpr int FrameCount = 100;
+    QObject::connect(&socket, &QLocalSocket::readyRead, &loop, [&] {
+        buffer.append(socket.readAll());
+        if (buffer.count('\n') >= FrameCount) {
+            loop.quit();
+        }
+    });
+
+    socket.connectToServer(sockPath);
+    QVERIFY(socket.waitForConnected(2000));
+
+    // Pipeline FrameCount list requests in a single write so they
+    // arrive as one readyRead burst on the server side.
+    QByteArray pipeline;
+    for (int i = 1; i <= FrameCount; ++i) {
+        QJsonObject req;
+        req.insert(QStringLiteral("type"), QStringLiteral("list"));
+        req.insert(QStringLiteral("id"), i);
+        pipeline.append(writeLine(req));
+    }
+    socket.write(pipeline);
+    socket.flush();
+
+    timeout.start(10000);
+    loop.exec();
+
+    QCOMPARE(buffer.count('\n'), FrameCount);
+    socket.disconnectFromServer();
 }
 
 QTEST_MAIN(TestPhosphorIpcE2e)

@@ -101,6 +101,18 @@ bool installSignalHandlers()
         teardownSignalHandlers(false, false);
         return false;
     }
+    // O_NONBLOCK on the read end too. Without this, the drain loop
+    // in the SIGINT/SIGTERM lambda would block indefinitely on its
+    // second read(): the first read returns the signal byte and the
+    // loop continues; the second read blocks because the pipe is
+    // empty AND this process still holds the write end (so no EOF).
+    // The drain loop's EINTR/EAGAIN exit conditions assume a
+    // non-blocking fd; without it Ctrl+C silently hangs the CLI.
+    const int readFlags = ::fcntl(g_signalFd[0], F_GETFL);
+    if (readFlags == -1 || ::fcntl(g_signalFd[0], F_SETFL, readFlags | O_NONBLOCK) == -1) {
+        teardownSignalHandlers(false, false);
+        return false;
+    }
     // sigaction over std::signal: std::signal's re-arm semantics
     // are implementation-defined (BSD vs SysV historical split).
     // sigaction is portable. SA_RESTART avoids interrupting
@@ -133,7 +145,12 @@ int runSubscribe(QStringList args, QString socketPath)
 {
     QTextStream out(stdout);
     QTextStream err(stderr);
-    const QString lateSocket = stripSocketFlag(args);
+    QString socketErr;
+    const QString lateSocket = stripSocketFlag(args, &socketErr);
+    if (!socketErr.isEmpty()) {
+        err << "phosphorctl subscribe: " << socketErr << "\n";
+        return 1;
+    }
     if (!lateSocket.isEmpty()) {
         socketPath = lateSocket;
     }
@@ -233,22 +250,40 @@ int runSubscribe(QStringList args, QString socketPath)
                 out.flush();
             } else if (frameType == QLatin1String(PhosphorIpc::ResponseType::Error)) {
                 // Mid-stream wire-level error: route to stderr with
-                // the structured Code: Message format used by the
-                // other subcommands. Don't print it as a normal
-                // event line (a downstream `jq` pipeline would
-                // choke if event-shaped objects were interleaved
-                // with error-shaped objects).
+                // the structured Code: Message [(detail: ...)]
+                // format used by subcommand_call. Don't print it as
+                // a normal event line (a downstream `jq` pipeline
+                // would choke if event-shaped objects were
+                // interleaved with error-shaped objects).
                 err << "phosphorctl subscribe: "
                     << sanitiseForSingleLine(obj.value(QLatin1String(PhosphorIpc::Field::Code)).toString()) << ": "
-                    << sanitiseForSingleLine(obj.value(QLatin1String(PhosphorIpc::Field::Message)).toString()) << "\n";
+                    << sanitiseForSingleLine(obj.value(QLatin1String(PhosphorIpc::Field::Message)).toString());
+                const QJsonValue detail = obj.value(QLatin1String(PhosphorIpc::Field::Detail));
+                if (detail.isObject() && !detail.toObject().isEmpty()) {
+                    err << " (detail: "
+                        << QString::fromUtf8(QJsonDocument(detail.toObject()).toJson(QJsonDocument::Compact).trimmed())
+                        << ")";
+                }
+                err << "\n";
+                err.flush();
+            } else if (frameType == QLatin1String(PhosphorIpc::ResponseType::Reply)) {
+                // Reply frames (e.g. the unsubscribe ack that lands
+                // during the Ctrl+C wait) are intentionally consumed
+                // and dropped: they're request/response correlated,
+                // not streaming events, and printing them as events
+                // would corrupt the event stream a downstream
+                // consumer is parsing.
+            } else {
+                // Unknown frame type. The wire protocol today is
+                // closed-set Reply/Event/Error; a future server may
+                // add a new type and we should not silently drop
+                // it. Emit a one-line stderr diagnostic so the user
+                // notices a CLI/server skew without breaking the
+                // stdout event stream.
+                err << "phosphorctl subscribe: unknown frame type '" << sanitiseForSingleLine(frameType)
+                    << "' (CLI/server version skew?)\n";
                 err.flush();
             }
-            // Reply frames (e.g. the unsubscribe ack that lands
-            // during the Ctrl+C wait) are intentionally consumed
-            // and dropped: they're request/response correlated, not
-            // streaming events, and printing them as events would
-            // corrupt the event stream a downstream consumer is
-            // parsing.
         }
     };
 
@@ -294,11 +329,14 @@ int runSubscribe(QStringList args, QString socketPath)
         // exit code would mis-report a Ctrl+C as "server died".
         userRequestedQuit = true;
         char drain[16];
-        // Drain whatever the handler queued. Retry on EINTR (a
-        // syscall interrupted by a signal during the drain is a
-        // transient condition, not a stop signal); exit the loop
-        // on EAGAIN/EWOULDBLOCK (pipe empty) or any other terminal
-        // error.
+        // Drain whatever the handler queued. The read end is
+        // O_NONBLOCK (set in installSignalHandlers), so an empty
+        // pipe surfaces as EAGAIN/EWOULDBLOCK rather than blocking
+        // forever. Retry on EINTR (a syscall interrupted by a
+        // signal during the drain is a transient condition); exit
+        // on EAGAIN/EWOULDBLOCK (pipe empty), on EOF (n == 0,
+        // shouldn't happen since this process holds the write end),
+        // or on any other terminal error.
         while (true) {
             const ssize_t n = ::read(g_signalFd[0], drain, sizeof(drain));
             if (n > 0) {
@@ -334,15 +372,16 @@ int runSubscribe(QStringList args, QString socketPath)
     // lambda above would call quit() BEFORE exec() entered, leaving
     // the loop stuck waiting for an event that already happened.
     // Short-circuit that race by checking state up front; otherwise
-    // run the loop.
-    int rc = 0;
+    // run the loop. We don't capture exec()'s return value — Qt6's
+    // QCoreApplication::quit() is equivalent to exit(0), and no
+    // path in this function calls exit(N) with N != 0, so the
+    // return value is always 0 when the loop terminates normally.
+    // The user-visible exit code is computed below from
+    // serverDisconnected (set by the disconnected lambda).
     if (socket->state() != QLocalSocket::ConnectedState) {
         serverDisconnected = true;
     } else {
-        rc = QCoreApplication::exec();
-    }
-    if (rc != 0) {
-        return rc;
+        QCoreApplication::exec();
     }
     // Server-initiated disconnect exits 2 so scripts driving us
     // can distinguish "Ctrl+C clean stop" from "server died".

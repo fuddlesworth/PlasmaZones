@@ -36,7 +36,7 @@ namespace PhosphorIpc {
 //   - QVariantList                                     → {"type":"array"}
 //   - QVariantMap / QJsonObject                        → {"type":"object"}
 //   - Void (return only)                               → "returns" omitted
-//   - Unknown / custom                                 → {"description":"<QMetaType::name>"}
+//   - Unknown / custom                                 → {"description":"custom QMetaType: <name>"}
 //
 // The CLI (phosphorctl) uses this schema for argument validation
 // before sending a call request. Server side, the schema lets

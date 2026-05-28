@@ -97,21 +97,31 @@ Error codes: `NO_SUCH_TARGET`, `NO_SUCH_FN`, `NO_SUCH_SIGNAL`,
 #include <PhosphorIpc/IpcEngine.h>
 #include <PhosphorIpc/IpcRouter.h>
 
-PhosphorIpc::IpcRouter router;
-if (!router.start()) {  // binds $XDG_RUNTIME_DIR/phosphor.sock
-    qWarning("IPC router failed to start (XDG_RUNTIME_DIR unset, "
-             "permission denied, or stale socket file held by another process)");
-    // Application can continue without IPC; failure is non-fatal.
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+
+int main(int argc, char** argv) {
+    QGuiApplication app(argc, argv);
+    // Declare `router` BEFORE `engine` so reverse-order destruction
+    // tears the engine down FIRST; otherwise QML-side IpcTarget
+    // instances would unregister against a dead router.
+    PhosphorIpc::IpcRouter router;
+    if (!router.start()) {  // binds $XDG_RUNTIME_DIR/phosphor.sock
+        qWarning("IPC router failed to start "
+                 "(XDG_RUNTIME_DIR unset, another live listener on "
+                 "the same path, or insufficient permissions)");
+        // Application can continue without IPC; failure is non-fatal.
+        // The router auto-recovers from STALE socket files (left
+        // behind by a crashed previous run) — those don't cause
+        // start() failures.
+    }
+
+    QQmlApplicationEngine engine;
+    PhosphorIpc::IpcEngine::install(&engine, &router);
+    engine.loadFromModule(...);  // shell QML
+    return app.exec();
 }
-
-QQmlApplicationEngine engine;
-PhosphorIpc::IpcEngine::install(&engine, &router);
-engine.loadFromModule(...);  // shell QML
 ```
-
-Declare `router` BEFORE `engine` so reverse-order destruction tears
-the engine down first; otherwise QML-side `IpcTarget` instances
-would unregister against a dead router.
 
 The shell QML can now declare `IpcTarget` instances anywhere in the
 component tree; each one auto-registers via the router stashed on

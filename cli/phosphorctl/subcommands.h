@@ -12,7 +12,14 @@ namespace Phosphorctl {
 // flag was supplied). Called by both the top-level dispatcher and
 // the per-subcommand handlers so `phosphorctl --socket /x call ...`
 // AND `phosphorctl call ... --socket /x` both work.
-[[nodiscard]] QString stripSocketFlag(QStringList& args);
+//
+// On usage error (`--socket` with no following value, or
+// `--socket=` with an empty value), populates `*errorMessage` (if
+// non-null) and returns a sentinel "" with `args` left in a
+// partially-consumed state — callers detect the error by checking
+// errorMessage and bailing out rather than treating the dangling
+// `--socket` as a positional argument.
+[[nodiscard]] QString stripSocketFlag(QStringList& args, QString* errorMessage = nullptr);
 
 // Sanitise a server-supplied string for safe stdout printing.
 // Server-side targets may return / broadcast strings that originated
