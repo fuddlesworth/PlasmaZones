@@ -2,1125 +2,106 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
+import org.phosphor.settings.ui as PhosphorUi
 
-ApplicationWindow {
-    // Cached breadcrumb segment list for the current navigation
-    // state. Rendered as `[sub-mode] › [category]? › [current page]`
-    // with every non-leaf segment navigable; the sub-mode segment is
-    // not clickable since it's where the user already is. The
-    // category segment is spliced in only when the active page lives
-    // inside an inline collapsible category (e.g. Animations /
-    // Surfaces / Windows). In main mode the chain collapses to just
-    // the current page name.
+// Top-level settings window. Chrome (sidebar, breadcrumbs, apply/discard
+// footer, "select a page" placeholder) comes from
+// PhosphorUi.SettingsAppWindow — driven by the PageRegistry that
+// SettingsController.app exposes. This file owns the PlasmaZones-specific
+// glue that surrounds the chrome: the layout-context popup menu QML pages
+// reach via `window.layoutContextMenu`, the three-way unsaved-changes
+// dialog (Apply / Discard / Cancel — richer than the lib's plain
+// Discard/Keep prompt), the toast, the shortcut overlay, and the
+// What's-New banner that pops on first launch after an update.
+PhosphorUi.SettingsAppWindow {
+    // Aspect-ratio labels consumed by the layout context menu's
+    // submenu — kept at window scope rather than inside the Menu so
+    // future consumers (Per-Screen Override picker, Layouts page) can
+    // bind to the same canonical i18n strings without duplicating them.
 
     id: window
 
-    // Expose the layout context menu so Loader-loaded pages can connect to its signals
+    // ── Public API used by per-page QML files ───────────────────────
+    // Pages reach the layout-context popup via window.layoutContextMenu.
     readonly property alias layoutContextMenu: layoutContextMenu
-    // Responsive sidebar: collapse to icon-only below 750px
-    readonly property bool sidebarCompact: window.width < Kirigami.Units.gridUnit * 50
-    // Track page navigation for transitions
-    // Shortcut overlay visibility
-    property bool _showShortcuts: false
-    // Close-without-save guard
-    property bool _closeConfirmed: false
-    // ── Drill-down sidebar state ─────────────────────────────────────
-    // "main" = top-level list; any other value names the currently-
-    // displayed sub-sidebar parent (e.g. "snapping", "tiling",
-    // "animations"). Sub-modes drill back to "main" via `_drillOut`.
-    // Inline collapsible categories ("display", "rules",
-    // "animations-surfaces", "animations-library", and the snapping/
-    // tiling `*-cat` buckets) are NOT sidebar modes — they expand
-    // inline under their host mode and never enter `_sidebarMode`.
-    property string _sidebarMode: "main"
-    // Suppression flag for the sidebar ListView's accordion add/remove
-    // transitions. Set true while `sidebarTransition` is rebuilding the
-    // model so the drill-in/out cross-fade isn't fought by per-row
-    // accordion animations. Toggling a collapsible category leaves this
-    // false so the accordion plays as intended.
-    property bool _suppressAccordion: false
-    // Expanded state for inline collapsible categories. Every known
-    // category is seeded to `true` so the sidebar opens with all
-    // groups expanded — the user can collapse any of them with a
-    // single click, and per-session state survives in this map.
-    // Categories currently come in three flavours: top-level
-    // "display" / "rules" groupings under the main sidebar, the
-    // Snapping/Tiling sub-sidebar `*-cat` buckets, and the
-    // Animations sub-sidebar "animations-surfaces" /
-    // "animations-library" buckets. Mutated by replacing the whole
-    // object so QML's binding system picks up the change.
-    property var _expandedCategories: ({
-        "display": true,
-        "rules": true,
-        "snapping-visual-cat": true,
-        "snapping-behavior-cat": true,
-        "snapping-config-cat": true,
-        "tiling-visual-cat": true,
-        "tiling-behavior-cat": true,
-        "tiling-config-cat": true,
-        "animations-surfaces": true,
-        "animations-library": true
-    })
-    // Main sidebar items. "display" and "rules" are top-level inline
-    // collapsible categories that group related leaves under a single
-    // header. They behave exactly like Surfaces/Library inside the
-    // Animations sub-sidebar: the header row toggles _expandedCategories
-    // and renders its children inline (indented) immediately below.
-    readonly property var _mainItems: [{
-        "name": "overview",
-        "label": i18n("Overview"),
-        "iconName": "monitor",
-        "hasChildren": false,
-        "hasDividerAfter": true
-    }, {
-        "name": "display",
-        "label": i18n("Display"),
-        "iconName": "preferences-desktop-display",
-        "hasChildren": true,
-        "isCollapsible": true,
-        "hasDividerAfter": true
-    }, {
-        "name": "snapping",
-        "label": i18n("Snapping"),
-        "iconName": "view-split-left-right",
-        "hasChildren": true,
-        "hasDividerAfter": false
-    }, {
-        "name": "tiling",
-        "label": i18n("Tiling"),
-        "iconName": "window-duplicate",
-        "hasChildren": true,
-        "hasDividerAfter": true
-    }, {
-        "name": "animations",
-        "label": i18n("Animations"),
-        "iconName": "media-playback-start",
-        "hasChildren": true,
-        "hasDividerAfter": false
-    }, {
-        "name": "rules",
-        "label": i18n("Rules"),
-        "iconName": "view-list-details",
-        "hasChildren": true,
-        "isCollapsible": true,
-        "hasDividerAfter": true
-    }, {
-        "name": "editor",
-        "label": i18n("Editor"),
-        "iconName": "document-edit",
-        "hasChildren": false,
-        "hasDividerAfter": false
-    }, {
-        "name": "general",
-        "label": i18n("General"),
-        "iconName": "configure",
-        "hasChildren": false,
-        "hasDividerAfter": false
-    }, {
-        "name": "about",
-        "label": i18n("About"),
-        "iconName": "help-about",
-        "hasChildren": false,
-        "hasDividerAfter": false
-    }]
-    // Children for each parent
-    readonly property var _childItems: ({
-        "display": [{
-            "name": "virtualscreens",
-            "label": i18n("Virtual Screens"),
-            "iconName": "virtual-desktops"
-        }, {
-            "name": "layouts",
-            "label": i18n("Layouts"),
-            "iconName": "view-grid"
-        }],
-        "rules": [{
-            "name": "window-rules",
-            "label": i18n("Window Rules"),
-            "iconName": "view-list-details"
-        }, {
-            "name": "exclusions",
-            "label": i18n("Exclusions"),
-            "iconName": "dialog-cancel"
-        }],
-        "snapping": [{
-            "name": "snapping-visual-cat",
-            "label": i18n("Visual"),
-            "iconName": "preferences-desktop-color",
-            "hasChildren": true,
-            "isCollapsible": true,
-            "hasDividerAfter": true
-        }, {
-            "name": "snapping-behavior-cat",
-            "label": i18n("Behavior"),
-            "iconName": "preferences-system",
-            "hasChildren": true,
-            "isCollapsible": true,
-            "hasDividerAfter": true
-        }, {
-            "name": "snapping-config-cat",
-            "label": i18n("Configuration"),
-            "iconName": "configure",
-            "hasChildren": true,
-            "isCollapsible": true
-        }],
-        "snapping-visual-cat": [{
-            "name": "snapping-appearance",
-            "label": i18n("Appearance"),
-            "iconName": "preferences-desktop-color"
-        }, {
-            "name": "snapping-effects",
-            "label": i18n("Effects"),
-            "iconName": "preferences-desktop-effects"
-        }, {
-            "name": "snapping-shaders",
-            "label": i18n("Shaders"),
-            "iconName": "preferences-desktop-display"
-        }],
-        "snapping-behavior-cat": [{
-            "name": "snapping-behavior",
-            "label": i18n("Behavior"),
-            "iconName": "preferences-system"
-        }, {
-            "name": "snapping-zoneselector",
-            "label": i18n("Zone Selector"),
-            "iconName": "view-choose"
-        }],
-        "snapping-config-cat": [{
-            "name": "snapping-ordering",
-            "label": i18n("Priority"),
-            "iconName": "view-sort"
-        }, {
-            "name": "snapping-shortcuts",
-            "label": i18n("Quick Shortcuts"),
-            "iconName": "bookmark"
-        }],
-        "tiling": [{
-            "name": "tiling-visual-cat",
-            "label": i18n("Visual"),
-            "iconName": "preferences-desktop-color",
-            "hasChildren": true,
-            "isCollapsible": true,
-            "hasDividerAfter": true
-        }, {
-            "name": "tiling-behavior-cat",
-            "label": i18n("Behavior"),
-            "iconName": "preferences-system",
-            "hasChildren": true,
-            "isCollapsible": true,
-            "hasDividerAfter": true
-        }, {
-            "name": "tiling-config-cat",
-            "label": i18n("Configuration"),
-            "iconName": "configure",
-            "hasChildren": true,
-            "isCollapsible": true
-        }],
-        "tiling-visual-cat": [{
-            "name": "tiling-appearance",
-            "label": i18n("Appearance"),
-            "iconName": "preferences-desktop-color"
-        }],
-        "tiling-behavior-cat": [{
-            "name": "tiling-behavior",
-            "label": i18n("Behavior"),
-            "iconName": "preferences-system"
-        }, {
-            "name": "tiling-algorithm",
-            "label": i18n("Algorithms"),
-            "iconName": "view-grid"
-        }],
-        "tiling-config-cat": [{
-            "name": "tiling-ordering",
-            "label": i18n("Priority"),
-            "iconName": "view-sort"
-        }, {
-            "name": "tiling-shortcuts",
-            "label": i18n("Quick Shortcuts"),
-            "iconName": "bookmark"
-        }],
-        "animations": [{
-            "name": "animations-general",
-            "label": i18n("General"),
-            "iconName": "configure",
-            "hasDividerAfter": true
-        }, {
-            "name": "animations-surfaces",
-            "label": i18n("Surfaces"),
-            "iconName": "preferences-desktop-multimedia",
-            "hasChildren": true,
-            "isCollapsible": true
-        }, {
-            "name": "animations-library",
-            "label": i18n("Library"),
-            "iconName": "folder-open",
-            "hasChildren": true,
-            "isCollapsible": true
-        }],
-        "animations-surfaces": [{
-            "name": "animations-windows",
-            "label": i18n("Windows"),
-            "iconName": "window-new"
-        }, {
-            "name": "animations-osds",
-            "label": i18n("OSDs"),
-            "iconName": "dialog-information"
-        }, {
-            "name": "animations-overlays",
-            "label": i18n("Overlays"),
-            "iconName": "view-presentation"
-        }, {
-            "name": "animations-side-panels",
-            "label": i18n("Side Panels"),
-            "iconName": "sidebar-collapse-symbolic"
-        }, {
-            "name": "animations-widgets",
-            "label": i18n("Widgets"),
-            "iconName": "preferences-desktop-theme"
-        }, {
-            "name": "animations-editor",
-            "label": i18n("Layout Editor"),
-            "iconName": "document-edit"
-        }],
-        "animations-library": [{
-            "name": "animations-presets",
-            "label": i18n("Presets"),
-            "iconName": "bookmarks"
-        }, {
-            "name": "animations-motionsets",
-            "label": i18n("Motion Sets"),
-            "iconName": "color-palette"
-        }, {
-            "name": "animations-shaders",
-            "label": i18n("Shaders"),
-            "iconName": "preferences-desktop-display"
-        }]
-    })
-    // Page component map -- loaded on demand by Loader
-    readonly property var _pageComponents: ({
-        "overview": "MonitorStatePage.qml",
-        "virtualscreens": "VirtualScreensPage.qml",
-        "layouts": "LayoutsPage.qml",
-        "snapping-appearance": "SnappingAppearancePage.qml",
-        "snapping-behavior": "SnappingBehaviorPage.qml",
-        "snapping-zoneselector": "SnappingZoneSelectorPage.qml",
-        "snapping-effects": "SnappingEffectsPage.qml",
-        "snapping-shaders": "SnappingShadersPage.qml",
-        "tiling-appearance": "TilingAppearancePage.qml",
-        "tiling-behavior": "TilingBehaviorPage.qml",
-        "tiling-algorithm": "TilingAlgorithmPage.qml",
-        "snapping-shortcuts": "SnappingQuickShortcutsPage.qml",
-        "snapping-ordering": "SnappingOrderingPage.qml",
-        "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
-        "tiling-ordering": "TilingOrderingPage.qml",
-        "window-rules": "WindowRulesPage.qml",
-        "exclusions": "ExclusionsPage.qml",
-        "editor": "EditorPage.qml",
-        "general": "GeneralPage.qml",
-        "about": "AboutPage.qml",
-        "animations-general": "AnimationsGeneralPage.qml",
-        "animations-windows": "AnimationsWindowsPage.qml",
-        "animations-editor": "AnimationsEditorPage.qml",
-        "animations-osds": "AnimationsOsdsPage.qml",
-        "animations-overlays": "AnimationsOverlaysPage.qml",
-        "animations-side-panels": "AnimationsSidePanelsPage.qml",
-        "animations-widgets": "AnimationsWidgetsPage.qml",
-        "animations-presets": "AnimationsPresetsPage.qml",
-        "animations-motionsets": "AnimationsMotionSetsPage.qml",
-        "animations-shaders": "AnimationsShadersPage.qml"
-    })
-    // Shared aspect ratio labels (used in context menu + LayoutsPage section headers)
+    // Kept as an object literal for back-compat with any QML reader that
+    // expects index-by-key access (a Repeater iterates the keys / a
+    // delegate looks up by aspect-ratio key). Reading any value here
+    // forces the dependent binding via the QtObject's per-property
+    // bindings, so locale changes still propagate.
+    //
+    // WARNING: Consumers MUST NOT cache the object literal into a
+    // local `var` and then read fields off the cache — the cache
+    // captures the QtObject member values at the moment of
+    // assignment and is NOT re-evaluated when the user changes
+    // language. Read fields off `window.aspectRatioLabels` directly
+    // (or call `window.aspectRatioLabel(key)`) at the point of use so
+    // QML's property-binding machinery sees the dependency and
+    // re-evaluates when the underlying i18n() strings refresh. The
+    // outer `readonly property var` IS itself a binding, so reading
+    // it inline is fine; caching it into a non-binding context is
+    // not.
     readonly property var aspectRatioLabels: ({
-        "any": i18n("All Monitors"),
-        "standard": i18n("Standard (16:9)"),
-        "ultrawide": i18n("Ultrawide (21:9)"),
-        "super-ultrawide": i18n("Super-Ultrawide (32:9)"),
-        "portrait": i18n("Portrait (9:16)")
-    })
-    // Flat name → label map computed once from `_mainItems` and
-    // every `_childItems` bucket. Drives `_modeLabel` and the
-    // breadcrumb so resolving a label is a single hash lookup
-    // instead of nested-loop scans on every binding re-evaluation.
-    // Property is `readonly` so QML caches the value at startup;
-    // both source maps are also `readonly`, so the index never goes
-    // stale.
-    readonly property var _labelByName: {
-        let out = ({
-        });
-        for (let i = 0; i < _mainItems.length; i++) {
-            out[_mainItems[i].name] = _mainItems[i].label;
+            "any": aspectRatioLabelsObject.allMonitors,
+            "standard": aspectRatioLabelsObject.standard,
+            "ultrawide": aspectRatioLabelsObject.ultrawide,
+            "super-ultrawide": aspectRatioLabelsObject.superUltrawide,
+            "portrait": aspectRatioLabelsObject.portrait
+        })
+    // Keyboard-shortcut overlay state.
+    property bool _showShortcuts: false
+
+    // ── Public functions (called from per-page QML): ───────────────
+    //   - aspectRatioLabel(key): translate an aspect-ratio key to its
+    //     localized label (mirrors the `aspectRatioLabels` lookup map
+    //     for consumers that prefer the function form).
+    //   - showWhatsNew(): pop the WhatsNewPage dialog. Used by the
+    //     AboutPage "What's New" link and by post-update auto-pop.
+    //   - showToast(msg): surface a transient pill notification at
+    //     the bottom of the window. Used by every page for inline
+    //     success / failure feedback.
+    function aspectRatioLabel(key) {
+        switch (key) {
+        case "any":
+            return aspectRatioLabelsObject.allMonitors;
+        case "standard":
+            return aspectRatioLabelsObject.standard;
+        case "ultrawide":
+            return aspectRatioLabelsObject.ultrawide;
+        case "super-ultrawide":
+            return aspectRatioLabelsObject.superUltrawide;
+        case "portrait":
+            return aspectRatioLabelsObject.portrait;
+        default:
+            return key;
         }
-        const buckets = Object.keys(_childItems);
-        for (let b = 0; b < buckets.length; b++) {
-            const entries = _childItems[buckets[b]];
-            for (let e = 0; e < entries.length; e++) {
-                out[entries[e].name] = entries[e].label;
-            }
-        }
-        return out;
-    }
-    // Hard depth ceiling for recursive walks through `_childItems` —
-    // guards against a malformed map (cyclic lineage, self-referencing
-    // parent) producing an infinite loop in `_firstLeafOf` and
-    // `_collectMatchingDescendants`. Today's tree never exceeds 2
-    // hops; 16 is an order of magnitude headroom.
-    readonly property int _maxNavDepth: 16
-    // Cached as a `readonly property var` so the Repeater's `model`
-    // and per-delegate separator-visibility binding share a single
-    // computation. Reading `_sidebarMode` and `activePage` inside
-    // the IIFE registers the binding's reactivity dependencies.
-    readonly property var _breadcrumbModel: {
-        if (_sidebarMode === "main") {
-            const activeName = settingsController.activePage;
-            return [{
-                "name": activeName,
-                "label": _modeLabel(activeName),
-                "clickable": false
-            }];
-        }
-        // No intermediate sub-modes today (Surfaces/Library inside
-        // Animations are inline collapsible categories, not drill-down
-        // sub-modes), so the chain has exactly one entry: the current
-        // sub-sidebar mode. If a future intermediate parent shows up,
-        // restore the parent-walk here.
-        let segments = [{
-            "name": _sidebarMode,
-            "label": _modeLabel(_sidebarMode),
-            "clickable": false
-        }];
-        // If the active page lives inside an inline collapsible category
-        // (e.g. animations-windows under animations-surfaces), splice the
-        // category segment in between the mode and the page so the
-        // breadcrumb reads "Animations / Surfaces / Windows".
-        const activePage = settingsController.activePage;
-        const cat = _categoryOf(activePage);
-        if (cat.length > 0)
-            segments.push({
-            "name": cat,
-            "label": _modeLabel(cat),
-            "clickable": true
-        });
-
-        segments.push({
-            "name": activePage,
-            "label": _subPageLabel(activePage),
-            "clickable": false
-        });
-        return segments;
-    }
-    /// Set of `_childItems` bucket keys whose entries are inline
-    /// collapsible categories — derived from the data once at startup so
-    /// adding a new category to `_childItems` automatically participates
-    /// in `_categoryOf` / breadcrumb-splice / smart-expand without a
-    /// matching hardcoded list edit. A bucket is a category iff some
-    /// parent bucket references it with `isCollapsible: true`.
-    readonly property var _categoryBuckets: {
-        let buckets = ({
-        });
-        const parents = Object.keys(_childItems);
-        for (let p = 0; p < parents.length; p++) {
-            const entries = _childItems[parents[p]];
-            for (let e = 0; e < entries.length; e++) {
-                if (entries[e].isCollapsible === true)
-                    buckets[entries[e].name] = true;
-
-            }
-        }
-        // Top-level `_mainItems` collapsibles (e.g. "display", "rules")
-        // also have a `_childItems` bucket of the same name; promote them
-        // so `_categoryOf` finds pages inside those groups too.
-        for (let i = 0; i < _mainItems.length; i++) {
-            if (_mainItems[i].isCollapsible === true)
-                buckets[_mainItems[i].name] = true;
-
-        }
-        return buckets;
-    }
-
-    /// Resolve the page QML source for @p pageName. An unmapped page name is
-    /// a navigation bug — surface it with a console.warn rather than silently
-    /// falling back, mirroring the sidebar's "show the gap visibly" stance.
-    function _resolvePageSource(pageName) {
-        var file = window._pageComponents[pageName];
-        if (file === undefined) {
-            console.warn("Main.qml: no page component mapped for activePage '" + pageName + "' — falling back to LayoutsPage.qml");
-            file = "LayoutsPage.qml";
-        }
-        return Qt.resolvedUrl(file);
-    }
-
-    // Walk @p parentName's descendants and return every leaf whose label
-    // matches @p searchText. Nested labels are prefixed with their
-    // immediate parent ("Surfaces / Windows") so a search hit is
-    // unambiguous when multiple intermediate categories live under the
-    // same grandparent. When an intermediate parent's OWN label matches
-    // the query (e.g. searching "surfaces"), every leaf under it is
-    // included unfiltered — otherwise typing a category name would yield
-    // empty results because the parent itself is a virtual non-leaf.
-    // @p depth is the recursion guard — short-circuits at
-    // `_maxNavDepth` so a cyclic `_childItems` map can't stack-overflow.
-    function _collectMatchingDescendants(parentName, searchText, depth) {
-        const nextDepth = depth === undefined ? 0 : depth;
-        if (nextDepth >= _maxNavDepth)
-            return [];
-
-        let out = [];
-        let children = _childItems[parentName] || [];
-        for (let j = 0; j < children.length; j++) {
-            let child = children[j];
-            if (child.hasChildren) {
-                let intermediateMatches = child.label.toLowerCase().indexOf(searchText) >= 0;
-                let nestedQuery = intermediateMatches ? "" : searchText;
-                let nested = _collectMatchingDescendants(child.name, nestedQuery, nextDepth + 1);
-                for (let k = 0; k < nested.length; k++) {
-                    out.push({
-                        "name": nested[k].name,
-                        "label": child.label + " / " + nested[k].label,
-                        "iconName": nested[k].iconName,
-                        "hasDividerAfter": false
-                    });
-                }
-            } else if (searchText === "" || child.label.toLowerCase().indexOf(searchText) >= 0) {
-                out.push(child);
-            }
-        }
-        return out;
-    }
-
-    function _rebuildSidebar() {
-        sidebarModel.clear();
-        let searchText = sidebarSearch.text.toLowerCase();
-        if (_sidebarMode === "main") {
-            for (let i = 0; i < _mainItems.length; i++) {
-                let item = _mainItems[i];
-                if (searchText) {
-                    // Search the item label and walk every descendant
-                    // (children + grand-children) so a Surfaces leaf
-                    // like "Windows" still surfaces under the
-                    // top-level Animations entry.
-                    let itemMatches = item.label.toLowerCase().indexOf(searchText) >= 0;
-                    // When a top-level collapsible category's OWN label
-                    // matches, broaden the descendant walk to include every
-                    // leaf — otherwise the user sees just the bare category
-                    // header (which isn't navigable) with no children. Mirrors
-                    // the intermediate-label-match logic in
-                    // `_collectMatchingDescendants`. Non-collapsible drill-down
-                    // parents (Snapping/Tiling/Animations) keep their current
-                    // behaviour: the header alone is enough because clicking
-                    // it drills in.
-                    let descendantQuery = (item.isCollapsible === true && itemMatches) ? "" : searchText;
-                    let matchingChildren = item.hasChildren ? _collectMatchingDescendants(item.name, descendantQuery) : [];
-                    if (!itemMatches && matchingChildren.length === 0)
-                        continue;
-
-                    // Show parent. Inline-collapsible categories are NEVER
-                    // drillable (they don't have a sub-sidebar mode); the
-                    // matched children appear below as search hits and the
-                    // header is a non-navigable label — the click handler's
-                    // `_categoryBuckets` guard keeps a stray header click
-                    // from setting `activePage` to the category name.
-                    sidebarModel.append({
-                        "name": item.name,
-                        "label": item.label,
-                        "iconName": item.iconName,
-                        "hasChildren": item.isCollapsible !== true && matchingChildren.length === 0 && item.hasChildren,
-                        "isBackButton": false,
-                        "hasDividerAfter": false,
-                        "isDivider": false,
-                        "isCategory": false,
-                        "categoryExpanded": false,
-                        "isCategoryChild": false
-                    });
-                    // Show matching children inline
-                    for (let j = 0; j < matchingChildren.length; j++) {
-                        let childDivider = matchingChildren[j].hasDividerAfter || false;
-                        sidebarModel.append({
-                            "name": matchingChildren[j].name,
-                            "label": matchingChildren[j].label,
-                            "iconName": matchingChildren[j].iconName,
-                            "hasChildren": false,
-                            "isBackButton": false,
-                            "hasDividerAfter": false,
-                            "isDivider": false,
-                            "isSearchChild": true,
-                            "isCategory": false,
-                            "categoryExpanded": false,
-                            "isCategoryChild": false
-                        });
-                        if (childDivider)
-                            sidebarModel.append({
-                            "name": "__divider__",
-                            "label": "",
-                            "iconName": "",
-                            "hasChildren": false,
-                            "isBackButton": false,
-                            "hasDividerAfter": false,
-                            "isDivider": true,
-                            "isCategory": false,
-                            "categoryExpanded": false,
-                            "isCategoryChild": false
-                        });
-
-                    }
-                    continue;
-                }
-                // Top-level inline collapsible category (Display, Rules):
-                // append the header row with isCategory:true and, when
-                // expanded, every child immediately after with
-                // isCategoryChild flagged so the delegate indents. The
-                // chevron is driven by isCategory, so don't set
-                // hasChildren on the header (that would make it drill).
-                if (item.isCollapsible === true) {
-                    const expanded = _expandedCategories[item.name] === true;
-                    sidebarModel.append({
-                        "name": item.name,
-                        "label": item.label,
-                        "iconName": item.iconName,
-                        "hasChildren": false,
-                        "isBackButton": false,
-                        "hasDividerAfter": false,
-                        "isDivider": false,
-                        "isCategory": true,
-                        "categoryExpanded": expanded,
-                        "isCategoryChild": false
-                    });
-                    if (expanded) {
-                        const groupChildren = _childItems[item.name] || [];
-                        for (let g = 0; g < groupChildren.length; g++) {
-                            const gc = groupChildren[g];
-                            sidebarModel.append({
-                                "name": gc.name,
-                                "label": gc.label,
-                                "iconName": gc.iconName,
-                                "hasChildren": false,
-                                "isBackButton": false,
-                                "hasDividerAfter": false,
-                                "isDivider": false,
-                                "isCategory": false,
-                                "categoryExpanded": false,
-                                "isCategoryChild": true
-                            });
-                        }
-                    }
-                    if (item.hasDividerAfter)
-                        sidebarModel.append({
-                        "name": "__divider__",
-                        "label": "",
-                        "iconName": "",
-                        "hasChildren": false,
-                        "isBackButton": false,
-                        "hasDividerAfter": false,
-                        "isDivider": true,
-                        "isCategory": false,
-                        "categoryExpanded": false,
-                        "isCategoryChild": false
-                    });
-
-                    continue;
-                }
-                sidebarModel.append({
-                    "name": item.name,
-                    "label": item.label,
-                    "iconName": item.iconName,
-                    "hasChildren": item.hasChildren,
-                    "isBackButton": false,
-                    "hasDividerAfter": false,
-                    "isDivider": false,
-                    "isCategory": false,
-                    "categoryExpanded": false,
-                    "isCategoryChild": false
-                });
-                if (item.hasDividerAfter)
-                    sidebarModel.append({
-                    "name": "__divider__",
-                    "label": "",
-                    "iconName": "",
-                    "hasChildren": false,
-                    "isBackButton": false,
-                    "hasDividerAfter": false,
-                    "isDivider": true,
-                    "isCategory": false,
-                    "categoryExpanded": false,
-                    "isCategoryChild": false
-                });
-
-            }
-        } else {
-            // Back-row label is the CURRENT mode's display label
-            // (so a sub-sidebar "Surfaces" reads "← Surfaces"). The
-            // mode may live in `_mainItems` (top-level parents like
-            // "animations") or inside another `_childItems` entry
-            // (intermediate parents like "animations-surfaces").
-            // Search-mode entries that have nested matches inlined
-            // below have their drill-in disabled at append time so
-            // the user clicks the leaves directly, mirroring the
-            // main-mode search pattern.
-            let parentLabel = _modeLabel(_sidebarMode);
-            // Back button row (always visible)
-            sidebarModel.append({
-                "name": "__back__",
-                "label": parentLabel,
-                "iconName": "arrow-left",
-                "hasChildren": false,
-                "isBackButton": true,
-                "hasDividerAfter": false,
-                "isDivider": false,
-                "isCategory": false,
-                "categoryExpanded": false,
-                "isCategoryChild": false
-            });
-            // Child items
-            let children = _childItems[_sidebarMode] || [];
-            for (let i = 0; i < children.length; i++) {
-                let child = children[i];
-                let childDivider = child.hasDividerAfter || false;
-                if (searchText) {
-                    // Search inside a sub-sidebar matches the entry's
-                    // own label OR (when it's an intermediate parent)
-                    // any grand-child label. Without the recursion,
-                    // searching "windows" from inside the Animations
-                    // sub-sidebar would silently miss it because
-                    // Windows lives one level deeper under Surfaces —
-                    // a regression compared with the prior flat layout.
-                    let ownMatch = child.label.toLowerCase().indexOf(searchText) >= 0;
-                    // Same broaden-on-label-match rule as the main-mode
-                    // branch: an inline-collapsible category whose own label
-                    // matches reveals every descendant so the user can
-                    // navigate into it. See the matching comment above.
-                    let nestedQuery = (child.isCollapsible === true && ownMatch) ? "" : searchText;
-                    let nestedMatches = child.hasChildren ? _collectMatchingDescendants(child.name, nestedQuery) : [];
-                    if (!ownMatch && nestedMatches.length === 0)
-                        continue;
-
-                    // Inline-collapsible categories never drill (they're
-                    // pseudo-grouping rows, not sub-sidebar modes). Force
-                    // hasChildren:false so the chevron / drill-in click
-                    // handler doesn't enter the category as a sidebar mode
-                    // — the click handler's `_categoryBuckets` guard catches
-                    // any stray header click and short-circuits it.
-                    sidebarModel.append({
-                        "name": child.name,
-                        "label": child.label,
-                        "iconName": child.iconName,
-                        "hasChildren": child.isCollapsible !== true && nestedMatches.length === 0 && (child.hasChildren || false),
-                        "isBackButton": false,
-                        "hasDividerAfter": false,
-                        "isDivider": false,
-                        "isCategory": false,
-                        "categoryExpanded": false,
-                        "isCategoryChild": false
-                    });
-                    for (let j = 0; j < nestedMatches.length; j++) {
-                        sidebarModel.append({
-                            "name": nestedMatches[j].name,
-                            "label": nestedMatches[j].label,
-                            "iconName": nestedMatches[j].iconName,
-                            "hasChildren": false,
-                            "isBackButton": false,
-                            "hasDividerAfter": false,
-                            "isDivider": false,
-                            "isSearchChild": true,
-                            "isCategory": false,
-                            "categoryExpanded": false,
-                            "isCategoryChild": false
-                        });
-                    }
-                    continue;
-                }
-                // Inline collapsible category (Surfaces / Library inside
-                // the Animations sub-sidebar). The header row never drills
-                // — clicking toggles _expandedCategories. When expanded,
-                // append every grand-child immediately after with
-                // isCategoryChild flagged so the delegate indents.
-                if (child.isCollapsible === true) {
-                    const expanded = _expandedCategories[child.name] === true;
-                    sidebarModel.append({
-                        "name": child.name,
-                        "label": child.label,
-                        "iconName": child.iconName,
-                        "hasChildren": false,
-                        "isBackButton": false,
-                        "hasDividerAfter": false,
-                        "isDivider": false,
-                        "isCategory": true,
-                        "categoryExpanded": expanded,
-                        "isCategoryChild": false
-                    });
-                    if (expanded) {
-                        const grandChildren = _childItems[child.name] || [];
-                        for (let g = 0; g < grandChildren.length; g++) {
-                            const gc = grandChildren[g];
-                            sidebarModel.append({
-                                "name": gc.name,
-                                "label": gc.label,
-                                "iconName": gc.iconName,
-                                "hasChildren": false,
-                                "isBackButton": false,
-                                "hasDividerAfter": false,
-                                "isDivider": false,
-                                "isCategory": false,
-                                "categoryExpanded": false,
-                                "isCategoryChild": true
-                            });
-                        }
-                    }
-                    if (childDivider)
-                        sidebarModel.append({
-                        "name": "__divider__",
-                        "label": "",
-                        "iconName": "",
-                        "hasChildren": false,
-                        "isBackButton": false,
-                        "hasDividerAfter": false,
-                        "isDivider": true,
-                        "isCategory": false,
-                        "categoryExpanded": false,
-                        "isCategoryChild": false
-                    });
-
-                    continue;
-                }
-                sidebarModel.append({
-                    "name": child.name,
-                    "label": child.label,
-                    "iconName": child.iconName,
-                    "hasChildren": child.hasChildren || false,
-                    "isBackButton": false,
-                    "hasDividerAfter": false,
-                    "isDivider": false,
-                    "isCategory": false,
-                    "categoryExpanded": false,
-                    "isCategoryChild": false
-                });
-                if (childDivider)
-                    sidebarModel.append({
-                    "name": "__divider__",
-                    "label": "",
-                    "iconName": "",
-                    "hasChildren": false,
-                    "isBackButton": false,
-                    "hasDividerAfter": false,
-                    "isDivider": true,
-                    "isCategory": false,
-                    "categoryExpanded": false,
-                    "isCategoryChild": false
-                });
-
-            }
-        }
-    }
-
-    // Returns the display label for any node by name. Falls back to
-    // the raw name so a missing entry shows up visibly in the UI
-    // rather than silently collapsing to an empty string.
-    function _modeLabel(name) {
-        const label = _labelByName[name];
-        return label !== undefined ? label : name;
-    }
-
-    // Toggle the expanded state of an inline collapsible category by
-    // its item name (e.g. "animations-surfaces"). Replaces the whole
-    // map so QML's binding system observes the mutation, then mutates
-    // the sidebar model INCREMENTALLY — insert this category's child
-    // rows directly after the header (expand), or remove them in place
-    // (collapse). A full `_rebuildSidebar()` here would clear and
-    // re-append every row in the model, firing the ListView's
-    // `add`/`remove` transitions for every visible row instead of just
-    // the toggled category's children — producing a sidebar-wide flash
-    // rather than the local accordion reveal. The incremental path
-    // keeps every other row in place so its `displaced` transition
-    // animates them sliding to make room.
-    function _toggleCategory(name) {
-        let next = Object.assign({
-        }, _expandedCategories);
-        const willBeExpanded = !(next[name] === true);
-        next[name] = willBeExpanded;
-        _expandedCategories = next;
-        _applyCategoryExpansion(name, willBeExpanded);
-    }
-
-    // Apply @p expanded to the named category's row in `sidebarModel`
-    // by inserting or removing its children. Falls back to a full
-    // rebuild when the category isn't visible as a category row in
-    // the current model (e.g. during search mode, where matches are
-    // inlined under a non-category parent).
-    function _applyCategoryExpansion(name, expanded) {
-        let headerIdx = -1;
-        for (let i = 0; i < sidebarModel.count; i++) {
-            const row = sidebarModel.get(i);
-            if (row.name === name && row.isCategory === true) {
-                headerIdx = i;
-                break;
-            }
-        }
-        if (headerIdx < 0) {
-            // Not a category row in the current model — rebuild from
-            // scratch (cheap path; the data structure walk is the
-            // authoritative renderer for non-trivial state changes).
-            _rebuildSidebar();
-            return ;
-        }
-        // Detect the current on-screen state by sniffing the row
-        // immediately after the header. Idempotent against repeat calls
-        // with the same `expanded` value — expanding an already-expanded
-        // category would otherwise insert duplicate child rows; this
-        // guard makes every caller safe whether or not they pre-checked
-        // `_expandedCategories[name]`.
-        const nextRow = headerIdx + 1 < sidebarModel.count ? sidebarModel.get(headerIdx + 1) : null;
-        const currentlyExpanded = nextRow !== null && nextRow.isCategoryChild === true;
-        if (currentlyExpanded === expanded) {
-            // Keep the header role in sync (e.g. on a fresh rebuild
-            // where it was stamped from a stale flag) but skip the
-            // model mutation entirely.
-            sidebarModel.setProperty(headerIdx, "categoryExpanded", expanded);
-            return ;
-        }
-        sidebarModel.setProperty(headerIdx, "categoryExpanded", expanded);
-        if (expanded) {
-            const children = _childItems[name] || [];
-            for (let j = 0; j < children.length; j++) {
-                const child = children[j];
-                sidebarModel.insert(headerIdx + 1 + j, {
-                    "name": child.name,
-                    "label": child.label,
-                    "iconName": child.iconName,
-                    "hasChildren": child.hasChildren === true,
-                    "isBackButton": false,
-                    "hasDividerAfter": false,
-                    "isDivider": false,
-                    "isCategory": false,
-                    "categoryExpanded": false,
-                    "isCategoryChild": true
-                });
-            }
-        } else {
-            // Walk forward while the row is a child of this category
-            // (marked via `isCategoryChild`). Stop at the next
-            // header / divider / non-child so we don't remove a
-            // sibling category's contents.
-            while (headerIdx + 1 < sidebarModel.count) {
-                const r = sidebarModel.get(headerIdx + 1);
-                if (r.isCategoryChild !== true)
-                    break;
-
-                sidebarModel.remove(headerIdx + 1);
-            }
-        }
-    }
-
-    // Smart-default expansion: if the active page lives inside an inline
-    // collapsible category, ensure that category is expanded. Called at
-    // startup and whenever activePage changes (via the Connections slot
-    // below). Idempotent — bails when the category is already expanded
-    // so it doesn't churn the sidebar model.
-    function _expandActivePageCategory() {
-        const cat = _categoryOf(settingsController.activePage);
-        if (cat.length === 0)
-            return ;
-
-        if (_expandedCategories[cat] === true)
-            return ;
-
-        let next = Object.assign({
-        }, _expandedCategories);
-        next[cat] = true;
-        _expandedCategories = next;
-        // Incremental expand keeps the rest of the sidebar in place so
-        // only the newly-revealed children animate in. See the same
-        // rationale on `_toggleCategory`.
-        _applyCategoryExpansion(cat, true);
-    }
-
-    /// If @p pageName lives inside an inline collapsible category, return
-    /// that category's bucket name (e.g. "animations-surfaces" or
-    /// "display"). Otherwise returns "". Used by the breadcrumb chain to
-    /// insert the category segment between the mode and the page AND by
-    /// the smart-default-expansion logic that auto-expands the owning
-    /// category whenever activePage lands inside it.
-    function _categoryOf(pageName) {
-        const candidates = Object.keys(_categoryBuckets);
-        for (let c = 0; c < candidates.length; c++) {
-            const list = _childItems[candidates[c]] || [];
-            for (let i = 0; i < list.length; i++) {
-                if (list[i].name === pageName)
-                    return candidates[c];
-
-            }
-        }
-        return "";
-    }
-
-    // Navigate to the breadcrumb segment named @p name. Top-level
-    // modes pop to main with that parent name as `activePage` (so the
-    // sidebar highlights it); top-level inline collapsible categories
-    // (e.g. "display", "rules") expand in place without a sidebar mode
-    // switch; sub-sidebar inline categories (animations-surfaces /
-    // animations-library) drill into their owning mode and ensure the
-    // category is expanded; remaining drill-down sub-modes pop directly
-    // into that intermediate sub-sidebar. All non-trivial transitions
-    // run through sidebarTransition for visual continuity.
-    function _navigateToBreadcrumbSegment(name) {
-        for (let i = 0; i < _mainItems.length; i++) {
-            if (_mainItems[i].name === name) {
-                // Top-level inline collapsible category — already in
-                // main mode, just guarantee the group is expanded.
-                if (_mainItems[i].isCollapsible === true) {
-                    let next = Object.assign({
-                    }, _expandedCategories);
-                    next[name] = true;
-                    _expandedCategories = next;
-                    // Incremental — see `_toggleCategory` for the
-                    // rationale (avoids whole-sidebar flash).
-                    _applyCategoryExpansion(name, true);
-                    return ;
-                }
-                sidebarTransition.pendingMode = "main";
-                sidebarTransition.pendingPage = name;
-                sidebarTransition.restart();
-                return ;
-            }
-        }
-        // Inline collapsible category inside any sub-sidebar — find its
-        // parent mode by scanning `_childItems` for the bucket that
-        // contains this name as a collapsible entry. If we're already
-        // in that mode (the common case — the breadcrumb only renders
-        // the category splice for the *active* page's category, which
-        // by definition is in the current mode), expand in place
-        // without restarting the fade. The cross-fade would otherwise
-        // run with no visible structural change.
-        const parentMode = _parentModeForCategory(name);
-        if (parentMode.length > 0) {
-            let next = Object.assign({
-            }, _expandedCategories);
-            next[name] = true;
-            _expandedCategories = next;
-            if (parentMode === _sidebarMode) {
-                _applyCategoryExpansion(name, true);
-            } else {
-                sidebarTransition.pendingMode = parentMode;
-                sidebarTransition.pendingPage = "";
-                sidebarTransition.restart();
-            }
-            return ;
-        }
-        // Drill-down sub-mode (Snapping / Tiling / Animations top-level).
-        sidebarTransition.pendingMode = name;
-        sidebarTransition.pendingPage = "";
-        sidebarTransition.restart();
-    }
-
-    /// Reverse lookup: given an inline collapsible category's item name
-    /// (e.g. "snapping-visual-cat"), return the sub-sidebar mode that
-    /// hosts it (e.g. "snapping"). Returns "" when no `_childItems`
-    /// bucket lists @p categoryName as a collapsible entry. Used by the
-    /// breadcrumb navigator and the stale-`activePage` remap so the
-    /// owning mode doesn't need to be hard-coded per category.
-    function _parentModeForCategory(categoryName) {
-        const keys = Object.keys(_childItems);
-        for (let k = 0; k < keys.length; k++) {
-            const list = _childItems[keys[k]];
-            for (let i = 0; i < list.length; i++) {
-                if (list[i].name === categoryName && list[i].isCollapsible === true)
-                    return keys[k];
-
-            }
-        }
-        return "";
-    }
-
-    // Helper: find a subpage label by name. Searches the current
-    // mode's child list first (fast path) then falls back to the
-    // whole tree so a stale `activePage` from a different mode still
-    // resolves to a readable label in the breadcrumb.
-    function _subPageLabel(pageName) {
-        let children = _childItems[_sidebarMode];
-        if (children) {
-            for (let i = 0; i < children.length; i++) {
-                if (children[i].name === pageName)
-                    return children[i].label;
-
-            }
-        }
-        return _modeLabel(pageName);
-    }
-
-    // Drill into a parent category and select the first reachable
-    // leaf (recursing through intermediate categories so e.g.
-    // drilling into "animations" lands on "General", and a future
-    // bucket whose immediate children are ALL `hasChildren` still
-    // resolves a real leaf instead of showing the LayoutsPage
-    // fallback). The optional @p depth parameter is incremented on
-    // each recursive call and short-circuits at `_maxNavDepth` to
-    // guard against a cyclic `_childItems` map producing a stack
-    // overflow.
-    function _firstLeafOf(parentName, depth) {
-        const next = depth === undefined ? 0 : depth;
-        if (next >= _maxNavDepth)
-            return "";
-
-        let children = _childItems[parentName] || [];
-        for (let i = 0; i < children.length; i++) {
-            if (!children[i].hasChildren)
-                return children[i].name;
-
-            const nested = _firstLeafOf(children[i].name, next + 1);
-            if (nested.length > 0)
-                return nested;
-
-        }
-        return "";
-    }
-
-    function _drillIn(parentName) {
-        const firstLeaf = _firstLeafOf(parentName);
-        sidebarTransition.pendingMode = parentName;
-        sidebarTransition.pendingPage = firstLeaf;
-        sidebarTransition.restart();
     }
 
     function showWhatsNew() {
         whatsNewDialog.open();
     }
 
-    // Show a toast notification from any child page
     function showToast(msg) {
         toast.show(msg);
     }
 
-    // Show the layout context menu (called from LayoutsPage.qml via window.showLayoutContextMenu)
-    function showLayoutContextMenu(layout) {
-        layoutContextMenu.showForLayout(layout);
-    }
-
-    // Pop one level. With no intermediate parent modes today, every
-    // sub-sidebar drills back to "main" with the parent name as the
-    // restored activePage (so the sidebar highlights it). Calling from
-    // main mode is a defensive no-op equivalent ("overview" stays the
-    // landing page rather than picking an empty activePage).
-    function _drillOut() {
-        const pendingPage = _sidebarMode !== "main" ? _sidebarMode : "overview";
-        sidebarTransition.pendingMode = "main";
-        sidebarTransition.pendingPage = pendingPage;
-        sidebarTransition.restart();
-    }
-
+    controller: settingsController.app
     title: i18n("PlasmaZones Settings")
-    width: Kirigami.Units.gridUnit * 80
-    height: Kirigami.Units.gridUnit * 48
-    visible: true
-    onClosing: function(close) {
-        settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
-        if (settingsController.needsSave && !window._closeConfirmed) {
-            close.accepted = false;
-            unsavedChangesDialog.open();
-        }
-    }
+    // Sized in Kirigami grid units so the window scales with the
+    // user's gridUnit setting (HiDPI / large-text themes). Was a
+    // hardcoded 1200x800 that ignored both.
+    width: Kirigami.Units.gridUnit * 60
+    height: Kirigami.Units.gridUnit * 40
+    // Use the lib's 3-action close prompt (Apply / Discard / Cancel)
+    // — same UX as the legacy hand-rolled unsavedChangesDialog, but
+    // the framework owns the dialog and the close orchestration.
+    closePromptShowsApply: true
     Component.onCompleted: {
-        // Restore window geometry
         var geo = settingsController.loadWindowGeometry();
         if (geo.width > 0 && geo.height > 0) {
             window.width = geo.width;
@@ -1130,231 +111,196 @@ ApplicationWindow {
             window.x = geo.x;
             window.y = geo.y;
         }
-        // Seed smart-default expansion BEFORE the first build so the
-        // owning category of a restored activePage is open from the
-        // first paint instead of flashing closed → open.
-        _expandActivePageCategory();
-        // Build initial sidebar
-        _rebuildSidebar();
-        // If the active page is a child of a category, drill in. Skip
-        // intermediate (`hasChildren: true`) entries so a stale
-        // `activePage = "animations-surfaces"` doesn't masquerade as a
-        // valid restored leaf — the virtual parent name only ever
-        // means "show this sub-sidebar" (drill-down) or "show this
-        // inline category" (no drill), and there's no QML component
-        // for it in `_pageComponents`. The drill-in transition picks a
-        // real leaf for the user when one of those names round-trips
-        // through stored state.
-        let page = settingsController.activePage;
-        let parents = Object.keys(_childItems);
-        for (let p = 0; p < parents.length; p++) {
-            let children = _childItems[parents[p]];
-            for (let c = 0; c < children.length; c++) {
-                // Page lives in a top-level main-mode collapsible
-                // (a category whose host bucket isn't in any
-                // sub-sidebar) — stay in main mode and let the
-                // expanded category render the leaf inline.
-
-                if (children[c].name === page && !children[c].hasChildren) {
-                    // If the owning parent is an inline collapsible
-                    // category, drill into its host mode (so the
-                    // sub-sidebar opens) — except for top-level main-mode
-                    // categories (Display/Rules), which live directly
-                    // under main and need _sidebarMode left at "main".
-                    // Inline categories are not sidebar modes themselves;
-                    // they render expanded under their owner.
-                    const cat = _categoryOf(page);
-                    const subMode = cat.length > 0 ? _parentModeForCategory(cat) : "";
-                    if (subMode.length > 0)
-                        _sidebarMode = subMode;
-                    else if (cat.length > 0)
-                        _sidebarMode = "main";
-                    else
-                        _sidebarMode = parents[p];
-                    _rebuildSidebar();
-                    return ;
-                }
-            }
-        }
-        // Stale activePage is a virtual parent. Inline category names
-        // need to be remapped to a real leaf so the user lands on
-        // something other than the silent LayoutsPage fallback. The
-        // owning sidebar mode is derived from the category's host
-        // bucket: top-level main-mode categories (display/rules) live
-        // under "main"; sub-sidebar categories (animations-*-cat,
-        // snapping-*-cat, tiling-*-cat) live under their parent mode
-        // returned by _parentModeForCategory.
-        let staleMode = "";
-        for (let m = 0; m < _mainItems.length; m++) {
-            if (_mainItems[m].name === page && _mainItems[m].isCollapsible === true) {
-                staleMode = "main";
-                break;
-            }
-        }
-        if (staleMode.length === 0)
-            staleMode = _parentModeForCategory(page);
-
-        if (staleMode.length > 0) {
-            _sidebarMode = staleMode;
-            const firstLeaf = _firstLeafOf(page);
-            if (firstLeaf.length > 0)
-                settingsController.activePage = firstLeaf;
-
-            _rebuildSidebar();
-            return ;
-        }
-        if (_childItems[page])
-            _drillIn(page);
-
+        // Restore sidebar drill state: walk the parent chain from the
+        // restored activePage. The legacy file did a 90-line traversal
+        // over _mainItems / _childItems for this — the framework now
+        // exposes the same lookup as one Q_INVOKABLE on the controller.
+        window._drillIntoActivePage();
     }
 
-    // Auto-drill-out if feature disabled while viewing its subpages
+    // Drill into the deepest non-collapsible ancestor of the current
+    // activePage so the sub-sidebar opens at the right level; inline-
+    // collapsible ancestors stay where they live (the sidebar will
+    // expand them via the default-true `expandedCategories` map). Used
+    // both at restore-time (Component.onCompleted) AND when activePage
+    // changes externally (CLI --page, daemon broadcast, shortcut). DRY
+    // the chain-walk so future tweaks happen in one place.
+    function _drillIntoActivePage() {
+        const chain = settingsController.app.parentChainFor(settingsController.activePage);
+        for (let i = chain.length - 1; i >= 0; --i) {
+            const entry = settingsController.app.registry.pageData(chain[i]);
+            if (entry && entry.id && entry.isCollapsible !== true) {
+                if (window.sidebar.currentParentId !== chain[i])
+                    window.sidebar.drillInto(chain[i]);
+                return;
+            }
+        }
+        // No non-collapsible ancestor — page lives under main mode.
+        if (window.sidebar.currentParentId !== "")
+            window.sidebar.drillOut();
+    }
+
+    // Translated labels for aspect-ratio classes. Backed by a QtObject
+    // so each property is its own binding — bindings re-evaluate when
+    // QML's language-change signal fires, while an object-literal
+    // declared with `property var = ({...})` is frozen at construction
+    // time and would freeze the labels at the language active during
+    // first instantiation. The "super-ultrawide" key contains a hyphen
+    // so it lives under the `superUltrawide` member of this QtObject;
+    // the aspectRatioLabel(key) accessor function (above) translates
+    // back to the hyphenated key consumers use.
+    QtObject {
+        // `any` (instead of e.g. `allMonitors`) was the original
+        // property name — qmlformat 6.11 silently fails on a property
+        // named `any` (same shadow-class bug that hits `id`). Renamed
+        // to `allMonitors` and the consumer reads below follow.
+        id: aspectRatioLabelsObject
+
+        readonly property string allMonitors: i18n("All Monitors")
+        readonly property string standard: i18n("Standard (16:9)")
+        readonly property string ultrawide: i18n("Ultrawide (21:9)")
+        readonly property string superUltrawide: i18n("Super-Ultrawide (32:9)")
+        readonly property string portrait: i18n("Portrait (9:16)")
+    }
+
+    // The lib's onClosing handles the dirty-state prompt. We just
+    // need to add a window-geometry save alongside it — Connections
+    // adds to the closing signal rather than overriding the base
+    // handler, so the framework's prompt still fires.
     Connections {
-        function onSnappingEnabledChanged() {
-            if (!appSettings.snappingEnabled && _sidebarMode === "snapping")
-                _drillOut();
+        function onClosing(close) {
+            // Skip when the framework's dirty-state prompt cancelled the
+            // close — geometry should only persist on an actual close, not
+            // on every cancelled-by-dialog attempt.
+            if (!close.accepted)
+                return;
 
+            settingsController.saveWindowGeometry(window.x, window.y, window.width, window.height);
         }
 
-        function onAutotileEnabledChanged() {
-            if (!appSettings.autotileEnabled && _sidebarMode === "tiling")
-                _drillOut();
-
+        // Wire the lib's apply-on-close failure signal to a toast so
+        // the user sees WHY the window didn't close, instead of getting
+        // re-prompted with the same discard dialog. The lib hands us
+        // the ids of pages still dirty after applyAll(); resolve them
+        // to titles via the registry for a readable message.
+        function onApplyOnCloseFailed(dirtyPageIds, errors) {
+            const reg = settingsController.app.registry;
+            const titles = [];
+            for (let i = 0; i < dirtyPageIds.length; ++i) {
+                const data = reg.pageData(dirtyPageIds[i]);
+                if (data && data.title)
+                    titles.push(data.title);
+                else if (dirtyPageIds[i])
+                    titles.push(dirtyPageIds[i]);
+            }
+            // Prefer the per-domain error string when the controller
+            // surfaced one — "permission denied on /etc/foo" is more
+            // actionable than "page X failed". Fall back to the page
+            // titles list when the error array is empty (older
+            // domains that don't emit per-domain text).
+            if (errors && errors.length > 0)
+                window.showToast(i18n("Save did not complete: %1", errors.join("; ")));
+            else if (titles.length === 0)
+                window.showToast(i18n("Save did not complete — some pages remain dirty."));
+            else
+                window.showToast(i18n("Save did not complete — still unsaved on: %1", titles.join(", ")));
         }
 
-        target: appSettings
+        function onDiscardOnCloseFailed(errors) {
+            // Toast before the deferred close fires so the user sees
+            // the message even though the window is about to close.
+            window.showToast(i18n("Discard did not complete: %1", errors.join("; ")));
+        }
+
+        target: window
     }
 
-    // Auto-expand the owning inline collapsible category when activePage
-    // changes to a page inside one (e.g. external navigation lands on
-    // animations-windows while Surfaces is collapsed, or on layouts
-    // while Display is collapsed). The user should see the selected
-    // leaf rather than a collapsed category hiding it.
+    // Mirror activePage changes back into the sidebar's drill scope —
+    // external navigation (a CLI --page arg, a daemon broadcast, a
+    // shortcut) should still land in the right drill view rather than
+    // leaving the sidebar showing a stale top-level / wrong-parent list.
     Connections {
         function onActivePageChanged() {
-            const cat = window._categoryOf(settingsController.activePage);
-            if (cat && window._expandedCategories[cat] !== true) {
-                let next = Object.assign({
-                }, window._expandedCategories);
-                next[cat] = true;
-                window._expandedCategories = next;
-                // Only animate when the affected category is on-screen.
-                // Top-level categories (display/rules) live under main
-                // mode; sub-sidebar categories (animations/snapping/
-                // tiling) live under the mode returned by
-                // _parentModeForCategory. When off-screen, the next
-                // _rebuildSidebar (triggered by drill-in) will render
-                // the category as expanded from the start, so there is
-                // nothing to animate here.
-                const subMode = window._parentModeForCategory(cat);
-                const topLevel = subMode.length === 0;
-                const visible = topLevel ? (window._sidebarMode === "main") : (window._sidebarMode === subMode);
-                if (visible)
-                    window._applyCategoryExpansion(cat, true);
-
-            }
+            window._drillIntoActivePage();
         }
 
         target: settingsController
     }
 
-    // Visible sidebar model (rebuilt when _sidebarMode changes)
-    ListModel {
-        id: sidebarModel
+    // Auto-drill-out when a feature is disabled while inside its sub-sidebar.
+    Connections {
+        function onSnappingEnabledChanged() {
+            if (!appSettings.snappingEnabled && window.sidebar.currentParentId === "snapping")
+                window.sidebar.drillOut();
+        }
+
+        function onAutotileEnabledChanged() {
+            if (!appSettings.autotileEnabled && window.sidebar.currentParentId === "tiling")
+                window.sidebar.drillOut();
+        }
+
+        target: appSettings
     }
 
-    // Sidebar drill-in/out transition animation. While this animation
-    // runs, _suppressAccordion is held true so the ListView's accordion
-    // add/remove transitions stay quiet — the cross-fade already covers
-    // the visual change and per-row animations would fight it.
-    SequentialAnimation {
-        id: sidebarTransition
-
-        property string pendingMode: ""
-        property string pendingPage: ""
-
-        ScriptAction {
-            script: window._suppressAccordion = true
-        }
-
-        PhosphorMotionAnimation {
-            target: sidebar
-            properties: "opacity"
-            to: 0
-            profile: "panel.fadeOut"
-        }
-
-        ScriptAction {
-            script: {
-                window._sidebarMode = sidebarTransition.pendingMode;
-                window._rebuildSidebar();
-                if (sidebarTransition.pendingPage)
-                    settingsController.activePage = sidebarTransition.pendingPage;
-
-            }
-        }
-
-        PhosphorMotionAnimation {
-            target: sidebar
-            properties: "opacity"
-            to: 1
-            profile: "panel.fadeIn"
-        }
-
-        ScriptAction {
-            script: window._suppressAccordion = false
-        }
-
-    }
+    // ── Ctrl+PgUp / Ctrl+PgDown — step through navigable pages ──────
+    // Guarded: page navigation must not fire while any of the inline
+    // confirm dialogs (whatsNewDialog, resetConfirmDialog,
+    // defaultsConfirmDialog, sectionToggleDiscardConfirm), the shortcut
+    // overlay, the active page's own modal stack (WindowRulesPage's
+    // forceSaveConfirm / addRuleWizard / ruleEditorSheet /
+    // windowPickerDialog), OR a native child window (QtQuick FileDialog,
+    // system color picker, etc.) is open. The `window.active` check
+    // covers native child windows — when they grab focus the main window
+    // goes inactive. The inline-dialog checks cover Kirigami.PromptDialog
+    // overlays that don't change the window's active state. Without the
+    // combined guard the user could navigate the underlying page state
+    // while interacting with any of these prompts.
+    //
+    // Page-level modals are surfaced via an optional `anyModalOpen`
+    // property on the active page item — the active page lives inside
+    // the framework-owned PageHost Loader, so we read it via the
+    // settingsApp activeFocusItem chain. Pages that haven't opted into
+    // the property contribute false; the guard stays correct.
+    // Shared enable-guard for page-navigation shortcuts. Hoisted from
+    // the two identical inline expressions so a future dialog addition
+    // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen
+    /// Cross-cutting flag that pages opt into by writing through
+    /// `window._pageOwnedModalOpen` when they open / close their own
+    /// modal stack. WindowRulesPage publishes its
+    /// addRuleWizard / windowPickerDialog / ruleEditorSheet /
+    /// forceSaveConfirm aggregate state here so page-navigation
+    /// shortcuts (Ctrl+PgUp / PgDown) cannot drag the user off the
+    /// page while a destructive modal is open. Pages without modals
+    /// never touch this property and contribute false by default.
+    property bool _pageOwnedModalOpen: false
 
     Shortcut {
         sequence: "Ctrl+PgUp"
-        onActivated: {
-            let idx = sidebar.currentIndex;
-            for (let i = idx - 1; i >= 0; i--) {
-                let item = sidebarModel.get(i);
-                if (!item.isBackButton && !item.hasChildren && !item.isCategory && item.name !== "__divider__") {
-                    settingsController.activePage = item.name;
-                    return ;
-                }
-            }
-            // At boundary — drill out if in a sub-category
-            if (_sidebarMode !== "main")
-                _drillOut();
-
-        }
+        enabled: window._navShortcutsEnabled
+        onActivated: settingsController.app.gotoPreviousPage()
     }
 
     Shortcut {
         sequence: "Ctrl+PgDown"
-        onActivated: {
-            let idx = sidebar.currentIndex;
-            for (let i = idx + 1; i < sidebarModel.count; i++) {
-                let item = sidebarModel.get(i);
-                if (!item.isBackButton && !item.hasChildren && !item.isCategory && item.name !== "__divider__") {
-                    settingsController.activePage = item.name;
-                    return ;
-                }
-            }
-            // At boundary — drill out if in a sub-category
-            if (_sidebarMode !== "main")
-                _drillOut();
-
-        }
+        enabled: window._navShortcutsEnabled
+        onActivated: settingsController.app.gotoNextPage()
     }
 
+    // ── Help-overlay shortcut ───────────────────────────────────────
     Shortcut {
         sequence: "?"
         enabled: {
+            // Don't toggle the overlay while the user is typing in a
+            // text field — `?` is a legitimate character there. The
+            // Accessible.role fallback catches TextField/TextArea
+            // (Qt Quick Controls 2 wrappers) which subclass neither
+            // TextInput nor TextEdit directly but report EditableText
+            // / PasswordText through their AT-SPI role.
             var item = window.activeFocusItem;
             if (!item)
                 return true;
 
-            // A focused QtQuick.Controls TextField/TextArea reports the
-            // control (not its internal TextInput/TextEdit) as the
-            // activeFocusItem, so the instanceof checks alone miss it.
-            // Also treat any item with an editable-text accessible role as
-            // a text input so typing `?` into a field never toggles help.
             if (item instanceof TextInput || item instanceof TextEdit)
                 return false;
 
@@ -1367,1392 +313,367 @@ ApplicationWindow {
         onActivated: window._showShortcuts = !window._showShortcuts
     }
 
-    RowLayout {
-        id: mainContent
-
-        anchors.fill: parent
-        spacing: 0
-
-        // =================================================================
-        // SIDEBAR
-        // =================================================================
-        Pane {
-            id: sidebarPane
-
-            Layout.fillHeight: true
-            Layout.preferredWidth: window.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
-            Layout.minimumWidth: window.sidebarCompact ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.gridUnit * 12
-            padding: 0
-
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 0
-
-                // Search field
-                TextField {
-                    id: sidebarSearch
-
-                    Layout.fillWidth: true
-                    Layout.margins: Kirigami.Units.smallSpacing
-                    Accessible.name: i18n("Search settings pages")
-                    placeholderText: i18n("Search...")
-                    visible: !window.sidebarCompact
-                    leftPadding: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
-                    onTextChanged: _rebuildSidebar()
-
-                    Kirigami.Icon {
-                        source: "search"
-                        anchors.left: parent.left
-                        anchors.leftMargin: Kirigami.Units.smallSpacing
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Kirigami.Units.iconSizes.small
-                        height: Kirigami.Units.iconSizes.small
-                        opacity: 0.5
-                    }
-
-                }
-
-                // Navigation list
-                ListView {
-                    id: sidebar
-
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    model: sidebarModel
-                    currentIndex: {
-                        for (var i = 0; i < sidebarModel.count; i++) {
-                            if (sidebarModel.get(i).name === settingsController.activePage)
-                                return i;
-
-                        }
-                        return -1;
-                    }
-                    clip: true
-
-                    // Accordion add/remove/displaced transitions drive the
-                    // collapsible category toggle (Display, Rules,
-                    // Surfaces, Library). Gated by _suppressAccordion so
-                    // they stay quiet during the drill-in/out cross-fade
-                    // which already covers the visual change.
-                    add: Transition {
-                        enabled: !window._suppressAccordion
-
-                        PhosphorMotionAnimation {
-                            properties: "opacity"
-                            from: 0
-                            to: 1
-                            profile: "widget.accordionExpand"
-                        }
-
-                        PhosphorMotionAnimation {
-                            properties: "y"
-                            profile: "widget.accordionExpand"
-                        }
-
-                    }
-
-                    remove: Transition {
-                        enabled: !window._suppressAccordion
-
-                        PhosphorMotionAnimation {
-                            properties: "opacity"
-                            from: 1
-                            to: 0
-                            profile: "widget.accordionCollapse"
-                        }
-
-                    }
-
-                    displaced: Transition {
-                        enabled: !window._suppressAccordion
-
-                        PhosphorMotionAnimation {
-                            properties: "y"
-                            profile: "widget.accordionExpand"
-                        }
-
-                    }
-
-                    delegate: ItemDelegate {
-                        id: navDelegate
-
-                        required property int index
-                        required property string name
-                        required property string label
-                        required property string iconName
-                        required property bool hasChildren
-                        required property bool isBackButton
-                        required property bool hasDividerAfter
-                        required property bool isDivider
-                        required property bool isCategory
-                        required property bool categoryExpanded
-                        required property bool isCategoryChild
-                        // `model` is the full row object — explicit
-                        // `required` so strict QML resolution finds it
-                        // (the ListView's implicit `model` context property
-                        // is rejected in strict mode). We still go through
-                        // `model.isSearchChild` rather than declaring the
-                        // role as its own `required property bool` because
-                        // not every append site sets the role — undefined
-                        // coerces to false via the `=== true` check.
-                        required property var model
-                        readonly property bool isSearchChild: model.isSearchChild === true
-                        readonly property bool isActive: {
-                            if (isBackButton)
-                                return false;
-
-                            if (hasChildren)
-                                return false;
-
-                            if (isCategory)
-                                return false;
-
-                            return name === settingsController.activePage;
-                        }
-
-                        width: sidebar.width
-                        height: isDivider ? Kirigami.Units.largeSpacing : (isBackButton ? Kirigami.Units.gridUnit * 2.6 : Kirigami.Units.gridUnit * 2.2)
-                        enabled: !isDivider
-                        highlighted: isActive
-                        onClicked: {
-                            if (isCategory) {
-                                window._toggleCategory(name);
-                                return ;
-                            }
-                            if (isBackButton) {
-                                window._drillOut();
-                                return ;
-                            }
-                            if (hasChildren) {
-                                // Block drill-down if the feature is disabled
-                                if (name === "snapping" && !appSettings.snappingEnabled)
-                                    return ;
-
-                                if (name === "tiling" && !appSettings.autotileEnabled)
-                                    return ;
-
-                                window._drillIn(name);
-                                return ;
-                            }
-                            // If selecting an inline search result, clear
-                            // the search, drill into the leaf's actual
-                            // parent (could be a different sub-sidebar
-                            // bucket), and activate the leaf. The lookup
-                            // walks every `_childItems` bucket so it
-                            // handles top-level search hits AND nested
-                            // matches inlined inside a sub-sidebar.
-                            if (sidebarSearch.text.length > 0) {
-                                let parents = Object.keys(_childItems);
-                                for (let p = 0; p < parents.length; p++) {
-                                    let children = _childItems[parents[p]];
-                                    for (let c = 0; c < children.length; c++) {
-                                        if (children[c].name === name) {
-                                            sidebarSearch.text = "";
-                                            // Inline-category parents are not
-                                            // sidebar modes themselves —
-                                            // resolve the leaf's owning mode
-                                            // from the category's host
-                                            // (snapping-visual-cat lives
-                                            // under "snapping",
-                                            // animations-surfaces under
-                                            // "animations", and top-level
-                                            // categories like "display" /
-                                            // "rules" live directly under
-                                            // "main"). For non-collapsible
-                                            // leaves the parent bucket name
-                                            // IS the sidebar mode.
-                                            const owner = window._categoryOf(name);
-                                            if (owner.length === 0) {
-                                                _sidebarMode = parents[p];
-                                            } else {
-                                                const ownerHost = window._parentModeForCategory(owner);
-                                                _sidebarMode = ownerHost.length > 0 ? ownerHost : "main";
-                                            }
-                                            _rebuildSidebar();
-                                            settingsController.activePage = name;
-                                            return ;
-                                        }
-                                    }
-                                }
-                            }
-                            // Inline-collapsible category headers reach this
-                            // fallthrough when shown in search results — they
-                            // aren't leaves, so assigning them to `activePage`
-                            // would land the user on the silent LayoutsPage
-                            // fallback. Treat the click as a no-op; the user
-                            // is meant to click matched leaves below.
-                            if (window._categoryBuckets[name] === true)
-                                return ;
-
-                            settingsController.activePage = name;
-                        }
-                        leftPadding: {
-                            const base = window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing;
-                            // Inline search-result rows AND inline
-                            // collapsible-category children nest under
-                            // their parent — bump leftPadding by an
-                            // iconSize-equivalent so the indent reads
-                            // as hierarchy. Theme-aware via
-                            // `Kirigami.Units` and RTL-correct because
-                            // `leftPadding` flips with layoutDirection.
-                            if (navDelegate.isSearchChild || navDelegate.isCategoryChild)
-                                return base + Kirigami.Units.iconSizes.small;
-
-                            return base;
-                        }
-                        rightPadding: window.sidebarCompact ? 0 : Kirigami.Units.smallSpacing
-                        // Strip the "Surfaces / Windows" prefix from
-                        // the Accessible.name so screen readers
-                        // announce the leaf cleanly without the
-                        // visual-hierarchy decoration. The full
-                        // composed label still drives the visible
-                        // Label and ToolTip below.
-                        Accessible.name: {
-                            const slashIdx = navDelegate.label.lastIndexOf(" / ");
-                            return slashIdx >= 0 ? navDelegate.label.substring(slashIdx + 3) : navDelegate.label;
-                        }
-                        ToolTip.visible: window.sidebarCompact && navDelegate.hovered
-                        ToolTip.text: label
-                        ToolTip.delay: 300
-
-                        // Section divider rendering (when this delegate is a divider item)
-                        Kirigami.Separator {
-                            visible: navDelegate.isDivider
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.leftMargin: Kirigami.Units.largeSpacing
-                            anchors.rightMargin: Kirigami.Units.largeSpacing
-                        }
-
-                        background: Rectangle {
-                            color: {
-                                if (navDelegate.isActive)
-                                    return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12);
-
-                                if (navDelegate.hovered)
-                                    return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06);
-
-                                return "transparent";
-                            }
-                            radius: Kirigami.Units.smallSpacing
-
-                            // Left accent bar for active item
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: Math.round(Kirigami.Units.devicePixelRatio * 2.5)
-                                height: parent.height * 0.5
-                                radius: width / 2
-                                color: Kirigami.Theme.highlightColor
-                                visible: navDelegate.isActive
-                            }
-
-                            // Bottom separator after back button
-                            Rectangle {
-                                visible: navDelegate.isBackButton
-                                anchors.bottom: parent.bottom
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.leftMargin: Kirigami.Units.smallSpacing
-                                anchors.rightMargin: Kirigami.Units.smallSpacing
-                                height: Math.round(Kirigami.Units.devicePixelRatio)
-                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                            }
-
-                            Behavior on color {
-                                PhosphorMotionAnimation {
-                                    profile: "widget.tint.fast"
-                                }
-
-                            }
-
-                        }
-
-                        contentItem: RowLayout {
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Kirigami.Icon {
-                                source: navDelegate.iconName
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                Layout.fillWidth: window.sidebarCompact
-                                Layout.alignment: Qt.AlignVCenter
-                                opacity: {
-                                    if (navDelegate.isBackButton)
-                                        return 0.7;
-
-                                    if (navDelegate.isActive)
-                                        return 1;
-
-                                    return 0.7;
-                                }
-
-                                Behavior on opacity {
-                                    PhosphorMotionAnimation {
-                                        profile: "widget.hover"
-                                        durationOverride: 120
-                                    }
-
-                                }
-
-                            }
-
-                            Label {
-                                text: navDelegate.label
-                                Layout.fillWidth: true
-                                font.weight: {
-                                    if (navDelegate.isBackButton)
-                                        return Font.DemiBold;
-
-                                    if (navDelegate.isActive)
-                                        return Font.DemiBold;
-
-                                    return Font.Normal;
-                                }
-                                opacity: {
-                                    if (navDelegate.isBackButton)
-                                        return 0.8;
-
-                                    if (navDelegate.isActive)
-                                        return 1;
-
-                                    return 0.7;
-                                }
-                                visible: !window.sidebarCompact
-
-                                Behavior on opacity {
-                                    PhosphorMotionAnimation {
-                                        profile: "widget.hover"
-                                        durationOverride: 120
-                                    }
-
-                                }
-
-                            }
-
-                            // Unsaved changes badge — per-page tracking.
-                            // Reference dirtyPages once so QML tracks it as a
-                            // binding dependency, then delegate the actual
-                            // lookup (including parent-category traversal) to
-                            // the controller's isPageDirty().
-                            Rectangle {
-                                id: dirtyBadge
-
-                                width: Kirigami.Units.smallSpacing * 1.5
-                                height: Kirigami.Units.smallSpacing * 1.5
-                                radius: width / 2
-                                color: Kirigami.Theme.neutralTextColor
-                                visible: {
-                                    if (navDelegate.isDivider || navDelegate.isBackButton)
-                                        return false;
-
-                                    // For inline-collapsible category headers,
-                                    // show the badge only when the category is
-                                    // COLLAPSED. Expanded categories don't need
-                                    // a header badge because every dirty child
-                                    // row below shows its own. Collapsed headers
-                                    // need it as the sole indicator that there
-                                    // are unsaved changes hiding inside the
-                                    // group — without this the user can miss
-                                    // pending edits behind a closed accordion.
-                                    if (navDelegate.isCategory && navDelegate.categoryExpanded)
-                                        return false;
-
-                                    settingsController.dirtyPages; // binding dependency
-                                    return settingsController.isPageDirty(navDelegate.name);
-                                }
-                                Layout.alignment: Qt.AlignVCenter
-
-                                SequentialAnimation {
-                                    id: dirtyBadgePulse
-
-                                    loops: Animation.Infinite
-                                    running: dirtyBadge.visible
-                                    onRunningChanged: {
-                                        if (!running)
-                                            dirtyBadge.opacity = 1;
-
-                                    }
-
-                                    PhosphorMotionAnimation {
-                                        target: dirtyBadge
-                                        properties: "opacity"
-                                        from: 1
-                                        to: 0.4
-                                        profile: "widget.pulse"
-                                    }
-
-                                    PhosphorMotionAnimation {
-                                        target: dirtyBadge
-                                        properties: "opacity"
-                                        from: 0.4
-                                        to: 1
-                                        profile: "widget.pulse"
-                                    }
-
-                                }
-
-                            }
-
-                            // Enable/disable toggle for snapping and tiling.
-                            // Wraps the assignment in begin/endExternalEdit so
-                            // the dirty marker lands on snapping/tiling rather
-                            // than whatever page the user is currently viewing.
-                            SettingsSwitch {
-                                visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
-                                checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : appSettings.autotileEnabled
-                                accessibleName: navDelegate.label
-                                onToggled: function(newValue) {
-                                    settingsController.beginExternalEdit(navDelegate.name);
-                                    if (navDelegate.name === "snapping")
-                                        appSettings.snappingEnabled = newValue;
-                                    else
-                                        appSettings.autotileEnabled = newValue;
-                                    settingsController.endExternalEdit();
-                                }
-                            }
-
-                            // Right chevron for drill-down items AND inline
-                            // collapsible category headers. Rotates 90° to
-                            // point down when an inline category is expanded.
-                            Kirigami.Icon {
-                                source: "go-next"
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                Layout.alignment: Qt.AlignVCenter
-                                opacity: {
-                                    if (navDelegate.name === "snapping" && !appSettings.snappingEnabled)
-                                        return 0.15;
-
-                                    if (navDelegate.name === "tiling" && !appSettings.autotileEnabled)
-                                        return 0.15;
-
-                                    return 0.3;
-                                }
-                                visible: (navDelegate.hasChildren || navDelegate.isCategory) && !window.sidebarCompact
-                                // Keep the same icon so the visual stays
-                                // familiar; rotation is animatable.
-                                rotation: navDelegate.categoryExpanded ? 90 : 0
-
-                                Behavior on rotation {
-                                    PhosphorMotionAnimation {
-                                        profile: "widget.hover"
-                                        durationOverride: 150
-                                    }
-
-                                }
-
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                // Daemon status
-                Pane {
-                    Layout.fillWidth: true
-                    padding: Kirigami.Units.smallSpacing * 1.5
-                    topPadding: Kirigami.Units.smallSpacing * 2
-                    bottomPadding: Kirigami.Units.smallSpacing * 2
-
-                    RowLayout {
-                        anchors.fill: parent
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Rectangle {
-                            id: daemonDot
-
-                            width: Kirigami.Units.smallSpacing * 1.5
-                            height: Kirigami.Units.smallSpacing * 1.5
-                            radius: width / 2
-                            Layout.alignment: Qt.AlignVCenter
-                            color: settingsController.daemonRunning ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
-
-                            // Pulsing glow when running
-                            SequentialAnimation {
-                                id: daemonPulse
-
-                                loops: settingsController.daemonRunning ? Animation.Infinite : 0
-                                running: settingsController.daemonRunning
-                                onRunningChanged: {
-                                    if (!running)
-                                        daemonDot.opacity = 1;
-
-                                }
-
-                                PhosphorMotionAnimation {
-                                    target: daemonDot
-                                    properties: "opacity"
-                                    from: 1
-                                    to: 0.4
-                                    profile: "widget.pulse.slow"
-                                }
-
-                                PhosphorMotionAnimation {
-                                    target: daemonDot
-                                    properties: "opacity"
-                                    from: 0.4
-                                    to: 1
-                                    profile: "widget.pulse.slow"
-                                }
-
-                            }
-
-                        }
-
-                        Label {
-                            text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
-                            opacity: 0.7
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignVCenter
-                            visible: !window.sidebarCompact
-                        }
-
-                        SettingsSwitch {
-                            Layout.alignment: Qt.AlignVCenter
-                            checked: settingsController.daemonRunning
-                            enabled: !settingsController.daemonController.busy
-                            accessibleName: i18n("Toggle daemon")
-                            onToggled: function(newValue) {
-                                settingsController.daemonController.setEnabled(newValue);
-                            }
-                        }
-
-                    }
-
-                    background: Rectangle {
-                        color: "transparent"
-
-                        Rectangle {
-                            anchors.top: parent.top
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            height: Math.round(Kirigami.Units.devicePixelRatio)
-                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                        }
-
-                    }
-
-                }
-
-            }
-
-            Behavior on Layout.preferredWidth {
-                PhosphorMotionAnimation {
-                    // Direction is taken from the same `sidebarCompact` flag
-                    // that drives `Layout.preferredWidth` above, so the leg
-                    // is decided synchronously when the nav rail is toggled.
-                    // Reading `Layout.preferredWidth` directly would re-
-                    // evaluate during the Behavior and converge to the wrong
-                    // leg as the value approaches its target.
-                    profile: !window.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
-                }
-
-            }
-
-            Behavior on Layout.minimumWidth {
-                PhosphorMotionAnimation {
-                    // Same `sidebarCompact` driver as above — the rail's
-                    // minimumWidth tracks preferredWidth in lockstep.
-                    profile: !window.sidebarCompact ? "panel.slideIn" : "panel.slideOut"
-                }
-
-            }
-
-            background: Rectangle {
-                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 1)
-
-                // Subtle right edge shadow
-                Rectangle {
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    width: Math.round(Kirigami.Units.devicePixelRatio)
-                    color: Kirigami.Theme.separatorColor !== undefined ? Kirigami.Theme.separatorColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-                }
-
-            }
-
-        }
-
-        // =================================================================
-        // CONTENT AREA
-        // =================================================================
-        ColumnLayout {
-            // Aspect ratio submenu — present unless the right-clicked
-            // layout is autotile (showForLayout reconciles its insertion
-            // state in lockstep with the layout kind). Rows are driven
-            // by an Instantiator over `_aspectRatioOptions` so each
-            // ItemDelegate's lifecycle is Qt-managed.
-
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: 0
-
-            // -- Breadcrumb header ----------------------------------------
-            // Breadcrumb — always visible (essential in compact mode for context)
-            Pane {
-                Layout.fillWidth: true
-                padding: Kirigami.Units.largeSpacing
-                topPadding: Kirigami.Units.smallSpacing * 2
-                bottomPadding: Kirigami.Units.smallSpacing * 2
-
-                RowLayout {
-                    anchors.fill: parent
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Row {
-                        spacing: Kirigami.Units.smallSpacing
-
-                        // Render every lineage segment + a separator
-                        // between them. The `_breadcrumbModel` cached
-                        // property holds the precomputed segment list
-                        // and re-evaluates only when its inputs
-                        // (`_sidebarMode`, `activePage`) change — far
-                        // cheaper than calling `_breadcrumbSegments()`
-                        // once per delegate per binding fire.
-                        Repeater {
-                            model: window._breadcrumbModel
-
-                            delegate: Row {
-                                required property int index
-                                required property var modelData
-
-                                spacing: Kirigami.Units.smallSpacing
-
-                                Label {
-                                    text: modelData.label
-                                    opacity: modelData.clickable && segmentMouse.containsMouse ? 0.8 : 0.5
-                                    font.underline: modelData.clickable && segmentMouse.containsMouse
-                                    Accessible.name: modelData.label
-                                    Accessible.role: modelData.clickable ? Accessible.Link : Accessible.StaticText
-
-                                    MouseArea {
-                                        id: segmentMouse
-
-                                        anchors.fill: parent
-                                        hoverEnabled: modelData.clickable
-                                        enabled: modelData.clickable
-                                        cursorShape: modelData.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                        onClicked: window._navigateToBreadcrumbSegment(modelData.name)
-                                    }
-
-                                }
-
-                                Label {
-                                    visible: index < window._breadcrumbModel.length - 1
-                                    text: "\u203A"
-                                    opacity: 0.5
-                                }
-
-                            }
-
-                        }
-
-                    }
-
-                    Item {
-                        Layout.fillWidth: true
-                    }
-
-                }
-
-                background: Rectangle {
-                    color: "transparent"
-
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: Math.round(Kirigami.Units.devicePixelRatio)
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06)
-                    }
-
-                }
-
-            }
-
-            // ── Update banner (visible on all pages) ─────────────────────
-            Pane {
-                id: updateBanner
-
-                Layout.fillWidth: true
-                visible: settingsController.updateChecker.updateAvailable && settingsController.updateChecker.latestVersion !== settingsController.dismissedUpdateVersion
-                padding: Kirigami.Units.smallSpacing
-                topPadding: Kirigami.Units.smallSpacing
-                bottomPadding: Kirigami.Units.smallSpacing
-
-                RowLayout {
-                    anchors.fill: parent
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Kirigami.Icon {
-                        source: "update-none"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                        color: Kirigami.Theme.positiveTextColor
-                    }
-
-                    Label {
-                        text: i18n("PlasmaZones %1 is available", settingsController.updateChecker.latestVersion)
-                        Layout.fillWidth: true
-                        color: Kirigami.Theme.positiveTextColor
-                    }
-
-                    Button {
-                        text: i18n("View Release")
-                        flat: true
-                        icon.name: "internet-web-browser"
-                        visible: settingsController.updateChecker.releaseUrl.length > 0
-                        Accessible.name: i18n("View release notes")
-                        onClicked: Qt.openUrlExternally(settingsController.updateChecker.releaseUrl)
-                    }
-
-                    ToolButton {
-                        icon.name: "dialog-close"
-                        display: ToolButton.IconOnly
-                        onClicked: settingsController.dismissUpdate()
-                        Accessible.name: i18n("Dismiss update notification")
-                        ToolTip.text: i18n("Dismiss")
-                        ToolTip.visible: hovered
-                    }
-
-                }
-
-                background: Rectangle {
-                    color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15)
-                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                    border.color: Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.3)
-                }
-
-            }
-
-            // ── What's New banner (visible when unseen changes exist) ──
-            Pane {
-                id: whatsNewBanner
-
-                Layout.fillWidth: true
-                visible: settingsController.hasUnseenWhatsNew
-                padding: Kirigami.Units.smallSpacing
-                topPadding: Kirigami.Units.smallSpacing
-                bottomPadding: Kirigami.Units.smallSpacing
-
-                RowLayout {
-                    anchors.fill: parent
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Kirigami.Icon {
-                        source: "documentinfo"
-                        Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                        Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                        color: Kirigami.Theme.linkColor
-                    }
-
-                    Label {
-                        text: i18n("See what's new in PlasmaZones %1", Qt.application.version)
-                        Layout.fillWidth: true
-                        color: Kirigami.Theme.linkColor
-                    }
-
-                    Button {
-                        text: i18n("What's New")
-                        flat: true
-                        icon.name: "go-next"
-                        Accessible.name: i18n("View what's new")
-                        onClicked: whatsNewDialog.open()
-                    }
-
-                    ToolButton {
-                        icon.name: "dialog-close"
-                        display: ToolButton.IconOnly
-                        onClicked: settingsController.markWhatsNewSeen()
-                        Accessible.name: i18n("Dismiss")
-                        ToolTip.text: i18n("Dismiss")
-                        ToolTip.visible: hovered
-                    }
-
-                }
-
-                background: Rectangle {
-                    color: Qt.rgba(Kirigami.Theme.linkColor.r, Kirigami.Theme.linkColor.g, Kirigami.Theme.linkColor.b, 0.15)
-                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                    border.color: Qt.rgba(Kirigami.Theme.linkColor.r, Kirigami.Theme.linkColor.g, Kirigami.Theme.linkColor.b, 0.3)
-                }
-
-            }
-
-            // Page content with crossfade transition
-            Item {
-                id: pageContainer
-
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-
-                // Opaque background to prevent bleed-through
-                Rectangle {
-                    anchors.fill: parent
-                    color: Kirigami.Theme.backgroundColor
-                }
-
-                Loader {
-                    id: pageLoader
-
-                    anchors.fill: parent
-                    anchors.margins: Kirigami.Units.largeSpacing
-                    source: window._resolvePageSource(settingsController.activePage)
-                    asynchronous: false
-                    // Fade in on page change
-                    onLoaded: {
-                        fadeIn.restart();
-                    }
-
-                    PhosphorMotionAnimation {
-                        id: fadeIn
-
-                        target: pageLoader.item
-                        properties: "opacity"
-                        from: 0
-                        to: 1
-                        profile: "widget.fadeIn"
-                        durationOverride: 180
-                    }
-
-                }
-
-                // -- Toast notification -----------------------------------
-                Rectangle {
-                    id: toast
-
-                    property string message: ""
-
-                    function show(msg) {
-                        message = msg;
-                        toastShow.restart();
-                        toastHide.restart();
-                    }
-
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: Kirigami.Units.largeSpacing * 2
-                    width: toastLabel.implicitWidth + Kirigami.Units.largeSpacing * 3
-                    height: toastLabel.implicitHeight + Kirigami.Units.largeSpacing * 1.5
-                    radius: height / 2
-                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.85)
-                    opacity: 0
-                    visible: opacity > 0
-                    z: 100
-
-                    Label {
-                        id: toastLabel
-
-                        anchors.centerIn: parent
-                        text: toast.message
-                        color: Kirigami.Theme.backgroundColor
-                        font.weight: Font.Medium
-                    }
-
-                    PhosphorMotionAnimation {
-                        id: toastShow
-
-                        target: toast
-                        properties: "opacity"
-                        from: 0
-                        to: 1
-                        profile: "popup"
-                        durationOverride: 200
-                    }
-
-                    SequentialAnimation {
-                        id: toastHide
-
-                        PauseAnimation {
-                            duration: 2000
-                        }
-
-                        PhosphorMotionAnimation {
-                            target: toast
-                            properties: "opacity"
-                            from: 1
-                            to: 0
-                            profile: "widget.fadeOut"
-                        }
-
-                    }
-
-                }
-
-            }
-
-            // ── Layout context menu (lives outside Loader to avoid Qt6 SIGSEGV on Menu destruction) ──
-            Menu {
-                id: layoutContextMenu
-
-                property var layout: null
-                property int viewMode: 0
-                /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
-                /// aspect-ratio submenu was last reconciled to. showForLayout
-                /// only mutates the menu when the current layout's kind
-                /// differs from this state — `removeMenu` `deleteLater`s
-                /// Qt 6's auto-generated MenuItem placeholder, and the
-                /// inline submenu's reparenting back to its declared parent
-                /// is unreliable enough that doing the dance on every show
-                /// can lose the QML object after many cycles.
-                property string _aspectRatioMenuKind: "none"
-                readonly property bool isAutotile: layout && layout.isAutotile === true
-                readonly property string layoutId: layout ? (layout.id || "") : ""
-                /// Aspect ratio options: `[key, label, settingsIndex]`. Drives
-                /// the `Instantiator` inside `aspectRatioSubMenu` so each row's
-                /// ItemDelegate is created with a stable Qt-managed lifecycle.
-                /// Imperative `Component.createObject(menu, ...)` parented to
-                /// a popup that isn't yet in the graphics scene emits the
-                /// `Created graphical object was not placed in the graphics
-                /// scene` warning and the unplaced object can leak into Qt's
-                /// menu state.
-                readonly property var _aspectRatioOptions: [["any", window.aspectRatioLabels["any"], 0], ["standard", window.aspectRatioLabels["standard"], 1], ["ultrawide", window.aspectRatioLabels["ultrawide"], 2], ["super-ultrawide", window.aspectRatioLabels["super-ultrawide"], 3], ["portrait", window.aspectRatioLabels["portrait"], 4]]
-                /// Driver for the dynamic "Edit on <screen>" Instantiator
-                /// below. Empty array hides every dynamic row; switching to
-                /// the `screens` list grows them. Single-screen setups never
-                /// populate the model so the submenu collapses cleanly.
-                readonly property var _screenItemsModel: {
-                    var screens = settingsController.screens || [];
-                    return screens.length > 1 ? screens : [];
-                }
-
-                // Signals for dialogs that live in LayoutsPage
-                signal deleteRequested(var layout)
-                signal exportRequested(string layoutId)
-
-                function showForLayout(layout) {
-                    layoutContextMenu.layout = layout;
-                    layoutContextMenu.viewMode = (layout && layout.isAutotile === true) ? 1 : 0;
-                    var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
-                    // Only reconcile the submenu when the layout kind flips.
-                    // Reconciling on every show churns Qt 6's MenuItem
-                    // placeholder; after enough churn the inline submenu's
-                    // reparenting back to its declared parent fails and
-                    // the QML object is lost.
-                    if (wantKind !== layoutContextMenu._aspectRatioMenuKind) {
-                        if (wantKind === "snap") {
-                            // Insert after the aspectRatioMarker separator so
-                            // the submenu lands in its declared visual slot
-                            // even though it's added imperatively. itemAt
-                            // walks the menu's children, which the inline
-                            // separator joined at parse time.
-                            var markerIdx = -1;
-                            for (var k = 0; k < layoutContextMenu.count; k++) {
-                                if (layoutContextMenu.itemAt(k) === aspectRatioMarker) {
-                                    markerIdx = k;
-                                    break;
-                                }
-                            }
-                            if (markerIdx >= 0)
-                                layoutContextMenu.insertMenu(markerIdx + 1, aspectRatioSubMenu);
-                            else
-                                layoutContextMenu.addMenu(aspectRatioSubMenu);
-                        } else {
-                            layoutContextMenu.removeMenu(aspectRatioSubMenu);
-                        }
-                        layoutContextMenu._aspectRatioMenuKind = wantKind;
-                    }
-                    layoutContextMenu.popup();
-                }
-
-                // -- Edit --
-                MenuItem {
-                    text: i18n("Edit")
-                    icon.name: "document-edit"
-                    onTriggered: settingsController.editLayout(layoutContextMenu.layoutId)
-                }
-
-                // Dynamic "Edit on <screen>" items. Instantiator gives Qt
-                // ownership of each row's lifecycle — rows are placed when
-                // the model grows and torn down synchronously when it
-                // shrinks, with no out-of-scene `createObject` parents and
-                // no deferred `destroy()` racing the next popup. The
-                // delegate is `ItemDelegate` rather than `MenuItem` to
-                // bypass Qt 6's onItemTriggered → dismiss() cascade through
-                // `finalizeExitTransition`; the click handler hides the
-                // menu explicitly via `Qt.callLater` after the click body
-                // finishes.
-                Instantiator {
-                    id: screenItemInstantiator
-
-                    model: layoutContextMenu._screenItemsModel
-                    onObjectAdded: function(index, object) {
-                        // The Edit MenuItem occupies index 0; dynamic rows
-                        // sit immediately after, ahead of screenSeparator
-                        // and the rest of the static menu.
-                        layoutContextMenu.insertItem(1 + index, object);
-                    }
-                    onObjectRemoved: function(index, object) {
-                        layoutContextMenu.removeItem(object);
-                    }
-
-                    delegate: ItemDelegate {
-                        required property var modelData
-                        readonly property string _screenName: (modelData && modelData.name) ? modelData.name : ""
-
-                        text: i18n("Edit on %1", (modelData && modelData.displayLabel) || (modelData && modelData.name) || "")
-                        icon.name: (modelData && modelData.isPrimary) ? "starred-symbolic" : "monitor"
-                        Accessible.name: text
-                        onClicked: {
-                            var screenName = _screenName;
-                            var layoutId = layoutContextMenu.layoutId;
-                            Qt.callLater(function() {
-                                layoutContextMenu.visible = false;
-                                if (screenName.length > 0)
-                                    settingsController.editLayoutOnScreen(layoutId, screenName);
-
-                            });
-                        }
-                    }
-
-                }
-
-                // Tracks the dynamic-row model directly so the separator
-                // hides when no extra screens exist — including live
-                // changes to `settingsController.screens` while the menu
-                // is open.
-                MenuSeparator {
-                    id: screenSeparator
-
-                    visible: layoutContextMenu._screenItemsModel.length > 0
-                }
-
-                // -- Open in Editor (external text editor) --
-                MenuItem {
-                    text: i18n("Open in Text Editor")
-                    icon.name: "document-open"
-                    Accessible.name: text
-                    onTriggered: {
-                        if (layoutContextMenu.isAutotile)
-                            settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
-                        else
-                            settingsController.openLayoutFile(layoutContextMenu.layoutId);
-                    }
-                }
-
-                MenuSeparator {
-                }
-
-                // -- State --
-                MenuItem {
-                    text: i18n("Set as Default")
-                    icon.name: "favorite"
-                    enabled: {
-                        if (!layoutContextMenu.layout)
-                            return false;
-
-                        if (layoutContextMenu.viewMode === 1)
-                            return layoutContextMenu.layoutId !== ("autotile:" + appSettings.defaultAutotileAlgorithm);
-
-                        return layoutContextMenu.layoutId !== appSettings.defaultLayoutId;
-                    }
-                    onTriggered: {
-                        if (layoutContextMenu.viewMode === 1)
-                            appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
-                        else
-                            appSettings.defaultLayoutId = layoutContextMenu.layoutId;
-                    }
-                }
-
-                MenuItem {
-                    text: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? i18n("Show in Zone Selector") : i18n("Hide from Zone Selector")
-                    icon.name: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? "view-visible" : "view-hidden"
-                    onTriggered: settingsController.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
-                }
-
-                MenuItem {
-                    readonly property bool perLayoutAuto: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true
-                    readonly property bool globalAuto: appSettings.autoAssignAllLayouts === true
-
-                    // When the global "Auto-assign for all layouts" toggle is on (#370),
-                    // every layout effectively auto-assigns regardless of its per-layout flag,
-                    // so the per-layout toggle is preserved but disabled here. The label
-                    // points the user at the global setting that's overriding it.
-                    text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
-                    icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
-                    visible: !layoutContextMenu.isAutotile
-                    enabled: !globalAuto
-                    onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
-                }
-
-                // -- Aspect Ratio insertion point (submenu managed imperatively in showForLayout) --
-                MenuSeparator {
-                    id: aspectRatioMarker
-
-                    visible: !layoutContextMenu.isAutotile
-                }
-
-                // -- Manage (snapping layouts) --
-                MenuSeparator {
-                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
-                }
-
-                MenuItem {
-                    text: i18n("Duplicate")
-                    icon.name: "edit-copy"
-                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
-                    onTriggered: settingsController.duplicateLayout(layoutContextMenu.layoutId)
-                }
-
-                MenuItem {
-                    text: i18n("Export")
-                    icon.name: "document-export"
-                    visible: layoutContextMenu.viewMode === 0 && !layoutContextMenu.isAutotile
-                    onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
-                }
-
-                MenuSeparator {
-                    visible: layoutContextMenu.viewMode === 0 && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
-                }
-
-                MenuItem {
-                    text: i18n("Delete")
-                    icon.name: "edit-delete"
-                    visible: layoutContextMenu.viewMode === 0 && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
-                    onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
-                }
-
-                // -- Algorithms: Manage --
-                MenuSeparator {
-                    // Only show if at least one item below is visible (Duplicate/Export always
-                    // are, so this fires for any autotile entry — but keeps the separator hidden
-                    // when !isAutotile, avoiding a dangling line for snapping layouts).
-                    visible: layoutContextMenu.isAutotile
-                }
-
-                MenuItem {
-                    text: i18n("Duplicate")
-                    icon.name: "edit-copy"
-                    visible: layoutContextMenu.isAutotile
-                    onTriggered: settingsController.duplicateAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
-                }
-
-                MenuItem {
-                    text: i18n("Export")
-                    icon.name: "document-export"
-                    visible: layoutContextMenu.isAutotile
-                    onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
-                }
-
-                MenuSeparator {
-                    visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
-                }
-
-                MenuItem {
-                    text: i18n("Delete")
-                    icon.name: "edit-delete"
-                    visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
-                    onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
-                }
-
-            }
-
-            // Empty `enter` / `exit` Transitions are the
-            // `finalizeExitTransition` hardening pattern (mirrors the
-            // editor's metadata-preset menu): synchronous close avoids
-            // the QQmlData::destroyed race Qt 6's animated Menu teardown
-            // can otherwise hit.
-            Menu {
-                id: aspectRatioSubMenu
-
-                title: i18n("Aspect Ratio")
-                icon.name: "view-fullscreen"
-
-                Instantiator {
-                    id: aspectRatioItemInstantiator
-
-                    model: layoutContextMenu._aspectRatioOptions
-                    onObjectAdded: function(index, object) {
-                        aspectRatioSubMenu.insertItem(index, object);
-                    }
-                    onObjectRemoved: function(index, object) {
-                        aspectRatioSubMenu.removeItem(object);
-                    }
-
-                    delegate: ItemDelegate {
-                        required property var modelData
-                        readonly property string _arKey: (modelData && modelData[0]) ? modelData[0] : ""
-                        readonly property int _arIndex: (modelData && modelData[2] !== undefined) ? modelData[2] : 0
-                        // Bound off the layout's aspect-ratio class so the
-                        // check mark tracks the current selection without
-                        // any imperative refresh hook on the submenu —
-                        // such a hook is what fails when the submenu's
-                        // QML object goes null during teardown.
-                        readonly property bool isSelected: {
-                            var current = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
-                            return _arKey === current;
-                        }
-
-                        text: (modelData && modelData[1]) ? modelData[1] : ""
-                        icon.name: isSelected ? "checkmark" : ""
-                        Accessible.name: text
-                        onClicked: {
-                            var layoutId = layoutContextMenu.layoutId;
-                            var idx = _arIndex;
-                            Qt.callLater(function() {
-                                aspectRatioSubMenu.visible = false;
-                                layoutContextMenu.visible = false;
-                                settingsController.setLayoutAspectRatio(layoutId, idx);
-                            });
-                        }
-                    }
-
-                }
-
-                enter: Transition {
-                }
-
-                exit: Transition {
-                }
-
-            }
-
-            // -- Footer action bar ----------------------------------------
-            Rectangle {
-                Layout.fillWidth: true
-                height: Math.round(Kirigami.Units.devicePixelRatio)
-                color: settingsController.needsSave ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-
-                Behavior on color {
-                    PhosphorMotionAnimation {
-                        profile: "widget.tint"
-                    }
-
-                }
-
-            }
-
-            // -- Unsaved changes notification bar -------------------------
-            Item {
-                id: unsavedBar
-
-                Layout.fillWidth: true
-                implicitHeight: settingsController.needsSave ? unsavedBarContent.implicitHeight : 0
-                clip: true
-
-                Rectangle {
-                    id: unsavedBarContent
-
-                    width: parent.width
-                    implicitHeight: unsavedBarRow.implicitHeight + Kirigami.Units.smallSpacing * 3
-                    anchors.bottom: parent.bottom
-                    color: Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, 0.12)
-
-                    // Top accent line
-                    Rectangle {
-                        anchors.top: parent.top
-                        width: parent.width
-                        height: Math.round(Kirigami.Units.devicePixelRatio)
-                        color: Kirigami.Theme.neutralTextColor
-                        opacity: 0.4
-                    }
-
-                    RowLayout {
-                        id: unsavedBarRow
-
-                        anchors.fill: parent
-                        anchors.leftMargin: Kirigami.Units.largeSpacing
-                        anchors.rightMargin: Kirigami.Units.largeSpacing
-                        anchors.topMargin: Kirigami.Units.smallSpacing * 1.5
-                        anchors.bottomMargin: Kirigami.Units.smallSpacing * 1.5
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Kirigami.Icon {
-                            source: "dialog-information"
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                            color: Kirigami.Theme.neutralTextColor
-                        }
-
-                        Label {
-                            text: i18n("Unsaved changes")
-                            color: Kirigami.Theme.neutralTextColor
-                            Layout.fillWidth: true
-                        }
-
-                        Button {
-                            text: i18n("Discard")
-                            icon.name: "edit-undo"
-                            flat: true
-                            Accessible.name: i18n("Discard changes")
-                            onClicked: resetConfirmDialog.open()
-                        }
-
-                        Button {
-                            text: i18n("Save")
-                            icon.name: "document-save"
-                            highlighted: true
-                            Accessible.name: i18n("Save settings")
-                            onClicked: {
-                                settingsController.save();
-                                toast.show(i18n("Settings saved"));
-                            }
-                        }
-
-                    }
-
-                }
-
-                Behavior on implicitHeight {
-                    PhosphorMotionAnimation {
-                        // Direction is taken from `needsSave` (the same flag
-                        // that drives `implicitHeight` for this bar) so the
-                        // leg is decided when needsSave flips. Reading the
-                        // animated `implicitHeight` would re-evaluate during
-                        // the Behavior and converge to the wrong leg as the
-                        // value approaches its target.
-                        profile: settingsController.needsSave ? "widget.accordionExpand" : "widget.accordionCollapse"
-                    }
-
-                }
-
-            }
-
-        }
-
+    // ── Toast ───────────────────────────────────────────────────────
+    // Pill notification, anchored to the bottom of the window's
+    // contentItem so it floats above the chrome.
+    Toast {
+        id: toast
+
+        parent: window.contentItem
     }
 
-    // ── Unsaved changes confirmation dialog ────────────────────────
-    Kirigami.PromptDialog {
-        id: unsavedChangesDialog
+    // ── Layout context menu (lives outside any Loader to avoid Qt6 SIGSEGV on Menu destruction) ──
+    Menu {
+        // _cachedScreens is now a declarative binding above — no
+        // Component.onCompleted seed or screensChanged handler needed.
 
-        title: i18n("Unsaved Changes")
-        subtitle: i18n("You have unsaved changes. Do you want to apply them before closing?")
-        standardButtons: Kirigami.Dialog.NoButton
-        customFooterActions: [
-            Kirigami.Action {
-                text: i18n("Apply")
-                icon.name: "dialog-ok-apply"
-                onTriggered: {
-                    unsavedChangesDialog.close();
-                    settingsController.save();
-                    window._closeConfirmed = true;
-                    window.close();
-                }
+        id: layoutContextMenu
+
+        property var layout: null
+        /// Tracks the kind (`"snap"` / `"autotile"` / `"none"`) the
+        /// aspect-ratio submenu was last reconciled to. showForLayout
+        /// only mutates the menu when the current layout's kind
+        /// differs from this state — Qt 6's auto-generated MenuItem
+        /// placeholder is deleteLater'd on removeMenu and the inline
+        /// submenu's reparenting back to its declared parent is
+        /// unreliable enough that doing the dance on every show can
+        /// lose the QML object after many cycles.
+        property string _aspectRatioMenuKind: "none"
+        readonly property bool isAutotile: layout && layout.isAutotile === true
+        readonly property string layoutId: layout ? (layout.id || "") : ""
+        // Cache the aspect-ratio options + screen list rather than
+        // re-deriving them on every binding read. The Instantiator
+        // delegate models below depend on these — re-evaluation on
+        // each popup() round was tearing down and rebuilding every
+        // delegate, which is precisely the Qt6 SIGSEGV class the
+        // header comment warns about. The bindings still react to
+        // `settingsController.screensChanged` so multi-monitor
+        // hotplug is handled.
+        // Named-key object form so the Repeater delegate below can refer
+        // to `modelData.key` / `modelData.label` / `modelData.index`
+        // instead of positional `modelData[0]` / `[1]` / `[2]` — a future
+        // edit that adds a field to one entry won't silently shift index
+        // meanings on the others.
+        readonly property var _aspectRatioOptions: [
+            {
+                "key": "any",
+                "label": window.aspectRatioLabels["any"],
+                "index": 0
             },
-            Kirigami.Action {
-                text: i18n("Discard")
-                icon.name: "edit-delete"
-                onTriggered: {
-                    unsavedChangesDialog.close();
-                    window._closeConfirmed = true;
-                    window.close();
-                }
+            {
+                "key": "standard",
+                "label": window.aspectRatioLabels["standard"],
+                "index": 1
             },
-            Kirigami.Action {
-                text: i18n("Cancel")
-                icon.name: "dialog-cancel"
-                onTriggered: unsavedChangesDialog.close()
+            {
+                "key": "ultrawide",
+                "label": window.aspectRatioLabels["ultrawide"],
+                "index": 2
+            },
+            {
+                "key": "super-ultrawide",
+                "label": window.aspectRatioLabels["super-ultrawide"],
+                "index": 3
+            },
+            {
+                "key": "portrait",
+                "label": window.aspectRatioLabels["portrait"],
+                "index": 4
             }
         ]
+        // Memoise the screen list result. The getter still re-runs on
+        // `settingsController.screensChanged`, but doesn't re-run on
+        // each popup() / every `_screenItemsModel.length` read.
+        // Cache the screens snapshot when there's more than one — the
+        // multi-screen menu items only appear in that case. The binding
+        // tracks settingsController.screens directly so a screensChanged
+        // emit (e.g. daemon-driven hot-plug, late-arriving D-Bus reply)
+        // refreshes the cache without needing a Connections + imperative
+        // seed. Previously Component.onCompleted seeded once and missed
+        // any value that arrived between settingsController construction
+        // and Main.qml mount.
+        readonly property var _cachedScreens: {
+            const s = settingsController.screens || [];
+            return s.length > 1 ? s : [];
+        }
+        readonly property var _screenItemsModel: _cachedScreens
+
+        signal deleteRequested(var layout)
+        signal exportRequested(string layoutId)
+
+        function showForLayout(layout) {
+            layoutContextMenu.layout = layout;
+            var wantKind = layoutContextMenu.isAutotile ? "autotile" : "snap";
+            if (wantKind !== layoutContextMenu._aspectRatioMenuKind) {
+                if (wantKind === "snap") {
+                    var markerIdx = -1;
+                    for (var k = 0; k < layoutContextMenu.count; k++) {
+                        if (layoutContextMenu.itemAt(k) === aspectRatioMarker) {
+                            markerIdx = k;
+                            break;
+                        }
+                    }
+                    if (markerIdx >= 0)
+                        layoutContextMenu.insertMenu(markerIdx + 1, aspectRatioSubMenu);
+                    else
+                        layoutContextMenu.addMenu(aspectRatioSubMenu);
+                } else {
+                    layoutContextMenu.removeMenu(aspectRatioSubMenu);
+                }
+                layoutContextMenu._aspectRatioMenuKind = wantKind;
+            }
+            layoutContextMenu.popup();
+        }
+
+        MenuItem {
+            id: editMenuItem
+
+            text: i18n("Edit")
+            icon.name: "document-edit"
+            onTriggered: settingsController.editLayout(layoutContextMenu.layoutId)
+        }
+
+        Instantiator {
+            id: screenItemInstantiator
+
+            model: layoutContextMenu._screenItemsModel
+            onObjectAdded: function (index, object) {
+                // Insert relative to the Edit marker — a future
+                // MenuItem inserted before Edit would otherwise shift
+                // the per-screen entries to the wrong slot.
+                let editPos = 0;
+                for (var k = 0; k < layoutContextMenu.count; k++) {
+                    if (layoutContextMenu.itemAt(k) === editMenuItem) {
+                        editPos = k;
+                        break;
+                    }
+                }
+                layoutContextMenu.insertItem(editPos + 1 + index, object);
+            }
+            onObjectRemoved: function (index, object) {
+                layoutContextMenu.removeItem(object);
+            }
+
+            delegate: ItemDelegate {
+                required property var modelData
+                readonly property string _screenName: (modelData && modelData.name) ? modelData.name : ""
+
+                text: i18n("Edit on %1", (modelData && modelData.displayLabel) || (modelData && modelData.name) || "")
+                icon.name: (modelData && modelData.isPrimary) ? "starred-symbolic" : "monitor"
+                Accessible.name: text
+                onClicked: {
+                    // Capture by value because Qt.callLater fires after
+                    // the menu's onClicked stack unwinds — the model
+                    // delegate's row data is no longer guaranteed valid
+                    // (the Instantiator may rebuild on the same tick).
+                    var screenName = _screenName;
+                    var layoutId = layoutContextMenu.layoutId;
+                    // SIGSEGV-avoidance: setting `visible = false` on a
+                    // QtQuick.Controls Menu and then synchronously
+                    // invoking an action that tears down the parent
+                    // popup chain can deref the in-flight click target.
+                    // Defer the close + the controller call until after
+                    // the click event fully propagates.
+                    Qt.callLater(function () {
+                        layoutContextMenu.visible = false;
+                        if (screenName.length > 0)
+                            settingsController.editLayoutOnScreen(layoutId, screenName);
+                    });
+                }
+            }
+        }
+
+        MenuSeparator {
+            id: screenSeparator
+
+            visible: layoutContextMenu._screenItemsModel.length > 0
+        }
+
+        MenuItem {
+            text: i18n("Open in Text Editor")
+            icon.name: "document-open"
+            Accessible.name: text
+            onTriggered: {
+                if (layoutContextMenu.isAutotile)
+                    settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
+                else
+                    settingsController.openLayoutFile(layoutContextMenu.layoutId);
+            }
+        }
+
+        MenuSeparator {}
+
+        MenuItem {
+            text: i18n("Set as Default")
+            icon.name: "favorite"
+            enabled: {
+                if (!layoutContextMenu.layout)
+                    return false;
+
+                if (layoutContextMenu.isAutotile)
+                    return layoutContextMenu.layoutId !== ("autotile:" + appSettings.defaultAutotileAlgorithm);
+
+                return layoutContextMenu.layoutId !== appSettings.defaultLayoutId;
+            }
+            onTriggered: {
+                if (layoutContextMenu.isAutotile)
+                    appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
+                else
+                    appSettings.defaultLayoutId = layoutContextMenu.layoutId;
+            }
+        }
+
+        MenuItem {
+            text: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? i18n("Show in Zone Selector") : i18n("Hide from Zone Selector")
+            icon.name: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? "view-visible" : "view-hidden"
+            onTriggered: settingsController.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
+        }
+
+        MenuItem {
+            readonly property bool perLayoutAuto: layoutContextMenu.layout && layoutContextMenu.layout.autoAssign === true
+            readonly property bool globalAuto: appSettings.autoAssignAllLayouts === true
+
+            text: globalAuto ? i18n("Auto-assign forced on (global setting)") : (perLayoutAuto ? i18n("Disable Auto-assign") : i18n("Enable Auto-assign"))
+            icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
+            visible: !layoutContextMenu.isAutotile
+            enabled: !globalAuto
+            onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
+        }
+
+        // Sentinel separators that flank the aspect-ratio submenu's
+        // insert position. showForLayout() inserts the submenu between
+        // them (after `aspectRatioMarker`) in snap mode and removes it
+        // in autotile mode. Gate visibility on both `!isAutotile` AND
+        // the actual reconciled menu kind tracked in
+        // `_aspectRatioMenuKind` — relying solely on `!isAutotile`
+        // would show two empty separators during the brief window
+        // between layout assignment and showForLayout()'s
+        // insertMenu/removeMenu reconciliation when the menu rebuilds
+        // (e.g. a layout swap in-place).
+        MenuSeparator {
+            id: aspectRatioMarker
+
+            visible: !layoutContextMenu.isAutotile && layoutContextMenu._aspectRatioMenuKind === "snap"
+        }
+
+        MenuSeparator {
+            visible: !layoutContextMenu.isAutotile && layoutContextMenu._aspectRatioMenuKind === "snap"
+        }
+
+        MenuItem {
+            text: i18n("Duplicate")
+            icon.name: "edit-copy"
+            visible: !layoutContextMenu.isAutotile
+            onTriggered: settingsController.duplicateLayout(layoutContextMenu.layoutId)
+        }
+
+        MenuItem {
+            text: i18n("Export")
+            icon.name: "document-export"
+            visible: !layoutContextMenu.isAutotile
+            onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
+        }
+
+        MenuSeparator {
+            visible: layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+        }
+
+        MenuItem {
+            text: i18n("Delete")
+            icon.name: "edit-delete"
+            visible: layoutContextMenu.layout && !layoutContextMenu.layout.isSystem && !layoutContextMenu.isAutotile
+            onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
+        }
+
+        MenuSeparator {
+            visible: layoutContextMenu.isAutotile
+        }
+
+        MenuItem {
+            text: i18n("Duplicate")
+            icon.name: "edit-copy"
+            visible: layoutContextMenu.isAutotile
+            onTriggered: settingsController.duplicateAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
+        }
+
+        MenuItem {
+            text: i18n("Export")
+            icon.name: "document-export"
+            visible: layoutContextMenu.isAutotile
+            onTriggered: layoutContextMenu.exportRequested(layoutContextMenu.layoutId)
+        }
+
+        MenuSeparator {
+            visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
+        }
+
+        MenuItem {
+            text: i18n("Delete")
+            icon.name: "edit-delete"
+            visible: layoutContextMenu.isAutotile && layoutContextMenu.layout && !layoutContextMenu.layout.isSystem
+            onTriggered: layoutContextMenu.deleteRequested(layoutContextMenu.layout)
+        }
     }
 
-    // ── Reset confirmation dialog ───────────────────────────────────
+    // Aspect-ratio submenu (added/removed imperatively by showForLayout).
+    // Empty `enter` / `exit` transitions are the `finalizeExitTransition`
+    // hardening pattern (mirrors the editor's metadata-preset menu):
+    // synchronous close avoids the QQmlData::destroyed race Qt 6's
+    // animated Menu teardown can otherwise hit.
+    Menu {
+        id: aspectRatioSubMenu
+
+        title: i18n("Aspect Ratio")
+        icon.name: "view-fullscreen"
+
+        Instantiator {
+            id: aspectRatioItemInstantiator
+
+            model: layoutContextMenu._aspectRatioOptions
+            onObjectAdded: function (index, object) {
+                aspectRatioSubMenu.insertItem(index, object);
+            }
+            onObjectRemoved: function (index, object) {
+                aspectRatioSubMenu.removeItem(object);
+            }
+
+            delegate: ItemDelegate {
+                required property var modelData
+                readonly property string _arKey: (modelData && modelData.key) ? modelData.key : ""
+                readonly property int _arIndex: (modelData && modelData.index !== undefined) ? modelData.index : 0
+                readonly property bool isSelected: {
+                    var current = (layoutContextMenu.layout && layoutContextMenu.layout.aspectRatioClass) || "any";
+                    return _arKey === current;
+                }
+
+                text: (modelData && modelData.label) ? modelData.label : ""
+                icon.name: isSelected ? "checkmark" : ""
+                Accessible.name: text
+                onClicked: {
+                    // SIGSEGV-avoidance — see the matching pattern in
+                    // the per-screen edit MenuItem above. The submenu's
+                    // visible-toggle + the layoutContextMenu close +
+                    // the controller call all need to run AFTER the
+                    // click event unwinds, otherwise the submenu
+                    // dismissal can deref the click target's parent
+                    // chain mid-event.
+                    var layoutId = layoutContextMenu.layoutId;
+                    var idx = _arIndex;
+                    Qt.callLater(function () {
+                        aspectRatioSubMenu.visible = false;
+                        layoutContextMenu.visible = false;
+                        settingsController.setLayoutAspectRatio(layoutId, idx);
+                    });
+                }
+            }
+        }
+
+        enter: Transition {}
+
+        exit: Transition {}
+    }
+
+    // ── Reset / Restore-defaults dialogs (used by Tools menu in pages) ──
     Kirigami.PromptDialog {
         id: resetConfirmDialog
 
@@ -2776,7 +697,6 @@ ApplicationWindow {
         ]
     }
 
-    // ── Defaults confirmation dialog ────────────────────────────────
     Kirigami.PromptDialog {
         id: defaultsConfirmDialog
 
@@ -2800,126 +720,65 @@ ApplicationWindow {
         ]
     }
 
-    // ── Keyboard shortcut overlay ──────────────────────────────────
-    Rectangle {
-        id: shortcutOverlay
+    // Confirm dialog for the sidebar's inline snapping/tiling toggle when
+    // the relevant page has unsaved edits. Disabling the section through
+    // beginExternalEdit/endExternalEdit commits the *_Enabled flag plus
+    // whatever the page has staged dirty — without this gate the user
+    // could silently apply a partial edit by flipping the sidebar toggle.
+    Kirigami.PromptDialog {
+        id: sectionToggleDiscardConfirm
 
-        anchors.fill: parent
-        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
-        visible: opacity > 0
-        opacity: window._showShortcuts ? 1 : 0
-        z: 200
-        Keys.onEscapePressed: window._showShortcuts = false
-        focus: window._showShortcuts
+        // Set by the trailing-delegate SettingsSwitch before open(); the
+        // confirm action reads them to know which section to commit and
+        // what value to set.
+        property string pendingSection: ""
+        property bool pendingValue: false
 
-        MouseArea {
-            anchors.fill: parent
-            onClicked: window._showShortcuts = false
-        }
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width * 0.6, Kirigami.Units.gridUnit * 30)
-            height: shortcutContent.implicitHeight + Kirigami.Units.largeSpacing * 3
-            radius: Kirigami.Units.smallSpacing * 2
-            color: Kirigami.Theme.backgroundColor
-            border.width: Math.round(Kirigami.Units.devicePixelRatio)
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-
-            ColumnLayout {
-                id: shortcutContent
-
-                anchors.fill: parent
-                anchors.margins: Kirigami.Units.largeSpacing * 1.5
-                spacing: Kirigami.Units.largeSpacing
-
-                Label {
-                    text: i18n("Keyboard Shortcuts")
-                    font.weight: Font.DemiBold
-                    font.pixelSize: Kirigami.Units.gridUnit * 1.2
-                    Layout.alignment: Qt.AlignHCenter
+        title: i18n("Discard unsaved changes?")
+        subtitle: pendingSection === "snapping" ? i18n("Disabling Snapping will discard your unsaved Snapping changes. Continue?") : i18n("Disabling Tiling will discard your unsaved Tiling changes. Continue?")
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Discard and Disable")
+                icon.name: "edit-undo"
+                onTriggered: {
+                    const section = sectionToggleDiscardConfirm.pendingSection;
+                    const value = sectionToggleDiscardConfirm.pendingValue;
+                    sectionToggleDiscardConfirm.close();
+                    // Discard the dirty page first, THEN flip the enable
+                    // flag — otherwise the inline beginExternalEdit /
+                    // endExternalEdit pair would surface the still-staged
+                    // edits alongside the disable. PageRegistry.controller
+                    // returns the StagingDomain whose discard() slot
+                    // reloads the backing store and clears the dirty flag.
+                    const ctrl = settingsController.app.registry.controller(section);
+                    if (ctrl)
+                        ctrl.discard();
+                    settingsController.beginExternalEdit(section);
+                    if (section === "snapping")
+                        appSettings.snappingEnabled = value;
+                    else
+                        appSettings.autotileEnabled = value;
+                    settingsController.endExternalEdit();
                 }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                // Shortcut entries
-                Repeater {
-                    model: [{
-                        "key": "Meta+Shift+P",
-                        "action": i18n("Open PlasmaZones Settings")
-                    }, {
-                        "key": "Meta+Shift+E",
-                        "action": i18n("Open Zone Editor")
-                    }, {
-                        "key": "Ctrl+PgUp",
-                        "action": i18n("Previous page")
-                    }, {
-                        "key": "Ctrl+PgDown",
-                        "action": i18n("Next page")
-                    }, {
-                        "key": "?",
-                        "action": i18n("Toggle this overlay")
-                    }]
-
-                    delegate: RowLayout {
-                        Layout.fillWidth: true
-
-                        Label {
-                            text: modelData.action
-                            Layout.fillWidth: true
-                            opacity: 0.7
-                        }
-
-                        Rectangle {
-                            implicitWidth: keyLabel.implicitWidth + Kirigami.Units.largeSpacing
-                            implicitHeight: keyLabel.implicitHeight + Kirigami.Units.smallSpacing
-                            radius: Kirigami.Units.smallSpacing / 2
-                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-                            border.width: Math.round(Kirigami.Units.devicePixelRatio)
-                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
-
-                            Label {
-                                id: keyLabel
-
-                                anchors.centerIn: parent
-                                text: modelData.key
-                                font: Kirigami.Theme.smallFont
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                Kirigami.Separator {
-                    Layout.fillWidth: true
-                }
-
-                Label {
-                    text: i18n("Press ? or Escape to close")
-                    opacity: 0.4
-                    Layout.alignment: Qt.AlignHCenter
-                    font: Kirigami.Theme.smallFont
-                }
-
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: sectionToggleDiscardConfirm.close()
             }
+        ]
+    }
 
-        }
-
-        Behavior on opacity {
-            PhosphorMotionAnimation {
-                // Direction is taken from `_showShortcuts` (the same flag
-                // driving `opacity` above) so the leg is decided when the
-                // overlay is toggled.
-                profile: window._showShortcuts ? "widget.fadeIn" : "widget.fadeOut"
-                durationOverride: 200
-            }
-
-        }
-
+    // ── Keyboard-shortcut overlay ───────────────────────────────────
+    KeyboardShortcutOverlay {
+        parent: window.contentItem
+        // `appSettings` is the context property exposed by main.cpp;
+        // pass it explicitly through the new required property so the
+        // overlay no longer relies on the implicit context-name match.
+        appSettings: appSettings
+        shown: window._showShortcuts
+        onDismiss: window._showShortcuts = false
     }
 
     // ── What's New dialog ──────────────────────────────────────────
@@ -2927,11 +786,210 @@ ApplicationWindow {
         id: whatsNewDialog
     }
 
-    // Auto-show What's New dialog on first launch after update
+    // Brief delay before auto-popping the What's-New dialog on first
+    // launch after an update — lets the main window finish its
+    // first-paint motion before the modal steals focus. Kirigami's
+    // `veryLongDuration` is the canonical "noticeable but unhurried"
+    // timing token (currently 400 ms across themes), close enough to
+    // the legacy hand-picked 500 ms and theme-tracking.
     Timer {
-        interval: 500
+        interval: Kirigami.Units.veryLongDuration
         running: settingsController.hasUnseenWhatsNew
         onTriggered: whatsNewDialog.open()
     }
 
+    // Sticky daemon-status footer at the bottom of the sidebar, always
+    // visible regardless of which page is active. Mirrors the legacy
+    // chrome's persistent status Pane: pulsing colored dot (positive
+    // when running, negative when stopped) + Running/Stopped label +
+    // enable/disable SettingsSwitch.
+    sidebar.footerContent: Component {
+        Pane {
+            padding: Kirigami.Units.smallSpacing * 1.5
+            topPadding: Kirigami.Units.smallSpacing * 2
+            bottomPadding: Kirigami.Units.smallSpacing * 2
+
+            background: Rectangle {
+                color: "transparent"
+
+                Rectangle {
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: Math.round(Screen.devicePixelRatio)
+                    // Subtle theme-tinted hairline. Same shape as the
+                    // KeyboardShortcutOverlay subtleBorder + Toast
+                    // toastBg tints documented in E32; future tweaks
+                    // should go through PhosphorUi.ThemeHelpers when
+                    // it's exposed publicly. For now we accept the
+                    // copy here (3 sites, low churn).
+                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
+                }
+            }
+
+            contentItem: RowLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                Rectangle {
+                    id: daemonDot
+
+                    width: Kirigami.Units.smallSpacing * 1.5
+                    height: Kirigami.Units.smallSpacing * 1.5
+                    radius: width / 2
+                    Layout.alignment: Qt.AlignVCenter
+                    color: settingsController.daemonRunning ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+
+                    SequentialAnimation on opacity {
+                        loops: Animation.Infinite
+                        running: settingsController.daemonRunning
+
+                        PhosphorMotionAnimation {
+                            from: 1
+                            to: 0.4
+                            profile: "widget.pulse.slow"
+                        }
+
+                        PhosphorMotionAnimation {
+                            from: 0.4
+                            to: 1
+                            profile: "widget.pulse.slow"
+                        }
+                    }
+                }
+
+                Label {
+                    text: settingsController.daemonRunning ? i18n("Running") : i18n("Stopped")
+                    opacity: 0.7
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: !window.sidebarCompact
+                }
+
+                SettingsSwitch {
+                    Layout.alignment: Qt.AlignVCenter
+                    checked: settingsController.daemonRunning
+                    enabled: !settingsController.daemonController.busy
+                    accessibleName: i18n("Toggle daemon")
+                    onToggled: function (newValue) {
+                        settingsController.daemonController.setEnabled(newValue);
+                    }
+                }
+            }
+        }
+    }
+
+    // Per-row sidebar trailing content — a Row with two slots:
+    //   1. Pulsing dirty badge that's visible when the row's page (or
+    //      one of its descendants for a collapsed category header) is
+    //      dirty. The user sees pending edits hiding inside categories
+    //      without having to drill in.
+    //   2. Inline SettingsSwitch on the snapping / tiling rows so a
+    //      whole feature can be disabled without drilling in.
+    sidebar.trailingDelegate: Component {
+        RowLayout {
+            id: trailingRow
+
+            // SidebarRow's trailingLoader exposes the row's role data via
+            // `modelData`. The lib renamed the row-identifier role from
+            // "id" to "pageId" (the prior name shadowed the QML id:
+            // directive); read `entry.pageId` accordingly.
+            readonly property var entry: parent ? parent.modelData : null
+            readonly property bool isSnapping: entry && entry.pageId === "snapping"
+            readonly property bool isTiling: entry && entry.pageId === "tiling"
+            readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
+            readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
+            property int _dirtyTick: 0
+
+            spacing: Kirigami.Units.smallSpacing
+
+            // ── Unsaved-changes badge ────────────────────────────────
+            // `_dirtyTick` bumps once per `dirtyPagesChanged` emit. We
+            // bind the badge's `visible` to it (read once via the
+            // ternary) and to `isPageDirty()` directly — vs. the
+            // earlier `settingsController.dirtyPages` read, which
+            // materialised a fresh QStringList per row per emit.
+            Connections {
+                function onDirtyPagesChanged() {
+                    trailingRow._dirtyTick++;
+                }
+
+                target: settingsController
+            }
+
+            Rectangle {
+                id: dirtyBadge
+
+                width: Kirigami.Units.smallSpacing * 1.5
+                height: Kirigami.Units.smallSpacing * 1.5
+                radius: width / 2
+                color: Kirigami.Theme.neutralTextColor
+                Layout.alignment: Qt.AlignVCenter
+                visible: {
+                    if (!trailingRow.entry)
+                        return false;
+
+                    // For inline-collapsible headers, only show the
+                    // badge when the category is COLLAPSED — expanded
+                    // categories show their dirty children's own
+                    // badges so the header badge is redundant.
+                    if (trailingRow.isCollapsibleHeader && trailingRow.isCollapsibleExpanded)
+                        return false;
+
+                    trailingRow._dirtyTick; // re-evaluate when dirty state changes
+                    return settingsController.isPageDirty(trailingRow.entry.pageId);
+                }
+
+                SequentialAnimation on opacity {
+                    loops: Animation.Infinite
+                    running: dirtyBadge.visible
+
+                    PhosphorMotionAnimation {
+                        from: 1
+                        to: 0.4
+                        profile: "widget.pulse"
+                    }
+
+                    PhosphorMotionAnimation {
+                        from: 0.4
+                        to: 1
+                        profile: "widget.pulse"
+                    }
+                }
+            }
+
+            // ── Snapping / Tiling toggle ────────────────────────────
+            SettingsSwitch {
+                id: sectionToggle
+
+                visible: trailingRow.isSnapping || trailingRow.isTiling
+                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : false)
+                accessibleName: trailingRow.entry ? trailingRow.entry.title : ""
+                onToggled: function (newValue) {
+                    // Disabling from the sidebar is a destructive shortcut
+                    // when the page underneath has unsaved edits — those
+                    // edits would silently apply through the
+                    // beginExternalEdit/endExternalEdit pair (which commits
+                    // the snapping/tiling enable flag plus whatever dirty
+                    // state the page has staged). Prompt before clobbering.
+                    // Enabling is safe — it doesn't discard anything — so
+                    // we only gate the disable path.
+                    if (!newValue && trailingRow.entry && settingsController.isPageDirty(trailingRow.entry.pageId)) {
+                        sectionToggleDiscardConfirm.pendingSection = trailingRow.isSnapping ? "snapping" : "tiling";
+                        sectionToggleDiscardConfirm.pendingValue = newValue;
+                        sectionToggleDiscardConfirm.open();
+                        // Snap the toggle visual back to its checked state
+                        // — the binding to appSettings.* keeps it in sync
+                        // automatically once the user makes a decision.
+                        return;
+                    }
+                    settingsController.beginExternalEdit(trailingRow.isSnapping ? "snapping" : "tiling");
+                    if (trailingRow.isSnapping)
+                        appSettings.snappingEnabled = newValue;
+                    else
+                        appSettings.autotileEnabled = newValue;
+                    settingsController.endExternalEdit();
+                }
+            }
+        }
+    }
 }

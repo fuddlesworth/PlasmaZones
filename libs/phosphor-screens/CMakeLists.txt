@@ -35,7 +35,28 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus)
+# PhosphorScreens::Core is QtDBus-free (constants + screen-topology
+# helpers only); the umbrella PhosphorScreens target adds the DBus
+# wiring on top. Split the find_package() call so the Core dependency
+# surface stays QtDBus-free: any consumer that only links ::Core (a
+# domain library, a test fixture, etc.) doesn't pay for QtDBus and
+# can't accidentally call into it via a transitively-resolved target.
+#
+# Both libraries are currently built unconditionally (there's no build
+# option that gates the D-Bus layer out — the umbrella target is part
+# of the lib's public contract), so the DBus find runs every time. If
+# a future flag makes the umbrella target optional, the DBus find can
+# be guarded behind it without revisiting consumer call sites.
+#
+# Namespace convention: this library exposes its types in a single-level
+# namespace `PhosphorScreens` (not `Phosphor::Screens`) to align with
+# other phosphor-* libs such as phosphor-settings-ui (`PhosphorSettingsUi`).
+# A single-level namespace is the project convention for new phosphor-*
+# libs; existing libs were flattened during the phosphor-settings-ui
+# scaffolding pass. See libs/phosphor-screens/CHANGES.md for the rename
+# history.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 6.6 REQUIRED COMPONENTS DBus)
 
 # PhosphorIdentity ships VirtualScreenId — the cross-process ID format
 # helpers that VirtualScreen.h consumes. INTERFACE-only dependency, so
@@ -74,6 +95,19 @@ function(_phosphorscreens_target_defaults _target)
         UNITY_BUILD OFF
         AUTOMOC ON
         POSITION_INDEPENDENT_CODE ON
+        # PhosphorScreens.so links PhosphorScreensCore.so via its public
+        # interface. On distros that don't add KDE_INSTALL_LIBDIR to the
+        # default loader search path (e.g. /usr/local/lib), runtime load
+        # of PhosphorScreens.so would fail with "PhosphorScreensCore.so:
+        # cannot open shared object file". $ORIGIN tells the dynamic
+        # linker to look beside the loading .so first, which is exactly
+        # where both shipped libs live. BUILD_WITH_INSTALL_RPATH lets
+        # ctest dlopen the in-tree binaries without an explicit
+        # LD_LIBRARY_PATH — without it, in-tree consumers (the demo,
+        # the test runner) inherit CMake's empty build-tree rpath and
+        # fail at sibling-lib resolution before install lands.
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH ON
     )
     target_compile_features(${_target} PUBLIC cxx_std_20)
 endfunction()
@@ -92,6 +126,7 @@ set(phosphorscreenscore_public_HDRS
     include/PhosphorScreens/PhysicalScreen.h
     include/PhosphorScreens/QtScreenProvider.h
     include/PhosphorScreens/ScreenIdentity.h
+    include/PhosphorScreens/ScreenInfo.h
     include/PhosphorScreens/Swapper.h
     include/PhosphorScreens/VirtualScreen.h
 )
@@ -103,6 +138,7 @@ add_library(PhosphorScreensCore SHARED
     src/manager_virtualscreens.cpp
     src/qtscreenprovider.cpp
     src/screenidentity.cpp
+    src/screeninfo.cpp
     src/screenslogging.cpp
     src/swapper.cpp
 )
@@ -130,6 +166,15 @@ target_link_libraries(PhosphorScreensCore
         Qt6::Gui   # QRect / QRectF / QScreen in public headers
         PhosphorIdentity::PhosphorIdentity
     PRIVATE
+        # FIXME(audit): screeninfo.cpp + several other Core TUs are pure
+        # POD/serialiser code and don't need Wayland; only the
+        # LayerSurface-backed geometry sensor in ScreenManager does.
+        # Splitting Core into a pure-POD sub-target + a CoreRuntime
+        # sub-target (with Wayland) would let consumers that only need
+        # ScreenInfo / ScreenIdentity / IConfigStore avoid pulling in
+        # PhosphorWayland. Deferred — splitting is API-breaking and
+        # warrants its own audit-pass commit. See
+        # libs/phosphor-screens/CHANGES.md for namespace history.
         PhosphorWayland::PhosphorWayland  # LayerSurface for geometry sensors
 )
 

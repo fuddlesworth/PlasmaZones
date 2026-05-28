@@ -10,7 +10,7 @@
 #include <QTest>
 #include <QVector>
 
-namespace Phosphor::Shortcuts::tests {
+namespace PhosphorShortcuts::tests {
 
 /**
  * FakeBackend: records every method call into inspectable vectors so tests
@@ -705,7 +705,7 @@ private Q_SLOTS:
     }
 };
 
-} // namespace Phosphor::Shortcuts::tests
+} // namespace PhosphorShortcuts::tests
 
-QTEST_MAIN(Phosphor::Shortcuts::tests::TestRegistry)
+QTEST_MAIN(PhosphorShortcuts::tests::TestRegistry)
 #include "test_registry.moc"

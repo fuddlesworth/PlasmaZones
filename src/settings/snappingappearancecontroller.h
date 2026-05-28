@@ -3,12 +3,13 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QString>
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "Snapping → Appearance" settings page.
 ///
@@ -23,7 +24,7 @@ class Settings;
 ///      Q_PROPERTY on Settings and mark dirty through the meta-loop, but
 ///      the top-level load path needs the explicit signal to cover any
 ///      batched writes that don't individually trip a NOTIFY.
-class SnappingAppearanceController : public QObject
+class SnappingAppearanceController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -33,7 +34,18 @@ class SnappingAppearanceController : public QObject
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
 
 public:
-    explicit SnappingAppearanceController(Settings* settings, QObject* parent = nullptr);
+    explicit SnappingAppearanceController(ISettings& settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     int borderWidthMin() const;
     int borderWidthMax() const;
@@ -61,7 +73,7 @@ Q_SIGNALS:
     void changed();
 
 private:
-    Settings* m_settings = nullptr;
+    ISettings* m_settings = nullptr;
 };
 
 } // namespace PlasmaZones

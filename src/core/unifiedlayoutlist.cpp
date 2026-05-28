@@ -239,8 +239,8 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
     // Translate connector name to screen ID for allowedScreens matching.
     QString resolvedScreenId;
     if (!screenId.isEmpty()) {
-        resolvedScreenId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
-            ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+        resolvedScreenId = PhosphorScreens::ScreenIdentity::isConnectorName(screenId)
+            ? PhosphorScreens::ScreenIdentity::idForName(screenId)
             : screenId;
     }
 

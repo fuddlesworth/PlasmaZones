@@ -50,7 +50,7 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
         return *it;
     }
 
-    // Build a screen ID that exactly matches the daemon's Phosphor::Screens::ScreenIdentity::identifierFor().
+    // Build a screen ID that exactly matches the daemon's PhosphorScreens::ScreenIdentity::identifierFor().
     // Uses shared ScreenIdUtils (compositor-common) for hex normalization and sysfs EDID
     // fallback, ensuring byte-identical output across daemon and compositor processes.
     //
@@ -201,6 +201,19 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 // tally isn't left hanging on the superseded call.
                 const bool isLatest = self->m_vsFetchSeqPerPhysId.value(physicalScreenId) == seq;
 
+                // Live VS-config changes (generation == 0) flip
+                // m_virtualScreensReady = false in onVirtualScreensChanged so
+                // window-screen-crossing detection pauses until the reply
+                // lands. EVERY early-return below must restore the flag for
+                // generation == 0 — otherwise an errored / stale / malformed
+                // reply leaves the gate closed forever and VS crossings
+                // silently stop being detected for that physical screen.
+                const auto restoreReadyIfLive = [self, generation]() {
+                    if (generation == 0) {
+                        self->m_virtualScreensReady = true;
+                    }
+                };
+
                 if (reply.isError()) {
                     qCDebug(lcEffect) << "fetchVirtualScreenConfig: no virtual screens for" << physicalScreenId
                                       << reply.error().message();
@@ -208,11 +221,13 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                         self->m_virtualScreenDefs.remove(physicalScreenId);
                     }
                     countdownVsGate();
+                    restoreReadyIfLive();
                     return;
                 }
 
                 if (!isLatest) {
                     countdownVsGate();
+                    restoreReadyIfLive();
                     return;
                 }
 
@@ -221,6 +236,7 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 if (!doc.isObject()) {
                     self->m_virtualScreenDefs.remove(physicalScreenId);
                     countdownVsGate();
+                    restoreReadyIfLive();
                     return;
                 }
 
@@ -301,15 +317,7 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 }
 
                 countdownVsGate();
-
-                // For live VS config changes (generation=0), re-enable VS crossing
-                // detection now that boundary definitions are updated.
-                // countdownVsGate skips for generation=0, so m_virtualScreensReady
-                // must be restored here. For startup fetches (generation>0),
-                // countdownVsGate already sets it when all screens are processed.
-                if (generation == 0) {
-                    self->m_virtualScreensReady = true;
-                }
+                restoreReadyIfLive();
             });
 }
 

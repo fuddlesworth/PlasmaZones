@@ -46,7 +46,7 @@ namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
 }
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -82,7 +82,7 @@ class PHOSPHORPLACEMENT_EXPORT WindowTrackingService : public QObject, public Ph
 public:
     explicit WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
                                    PhosphorZones::IZoneDetector* zoneDetector,
-                                   Phosphor::Screens::ScreenManager* screenManager,
+                                   PhosphorScreens::ScreenManager* screenManager,
                                    PhosphorWorkspaces::VirtualDesktopManager* vdm,
                                    IGeometryResolver* geometryResolver = nullptr, PlacementConfig config = {},
                                    QObject* parent = nullptr);
@@ -192,7 +192,7 @@ public:
         return m_windowRegistry;
     }
 
-    Phosphor::Screens::ScreenManager* screenManager() const override
+    PhosphorScreens::ScreenManager* screenManager() const override
     {
         return m_screenManager;
     }
@@ -611,10 +611,10 @@ public:
      *
      * @param physicalScreenId The physical screen being subdivided
      * @param virtualScreenIds Virtual screen IDs for the physical screen
-     * @param mgr Phosphor::Screens::ScreenManager for geometry lookups
+     * @param mgr PhosphorScreens::ScreenManager for geometry lookups
      */
     void migrateScreenAssignmentsToVirtual(const QString& physicalScreenId, const QStringList& virtualScreenIds,
-                                           Phosphor::Screens::ScreenManager* mgr);
+                                           PhosphorScreens::ScreenManager* mgr);
 
     /**
      * @brief Reverse migration: virtual screen IDs → physical screen ID
@@ -931,7 +931,7 @@ public:
 
     /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
     ///
-    /// Uses Phosphor::Screens::ScreenIdentity::screensMatch() for format-agnostic screen comparison.
+    /// Uses PhosphorScreens::ScreenIdentity::screensMatch() for format-agnostic screen comparison.
     ///
     /// @param desktopFilter When > 0, only counts assignments whose window desktop
     ///   matches (or is 0 = pinned/all-desktops). Pass the current virtual desktop
@@ -970,7 +970,7 @@ private:
     // Shared registry for current-class queries and canonical key translation.
     // Not owned. Null in unit tests.
     PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
-    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
 
     // Floating windows: full windowId at runtime, appId for session-restored entries

@@ -392,8 +392,8 @@ PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, 
         return *result ? *result : defaultLayout();
     }
     // Connector-name fallback.
-    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)) {
-        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
+        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
         if (resolved != screenId) {
             if (const auto result = tryResolve(resolved)) {
                 return *result ? *result : defaultLayout();
@@ -453,8 +453,8 @@ QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtu
     if (const auto result = tryResolve(screenId)) {
         return *result;
     }
-    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)) {
-        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
+        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
         if (resolved != screenId) {
             if (const auto result = tryResolve(resolved)) {
                 return *result;
@@ -491,8 +491,8 @@ AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId
     if (const auto result = tryResolve(screenId)) {
         return *result;
     }
-    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)) {
-        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+    if (PhosphorScreens::ScreenIdentity::isConnectorName(screenId)) {
+        const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screenId);
         if (resolved != screenId) {
             if (const auto result = tryResolve(resolved)) {
                 return *result;

@@ -21,7 +21,7 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorTiles/AlgorithmPreviewParams.h>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class PlasmaPanelSource;
 class DBusScreenAdaptor;
 }
@@ -149,7 +149,7 @@ public:
     {
         return m_overlayService.get();
     }
-    Phosphor::Screens::ScreenManager* screenManager() const
+    PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager.get();
     }
@@ -381,9 +381,9 @@ private:
     void updateAutotileScreens();
 
     /**
-     * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen
+     * @brief Respond to a PhosphorScreens::ScreenManager VS cache change for a physical screen
      *
-     * Wired to Phosphor::Screens::ScreenManager::virtualScreensChanged. Performs the post-change
+     * Wired to PhosphorScreens::ScreenManager::virtualScreensChanged. Performs the post-change
      * fan-out: clears stale resnap buffer, migrates window assignments to the
      * new VS IDs (when subdivisions exist), prunes stale autotile orders,
      * refreshes the autotile screen set, recalculates affected zone
@@ -523,13 +523,13 @@ private:
     std::unique_ptr<PhosphorEngine::WindowRegistry> m_windowRegistry;
     /// Plasma D-Bus panel-offset source. Declared before m_screenManager
     /// because the manager holds a non-owning IPanelSource* into it.
-    std::unique_ptr<Phosphor::Screens::PlasmaPanelSource> m_panelSource;
+    std::unique_ptr<PhosphorScreens::PlasmaPanelSource> m_panelSource;
     /// Settings-backed IConfigStore for VS topology. Shared by
     /// m_screenManager (Config::configStore) and m_virtualScreenSwapper
     /// (constructor arg). Declared before both so destruction order
     /// runs swapper → screen-manager → store.
     std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
-    std::unique_ptr<Phosphor::Screens::ScreenManager> m_screenManager;
+    std::unique_ptr<PhosphorScreens::ScreenManager> m_screenManager;
     /// Per-daemon shader registry. Replaces the previous
     /// ShaderRegistry::instance() singleton — per-process ownership is the
     /// plugin-architecture-friendly shape (matches m_algorithmRegistry).
@@ -555,7 +555,7 @@ private:
     OverlayAdaptor* m_overlayAdaptor = nullptr; // Overlay visibility only
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr; // PhosphorZones::Zone detection queries
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
-    Phosphor::Screens::DBusScreenAdaptor* m_screenAdaptor = nullptr;
+    PhosphorScreens::DBusScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
     // Held so stop() can invoke detach() before the unique_ptr members
     // those adaptors borrow from are destroyed. ~QObject runs AFTER all
@@ -596,7 +596,7 @@ private:
     /// Stateless facade over m_virtualScreenStore for VS swap/rotate.
     /// Held as a member rather than reconstructed per-call so navigation
     /// handlers don't need to know about its dependencies.
-    std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;
+    std::unique_ptr<PhosphorScreens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 

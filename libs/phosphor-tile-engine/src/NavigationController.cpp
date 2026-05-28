@@ -425,8 +425,8 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     }
 
     // No focused window found - fallback to primary screen if available
-    const Phosphor::Screens::PhysicalScreen primaryScreen =
-        m_engine->m_screenManager ? m_engine->m_screenManager->primaryScreen() : Phosphor::Screens::PhysicalScreen{};
+    const PhosphorScreens::PhysicalScreen primaryScreen =
+        m_engine->m_screenManager ? m_engine->m_screenManager->primaryScreen() : PhosphorScreens::PhysicalScreen{};
     if (primaryScreen.isValid()) {
         outScreenId = primaryScreen.identifier;
         const auto key = m_engine->currentKeyForScreen(outScreenId);

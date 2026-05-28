@@ -857,13 +857,13 @@ public:
                           bool locked) override;
 
     // Virtual screen configuration
-    QHash<QString, Phosphor::Screens::VirtualScreenConfig> virtualScreenConfigs() const;
-    void setVirtualScreenConfigs(const QHash<QString, Phosphor::Screens::VirtualScreenConfig>& configs);
+    QHash<QString, PhosphorScreens::VirtualScreenConfig> virtualScreenConfigs() const;
+    void setVirtualScreenConfigs(const QHash<QString, PhosphorScreens::VirtualScreenConfig>& configs);
     /// Returns true on success, false if the config was rejected by
-    /// Phosphor::Screens::VirtualScreenConfig::isValid (or empty physicalScreenId). An
+    /// PhosphorScreens::VirtualScreenConfig::isValid (or empty physicalScreenId). An
     /// already-current value is treated as a successful no-op.
-    bool setVirtualScreenConfig(const QString& physicalScreenId, const Phosphor::Screens::VirtualScreenConfig& config);
-    Phosphor::Screens::VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
+    bool setVirtualScreenConfig(const QString& physicalScreenId, const PhosphorScreens::VirtualScreenConfig& config);
+    PhosphorScreens::VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
 
     /// Atomically re-key a persisted VS config from @p oldPhysicalScreenId to
     /// @p newPhysicalScreenId. Used when a screen's disambiguation-aware
@@ -1014,28 +1014,28 @@ public:
     // Editor Settings (shared [Editor] group in config.json)
     // PhosphorConfig::Store-backed.
     // ═══════════════════════════════════════════════════════════════════════════
-    QString editorDuplicateShortcut() const;
-    void setEditorDuplicateShortcut(const QString& shortcut);
-    QString editorSplitHorizontalShortcut() const;
-    void setEditorSplitHorizontalShortcut(const QString& shortcut);
-    QString editorSplitVerticalShortcut() const;
-    void setEditorSplitVerticalShortcut(const QString& shortcut);
-    QString editorFillShortcut() const;
-    void setEditorFillShortcut(const QString& shortcut);
-    bool editorGridSnappingEnabled() const;
-    void setEditorGridSnappingEnabled(bool enabled);
-    bool editorEdgeSnappingEnabled() const;
-    void setEditorEdgeSnappingEnabled(bool enabled);
-    qreal editorSnapIntervalX() const;
-    void setEditorSnapIntervalX(qreal interval);
-    qreal editorSnapIntervalY() const;
-    void setEditorSnapIntervalY(qreal interval);
-    int editorSnapOverrideModifier() const;
-    void setEditorSnapOverrideModifier(int mod);
-    bool fillOnDropEnabled() const;
-    void setFillOnDropEnabled(bool enabled);
-    int fillOnDropModifier() const;
-    void setFillOnDropModifier(int mod);
+    QString editorDuplicateShortcut() const override;
+    void setEditorDuplicateShortcut(const QString& shortcut) override;
+    QString editorSplitHorizontalShortcut() const override;
+    void setEditorSplitHorizontalShortcut(const QString& shortcut) override;
+    QString editorSplitVerticalShortcut() const override;
+    void setEditorSplitVerticalShortcut(const QString& shortcut) override;
+    QString editorFillShortcut() const override;
+    void setEditorFillShortcut(const QString& shortcut) override;
+    bool editorGridSnappingEnabled() const override;
+    void setEditorGridSnappingEnabled(bool enabled) override;
+    bool editorEdgeSnappingEnabled() const override;
+    void setEditorEdgeSnappingEnabled(bool enabled) override;
+    qreal editorSnapIntervalX() const override;
+    void setEditorSnapIntervalX(qreal interval) override;
+    qreal editorSnapIntervalY() const override;
+    void setEditorSnapIntervalY(qreal interval) override;
+    int editorSnapOverrideModifier() const override;
+    void setEditorSnapOverrideModifier(int mod) override;
+    bool fillOnDropEnabled() const override;
+    void setFillOnDropEnabled(bool enabled) override;
+    int fillOnDropModifier() const override;
+    void setFillOnDropModifier(int mod) override;
 
     // Old inline accessors replaced above — kept anchors below so the second
     // half of the replaced region can be collapsed in one edit pass.
@@ -1051,7 +1051,7 @@ public:
     void reset() override;
 
     // Additional methods
-    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath);
+    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     Q_INVOKABLE void applySystemColorScheme();
     void applyAutotileBorderSystemColor();
 
@@ -1065,20 +1065,13 @@ Q_SIGNALS:
     /// signals per the existing NOTIFY wiring.
     void animationProfileChanged();
 
-    // Editor settings signals (not part of ISettings interface)
-    void editorDuplicateShortcutChanged();
-    void editorSplitHorizontalShortcutChanged();
-    void editorSplitVerticalShortcutChanged();
-    void editorFillShortcutChanged();
-    void editorGridSnappingEnabledChanged();
-    void editorEdgeSnappingEnabledChanged();
-    void editorSnapIntervalXChanged();
-    void editorSnapIntervalYChanged();
-    void editorSnapOverrideModifierChanged();
-    void fillOnDropEnabledChanged();
-    void fillOnDropModifierChanged();
-    void filterLayoutsByAspectRatioChanged();
-    void virtualScreenConfigsChanged();
+    // NOTE: do not redeclare signals already on ISettings here.
+    // Re-declaring a base-class Q_SIGNAL produces a second moc index
+    // and `connect(s, &ISettings::xChanged, ...)` then misses the
+    // unqualified `Q_EMIT xChanged()` (which resolves to the derived
+    // signal). All editor / fillOnDrop / filterLayoutsByAspectRatio /
+    // virtualScreenConfigs signals live on ISettings and are inherited
+    // here — see src/core/isettings.h.
 
 private:
     /// Member-function-pointer alias used by the indexed shortcut setters
@@ -1258,7 +1251,7 @@ private:
     // (remaining zone selector members stored in m_store)
 
     // Virtual screen configurations (physicalScreenId -> config)
-    QHash<QString, Phosphor::Screens::VirtualScreenConfig> m_virtualScreenConfigs;
+    QHash<QString, PhosphorScreens::VirtualScreenConfig> m_virtualScreenConfigs;
 
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;

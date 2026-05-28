@@ -24,13 +24,44 @@ SettingsFlickable {
 
     readonly property var controller: settingsController.windowRulesPage
     readonly property var ruleModel: controller.model
+    /// True while any rule-authoring modal owned by this page is open
+    /// — read by Main.qml's `_navShortcutsEnabled` guard so Ctrl+PgUp /
+    /// Ctrl+PgDown can't drag the user off the page while they have an
+    /// unsaved rule edit, picker selection, or force-save prompt open.
+    /// `forceSaveConfirm` lives below mainCol and binds back through
+    /// `_forceSaveConfirmOpen` to avoid a forward reference here. The
+    /// `onAnyModalOpenChanged` handler republishes the value into the
+    /// chrome-level `window._pageOwnedModalOpen` flag that Main.qml's
+    /// nav-shortcut guard reads (the framework's PageHost Loader keeps
+    /// the page item private, so a direct binding can't reach it).
+    readonly property bool anyModalOpen: addRuleWizard.opened || windowPickerDialog.opened || ruleEditorSheet.opened || page._forceSaveConfirmOpen
+    /// Internal bridge updated by `forceSaveConfirm.onVisibleChanged` so
+    /// `anyModalOpen` can read it without forward-referencing an id that
+    /// is declared further down in the file.
+    property bool _forceSaveConfirmOpen: false
+
+    onAnyModalOpenChanged: {
+        // Defensive truthy-check: this page can be hosted by consumers
+        // (KCM, future preview) that don't define `window` or the
+        // `_pageOwnedModalOpen` cross-cut. The full settings app does;
+        // standalone hosts ignore the publish.
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = anyModalOpen;
+    }
+    Component.onDestruction: {
+        // Clear the flag on page swap — the destructor fires when the
+        // PageHost Loader swaps source, and a stale `true` would
+        // permanently disable Ctrl+PgUp/PgDown on the page we navigated
+        // to.
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = false;
+    }
     // Composite "appSettings" surface threaded into the rule editor so the
     // picker components (LayoutComboBox for snapping/tiling actions, and the
     // screen / activity match-leaf editors) all see the same object.
     // LayoutComboBox reads `layouts` + the `default*` ids from this; the leaf
     // pickers read `screens` and `activities`.
-    readonly property QtObject
-    _editorAppSettings: QtObject {
+    readonly property QtObject _editorAppSettings: QtObject {
         readonly property var layouts: settingsController.layouts
         readonly property var screens: settingsController.screens
         readonly property var activities: settingsController.activities
@@ -61,11 +92,23 @@ SettingsFlickable {
     // Cached `matchFields()` table — threaded down to every WindowRuleRow's
     // expansion view so the per-row Q_INVOKABLE doesn't fire on every
     // expand. Same caching rationale as the RuleEditorBody cache.
-    readonly property var matchFieldOptions: page.controller.matchFields()
+    // Static-catalogue controllers never fire authoringCatalogueChanged
+    // so this stays a one-shot read; a plugin-driven controller wanting
+    // runtime catalogue refresh just needs to emit the signal.
+    property var matchFieldOptions: page.controller.matchFields()
     // Cached `actionTypes()` — same caching rationale as matchFieldOptions;
     // threaded down to WindowRuleRow's expansion so each row doesn't re-invoke
     // the Q_INVOKABLE.
-    readonly property var actionTypeOptions: page.controller.actionTypes()
+    property var actionTypeOptions: page.controller.actionTypes()
+
+    Connections {
+        function onAuthoringCatalogueChanged() {
+            page.matchFieldOptions = page.controller.matchFields();
+            page.actionTypeOptions = page.controller.actionTypes();
+        }
+        target: page.controller
+        ignoreUnknownSignals: true
+    }
     // Bumped whenever the underlying model changes so sectionModel re-evaluates
     // without QML hardcoding the model's role layout.
     property int modelRevision: 0
@@ -76,9 +119,9 @@ SettingsFlickable {
         // Touch the revision so the binding re-evaluates on any model change.
         var rev = page.modelRevision;
         var snapshot = page.controller.rulesSnapshot();
-        var buckets = {
-        };
-        for (var s = 0; s < page.sectionDescriptors.length; ++s) buckets[page.sectionDescriptors[s].value] = []
+        var buckets = {};
+        for (var s = 0; s < page.sectionDescriptors.length; ++s)
+            buckets[page.sectionDescriptors[s].value] = [];
         var search = page.searchText.toLowerCase();
         for (var i = 0; i < snapshot.length; ++i) {
             var entry = snapshot[i];
@@ -91,7 +134,6 @@ SettingsFlickable {
                 var hay = (entry.name + " " + entry.matchSummary + " " + entry.actionSummary).toLowerCase();
                 if (hay.indexOf(search) < 0)
                     continue;
-
             }
             // Monitor filter — keep only rules whose ScreenId predicate(s)
             // name the selected monitor (an exact id match, not a substring
@@ -99,11 +141,9 @@ SettingsFlickable {
             if (page.monitorFilter.length > 0) {
                 if (!entry.screenIds || entry.screenIds.indexOf(page.monitorFilter) < 0)
                     continue;
-
             }
             if (buckets[entry.section] !== undefined)
                 buckets[entry.section].push(entry);
-
         }
         var out = [];
         for (var so = 0; so < page.sectionDescriptors.length; ++so) {
@@ -156,12 +196,12 @@ SettingsFlickable {
             // silently dropping legitimate updates.
             if (!roles || roles.length === 0) {
                 page.modelRevision++;
-                return ;
+                return;
             }
             for (var i = 0; i < roles.length; ++i) {
                 if (page._summaryRoles.indexOf(roles[i]) >= 0) {
                     page.modelRevision++;
-                    return ;
+                    return;
                 }
             }
         }
@@ -185,12 +225,31 @@ SettingsFlickable {
         target: settingsController
     }
 
+    // Surface asyncCommit failures (force-save daemon errors, partial-
+    // drop rejections) to the user. The controller's applyResult fires
+    // for every asyncCommit invocation; we only want to toast on
+    // failure — the success path is covered by the chrome's footer
+    // state.
+    Connections {
+        function onApplyResult(ok, error) {
+            if (!ok && window && window.showToast) {
+                // Match the defensive shape used throughout LayoutsPage:
+                // when this page is hosted outside Main.qml (KCM / preview
+                // host), `window.showToast` is undefined and an unguarded
+                // call would raise.
+                window.showToast(error.length > 0 ? error : i18n("Failed to save window rules."));
+            }
+        }
+
+        target: page.controller
+    }
+
     AddRuleWizard {
         id: addRuleWizard
 
         controller: page.controller
         appSettings: page._editorAppSettings
-        onRuleSaved: function(ruleJson) {
+        onRuleSaved: function (ruleJson) {
             page.controller.addRuleFromJson(ruleJson);
         }
     }
@@ -209,7 +268,7 @@ SettingsFlickable {
 
         controller: page.controller
         appSettings: page._editorAppSettings
-        onRuleSaved: function(ruleJson) {
+        onRuleSaved: function (ruleJson) {
             page.controller.updateRuleFromJson(ruleJson);
         }
     }
@@ -232,6 +291,61 @@ SettingsFlickable {
             type: Kirigami.MessageType.Warning
             visible: page.controller.daemonChangedWhileDirty
             text: i18n("The window rules changed on disk while you were editing — saving now will overwrite those changes. Review your edits before saving, or discard them to reload.")
+            // Escape hatch — the controller's normal commit() refuses
+            // when daemonChangedWhileDirty is set so the user doesn't
+            // silently overwrite. forceCommit() bypasses the guard for
+            // the "I know, save anyway" path; mirrors the SettingsCard
+            // confirm-prompt UX so the user has to acknowledge the
+            // overwrite explicitly.
+            actions: [
+                Kirigami.Action {
+                    icon.name: "document-save"
+                    text: i18n("Save anyway")
+                    onTriggered: forceSaveConfirm.open()
+                },
+                Kirigami.Action {
+                    icon.name: "edit-undo"
+                    text: i18n("Discard and reload")
+                    onTriggered: page.controller.revert()
+                }
+            ]
+        }
+
+        Kirigami.PromptDialog {
+            id: forceSaveConfirm
+
+            // Bridge open-state to page-level `_forceSaveConfirmOpen` so
+            // Main.qml's `_navShortcutsEnabled` can include this dialog
+            // in its modal-open guard. Forward-reference avoidance: the
+            // `anyModalOpen` binding is declared at the top of the file
+            // and `forceSaveConfirm` is nested several scopes deep, so a
+            // direct id reference up there is brittle.
+            onOpened: page._forceSaveConfirmOpen = true
+            onClosed: page._forceSaveConfirmOpen = false
+            title: i18n("Overwrite daemon-side changes?")
+            subtitle: i18n("Saving will replace the rule set that the daemon currently has on disk with your staged edits. Any rules that changed there while you were editing will be lost.")
+            standardButtons: Kirigami.Dialog.NoButton
+            customFooterActions: [
+                Kirigami.Action {
+                    icon.name: "dialog-cancel"
+                    text: i18n("Cancel")
+                    onTriggered: forceSaveConfirm.close()
+                },
+                Kirigami.Action {
+                    icon.name: "document-save"
+                    text: i18n("Overwrite")
+                    onTriggered: {
+                        // Use the async path (asyncCommit dispatches
+                        // setAllRules via QDBusPendingCallWatcher) so a
+                        // stuck daemon doesn't freeze the chrome.
+                        // applyResult fires later with the outcome —
+                        // surface a toast on failure via the one-shot
+                        // wiring below.
+                        forceSaveConfirm.close();
+                        page.controller.asyncCommit(true);
+                    }
+                }
+            ]
         }
 
         // ── Monitor overview strip ──
@@ -252,7 +366,7 @@ SettingsFlickable {
                 return page.controller.monitorOverview(settingsController.screens);
             }
             selectedScreenId: page.monitorFilter
-            onMonitorSelected: function(screenId) {
+            onMonitorSelected: function (screenId) {
                 page.monitorFilter = screenId;
             }
         }
@@ -275,7 +389,6 @@ SettingsFlickable {
                 Accessible.name: i18n("Add a new window rule")
                 onClicked: addRuleWizard.open()
             }
-
         }
 
         // ── Filter chips ──
@@ -291,10 +404,12 @@ SettingsFlickable {
             Repeater {
                 // "All" chip prepended to the controller's section list — the
                 // section labels and order come from C++, not hardcoded here.
-                model: [{
-                    "value": -1,
-                    "label": i18n("All")
-                }].concat(page.sectionDescriptors)
+                model: [
+                    {
+                        "value": -1,
+                        "label": i18n("All")
+                    }
+                ].concat(page.sectionDescriptors)
 
                 delegate: Button {
                     required property var modelData
@@ -305,13 +420,11 @@ SettingsFlickable {
                     Accessible.name: i18n("Filter rules: %1", modelData.label)
                     onClicked: page.chipFilter = modelData.value
                 }
-
             }
 
             Item {
                 Layout.fillWidth: true
             }
-
         }
 
         // ── Empty state ──
@@ -397,7 +510,7 @@ SettingsFlickable {
                             matchFieldOptions: page.matchFieldOptions
                             actionTypeOptions: page.actionTypeOptions
                             appSettings: page._editorAppSettings
-                            onToggleRequested: function(en) {
+                            onToggleRequested: function (en) {
                                 page.controller.setRuleEnabled(ruleId, en);
                             }
                             onEditRequested: {
@@ -410,7 +523,6 @@ SettingsFlickable {
                                 page.controller.removeRule(ruleId);
                             }
                         }
-
                     }
 
                     // Animation section — manual-positioning drag container,
@@ -469,7 +581,6 @@ SettingsFlickable {
                                     if (from < to) {
                                         if (index > from && index <= to)
                                             return -animationOrderContainer.rowHeight;
-
                                     } else if (index >= to && index < from) {
                                         return animationOrderContainer.rowHeight;
                                     }
@@ -480,6 +591,70 @@ SettingsFlickable {
                                 height: animationOrderContainer.rowHeight
                                 y: baseY + visualOffset
                                 z: animDragArea.drag.active ? 100 : 0
+                                // Make the delegate receive keyboard focus so
+                                // the Keys.onPressed handler below can fire.
+                                // Tab walks the list; Alt+Up/Down then
+                                // reorders. WindowRuleRow's inner buttons
+                                // still receive focus on their own — this
+                                // only enables row-level focus for the
+                                // reorder handler.
+                                //
+                                // No `focus: true` — Repeater rebuilds the
+                                // delegate on every model change, and a
+                                // `focus: true` delegate yanks focus from
+                                // wherever the user was (an edit dialog
+                                // button, a text field, etc.) on every
+                                // rebuild. activeFocusOnTab gives the row
+                                // its own tab stop without stealing focus.
+                                activeFocusOnTab: true
+                                Accessible.role: Accessible.ListItem
+                                Accessible.name: i18nc("Accessible row label for an animation rule", "Animation rule %1 of %2: %3", animDelegateRoot.index + 1, animationOrderContainer.rules.length, animDelegateRoot.modelData.name)
+
+                                // Keyboard reorder: Alt+Up / Alt+Down moves
+                                // the focused row in priority order without
+                                // requiring the drag MouseArea. Without
+                                // this, the rule list was reorderable by
+                                // pointer only — screen-reader and
+                                // keyboard-only users had no way to change
+                                // priority. Pairs with activeFocusOnTab on
+                                // the row WindowRuleRow below so Tab walks
+                                // the list focusably.
+                                Keys.onPressed: event => {
+                                    if (!(event.modifiers & Qt.AltModifier))
+                                        return;
+                                    var rules = animationOrderContainer.rules;
+                                    var from = animDelegateRoot.index;
+                                    var to = from;
+                                    if (event.key === Qt.Key_Up) {
+                                        // Always accept the keystroke at the
+                                        // clamp boundaries — otherwise Alt+Up
+                                        // bubbles up to ancestors (menu
+                                        // mnemonics, focus traversal) and the
+                                        // user gets surprising secondary
+                                        // behaviour at the list endpoints.
+                                        event.accepted = true;
+                                        if (from <= 0)
+                                            return;
+                                        to = from - 1;
+                                    } else if (event.key === Qt.Key_Down) {
+                                        event.accepted = true;
+                                        if (from >= rules.length - 1)
+                                            return;
+                                        to = from + 1;
+                                    } else {
+                                        return;
+                                    }
+                                    var movedId = rules[from].ruleId;
+                                    // Mirror the drag-release beforeId math.
+                                    var beforeId = "";
+                                    if (from < to) {
+                                        if (to + 1 < rules.length)
+                                            beforeId = rules[to + 1].ruleId;
+                                    } else {
+                                        beforeId = rules[to].ruleId;
+                                    }
+                                    page.controller.moveRule(movedId, beforeId);
+                                }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -512,27 +687,40 @@ SettingsFlickable {
                                             drag.axis: Drag.YAxis
                                             drag.minimumY: 0
                                             drag.maximumY: Math.max(0, (animationOrderContainer.rules.length - 1) * animationOrderContainer.rowHeight)
+                                            // Captured at onPressed so we
+                                            // move the rule the user actually
+                                            // grabbed even if the rules array
+                                            // mutates mid-drag (daemon-driven
+                                            // rulesChanged). Using the
+                                            // current-snapshot index at
+                                            // onReleased could pick up a
+                                            // different rule that landed at
+                                            // the same index.
+                                            property string draggedRuleId: ""
                                             onPressed: {
                                                 animationOrderContainer.dragFromIndex = animDelegateRoot.index;
                                                 animationOrderContainer.dropTargetIndex = animDelegateRoot.index;
                                                 animationOrderContainer.isDragging = true;
+                                                const snapshotRules = animationOrderContainer.rules;
+                                                draggedRuleId = (animDelegateRoot.index >= 0 && animDelegateRoot.index < snapshotRules.length) ? snapshotRules[animDelegateRoot.index].ruleId : "";
                                             }
                                             onReleased: {
                                                 var rules = animationOrderContainer.rules;
                                                 var from = animationOrderContainer.dragFromIndex;
                                                 var to = animationOrderContainer.dropTargetIndex;
+                                                var movedId = draggedRuleId;
                                                 animationOrderContainer.isDragging = false;
                                                 animationOrderContainer.dragFromIndex = -1;
                                                 animationOrderContainer.dropTargetIndex = -1;
+                                                draggedRuleId = "";
                                                 // Snap delegate back to its
                                                 // layout position before the
                                                 // controller mutation reorders
                                                 // the underlying snapshot.
-                                                animDelegateRoot.y = Qt.binding(function() {
+                                                animDelegateRoot.y = Qt.binding(function () {
                                                     return animDelegateRoot.baseY + animDelegateRoot.visualOffset;
                                                 });
-                                                if (from >= 0 && to >= 0 && from !== to && from < rules.length && to < rules.length) {
-                                                    var movedId = rules[from].ruleId;
+                                                if (movedId !== "" && from >= 0 && to >= 0 && from !== to && to < rules.length) {
                                                     // controller.moveRule
                                                     // positions movedId
                                                     // immediately BEFORE
@@ -547,7 +735,6 @@ SettingsFlickable {
                                                     if (from < to) {
                                                         if (to + 1 < rules.length)
                                                             beforeId = rules[to + 1].ruleId;
-
                                                     } else {
                                                         beforeId = rules[to].ruleId;
                                                     }
@@ -560,11 +747,9 @@ SettingsFlickable {
                                                     var targetIndex = Math.max(0, Math.min(animationOrderContainer.rules.length - 1, Math.floor(centerY / animationOrderContainer.rowHeight)));
                                                     if (targetIndex !== animationOrderContainer.dropTargetIndex)
                                                         animationOrderContainer.dropTargetIndex = targetIndex;
-
                                                 }
                                             }
                                         }
-
                                     }
 
                                     WindowRuleRow {
@@ -593,7 +778,7 @@ SettingsFlickable {
                                         // button still opens the full
                                         // editor for inspecting the match.
                                         expandable: false
-                                        onToggleRequested: function(en) {
+                                        onToggleRequested: function (en) {
                                             page.controller.setRuleEnabled(animDelegateRoot.modelData.ruleId, en);
                                         }
                                         onEditRequested: {
@@ -606,7 +791,6 @@ SettingsFlickable {
                                             page.controller.removeRule(animDelegateRoot.modelData.ruleId);
                                         }
                                     }
-
                                 }
 
                                 Behavior on y {
@@ -616,21 +800,12 @@ SettingsFlickable {
                                         profile: "widget.reorder"
                                         durationOverride: Kirigami.Units.longDuration
                                     }
-
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

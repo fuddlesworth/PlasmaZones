@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -61,6 +62,18 @@ Item {
             expandAnim.start();
         }
     }
+    // Honour `collapsed: true` at construction time. The
+    // `onCollapsedChanged` handler above only fires on subsequent
+    // changes — instantiating `SettingsCard { collapsible: true;
+    // collapsed: true }` would otherwise leave the contentClip
+    // at its full implicitHeight (the declarative initial value)
+    // and the card would render expanded despite the property.
+    Component.onCompleted: {
+        if (collapsed) {
+            contentClip.height = 0;
+            contentClip.opacity = 0;
+        }
+    }
     Layout.fillWidth: true
     implicitHeight: cardBg.height
     implicitWidth: cardBg.width
@@ -69,7 +82,7 @@ Item {
         if (contentItem) {
             contentItem.parent = contentColumn;
             contentItem.y = Kirigami.Units.largeSpacing;
-            contentItem.width = Qt.binding(function() {
+            contentItem.width = Qt.binding(function () {
                 return contentColumn.width;
             });
         }
@@ -78,7 +91,7 @@ Item {
     onHeaderChanged: {
         if (header) {
             header.parent = headerLoader;
-            header.width = Qt.binding(function() {
+            header.width = Qt.binding(function () {
                 return headerLoader.width;
             });
             headerLoader.sourceComponent = null;
@@ -97,7 +110,7 @@ Item {
         radius: Kirigami.Units.smallSpacing * 1.5
         // Slightly elevated from page background
         color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
-        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+        border.width: Math.round(Screen.devicePixelRatio)
         border.color: {
             if (!root.enabled)
                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04);
@@ -176,7 +189,7 @@ Item {
                         checked: root.toggleChecked
                         accessibleName: root.headerText
                         Layout.rightMargin: Kirigami.Units.smallSpacing
-                        onToggled: function(newValue) {
+                        onToggled: function (newValue) {
                             root.toggleClicked(newValue);
                         }
                     }
@@ -194,17 +207,12 @@ Item {
                         Behavior on rotation {
                             PhosphorMotionAnimation {
                                 profile: "widget.hover"
-                                durationOverride: 200
+                                durationOverride: Kirigami.Units.shortDuration
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // ── Separator ──────────────────────────────────────────────────
@@ -213,7 +221,11 @@ Item {
 
             anchors.top: headerArea.bottom
             width: parent.width
-            height: headerArea.visible ? 1 : 0
+            // HiDPI: scale the 1px hairline by devicePixelRatio so it
+            // remains a single physical pixel on high-DPI displays
+            // instead of collapsing to ~0.5px (browser-style anti-alias
+            // blur) or disappearing on integer fractional scales.
+            height: headerArea.visible ? Math.round(Screen.devicePixelRatio) : 0
             color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
         }
 
@@ -243,7 +255,7 @@ Item {
                     properties: "opacity"
                     to: 0
                     profile: "widget.fadeOut"
-                    durationOverride: 150
+                    durationOverride: Kirigami.Units.veryShortDuration * 2
                 }
 
                 PhosphorMotionAnimation {
@@ -251,9 +263,8 @@ Item {
                     properties: "height"
                     to: 0
                     profile: "widget.accordionCollapse"
-                    durationOverride: 200
+                    durationOverride: Kirigami.Units.shortDuration
                 }
-
             }
 
             SequentialAnimation {
@@ -264,7 +275,7 @@ Item {
                     properties: "height"
                     to: contentColumn.implicitHeight
                     profile: "widget.accordionExpand"
-                    durationOverride: 200
+                    durationOverride: Kirigami.Units.shortDuration
                 }
 
                 PhosphorMotionAnimation {
@@ -276,49 +287,43 @@ Item {
 
                 ScriptAction {
                     script: {
-                        contentClip.height = Qt.binding(function() {
+                        contentClip.height = Qt.binding(function () {
                             return contentColumn.implicitHeight;
                         });
-                        contentClip.opacity = Qt.binding(function() {
+                        contentClip.opacity = Qt.binding(function () {
                             return root.showToggle && !root.toggleChecked ? 0.5 : 1;
                         });
                     }
                 }
-
             }
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
                     profile: "widget.hover"
-                    durationOverride: 200
+                    durationOverride: Kirigami.Units.shortDuration
                 }
-
             }
-
         }
 
         Behavior on border.color {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.shortDuration
             }
-
         }
-
     }
 
-    // Subtle lift on hover
+    // Subtle lift on hover. HiDPI: scale by devicePixelRatio so the
+    // 1px lift stays one physical pixel on high-DPI displays instead
+    // of collapsing to a sub-pixel offset.
     transform: Translate {
-        y: hoverHandler.hovered && root.enabled ? -1 : 0
+        y: hoverHandler.hovered && root.enabled ? -Math.round(Screen.devicePixelRatio) : 0
 
         Behavior on y {
             PhosphorMotionAnimation {
                 profile: "widget.hover"
-                durationOverride: 200
+                durationOverride: Kirigami.Units.shortDuration
             }
-
         }
-
     }
-
 }

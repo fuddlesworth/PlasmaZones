@@ -12,6 +12,8 @@
 #include <QJsonArray>
 #include <QStringList>
 
+#include <algorithm>
+
 namespace PlasmaZones {
 
 namespace {
@@ -178,15 +180,18 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
 }
 
 /// Human label for one action ("Snapping", "Float", "Excluded"). @p
-/// layoutLookup resolves layoutId / algorithm-token wire values to their
-/// display name so the user sees "Binary Split" rather than "bsp".
-QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup& layoutLookup)
+/// snappingLayoutLookup resolves SetSnappingLayout's layoutId UUIDs;
+/// @p tilingAlgorithmLookup resolves SetTilingAlgorithm's wire tokens
+/// ("bsp", …) — split so a stray cross-resolve can't surface an algorithm
+/// name in a snapping action's label or vice versa.
+QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup& snappingLayoutLookup,
+                    const WindowRuleModel::LabelLookup& tilingAlgorithmLookup)
 {
-    auto resolve = [&](const QString& wire) {
-        if (wire.isEmpty() || !layoutLookup) {
+    auto resolveWith = [](const QString& wire, const WindowRuleModel::LabelLookup& lookup) {
+        if (wire.isEmpty() || !lookup) {
             return wire;
         }
-        const QString resolved = layoutLookup(wire);
+        const QString resolved = lookup(wire);
         return resolved.isEmpty() ? wire : resolved;
     };
 
@@ -206,15 +211,16 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     }
     if (action.type == ActionType::SetSnappingLayout) {
         const QString layoutId = action.params.value(QLatin1String("layoutId")).toString();
-        return layoutId.isEmpty() ? PzI18n::tr("Snapping layout") : PzI18n::tr("Snapping: %1").arg(resolve(layoutId));
+        return layoutId.isEmpty() ? PzI18n::tr("Snapping layout")
+                                  : PzI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetTilingAlgorithm) {
         const QString algo = action.params.value(QLatin1String("algorithm")).toString();
-        // Algorithms are wire tokens (`bsp`, `grid`, …). The layout lookup
-        // also knows about the autotile entries — the WindowRuleController
-        // wires it from `settingsController.layouts`, which contains the
-        // `displayName` ("Binary Split") for each algorithm.
-        return PzI18n::tr("Tiling: %1").arg(resolve(algo));
+        // Algorithms are wire tokens (`bsp`, `grid`, …). The dedicated
+        // tilingAlgorithm lookup knows about autotile entries — the
+        // WindowRuleController wires it from settingsController.layouts,
+        // which contains the displayName ("Binary Split") for each algorithm.
+        return PzI18n::tr("Tiling: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }
     if (action.type == ActionType::DisableEngine) {
         return PzI18n::tr("Disabled");
@@ -350,6 +356,27 @@ bool WindowRuleModel::addRule(const WindowRule& rule)
     const int row = m_rules.size();
     beginInsertRows(QModelIndex(), row, row);
     m_rules.append(rule);
+    endInsertRows();
+    Q_EMIT countChanged();
+    return true;
+}
+
+bool WindowRuleModel::addRuleAt(const WindowRule& rule, int insertIndex)
+{
+    if (rule.id.isNull() || !rule.isValid() || contains(rule.id)) {
+        return false;
+    }
+    // Clamp so callers don't have to range-check; -1 / negative goes
+    // to the front, anything >= rowCount goes to the end. Matches the
+    // semantics QML drag-reorder expects. Use qsizetype-clamped form
+    // to avoid `-Wshorten-64-to-32` for the m_rules.size() cast;
+    // beginInsertRows takes int (Qt API), so the final narrow is
+    // both unavoidable and safe for any rule count ≤ INT_MAX (rules
+    // realistically fit on a single page — N ≈ 10s, not billions).
+    const qsizetype clampedRow = std::clamp(static_cast<qsizetype>(insertIndex), qsizetype{0}, m_rules.size());
+    const int row = static_cast<int>(clampedRow);
+    beginInsertRows(QModelIndex(), row, row);
+    m_rules.insert(row, rule);
     endInsertRows();
     Q_EMIT countChanged();
     return true;
@@ -559,7 +586,7 @@ QString WindowRuleModel::actionSummary(const QList<RuleAction>& actions) const
     }
     QStringList parts;
     for (const RuleAction& a : actions) {
-        parts.append(actionLabel(a, m_layoutLookup));
+        parts.append(actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup));
     }
     return parts.join(QStringLiteral(" · "));
 }
@@ -604,7 +631,20 @@ void WindowRuleModel::setActivityLabelLookup(LabelLookup fn)
 
 void WindowRuleModel::setLayoutLabelLookup(LabelLookup fn)
 {
-    m_layoutLookup = std::move(fn);
+    // Back-compat shim: wire the same lookup into both split lookups so
+    // callers that haven't migrated to the typed pair keep working.
+    m_snappingLayoutLookup = fn;
+    m_tilingAlgorithmLookup = std::move(fn);
+}
+
+void WindowRuleModel::setSnappingLayoutLabelLookup(LabelLookup fn)
+{
+    m_snappingLayoutLookup = std::move(fn);
+}
+
+void WindowRuleModel::setTilingAlgorithmLabelLookup(LabelLookup fn)
+{
+    m_tilingAlgorithmLookup = std::move(fn);
 }
 
 void WindowRuleModel::refreshLabels()

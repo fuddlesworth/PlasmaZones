@@ -12,7 +12,7 @@ namespace PlasmaZones {
 
 EngineSet createEngines(PhosphorZones::LayoutRegistry* layoutManager,
                         PhosphorPlacement::WindowTrackingService* windowTracker,
-                        Phosphor::Screens::ScreenManager* screenManager,
+                        PhosphorScreens::ScreenManager* screenManager,
                         PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings,
                         PhosphorWorkspaces::VirtualDesktopManager* vdm, PhosphorEngine::WindowRegistry* windowRegistry,

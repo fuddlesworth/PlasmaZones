@@ -71,14 +71,14 @@ QString resolveNavScreen(INavigationStateProvider* navState, const QString& wind
             if (!storedScreen.isEmpty()) {
                 if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
                     const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-                    QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId);
+                    QScreen* physScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(physId);
                     if (physScreen) {
                         auto* mgr = service ? service->screenManager() : nullptr;
                         if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
                             return storedScreen;
                         }
                     }
-                } else if (Phosphor::Screens::ScreenIdentity::findByIdOrName(storedScreen)) {
+                } else if (PhosphorScreens::ScreenIdentity::findByIdOrName(storedScreen)) {
                     return storedScreen;
                 }
             }

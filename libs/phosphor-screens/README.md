@@ -30,14 +30,14 @@ pure-compute consumers:
 
 | Type | Purpose |
 |------|---------|
-| `Phosphor::Screens::ScreenManager`      | Physical + virtual topology state with change signals as screens come and go. |
-| `Phosphor::Screens::ScreenResolver`     | Point-to-screen lookup; accepts an optional D-Bus endpoint override. |
-| `Phosphor::Screens::IPanelSource`       | Pluggable panel-reservation source per desktop (Plasma, GNOME, wlr). |
-| `Phosphor::Screens::PlasmaPanelSource`  | Bundled `IPanelSource` for `org.kde.plasmashell` reservations. |
-| `Phosphor::Screens::VirtualScreenDef`   | One rectangular sub-region of a physical screen with its own screen ID. |
-| `Phosphor::Screens::VirtualScreenSwapper` | D-Bus-addressable directional virtual-screen swaps (`left`, `right`, `up`, `down`). |
-| `Phosphor::Screens::DBusScreenAdaptor`  | Canonical `org.plasmazones.Screen` D-Bus surface. |
-| `Phosphor::Screens::IConfigStore`       | Persisted virtual-screen configuration. `InMemoryConfigStore` is the default for tests. |
+| `PhosphorScreens::ScreenManager`      | Physical + virtual topology state with change signals as screens come and go. |
+| `PhosphorScreens::ScreenResolver`     | Point-to-screen lookup; accepts an optional D-Bus endpoint override. |
+| `PhosphorScreens::IPanelSource`       | Pluggable panel-reservation source per desktop (Plasma, GNOME, wlr). |
+| `PhosphorScreens::PlasmaPanelSource`  | Bundled `IPanelSource` for `org.kde.plasmashell` reservations. |
+| `PhosphorScreens::VirtualScreenDef`   | One rectangular sub-region of a physical screen with its own screen ID. |
+| `PhosphorScreens::VirtualScreenSwapper` | D-Bus-addressable directional virtual-screen swaps (`left`, `right`, `up`, `down`). |
+| `PhosphorScreens::DBusScreenAdaptor`  | Canonical `org.plasmazones.Screen` D-Bus surface. |
+| `PhosphorScreens::IConfigStore`       | Persisted virtual-screen configuration. `InMemoryConfigStore` is the default for tests. |
 
 ## Design notes
 

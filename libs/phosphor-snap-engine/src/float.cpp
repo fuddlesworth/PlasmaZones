@@ -141,7 +141,7 @@ UnfloatResult SnapEngine::resolveUnfloatGeometry(const QString& windowId, const 
         restoreScreen = m_windowTracker->resolveEffectiveScreenId(restoreScreen);
         auto* mgr = m_windowTracker->screenManager();
         const bool screenExists = mgr ? mgr->physicalScreenFor(restoreScreen).isValid()
-                                      : (Phosphor::Screens::ScreenIdentity::findByIdOrName(restoreScreen) != nullptr);
+                                      : (PhosphorScreens::ScreenIdentity::findByIdOrName(restoreScreen) != nullptr);
         if (!screenExists) {
             restoreScreen.clear();
         }

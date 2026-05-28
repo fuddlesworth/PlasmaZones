@@ -884,7 +884,7 @@ private:
     /// no Snapping defaults). Keeps animation-specific tests narrow — they
     /// don't have to filter the provider-default + disable-rule noise out.
     ///
-    /// Routes the v4 group / key names through ConfigKeys::v4* accessors —
+    /// Routes the v4 group / key names through ConfigKeys::Legacy::v4* accessors —
     /// the migration reads from the same accessors, so a future rename of
     /// the frozen v4 wire shape can't drift between production and tests.
     QJsonObject makeV3ConfigWithAnimationRules(const QJsonArray& animationRules)
@@ -893,8 +893,8 @@ private:
         root.insert(ConfigKeys::versionKey(), 3);
         if (!animationRules.isEmpty()) {
             QJsonObject animations;
-            animations.insert(ConfigKeys::v4AnimationAppRulesKey(), animationRules);
-            root.insert(ConfigKeys::v4AnimationsGroup(), animations);
+            animations.insert(ConfigKeys::Legacy::v4AnimationAppRulesKey(), animationRules);
+            root.insert(ConfigKeys::Legacy::v4AnimationsGroup(), animations);
         }
         return root;
     }
@@ -1203,8 +1203,8 @@ private Q_SLOTS:
         animRules.append(
             makeShaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
         QJsonObject animations;
-        animations.insert(ConfigKeys::v4AnimationAppRulesKey(), animRules);
-        cfg.insert(ConfigKeys::v4AnimationsGroup(), animations);
+        animations.insert(ConfigKeys::Legacy::v4AnimationAppRulesKey(), animRules);
+        cfg.insert(ConfigKeys::Legacy::v4AnimationsGroup(), animations);
         writeJson(ConfigDefaults::configFilePath(), cfg);
         writeJson(assignmentsPath(), makeAssignments());
 

@@ -32,7 +32,7 @@ namespace PlasmaZones {
 
 WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
                                              PhosphorZones::IZoneDetector* zoneDetector,
-                                             Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                             PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                                              PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager,
                                              QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -142,21 +142,21 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
         onLayoutChanged();
     });
 
-    // Deferred: Phosphor::Screens::ScreenManager may not be initialized yet during adaptor construction.
-    // If Phosphor::Screens::ScreenManager is still unavailable after the first event loop iteration,
+    // Deferred: PhosphorScreens::ScreenManager may not be initialized yet during adaptor construction.
+    // If PhosphorScreens::ScreenManager is still unavailable after the first event loop iteration,
     // virtual screen signals won't be connected until the next daemon restart or
     // screen change. Window restoration will still work via onLayoutChanged() ->
     // tryEmitPendingRestoresAvailable(), which emits immediately when
     // (m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady()) returns false (no
-    // Phosphor::Screens::ScreenManager instance).
+    // PhosphorScreens::ScreenManager instance).
     QTimer::singleShot(0, this, [this]() {
         auto* screenMgr = m_service->screenManager();
         if (!screenMgr) {
-            qCWarning(lcDbusWindow) << "Phosphor::Screens::ScreenManager instance not available - window restoration "
+            qCWarning(lcDbusWindow) << "PhosphorScreens::ScreenManager instance not available - window restoration "
                                        "may use incorrect geometry";
             return;
         }
-        connect(screenMgr, &Phosphor::Screens::ScreenManager::panelGeometryReady, this,
+        connect(screenMgr, &PhosphorScreens::ScreenManager::panelGeometryReady, this,
                 &WindowTrackingAdaptor::onPanelGeometryReady);
         // If panel geometry is already ready, trigger the check now
         if ((m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady())) {
@@ -329,7 +329,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         const QString trackedAutotile =
             m_autotileEngine ? m_autotileEngine->screenForTrackedWindow(windowId) : QString();
         const QString trackedScreen = !trackedSnap.isEmpty() ? trackedSnap : trackedAutotile;
-        if (trackedScreen.isEmpty() || Phosphor::Screens::ScreenIdentity::screensMatch(trackedScreen, newScreenId)) {
+        if (trackedScreen.isEmpty() || PhosphorScreens::ScreenIdentity::screensMatch(trackedScreen, newScreenId)) {
             return;
         }
         PhosphorEngine::PlacementEngineBase* source =
@@ -376,7 +376,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     if (!PhosphorIdentity::VirtualScreenId::isVirtual(newScreenId)
         && PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
         QString storedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-        if (Phosphor::Screens::ScreenIdentity::screensMatch(storedPhysical, newScreenId)) {
+        if (PhosphorScreens::ScreenIdentity::screensMatch(storedPhysical, newScreenId)) {
             // Physical parent matches — the window is still on the same monitor,
             // so the stored virtual screen ID is still valid.
             resolvedNewScreen = storedScreen;
@@ -398,7 +398,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         }
     }
 
-    if (Phosphor::Screens::ScreenIdentity::screensMatch(storedScreen, resolvedNewScreen)) {
+    if (PhosphorScreens::ScreenIdentity::screensMatch(storedScreen, resolvedNewScreen)) {
         qCDebug(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved to assigned screen, keeping snap";
         return;
     }

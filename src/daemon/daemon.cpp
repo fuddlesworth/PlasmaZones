@@ -175,17 +175,17 @@ Daemon::Daemon(QObject* parent)
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), &m_curveRegistry, m_windowRuleStore.get(), nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<PhosphorEngine::WindowRegistry>(nullptr))
-    , m_panelSource(std::make_unique<Phosphor::Screens::PlasmaPanelSource>())
+    , m_panelSource(std::make_unique<PhosphorScreens::PlasmaPanelSource>())
     , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
-    , m_screenManager(std::make_unique<Phosphor::Screens::ScreenManager>(
-          Phosphor::Screens::ScreenManager::Config{
+    , m_screenManager(std::make_unique<PhosphorScreens::ScreenManager>(
+          PhosphorScreens::ScreenManager::Config{
               .panelSource = m_panelSource.get(),
               .configStore = m_virtualScreenStore.get(),
               .useGeometrySensors = true,
               // Align the lib's cap with the daemon's source-of-truth (Settings
               // uses ConfigDefaults::maxVirtualScreensPerPhysical() when
               // validating writes). A lower cap here would silently reject
-              // configs Settings accepted, leaving Settings ↔ Phosphor::Screens::ScreenManager
+              // configs Settings accepted, leaving Settings ↔ PhosphorScreens::ScreenManager
               // divergent.
               .maxVirtualScreensPerPhysical = ConfigDefaults::maxVirtualScreensPerPhysical(),
           },
@@ -772,7 +772,7 @@ bool Daemon::init()
                     // on the fly via GeometryUtils::getZoneGeometryWithGaps(m_screenManager.get(), ).
                     QScreen* primary = Utils::primaryScreen();
                     if (primary) {
-                        QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(primary);
+                        QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(primary);
                         m_layoutComputeService->requestRecalculate(
                             layout, screenId,
                             GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
@@ -797,7 +797,7 @@ bool Daemon::init()
                 }
                 // This is a screen-specific layout different from the active one
                 // Only recalculate for the specific screen
-                const Phosphor::Screens::PhysicalScreen screen = m_screenManager->screenByName(screenId);
+                const PhosphorScreens::PhysicalScreen screen = m_screenManager->screenByName(screenId);
                 if (screen.isValid() && screen.qscreen) {
                     m_layoutComputeService->requestRecalculate(
                         layout, screenId,
@@ -957,7 +957,7 @@ bool Daemon::init()
     // instance, shared with m_screenManager (as its Config::configStore) and
     // m_virtualScreenSwapper. One store per process, one change-signal
     // channel, no parallel Settings observer.
-    m_screenAdaptor = new Phosphor::Screens::DBusScreenAdaptor(m_screenManager.get(), m_virtualScreenStore.get(), this);
+    m_screenAdaptor = new PhosphorScreens::DBusScreenAdaptor(m_screenManager.get(), m_virtualScreenStore.get(), this);
 
     // Window drag adaptor - handles drag events from KWin script
     // All drag logic (modifiers, zones, snapping) handled here
@@ -969,7 +969,7 @@ bool Daemon::init()
 
     // Give the window drag adaptor access to the shortcut manager for
     // registering/unregistering the Escape cancel shortcut during drags.
-    // Routed through the Phosphor::Shortcuts::Integration::IAdhocRegistrar interface so the underlying
+    // Routed through the PhosphorShortcutsIntegration::IAdhocRegistrar interface so the underlying
     // Registry stays private to ShortcutManager.
     m_windowDragAdaptor->setShortcutRegistrar(m_shortcutManager.get());
 
@@ -1085,7 +1085,7 @@ bool Daemon::init()
     // m_virtualScreenStore is constructed in the initializer list (it's a
     // Config arg for m_screenManager). The swapper is constructed here
     // because navigation handlers don't run before init() returns anyway.
-    m_virtualScreenSwapper = std::make_unique<Phosphor::Screens::VirtualScreenSwapper>(m_virtualScreenStore.get());
+    m_virtualScreenSwapper = std::make_unique<PhosphorScreens::VirtualScreenSwapper>(m_virtualScreenStore.get());
     Q_ASSERT(m_virtualScreenSwapper);
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).

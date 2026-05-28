@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -41,12 +42,13 @@ namespace PlasmaZones {
  * The controller is the only thing on the settings side that knows the D-Bus
  * shape; the model and QML never touch the wire.
  */
-class WindowRuleController : public QObject
+class WindowRuleController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
     Q_PROPERTY(WindowRuleModel* model READ model CONSTANT)
-    Q_PROPERTY(bool dirty READ isDirty NOTIFY dirtyChanged)
+    // `dirty` Q_PROPERTY + `dirtyChanged()` signal are inherited from
+    // PhosphorSettingsUi::StagingDomain via PageController — do not redeclare.
     Q_PROPERTY(bool daemonReachable READ daemonReachable NOTIFY daemonReachableChanged)
     /// True when a daemon `rulesChanged` broadcast arrived while the page had
     /// unsaved staged edits — `reload()` skipped the refresh to avoid stomping
@@ -61,6 +63,13 @@ public:
     explicit WindowRuleController(QObject* parent = nullptr);
     ~WindowRuleController() override;
 
+    /// PhosphorSettingsUi::StagingDomain contract. apply() forwards to
+    /// commit() (the staged set goes to the daemon); discard() forwards to
+    /// revert() (the daemon's set is re-fetched into the model).
+    bool isDirty() const override;
+    void apply() override;
+    void discard() override;
+
     /// Wire the screen-id / activity-uuid / layout-id → display-name lookups
     /// used by the model's `matchSummary` and by the controller's own
     /// `monitorOverview` summary. The lookups capture the SettingsController
@@ -69,18 +78,26 @@ public:
     /// the parent calls `WindowRuleModel::refreshLabels()` on the model to
     /// invalidate the cached label cells — re-installing the lookups would
     /// just churn the closures without changing behaviour.
+    ///
+    /// All FOUR lookups (screen + activity + snappingLayout +
+    /// tilingAlgorithm) must be wired for the model to render rich
+    /// `matchSummary` / `actionSummary` cells — a missing lookup falls
+    /// back to printing the raw id/UUID. SettingsController is the
+    /// single intended caller and installs all four during page
+    /// registration. The legacy `setLayoutLookup(fn)` wires the same
+    /// resolver into BOTH snappingLayout and tilingAlgorithm; new
+    /// callers should prefer the typed pair below.
     void setScreenLookup(WindowRuleModel::LabelLookup fn);
     void setActivityLookup(WindowRuleModel::LabelLookup fn);
     void setLayoutLookup(WindowRuleModel::LabelLookup fn);
+    /// layoutId UUID → display label resolver for SetSnappingLayout actions.
+    void setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn);
+    /// Algorithm token ("bsp", …) → display label resolver for SetTilingAlgorithm actions.
+    void setTilingAlgorithmLookup(WindowRuleModel::LabelLookup fn);
 
     WindowRuleModel* model()
     {
         return &m_model;
-    }
-
-    bool isDirty() const
-    {
-        return m_dirty;
     }
 
     bool daemonReachable() const
@@ -112,6 +129,27 @@ public:
     /// explicitly review (revert) or force the overwrite. Pass @p force true
     /// once the user has chosen "overwrite anyway".
     bool commit(bool force = false);
+
+    /// C++ helper that forwards to `commit(true)`. Was Q_INVOKABLE in
+    /// pass 17 when the QML daemonChangedWhileDirty banner called it
+    /// directly; pass 27 migrated that banner to the async path
+    /// (`asyncCommit(true)`), so the QML-facing escape hatch now lives
+    /// on `asyncCommit`. Kept as a public sync helper for tests and
+    /// any future internal caller — the Q_INVOKABLE marker is gone.
+    bool forceCommit();
+
+    /// Async sibling of `commit()` — pushes the staged rule set to the
+    /// daemon via QDBusPendingCallWatcher and emits the inherited
+    /// `applyResult(ok, error)` signal on the reply. UI threads no
+    /// longer block waiting for the daemon (a stuck/firewalled daemon
+    /// would freeze the whole Settings window with the sync path).
+    ///
+    /// The sync `commit()` above stays callable for back-compat:
+    /// `SettingsController::save()` and the inherited `apply()` slot
+    /// still use it. Once the chrome footer surfaces the async
+    /// applyResult state-machine, the sync helper can become an
+    /// internal implementation detail.
+    Q_INVOKABLE void asyncCommit(bool force = false);
 
     /// Discard staged edits and re-fetch from the daemon. The fetch is async,
     /// so this returns immediately — the model is repopulated when the reply
@@ -287,7 +325,7 @@ public:
     Q_INVOKABLE bool matchIsContextOnly(const QVariantMap& matchJson) const;
 
 Q_SIGNALS:
-    void dirtyChanged();
+    // dirtyChanged() inherited from StagingDomain.
     void daemonReachableChanged();
     void daemonChangedWhileDirtyChanged();
     /// Emitted on the async fetch reply path after the model has been
@@ -303,11 +341,45 @@ Q_SIGNALS:
     /// "window-rules" entry to its dirty-pages set when revert failed during
     /// the `setNeedsSave(false)` blanket-clear it does for every other page.
     void revertFinished(bool success);
+    /// Emitted exactly once when ALL three label resolvers
+    /// (screen / activity / snapping-layout + tiling-algorithm) have
+    /// been wired by the parent SettingsController. QML pages (notably
+    /// WindowRulesPage and monitorOverview consumers) gate "show raw
+    /// model" on this signal so the brief startup window where
+    /// `monitorOverview` would return raw UUIDs / wire tokens never
+    /// becomes visible to the user. Emitted at most once per controller
+    /// instance — the resolvers are install-once, not refreshable.
+    void lookupsReady();
 
 private:
     void setDirty(bool dirty);
     void setDaemonReachable(bool reachable);
     void setDaemonChangedWhileDirty(bool changed);
+
+    /// Subscribe / unsubscribe the rulesChanged → reload() D-Bus
+    /// pipe. Routed through these private helpers (rather than
+    /// inlining the QDBusConnection calls in the ctor/dtor) so the
+    /// (service, path, interface, signal, slot) tuple is captured in
+    /// exactly one place. Without this, a rename of the signal name
+    /// must touch BOTH ends of the connect+disconnect pair or the
+    /// dtor leaks a dangling slot binding referencing the destroyed
+    /// controller.
+    bool subscribeRulesChanged();
+    void unsubscribeRulesChanged();
+
+    /// Canonical (service, path, interface, signal) tuple for the
+    /// rulesChanged D-Bus signal. Used by both subscribe / unsubscribe
+    /// helpers so a rename of any field touches exactly one place — the
+    /// dtor's disconnect must spell the same tuple as the ctor's connect
+    /// or the bus keeps a dangling slot reference.
+    struct RulesChangedSubscription
+    {
+        QString service;
+        QString objectPath;
+        QString interface;
+        QString signalName;
+    };
+    static RulesChangedSubscription rulesChangedSubscriptionArgs();
 
     /// Re-fetch the rule set from the daemon and load it into the model. The
     /// fetch is asynchronous — the function returns immediately and the model
@@ -317,11 +389,25 @@ private:
     /// cleared and the staged model is left untouched. The public `reload()`
     /// slot guards on the dirty bit so a daemon broadcast can't stomp staged
     /// edits; `revert()` calls this directly to bypass that guard.
-    void fetchAndLoad();
+    /// @p fromRevert tags this fetch as originating from an explicit
+    /// revert() (true) vs. ctor/reload() (false). The reply handler
+    /// only emits revertFinished when fromRevert is true. Each
+    /// watcher carries the bool through its lambda capture, so a
+    /// concurrent daemon broadcast (reload path) can't spoof a
+    /// `revertFinished(true)` while a real revert is in flight on a
+    /// sibling watcher.
+    void fetchAndLoad(bool fromRevert = false);
 
     /// Push @p rules to the daemon via `setAllRules`. Returns true only if the
     /// daemon accepted every rule (no partial drop).
     bool pushToDaemon(const QList<PhosphorWindowRule::WindowRule>& rules);
+
+    /// Async sibling of pushToDaemon — dispatches `setAllRules` via
+    /// QDBusPendingCallWatcher and emits applyResult on the reply.
+    /// Returns false ONLY for the up-front validation failure (a rule
+    /// was rejected client-side) — the async leg covers transport
+    /// errors via the applyResult signal.
+    bool pushToDaemonAsync(const QList<PhosphorWindowRule::WindowRule>& rules);
 
     /// Renormalize every rule's priority so descending list order ⇒
     /// descending priority. Keeps the migrated-context bands roughly intact
@@ -333,18 +419,46 @@ private:
     bool m_dirty = false;
     bool m_daemonReachable = false;
     bool m_daemonChangedWhileDirty = false;
-    /// Counts in-flight `fetchAndLoad()` calls that originated from a
-    /// `revert()` (Discard). Tracked separately from the initial / broadcast
-    /// fetch flow so the reply handler can emit `revertFinished(success)` only
-    /// when the caller is actually a revert — a stray daemon broadcast that
-    /// arrives concurrently with a revert must not spoof the signal. Counter
-    /// (not a bool) tolerates user-mashing Discard repeatedly: every revert
-    /// reply emits exactly once.
-    int m_pendingRevertFetches = 0;
-    /// Resolves a layoutId to the layout's display name. Used by
-    /// `monitorOverview` to turn the raw UUID in `SetSnappingLayout` /
-    /// `SetTilingAlgorithm` params into the friendly layout/algorithm name.
-    WindowRuleModel::LabelLookup m_layoutLookup;
+    /// Tracks whether the `rulesChanged` D-Bus subscription is currently
+    /// active. Set true on a successful subscribeRulesChanged(), false on
+    /// failure / disconnect. setDaemonReachable() consults this to retry
+    /// the subscription when the daemon comes up after a failed initial
+    /// connect (e.g. the daemon was down when the controller was built).
+    bool m_rulesChangedSubscribed = false;
+    /// In-flight guard for the StagingDomain discard() entry point.
+    /// Set true on discard() dispatch, cleared in the one-shot
+    /// revertFinished handler. A second discard() while the first
+    /// revert is still in flight is rejected with a failed
+    /// discardResult so the framework's wait-counter ticks down
+    /// rather than the chrome stalling.
+    bool m_discardInFlight = false;
+    /// Symmetric guard for the StagingDomain apply() entry point.
+    /// Cleared inside pushToDaemonAsync's reply lambda before the
+    /// applyResult emit. Refuses re-entrant apply() while a setAllRules
+    /// D-Bus call is still outstanding — without this, a second
+    /// apply() dispatches a duplicate setAllRules push, and the reply
+    /// lambdas race on setDirty(false) + applyResult emission.
+    bool m_asyncCommitInFlight = false;
+    /// Split lookups: monitorOverview's tile picks one based on the rule's
+    /// engineMode, so a SetSnappingLayout with a UUID-shaped value can't
+    /// accidentally hit the tiling-algorithm path and vice versa.
+    WindowRuleModel::LabelLookup m_snappingLayoutLookup;
+    WindowRuleModel::LabelLookup m_tilingAlgorithmLookup;
+    /// Bit-mask of resolvers wired so far. When all four bits are set,
+    /// emit lookupsReady() once. Tracks individual setters because the
+    /// parent SettingsController wires them across separate calls in
+    /// its constructor and the QML side wants a single "everything is
+    /// ready" signal.
+    enum LookupBit : unsigned {
+        LookupScreen = 1u << 0,
+        LookupActivity = 1u << 1,
+        LookupSnappingLayout = 1u << 2,
+        LookupTilingAlgorithm = 1u << 3,
+        AllLookups = LookupScreen | LookupActivity | LookupSnappingLayout | LookupTilingAlgorithm,
+    };
+    unsigned m_wiredLookups = 0;
+    bool m_lookupsReadyEmitted = false;
+    void markLookupWired(LookupBit bit);
 };
 
 } // namespace PlasmaZones

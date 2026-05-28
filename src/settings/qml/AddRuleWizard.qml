@@ -42,8 +42,7 @@ Kirigami.Dialog {
     /// step 1, mutated in place by the body in step 2. Cancel / re-pick
     /// throws away this reference; the parent only sees a final rule when
     /// `ruleSaved` fires.
-    property var _workingRule: ({
-    })
+    property var _workingRule: ({})
     /// JSON snapshot of the working rule at the moment we entered step 2
     /// (i.e. immediately after the picker handed us the seeded rule). Used
     /// by `_requestClose` / `_requestBack` to decide whether to surface the
@@ -61,10 +60,21 @@ Kirigami.Dialog {
         // template/subject id so a debug log can trace which starting
         // point produced an issue, but we don't gate behaviour on it.
         root._workingRule = ruleJson;
-        // Snapshot at hand-off — every subsequent body edit will diverge
-        // from this, which is exactly when the close-discard prompt should
-        // fire. Re-stringifying the post-clone object matches the same
-        // shape `_requestClose` compares against.
+        // Snapshot the picker payload directly (vs. reading
+        // `editorBody.workingRule` via Qt.callLater) — the previous
+        // shape deferred the snapshot to the next event loop turn so
+        // editorBody's binding could propagate, but the deferred read
+        // left a brief timing window during which `_isClean()` saw
+        // `_initialSnapshot == ""` while a real working rule was
+        // already staged. An Esc keystroke (or an outside click in
+        // the brief window between currentStep flip and the deferred
+        // snapshot) would bypass the dirty-discard prompt because the
+        // clean check returns true on the still-empty snapshot.
+        //
+        // Snapshotting `ruleJson` directly avoids the binding-
+        // propagation race: the picker's payload IS the staged rule,
+        // and `editorBody.workingRule` will converge to the same JSON
+        // once the binding settles.
         root._initialSnapshot = JSON.stringify(ruleJson);
         root.currentStep = 1;
     }
@@ -75,7 +85,7 @@ Kirigami.Dialog {
     function _requestClose() {
         if (root._isClean()) {
             root.close();
-            return ;
+            return;
         }
         discardConfirm.open();
     }
@@ -87,25 +97,28 @@ Kirigami.Dialog {
     function _requestBack() {
         if (root._isClean()) {
             root._goBack();
-            return ;
+            return;
         }
         discardBackConfirm.open();
     }
 
     function _goBack() {
         root.currentStep = 0;
-        root._workingRule = ({
-        });
+        root._workingRule = ({});
         root._initialSnapshot = "";
     }
 
     function _isClean() {
         // Step 1 has no working rule to lose. Step 2 is dirty iff the
         // current working rule diverges from the snapshot we took on entry.
+        //
+        // Read body's live workingRule (not the picker-seeded
+        // root._workingRule). The previous shape echoed body edits back
+        // into _workingRule, which produced a Qt 6.11 binding loop.
         if (root.currentStep === 0)
             return true;
 
-        return JSON.stringify(root._workingRule) === root._initialSnapshot;
+        return JSON.stringify(editorBody.workingRule) === root._initialSnapshot;
     }
 
     title: i18nc("@title:window", "New Window Rule")
@@ -122,14 +135,15 @@ Kirigami.Dialog {
         // Reset state on every open so a previously-cancelled wizard doesn't
         // carry stale picker selection / draft rule into the next session.
         root.currentStep = 0;
-        root._workingRule = ({
-        });
+        root._workingRule = ({});
         root._initialSnapshot = "";
         wizardFooter.errorText = "";
     }
 
     Shortcut {
-        sequence: StandardKey.Cancel
+        // `sequences` (plural) binds all key sequences associated with
+        // StandardKey.Cancel — the singular form only catches one.
+        sequences: [StandardKey.Cancel]
         enabled: root.opened
         onActivated: root._requestClose()
     }
@@ -172,7 +186,7 @@ Kirigami.Dialog {
             RuleStartPicker {
                 Layout.fillWidth: true
                 controller: root.controller
-                onChosen: function(kind, id, ruleJson) {
+                onChosen: function (kind, id, ruleJson) {
                     root._onChosen(kind, id, ruleJson);
                 }
             }
@@ -191,13 +205,27 @@ Kirigami.Dialog {
                     Layout.fillWidth: true
                     controller: root.controller
                     appSettings: root.appSettings
+                    // Bind workingRule to the wizard seed; the body
+                    // emits workingRuleEdited(next) and we push back
+                    // into root._workingRule. The binding then
+                    // propagates the new value back into editorBody,
+                    // keeping the wizard as the single source of
+                    // truth and preserving the binding across
+                    // _goBack / re-pick cycles (the prior shape had
+                    // the body assign workingRule directly, breaking
+                    // the binding on first edit).
                     workingRule: root._workingRule
-                    onWorkingRuleChanged: {
-                        // Body owns mutation — propagate its edits back into
-                        // the wizard's working-rule mirror so Create reads
-                        // the latest state. Without this echo, Create would
-                        // submit the picker's seed rule un-edited.
-                        root._workingRule = workingRule;
+                    // Guard against a ref-equality echo loop: the body's
+                    // `_patch` shallow-clones `workingRule`, so every emit
+                    // hands us a NEW object even when the resulting JSON
+                    // is identical (e.g. a TextField onEditingFinished
+                    // that re-fires with the same string). Without this
+                    // guard, the assignment bumps the binding generation
+                    // and the body re-reads + re-validates on every
+                    // keystroke that didn't actually change content.
+                    onWorkingRuleEdited: next => {
+                        if (JSON.stringify(root._workingRule) !== JSON.stringify(next))
+                            root._workingRule = next;
                     }
                 }
 
@@ -207,11 +235,8 @@ Kirigami.Dialog {
                     validationIssues: editorBody.validationIssues
                     workingRule: editorBody.workingRule
                 }
-
             }
-
         }
-
     }
 
     footer: WizardFooter {
@@ -235,10 +260,11 @@ Kirigami.Dialog {
         }
         onCreateClicked: {
             wizardFooter.errorText = "";
-            root.ruleSaved(root._workingRule);
+            // Read body's live workingRule (not the picker seed) — see
+            // the binding-loop comment on editorBody above.
+            root.ruleSaved(editorBody.workingRule);
             root.close();
         }
         onCancelClicked: root._requestClose()
     }
-
 }

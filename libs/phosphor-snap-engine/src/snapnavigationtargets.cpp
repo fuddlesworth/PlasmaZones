@@ -63,19 +63,19 @@ PhosphorProtocol::SwapTargetResult swapResult(bool success, const QString& reaso
 // For physical screen IDs, verifies the screen is connected.
 // ═══════════════════════════════════════════════════════════════════════════
 
-bool isStoredScreenValid(Phosphor::Screens::ScreenManager* mgr, const QString& storedScreen)
+bool isStoredScreenValid(PhosphorScreens::ScreenManager* mgr, const QString& storedScreen)
 {
     if (storedScreen.isEmpty()) {
         return false;
     }
     if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
         QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-        if (!Phosphor::Screens::ScreenIdentity::findByIdOrName(physId)) {
+        if (!PhosphorScreens::ScreenIdentity::findByIdOrName(physId)) {
             return false;
         }
         return mgr && mgr->effectiveScreenIds().contains(storedScreen);
     }
-    return Phosphor::Screens::ScreenIdentity::findByIdOrName(storedScreen) != nullptr;
+    return PhosphorScreens::ScreenIdentity::findByIdOrName(storedScreen) != nullptr;
 }
 
 // Pre-call contract checks. Target-resolver callers (the WTA slots) are

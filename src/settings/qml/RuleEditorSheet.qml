@@ -35,8 +35,7 @@ Kirigami.OverlaySheet {
     /// Working copy of the rule being edited. Set via `openFor`. The body
     /// mutates it in place; Cancel discards by simply closing the sheet
     /// (the staged rule never reaches the controller).
-    property var _workingRule: ({
-    })
+    property var _workingRule: ({})
     /// JSON snapshot taken at `openFor` time so the close paths can detect
     /// whether the user has made any edits. Compared by serialised string
     /// equality — the working rule is plain JSON, so this is deterministic
@@ -64,10 +63,15 @@ Kirigami.OverlaySheet {
     /// button) through this gate so the dirty check is honoured uniformly.
     /// A clean working rule closes immediately; a dirty one opens the
     /// shared confirm dialog, and only its "Discard" path closes the sheet.
+    ///
+    /// Dirty check reads `editorBody.workingRule` (the body's live mutated
+    /// copy) rather than `sheet._workingRule` (the openFor seed). The
+    /// body owns mutation; the previous shape echoed body changes back
+    /// into `_workingRule`, which produced a binding loop under Qt 6.11.
     function _requestClose() {
-        if (JSON.stringify(sheet._workingRule) === sheet._initialSnapshot) {
+        if (JSON.stringify(editorBody.workingRule) === sheet._initialSnapshot) {
             sheet.close();
-            return ;
+            return;
         }
         discardConfirm.open();
     }
@@ -84,7 +88,10 @@ Kirigami.OverlaySheet {
     closePolicy: Popup.NoAutoClose
 
     Shortcut {
-        sequence: StandardKey.Cancel
+        // `sequences` (plural) binds to all key sequences associated
+        // with StandardKey.Cancel — Qt warns about only catching one
+        // of them when the singular form is used.
+        sequences: [StandardKey.Cancel]
         enabled: sheet.opened
         onActivated: sheet._requestClose()
     }
@@ -100,12 +107,30 @@ Kirigami.OverlaySheet {
 
         controller: sheet.controller
         appSettings: sheet.appSettings
+        // Bind workingRule to the sheet's seed — the body emits
+        // `workingRuleEdited(next)` for every mutation, and the
+        // handler below pushes `next` back into sheet._workingRule.
+        // The binding then propagates the new value into editorBody.
+        // This keeps the host as the single source of truth and
+        // preserves the binding across openFor re-seeds (the prior
+        // shape had the body assign `workingRule = next` directly,
+        // which broke the binding on first edit and stuck subsequent
+        // openFor calls on the previously-edited rule).
         workingRule: sheet._workingRule
-        onWorkingRuleChanged: {
-            // Echo body edits back into the sheet's mirror so Save reads the
-            // latest state. The body owns mutation; this property lives on
-            // the sheet only to keep the openFor seed survival path explicit.
-            sheet._workingRule = workingRule;
+        // Guard against a ref-equality echo loop: the body's `_patch`
+        // shallow-clones `workingRule`, so every emit hands us a NEW
+        // object even when the resulting JSON is identical to the
+        // current staged state (e.g. a TextField onEditingFinished
+        // that re-fires with the same string). Without this guard,
+        // assigning the clone bumps the binding generation, the body
+        // re-reads `workingRule`, validation re-runs through the
+        // tree — all on the same logical value. JSON.stringify is
+        // O(rule-size) but the rule is small (≪1 KB even on the
+        // largest authored rules) and the savings on validation /
+        // tree re-eval dominate.
+        onWorkingRuleEdited: next => {
+            if (JSON.stringify(sheet._workingRule) !== JSON.stringify(next))
+                sheet._workingRule = next;
         }
     }
 
@@ -138,13 +163,12 @@ Kirigami.OverlaySheet {
                 enabled: editorBody.canSave
                 Accessible.name: i18n("Save changes to this rule")
                 onClicked: {
-                    sheet.ruleSaved(sheet._workingRule);
+                    // Read body's live working rule (not the seed) —
+                    // see the binding-loop comment on editorBody above.
+                    sheet.ruleSaved(editorBody.workingRule);
                     sheet.close();
                 }
             }
-
         }
-
     }
-
 }

@@ -18,12 +18,12 @@
 #include <QSignalSpy>
 #include <QTest>
 
-using Phosphor::Screens::InMemoryConfigStore;
-using Phosphor::Screens::NoOpPanelSource;
-using Phosphor::Screens::ScreenManager;
-using Phosphor::Screens::ScreenManagerConfig;
-using Phosphor::Screens::VirtualScreenConfig;
-using Phosphor::Screens::VirtualScreenDef;
+using PhosphorScreens::InMemoryConfigStore;
+using PhosphorScreens::NoOpPanelSource;
+using PhosphorScreens::ScreenManager;
+using PhosphorScreens::ScreenManagerConfig;
+using PhosphorScreens::VirtualScreenConfig;
+using PhosphorScreens::VirtualScreenDef;
 
 namespace {
 

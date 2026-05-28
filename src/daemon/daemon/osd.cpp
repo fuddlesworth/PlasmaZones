@@ -5,6 +5,7 @@
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../modetracker.h"
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
@@ -158,7 +159,7 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
 
     // Show the visual preview OSD with lock overlay showing the current layout
     if (style == OsdStyle::Preview && m_overlayService && m_layoutManager) {
-        const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
+        const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
         PhosphorZones::Layout* layout =
             m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
         if (layout) {
@@ -539,11 +540,16 @@ QString Daemon::currentActivity() const
 
 bool Daemon::isCurrentContextLocked(const QString& screenId) const
 {
-    // Check both snapping and tiling locks (mode-agnostic check)
+    // Check both snapping and tiling locks (mode-agnostic check).
+    // Spell the mode constants via AssignmentEntry::Mode so the
+    // call sites stay readable when someone greps for "Snapping" /
+    // "Autotile" — raw `0` / `1` were silent on intent.
     if (!m_settings)
         return false;
-    return m_settings->isContextLocked(Utils::contextLockKey(0, screenId), currentDesktop(), currentActivity())
-        || m_settings->isContextLocked(Utils::contextLockKey(1, screenId), currentDesktop(), currentActivity());
+    return m_settings->isContextLocked(Utils::contextLockKey(PhosphorZones::AssignmentEntry::Snapping, screenId),
+                                       currentDesktop(), currentActivity())
+        || m_settings->isContextLocked(Utils::contextLockKey(PhosphorZones::AssignmentEntry::Autotile, screenId),
+                                       currentDesktop(), currentActivity());
 }
 
 bool Daemon::isCurrentContextLockedForMode(const QString& screenId, int mode) const

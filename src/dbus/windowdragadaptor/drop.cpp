@@ -205,8 +205,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             int curDesktop = m_layoutManager->currentVirtualDesktop();
             QString curActivity = m_layoutManager->currentActivity();
             int curMode = static_cast<int>(m_layoutManager->modeForScreen(selectorScreenId, curDesktop, curActivity));
-            selectorScreenLocked = m_settings->isContextLocked(
-                QString::number(curMode) + QStringLiteral(":") + selectorScreenId, curDesktop, curActivity);
+            selectorScreenLocked =
+                m_settings->isContextLocked(Utils::contextLockKey(curMode, selectorScreenId), curDesktop, curActivity);
         }
         if (screen && !selectorScreenLocked
             && !isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, selectorScreenId,
@@ -272,8 +272,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                         int lcMode = static_cast<int>(m_layoutManager->modeForScreen(
                             selectorScreenId, layoutChangeDesktop, layoutChangeActivity));
                         bool screenLocked = m_settings
-                            && m_settings->isContextLocked(QString::number(lcMode) + QStringLiteral(":")
-                                                               + selectorScreenId,
+                            && m_settings->isContextLocked(Utils::contextLockKey(lcMode, selectorScreenId),
                                                            layoutChangeDesktop, layoutChangeActivity);
                         PhosphorZones::Layout* currentLayout =
                             m_layoutManager->resolveLayoutForScreen(selectorScreenId);
@@ -437,7 +436,7 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // handle it via screenId lookup inside buildEmptyZoneList itself.
     QScreen* releaseScreen = nullptr;
     for (QScreen* s : QGuiApplication::screens()) {
-        if (Phosphor::Screens::ScreenIdentity::identifierFor(s) == screenId || s->name() == screenId) {
+        if (PhosphorScreens::ScreenIdentity::identifierFor(s) == screenId || s->name() == screenId) {
             releaseScreen = s;
             break;
         }

@@ -1266,8 +1266,8 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         QStringList c;
         for (const QString& raw : list) {
             QString value = raw.trimmed();
-            if (axis == DisableAxis::Monitor && Phosphor::Screens::ScreenIdentity::isConnectorName(value)) {
-                const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(value);
+            if (axis == DisableAxis::Monitor && PhosphorScreens::ScreenIdentity::isConnectorName(value)) {
+                const QString resolved = PhosphorScreens::ScreenIdentity::idForName(value);
                 if (resolved != value) {
                     value = resolved;
                 }
@@ -1344,8 +1344,7 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             break;
         }
         }
-        const QString name =
-            (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId;
+        const QString name = disableRulePrefixFor(autotile) + screenId;
         kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, autotile));
     }
 
@@ -1365,8 +1364,8 @@ QStringList Settings::disabledMonitors(PhosphorZones::AssignmentEntry::Mode mode
     // done at lookup time inside isDesktopDisabled / isActivityDisabled.
     QStringList entries = disableEntriesFor(mode, static_cast<int>(DisableAxis::Monitor));
     for (auto& name : entries) {
-        if (Phosphor::Screens::ScreenIdentity::isConnectorName(name)) {
-            const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(name);
+        if (PhosphorScreens::ScreenIdentity::isConnectorName(name)) {
+            const QString resolved = PhosphorScreens::ScreenIdentity::idForName(name);
             if (resolved != name) {
                 name = resolved;
             }
@@ -1384,7 +1383,7 @@ void Settings::setDisabledMonitors(PhosphorZones::AssignmentEntry::Mode mode, co
 bool Settings::isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode mode, const QString& screenIdOrName) const
 {
     const QStringList entries = disabledMonitors(mode);
-    for (const QString& name : Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName)) {
+    for (const QString& name : PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName)) {
         if (entries.contains(name)) {
             return true;
         }
@@ -1412,7 +1411,7 @@ bool Settings::isDesktopDisabled(PhosphorZones::AssignmentEntry::Mode mode, cons
         return false;
     }
     const QStringList entries = disabledDesktops(mode);
-    const QStringList namesToCheck = Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName);
+    const QStringList namesToCheck = PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName);
     const QString desktopStr = QString::number(desktop);
     for (const QString& name : namesToCheck) {
         if (entries.contains(name + QLatin1Char('/') + desktopStr)) {
@@ -1442,7 +1441,7 @@ bool Settings::isActivityDisabled(PhosphorZones::AssignmentEntry::Mode mode, con
         return false;
     }
     const QStringList entries = disabledActivities(mode);
-    const QStringList namesToCheck = Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName);
+    const QStringList namesToCheck = PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName);
     for (const QString& name : namesToCheck) {
         if (entries.contains(name + QLatin1Char('/') + activityId)) {
             return true;
@@ -2372,7 +2371,7 @@ void Settings::setScreenLocked(const QString& screenIdOrName, bool locked)
 bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const
 {
     const QStringList locked = lockedScreens();
-    const QStringList namesToCheck = Phosphor::Screens::ScreenIdentity::variantsFor(screenIdOrName);
+    const QStringList namesToCheck = PhosphorScreens::ScreenIdentity::variantsFor(screenIdOrName);
     for (const QString& name : namesToCheck) {
         if (virtualDesktop > 0 && !activity.isEmpty()) {
             const QString k =

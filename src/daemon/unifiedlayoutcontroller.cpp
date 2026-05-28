@@ -15,7 +15,7 @@
 namespace PlasmaZones {
 
 UnifiedLayoutController::UnifiedLayoutController(PhosphorZones::LayoutRegistry* layoutManager, Settings* settings,
-                                                 Phosphor::Screens::ScreenManager* screenManager,
+                                                 PhosphorScreens::ScreenManager* screenManager,
                                                  PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                                  PhosphorEngine::PlacementEngineBase* autotileEngine, QObject* parent)
     : QObject(parent)

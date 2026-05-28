@@ -14,7 +14,7 @@
 #include <QHash>
 #include <optional>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -57,7 +57,7 @@ class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
 public:
     explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* parent = nullptr);
     explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, PhosphorWorkspaces::VirtualDesktopManager* vdm,
-                           Phosphor::Screens::ScreenManager* screenManager = nullptr, QObject* parent = nullptr);
+                           PhosphorScreens::ScreenManager* screenManager = nullptr, QObject* parent = nullptr);
     ~LayoutAdaptor() override = default;
 
     void setVirtualDesktopManager(PhosphorWorkspaces::VirtualDesktopManager* vdm);
@@ -484,7 +484,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager; // Concrete type for signal connections
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     PhosphorWorkspaces::ActivityManager* m_activityManager = nullptr;
-    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     ISettings* m_settings = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
     PhosphorLayout::ILayoutSource* m_layoutSource = nullptr;

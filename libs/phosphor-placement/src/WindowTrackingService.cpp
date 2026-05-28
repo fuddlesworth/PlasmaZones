@@ -24,7 +24,7 @@ namespace PhosphorPlacement {
 
 WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
                                              PhosphorZones::IZoneDetector* zoneDetector,
-                                             Phosphor::Screens::ScreenManager* screenManager,
+                                             PhosphorScreens::ScreenManager* screenManager,
                                              PhosphorWorkspaces::VirtualDesktopManager* vdm,
                                              IGeometryResolver* geometryResolver, PlacementConfig config,
                                              QObject* parent)
@@ -242,12 +242,12 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
     // 2. Different virtual screens on the same physical monitor (e.g. DP-1/vs:0 vs DP-1/vs:1)
     //    — the virtual screens have different geometry bounds, so coordinates are wrong.
     if (!savedScreen.isEmpty() && !currentScreenName.isEmpty()
-        && !Phosphor::Screens::ScreenIdentity::screensMatch(savedScreen, currentScreenName)) {
+        && !PhosphorScreens::ScreenIdentity::screensMatch(savedScreen, currentScreenName)) {
         auto* mgr = m_screenManager;
         QRect available;
         bool haveTarget = false;
         if (mgr) {
-            const Phosphor::Screens::PhysicalScreen target = mgr->physicalScreenFor(currentScreenName);
+            const PhosphorScreens::PhysicalScreen target = mgr->physicalScreenFor(currentScreenName);
             if (target.isValid()) {
                 haveTarget = true;
                 // For virtual screens, prefer virtual screen bounds over full physical screen
@@ -255,7 +255,7 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
                     ? mgr->screenAvailableGeometry(currentScreenName)
                     : mgr->actualAvailableGeometry(target);
             }
-        } else if (QScreen* target = Phosphor::Screens::ScreenIdentity::findByIdOrName(currentScreenName)) {
+        } else if (QScreen* target = PhosphorScreens::ScreenIdentity::findByIdOrName(currentScreenName)) {
             haveTarget = true;
             available = target->availableGeometry();
         }

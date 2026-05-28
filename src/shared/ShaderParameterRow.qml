@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -44,8 +45,7 @@ Item {
 
     required property var paramData
     required property var currentValues
-    property var lockedParams: ({
-    })
+    property var lockedParams: ({})
     property bool enableLocking: true
     property bool enableImage: true
     /// Compact mode: slider/spinbox/swatch use fixed widths matching the
@@ -127,7 +127,6 @@ Item {
             onMoved: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, value);
-
             }
 
             Binding on value {
@@ -147,7 +146,6 @@ Item {
                 when: !floatSlider.pressed && !floatSlider.activeFocus
                 restoreMode: Binding.RestoreNone
             }
-
         }
 
         Label {
@@ -174,7 +172,6 @@ Item {
             onValueModified: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, value);
-
             }
 
             Binding on value {
@@ -190,7 +187,6 @@ Item {
                 when: !intSpinBox.activeFocus
                 restoreMode: Binding.RestoreNone
             }
-
         }
 
         Item {
@@ -208,7 +204,6 @@ Item {
             onToggled: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, checked);
-
             }
 
             Binding on checked {
@@ -222,7 +217,6 @@ Item {
                 when: !boolCheckBox.activeFocus
                 restoreMode: Binding.RestoreNone
             }
-
         }
 
         Item {
@@ -271,7 +265,7 @@ Item {
             Accessible.name: i18nc("@action:button", "Choose %1 color", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id) : "")
             onClicked: {
                 if (!paramDelegate.paramData)
-                    return ;
+                    return;
 
                 paramDelegate.requestColorPicker(paramDelegate.paramData.id, paramDelegate.paramData.name || paramDelegate.paramData.id, colorSwatch.currentColor);
             }
@@ -279,7 +273,7 @@ Item {
             contentItem: Rectangle {
                 radius: Kirigami.Units.smallSpacing
                 color: colorSwatch.currentColor
-                border.width: colorSwatch.activeFocus ? Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2)) : Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                border.width: colorSwatch.activeFocus ? Math.max(2, Math.round(Screen.devicePixelRatio * 2)) : Math.max(1, Math.round(Screen.devicePixelRatio))
                 border.color: colorSwatch.activeFocus ? Kirigami.Theme.focusColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
 
                 MouseArea {
@@ -287,13 +281,10 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     acceptedButtons: Qt.NoButton // pass clicks to AbstractButton
                 }
-
             }
 
             // suppress default Button frame
-            background: Item {
-            }
-
+            background: Item {}
         }
 
         Label {
@@ -334,7 +325,6 @@ Item {
             onClicked: {
                 if (paramDelegate.paramData)
                     paramDelegate.requestImagePicker(paramDelegate.paramData.id);
-
             }
         }
 
@@ -346,7 +336,6 @@ Item {
             onClicked: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id, "");
-
             }
         }
 
@@ -372,7 +361,6 @@ Item {
             onValueModified: {
                 if (paramDelegate.paramData)
                     paramDelegate.valueChanged(paramDelegate.paramData.id + "_svgSize", value);
-
             }
 
             // Mirror the float/int/bool reactivity pattern: Binding-on-value
@@ -389,7 +377,6 @@ Item {
                 when: !svgSizeSpinBox.activeFocus
                 restoreMode: Binding.RestoreNone
             }
-
         }
 
         Item {
@@ -414,10 +401,7 @@ Item {
             onClicked: {
                 if (paramDelegate.paramData)
                     paramDelegate.lockToggled(paramDelegate.paramData.id, !isLocked);
-
             }
         }
-
     }
-
 }

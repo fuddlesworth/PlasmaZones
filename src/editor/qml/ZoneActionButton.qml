@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
@@ -48,7 +49,7 @@ AbstractButton {
 
             return actionButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.15);
         }
-        border.width: actionButton.activeFocus ? Math.round(Kirigami.Units.devicePixelRatio * Theme.focusBorderWidth) : Math.round(Kirigami.Units.devicePixelRatio)
+        border.width: actionButton.activeFocus ? Math.round(Screen.devicePixelRatio * Theme.focusBorderWidth) : Math.round(Screen.devicePixelRatio)
         border.color: {
             if (actionButton.activeFocus)
                 return Theme.withAlpha(Kirigami.Theme.highlightColor, 0.8);
@@ -64,7 +65,6 @@ AbstractButton {
                 profile: "widget.press"
                 durationOverride: Theme.animDuration
             }
-
         }
 
         Behavior on color {
@@ -72,7 +72,6 @@ AbstractButton {
                 profile: "widget.press"
                 durationOverride: Theme.animDuration
             }
-
         }
 
         Behavior on border.color {
@@ -80,9 +79,6 @@ AbstractButton {
                 profile: "widget.press"
                 durationOverride: Theme.animDuration
             }
-
         }
-
     }
-
 }

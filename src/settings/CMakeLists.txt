@@ -11,10 +11,58 @@ set(plasmazones_settings_SRCS
     main.cpp
     settingscontroller.h
     settingscontroller.cpp
+    # SettingsController is large enough to violate the 800-line cap
+    # if kept as a single TU. The sub-domain methods live in sibling
+    # .cpp files compiled into the same target — same class, multiple
+    # translation units, no API change. Order matches reading order:
+    # construction → lifecycle → page registry → per-domain CRUD.
+    settingscontroller_lifecycle.cpp
+    settingscontroller_pageregistration.cpp
+    settingscontroller_layouts.cpp
+    settingscontroller_session.cpp
+    # Per-screen autotile/snapping/zone-selector override wrappers — split
+    # out so settingscontroller_session.cpp stays under the 800-line cap.
+    settingscontroller_perscreen.cpp
+    settingscontroller_ordering.cpp
+    # Virtual-screen lifecycle methods (getVirtualScreenConfig +
+    # apply/remove/stage variants). Split out of _session.cpp to
+    # keep that TU under the 800-line cap (CLAUDE.md).
+    settingscontroller_virtualscreens.cpp
+    # D-Bus subscription wiring (wireDaemonSubscriptions + reloadLocal
+    # RuleStore) — extracted from settingscontroller.cpp so the central
+    # TU stays under the 800-line cap (CLAUDE.md).
+    settingscontroller_dbuswire.cpp
+    # RAII begin/endExternalEdit wrapper — extracted from
+    # settingscontroller.h so the header stays under the 800-line cap.
+    externaleditscope.h
+    externaleditscope.cpp
     # Per-page sub-controllers — hang off SettingsController as child QObjects,
     # exposing the Q_PROPERTY surface for a single settings page each.
     animationspagecontroller.h
     animationspagecontroller.cpp
+    # Internal header carrying the inline effect/parameter/profile→QVariantMap
+    # helpers shared between the two AnimationsPageController TUs. Inline
+    # definitions make cross-TU linkage independent of unity-build merging.
+    animations_controller_detail.h
+    # AnimationsPageController shader-leg methods compile into the same
+    # target — same class, separate TU, no API change. Keeps the main
+    # cpp under the 800-line cap (CLAUDE.md).
+    animationspagecontroller_shaders.cpp
+    # AnimationsPageController override-CRUD methods (userProfilesDir,
+    # hasOverride / rawProfile / resolvedProfile / setOverride /
+    # clearOverride). Same split rationale as _shaders.cpp — the main
+    # TU grew past 800 lines after the F#2c async-revert addition.
+    animationspagecontroller_overrides.cpp
+    # AnimationsPageController path-discovery helpers
+    # (sectionForPath / eventLabel / parentPath / parentChain). Same
+    # split rationale — small per-Q_INVOKABLE methods extracted so the
+    # main TU stays under the 800-line cap.
+    animationspagecontroller_paths.cpp
+    # Shared validate+copy primitive for installing shader packs.
+    # Consumed by AnimationsPageController + SnappingShadersPageController.
+    # Centralises the symlink-rejection + metadata.json safety checks.
+    shaderpackinstaller.h
+    shaderpackinstaller.cpp
     # Sub-services hosted by AnimationsPageController as child QObjects:
     # preset library + motion-set store. Split out to keep
     # animationspagecontroller.cpp under the project's 800-line cap.
@@ -44,6 +92,17 @@ set(plasmazones_settings_SRCS
     tilingappearancecontroller.cpp
     tilingbehaviorcontroller.h
     tilingbehaviorcontroller.cpp
+    # PhosphorSettingsUi integration scaffold. PageAdapter wraps existing
+    # plain-QObject page controllers so they can be registered with
+    # PhosphorSettingsUi::PageRegistry without changing each controller's
+    # inheritance. SettingsStagingDomain bridges SettingsController's
+    # central needsSave/save()/load() to the framework's StagingDomain
+    # contract. Both are scaffolding for the in-progress src/settings
+    # migration onto libs/phosphor-settings-ui.
+    pageadapter.h
+    pageadapter.cpp
+    settingsstagingdomain.h
+    settingsstagingdomain.cpp
     # Window Rules page — the unified rule surface. WindowRuleController
     # owns one WindowRuleModel (QAbstractListModel) and talks to the
     # daemon's org.plasmazones.WindowRules adaptor.
@@ -51,6 +110,17 @@ set(plasmazones_settings_SRCS
     windowrulemodel.cpp
     windowrulecontroller.h
     windowrulecontroller.cpp
+    # Read-only / projection methods of WindowRuleController — sections,
+    # rulesSnapshot, monitorOverview, ruleScreenIds, author surfaces
+    # (matchFields/operatorsForField/actionTypes/defaultPayloadFor),
+    # validation entry points. Split out so windowrulecontroller.cpp stays
+    # under the 800-line cap; same class, separate TU, no API change.
+    windowrulecontroller_views.cpp
+    # WindowRuleController label-lookup setters (screen/activity/layout/
+    # snapping-layout/tiling-algorithm) plus the wiring-completion gate.
+    # Five tiny pass-throughs into WindowRuleModel; split out so
+    # windowrulecontroller.cpp stays under the project's 800-line cap.
+    windowrulecontroller_lookups.cpp
     # WindowRuleController authoring metadata + templates — pure read-only
     # helpers split out so windowrulecontroller.cpp stays under the project's
     # 800-line cap. The controller's Q_INVOKABLE entry points (matchFields,
@@ -135,6 +205,8 @@ qt_add_qml_module(plasmazones-settings
         windowrulemodel.cpp
     QML_FILES
         qml/Main.qml
+        qml/Toast.qml
+        qml/KeyboardShortcutOverlay.qml
         qml/GeneralPage.qml
         qml/SnappingAppearancePage.qml
         qml/SnappingEffectsPage.qml
@@ -295,6 +367,8 @@ target_link_libraries(plasmazones-settings
         plasmazones_core
         PhosphorAnimation::PhosphorAnimation  # motion runtime + QML module
         PhosphorAnimationQmlplugin  # Generated by qt_add_qml_module (STATIC)
+        PhosphorSettingsUi::PhosphorSettingsUi  # ApplicationController, PageController, IStagingDomain
+        PhosphorSettingsUi::PhosphorSettingsUiQml  # QML chrome: SettingsAppWindow, Sidebar, footer, etc.
         Qt6::Quick
         Qt6::QuickControls2
         Qt6::DBus

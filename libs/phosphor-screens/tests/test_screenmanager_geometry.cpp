@@ -16,10 +16,10 @@
 #include <QSignalSpy>
 #include <QTest>
 
-using Phosphor::Screens::FakeScreenProvider;
-using Phosphor::Screens::PhysicalScreen;
-using Phosphor::Screens::ScreenManager;
-using Phosphor::Screens::ScreenManagerConfig;
+using PhosphorScreens::FakeScreenProvider;
+using PhosphorScreens::PhysicalScreen;
+using PhosphorScreens::ScreenManager;
+using PhosphorScreens::ScreenManagerConfig;
 
 class TestScreenManagerGeometry : public QObject
 {

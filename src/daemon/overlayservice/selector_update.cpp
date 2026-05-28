@@ -22,7 +22,7 @@ namespace PlasmaZones {
 
 namespace {
 
-void updateZoneSelectorComputedProperties(Phosphor::Screens::ScreenManager* mgr, QObject* window, QScreen* screen,
+void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, QObject* window, QScreen* screen,
                                           const QString& virtualScreenId, const ZoneSelectorConfig& config,
                                           ISettings* settings, const ZoneSelectorLayout& layout)
 {

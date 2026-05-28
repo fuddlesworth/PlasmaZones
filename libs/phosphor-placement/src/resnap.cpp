@@ -145,7 +145,7 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
     for (auto it = snapScreens.constBegin(); it != snapScreens.constEnd(); ++it) {
-        if (!Phosphor::Screens::ScreenIdentity::screensMatch(it.value(), screenId)) {
+        if (!PhosphorScreens::ScreenIdentity::screensMatch(it.value(), screenId)) {
             continue;
         }
         const QString& windowId = it.key();

@@ -684,10 +684,16 @@ public:
     // When adding entries, also add the display name to the translation catalog.
     static const QList<RenderingBackendEntry>& renderingBackendEntries()
     {
+        // QT_TRANSLATE_NOOP marks the display names for lupdate
+        // extraction under the project's "plasmazones" context while
+        // keeping the literal as the runtime value — GeneralPageController
+        // resolves the translated form via PzI18n::tr() at display time.
+        // Without the macro, lupdate wouldn't see the source strings
+        // and the .ts catalog would never carry the translations.
         static const QList<RenderingBackendEntry> entries = {
-            {QStringLiteral("auto"), QStringLiteral("Automatic")},
-            {QStringLiteral("vulkan"), QStringLiteral("Vulkan")},
-            {QStringLiteral("opengl"), QStringLiteral("OpenGL")},
+            {QStringLiteral("auto"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Automatic"))},
+            {QStringLiteral("vulkan"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Vulkan"))},
+            {QStringLiteral("opengl"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "OpenGL"))},
         };
         return entries;
     }
@@ -1128,11 +1134,16 @@ public:
     /// Per-axis defaults — currently share the same value as editorSnapInterval
     /// but split so future aspect-aware defaults don't require auditing every
     /// call site. Use these from resetDefaults / first-run paths.
-    static double editorSnapIntervalX()
+    ///
+    /// Return type is `qreal` to match `ISettings::editorSnapIntervalX/Y`
+    /// (qreal is `double` on every Qt6-supported target, but the type
+    /// alignment removes a category of "I forgot which one" mistakes in
+    /// callers that take the value `auto`).
+    static qreal editorSnapIntervalX()
     {
         return editorSnapInterval();
     }
-    static double editorSnapIntervalY()
+    static qreal editorSnapIntervalY()
     {
         return editorSnapInterval();
     }

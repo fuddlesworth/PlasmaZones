@@ -138,7 +138,7 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
         if (screenId.isEmpty()) {
             for (QScreen* screen : QGuiApplication::screens()) {
                 if (screen->geometry().contains(center)) {
-                    screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+                    screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
                     break;
                 }
             }

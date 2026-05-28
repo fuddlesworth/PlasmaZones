@@ -591,29 +591,32 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     }
 
     // ── Read all v1 groups (using ConfigKeys v1 accessors) ────────────────
-    const QJsonObject v1Activation = root.value(ConfigKeys::v1ActivationGroup()).toObject();
-    const QJsonObject v1Display = root.value(ConfigKeys::v1DisplayGroup()).toObject();
-    const QJsonObject v1Appearance = root.value(ConfigKeys::v1AppearanceGroup()).toObject();
-    const QJsonObject v1Zones = root.value(ConfigKeys::v1ZonesGroup()).toObject();
-    const QJsonObject v1Behavior = root.value(ConfigKeys::v1BehaviorGroup()).toObject();
-    const QJsonObject v1Exclusions = root.value(ConfigKeys::v1ExclusionsGroup()).toObject();
-    const QJsonObject v1ZoneSelector = root.value(ConfigKeys::v1ZoneSelectorGroup()).toObject();
-    const QJsonObject v1Autotiling = root.value(ConfigKeys::v1AutotilingGroup()).toObject();
-    const QJsonObject v1AutotileShortcuts = root.value(ConfigKeys::v1AutotileShortcutsGroup()).toObject();
-    const QJsonObject v1Animations = root.value(ConfigKeys::v1AnimationsGroup()).toObject();
-    const QJsonObject v1GlobalShortcuts = root.value(ConfigKeys::v1GlobalShortcutsGroup()).toObject();
-    const QJsonObject v1Editor = root.value(ConfigKeys::v1EditorGroup()).toObject();
-    const QJsonObject v1Ordering = root.value(ConfigKeys::v1OrderingGroup()).toObject();
-    const QJsonObject v1Rendering = root.value(ConfigKeys::v1RenderingGroup()).toObject();
-    const QJsonObject v1Shaders = root.value(ConfigKeys::v1ShadersGroup()).toObject();
+    const QJsonObject v1Activation = root.value(ConfigKeys::Legacy::v1ActivationGroup()).toObject();
+    const QJsonObject v1Display = root.value(ConfigKeys::Legacy::v1DisplayGroup()).toObject();
+    const QJsonObject v1Appearance = root.value(ConfigKeys::Legacy::v1AppearanceGroup()).toObject();
+    const QJsonObject v1Zones = root.value(ConfigKeys::Legacy::v1ZonesGroup()).toObject();
+    const QJsonObject v1Behavior = root.value(ConfigKeys::Legacy::v1BehaviorGroup()).toObject();
+    const QJsonObject v1Exclusions = root.value(ConfigKeys::Legacy::v1ExclusionsGroup()).toObject();
+    const QJsonObject v1ZoneSelector = root.value(ConfigKeys::Legacy::v1ZoneSelectorGroup()).toObject();
+    const QJsonObject v1Autotiling = root.value(ConfigKeys::Legacy::v1AutotilingGroup()).toObject();
+    const QJsonObject v1AutotileShortcuts = root.value(ConfigKeys::Legacy::v1AutotileShortcutsGroup()).toObject();
+    const QJsonObject v1Animations = root.value(ConfigKeys::Legacy::v1AnimationsGroup()).toObject();
+    const QJsonObject v1GlobalShortcuts = root.value(ConfigKeys::Legacy::v1GlobalShortcutsGroup()).toObject();
+    const QJsonObject v1Editor = root.value(ConfigKeys::Legacy::v1EditorGroup()).toObject();
+    const QJsonObject v1Ordering = root.value(ConfigKeys::Legacy::v1OrderingGroup()).toObject();
+    const QJsonObject v1Rendering = root.value(ConfigKeys::Legacy::v1RenderingGroup()).toObject();
+    const QJsonObject v1Shaders = root.value(ConfigKeys::Legacy::v1ShadersGroup()).toObject();
 
     // ── Remove all v1 groups ────────────────────────────────────────────────
     const QString v1Groups[] = {
-        ConfigKeys::v1ActivationGroup(),   ConfigKeys::v1DisplayGroup(),         ConfigKeys::v1AppearanceGroup(),
-        ConfigKeys::v1ZonesGroup(),        ConfigKeys::v1BehaviorGroup(),        ConfigKeys::v1ExclusionsGroup(),
-        ConfigKeys::v1ZoneSelectorGroup(), ConfigKeys::v1AutotilingGroup(),      ConfigKeys::v1AutotileShortcutsGroup(),
-        ConfigKeys::v1AnimationsGroup(),   ConfigKeys::v1GlobalShortcutsGroup(), ConfigKeys::v1EditorGroup(),
-        ConfigKeys::v1OrderingGroup(),     ConfigKeys::v1RenderingGroup(),       ConfigKeys::v1ShadersGroup(),
+        ConfigKeys::Legacy::v1ActivationGroup(),        ConfigKeys::Legacy::v1DisplayGroup(),
+        ConfigKeys::Legacy::v1AppearanceGroup(),        ConfigKeys::Legacy::v1ZonesGroup(),
+        ConfigKeys::Legacy::v1BehaviorGroup(),          ConfigKeys::Legacy::v1ExclusionsGroup(),
+        ConfigKeys::Legacy::v1ZoneSelectorGroup(),      ConfigKeys::Legacy::v1AutotilingGroup(),
+        ConfigKeys::Legacy::v1AutotileShortcutsGroup(), ConfigKeys::Legacy::v1AnimationsGroup(),
+        ConfigKeys::Legacy::v1GlobalShortcutsGroup(),   ConfigKeys::Legacy::v1EditorGroup(),
+        ConfigKeys::Legacy::v1OrderingGroup(),          ConfigKeys::Legacy::v1RenderingGroup(),
+        ConfigKeys::Legacy::v1ShadersGroup(),
     };
     for (const auto& key : v1Groups) {
         root.remove(key);
@@ -853,12 +856,12 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // Both sides go through accessors: v2 via ConfigDefaults / Profile
     // constants (per CLAUDE.md rule: no inline QStringLiteral for config
     // keys) so a schema rename touches one accessor, and v1 via
-    // ConfigKeys::v1Animation*Key() so the migration is unambiguous about
+    // ConfigKeys::Legacy::v1Animation*Key() so the migration is unambiguous about
     // "reading legacy field" — the v1 shape is stable by definition but
     // having a single source of truth keeps `grep "AnimationDuration"`
     // returning one accessor declaration instead of N call-sites.
     QJsonObject animations;
-    moveKey(v1Animations, ConfigKeys::v1AnimationsEnabledKey(), animations, ConfigDefaults::enabledKey());
+    moveKey(v1Animations, ConfigKeys::Legacy::v1AnimationsEnabledKey(), animations, ConfigDefaults::enabledKey());
 
     // Assemble Profile fields from the v1 keys (if present). We build
     // the JSON shape directly using Profile's public field-name
@@ -876,12 +879,12 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // Clamping at migration time prevents both: the stored value is
     // always in-range, and `Profile::fromJson` accepts it cleanly.
     QJsonObject profile;
-    if (v1Animations.contains(ConfigKeys::v1AnimationDurationKey())) {
-        const int raw = v1Animations.value(ConfigKeys::v1AnimationDurationKey()).toInt();
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationDurationKey())) {
+        const int raw = v1Animations.value(ConfigKeys::Legacy::v1AnimationDurationKey()).toInt();
         const int clamped = qBound(ConfigDefaults::animationDurationMin(), raw, ConfigDefaults::animationDurationMax());
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldDuration)] = clamped;
     }
-    if (v1Animations.contains(ConfigKeys::v1AnimationEasingCurveKey())) {
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationEasingCurveKey())) {
         // Resolve the v1 friendly name (e.g. "easeOutCubic") through a
         // stack-local CurveRegistry so we store the canonical wire form
         // (e.g. "0.33,1.00,0.68,1.00") in the Profile blob. Without this
@@ -902,7 +905,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         // the repeating diagnostic. The migration log below records
         // the dropped spec so an operator investigating a silent
         // curve change can find it.
-        const QString v1Curve = v1Animations.value(ConfigKeys::v1AnimationEasingCurveKey()).toString();
+        const QString v1Curve = v1Animations.value(ConfigKeys::Legacy::v1AnimationEasingCurveKey()).toString();
         PhosphorAnimation::CurveRegistry registry;
         if (const auto resolved = registry.tryCreate(v1Curve)) {
             profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldCurve)] = resolved->toString();
@@ -911,27 +914,27 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
                   qPrintable(v1Curve));
         }
     }
-    if (v1Animations.contains(ConfigKeys::v1AnimationMinDistanceKey())) {
-        const int raw = v1Animations.value(ConfigKeys::v1AnimationMinDistanceKey()).toInt();
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationMinDistanceKey())) {
+        const int raw = v1Animations.value(ConfigKeys::Legacy::v1AnimationMinDistanceKey()).toInt();
         const int clamped =
             qBound(ConfigDefaults::animationMinDistanceMin(), raw, ConfigDefaults::animationMinDistanceMax());
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldMinDistance)] = clamped;
     }
-    if (v1Animations.contains(ConfigKeys::v1AnimationSequenceModeKey())) {
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationSequenceModeKey())) {
         // SequenceMode is a closed enum (AllAtOnce=0, Stagger=1 as of v2).
         // Out-of-range values snap to the project default rather than
         // clamping to the nearest bound — clamping would silently alias
         // e.g. 999 onto Stagger, which is semantically different from
         // "the user's setting is meaningless, use the default".
-        const int raw = v1Animations.value(ConfigKeys::v1AnimationSequenceModeKey()).toInt();
+        const int raw = v1Animations.value(ConfigKeys::Legacy::v1AnimationSequenceModeKey()).toInt();
         const int resolved =
             (raw >= ConfigDefaults::animationSequenceModeMin() && raw <= ConfigDefaults::animationSequenceModeMax())
             ? raw
             : ConfigDefaults::animationSequenceMode();
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldSequenceMode)] = resolved;
     }
-    if (v1Animations.contains(ConfigKeys::v1AnimationStaggerIntervalKey())) {
-        const int raw = v1Animations.value(ConfigKeys::v1AnimationStaggerIntervalKey()).toInt();
+    if (v1Animations.contains(ConfigKeys::Legacy::v1AnimationStaggerIntervalKey())) {
+        const int raw = v1Animations.value(ConfigKeys::Legacy::v1AnimationStaggerIntervalKey()).toInt();
         const int clamped =
             qBound(ConfigDefaults::animationStaggerIntervalMin(), raw, ConfigDefaults::animationStaggerIntervalMax());
         profile[QLatin1String(PhosphorAnimation::Profile::JsonFieldStaggerInterval)] = clamped;
@@ -1082,7 +1085,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // so this extraction is a stepping-stone that v3→v4 reads back out.
     {
         QJsonObject assignRoot;
-        const QString assignPrefix = ConfigDefaults::v3assignmentGroupPrefix();
+        const QString assignPrefix = ConfigKeys::Legacy::v3assignmentGroupPrefix();
         QStringList keysToRemove;
         for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
             if (it.key().startsWith(assignPrefix)) {
@@ -1090,7 +1093,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
                 keysToRemove.append(it.key());
             }
         }
-        const QString quickLayoutsKey = ConfigDefaults::v3quickLayoutsGroup();
+        const QString quickLayoutsKey = ConfigKeys::Legacy::v3quickLayoutsGroup();
         if (root.contains(quickLayoutsKey)) {
             assignRoot[quickLayoutsKey] = root.value(quickLayoutsKey);
             keysToRemove.append(quickLayoutsKey);
@@ -1099,7 +1102,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         // consumed by PhosphorZones::LayoutRegistry directly from config.json and deleted
         // after application. Extracting it would leave dead data in
         // assignments.json that nothing reads (and v4 doesn't read it either).
-        const QString modeTrackingKey = ConfigDefaults::v3modeTrackingGroup();
+        const QString modeTrackingKey = ConfigKeys::Legacy::v3modeTrackingGroup();
         if (root.contains(modeTrackingKey)) {
             keysToRemove.append(modeTrackingKey);
         }
@@ -1214,9 +1217,9 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
         return result;
     };
 
-    const QString v2Monitors = takeKey(v2Display, ConfigKeys::v2DisabledMonitorsKey());
-    const QString v2Desktops = takeKey(v2Display, ConfigKeys::v2DisabledDesktopsKey());
-    const QString v2Activities = takeKey(v2Display, ConfigKeys::v2DisabledActivitiesKey());
+    const QString v2Monitors = takeKey(v2Display, ConfigKeys::Legacy::v2DisabledMonitorsKey());
+    const QString v2Desktops = takeKey(v2Display, ConfigKeys::Legacy::v2DisabledDesktopsKey());
+    const QString v2Activities = takeKey(v2Display, ConfigKeys::Legacy::v2DisabledActivitiesKey());
 
     // Write the duplicated lists into the new Display group. Skip empties so
     // a clean v2 config with no disabled entries doesn't grow noise keys.
@@ -1228,12 +1231,12 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
         }
     };
 
-    writeIfNonEmpty(ConfigKeys::v3snappingDisabledMonitorsKey(), v2Monitors);
-    writeIfNonEmpty(ConfigKeys::v3autotileDisabledMonitorsKey(), v2Monitors);
-    writeIfNonEmpty(ConfigKeys::v3snappingDisabledDesktopsKey(), v2Desktops);
-    writeIfNonEmpty(ConfigKeys::v3autotileDisabledDesktopsKey(), v2Desktops);
-    writeIfNonEmpty(ConfigKeys::v3snappingDisabledActivitiesKey(), v2Activities);
-    writeIfNonEmpty(ConfigKeys::v3autotileDisabledActivitiesKey(), v2Activities);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3snappingDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3autotileDisabledMonitorsKey(), v2Monitors);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3snappingDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3autotileDisabledDesktopsKey(), v2Desktops);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3snappingDisabledActivitiesKey(), v2Activities);
+    writeIfNonEmpty(ConfigKeys::Legacy::v3autotileDisabledActivitiesKey(), v2Activities);
 
     // Stitch the trimmed v2 Display object back into Snapping.Behavior, drop
     // the Display sub-object entirely if it became empty (no ShowOnAllMonitors
@@ -1289,23 +1292,42 @@ constexpr QLatin1String kV4DisableStashKey{"_v4DisableStash"};
 // Animations group in migrateV3ToV4 so the unified rule store becomes the sole
 // home for per-window animation overrides.
 constexpr QLatin1String kV4AnimationRulesStashKey{"_v4AnimationRulesStash"};
+
+// Inner field names inside the `_v4DisableStash` object. Shared between the
+// writer (migrateV3ToV4) and the reader (finalizeV4Conversion) so a typo or
+// rename can't silently drop a disable list on conversion.
+constexpr QLatin1StringView kV3SnappingMonitorsStash{"snappingMonitors"};
+constexpr QLatin1StringView kV3AutotileMonitorsStash{"autotileMonitors"};
+constexpr QLatin1StringView kV3SnappingDesktopsStash{"snappingDesktops"};
+constexpr QLatin1StringView kV3AutotileDesktopsStash{"autotileDesktops"};
+constexpr QLatin1StringView kV3SnappingActivitiesStash{"snappingActivities"};
+constexpr QLatin1StringView kV3AutotileActivitiesStash{"autotileActivities"};
 } // namespace
 
 void ConfigMigration::migrateV3ToV4(QJsonObject& root)
 {
+    // Schema-version-migration freeze policy: this function reads the v3
+    // on-disk shape. All group/key accessors used here MUST be the frozen
+    // `ConfigKeys::Legacy::v3*` accessors, NEVER the live ConfigDefaults
+    // accessors. A future runtime rename of the live accessor would silently
+    // retarget this migration to a path no v3 config ever had on disk; the
+    // freeze decouples the migration's stable wire-format contract from the
+    // live schema. See the comment block on `v4AnimationsGroup` in
+    // configkeys.h for the same rationale applied to v4.
+    //
     // Defense-in-depth idempotency guard, mirroring the earlier steps.
     if (root.value(ConfigKeys::versionKey()).toInt(0) >= 4) {
         return;
     }
 
-    QJsonObject display = root.value(ConfigKeys::displayGroup()).toObject();
+    QJsonObject display = root.value(ConfigKeys::Legacy::v3DisplayGroup()).toObject();
 
     // Move the disable-list values out of config.json: stash the value, then
     // REMOVE the key. windowrules.json supersedes them — the runtime Settings
     // layer reads DisableEngine rules from the store now, never these keys.
     // finalizeV4Conversion consumes the stash and writes the rules.
     QJsonObject stash;
-    const auto moveDisableKey = [&display, &stash](const QString& configKey, const QString& stashKey) {
+    const auto moveDisableKey = [&display, &stash](const QString& configKey, QLatin1StringView stashKey) {
         // Only stash a value when the v3 key actually carried one — an absent
         // or empty disable list contributes no rules, so a stash entry for it
         // would just be inert noise finalizeV4Conversion has to skip.
@@ -1315,19 +1337,19 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         }
         display.remove(configKey);
     };
-    moveDisableKey(ConfigKeys::v3snappingDisabledMonitorsKey(), QStringLiteral("snappingMonitors"));
-    moveDisableKey(ConfigKeys::v3autotileDisabledMonitorsKey(), QStringLiteral("autotileMonitors"));
-    moveDisableKey(ConfigKeys::v3snappingDisabledDesktopsKey(), QStringLiteral("snappingDesktops"));
-    moveDisableKey(ConfigKeys::v3autotileDisabledDesktopsKey(), QStringLiteral("autotileDesktops"));
-    moveDisableKey(ConfigKeys::v3snappingDisabledActivitiesKey(), QStringLiteral("snappingActivities"));
-    moveDisableKey(ConfigKeys::v3autotileDisabledActivitiesKey(), QStringLiteral("autotileActivities"));
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledMonitorsKey(), kV3SnappingMonitorsStash);
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledMonitorsKey(), kV3AutotileMonitorsStash);
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledDesktopsKey(), kV3SnappingDesktopsStash);
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledDesktopsKey(), kV3AutotileDesktopsStash);
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledActivitiesKey(), kV3SnappingActivitiesStash);
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledActivitiesKey(), kV3AutotileActivitiesStash);
 
     // Write the stripped Display group back; drop it entirely if now empty so
     // no husk object lingers.
     if (display.isEmpty()) {
-        root.remove(ConfigKeys::displayGroup());
+        root.remove(ConfigKeys::Legacy::v3DisplayGroup());
     } else {
-        root[ConfigKeys::displayGroup()] = display;
+        root[ConfigKeys::Legacy::v3DisplayGroup()] = display;
     }
 
     // ── Stash hand-off to finalizeV4Conversion ─────────────────────────────
@@ -1351,16 +1373,16 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // matcher. finalizeV4Conversion ports the bridge logic against the
     // stashed JSON and appends the resulting WindowRules to the same rule
     // set assignments/disable lists feed.
-    QJsonObject animations = root.value(ConfigKeys::v4AnimationsGroup()).toObject();
-    const QJsonArray animationRules = animations.value(ConfigKeys::v4AnimationAppRulesKey()).toArray();
+    QJsonObject animations = root.value(ConfigKeys::Legacy::v4AnimationsGroup()).toObject();
+    const QJsonArray animationRules = animations.value(ConfigKeys::Legacy::v4AnimationAppRulesKey()).toArray();
     if (!animationRules.isEmpty()) {
         root[kV4AnimationRulesStashKey] = animationRules;
     }
-    animations.remove(ConfigKeys::v4AnimationAppRulesKey());
+    animations.remove(ConfigKeys::Legacy::v4AnimationAppRulesKey());
     if (animations.isEmpty()) {
-        root.remove(ConfigKeys::v4AnimationsGroup());
+        root.remove(ConfigKeys::Legacy::v4AnimationsGroup());
     } else {
-        root[ConfigKeys::v4AnimationsGroup()] = animations;
+        root[ConfigKeys::Legacy::v4AnimationsGroup()] = animations;
     }
 
     // Stamp literal 4 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
@@ -1401,7 +1423,7 @@ QStringList parseDisableList(const QString& csv)
 /// Build a context rule from a v3 monitor disable-list entry (`screenId`).
 PhosphorWindowRule::WindowRule disableRuleForMonitor(const QString& screenId, bool autotile)
 {
-    const QString name = (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId;
+    const QString name = disableRulePrefixFor(autotile) + screenId;
     return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, QString(), autotile);
 }
 
@@ -1424,8 +1446,7 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QStrin
     if (!ok || desktop <= 0) {
         return std::nullopt;
     }
-    const QString name = (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId
-        + QStringLiteral(" · Desktop ") + QString::number(desktop);
+    const QString name = disableRulePrefixFor(autotile) + screenId + disableRuleDesktopSuffix(desktop);
     return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, desktop, QString(), autotile);
 }
 
@@ -1445,8 +1466,7 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForActivity(const QStri
     }
     const QString screenId = entry.left(slash);
     const QString activity = entry.mid(slash + 1);
-    const QString name = (autotile ? QStringLiteral("Autotile off · ") : QStringLiteral("Snapping off · ")) + screenId
-        + QStringLiteral(" · Activity");
+    const QString name = disableRulePrefixFor(autotile) + screenId + disableRuleActivitySuffix();
     return PhosphorWindowRule::ContextRuleBridge::makeDisableRule(name, screenId, 0, activity, autotile);
 }
 
@@ -1793,10 +1813,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // ── Assignment rules ───────────────────────────────────────────────────
     QJsonObject quickLayoutsToRelocate;
     if (haveAssignments) {
-        const QString prefix = ConfigDefaults::v3assignmentGroupPrefix();
+        const QString prefix = ConfigKeys::Legacy::v3assignmentGroupPrefix();
         for (auto it = assignmentsRoot.constBegin(); it != assignmentsRoot.constEnd(); ++it) {
             const QString& groupName = it.key();
-            if (groupName == ConfigDefaults::v3quickLayoutsGroup()) {
+            if (groupName == ConfigKeys::Legacy::v3quickLayoutsGroup()) {
                 // QuickLayouts slots are NOT rules — relocate them to the
                 // quicklayouts.json sidecar.
                 quickLayoutsToRelocate = it.value().toObject();
@@ -1812,12 +1832,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             // "Mode" / "SnappingLayout" / "TilingAlgorithm" are intentionally
             // frozen legacy field names — they belong to the dead v3
             // assignments.json format this finalizer is the last reader of.
-            // They are NOT live config keys and have no ConfigDefaults::
-            // accessor; the literals must stay verbatim.
-            const int modeInt = grp.value(QLatin1String("Mode")).toInt(0);
+            // They are NOT live config keys; the frozen `Legacy::v3Assignment*`
+            // accessors keep the literals out of this call site so a future
+            // editor of this function can't drift them by accident.
+            const int modeInt = grp.value(ConfigKeys::Legacy::v3AssignmentMode()).toInt(0);
             const bool autotile = (modeInt == 1);
-            const QString snappingLayout = grp.value(QLatin1String("SnappingLayout")).toString();
-            const QString tilingAlgorithm = grp.value(QLatin1String("TilingAlgorithm")).toString();
+            const QString snappingLayout = grp.value(ConfigKeys::Legacy::v3AssignmentLayout()).toString();
+            const QString tilingAlgorithm = grp.value(ConfigKeys::Legacy::v3AssignmentAlgorithm()).toString();
 
             rules.append(PhosphorWindowRule::ContextRuleBridge::makeAssignmentRule(
                 assignmentRuleName(screenId, desktop, activity), screenId, desktop, activity, autotile, snappingLayout,
@@ -1836,15 +1857,18 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // was embedded, leaving the user's snapping default off the catch-all
     // when an autotile default was also present.
     {
-        // Live v4 config keys — route group/key strings through the
-        // ConfigDefaults:: accessors (CLAUDE.md: live keys must not use inline
-        // segment literals; the v1* exemption is migration-only).
+        // Schema-migration freeze policy: read v3 on-disk paths through the
+        // frozen `ConfigKeys::Legacy::v3*` accessors, NEVER the live
+        // ConfigDefaults accessors. A future runtime rename of e.g.
+        // `snappingBehaviorWindowHandlingGroup()` MUST NOT retarget the v3→v4
+        // finalizer to a path that no v3 config ever had on disk. See
+        // configkeys.h `Legacy` struct for the policy rationale.
         const QJsonObject windowHandling =
-            groupObjectAtPath(configRoot, ConfigDefaults::snappingBehaviorWindowHandlingGroup());
-        const QString defaultLayoutId = windowHandling.value(ConfigDefaults::defaultLayoutIdKey()).toString();
+            groupObjectAtPath(configRoot, ConfigKeys::Legacy::v3SnappingBehaviorWindowHandlingGroup());
+        const QString defaultLayoutId = windowHandling.value(ConfigKeys::Legacy::v3DefaultLayoutIdKey()).toString();
 
-        const QJsonObject tilingAlgo = groupObjectAtPath(configRoot, ConfigDefaults::tilingAlgorithmGroup());
-        const QString defaultAlgorithm = tilingAlgo.value(ConfigDefaults::defaultKey()).toString();
+        const QJsonObject tilingAlgo = groupObjectAtPath(configRoot, ConfigKeys::Legacy::v3TilingAlgorithmGroup());
+        const QString defaultAlgorithm = tilingAlgo.value(ConfigKeys::Legacy::v3DefaultKey()).toString();
 
         // Engine-mode preference: pick autotile only when the user has no
         // snapping default but does have a tiling default — snapping is the
@@ -1881,12 +1905,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             }
         }
     };
-    appendMonitorRules(stash.value(QLatin1String("snappingMonitors")).toString(), false);
-    appendMonitorRules(stash.value(QLatin1String("autotileMonitors")).toString(), true);
-    appendDesktopRules(stash.value(QLatin1String("snappingDesktops")).toString(), false);
-    appendDesktopRules(stash.value(QLatin1String("autotileDesktops")).toString(), true);
-    appendActivityRules(stash.value(QLatin1String("snappingActivities")).toString(), false);
-    appendActivityRules(stash.value(QLatin1String("autotileActivities")).toString(), true);
+    appendMonitorRules(stash.value(kV3SnappingMonitorsStash).toString(), false);
+    appendMonitorRules(stash.value(kV3AutotileMonitorsStash).toString(), true);
+    appendDesktopRules(stash.value(kV3SnappingDesktopsStash).toString(), false);
+    appendDesktopRules(stash.value(kV3AutotileDesktopsStash).toString(), true);
+    appendActivityRules(stash.value(kV3SnappingActivitiesStash).toString(), false);
+    appendActivityRules(stash.value(kV3AutotileActivitiesStash).toString(), true);
 
     // Collapse exact-duplicate disable rules: dedup on the semantic identity
     // (autotile-mode, screenId, desktop, activity) so the migrated store is no

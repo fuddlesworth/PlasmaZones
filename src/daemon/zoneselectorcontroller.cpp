@@ -25,7 +25,7 @@ constexpr int CollapseDelayMs = 300; // Delay before collapsing selector after c
 constexpr int ProximityCheckMs = 16; // ~60fps polling
 } // namespace
 
-ZoneSelectorController::ZoneSelectorController(Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
+ZoneSelectorController::ZoneSelectorController(PhosphorScreens::ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_screenManager(screenManager)
 {
@@ -240,7 +240,7 @@ void ZoneSelectorController::setScreen(QScreen* screen)
     m_screen = screen;
     // Derive screen ID from QScreen if not already set by setScreenId()
     if (m_screenId.isEmpty() && screen) {
-        m_screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        m_screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     }
 
     // Update active layout ID for this screen and current desktop

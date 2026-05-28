@@ -17,7 +17,7 @@ namespace {
 // Non-blocking startup gate shared by all synchronous snap D-Bus methods.
 //
 // Rationale: these slots return zone geometry synchronously to the KWin effect.
-// Before the first panel D-Bus query completes, Phosphor::Screens::ScreenManager's availability cache
+// Before the first panel D-Bus query completes, PhosphorScreens::ScreenManager's availability cache
 // is empty and zones would be computed against the unreserved full-screen rect —
 // handing the effect coordinates that place the window partially behind the panel.
 //

@@ -203,7 +203,7 @@ private Q_SLOTS:
 
         QCOMPARE(mgr->defaultLayout()->name(), QStringLiteral("First"));
 
-        settings->setTestDefaultLayoutId(second->id().toString());
+        settings->setDefaultLayoutId(second->id().toString());
         QCOMPARE(mgr->defaultLayout()->name(), QStringLiteral("Second"));
     }
 
@@ -218,10 +218,10 @@ private Q_SLOTS:
         auto* layout = createTestLayout(QStringLiteral("OnlyLayout"));
         mgr->addLayout(layout);
 
-        settings->setTestDefaultLayoutId(QUuid::createUuid().toString());
+        settings->setDefaultLayoutId(QUuid::createUuid().toString());
         QCOMPARE(mgr->defaultLayout()->name(), QStringLiteral("OnlyLayout"));
 
-        settings->setTestDefaultLayoutId(QString());
+        settings->setDefaultLayoutId(QString());
         QCOMPARE(mgr->defaultLayout()->name(), QStringLiteral("OnlyLayout"));
     }
 

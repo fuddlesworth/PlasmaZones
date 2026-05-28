@@ -3,7 +3,17 @@
 #
 # PlasmaZones Unit Tests
 
-# Helper macro for simple tests (Qt6::Test + Qt6::Core + plasmazones_core)
+# Helper macro for simple tests (Qt6::Test + Qt6::Core + plasmazones_core).
+#
+# IMPORTANT: This macro hands you Qt6::Test + Qt6::Core ONLY. If your test
+# source includes a D-Bus header, a Wayland-client header, or any other Qt
+# component not in that minimal pair, use a hand-rolled `add_executable` +
+# `target_link_libraries` with an explicit `target_link_libraries(... PRIVATE
+# Qt6::DBus ...)` instead. The macro will SEEM to work because plasmazones_core's
+# INTERFACE_LINK_LIBRARIES pulls Qt6::DBus transitively today — but that's
+# coincidental, not contractual. A future refactor that drops Qt6::DBus from
+# plasmazones_core's interface link would silently break every test that
+# relied on the transitive pull.
 macro(pz_add_test _name _src)
     add_executable(${_name} ${_src})
     target_link_libraries(${_name} PRIVATE Qt6::Test Qt6::Core plasmazones_core)
@@ -188,60 +198,40 @@ pz_add_test(test_screen_mode_router core/test_screen_mode_router.cpp)
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - Settings Tests (core, validation, per-screen)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_settings_core config/test_settings_core.cpp)
-target_link_libraries(test_settings_core PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_core COMMAND test_settings_core)
+pz_add_test(test_settings_core config/test_settings_core.cpp)
 
 # Companion test executable: animation Profile JSON-blob storage,
 # per-field signal discrimination, aggregate-setter merge semantics.
 # Split from test_settings_core to keep each test file under the
 # project's <800-line guideline.
-add_executable(test_settings_animation_profile config/test_settings_animation_profile.cpp)
-target_link_libraries(test_settings_animation_profile PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_animation_profile COMMAND test_settings_animation_profile)
+pz_add_test(test_settings_animation_profile config/test_settings_animation_profile.cpp)
 
 # Companion test executable: ShaderProfileTree persistence + prune,
 # autoAssignAllLayouts master toggle. Split from test_settings_core to
 # keep each test file under the project's <800-line guideline.
-add_executable(test_settings_shader_tree config/test_settings_shader_tree.cpp)
-target_link_libraries(test_settings_shader_tree PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_shader_tree COMMAND test_settings_shader_tree)
+pz_add_test(test_settings_shader_tree config/test_settings_shader_tree.cpp)
 
-add_executable(test_settings_validation config/test_settings_validation.cpp)
-target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_validation COMMAND test_settings_validation)
+pz_add_test(test_settings_validation config/test_settings_validation.cpp)
 
-add_executable(test_settings_perscreen config/test_settings_perscreen.cpp)
-target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
+pz_add_test(test_settings_perscreen config/test_settings_perscreen.cpp)
 
-add_executable(test_settings_disable_per_mode config/test_settings_disable_per_mode.cpp)
-target_link_libraries(test_settings_disable_per_mode PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_disable_per_mode COMMAND test_settings_disable_per_mode)
+pz_add_test(test_settings_disable_per_mode config/test_settings_disable_per_mode.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - Virtual Screen Settings Tests (save/load round-trip, staged flow)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_settings_virtualscreen config/test_settings_virtualscreen.cpp)
-target_link_libraries(test_settings_virtualscreen PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_settings_virtualscreen COMMAND test_settings_virtualscreen)
+pz_add_test(test_settings_virtualscreen config/test_settings_virtualscreen.cpp)
 
 pz_add_test(test_virtualscreen_staged config/test_virtualscreen_staged.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - ConfigDefaults Tests (standalone, no external dependency)
 # ═══════════════════════════════════════════════════════════════════════════════
-add_executable(test_configdefaults config/test_configdefaults.cpp)
-target_link_libraries(test_configdefaults PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_configdefaults COMMAND test_configdefaults)
+pz_add_test(test_configdefaults config/test_configdefaults.cpp)
 
-add_executable(test_configbackend_json config/test_configbackend_json.cpp)
-target_link_libraries(test_configbackend_json PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_configbackend_json COMMAND test_configbackend_json)
+pz_add_test(test_configbackend_json config/test_configbackend_json.cpp)
 
-add_executable(test_configmigration config/test_configmigration.cpp)
-target_link_libraries(test_configmigration PRIVATE Qt6::Test Qt6::Core plasmazones_core)
-add_test(NAME test_configmigration COMMAND test_configmigration)
+pz_add_test(test_configmigration config/test_configmigration.cpp)
 
 # v3 → v4 window-rule consolidation migration.
 add_executable(test_migration_v3_to_v4 config/test_migration_v3_to_v4.cpp)
@@ -327,7 +317,7 @@ target_link_libraries(test_windowrule_cascade_fidelity
 add_test(NAME test_windowrule_cascade_fidelity COMMAND test_windowrule_cascade_fidelity)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# core/ - Virtual Screen Tests (ID utilities, data model, Phosphor::Screens::ScreenManager)
+# core/ - Virtual Screen Tests (ID utilities, data model, PhosphorScreens::ScreenManager)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_virtual_screen core/test_virtual_screen.cpp)
 pz_add_test(test_virtual_screen_manager core/test_virtual_screen_manager.cpp)
@@ -509,7 +499,7 @@ add_test(NAME test_dbus_adaptor_routing COMMAND test_dbus_adaptor_routing)
 
 # Panel-ready gate for AutotileAdaptor windowOpened queue. Regression guard
 # for the stale-VS-geometry race: entries arriving before the first panel
-# D-Bus query must be deferred until Phosphor::Screens::ScreenManager::panelGeometryReady fires.
+# D-Bus query must be deferred until PhosphorScreens::ScreenManager::panelGeometryReady fires.
 add_executable(test_autotile_adaptor_panel_gate dbus/test_autotile_adaptor_panel_gate.cpp)
 target_link_libraries(test_autotile_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus
                                                                  plasmazones_core)
@@ -542,7 +532,8 @@ add_executable(test_snapping_behavior_controller
     ${CMAKE_SOURCE_DIR}/src/settings/snappingbehaviorcontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/triggerutils.cpp
 )
-target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+target_link_libraries(test_snapping_behavior_controller PRIVATE Qt6::Test Qt6::Core plasmazones_core
+    PhosphorSettingsUi::PhosphorSettingsUi)
 add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_controller)
 
 # Phase 0 of the animation-settings UI rework: AnimationsPageController
@@ -554,6 +545,10 @@ add_test(NAME test_snapping_behavior_controller COMMAND test_snapping_behavior_c
 add_executable(test_animations_page_controller
     settings/test_animations_page_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
@@ -563,6 +558,7 @@ target_link_libraries(test_animations_page_controller
         Qt6::Test
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
+        PhosphorSettingsUi::PhosphorSettingsUi
         plasmazones_core
 )
 add_test(NAME test_animations_page_controller COMMAND test_animations_page_controller)
@@ -573,6 +569,10 @@ add_test(NAME test_animations_page_controller COMMAND test_animations_page_contr
 add_executable(test_animations_motion_sets
     settings/test_animations_motion_sets.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
@@ -582,6 +582,7 @@ target_link_libraries(test_animations_motion_sets
         Qt6::Test
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
+        PhosphorSettingsUi::PhosphorSettingsUi
         plasmazones_core
 )
 add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
@@ -592,6 +593,10 @@ add_test(NAME test_animations_motion_sets COMMAND test_animations_motion_sets)
 add_executable(test_animations_shader_overrides
     settings/test_animations_shader_overrides.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationfileutils.cpp
@@ -601,6 +606,7 @@ target_link_libraries(test_animations_shader_overrides
         Qt6::Test
         Qt6::Core
         PhosphorAnimation::PhosphorAnimation
+        PhosphorSettingsUi::PhosphorSettingsUi
         plasmazones_core
 )
 add_test(NAME test_animations_shader_overrides COMMAND test_animations_shader_overrides)
@@ -627,6 +633,15 @@ add_executable(test_window_rule_controller
     settings/test_window_rule_controller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowrulemodel.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller.cpp
+    # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
+    # author surfaces, validation) — split out of windowrulecontroller.cpp
+    # to keep that TU under the 800-line cap; the controller's class
+    # definition spans both TUs.
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller_views.cpp
+    # Label-lookup setters + wiring-completion gate — split out so
+    # windowrulecontroller.cpp stays under the 800-line cap; the
+    # controller's class definition spans both TUs.
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller_lookups.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowruletemplates.cpp
 )
@@ -636,6 +651,7 @@ target_link_libraries(test_window_rule_controller
         Qt6::Core
         Qt6::DBus
         PhosphorWindowRule::PhosphorWindowRule
+        PhosphorSettingsUi::PhosphorSettingsUi
         plasmazones_core
 )
 add_test(NAME test_window_rule_controller COMMAND test_window_rule_controller)
@@ -695,6 +711,11 @@ add_test(NAME test_autotile_state COMMAND test_autotile_state)
 # Apply QT_QPA_PLATFORM=offscreen to every test in this directory so new tests
 # added above automatically inherit it - a hand-maintained list rotted and left
 # tests aborting in CI when the author forgot to append.
+#
+# IMPORTANT: get_property(... PROPERTY TESTS) reads the test list at CMake
+# configure time, which means tests added BELOW this line are NOT covered.
+# Always add new test targets ABOVE this block — never after it.
 # ═══════════════════════════════════════════════════════════════════════════════
 get_property(_all_tests DIRECTORY . PROPERTY TESTS)
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+# ─── ABOVE THIS LINE: ADD NEW TESTS — BELOW THIS LINE: env wiring only ───

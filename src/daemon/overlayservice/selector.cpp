@@ -50,7 +50,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
     QScreen* targetScreen = nullptr;
     if (!targetScreenId.isEmpty()) {
         targetScreen = mgr ? mgr->physicalScreenFor(targetScreenId).qscreen
-                           : Phosphor::Screens::ScreenIdentity::findByIdOrName(targetScreenId);
+                           : PhosphorScreens::ScreenIdentity::findByIdOrName(targetScreenId);
     }
 
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
@@ -111,7 +111,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (targetScreen && screen != targetScreen) {
                 continue;
             }
-            QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
                                   m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
@@ -646,9 +646,9 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
     }
 
     auto* mgr = m_screenManager;
-    const Phosphor::Screens::PhysicalScreen physInfo =
-        mgr ? mgr->physicalScreenFor(screenId) : Phosphor::Screens::PhysicalScreen{};
-    QScreen* physScreen = mgr ? physInfo.qscreen : Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+    const PhosphorScreens::PhysicalScreen physInfo =
+        mgr ? mgr->physicalScreenFor(screenId) : PhosphorScreens::PhysicalScreen{};
+    QScreen* physScreen = mgr ? physInfo.qscreen : PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
 
     // Primary path: use layout/zone geometry pipeline with virtual screen bounds
     if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
@@ -720,7 +720,7 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
             }
         }
         if (screenId.isEmpty() && senderWindow->screen()) {
-            screenId = Phosphor::Screens::ScreenIdentity::identifierFor(senderWindow->screen());
+            screenId = PhosphorScreens::ScreenIdentity::identifierFor(senderWindow->screen());
         }
     }
 

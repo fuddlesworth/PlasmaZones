@@ -101,6 +101,17 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     ShaderTools
     Svg
 )
+# Silence Qt 6.6+ deprecation warnings on qt_add_qml_module: opt into
+# the new default for resource-prefix derivation (QTP0001) and the new
+# default for QML module dependency resolution (QTP0004). These are
+# the NEW behaviours we already rely on across phosphor-* and src/
+# qt_add_qml_module calls.
+if(POLICY QTP0001)
+    qt_policy(SET QTP0001 NEW)
+endif()
+if(POLICY QTP0004)
+    qt_policy(SET QTP0004 NEW)
+endif()
 # GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay.
 # Some distros (Fedora) create these targets inside Qt6GuiConfig.cmake rather than providing
 # standalone config files, so only call find_package if the target doesn't already exist.
@@ -419,6 +430,7 @@ endforeach()
 
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
+add_subdirectory(libs/phosphor-settings-ui) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-services) # DBus + platform-integration primitives (SNI tray, dbusmenu, future: notifications/MPRIS/UPower)
 endif()

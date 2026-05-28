@@ -28,8 +28,8 @@ Rectangle {
     property bool fontStrikeout: false
     readonly property real previewOpacity: 0.2 // Increased for better background contrast
     readonly property real borderOpacity: 0.9 // Increased for better border visibility
-    readonly property int normalBorderWidth: Math.round(Kirigami.Units.devicePixelRatio)
-    readonly property int selectedBorderWidth: Math.round(Kirigami.Units.devicePixelRatio * 2.5) // Thicker when selected
+    readonly property int normalBorderWidth: Math.round(Screen.devicePixelRatio)
+    readonly property int selectedBorderWidth: Math.round(Screen.devicePixelRatio * 2.5) // Thicker when selected
     // Override: set to a positive value to force the aspect ratio for the target screen
     // (e.g., a virtual screen that is portrait even though the primary display is landscape).
     property real screenAspectRatio: 0
@@ -122,7 +122,5 @@ Rectangle {
             color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
             radius: Kirigami.Units.smallSpacing * 0.5
         }
-
     }
-
 }

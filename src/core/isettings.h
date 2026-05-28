@@ -30,6 +30,34 @@ namespace PlasmaZones {
  * Allows dependency inversion - components depend on this interface
  * rather than concrete Settings implementation. Inherits from focused
  * sub-interfaces so components can depend on just what they need.
+ *
+ * Note on the sub-interface NOTIFY surface: the sub-interfaces
+ * (IZoneActivationSettings, IZoneSelectorSettings, etc.) are
+ * deliberately non-QObject and so cannot declare Q_SIGNALS of their
+ * own. All notify signals live on this ISettings level. The codebase
+ * idiom is for a consumer that needs both the value AND the signal to
+ * hold BOTH pointers — `IZoneSelectorSettings*` for reads/writes,
+ * `ISettings*` (or `QObject*`) for `connect()`:
+ *
+ * @code
+ * class Consumer {
+ * public:
+ *     Consumer(ISettings* settings)
+ *         : m_settings(settings),               // for connect()
+ *           m_selector(settings)                // for value access
+ *     {
+ *         connect(m_settings, &ISettings::zoneSelectorEnabledChanged,
+ *                 this, &Consumer::onChanged);
+ *     }
+ * private:
+ *     ISettings* m_settings;
+ *     IZoneSelectorSettings* m_selector;
+ * };
+ * @endcode
+ *
+ * A `dynamic_cast<ISettings*>(zoneSelectorSettingsPtr)` also works at the
+ * call site since `Settings` (the only concrete subclass) inherits from both
+ * bases, but holding both pointers from construction is cheaper and clearer.
  */
 class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneActivationSettings,
@@ -69,13 +97,20 @@ public:
     /// True only when the zone selector is enabled AND snapping is enabled
     /// at the top level. Use this in consumers instead of
     /// zoneSelectorEnabled() unless you need the raw child flag value.
+    ///
+    /// Test-stub note: `StubSettings` (tests/unit/helpers/StubSettings.h)
+    /// defaults `snappingEnabled() == true` and `zoneSelectorEnabled() == true`,
+    /// so this returns true unless a test explicitly overrides one of the
+    /// two flags. The same applies to `isSnapAssistActive` (defaults
+    /// `snapAssistEnabled() == false` so it returns false until overridden).
     bool isZoneSelectorActive() const
     {
         return snappingEnabled() && zoneSelectorEnabled();
     }
 
     /// True only when snap assist is enabled AND snapping is enabled at
-    /// the top level. Same pattern as isZoneSelectorActive.
+    /// the top level. Same pattern as isZoneSelectorActive (see that
+    /// method's doc comment for the StubSettings default semantics).
     bool isSnapAssistActive() const
     {
         return snappingEnabled() && snapAssistEnabled();
@@ -95,6 +130,14 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Animation settings (global — applies to snapping and autotiling)
+    //
+    // FIXME(audit): consider extracting IAnimationSettings sub-interface —
+    // every method between here and `setShaderProfileTree` is purely about
+    // animation/shader-profile state. A focused sub-interface would let
+    // consumers (kwin-effect's animator, AnimationsPageController) depend on
+    // exactly that surface and remove the cross-cutting include of the full
+    // ISettings header. Deferred because it touches a large number of files;
+    // do not roll into an unrelated audit pass.
     virtual bool animationsEnabled() const = 0;
     virtual void setAnimationsEnabled(bool enabled) = 0;
     virtual int animationDuration() const = 0;
@@ -160,9 +203,53 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
+    // Per-algorithm autotile settings map. Settings inherits from
+    // PhosphorEngine::IAutotileSettings (which also declares these),
+    // so the override in Settings covers both bases — the redundant
+    // declaration here is the price of letting page controllers
+    // depend on ISettings without dragging in PhosphorTileEngine.
+    virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
+    virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
+
+    // Color-import helper used by SnappingAppearanceController. Returns
+    // an empty string on success, a user-readable error message
+    // otherwise. The signature mirrors Settings::loadColorsFromFile
+    // exactly so its existing Q_INVOKABLE annotation overrides this.
+    virtual QString loadColorsFromFile(const QString& filePath) = 0;
+
+    // Snapping behavior triggers (dragActivation, zoneSpan, snapAssist)
+    // are declared by the IZoneActivationSettings / IZoneSelectorSettings
+    // sub-interfaces ISettings inherits from — see settings_interfaces.h.
+    // Re-declaring them here would shadow the parent virtual.
+
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
+
+    // Editor settings — used by EditorPageController. Editor-scope rather
+    // than Snapping/Tiling-scope, so they don't fit any sub-interface.
+    virtual QString editorDuplicateShortcut() const = 0;
+    virtual void setEditorDuplicateShortcut(const QString& shortcut) = 0;
+    virtual QString editorSplitHorizontalShortcut() const = 0;
+    virtual void setEditorSplitHorizontalShortcut(const QString& shortcut) = 0;
+    virtual QString editorSplitVerticalShortcut() const = 0;
+    virtual void setEditorSplitVerticalShortcut(const QString& shortcut) = 0;
+    virtual QString editorFillShortcut() const = 0;
+    virtual void setEditorFillShortcut(const QString& shortcut) = 0;
+    virtual bool editorGridSnappingEnabled() const = 0;
+    virtual void setEditorGridSnappingEnabled(bool enabled) = 0;
+    virtual bool editorEdgeSnappingEnabled() const = 0;
+    virtual void setEditorEdgeSnappingEnabled(bool enabled) = 0;
+    virtual qreal editorSnapIntervalX() const = 0;
+    virtual void setEditorSnapIntervalX(qreal interval) = 0;
+    virtual qreal editorSnapIntervalY() const = 0;
+    virtual void setEditorSnapIntervalY(qreal interval) = 0;
+    virtual int editorSnapOverrideModifier() const = 0;
+    virtual void setEditorSnapOverrideModifier(int mod) = 0;
+    virtual bool fillOnDropEnabled() const = 0;
+    virtual void setFillOnDropEnabled(bool enabled) = 0;
+    virtual int fillOnDropModifier() const = 0;
+    virtual void setFillOnDropModifier(int mod) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen overrides — category-keyed maps of setting key → value that
@@ -207,6 +294,14 @@ public:
         return false;
     }
 
+    // NOTE: only the getter `override`s — `getPerScreenSnappingSettings`
+    // is the lone snapping accessor declared on
+    // PhosphorEngine::IGeometrySettings (consumed by the geometry
+    // pipeline). The set/clear/has triplet is ISettings-only (writers
+    // live in settings + KCM, never reached from the geometry path),
+    // so they're plain `virtual` with no base to override. Mirrors the
+    // autotile + zone-selector blocks above where neither side declares
+    // any of the four on IGeometrySettings.
     QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
     {
         return {};
@@ -224,6 +319,16 @@ public:
     }
 
     // Persistence (unique to ISettings)
+    //
+    // Borrowed-store contract for load(): when the concrete Settings was
+    // constructed with an externally-owned `WindowRuleStore*` (e.g. the
+    // daemon's shared store), load() MUST NOT reload that store — the owner
+    // is the writer and an interleaved load() here would clobber unflushed
+    // in-memory edits. Only the owning side (or a future cross-process
+    // watcher) drives reloads on the borrowed path. Implementations that
+    // own their store (the standard constructor) reload normally. See
+    // Settings::load (settings.cpp) for the live guard against
+    // `m_ownedWindowRuleStore`.
     virtual void load() = 0;
     virtual void save() = 0;
     virtual void reset() = 0;
@@ -321,6 +426,18 @@ Q_SIGNALS:
     void perScreenSnappingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
+    // Editor
+    void editorDuplicateShortcutChanged();
+    void editorSplitHorizontalShortcutChanged();
+    void editorSplitVerticalShortcutChanged();
+    void editorFillShortcutChanged();
+    void editorGridSnappingEnabledChanged();
+    void editorEdgeSnappingEnabledChanged();
+    void editorSnapIntervalXChanged();
+    void editorSnapIntervalYChanged();
+    void editorSnapOverrideModifierChanged();
+    void fillOnDropEnabledChanged();
+    void fillOnDropModifierChanged();
     // Shader effects
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();

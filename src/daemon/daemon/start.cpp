@@ -55,28 +55,28 @@ void Daemon::connectScreenSignals()
     // catches users plugging a second identical monitor mid-session, where
     // the disambiguation "/CONNECTOR" suffix kicks in for the first time.
     Utils::warnDuplicateScreenIds();
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this,
-            [](const Phosphor::Screens::PhysicalScreen&) {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenAdded, this,
+            [](const PhosphorScreens::PhysicalScreen&) {
                 Utils::warnDuplicateScreenIds();
             });
 
-    // Settings → Phosphor::Screens::ScreenManager refresh flows exclusively through the
+    // Settings → PhosphorScreens::ScreenManager refresh flows exclusively through the
     // IConfigStore contract: SettingsConfigStore forwards
     // Settings::virtualScreenConfigsChanged to IConfigStore::changed, which
-    // Phosphor::Screens::ScreenManager subscribes to in its start() (already called above) and
+    // PhosphorScreens::ScreenManager subscribes to in its start() (already called above) and
     // which also seeds the initial cache via loadAll(). A parallel direct
     // Settings observer here would double every refresh — left intentionally
     // absent.
 
-    // React to Phosphor::Screens::ScreenManager VS cache changes (driven by the IConfigStore
+    // React to PhosphorScreens::ScreenManager VS cache changes (driven by the IConfigStore
     // OR by direct test calls). Delegates to onVirtualScreensReconfigured
     // which migrates window assignments, refreshes autotile, resnaps
     // windows, and schedules downstream geometry updates. NOTE: this
     // handler no longer writes back to Settings — Settings is now the
     // source, not the sink.
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::virtualScreensChanged, this,
             &Daemon::onVirtualScreensReconfigured);
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
             &Daemon::onVirtualScreenRegionsChanged);
 
     // Identifier-drift propagation: ScreenManager just re-keyed its own
@@ -85,7 +85,7 @@ void Daemon::connectScreenSignals()
     // Fires on same-model hotplug where disambiguation flips
     // bare ↔ "/CONNECTOR"-suffixed form. Gated on m_settings so tests that
     // construct a manager without Settings don't crash.
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenIdentifierChanged, this,
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenIdentifierChanged, this,
             [this](const QString& oldId, const QString& newId) {
                 if (!m_settings) {
                     return;
@@ -107,18 +107,18 @@ void Daemon::connectScreenSignals()
             });
 
     // Connect screen manager signals
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this,
-            [this](const Phosphor::Screens::PhysicalScreen& screen) {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenAdded, this,
+            [this](const PhosphorScreens::PhysicalScreen& screen) {
                 // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
                 // (handles the case where EDID wasn't available during very early startup)
-                Phosphor::Screens::ScreenIdentity::invalidateEdidCache(screen.name);
+                PhosphorScreens::ScreenIdentity::invalidateEdidCache(screen.name);
                 // The daemon's ScreenManager runs on the live QtScreenProvider,
                 // so a tracked screen always carries a real QScreen — qscreen
                 // is non-null here.
                 m_overlayService->handleScreenAdded(screen.qscreen);
                 // Recalculate zone geometries for all effective screen IDs on this physical screen.
                 // Note: VS cache restoration on screen re-add is no longer needed —
-                // Phosphor::Screens::ScreenManager::onScreenRemoved no longer wipes m_virtualConfigs, so
+                // PhosphorScreens::ScreenManager::onScreenRemoved no longer wipes m_virtualConfigs, so
                 // the entry survives a disconnect and is reused as-is when the screen
                 // comes back. Settings is the source of truth and pushes updates via
                 // refreshVirtualConfigs() in response to its own change signal.
@@ -138,8 +138,8 @@ void Daemon::connectScreenSignals()
                 }
             });
 
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenRemoved, this,
-            [this](const Phosphor::Screens::PhysicalScreen& screen) {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenRemoved, this,
+            [this](const PhosphorScreens::PhysicalScreen& screen) {
                 // Suppress OSD shows for ~1 s after any screen removal — see m_screensSettlingUntil.
                 m_screensSettlingUntil = std::chrono::steady_clock::now() + std::chrono::seconds(1);
 
@@ -150,7 +150,7 @@ void Daemon::connectScreenSignals()
                 const QString removedScreenId = screen.identifier;
 
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
-                Phosphor::Screens::ScreenIdentity::invalidateEdidCache(removedName);
+                PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
 
                 // Clean stale entries from layout visibility restrictions
                 // Check both screen ID (new) and connector name (legacy)
@@ -167,7 +167,7 @@ void Daemon::connectScreenSignals()
                 }
             });
 
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenGeometryChanged, this, [this] {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this, [this] {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     });
@@ -175,7 +175,7 @@ void Daemon::connectScreenSignals()
     // Connect to available geometry changes (panels added/removed/resized)
     // This is reactive - the sensor windows automatically track panel changes
     // Uses debouncing to coalesce rapid changes into a single update
-    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::availableGeometryChanged, this, [this] {
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::availableGeometryChanged, this, [this] {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     });
@@ -616,7 +616,7 @@ void Daemon::connectShortcutSignals()
         int desktop = currentDesktop();
         QString activity = currentActivity();
         int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, desktop, activity));
-        QString key = QString::number(mode) + QStringLiteral(":") + screenId;
+        QString key = Utils::contextLockKey(mode, screenId);
         // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
         // and matches the KCM's screen-level lock button
         bool wasLocked = m_settings->isScreenLocked(key);
@@ -791,7 +791,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // m_windowTrackingAdaptor is constructed later in init() and may be null
     // if the signal somehow fires before construction (e.g. early Settings
     // load); guard those uses individually.
-    const Phosphor::Screens::VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
+    const PhosphorScreens::VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
 
     // Recalculate zone geometries inline for the affected screens FIRST so
     // that any PhosphorTiles::TilingState created by the upcoming updateAutotileScreens
@@ -863,7 +863,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // (overlays, panel requery, autotile retile). Reuse the same debounced
     // path as physical screen geometry changes.
     if (m_screenManager ? m_screenManager->physicalScreenFor(physicalScreenId).isValid()
-                        : (Phosphor::Screens::ScreenIdentity::findByIdOrName(physicalScreenId) != nullptr)) {
+                        : (PhosphorScreens::ScreenIdentity::findByIdOrName(physicalScreenId) != nullptr)) {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     }

@@ -10,7 +10,7 @@
 #include <QScreen>
 #include <QTimer>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Trivial @ref IPanelSource that reports zero offsets and ready=true.
@@ -75,4 +75,4 @@ public:
     }
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

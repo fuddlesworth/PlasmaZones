@@ -44,10 +44,17 @@ SettingsFlickable {
     }
 
     function parseSpring(curveStr) {
+        // `|| fallback` coerces falsy values to the fallback — but
+        // `0` is falsy in JS, and zeta = 0 is a semantically valid
+        // value (undamped oscillator). Test `isFinite` instead so
+        // a user-saved `spring:12,0` preset round-trips correctly
+        // rather than silently snapping to critically-damped (zeta = 1).
         var parts = curveStr.substring(7).split(",");
+        var omega = parseFloat(parts[0]);
+        var zeta = parseFloat(parts[1]);
         return {
-            "omega": parseFloat(parts[0]) || 12,
-            "zeta": parseFloat(parts[1]) || 1
+            "omega": isFinite(omega) ? omega : 12,
+            "zeta": isFinite(zeta) ? zeta : 1
         };
     }
 
@@ -61,7 +68,6 @@ SettingsFlickable {
             var isSpring = isSpringEntry(entry.curve);
             if (isSpring === wantSpring)
                 result.push(entry);
-
         }
         return result;
     }
@@ -82,6 +88,13 @@ SettingsFlickable {
         function onUserPresetsChanged() {
             root.userPresetsList = settingsController.animationsPage.userPresets();
             root._deletingPreset = false;
+        }
+
+        // Surface controller-emitted toast requests (e.g. removeUserPreset
+        // refused mid-discard) through the shell `window.showToast`.
+        function onToastRequested(text) {
+            if (window && window.showToast)
+                window.showToast(text);
         }
 
         target: settingsController.animationsPage
@@ -136,9 +149,7 @@ SettingsFlickable {
                             text: i18n("Use as Default")
                             onClicked: root.applyAsDefault(modelData.curve)
                         }
-
                     }
-
                 }
 
                 // User presets
@@ -210,9 +221,7 @@ SettingsFlickable {
                                 easingDeleteConfirm.close();
                             }
                         }
-
                     }
-
                 }
 
                 Label {
@@ -223,9 +232,7 @@ SettingsFlickable {
                     Layout.fillWidth: true
                     font.italic: true
                 }
-
             }
-
         }
 
         // ════════════════ SPRING PRESETS ════════════════
@@ -273,9 +280,7 @@ SettingsFlickable {
                             text: i18n("Use as Default")
                             onClicked: root.applyAsDefault("spring:" + modelData.omega.toFixed(2) + "," + modelData.zeta.toFixed(2))
                         }
-
                     }
-
                 }
 
                 // User presets
@@ -348,9 +353,7 @@ SettingsFlickable {
                                 springDeleteConfirm.close();
                             }
                         }
-
                     }
-
                 }
 
                 Label {
@@ -361,11 +364,7 @@ SettingsFlickable {
                     Layout.fillWidth: true
                     font.italic: true
                 }
-
             }
-
         }
-
     }
-
 }

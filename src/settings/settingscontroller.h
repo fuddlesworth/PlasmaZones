@@ -29,6 +29,16 @@ namespace PhosphorAnimationShaders {
 class AnimationShaderRegistry;
 }
 
+namespace PhosphorWindowRule {
+// Forward-declared for the `std::unique_ptr<WindowRuleStore>` member
+// below. The complete type is needed only in settingscontroller.cpp
+// (where m_localRuleStore is constructed); pulling
+// <PhosphorWindowRule/WindowRuleStore.h> into the header would force
+// every consumer of this controller to re-parse the WindowRuleStore
+// dependency graph.
+class WindowRuleStore;
+}
+
 namespace PlasmaZones {
 class ShaderRegistry;
 }
@@ -36,16 +46,21 @@ class ShaderRegistry;
 #include <QHash>
 #include <QObject>
 #include <QSet>
+#include <QStack>
 #include <QString>
 #include <QDBusConnection>
+#include <QUrl>
 #include <QVariantList>
 #include <QTimer>
 #include <memory>
 #include <optional>
 
+#include <PhosphorSettingsUi/ApplicationController.h>
+
 #include "algorithmservice.h"
 #include "animationspagecontroller.h"
 #include "editorpagecontroller.h"
+#include "externaleditscope.h"
 #include "generalpagecontroller.h"
 #include "snappingappearancecontroller.h"
 #include "snappingbehaviorcontroller.h"
@@ -105,6 +120,12 @@ class SettingsController : public QObject
     // adaptor; QML reads `settingsController.windowRulesPage.model`.
     Q_PROPERTY(WindowRuleController* windowRulesPage READ windowRulesPage CONSTANT)
 
+    // PhosphorSettingsUi ApplicationController hosting the PageRegistry that
+    // SettingsAppWindow's sidebar / breadcrumbs / footer consume. Constructed
+    // lazily after every page controller has been built so the registry
+    // entries can carry stable PageController* pointers.
+    Q_PROPERTY(PhosphorSettingsUi::ApplicationController* app READ app CONSTANT)
+
 public:
     explicit SettingsController(QObject* parent = nullptr);
     ~SettingsController() override;
@@ -156,6 +177,7 @@ public:
     ///     endExternalEdit();
     Q_INVOKABLE void beginExternalEdit(const QString& page);
     Q_INVOKABLE void endExternalEdit();
+
     bool daemonRunning() const
     {
         return m_daemonController.isRunning();
@@ -204,37 +226,23 @@ public:
     }
 
     // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
-    //
-    // Settings runs in its own process, separate from the daemon. The legacy
-    // path fetches the layout list over D-Bus (getLayoutList) which only
-    // works while the daemon is running. The methods below load the SAME
-    // on-disk layouts via an in-process PhosphorZones::LayoutRegistry + PhosphorZones::ZonesLayoutSource,
-    // so QML preview-rendering paths can render layouts even when the
-    // daemon isn't up (early settings launch, daemon crashed, etc.).
-    //
-    // Returns the QML-facing projection produced by
-    // PlasmaZones::toVariantMap (src/common/layoutpreviewserialize.h):
-    // id / name / zones[]{relativeGeometry{x,y,width,height},zoneNumber} /
-    // isAutotile / aspectRatioClass (string tag) / flat supports* capability
-    // flags. Intentionally different from the D-Bus getLayoutPreviewList JSON
-    // shape, which is optimised for wire transfer.
+    // Loads the on-disk layouts via an in-process LayoutRegistry +
+    // ZonesLayoutSource so QML preview paths render even when the daemon
+    // is down (early launch, crash). Returns the QML projection produced
+    // by PlasmaZones::toVariantMap — intentionally different from the
+    // D-Bus getLayoutPreviewList wire shape.
     //
     // @note Autotile preview-parameter drift: the local AlgorithmRegistry
-    // here is independent of the daemon's (see m_localAlgorithmRegistry
-    // below) — preview params (master count, split ratio, saved per-
-    // algorithm settings) configured via the daemon's D-Bus do NOT
-    // propagate to this process's registry. The fallback previews always
-    // render with the algorithm's built-in defaults rather than the
-    // user's live tuning. This only affects the daemon-independent code
-    // path; when the daemon is up the D-Bus @c getLayoutPreviewList
-    // carries the fully-tuned previews. Acceptable because the fallback
-    // is primarily a "daemon is down" safety net for early launch /
-    // crash-recovery, not a replacement for the D-Bus surface.
+    // is independent of the daemon's (see m_localAlgorithmRegistry below),
+    // so daemon-side tuning (master count, split ratio, per-algorithm
+    // settings) does NOT propagate here — fallback previews render with
+    // built-in defaults. When the daemon is up, D-Bus carries the tuned
+    // previews; the fallback is only a "daemon is down" safety net.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
     // Non-const: ILayoutSource::previewAt is non-const so implementations
     // can populate a query cache (scripted autotile algorithms would be
-    // prohibitively expensive to re-run on every picker redraw). Changing
-    // this invoker to const would silently dodge that cache.
+    // prohibitively expensive to re-run on every picker redraw). Const
+    // would silently dodge that cache.
     Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4);
 
     // Screen accessors
@@ -305,6 +313,12 @@ public:
     Q_INVOKABLE QString getTilingQuickLayoutSlot(int slotNumber) const;
     Q_INVOKABLE void setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId);
 
+    /// Convert a file:// URL from Qt's FileDialog to a local filesystem
+    /// path. Replaces ad-hoc regex stripping in QML — QUrl::toLocalFile()
+    /// handles percent-decoding, embedded query/fragment, and non-trivial
+    /// schemes that the QML-side regex would silently mishandle.
+    Q_INVOKABLE QString urlToLocalFile(const QUrl& url) const;
+
     // ── Page sub-controllers ─────────────────────────────────────────────
     EditorPageController* editorPage() const
     {
@@ -355,19 +369,28 @@ public:
         return m_windowRulesPage;
     }
 
+    PhosphorSettingsUi::ApplicationController* app() const
+    {
+        return m_app.get();
+    }
+
     // ── Running window picker (async flow) ──────────────────────────────────
     //
     // The QML picker dialog calls requestRunningWindows() and binds to
     // runningWindowsAvailable(list) — no blocking D-Bus round-trip. The
     // controller caches the most recent list in m_cachedRunningWindows so
-    // repeat opens of the dialog can show the last-seen values immediately
-    // while the fresh fetch is in flight. The old synchronous
+    // QML dialogs can read it directly between calls. The old synchronous
     // getRunningWindows() was removed in Phase 6 of refactor/dbus-performance.
     //
+    // requestRunningWindows() invalidates the cache before issuing the
+    // call, so QML readers binding to cachedRunningWindows() during a
+    // refresh see an empty list (intentional — distinguishes "loading"
+    // from "stale-but-cached").
+    //
     // A client-side timeout guards against the KWin effect being unloaded:
-    // if no reply arrives within RunningWindowsTimeoutMs, we surface the
-    // last-cached list via runningWindowsTimedOut() so the QML dialog can
-    // show a "no response" state instead of hanging on a spinner forever.
+    // if no reply arrives within RunningWindowsTimeoutMs, we emit
+    // runningWindowsTimedOut() so the QML dialog can show a "no response"
+    // state instead of hanging on a spinner forever.
     Q_INVOKABLE void requestRunningWindows();
     Q_INVOKABLE QVariantList cachedRunningWindows() const
     {
@@ -404,6 +427,9 @@ public:
     Q_INVOKABLE QStringList effectiveTilingOrder() const;
 
     // ── Algorithm helpers ────────────────────────────────────────────────────
+    // Q_PROPERTY for reactive QML bindings; Q_INVOKABLE retained for legacy
+    // imperative call sites (wizard preview refresh, etc).
+    Q_PROPERTY(QVariantList availableAlgorithms READ availableAlgorithms NOTIFY availableAlgorithmsChanged)
     Q_INVOKABLE QVariantList availableAlgorithms() const;
     Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
                                                       int masterCount) const;
@@ -461,6 +487,15 @@ public:
 Q_SIGNALS:
     void activePageChanged();
     void dirtyPagesChanged();
+    /// Emitted after a `save()` call has fully completed, including the
+    /// deferred `singleShot(0)` reset of the internal `m_saving` guard
+    /// that drains lingering daemon broadcasts. Consumers that need to
+    /// chain post-save bookkeeping (e.g. SettingsStagingDomain's async
+    /// applyResult emission) MUST wait for this signal rather than
+    /// inspecting state on `save()` return — the m_saving flag is still
+    /// set when save() returns and a second apply can race the open
+    /// window otherwise.
+    void savingFinished();
     void daemonRunningChanged();
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
@@ -468,6 +503,10 @@ Q_SIGNALS:
     void algorithmCreated(const QString& algorithmId);
     void algorithmOperationFailed(const QString& reason);
     void layoutOperationFailed(const QString& reason);
+    /// Emitted when `applyVirtualScreenConfig` / `removeVirtualScreenConfig`
+    /// fails at the daemon — QML can surface the reason in a toast so the
+    /// user knows the change wasn't saved.
+    void virtualScreenConfigFailed(const QString& physicalScreenId, const QString& reason);
     void screensChanged();
     void dismissedUpdateVersionChanged();
     void lastSeenWhatsNewVersionChanged();
@@ -495,8 +534,9 @@ Q_SIGNALS:
      * answers a requestRunningWindows() call (effect unloaded, crashed,
      * or slow). QML dialogs should surface an error state so the user
      * can distinguish "no windows" from "daemon or effect not responding".
-     * Cached list (possibly stale) is still available via
-     * cachedRunningWindows().
+     * Note: cachedRunningWindows() is empty by the time this fires —
+     * requestRunningWindows() invalidated the cache at the start of the
+     * request, so the timeout signal means "no data, refresh failed."
      */
     void runningWindowsTimedOut();
 
@@ -506,6 +546,10 @@ Q_SIGNALS:
     // Ordering staged signals
     void stagedSnappingOrderChanged();
     void stagedTilingOrderChanged();
+
+    // Internal forwarder for the Settings-NOTIFY meta-object loop —
+    // see ctor for rationale (QMetaMethod::fromSignal vs indexOfSlot).
+    void _settingsPropertyNotifyForwarder();
 
 private Q_SLOTS:
     void onExternalSettingsChanged();
@@ -529,6 +573,10 @@ private Q_SLOTS:
      * runningWindowsAvailable(list) signal.
      */
     void onRunningWindowsAvailable(const QString& json);
+
+    /// Daemon WindowRules.rulesChanged → reload m_localRuleStore so the
+    /// in-process LayoutRegistry assignment cascade sees rule edits.
+    void reloadLocalRuleStore(bool persisted);
 
 private:
     void setNeedsSave(bool needs);
@@ -579,9 +627,17 @@ private:
     ScreenHelper m_screenHelper;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
-    QString m_externalEditPage; // Non-empty: setNeedsSave(true) targets this instead of m_activePage
+    /// Stack of external-edit page ids — `setNeedsSave(true)` targets
+    /// `top()` instead of `m_activePage`. Nesting-aware so an inner
+    /// begin/end pair restores the outer target on pop rather than
+    /// clearing it. See ExternalEditScope for the RAII wrapper.
+    QStack<QString> m_externalEditStack;
     bool m_saving = false;
     bool m_loading = false;
+    /// Reentrancy guard for setActivePage(). A slot connected to
+    /// activePageChanged that calls back into setActivePage would
+    /// otherwise corrupt the m_loading toggle window.
+    bool m_settingActivePage = false;
 
     // PhosphorZones::Layout state
     QVariantList m_layouts;
@@ -704,6 +760,40 @@ private:
     // Staged ordering changes (flushed to m_settings on save)
     std::optional<QStringList> m_stagedSnappingOrder;
     std::optional<QStringList> m_stagedTilingOrder;
+
+    // PhosphorSettingsUi integration — owns the PageRegistry the framework's
+    // SettingsAppWindow chrome consumes. Constructed in buildApplicationController()
+    // after every page controller exists (so adapter registrations carry stable
+    // pointers).
+    //
+    // Declared as a unique_ptr (rather than QObject child of `this`) AFTER the
+    // page sub-controllers above so reverse-order member destruction tears down
+    // m_app FIRST: its PageRegistry holds raw PageController* refs to the
+    // m_tilingAlgorithmPage / m_snappingShadersPage unique_ptrs (and the
+    // PageAdapter QObject children of `this`). A QObject-child raw pointer
+    // would defer m_app's destruction to ~QObject, which runs AFTER the page
+    // unique_ptrs reset — leaving the registry briefly holding dangling refs
+    // any queued event-loop tick could trip on.
+    std::unique_ptr<PhosphorSettingsUi::ApplicationController> m_app;
+
+    void buildApplicationController();
+
+    /// Wire daemon D-Bus broadcast subscriptions. Failed connects are
+    /// appended to @p failedSubscriptions for one batched ctor warning.
+    /// Defined in settingscontroller_dbuswire.cpp (800-line cap).
+    void wireDaemonSubscriptions(QStringList& failedSubscriptions);
+
+    // File-scope sort helper exposed as a private static member so both
+    // settingscontroller.cpp (file-watcher rebind path) and
+    // settingscontroller_layouts.cpp (D-Bus refresh path) link to the
+    // same external-linkage symbol regardless of unity-build batching.
+    // Manual layouts sort first; within each category alphabetical by
+    // displayName (case-insensitive).
+    static void sortMergedLayoutList(QVariantList& list);
+    // Defence-in-depth path sanitiser shared by importLayout/exportLayout
+    // (layouts TU) and importAllSettings/exportAllSettings (session TU).
+    // See the implementation comment for the rejection rules.
+    static QString sanitizeIOPath(const QString& raw);
 };
 
 } // namespace PlasmaZones

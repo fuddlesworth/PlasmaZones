@@ -14,7 +14,7 @@ namespace PlasmaZones::VirtualScreenUtils {
 /// Shared by SettingsController's immediate-apply path and StagingService's
 /// persistence + D-Bus flush paths so both emit the same shape regardless of
 /// which entry point the user hit.
-Phosphor::Screens::VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map,
-                                                                 const QString& physicalScreenId, int index);
+PhosphorScreens::VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QString& physicalScreenId,
+                                                               int index);
 
 } // namespace PlasmaZones::VirtualScreenUtils

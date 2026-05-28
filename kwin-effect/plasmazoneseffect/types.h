@@ -289,7 +289,7 @@ struct RestoreSuppression
 /// definitions; the effect fetches them via D-Bus and resolves positions.
 ///
 /// Named `EffectVirtualScreenDef` to avoid collision with the daemon's
-/// `Phosphor::Screens::VirtualScreenDef` (which has many more fields).
+/// `PhosphorScreens::VirtualScreenDef` (which has many more fields).
 struct EffectVirtualScreenDef
 {
     QString id; ///< e.g., "Dell:U2722D:115107/vs:0"

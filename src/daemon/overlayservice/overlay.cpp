@@ -68,7 +68,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         QPoint pos = (cursorPos.x() >= 0) ? cursorPos : QCursor::pos();
         cursorEffectiveId = Utils::effectiveScreenIdAt(m_screenManager, pos, cursorScreen);
     } else if (cursorScreen) {
-        cursorEffectiveId = Phosphor::Screens::ScreenIdentity::identifierFor(cursorScreen);
+        cursorEffectiveId = PhosphorScreens::ScreenIdentity::identifierFor(cursorScreen);
     }
 
     // Store the effective screen ID for cross-virtual-screen detection in showAtPosition()
@@ -97,7 +97,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     QHash<QString, QRect> targetGeometries;
     if (haveEffective) {
         for (const QString& screenId : effectiveIds) {
-            const Phosphor::Screens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
+            const PhosphorScreens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
             QScreen* physScreen = phys.qscreen;
             if (!physScreen) {
                 continue;
@@ -115,7 +115,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         }
     } else {
         for (auto* screen : Utils::allScreens()) {
-            const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
                                   m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
@@ -318,10 +318,16 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
 
 void OverlayService::updateGeometries()
 {
-    for (const QString& screenId : m_screenStates.keys()) {
-        QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
+    // Iterate via constBegin/constEnd rather than `.keys()` — the prior
+    // shape allocated a QStringList copy on every geometry update; this
+    // is a hot path during multi-monitor compositor signal storms (Plasma
+    // emits screenAdded/screenRemoved/geometryChanged in tight bursts on
+    // hotplug and DPMS-wake). updateOverlayWindow does not mutate
+    // m_screenStates, so iterating in-place is safe.
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        QScreen* physScreen = it.value().overlayPhysScreen;
         if (physScreen) {
-            updateOverlayWindow(screenId, physScreen);
+            updateOverlayWindow(it.key(), physScreen);
         }
     }
     // Geometry data is now current - do NOT bump version here.
@@ -400,7 +406,7 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
 
 void OverlayService::createOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     auto* mgr = m_screenManager;
     QRect geom = (mgr && mgr->screenGeometry(screenId).isValid()) ? mgr->screenGeometry(screenId) : screen->geometry();
     createOverlayWindow(screenId, screen, geom);
@@ -517,7 +523,7 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
 
 void OverlayService::dismissOverlayWindow(QScreen* screen)
 {
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
 
     // Collect matching overlay keys - may be virtual screen IDs for this physical screen
     QStringList matchingKeys;
@@ -597,7 +603,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
 
 void OverlayService::destroyOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     qCDebug(lcOverlay) << "destroyOverlayWindow:" << screenId;
     destroyOverlayWindow(screenId);
 }
@@ -623,7 +629,7 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
 
 void OverlayService::updateOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     updateOverlayWindow(screenId, screen);
 }
 

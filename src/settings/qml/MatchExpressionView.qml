@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -53,7 +54,6 @@ ColumnLayout {
         for (var i = 0; i < root.matchFieldOptions.length; ++i) {
             if (root.matchFieldOptions[i].wire === wire)
                 return root.matchFieldOptions[i].label;
-
         }
         return wire;
     }
@@ -63,7 +63,6 @@ ColumnLayout {
         for (var i = 0; i < root.matchFieldOptions.length; ++i) {
             if (root.matchFieldOptions[i].wire === wire)
                 return root.matchFieldOptions[i].value;
-
         }
         return -1;
     }
@@ -79,7 +78,6 @@ ColumnLayout {
         for (var i = 0; i < ops.length; ++i) {
             if (ops[i].wire === opWire)
                 return ops[i].label;
-
         }
         return opWire;
     }
@@ -92,7 +90,6 @@ ColumnLayout {
         for (var i = 0; i < root.matchFieldOptions.length; ++i) {
             if (root.matchFieldOptions[i].wire === wire)
                 return root.matchFieldOptions[i].valueKind || "string";
-
         }
         return "string";
     }
@@ -120,7 +117,6 @@ ColumnLayout {
                 for (var i = 0; i < screens.length; ++i) {
                     if (screens[i].name === value)
                         return screens[i].displayLabel || String(value);
-
                 }
             }
         }
@@ -130,7 +126,6 @@ ColumnLayout {
                 for (var j = 0; j < activities.length; ++j) {
                     if (activities[j].id === value)
                         return activities[j].name || String(value);
-
                 }
             }
         }
@@ -174,7 +169,7 @@ ColumnLayout {
         // correct.
         Connections {
             function onMatchJsonChanged() {
-                Qt.callLater(function() {
+                Qt.callLater(function () {
                     tree.expandRecursively(0, -1);
                 });
             }
@@ -234,7 +229,7 @@ ColumnLayout {
             /// non-hidpi the stroke is two physical pixels — single-pixel
             /// strokes disappear into anti-aliased edges on dark
             /// surfaces.
-            readonly property int _guideThickness: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 1.5))
+            readonly property int _guideThickness: Math.max(2, Math.round(Screen.devicePixelRatio * 1.5))
 
             // Size delegate to the tree's available width so the
             // rightmost spacer pushes content into a clean column.
@@ -363,7 +358,6 @@ ColumnLayout {
 
                     target: contentRow
                 }
-
             }
 
             // ── Row content ──
@@ -400,7 +394,6 @@ ColumnLayout {
                 Item {
                     Layout.fillWidth: true
                 }
-
             }
 
             Component {
@@ -428,7 +421,7 @@ ColumnLayout {
                     // staying soft enough that the white label keeps
                     // its high-contrast read.
                     color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.4)
-                    border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                     border.color: Qt.rgba(_tint.r, _tint.g, _tint.b, 0.9)
 
                     Label {
@@ -446,9 +439,7 @@ ColumnLayout {
                         // against the tinted pill fill on every theme.
                         color: Kirigami.Theme.textColor
                     }
-
                 }
-
             }
 
             Component {
@@ -508,7 +499,7 @@ ColumnLayout {
                         implicitHeight: valueLabel.implicitHeight + Kirigami.Units.smallSpacing
                         radius: Kirigami.Units.smallSpacing
                         color: Kirigami.Theme.alternateBackgroundColor
-                        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                        border.width: Math.round(Screen.devicePixelRatio)
                         border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
                         Label {
@@ -518,15 +509,9 @@ ColumnLayout {
                             text: root._valueLabel(delegate.value, delegate.fieldWire)
                             font.family: Kirigami.Theme.smallFont.family
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

@@ -44,6 +44,7 @@ private Q_SLOTS:
     void matchIsContextOnlyClassifies();
     void validationIssuesForJsonFlags();
     void defaultPayloadForSeedsParams();
+    void forceCommitIsInvokable();
 };
 
 void TestWindowRuleController::newEmptyRuleShapesBySubject()
@@ -457,6 +458,21 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     const QVariantMap unknownPayload = controller.defaultPayloadFor(QStringLiteral("bogusActionType"));
     QCOMPARE(unknownPayload.value(QStringLiteral("type")).toString(), QStringLiteral("bogusActionType"));
     QCOMPARE(unknownPayload.size(), 1);
+}
+
+void TestWindowRuleController::forceCommitIsInvokable()
+{
+    // Pin the post-pass-27 contract — asyncCommit(bool) is the
+    // QML-facing escape hatch the daemonChangedWhileDirty banner
+    // uses. Originally forceCommit() carried the Q_INVOKABLE, but
+    // pass 27 migrated QML to the async path so the test now pins
+    // the live contract. The old test name is preserved so the
+    // history is grep-able; the assertion targets the actual hot
+    // path.
+    WindowRuleController controller;
+    const QMetaObject* mo = controller.metaObject();
+    QVERIFY2(mo->indexOfMethod("asyncCommit(bool)") >= 0,
+             "WindowRuleController::asyncCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
 }
 
 QTEST_MAIN(TestWindowRuleController)

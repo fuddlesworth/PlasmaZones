@@ -12,9 +12,7 @@
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorWindowRule/MatchExpression.h>
 #include <PhosphorWindowRule/MatchTypes.h>
-#include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
 
 #include <QDBusConnection>
@@ -22,6 +20,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QHash>
+#include <QSet>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -30,9 +29,6 @@ namespace PlasmaZones {
 
 namespace {
 
-namespace ActionType = PhosphorWindowRule::ActionType;
-using PhosphorWindowRule::MatchExpression;
-using PhosphorWindowRule::RuleAction;
 using PhosphorWindowRule::WindowRule;
 using PhosphorWindowRule::WindowRuleSet;
 
@@ -58,7 +54,7 @@ WindowRule ruleFromVariant(const QVariantMap& map)
 } // namespace
 
 WindowRuleController::WindowRuleController(QObject* parent)
-    : QObject(parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("window-rules"), parent)
 {
     // Re-fetch from the daemon whenever it broadcasts a rule change — but only
     // while the page is clean, so a daemon-side write doesn't silently stomp
@@ -70,14 +66,19 @@ WindowRuleController::WindowRuleController(QObject* parent)
     // diagnosable rather than a silent miss — the deferred reload below still
     // fetches the initial state, but without this subscription the page would
     // never re-sync on subsequent daemon-side writes.
-    const bool subscribed = QDBusConnection::sessionBus().connect(
-        QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
-        QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
-        SLOT(reload()));
+    // Subscribe to daemon-side rule mutations. The connect() and the
+    // disconnect() in the dtor must use IDENTICAL (service, path,
+    // interface, signal, slot) tuples — otherwise the bus keeps a
+    // dangling slot binding referencing a destroyed object. Routing
+    // both through `rulesChangedSubscriptionArgs()` makes that
+    // symmetry mechanical: a future rename of the signal touches the
+    // tuple in one place and connect+disconnect track each other.
+    const bool subscribed = subscribeRulesChanged();
     if (!subscribed) {
         qCWarning(lcConfig) << "WindowRuleController: failed to subscribe to org.plasmazones.WindowRules.rulesChanged "
-                               "— page will not refresh on daemon-side writes";
+                               "— will retry when the daemon becomes reachable";
     }
+    m_rulesChangedSubscribed = subscribed;
     // Kick off the initial fetch immediately — the call is asynchronous
     // (QDBusPendingCallWatcher), so the constructor returns without
     // blocking and the settings page can finish loading. The reply
@@ -87,34 +88,84 @@ WindowRuleController::WindowRuleController(QObject* parent)
 
 WindowRuleController::~WindowRuleController()
 {
-    // Mirror the `connect()` from the constructor so the bus doesn't keep
-    // a slot binding referencing this destroyed instance. Settings-app
-    // lifetime is process-wide today, but the symmetric disconnect makes
-    // the controller safe to instantiate from a transient owner (tests,
-    // future KCM page where the controller is rebuilt on demand) without
-    // leaking dangling slot dispatches.
-    QDBusConnection::sessionBus().disconnect(QString(PhosphorProtocol::Service::Name),
-                                             QString(PhosphorProtocol::Service::ObjectPath),
-                                             QString(PhosphorProtocol::Service::Interface::WindowRules),
-                                             QStringLiteral("rulesChanged"), this, SLOT(reload()));
+    // Mirror the `connect()` from the constructor — see subscribe
+    // helper docstring above.
+    unsubscribeRulesChanged();
 }
 
-void WindowRuleController::setScreenLookup(WindowRuleModel::LabelLookup fn)
+WindowRuleController::RulesChangedSubscription WindowRuleController::rulesChangedSubscriptionArgs()
 {
-    m_model.setScreenLabelLookup(std::move(fn));
+    // QLatin1String avoids the QString allocation that `QString(...)` of a
+    // const-char* produced — the protocol constants are compile-time
+    // literals, and the implicit-conversion to QString happens once at
+    // the QDBus connect call boundary.
+    return {QLatin1String(PhosphorProtocol::Service::Name), QLatin1String(PhosphorProtocol::Service::ObjectPath),
+            QLatin1String(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged")};
 }
 
-void WindowRuleController::setActivityLookup(WindowRuleModel::LabelLookup fn)
+bool WindowRuleController::subscribeRulesChanged()
 {
-    m_model.setActivityLabelLookup(std::move(fn));
+    const auto args = rulesChangedSubscriptionArgs();
+    return QDBusConnection::sessionBus().connect(args.service, args.objectPath, args.interface, args.signalName, this,
+                                                 SLOT(reload()));
 }
 
-void WindowRuleController::setLayoutLookup(WindowRuleModel::LabelLookup fn)
+void WindowRuleController::unsubscribeRulesChanged()
 {
-    m_layoutLookup = fn;
-    // Also forward to the model so its `actionSummary` can resolve layoutId /
-    // algorithm-token wire values when building the rule-list captions.
-    m_model.setLayoutLabelLookup(std::move(fn));
+    const auto args = rulesChangedSubscriptionArgs();
+    QDBusConnection::sessionBus().disconnect(args.service, args.objectPath, args.interface, args.signalName, this,
+                                             SLOT(reload()));
+    m_rulesChangedSubscribed = false;
+}
+
+// Label-lookup setters (setScreenLookup, setActivityLookup, setLayoutLookup,
+// setSnappingLayoutLookup, setTilingAlgorithmLookup) and the
+// `markLookupWired` completion gate live in windowrulecontroller_lookups.cpp
+// so this TU stays under the project's 800-line cap.
+
+bool WindowRuleController::isDirty() const
+{
+    return m_dirty;
+}
+
+void WindowRuleController::apply()
+{
+    // StagingDomain::apply contract: asyncCommit dispatches the
+    // setAllRules push via QDBusPendingCallWatcher and emits
+    // applyResult(ok, error) on the reply. The chrome's
+    // ApplicationController::applyAllAsync waits on this signal so a
+    // stuck daemon no longer freezes the Settings window — the user
+    // sees a "Saving…" indicator and an error toast if the push
+    // fails.
+    asyncCommit(/*force=*/false);
+}
+
+void WindowRuleController::discard()
+{
+    // Re-entrant guard: a second discard() while the first revert is
+    // in flight would register a second one-shot lambda on
+    // revertFinished — both fire on the next reply and emit
+    // discardResult twice, breaking the StagingDomain contract that
+    // promises one terminal signal per discard() invocation.
+    if (m_discardInFlight) {
+        Q_EMIT discardResult(false, QStringLiteral("Discard already in flight"));
+        return;
+    }
+    m_discardInFlight = true;
+    // Qt::SingleShotConnection self-disconnects on first fire — no
+    // heap-allocated QMetaObject::Connection* needed (the prior
+    // pattern leaked when ~WindowRuleController ran before
+    // revertFinished arrived). The companion destroyed() guard would
+    // be redundant here: the lambda's receiver IS `this`, so Qt
+    // auto-removes the connection on `this` destruction.
+    connect(
+        this, &WindowRuleController::revertFinished, this,
+        [this](bool success) {
+            m_discardInFlight = false;
+            Q_EMIT discardResult(success, success ? QString() : PzI18n::tr("Failed to fetch the daemon's rule set."));
+        },
+        Qt::SingleShotConnection);
+    revert();
 }
 
 void WindowRuleController::setDirty(bool dirty)
@@ -132,6 +183,18 @@ void WindowRuleController::setDaemonReachable(bool reachable)
         return;
     }
     m_daemonReachable = reachable;
+    // Retry the rulesChanged subscription if a previous attempt failed.
+    // Covers the "controller built before the daemon was up" scenario:
+    // the initial subscribe() in the ctor returned false, but once the
+    // daemon arrives the next setDaemonReachable(true) reattaches the
+    // signal so subsequent daemon-side writes refresh the page.
+    if (reachable && !m_rulesChangedSubscribed) {
+        if (subscribeRulesChanged()) {
+            m_rulesChangedSubscribed = true;
+            qCInfo(lcConfig)
+                << "WindowRuleController: rulesChanged subscription attached after daemon became reachable";
+        }
+    }
     Q_EMIT daemonReachableChanged();
 }
 
@@ -171,7 +234,56 @@ bool WindowRuleController::pushToDaemon(const QList<WindowRule>& rules)
     return !reply.arguments().isEmpty() && reply.arguments().constFirst().toBool();
 }
 
-void WindowRuleController::fetchAndLoad()
+bool WindowRuleController::pushToDaemonAsync(const QList<WindowRule>& rules)
+{
+    // Same up-front validation as the sync path — bail out BEFORE
+    // dispatching so a partial-drop never reaches the daemon.
+    WindowRuleSet set;
+    const int accepted = set.setRules(rules);
+    if (accepted != rules.size()) {
+        qCWarning(lcConfig) << "WindowRuleController::pushToDaemonAsync: rejecting push —" << (rules.size() - accepted)
+                            << "of" << rules.size() << "rules failed client-side validation; daemon NOT updated";
+        return false;
+    }
+    const QJsonDocument doc(set.toJson());
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::WindowRules),
+                                                   QStringLiteral("setAllRules"),
+                                                   {QString::fromUtf8(doc.toJson(QJsonDocument::Compact))}),
+        this);
+    // Flip the in-flight guard now so an asyncCommit re-entry during
+    // the wire round-trip rejects rather than dispatching a second
+    // setAllRules. Cleared in the reply lambda below before every
+    // applyResult emit.
+    m_asyncCommitInFlight = true;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        m_asyncCommitInFlight = false;
+        QDBusPendingReply<bool> reply = *w;
+        if (reply.isError()) {
+            setDaemonReachable(false);
+            qCWarning(lcConfig) << "WindowRuleController::pushToDaemonAsync: setAllRules failed —"
+                                << reply.error().message();
+            Q_EMIT applyResult(false, reply.error().message());
+            return;
+        }
+        setDaemonReachable(true);
+        // The daemon's bool reply tells us whether it accepted every
+        // rule; treat anything other than `true` as a partial-drop
+        // failure so the page can stay dirty for retry.
+        const bool ok = reply.value();
+        if (!ok) {
+            Q_EMIT applyResult(false, PzI18n::tr("The daemon rejected one or more rules."));
+            return;
+        }
+        setDirty(false);
+        setDaemonChangedWhileDirty(false);
+        Q_EMIT applyResult(true, QString());
+    });
+    return true;
+}
+
+void WindowRuleController::fetchAndLoad(bool fromRevert)
 {
     // Asynchronous `getAllRules` — the reply handler repopulates the model.
     // Bound to `this` for parent, so a controller teardown before the reply
@@ -180,21 +292,9 @@ void WindowRuleController::fetchAndLoad()
         PhosphorProtocol::ClientHelpers::asyncCall(QString(PhosphorProtocol::Service::Interface::WindowRules),
                                                    QStringLiteral("getAllRules")),
         this);
-    // Tag THIS watcher with whether the call originated from revert(). A
-    // counter-only scheme would let an in-flight initial-load watcher A
-    // wrongly claim a revert tag posted by a concurrent watcher B — whichever
-    // reply lands first decrements the counter regardless of which watcher
-    // posted the increment. Capturing the bool by value at watcher
-    // construction time binds the tag to the specific caller path.
-    const bool fromRevert = m_pendingRevertFetches > 0;
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, fromRevert](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         QDBusPendingReply<QString> reply = *w;
-        // Decrement *before* emitting so a chained revert→revertFinished→commit
-        // handler sees the counter at the correct value.
-        if (fromRevert) {
-            --m_pendingRevertFetches;
-        }
         if (reply.isError()) {
             // Daemon unreachable or method missing — leave the model and the
             // dirty bit untouched so a staged-but-unsavable edit isn't silently
@@ -211,15 +311,46 @@ void WindowRuleController::fetchAndLoad()
         setDaemonReachable(true);
         const QString json = reply.value();
         WindowRuleSet set;
+        bool jsonOk = true;
         if (!json.isEmpty()) {
             QJsonParseError err;
             const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
             if (err.error == QJsonParseError::NoError && doc.isObject()) {
                 set = WindowRuleSet::fromJson(doc.object()).value_or(WindowRuleSet{});
+            } else {
+                // Malformed JSON — daemon answered but with a corrupt store.
+                // Do NOT stomp the existing model with an empty set: a single
+                // corrupt reply could otherwise wipe the user's view of their
+                // rules. Treat as transient transport error parallel to
+                // reply.isError() above so the model stays intact and the
+                // user can retry.
+                qCWarning(lcConfig) << "WindowRuleController::fetchAndLoad: malformed daemon JSON —"
+                                    << err.errorString();
+                jsonOk = false;
             }
-            // Malformed JSON — daemon answered but with a corrupt store. Fall
-            // through to the empty set so the page paints rather than holding
-            // stale rules; the daemon log will carry the parse error.
+        }
+        if (!jsonOk) {
+            if (fromRevert) {
+                Q_EMIT revertFinished(false);
+            }
+            return;
+        }
+        // If the user staged edits between dispatch and reply (e.g. an
+        // initial-load fetch that races a fast user action), do not stomp
+        // them on the non-revert path. Mirror reload()'s dirty-guard:
+        // flag daemonChangedWhileDirty so the page can warn before any
+        // commit() overwrites the daemon's newer set, and leave the staged
+        // model intact. The explicit revert path is allowed to clobber.
+        //
+        // Do NOT emit rulesLoaded here — we did not actually load anything,
+        // and downstream observers treat rulesLoaded as "the controller's
+        // model now matches the daemon's authoritative set" which would be
+        // false after this guard. Tests that synchronise on rulesLoaded
+        // would otherwise read isDirty() before the explicit revert's
+        // reply lands.
+        if (!fromRevert && m_dirty) {
+            setDaemonChangedWhileDirty(true);
+            return;
         }
         m_model.setRules(set.rules());
         setDirty(false);
@@ -247,8 +378,22 @@ void WindowRuleController::reload()
     fetchAndLoad();
 }
 
+bool WindowRuleController::forceCommit()
+{
+    return commit(/*force=*/true);
+}
+
 bool WindowRuleController::commit(bool force)
 {
+    if (m_asyncCommitInFlight) {
+        // A sync commit() landing while an async push is still mid-flight
+        // would race the in-flight reply — both paths call setDirty(false)
+        // on success, and the daemon receives two parallel setAllRules
+        // writes for one user action. Refuse the sync path; the caller
+        // can wait for applyResult and retry.
+        qCWarning(lcConfig) << "WindowRuleController::commit: refusing — asyncCommit already in flight";
+        return false;
+    }
     if (!m_dirty) {
         return true;
     }
@@ -272,6 +417,46 @@ bool WindowRuleController::commit(bool force)
     return true;
 }
 
+void WindowRuleController::asyncCommit(bool force)
+{
+    // Mirror commit(force) but emit applyResult on the reply instead
+    // of returning bool. Clean state is emitted as applyResult(true, "");
+    // refusals + transport errors carry an explanatory message.
+    //
+    // Refuse re-entrant invocation while a prior setAllRules push is
+    // outstanding — a second push would race the first reply (both
+    // would call setDirty(false) and emit applyResult), and the
+    // daemon receives two identical writes for one user action.
+    if (m_asyncCommitInFlight) {
+        Q_EMIT applyResult(false, PzI18n::tr("A save is already in flight."));
+        return;
+    }
+    if (!m_dirty) {
+        Q_EMIT applyResult(true, QString());
+        return;
+    }
+    if (m_daemonChangedWhileDirty && !force) {
+        qCWarning(lcConfig) << "WindowRuleController::asyncCommit: refusing to push — daemon rules changed while the "
+                               "page had staged edits; review or force-overwrite required";
+        Q_EMIT applyResult(false,
+                           PzI18n::tr("The daemon's window rules changed while you were editing. Review or use "
+                                      "Save anyway to overwrite."));
+        return;
+    }
+    if (!pushToDaemonAsync(m_model.rules())) {
+        // The up-front client validation failed (a rule was rejected
+        // before any wire dispatch). pushToDaemonAsync already logged a
+        // diagnostic; surface a user-readable error so the chrome can
+        // toast / banner the failure rather than leaving the page in a
+        // silent-fail "still dirty" state.
+        Q_EMIT applyResult(false,
+                           PzI18n::tr("One or more window rules failed validation and could not be saved. See the "
+                                      "log for details."));
+    }
+    // pushToDaemonAsync's QDBusPendingCallWatcher emits applyResult on
+    // the reply (success or transport error) — nothing to do here.
+}
+
 void WindowRuleController::revert()
 {
     // Discard staged edits by re-fetching the daemon's authoritative set —
@@ -280,12 +465,15 @@ void WindowRuleController::revert()
     // the page dirty (and `daemonReachable` false) rather than silently
     // dropping the staged edits.
     //
-    // Tag this fetch so the reply handler can emit `revertFinished(success)`.
-    // SettingsController::load() listens once so it can re-add the
-    // "window-rules" entry to the dirty-pages set on a failed revert (its
-    // surrounding setNeedsSave(false) blanket-clears every page unconditionally).
-    ++m_pendingRevertFetches;
-    fetchAndLoad();
+    // Tag this fetch explicitly as fromRevert=true so the reply handler
+    // emits revertFinished. SettingsController::load() listens once so
+    // it can re-add the "window-rules" entry to the dirty-pages set on
+    // a failed revert (its surrounding setNeedsSave(false) blanket-clears
+    // every page unconditionally). The prior counter-based tagging was
+    // spoofable by a concurrent daemon broadcast: a reload() arriving
+    // mid-revert would read m_pendingRevertFetches > 0 and tag itself
+    // as fromRevert, emitting a spurious revertFinished(true).
+    fetchAndLoad(/*fromRevert=*/true);
 }
 
 void WindowRuleController::renormalizePriorities()
@@ -430,7 +618,17 @@ bool WindowRuleController::updateRuleFromJson(const QVariantMap& ruleJson)
 
 bool WindowRuleController::removeRule(const QString& ruleId)
 {
-    if (!m_model.removeRule(QUuid::fromString(ruleId))) {
+    const QUuid id = QUuid::fromString(ruleId);
+    if (id.isNull()) {
+        // Distinguish "you sent garbage" from "rule doesn't exist" — both
+        // return false but the garbage path deserves a warning so a buggy
+        // caller doesn't silently fail in production.
+        if (!ruleId.isEmpty()) {
+            qCWarning(lcConfig) << "WindowRuleController::removeRule: invalid UUID:" << ruleId;
+        }
+        return false;
+    }
+    if (!m_model.removeRule(id)) {
         return false;
     }
     setDirty(true);
@@ -450,38 +648,54 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
     // — the matchSummary will distinguish the clone in that case (and the
     // user typically renames immediately on duplicate anyway).
     if (!source.name.isEmpty()) {
-        clone.name = PzI18n::tr("%1 (copy)").arg(source.name);
+        // Walk existing rules ONCE into a name → present set, then
+        // probe candidate names against the set so duplicating into a
+        // list with M existing duplicates is O(N + M) instead of
+        // O(N · M) (the prior shape walked all N rules per candidate
+        // probe). Three duplicates of the same source still land as
+        // "X (copy)", "X (copy) 2", "X (copy) 3".
+        QSet<QString> takenNames;
+        const auto& existing = m_model.rules();
+        takenNames.reserve(existing.size());
+        for (const WindowRule& r : existing)
+            takenNames.insert(r.name);
+        const QString base = PzI18n::tr("%1 (copy)").arg(source.name);
+        QString candidate = base;
+        int n = 2;
+        while (takenNames.contains(candidate))
+            candidate = base + QStringLiteral(" %1").arg(n++);
+        clone.name = candidate;
     }
-    if (!m_model.addRule(clone)) {
-        qCWarning(lcConfig) << "WindowRuleController::duplicateRule: model rejected clone" << clone.id.toString();
-        return QString();
-    }
-    // The model appends to the end; reorder so the clone sits just after the
-    // source — preserves the user's mental model ("the new rule is next to
-    // the one I copied") instead of dropping it at the bottom of the list.
-    m_model.moveRule(clone.id, source.id);
-    // moveRule "before source" puts the clone immediately ABOVE the source.
-    // Shift it once more to the next slot below the source — find the rule
-    // that currently follows source and move the clone before that. If the
-    // source was the LAST rule in the list, there is no rule after it; move
-    // the clone to the end of the list instead (an empty beforeId means
-    // "send to end"), otherwise the off-by-one leaves order [..., clone,
-    // source] instead of the intended [..., source, clone].
+    // Locate the source's slot ONCE and insert the clone directly into
+    // sourceIndex+1 via addRuleAt — the old shape fired addRule (append)
+    // + up to two moveRule() calls + a final renormalize, producing
+    // four model signals per Duplicate click. Now one beginInsertRows/
+    // endInsertRows pair carries everything.
+    int sourceIndex = -1;
     const auto& rules = m_model.rules();
     for (int i = 0; i < rules.size(); ++i) {
         if (rules.at(i).id == source.id) {
-            if (i + 1 < rules.size()) {
-                const QUuid afterSource = rules.at(i + 1).id;
-                if (afterSource != clone.id) {
-                    m_model.moveRule(clone.id, afterSource);
-                }
-            } else {
-                // Source is the last rule — push clone to the end.
-                m_model.moveRule(clone.id, QUuid());
-            }
+            sourceIndex = i;
             break;
         }
     }
+    // Source vanished between ruleById() and this lookup (concurrent
+    // teardown / race) — bail out instead of inserting at a guessed
+    // index that could land in the wrong section.
+    if (sourceIndex < 0) {
+        qCWarning(lcConfig) << "WindowRuleController::duplicateRule: source rule disappeared during clone"
+                            << source.id.toString();
+        return QString();
+    }
+    if (!m_model.addRuleAt(clone, sourceIndex + 1)) {
+        qCWarning(lcConfig) << "WindowRuleController::duplicateRule: model rejected clone" << clone.id.toString();
+        return QString();
+    }
+    // The clone inherited the source's priority verbatim; without
+    // re-stamping the two would collide on the band-base value and the
+    // daemon's section-ordering would treat them as indistinguishable.
+    // Mirrors the renormalize call addRuleFromJson does after appending.
+    renormalizePriorities();
     setDirty(true);
     return clone.id.toString();
 }
@@ -489,8 +703,14 @@ QString WindowRuleController::duplicateRule(const QString& ruleId)
 bool WindowRuleController::setRuleEnabled(const QString& ruleId, bool enabled)
 {
     WindowRule rule = m_model.ruleById(QUuid::fromString(ruleId));
-    if (rule.id.isNull() || rule.enabled == enabled) {
+    if (rule.id.isNull()) {
         return false;
+    }
+    if (rule.enabled == enabled) {
+        // No-op: the rule is already in the requested state. Report success so
+        // a QML caller toggling a switch into its current state doesn't surface
+        // a spurious "save failed" toast.
+        return true;
     }
     rule.enabled = enabled;
     // The enabled-flag flip is guaranteed a real change (guarded above), so
@@ -504,8 +724,34 @@ bool WindowRuleController::setRuleEnabled(const QString& ruleId, bool enabled)
 
 bool WindowRuleController::moveRule(const QString& ruleId, const QString& beforeRuleId)
 {
+    // Capture order BEFORE the move so a no-op move (drop a rule on its
+    // own slot, or the slot immediately after — the model accepts both
+    // and returns true) doesn't flip the dirty flag. The model has its
+    // own no-op short-circuit but reports success either way; the user-
+    // visible "drag-drop back to where it started" should never pollute
+    // the dirty state.
+    QList<QUuid> before;
+    before.reserve(m_model.rules().size());
+    for (const WindowRule& r : m_model.rules()) {
+        before.append(r.id);
+    }
     if (!m_model.moveRule(QUuid::fromString(ruleId), QUuid::fromString(beforeRuleId))) {
         return false;
+    }
+    bool actuallyMoved = false;
+    const auto& after = m_model.rules();
+    if (after.size() != before.size()) {
+        actuallyMoved = true;
+    } else {
+        for (int i = 0; i < after.size(); ++i) {
+            if (after.at(i).id != before.at(i)) {
+                actuallyMoved = true;
+                break;
+            }
+        }
+    }
+    if (!actuallyMoved) {
+        return true;
     }
     renormalizePriorities();
     setDirty(true);
@@ -516,246 +762,6 @@ QVariantMap WindowRuleController::ruleJson(const QString& ruleId) const
 {
     const WindowRule rule = m_model.ruleById(QUuid::fromString(ruleId));
     return rule.id.isNull() ? QVariantMap{} : rule.toJson().toVariantMap();
-}
-
-QVariantList WindowRuleController::sections() const
-{
-    // Canonical display order — Monitor & Layout first, Advanced last. The
-    // enum values are emitted as data so QML never hardcodes them.
-    static const QList<WindowRuleModel::Section> kOrder = {
-        WindowRuleModel::Section::Monitor,   WindowRuleModel::Section::Application, WindowRuleModel::Section::Activity,
-        WindowRuleModel::Section::Animation, WindowRuleModel::Section::Advanced,
-    };
-    QVariantList out;
-    for (WindowRuleModel::Section s : kOrder) {
-        QVariantMap entry;
-        entry[QStringLiteral("value")] = static_cast<int>(s);
-        entry[QStringLiteral("label")] = WindowRuleModel::sectionLabel(s);
-        out.append(entry);
-    }
-    return out;
-}
-
-QVariantList WindowRuleController::rulesSnapshot() const
-{
-    // Read every field through the model's own data() + role enum so the
-    // section / summary logic stays in exactly one place and QML never has to
-    // reference raw `Qt.UserRole + N` integers.
-    QVariantList out;
-    const int n = m_model.rowCount();
-    for (int i = 0; i < n; ++i) {
-        const QModelIndex idx = m_model.index(i, 0);
-        QVariantMap entry;
-        entry[QStringLiteral("ruleId")] = m_model.data(idx, WindowRuleModel::IdRole);
-        entry[QStringLiteral("name")] = m_model.data(idx, WindowRuleModel::NameRole);
-        entry[QStringLiteral("enabled")] = m_model.data(idx, WindowRuleModel::EnabledRole);
-        entry[QStringLiteral("priority")] = m_model.data(idx, WindowRuleModel::PriorityRole);
-        entry[QStringLiteral("section")] =
-            static_cast<int>(m_model.data(idx, WindowRuleModel::SectionRole).value<WindowRuleModel::Section>());
-        entry[QStringLiteral("matchSummary")] = m_model.data(idx, WindowRuleModel::MatchSummaryRole);
-        entry[QStringLiteral("actionSummary")] = m_model.data(idx, WindowRuleModel::ActionSummaryRole);
-        entry[QStringLiteral("conditionCount")] = m_model.data(idx, WindowRuleModel::ConditionCountRole);
-        entry[QStringLiteral("actionCount")] = m_model.data(idx, WindowRuleModel::ActionCountRole);
-        entry[QStringLiteral("isComposite")] = m_model.data(idx, WindowRuleModel::IsCompositeRole);
-        // ScreenIdsRole is computed in the model's data() — no per-row
-        // by-id lookup, so the snapshot stays O(n).
-        entry[QStringLiteral("screenIds")] = m_model.data(idx, WindowRuleModel::ScreenIdsRole);
-        entry[QStringLiteral("validationIssueCount")] = m_model.data(idx, WindowRuleModel::ValidationIssueCountRole);
-        out.append(entry);
-    }
-    return out;
-}
-
-QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) const
-{
-    // Per-screen accumulator — built in a single pass over the rule set so the
-    // total cost is O(rules × actions + screens) rather than O(screens × rules
-    // × actions). A screen with no pinned rule simply never gets an entry and
-    // falls through to the default "not assigned" tile below.
-    struct Summary
-    {
-        int ruleCount = 0;
-        bool tilingEnabled = true;
-        QString snappingLayout;
-        QString tilingAlgorithm;
-        // Mode the rule's `SetEngineMode` action selects (if any). Used to
-        // disambiguate which layout name the overview tile should show
-        // when a rule carries BOTH a snapping layout and a tiling
-        // algorithm — the engine mode is the source of truth for which
-        // engine actually runs.
-        QString engineMode;
-    };
-    QHash<QString, Summary> byScreen;
-
-    for (const WindowRule& rule : m_model.rules()) {
-        // Only context-only rules that pin a monitor count toward a tile.
-        if (!rule.match.isContextOnly()) {
-            continue;
-        }
-        const QStringList screenIds = WindowRuleModel::screenIdsOf(rule.match);
-        if (screenIds.isEmpty()) {
-            continue;
-        }
-        for (const QString& screenId : screenIds) {
-            Summary& s = byScreen[screenId];
-            ++s.ruleCount;
-            for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::DisableEngine) {
-                    s.tilingEnabled = false;
-                } else if (a.type == ActionType::SetEngineMode && s.engineMode.isEmpty()) {
-                    s.engineMode = a.params.value(QLatin1String("mode")).toString();
-                } else if (a.type == ActionType::SetSnappingLayout && s.snappingLayout.isEmpty()) {
-                    s.snappingLayout = a.params.value(QLatin1String("layoutId")).toString();
-                } else if (a.type == ActionType::SetTilingAlgorithm && s.tilingAlgorithm.isEmpty()) {
-                    s.tilingAlgorithm = a.params.value(QLatin1String("algorithm")).toString();
-                }
-            }
-        }
-    }
-
-    QVariantList out;
-    for (const QVariant& sv : screens) {
-        const QVariantMap screen = sv.toMap();
-        // Settings screen maps key the connector under "name" (and sometimes
-        // "id"); accept either so the overview never silently drops a tile.
-        QString screenId = screen.value(QStringLiteral("name")).toString();
-        if (screenId.isEmpty()) {
-            screenId = screen.value(QStringLiteral("id")).toString();
-        }
-        if (screenId.isEmpty()) {
-            continue;
-        }
-
-        const auto it = byScreen.constFind(screenId);
-        const bool assigned = it != byScreen.constEnd();
-        const Summary summary = assigned ? *it : Summary{};
-
-        QVariantMap tile;
-        tile[QStringLiteral("screenId")] = screenId;
-        // Pick the layout token that matches the rule's engine mode. When a
-        // rule sets BOTH a snapping layout AND a tiling algorithm (legal —
-        // they live in independent slots) the engine mode decides which
-        // one is actually visible. Without an explicit engine mode we
-        // prefer the snapping layout (the more common case) and fall back
-        // to the algorithm so the tile is never blank when only one is
-        // set.
-        QString layoutLabel;
-        if (summary.engineMode == QLatin1String("autotile") && !summary.tilingAlgorithm.isEmpty()) {
-            layoutLabel = summary.tilingAlgorithm;
-        } else if (summary.engineMode == QLatin1String("snapping") && !summary.snappingLayout.isEmpty()) {
-            layoutLabel = summary.snappingLayout;
-        } else if (!summary.snappingLayout.isEmpty()) {
-            layoutLabel = summary.snappingLayout;
-        } else {
-            layoutLabel = summary.tilingAlgorithm;
-        }
-        // The token is the raw layoutId / algorithm name from the rule's
-        // action params — resolve it to a user-facing label when a lookup
-        // is wired so the tile reads "BSP" instead of "{25828c9b-…}".
-        if (m_layoutLookup && !layoutLabel.isEmpty()) {
-            const QString resolved = m_layoutLookup(layoutLabel);
-            if (!resolved.isEmpty()) {
-                layoutLabel = resolved;
-            }
-        }
-        tile[QStringLiteral("layoutName")] = layoutLabel;
-        tile[QStringLiteral("tilingEnabled")] = summary.tilingEnabled;
-        tile[QStringLiteral("ruleCount")] = summary.ruleCount;
-        tile[QStringLiteral("assigned")] = assigned;
-        out.append(tile);
-    }
-    return out;
-}
-
-QStringList WindowRuleController::ruleScreenIds(const QString& ruleId) const
-{
-    const WindowRule rule = m_model.ruleById(QUuid::fromString(ruleId));
-    if (rule.id.isNull()) {
-        return {};
-    }
-    return WindowRuleModel::screenIdsOf(rule.match);
-}
-
-QVariantList WindowRuleController::matchFields() const
-{
-    return WindowRuleAuthoring::matchFields();
-}
-
-QVariantList WindowRuleController::operatorsForField(int fieldValue) const
-{
-    return WindowRuleAuthoring::operatorsForField(fieldValue);
-}
-
-QVariantList WindowRuleController::actionTypes() const
-{
-    return WindowRuleAuthoring::actionTypes();
-}
-
-QVariantMap WindowRuleController::defaultPayloadFor(const QString& typeWire) const
-{
-    return WindowRuleAuthoring::defaultPayloadFor(typeWire);
-}
-
-QVariantList WindowRuleController::validationIssuesForJson(const QVariantMap& ruleJson) const
-{
-    // Build a partial rule from the variant map — enough to run the semantic
-    // compatibility check without requiring a full `WindowRule::fromJson`
-    // (which would refuse a rule mid-edit: no id, no actions yet). The
-    // validator only consults `match` and `actions`, so reconstruct just those.
-    const QJsonObject obj = QJsonObject::fromVariantMap(ruleJson);
-
-    WindowRule probe;
-    const QJsonValue matchValue = obj.value(QLatin1String("match"));
-    if (matchValue.isObject()) {
-        if (const auto match = MatchExpression::fromJson(matchValue.toObject())) {
-            probe.match = *match;
-        }
-        // A malformed match leaves `probe.match` as the default catch-all,
-        // which is context-only — so the check still works as the user fills
-        // out leaves: the issue only surfaces once a window-property leaf
-        // lands AND a context action is present.
-    }
-    const QJsonValue actionsValue = obj.value(QLatin1String("actions"));
-    if (actionsValue.isArray()) {
-        for (const QJsonValue& v : actionsValue.toArray()) {
-            if (!v.isObject()) {
-                continue;
-            }
-            if (const auto action = RuleAction::fromJson(v.toObject())) {
-                probe.actions.append(*action);
-            }
-            // Malformed actions are silently dropped — the editor will fail
-            // its own structural gates (param fields empty etc.) before save.
-        }
-    }
-
-    QVariantList out;
-    for (const PhosphorWindowRule::ValidationIssue& issue : probe.validationIssues()) {
-        QVariantMap m;
-        m[QStringLiteral("code")] = static_cast<int>(issue.code);
-        m[QStringLiteral("actionIndex")] = issue.actionIndex;
-        m[QStringLiteral("actionType")] = issue.actionType;
-        m[QStringLiteral("message")] = issue.message;
-        out.append(m);
-    }
-    return out;
-}
-
-bool WindowRuleController::matchIsContextOnly(const QVariantMap& matchJson) const
-{
-    // An empty / unparseable match collapses to the default catch-all, which
-    // is context-only by definition (no leaves to fail against a context
-    // query). The picker treats this as "every action type compatible" so the
-    // user can start with any action and add window predicates afterwards.
-    const QJsonObject obj = QJsonObject::fromVariantMap(matchJson);
-    if (obj.isEmpty()) {
-        return true;
-    }
-    const auto match = MatchExpression::fromJson(obj);
-    if (!match) {
-        return true;
-    }
-    return match->isContextOnly();
 }
 
 } // namespace PlasmaZones

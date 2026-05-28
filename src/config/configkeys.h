@@ -14,12 +14,11 @@
         return QStringLiteral(str);                                                                                    \
     }
 
-// Alias for group name accessors — identical expansion, separate macro for readability.
-#define PZ_CONFIG_GROUP(name, str)                                                                                     \
-    static QString name()                                                                                              \
-    {                                                                                                                  \
-        return QStringLiteral(str);                                                                                    \
-    }
+// Alias for group-name accessors — same body as PZ_CONFIG_KEY, single
+// definition so a future tweak to PZ_CONFIG_KEY (e.g. attribute
+// annotation) automatically applies to groups too. Separate macro
+// name preserved for readability at the call sites.
+#define PZ_CONFIG_GROUP(name, str) PZ_CONFIG_KEY(name, str)
 
 namespace PlasmaZones {
 
@@ -402,10 +401,21 @@ public:
     PZ_CONFIG_KEY(previousLayoutKey, "PreviousLayout")
     PZ_CONFIG_KEY(nextLayoutKey, "NextLayout")
 
-    // Parameterized — uses the pattern accessor to avoid duplication
+    // Parameterized — uses the pattern accessor to avoid duplication.
+    // 1..9 mirrors quickLayoutN() in the enum surface; out-of-range
+    // values would round-trip as e.g. "QuickLayout100" and ghost the
+    // config namespace.
     PZ_CONFIG_KEY(quickLayoutKeyPattern, "QuickLayout%1")
     static QString quickLayoutKey(int n)
     {
+        Q_ASSERT_X(n >= 1 && n <= 9, "quickLayoutKey", "n out of range");
+        // Release-build guard: Q_ASSERT_X is compiled out in release builds,
+        // so an out-of-range `n` would silently yield "QuickLayout100" (or
+        // similar) and ghost the config namespace. qFatal aborts unambiguously
+        // in both build modes — the contract is "n in 1..9, no exceptions".
+        if (n < 1 || n > 9) {
+            qFatal("quickLayoutKey: n out of range: %d", n);
+        }
         return quickLayoutKeyPattern().arg(n);
     }
 
@@ -425,10 +435,17 @@ public:
     PZ_CONFIG_KEY(swapWindowUpKey, "SwapWindowUp")
     PZ_CONFIG_KEY(swapWindowDownKey, "SwapWindowDown")
 
-    // Parameterized — uses the pattern accessor to avoid duplication
+    // Parameterized — uses the pattern accessor to avoid duplication.
+    // 1..9 mirrors snapToZoneN() in the enum surface.
     PZ_CONFIG_KEY(snapToZoneKeyPattern, "SnapToZone%1")
     static QString snapToZoneKey(int n)
     {
+        Q_ASSERT_X(n >= 1 && n <= 9, "snapToZoneKey", "n out of range");
+        // See quickLayoutKey above for the rationale on the release-build
+        // qFatal guard — same contract, same failure mode if violated.
+        if (n < 1 || n > 9) {
+            qFatal("snapToZoneKey: n out of range: %d", n);
+        }
         return snapToZoneKeyPattern().arg(n);
     }
 
@@ -519,103 +536,200 @@ public:
     PZ_CONFIG_GROUP(snappingScreenGroupPrefix, "SnappingScreen:")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Legacy v1 key accessors — used ONLY by migration code.
-    // Some names are identical to their v2 counterparts (marked "= v2") because
-    // the group name didn't change — only the keys inside were restructured.
-    // They exist as separate accessors so migration code reads unambiguously as
-    // "reading from v1 source" vs "writing to v2 destination".
+    // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.
+    //
+    // Wrapped in a nested `Legacy` struct so a stray
+    // ConfigKeys::v1ActivationGroup() call outside configmigration.cpp
+    // fails at the read-time `Legacy::` prefix lookup, surfacing the
+    // accidental dependence at code-review time rather than as a
+    // silent regression. configmigration.cpp uses the qualified form
+    // `ConfigKeys::Legacy::v1*` throughout.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    PZ_CONFIG_GROUP(v1ActivationGroup, "Activation")
-    PZ_CONFIG_GROUP(v1DisplayGroup, "Display")
-    PZ_CONFIG_GROUP(v1AppearanceGroup, "Appearance")
-    PZ_CONFIG_GROUP(v1ZonesGroup, "Zones")
-    PZ_CONFIG_GROUP(v1BehaviorGroup, "Behavior")
-    PZ_CONFIG_GROUP(v1ExclusionsGroup, "Exclusions") // = v2 exclusionsGroup
-    PZ_CONFIG_GROUP(v1ZoneSelectorGroup, "ZoneSelector")
-    PZ_CONFIG_GROUP(v1AutotilingGroup, "Autotiling")
-    PZ_CONFIG_GROUP(v1AutotileShortcutsGroup, "AutotileShortcuts")
-    PZ_CONFIG_GROUP(v1AnimationsGroup, "Animations") // = v2 animationsGroup
-    // v1 animation per-field keys — Phase-4 migration packs these into the
-    // v2 `Profile` JSON blob (see configmigration.cpp::migrateV1ToV2).
-    // The accessors exist solely so migration code is unambiguous about
-    // "reading legacy field" vs "reading new blob"; production reads after
-    // migration go through `Profile::JsonField*` constants.
-    PZ_CONFIG_KEY(v1AnimationsEnabledKey, "AnimationsEnabled")
-    PZ_CONFIG_KEY(v1AnimationDurationKey, "AnimationDuration")
-    PZ_CONFIG_KEY(v1AnimationEasingCurveKey, "AnimationEasingCurve")
-    PZ_CONFIG_KEY(v1AnimationMinDistanceKey, "AnimationMinDistance")
-    PZ_CONFIG_KEY(v1AnimationSequenceModeKey, "AnimationSequenceMode")
-    PZ_CONFIG_KEY(v1AnimationStaggerIntervalKey, "AnimationStaggerInterval")
-    PZ_CONFIG_GROUP(v1GlobalShortcutsGroup, "GlobalShortcuts")
-    PZ_CONFIG_GROUP(v1EditorGroup, "Editor") // = v2 editorGroup
-    PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup
-    PZ_CONFIG_GROUP(v1RenderingGroup, "Rendering") // = v2 renderingGroup
-    PZ_CONFIG_GROUP(v1ShadersGroup, "Shaders") // = v2 shadersGroup
+    struct Legacy
+    {
+        // Some v1 names are identical to their v2 counterparts (marked "= v2")
+        // because the group name didn't change — only the keys inside were
+        // restructured. They exist as separate accessors so migration code
+        // reads unambiguously as "reading from v1 source" vs "writing to v2
+        // destination".
+        PZ_CONFIG_GROUP(v1ActivationGroup, "Activation")
+        PZ_CONFIG_GROUP(v1DisplayGroup, "Display")
+        PZ_CONFIG_GROUP(v1AppearanceGroup, "Appearance")
+        PZ_CONFIG_GROUP(v1ZonesGroup, "Zones")
+        PZ_CONFIG_GROUP(v1BehaviorGroup, "Behavior")
+        PZ_CONFIG_GROUP(v1ExclusionsGroup, "Exclusions") // = v2 exclusionsGroup
+        PZ_CONFIG_GROUP(v1ZoneSelectorGroup, "ZoneSelector")
+        PZ_CONFIG_GROUP(v1AutotilingGroup, "Autotiling")
+        PZ_CONFIG_GROUP(v1AutotileShortcutsGroup, "AutotileShortcuts")
+        PZ_CONFIG_GROUP(v1AnimationsGroup, "Animations") // = v2 animationsGroup
+        // v1 animation per-field keys — Phase-4 migration packs these into the
+        // v2 `Profile` JSON blob (see configmigration.cpp::migrateV1ToV2).
+        // The accessors exist solely so migration code is unambiguous about
+        // "reading legacy field" vs "reading new blob"; production reads after
+        // migration go through `Profile::JsonField*` constants.
+        PZ_CONFIG_KEY(v1AnimationsEnabledKey, "AnimationsEnabled")
+        PZ_CONFIG_KEY(v1AnimationDurationKey, "AnimationDuration")
+        PZ_CONFIG_KEY(v1AnimationEasingCurveKey, "AnimationEasingCurve")
+        PZ_CONFIG_KEY(v1AnimationMinDistanceKey, "AnimationMinDistance")
+        PZ_CONFIG_KEY(v1AnimationSequenceModeKey, "AnimationSequenceMode")
+        PZ_CONFIG_KEY(v1AnimationStaggerIntervalKey, "AnimationStaggerInterval")
+        PZ_CONFIG_GROUP(v1GlobalShortcutsGroup, "GlobalShortcuts")
+        PZ_CONFIG_GROUP(v1EditorGroup, "Editor") // = v2 editorGroup
+        PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup
+        PZ_CONFIG_GROUP(v1RenderingGroup, "Rendering") // = v2 renderingGroup
+        PZ_CONFIG_GROUP(v1ShadersGroup, "Shaders") // = v2 shadersGroup
 
-    // ───────────────────────────────────────────────────────────────────────────
-    // v2 legacy key accessors — used ONLY by migrateV2ToV3.
-    // The v2 group itself (Snapping.Behavior.Display) lives on past v3 — it
-    // still holds ShowOnAllMonitors and FilterByAspectRatio. Only the three
-    // disabled-* keys move out, so we name the keys with a v2 prefix; the
-    // migration walks the canonical snappingBehaviorDisplayGroup() dot-path
-    // (split on '.') to descend the JSON tree.
-    // ───────────────────────────────────────────────────────────────────────────
-    PZ_CONFIG_KEY(v2DisabledMonitorsKey, "DisabledMonitors")
-    PZ_CONFIG_KEY(v2DisabledDesktopsKey, "DisabledDesktops")
-    PZ_CONFIG_KEY(v2DisabledActivitiesKey, "DisabledActivities")
+        // v2 legacy keys — used ONLY by migrateV2ToV3.
+        // The v2 group itself (Snapping.Behavior.Display) lives on past v3 — it
+        // still holds ShowOnAllMonitors and FilterByAspectRatio. Only the three
+        // disabled-* keys move out, so we name the keys with a v2 prefix; the
+        // migration walks the canonical snappingBehaviorDisplayGroup() dot-path
+        // (split on '.') to descend the JSON tree.
+        PZ_CONFIG_KEY(v2DisabledMonitorsKey, "DisabledMonitors")
+        PZ_CONFIG_KEY(v2DisabledDesktopsKey, "DisabledDesktops")
+        PZ_CONFIG_KEY(v2DisabledActivitiesKey, "DisabledActivities")
 
-    // ───────────────────────────────────────────────────────────────────────────
-    // v3 legacy key/group accessors — used ONLY by migration code.
-    //
-    // Per-mode disable keys (`v3*DisabledMonitorsKey` etc.) lived in the v3
-    // Display group; migrateV2ToV3 wrote them there and migrateV3ToV4 reads
-    // and removes them as the values move into windowrules.json. They no
-    // longer exist on disk at runtime (v4+) — Settings::disableEntriesFor /
-    // writeDisableEntries route through the rule store instead.
-    //
-    // Group/prefix accessors (`v3assignmentGroupPrefix`, `v3quickLayoutsGroup`,
-    // `v3modeTrackingGroup`) describe the assignments.json layout migrateV1ToV2
-    // produced and finalizeV4Conversion drains. Runtime no longer touches
-    // these on-disk shapes — LayoutRegistry reads the unified rule store via
-    // m_ruleStore->load().
-    // ───────────────────────────────────────────────────────────────────────────
-    PZ_CONFIG_KEY(v3snappingDisabledMonitorsKey, "SnappingDisabledMonitors")
-    PZ_CONFIG_KEY(v3autotileDisabledMonitorsKey, "AutotileDisabledMonitors")
-    PZ_CONFIG_KEY(v3snappingDisabledDesktopsKey, "SnappingDisabledDesktops")
-    PZ_CONFIG_KEY(v3autotileDisabledDesktopsKey, "AutotileDisabledDesktops")
-    PZ_CONFIG_KEY(v3snappingDisabledActivitiesKey, "SnappingDisabledActivities")
-    PZ_CONFIG_KEY(v3autotileDisabledActivitiesKey, "AutotileDisabledActivities")
-    PZ_CONFIG_GROUP(v3assignmentGroupPrefix, "Assignment:")
-    PZ_CONFIG_GROUP(v3quickLayoutsGroup, "QuickLayouts")
-    PZ_CONFIG_GROUP(v3modeTrackingGroup, "ModeTracking")
+        // v3 legacy keys/groups — used ONLY by migration code.
+        //
+        // Per-mode disable keys (`v3*DisabledMonitorsKey` etc.) lived in the v3
+        // Display group; migrateV2ToV3 wrote them there and migrateV3ToV4 reads
+        // and removes them as the values move into windowrules.json. They no
+        // longer exist on disk at runtime (v4+) — Settings::disableEntriesFor /
+        // writeDisableEntries route through the rule store instead.
+        //
+        // Group/prefix accessors (`v3assignmentGroupPrefix`, `v3quickLayoutsGroup`,
+        // `v3modeTrackingGroup`) describe the assignments.json layout migrateV1ToV2
+        // produced and finalizeV4Conversion drains. Runtime no longer touches
+        // these on-disk shapes — LayoutRegistry reads the unified rule store via
+        // m_ruleStore->load().
+        PZ_CONFIG_KEY(v3snappingDisabledMonitorsKey, "SnappingDisabledMonitors")
+        PZ_CONFIG_KEY(v3autotileDisabledMonitorsKey, "AutotileDisabledMonitors")
+        PZ_CONFIG_KEY(v3snappingDisabledDesktopsKey, "SnappingDisabledDesktops")
+        PZ_CONFIG_KEY(v3autotileDisabledDesktopsKey, "AutotileDisabledDesktops")
+        PZ_CONFIG_KEY(v3snappingDisabledActivitiesKey, "SnappingDisabledActivities")
+        PZ_CONFIG_KEY(v3autotileDisabledActivitiesKey, "AutotileDisabledActivities")
+        PZ_CONFIG_GROUP(v3assignmentGroupPrefix, "Assignment:")
+        PZ_CONFIG_GROUP(v3quickLayoutsGroup, "QuickLayouts")
+        PZ_CONFIG_GROUP(v3modeTrackingGroup, "ModeTracking")
 
-    // ───────────────────────────────────────────────────────────────────────────
-    // v4 legacy key/group accessors — used ONLY by migration code.
+        // v4 legacy keys/groups — used ONLY by migration code.
+        //
+        // The `Animations.AnimationAppRules` array carried per-window animation
+        // overrides up through v4. migrateV3ToV4 stashes that array for
+        // finalizeV4Conversion to convert into WindowRules, then removes the key
+        // permanently. The group name `Animations` is unchanged at runtime (it
+        // still hosts ShaderProfileTree), but the key accessor is migration-only:
+        // it lives here so the migration is the sole remaining reader of the v4
+        // wire format — the live ConfigDefaults accessors for the key and its
+        // default value have been removed.
+        //
+        // `v4AnimationsGroup` deliberately duplicates the live `animationsGroup()`
+        // accessor's literal ("Animations") rather than aliasing it. The migration
+        // reads from the FROZEN v4 on-disk name; a future rename of
+        // `animationsGroup()` (v5+ runtime) MUST NOT silently retarget the v4
+        // migration to a path that never existed on disk in v4-and-earlier
+        // configs. Do not consolidate these two accessors.
+        //
+        // The same freeze policy applies to every accessor in this `Legacy`
+        // struct: each one names a v1/v2/v3/v4 on-disk shape the runtime no
+        // longer touches. The `v3*` group/key accessors below duplicate live
+        // ConfigDefaults literals on purpose — the v3→v4 migration must read
+        // from the path that existed in v3 configs on disk, even if a future
+        // schema bump renames the live accessor. Consolidating Legacy accessors
+        // with their live counterparts would silently retarget the migration on
+        // the next rename. Do not do it.
+        PZ_CONFIG_GROUP(v4AnimationsGroup, "Animations")
+        PZ_CONFIG_KEY(v4AnimationAppRulesKey, "AnimationAppRules")
+
+        // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
+        // finalizeV4Conversion. These mirror the live `displayGroup`,
+        // `defaultLayoutIdKey`, `snappingBehaviorWindowHandlingGroup`,
+        // `tilingAlgorithmGroup`, and `defaultKey` accessors but are frozen
+        // at their v3 literal so a future runtime rename cannot silently
+        // retarget the migration to a path no v3 config ever had on disk.
+        PZ_CONFIG_GROUP(v3DisplayGroup, "Display")
+        PZ_CONFIG_KEY(v3DefaultLayoutIdKey, "DefaultLayoutId")
+        PZ_CONFIG_GROUP(v3SnappingBehaviorWindowHandlingGroup, "Snapping.Behavior.WindowHandling")
+        PZ_CONFIG_GROUP(v3TilingAlgorithmGroup, "Tiling.Algorithm")
+        PZ_CONFIG_KEY(v3DefaultKey, "Default")
+
+        // v3 assignments.json field names — frozen literals from the dead
+        // v3 assignments.json schema. finalizeV4Conversion is the sole
+        // remaining reader; these are NOT live config keys.
+        PZ_CONFIG_KEY(v3AssignmentMode, "Mode")
+        PZ_CONFIG_KEY(v3AssignmentLayout, "SnappingLayout")
+        PZ_CONFIG_KEY(v3AssignmentAlgorithm, "TilingAlgorithm")
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Settings-app session keys
     //
-    // The `Animations.AnimationAppRules` array carried per-window animation
-    // overrides up through v4. migrateV3ToV4 stashes that array for
-    // finalizeV4Conversion to convert into WindowRules, then removes the key
-    // permanently. The group name `Animations` is unchanged at runtime (it
-    // still hosts ShaderProfileTree), but the key accessor is migration-only:
-    // it lives here so the migration is the sole remaining reader of the v4
-    // wire format — the live ConfigDefaults accessors for the key and its
-    // default value have been removed.
+    // These do NOT live in the main config JSON — they're per-organization
+    // QSettings entries (~/.config/<org>/<app>.conf) for the settings UI's
+    // own ephemeral state: last window geometry, dismissed update banner,
+    // last-seen what's-new version. Centralised here so the CLAUDE.md "no
+    // inline QStringLiteral for config keys" rule applies uniformly.
+    // ═══════════════════════════════════════════════════════════════════════════
+    PZ_CONFIG_KEY(settingsAppWindowXKey, "x")
+    PZ_CONFIG_KEY(settingsAppWindowYKey, "y")
+    PZ_CONFIG_KEY(settingsAppWindowWidthKey, "width")
+    PZ_CONFIG_KEY(settingsAppWindowHeightKey, "height")
+    PZ_CONFIG_KEY(settingsAppDismissedUpdateVersionKey, "dismissedUpdateVersion")
+    PZ_CONFIG_KEY(settingsAppLastSeenWhatsNewVersionKey, "lastSeenWhatsNewVersion")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Filesystem paths under XDG_DATA_HOME
     //
-    // `v4AnimationsGroup` deliberately duplicates the live `animationsGroup()`
-    // accessor's literal ("Animations") rather than aliasing it. The migration
-    // reads from the FROZEN v4 on-disk name; a future rename of
-    // `animationsGroup()` (v5+ runtime) MUST NOT silently retarget the v4
-    // migration to a path that never existed on disk in v4-and-earlier
-    // configs. Do not consolidate these two accessors.
-    // ───────────────────────────────────────────────────────────────────────────
-    PZ_CONFIG_GROUP(v4AnimationsGroup, "Animations")
-    PZ_CONFIG_KEY(v4AnimationAppRulesKey, "AnimationAppRules")
+    // Daemon, settings app, and editor all read/write the same per-user
+    // layouts and algorithms directories. Hoisted into one accessor each so
+    // a rename only touches one site.
+    // ═══════════════════════════════════════════════════════════════════════════
+    PZ_CONFIG_KEY(userDataSubdir, "plasmazones")
+    PZ_CONFIG_KEY(layoutsSubdir, "plasmazones/layouts")
+    PZ_CONFIG_KEY(algorithmsSubdir, "plasmazones/algorithms")
 
 private:
     // Non-instantiable
     ConfigKeys() = delete;
 };
+
+// ─── Disable-rule label helpers ─────────────────────────────────────────────
+// Shared between the live Settings disable-list writer
+// (Settings::writeDisableEntries) and the v3→v4 migration's disable-rule
+// builders. Both call sites must produce the same `WindowRule::name` string for
+// a given (mode, screen, desktop, activity) tuple so that resaving an existing
+// disable list (e.g. after a UI edit) doesn't fork into two slightly different
+// labels for what is otherwise the same rule.
+//
+// These are NOT translated. `WindowRule::name` is the persisted identity
+// surface in windowrules.json; running the app under different locales must
+// not change its on-disk text. The rule editor surfaces the name verbatim,
+// matching the historic behaviour.
+inline QString autotileDisableRulePrefix()
+{
+    return QStringLiteral("Autotile off · ");
+}
+
+inline QString snappingDisableRulePrefix()
+{
+    return QStringLiteral("Snapping off · ");
+}
+
+inline QString disableRulePrefixFor(bool autotile)
+{
+    return autotile ? autotileDisableRulePrefix() : snappingDisableRulePrefix();
+}
+
+inline QString disableRuleDesktopSuffix(int desktop)
+{
+    return QStringLiteral(" · Desktop ") + QString::number(desktop);
+}
+
+inline QString disableRuleActivitySuffix()
+{
+    return QStringLiteral(" · Activity");
+}
 
 } // namespace PlasmaZones
 

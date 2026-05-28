@@ -14,9 +14,17 @@ QVariantList convertTriggersForQml(const QVariantList& triggers)
     QVariantList result;
     for (const auto& t : triggers) {
         auto map = t.toMap();
+        const int modifierValue = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        // The header contract requires callers to strip the
+        // AlwaysActive sentinel (DragModifier::AlwaysActive == 8)
+        // first — `dragModifierToBitmask(8)` returns 0, which would
+        // surface as a phantom "no-modifier" chip in QML. Skip the
+        // entry defensively so a forgetful caller can't silently
+        // poison the QML view.
+        if (modifierValue == static_cast<int>(DragModifier::AlwaysActive))
+            continue;
         QVariantMap converted;
-        converted[ConfigDefaults::triggerModifierField()] =
-            ModifierUtils::dragModifierToBitmask(map.value(ConfigDefaults::triggerModifierField(), 0).toInt());
+        converted[ConfigDefaults::triggerModifierField()] = ModifierUtils::dragModifierToBitmask(modifierValue);
         converted[ConfigDefaults::triggerMouseButtonField()] = map.value(ConfigDefaults::triggerMouseButtonField(), 0);
         result.append(converted);
     }
@@ -86,6 +94,30 @@ QVariantList mergeAlwaysActiveTrigger(const QVariantList& nonSentinelTriggers)
         result.append(t);
     }
     return result;
+}
+
+QVariantList applyAlwaysActiveToggle(const QVariantList& currentStored, bool enabled,
+                                     const QVariantList& factoryDefault)
+{
+    const QVariantList nonSentinel = stripAlwaysActiveTrigger(currentStored);
+    if (enabled) {
+        return mergeAlwaysActiveTrigger(nonSentinel);
+    }
+    if (nonSentinel.isEmpty()) {
+        return factoryDefault;
+    }
+    return nonSentinel;
+}
+
+QVariantList normaliseExplicitEdit(const QVariantList& fromQml, bool masterToggleOn)
+{
+    // Strip the sentinel from the QML-authored edit (the widget shouldn't
+    // include it — the master toggle owns that bit), then re-merge if the
+    // master toggle is currently on. Without the re-merge, the sentinel-
+    // free explicit list would silently flip the master toggle off as a
+    // side effect of the user editing the non-sentinel chips.
+    const QVariantList nonSentinel = stripAlwaysActiveTrigger(convertTriggersForStorage(fromQml));
+    return masterToggleOn ? mergeAlwaysActiveTrigger(nonSentinel) : nonSentinel;
 }
 
 } // namespace PlasmaZones::TriggerUtils

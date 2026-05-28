@@ -13,7 +13,7 @@
 class QDBusPendingCallWatcher;
 class QDBusServiceWatcher;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief @ref IPanelSource implementation that queries KDE Plasma Shell
@@ -89,4 +89,4 @@ private:
     QDBusPendingCallWatcher* m_activeWatcher = nullptr;
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

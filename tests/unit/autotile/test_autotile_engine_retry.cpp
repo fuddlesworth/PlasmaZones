@@ -20,7 +20,7 @@ using namespace PhosphorTileEngine;
  * @brief AutotileEngine tests for bounded retile retry, recalculateLayout bool
  *        return value, and min-size cache clearing on unfloat.
  *
- * These tests run WITHOUT a Phosphor::Screens::ScreenManager (nullptr), which means the
+ * These tests run WITHOUT a PhosphorScreens::ScreenManager (nullptr), which means the
  * pre-validation gate in retileScreen is skipped. The retry mechanism is
  * tested indirectly via the public API surface. recalculateLayout's bool
  * return is tested via observable side effects (placementChanged emission).

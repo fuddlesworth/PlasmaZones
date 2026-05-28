@@ -6,7 +6,7 @@
 #include "plasmazones_export.h"
 #include <PhosphorIdentity/WindowId.h>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -63,10 +63,10 @@ inline qreal screenAspectRatio(QScreen* screen)
  * @param screenNameOrId Screen connector name, EDID-based ID, or virtual screen ID
  * @return width/height ratio, or 0.0 if screen not found
  *
- * For virtual screen IDs, uses Phosphor::Screens::ScreenManager::screenGeometry() to get the
+ * For virtual screen IDs, uses PhosphorScreens::ScreenManager::screenGeometry() to get the
  * virtual screen dimensions. Falls back to physical QScreen* for non-virtual IDs.
  */
-PLASMAZONES_EXPORT qreal screenAspectRatio(Phosphor::Screens::ScreenManager* mgr, const QString& screenNameOrId);
+PLASMAZONES_EXPORT qreal screenAspectRatio(PhosphorScreens::ScreenManager* mgr, const QString& screenNameOrId);
 
 /**
  * @brief Get the primary screen
@@ -200,7 +200,7 @@ inline std::optional<QJsonObject> parseJsonObject(const QString& json)
 /**
  * @brief Resolve the effective screen ID at a global position (virtual-screen-aware)
  *
- * Queries Phosphor::Screens::ScreenManager::effectiveScreenAt() for virtual screen resolution,
+ * Queries PhosphorScreens::ScreenManager::effectiveScreenAt() for virtual screen resolution,
  * falling back to the physical QScreen's stable identifier. Eliminates the
  * repeated pattern of:
  *   auto* mgr = screenManager();
@@ -208,13 +208,13 @@ inline std::optional<QJsonObject> parseJsonObject(const QString& json)
  *   if (id.isEmpty()) id = Utils::screenIdentifier(screen);
  *
  * @param pos Global compositor position
- * @param fallbackScreen Physical QScreen* to derive screen ID from if Phosphor::Screens::ScreenManager
+ * @param fallbackScreen Physical QScreen* to derive screen ID from if PhosphorScreens::ScreenManager
  *        is unavailable or pos is outside all virtual screens. If nullptr, the
  *        QScreen at pos (via QGuiApplication::screenAt) is used.
  * @return Effective screen ID (virtual if subdivided, physical otherwise), or
  *         empty string if no screen could be resolved
  */
-PLASMAZONES_EXPORT QString effectiveScreenIdAt(Phosphor::Screens::ScreenManager* mgr, const QPoint& pos,
+PLASMAZONES_EXPORT QString effectiveScreenIdAt(PhosphorScreens::ScreenManager* mgr, const QPoint& pos,
                                                QScreen* fallbackScreen = nullptr);
 
 /**

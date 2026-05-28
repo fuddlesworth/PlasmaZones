@@ -5,13 +5,14 @@
 
 #include "../config/configdefaults.h"
 
+#include <PhosphorSettingsUi/PageController.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 
 namespace PlasmaZones {
 
-class Settings;
+class ISettings;
 
 /// Q_PROPERTY surface for the "General" settings page.
 ///
@@ -23,7 +24,17 @@ class Settings;
 ///
 /// Import/export of the full config stays on SettingsController — those are
 /// top-level app actions that touch every page, not a "General" concern.
-class GeneralPageController : public QObject
+///
+/// Pure CONSTANT facade — no per-page staged state; isDirty/apply/discard
+/// are no-ops. Dirty tracking is global through SettingsController's
+/// meta-object loop on Settings's Q_PROPERTYs: any rendering-backend
+/// selection that calls `m_settings.setRenderingBackend` trips the
+/// Q_PROPERTY NOTIFY, which SettingsController's `onSettingsPropertyChanged`
+/// slot maps to the active page (or the top of `m_externalEditStack`).
+/// The "General" page therefore participates in dirty tracking via
+/// the Settings property surface, not via this controller's own
+/// signals.
+class GeneralPageController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -39,7 +50,23 @@ class GeneralPageController : public QObject
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
 
 public:
-    explicit GeneralPageController(Settings* settings, QObject* parent = nullptr);
+    /// Reference parameter, not pointer: the ISettings instance is required
+    /// at construction time (to snapshot the current rendering backend) and
+    /// must not be null. Taking it by reference makes the precondition a
+    /// compile-time guarantee. ISettings (not the concrete Settings) per
+    /// CLAUDE.md so unit tests can stub.
+    explicit GeneralPageController(ISettings& settings, QObject* parent = nullptr);
+
+    bool isDirty() const override
+    {
+        return false;
+    }
+    void apply() override
+    {
+    }
+    void discard() override
+    {
+    }
 
     QStringList renderingBackendOptions() const
     {

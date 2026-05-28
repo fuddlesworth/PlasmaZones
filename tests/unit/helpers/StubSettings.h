@@ -14,7 +14,9 @@ namespace PlasmaZones {
  * @brief Unified stub ISettings for unit tests
  *
  * Provides sensible defaults for all ISettings pure virtual methods.
- * The defaultLayoutId can be overridden via setTestDefaultLayoutId().
+ * The defaultLayoutId is mutated via setDefaultLayoutId() (the
+ * ISettings setter); tests should call that directly rather than a
+ * "test-only" duplicate.
  *
  * Also inherits PhosphorEngine::ISnapSettings so SnapEngine's
  * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
@@ -22,6 +24,13 @@ namespace PlasmaZones {
  * stickyWindowHandling, moveNewWindowsToLastZone, restoreWindowsToZonesOnLogin,
  * autoAssignAllLayouts) are already implemented for ISettings — the multiple
  * inheritance just registers the second base so the cast resolves.
+ *
+ * NOTE: This stub does NOT inherit PhosphorEngine::IAutotileSettings —
+ * the AutotileEngine fetches its config via a separate code path and
+ * no currently-exercised unit test routes through a
+ * dynamic_cast<IAutotileSettings*> against the stub. If a future test
+ * exercises autotile-engine wiring through ISettings, the stub
+ * should grow that base + the 22 IAutotileSettings overrides.
  */
 class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
 {
@@ -43,11 +52,11 @@ public:
     }
     void setDefaultLayoutId(const QString& id) override
     {
+        if (m_defaultLayoutId == id)
+            return;
         m_defaultLayoutId = id;
-    }
-    void setTestDefaultLayoutId(const QString& id)
-    {
-        m_defaultLayoutId = id;
+        Q_EMIT defaultLayoutIdChanged();
+        Q_EMIT settingsChanged();
     }
 
     // IZoneActivationSettings
@@ -641,7 +650,11 @@ public:
     }
     void setAutoAssignAllLayouts(bool enabled) override
     {
+        if (m_autoAssignAllLayouts == enabled)
+            return;
         m_autoAssignAllLayouts = enabled;
+        Q_EMIT autoAssignAllLayoutsChanged();
+        Q_EMIT settingsChanged();
     }
     bool snapAssistFeatureEnabled() const override
     {
@@ -649,7 +662,11 @@ public:
     }
     void setSnapAssistFeatureEnabled(bool enabled) override
     {
+        if (m_snapAssistFeatureEnabled == enabled)
+            return;
         m_snapAssistFeatureEnabled = enabled;
+        Q_EMIT snapAssistFeatureEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     bool snapAssistEnabled() const override
     {
@@ -657,7 +674,11 @@ public:
     }
     void setSnapAssistEnabled(bool enabled) override
     {
+        if (m_snapAssistEnabled == enabled)
+            return;
         m_snapAssistEnabled = enabled;
+        Q_EMIT snapAssistEnabledChanged();
+        Q_EMIT settingsChanged();
     }
     QVariantList snapAssistTriggers() const override
     {
@@ -681,7 +702,11 @@ public:
     }
     void setSnappingLayoutOrder(const QStringList& order) override
     {
+        if (m_snappingLayoutOrder == order)
+            return;
         m_snappingLayoutOrder = order;
+        Q_EMIT snappingLayoutOrderChanged();
+        Q_EMIT settingsChanged();
     }
     QStringList tilingAlgorithmOrder() const override
     {
@@ -689,7 +714,11 @@ public:
     }
     void setTilingAlgorithmOrder(const QStringList& order) override
     {
+        if (m_tilingAlgorithmOrder == order)
+            return;
         m_tilingAlgorithmOrder = order;
+        Q_EMIT tilingAlgorithmOrderChanged();
+        Q_EMIT settingsChanged();
     }
 
     // Animation settings (ISettings)
@@ -835,6 +864,167 @@ public:
     void setAutotileDragInsertToggle(bool) override
     {
     }
+    QVariantMap autotilePerAlgorithmSettings() const override
+    {
+        return m_autotilePerAlgorithmSettings;
+    }
+    void setAutotilePerAlgorithmSettings(const QVariantMap& settings) override
+    {
+        if (m_autotilePerAlgorithmSettings == settings)
+            return;
+        m_autotilePerAlgorithmSettings = settings;
+        Q_EMIT autotilePerAlgorithmSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString loadColorsFromFile(const QString&) override
+    {
+        // Stub returns "not supported" so a test that exercised this
+        // path could distinguish a real failure from a missing impl,
+        // but the controllers under test don't reach this in their
+        // unit-test paths today.
+        return QStringLiteral("loadColorsFromFile: stub not supported");
+    }
+
+    // Editor settings — round-trip the stub members so a test can
+    // exercise the EditorPageController setter/getter contract.
+    //
+    // Every setter below pairs the field-specific signal with the umbrella
+    // `settingsChanged()` emit. The concrete Settings class does the same
+    // via the PZ_STORE_SET_{BOOL,STRING,INT,DOUBLE} macros (settings.cpp
+    // ~2759-2784) — the stub matches so tests can rely on `settingsChanged()`
+    // firing on any setter, regardless of which ISettings backend is wired.
+    QString editorDuplicateShortcut() const override
+    {
+        return m_editorDuplicateShortcut;
+    }
+    void setEditorDuplicateShortcut(const QString& s) override
+    {
+        if (m_editorDuplicateShortcut == s)
+            return;
+        m_editorDuplicateShortcut = s;
+        Q_EMIT editorDuplicateShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString editorSplitHorizontalShortcut() const override
+    {
+        return m_editorSplitHorizontalShortcut;
+    }
+    void setEditorSplitHorizontalShortcut(const QString& s) override
+    {
+        if (m_editorSplitHorizontalShortcut == s)
+            return;
+        m_editorSplitHorizontalShortcut = s;
+        Q_EMIT editorSplitHorizontalShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString editorSplitVerticalShortcut() const override
+    {
+        return m_editorSplitVerticalShortcut;
+    }
+    void setEditorSplitVerticalShortcut(const QString& s) override
+    {
+        if (m_editorSplitVerticalShortcut == s)
+            return;
+        m_editorSplitVerticalShortcut = s;
+        Q_EMIT editorSplitVerticalShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+    QString editorFillShortcut() const override
+    {
+        return m_editorFillShortcut;
+    }
+    void setEditorFillShortcut(const QString& s) override
+    {
+        if (m_editorFillShortcut == s)
+            return;
+        m_editorFillShortcut = s;
+        Q_EMIT editorFillShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool editorGridSnappingEnabled() const override
+    {
+        return m_editorGridSnappingEnabled;
+    }
+    void setEditorGridSnappingEnabled(bool e) override
+    {
+        if (m_editorGridSnappingEnabled == e)
+            return;
+        m_editorGridSnappingEnabled = e;
+        Q_EMIT editorGridSnappingEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool editorEdgeSnappingEnabled() const override
+    {
+        return m_editorEdgeSnappingEnabled;
+    }
+    void setEditorEdgeSnappingEnabled(bool e) override
+    {
+        if (m_editorEdgeSnappingEnabled == e)
+            return;
+        m_editorEdgeSnappingEnabled = e;
+        Q_EMIT editorEdgeSnappingEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+    qreal editorSnapIntervalX() const override
+    {
+        return m_editorSnapIntervalX;
+    }
+    void setEditorSnapIntervalX(qreal v) override
+    {
+        if (qFuzzyCompare(m_editorSnapIntervalX, v))
+            return;
+        m_editorSnapIntervalX = v;
+        Q_EMIT editorSnapIntervalXChanged();
+        Q_EMIT settingsChanged();
+    }
+    qreal editorSnapIntervalY() const override
+    {
+        return m_editorSnapIntervalY;
+    }
+    void setEditorSnapIntervalY(qreal v) override
+    {
+        if (qFuzzyCompare(m_editorSnapIntervalY, v))
+            return;
+        m_editorSnapIntervalY = v;
+        Q_EMIT editorSnapIntervalYChanged();
+        Q_EMIT settingsChanged();
+    }
+    int editorSnapOverrideModifier() const override
+    {
+        return m_editorSnapOverrideModifier;
+    }
+    void setEditorSnapOverrideModifier(int m) override
+    {
+        if (m_editorSnapOverrideModifier == m)
+            return;
+        m_editorSnapOverrideModifier = m;
+        Q_EMIT editorSnapOverrideModifierChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool fillOnDropEnabled() const override
+    {
+        return m_fillOnDropEnabled;
+    }
+    void setFillOnDropEnabled(bool e) override
+    {
+        if (m_fillOnDropEnabled == e)
+            return;
+        m_fillOnDropEnabled = e;
+        Q_EMIT fillOnDropEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+    int fillOnDropModifier() const override
+    {
+        return m_fillOnDropModifier;
+    }
+    void setFillOnDropModifier(int m) override
+    {
+        if (m_fillOnDropModifier == m)
+            return;
+        m_fillOnDropModifier = m;
+        Q_EMIT fillOnDropModifierChanged();
+        Q_EMIT settingsChanged();
+    }
     QStringList lockedScreens() const override
     {
         return {};
@@ -892,12 +1082,27 @@ private:
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
     QVariantList m_dragActivationTriggers;
-    bool m_animationExcludeTransientWindows = false;
-    bool m_animationExcludeNotificationsAndOsd = true;
-    int m_animationMinimumWindowWidth = 0;
-    int m_animationMinimumWindowHeight = 0;
+    // Animation-filter defaults routed through ConfigDefaults so a future
+    // tweak to the production defaults flows into tests automatically — keeps
+    // the stub from drifting into "tests pass against a stale baseline".
+    bool m_animationExcludeTransientWindows = ConfigDefaults::animationExcludeTransientWindows();
+    bool m_animationExcludeNotificationsAndOsd = ConfigDefaults::animationExcludeNotificationsAndOsd();
+    int m_animationMinimumWindowWidth = ConfigDefaults::animationMinimumWindowWidth();
+    int m_animationMinimumWindowHeight = ConfigDefaults::animationMinimumWindowHeight();
     QStringList m_animationExcludedApplications;
     QStringList m_animationExcludedWindowClasses;
+    QVariantMap m_autotilePerAlgorithmSettings;
+    QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
+    QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();
+    QString m_editorSplitVerticalShortcut = ConfigDefaults::editorSplitVerticalShortcut();
+    QString m_editorFillShortcut = ConfigDefaults::editorFillShortcut();
+    bool m_editorGridSnappingEnabled = ConfigDefaults::editorGridSnappingEnabled();
+    bool m_editorEdgeSnappingEnabled = ConfigDefaults::editorEdgeSnappingEnabled();
+    qreal m_editorSnapIntervalX = ConfigDefaults::editorSnapIntervalX();
+    qreal m_editorSnapIntervalY = ConfigDefaults::editorSnapIntervalY();
+    int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
+    bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
+    int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
 };
 
 } // namespace PlasmaZones

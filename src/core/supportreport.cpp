@@ -49,7 +49,7 @@ QString SupportReport::redactHomePath(const QString& input)
     return result;
 }
 
-SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
+SupportReport::Snapshot SupportReport::collectSnapshot(PhosphorScreens::ScreenManager* screenManager,
                                                        PhosphorZones::LayoutRegistry* layoutManager,
                                                        PhosphorEngine::IPlacementEngine* autotileEngine)
 {
@@ -57,9 +57,9 @@ SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::Screen
 
     if (screenManager) {
         snap.hasScreenManager = true;
-        const QVector<Phosphor::Screens::PhysicalScreen> screens = screenManager->screens();
+        const QVector<PhosphorScreens::PhysicalScreen> screens = screenManager->screens();
         snap.screens.reserve(screens.size());
-        for (const Phosphor::Screens::PhysicalScreen& screen : screens) {
+        for (const PhosphorScreens::PhysicalScreen& screen : screens) {
             Snapshot::ScreenInfo info;
             info.name = screen.name;
             info.geometry = screen.geometry;
@@ -413,7 +413,7 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     return report;
 }
 
-QString SupportReport::generate(Phosphor::Screens::ScreenManager* screenManager,
+QString SupportReport::generate(PhosphorScreens::ScreenManager* screenManager,
                                 PhosphorZones::LayoutRegistry* layoutManager,
                                 PhosphorEngine::IPlacementEngine* autotileEngine, int sinceMinutes)
 {

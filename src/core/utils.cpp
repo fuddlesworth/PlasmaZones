@@ -19,14 +19,14 @@ namespace Utils {
 
 bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId)
 {
-    return Phosphor::Screens::ScreenIdentity::belongsToPhysicalScreen(storedScreenId, physicalScreenId);
+    return PhosphorScreens::ScreenIdentity::belongsToPhysicalScreen(storedScreenId, physicalScreenId);
 }
 
 void warnDuplicateScreenIds()
 {
     QHash<QString, QStringList> idToConnectors;
     for (QScreen* screen : QGuiApplication::screens()) {
-        QString id = Phosphor::Screens::ScreenIdentity::baseIdentifierFor(screen);
+        QString id = PhosphorScreens::ScreenIdentity::baseIdentifierFor(screen);
         idToConnectors[id].append(screen->name());
     }
     for (auto it = idToConnectors.constBegin(); it != idToConnectors.constEnd(); ++it) {
@@ -38,7 +38,7 @@ void warnDuplicateScreenIds()
     }
 }
 
-QString effectiveScreenIdAt(Phosphor::Screens::ScreenManager* mgr, const QPoint& pos, QScreen* fallbackScreen)
+QString effectiveScreenIdAt(PhosphorScreens::ScreenManager* mgr, const QPoint& pos, QScreen* fallbackScreen)
 {
     if (mgr) {
         QString id = mgr->effectiveScreenAt(pos);
@@ -50,10 +50,10 @@ QString effectiveScreenIdAt(Phosphor::Screens::ScreenManager* mgr, const QPoint&
     if (!screen) {
         screen = findScreenAtPosition(pos);
     }
-    return screen ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : QString();
+    return screen ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : QString();
 }
 
-qreal screenAspectRatio(Phosphor::Screens::ScreenManager* mgr, const QString& screenNameOrId)
+qreal screenAspectRatio(PhosphorScreens::ScreenManager* mgr, const QString& screenNameOrId)
 {
     // For virtual screen IDs, use the injected ScreenManager for VS geometry
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenNameOrId) && mgr) {
@@ -64,7 +64,7 @@ qreal screenAspectRatio(Phosphor::Screens::ScreenManager* mgr, const QString& sc
     }
 
     // Fallback: physical screen lookup
-    return screenAspectRatio(Phosphor::Screens::ScreenIdentity::findByIdOrName(screenNameOrId));
+    return screenAspectRatio(PhosphorScreens::ScreenIdentity::findByIdOrName(screenNameOrId));
 }
 
 } // namespace Utils

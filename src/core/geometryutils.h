@@ -23,7 +23,7 @@ class Layout;
 class Zone;
 }
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -48,9 +48,9 @@ using ::PhosphorZones::GeometryUtils::getZoneGeometryWithGaps;
 /**
  * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry
  *
- * Unified helper that resolves virtual screen geometry via Phosphor::Screens::ScreenManager when
+ * Unified helper that resolves virtual screen geometry via PhosphorScreens::ScreenManager when
  * available, falling back to the physical QScreen* geometry. Eliminates the
- * repeated pattern of querying Phosphor::Screens::ScreenManager + branching on vsGeom.isValid()
+ * repeated pattern of querying PhosphorScreens::ScreenManager + branching on vsGeom.isValid()
  * that appears in navigation, resnap, snap-all, rotation, and overlay code.
  *
  * @param zone PhosphorZones::Zone to get geometry for
@@ -60,7 +60,7 @@ using ::PhosphorZones::GeometryUtils::getZoneGeometryWithGaps;
  * @param settings Global settings for gap fallbacks
  * @return Snapped integer geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Zone* zone,
                                                   QScreen* screen, const QString& screenId,
                                                   PhosphorZones::Layout* layout, ISettings* settings);
 
@@ -78,7 +78,7 @@ PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManag
  * @param settings Global settings for gap fallbacks
  * @return Floating-point geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Zone* zone,
                                                     QScreen* screen, const QString& screenId,
                                                     PhosphorZones::Layout* layout, ISettings* settings);
 
@@ -126,17 +126,17 @@ using ::PhosphorZones::GeometryUtils::setZoneGeometry;
  * to avoid duplicating the empty-zones building logic.
  */
 PLASMAZONES_EXPORT PhosphorProtocol::EmptyZoneList
-buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout, QScreen* screen,
+buildEmptyZoneList(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout, QScreen* screen,
                    ISettings* settings, const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
 
 /**
  * @brief Build typed list of empty zones using explicit screen ID (virtual-screen-aware)
  *
- * Uses Phosphor::Screens::ScreenManager to resolve virtual screen geometry when available, falling back
+ * Uses PhosphorScreens::ScreenManager to resolve virtual screen geometry when available, falling back
  * to the physical QScreen* geometry.
  */
 PLASMAZONES_EXPORT PhosphorProtocol::EmptyZoneList
-buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout, const QString& screenId,
+buildEmptyZoneList(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout, const QString& screenId,
                    QScreen* physScreen, ISettings* settings,
                    const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
 

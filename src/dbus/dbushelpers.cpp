@@ -14,7 +14,7 @@
 namespace PlasmaZones {
 namespace DbusHelpers {
 
-QString resolveScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
+QString resolveScreenId(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
 {
     if (screenId.isEmpty()) {
         // Fall back to the primary screen's effective screen ID.
@@ -24,17 +24,17 @@ QString resolveScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& sc
         if (primary && mgr) {
             // If the primary screen has virtual subdivisions, returns the first
             // virtual screen ID. Otherwise returns the physical screen ID.
-            const QStringList ids = mgr->virtualScreenIdsFor(Phosphor::Screens::ScreenIdentity::identifierFor(primary));
-            return ids.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : ids.first();
+            const QStringList ids = mgr->virtualScreenIdsFor(PhosphorScreens::ScreenIdentity::identifierFor(primary));
+            return ids.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : ids.first();
         }
-        return primary ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : QString();
+        return primary ? PhosphorScreens::ScreenIdentity::identifierFor(primary) : QString();
     }
     return PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
         ? screenId
-        : Phosphor::Screens::ScreenIdentity::idForName(screenId);
+        : PhosphorScreens::ScreenIdentity::idForName(screenId);
 }
 
-QRectF resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+QRectF resolveScreenGeometry(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout,
                              const QString& screenId)
 {
     if (mgr) {
@@ -43,8 +43,8 @@ QRectF resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZone
             return GeometryUtils::effectiveScreenGeometry(mgr, layout, screenId);
         }
     }
-    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(
-        PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    QScreen* screen =
+        PhosphorScreens::ScreenIdentity::findByIdOrName(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
     if (!screen && mgr) {
         screen = mgr->physicalScreenFor(screenId).qscreen;
     }
@@ -54,7 +54,7 @@ QRectF resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZone
     return {};
 }
 
-QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
+QScreen* resolvePhysicalQScreen(PhosphorScreens::ScreenManager* mgr, const QString& screenId)
 {
     if (mgr) {
         QScreen* screen = mgr->physicalScreenFor(screenId).qscreen;
@@ -62,7 +62,7 @@ QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QSt
             return screen;
         }
     }
-    return Phosphor::Screens::ScreenIdentity::findByIdOrName(
+    return PhosphorScreens::ScreenIdentity::findByIdOrName(
         PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
 }
 

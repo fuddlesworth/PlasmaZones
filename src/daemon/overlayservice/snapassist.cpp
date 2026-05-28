@@ -155,13 +155,18 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
 
     // Attach cached thumbnails - kwin-effect posts updates via
     // setSnapAssistThumbnail asynchronously after this returns.
+    //
+    // Hoist the atomic load out of the loop — it's stable across the
+    // single-threaded GUI iteration here, so paying the per-iteration
+    // acquire fence to re-read it was wasted work on a hot path that
+    // can run with dozens of candidates during snap-assist setup.
     QVariantList rebuilt;
     rebuilt.reserve(candidatesList.size());
     int cachedCount = 0;
+    auto* const thumbProvider = m_thumbnailProvider.load(std::memory_order_acquire);
     for (int i = 0; i < candidatesList.size(); ++i) {
         QVariantMap cand = candidatesList[i].toMap();
         const QString compositorHandle = cand.value(QStringLiteral("compositorHandle")).toString();
-        auto* thumbProvider = m_thumbnailProvider.load(std::memory_order_acquire);
         if (!compositorHandle.isEmpty() && thumbProvider) {
             const QString cachedUrl = thumbProvider->urlFor(compositorHandle);
             if (!cachedUrl.isEmpty()) {
@@ -399,7 +404,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    const QString resolvedId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
+    const QString resolvedId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
     QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();

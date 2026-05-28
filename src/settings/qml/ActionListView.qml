@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -46,7 +47,7 @@ ColumnLayout {
     /// look like one consistent tree visualisation.
     readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
     readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
-    readonly property int _guideThickness: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 1.5))
+    readonly property int _guideThickness: Math.max(2, Math.round(Screen.devicePixelRatio * 1.5))
 
     /// Look up the `{ value, label, params }` entry for a wire type
     /// string, or null when the type isn't in the registry.
@@ -54,7 +55,6 @@ ColumnLayout {
         for (var i = 0; i < root.actionTypeOptions.length; ++i) {
             if (root.actionTypeOptions[i].value === typeWire)
                 return root.actionTypeOptions[i];
-
         }
         return null;
     }
@@ -89,7 +89,6 @@ ColumnLayout {
             for (var i = 0; i < opts.length; ++i) {
                 if (opts[i].value === raw)
                     return opts[i].label;
-
             }
             return rawStr;
         }
@@ -98,7 +97,6 @@ ColumnLayout {
             for (var j = 0; j < layouts.length; ++j) {
                 if (layouts[j].id === raw)
                     return layouts[j].name;
-
             }
             return rawStr;
         }
@@ -113,7 +111,6 @@ ColumnLayout {
                 for (var p = 0; p < paths.length; ++p) {
                     if (paths[p].path === raw && !paths[p].isCategory)
                         return sections[s].label + " · " + paths[p].label;
-
                 }
             }
             return rawStr;
@@ -127,7 +124,6 @@ ColumnLayout {
             for (var k = 0; k < effects.length; ++k) {
                 if (effects[k].id === raw)
                     return effects[k].name;
-
             }
             return rawStr;
         }
@@ -222,7 +218,6 @@ ColumnLayout {
 
                     target: actionDelegate
                 }
-
             }
 
             RowLayout {
@@ -286,7 +281,7 @@ ColumnLayout {
                             implicitHeight: valueLabel.implicitHeight + Kirigami.Units.smallSpacing
                             radius: Kirigami.Units.smallSpacing
                             color: Kirigami.Theme.alternateBackgroundColor
-                            border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                            border.width: Math.round(Screen.devicePixelRatio)
                             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
 
                             Label {
@@ -296,21 +291,14 @@ ColumnLayout {
                                 text: root._resolveParamValue(paramRow.modelData, actionDelegate._action)
                                 font.family: Kirigami.Theme.smallFont.family
                             }
-
                         }
-
                     }
-
                 }
 
                 Item {
                     Layout.fillWidth: true
                 }
-
             }
-
         }
-
     }
-
 }

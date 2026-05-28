@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -54,14 +55,14 @@ SettingsFlickable {
     /// break locales with >2 plural forms (Polish, Russian, Arabic, …)
     /// and would lie about `%n` (it would substitute the wrapper's
     /// hard-coded count instead of `_usages.length`).
-    property var usageHeaderTextFn: function(count) {
+    property var usageHeaderTextFn: function (count) {
         return i18ncp("@info shader usage section header", "Used in %n event", "Used in %n events", count);
     }
     /// Closure plumbed through to each ShaderBrowserCard's footer chip.
     /// Same plural-form / live-count rationale as `usageHeaderTextFn`,
     /// and lets the card chip stay consistent with the dialog header
     /// (animations: "event"; snapping: "layout"; default: generic "use").
-    property var usageChipTextFn: function(count) {
+    property var usageChipTextFn: function (count) {
         return i18ncp("@info shader usage count", "%n use", "%n uses", count);
     }
     // Loaded from a Q_INVOKABLE; Connections below manually refreshes it
@@ -71,15 +72,13 @@ SettingsFlickable {
     // ── Filter state ────────────────────────────────────────────────────
     property string filterText: ""
     /// Map of `{ categoryName: true }`. Empty = show all categories.
-    property var selectedCategories: ({
-    })
+    property var selectedCategories: ({})
     property bool showBuiltIn: true
     property bool showUser: true
     readonly property bool _hasActiveFilters: filterText.length > 0 || Object.keys(selectedCategories).length > 0 || !showBuiltIn || !showUser
     // ── Derived: category index (sorted, with counts) ───────────────────
     readonly property var _allCategories: {
-        var counts = {
-        };
+        var counts = {};
         for (var i = 0; i < effectList.length; i++) {
             var cat = (effectList[i] && effectList[i].category) ? effectList[i].category : "";
             if (cat.length === 0)
@@ -88,14 +87,15 @@ SettingsFlickable {
             counts[cat] = (counts[cat] || 0) + 1;
         }
         var keys = Object.keys(counts);
-        keys.sort(function(a, b) {
+        keys.sort(function (a, b) {
             return a.localeCompare(b);
         });
         var result = [];
-        for (var k = 0; k < keys.length; k++) result.push({
-            "name": keys[k],
-            "count": counts[keys[k]]
-        })
+        for (var k = 0; k < keys.length; k++)
+            result.push({
+                "name": keys[k],
+                "count": counts[keys[k]]
+            });
         return result;
     }
     // ── Derived: filtered + grouped effects ─────────────────────────────
@@ -119,13 +119,11 @@ SettingsFlickable {
                 var cat = e.category || "";
                 if (!root.selectedCategories[cat])
                     continue;
-
             }
             if (needle.length > 0) {
                 var hay = (String(e.name || "") + " " + String(e.id || "") + " " + String(e.description || "") + " " + String(e.category || "") + " " + String(e.author || "")).toLowerCase();
                 if (hay.indexOf(needle) === -1)
                     continue;
-
             }
             out.push(e);
         }
@@ -134,8 +132,7 @@ SettingsFlickable {
     /// `[{category, effects}]` sorted alphabetically by category. Effects
     /// inside each group keep their bridge-emitted order.
     readonly property var _groupedEffects: {
-        var groups = {
-        };
+        var groups = {};
         var order = [];
         var uncategorisedKey = i18nc("@title:group fallback for shaders without a category", "Uncategorised");
         for (var i = 0; i < _filteredEffects.length; i++) {
@@ -147,7 +144,7 @@ SettingsFlickable {
             }
             groups[cat].push(e);
         }
-        order.sort(function(a, b) {
+        order.sort(function (a, b) {
             if (a === uncategorisedKey)
                 return 1;
 
@@ -157,10 +154,11 @@ SettingsFlickable {
             return a.localeCompare(b);
         });
         var result = [];
-        for (var k = 0; k < order.length; k++) result.push({
-            "category": order[k],
-            "effects": groups[order[k]]
-        })
+        for (var k = 0; k < order.length; k++)
+            result.push({
+                "category": order[k],
+                "effects": groups[order[k]]
+            });
         return result;
     }
     // Per-row "Used in:" labels resolve via Q_INVOKABLE. QML can't
@@ -180,11 +178,22 @@ SettingsFlickable {
             ++root._usagesRev;
         }
 
+        // Surface bridge-emitted toast requests through the shell
+        // `window.showToast`. Without this, the controller's
+        // toastRequested signal goes to /dev/null and the install
+        // drop zone falls back to the generic InlineMessage above
+        // (which can't carry the concrete failure reason).
+        function onToastRequested(text) {
+            if (window && window.showToast)
+                window.showToast(text);
+        }
+
         target: root.bridge
         // `ignoreUnknownSignals` is tolerated implicitly by Connections —
-        // bridges that don't expose `shaderProfileChanged` simply never
-        // fire it; the function is still defined so the signal handler
-        // index resolves correctly when present.
+        // bridges that don't expose `shaderProfileChanged` /
+        // `toastRequested` simply never fire them; the functions are
+        // still defined so the signal handler index resolves correctly
+        // when present.
         ignoreUnknownSignals: true
     }
 
@@ -231,7 +240,7 @@ SettingsFlickable {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 5
                     radius: Kirigami.Units.smallSpacing
                     color: _highlight ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
-                    border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                     border.color: _highlight ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
 
                     RowLayout {
@@ -250,7 +259,6 @@ SettingsFlickable {
                             color: dropZone._highlight ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
                             font.italic: !dropZone._highlight
                         }
-
                     }
 
                     DropArea {
@@ -258,18 +266,17 @@ SettingsFlickable {
 
                         anchors.fill: parent
                         keys: ["text/uri-list"]
-                        onDropped: function(drop) {
+                        onDropped: function (drop) {
                             var urls = drop.urls;
                             if (!urls || urls.length === 0) {
                                 drop.accepted = false;
-                                return ;
+                                return;
                             }
                             var ok = root.bridge ? root.bridge.installShaderPack(String(urls[0])) : false;
                             installResult.show(ok, urls[0]);
                             drop.accepted = true;
                         }
                     }
-
                 }
 
                 Kirigami.InlineMessage {
@@ -301,7 +308,6 @@ SettingsFlickable {
                         interval: 6000
                         onTriggered: installResult.visible = false
                     }
-
                 }
 
                 RowLayout {
@@ -319,14 +325,10 @@ SettingsFlickable {
                         onClicked: {
                             if (root.bridge)
                                 root.bridge.openUserShaderDirectory();
-
                         }
                     }
-
                 }
-
             }
-
         }
 
         // ── Filter bar ──────────────────────────────────────────────────
@@ -360,7 +362,6 @@ SettingsFlickable {
                         root.filterText = "";
                     }
                 }
-
             }
 
             Flow {
@@ -381,8 +382,7 @@ SettingsFlickable {
                         onClicked: {
                             // Replace-the-map mutation pattern — QML reactivity
                             // requires a new map identity, not in-place edits.
-                            var next = Object.assign({
-                            }, root.selectedCategories);
+                            var next = Object.assign({}, root.selectedCategories);
                             if (next[modelData.name])
                                 delete next[modelData.name];
                             else
@@ -390,9 +390,7 @@ SettingsFlickable {
                             root.selectedCategories = next;
                         }
                     }
-
                 }
-
             }
 
             ToolButton {
@@ -425,9 +423,7 @@ SettingsFlickable {
                         checked: root.showUser
                         onToggled: root.showUser = checked
                     }
-
                 }
-
             }
 
             ToolButton {
@@ -441,13 +437,11 @@ SettingsFlickable {
                     searchField.clear();
                     searchDebounce.stop();
                     root.filterText = "";
-                    root.selectedCategories = ({
-                    });
+                    root.selectedCategories = ({});
                     root.showBuiltIn = true;
                     root.showUser = true;
                 }
             }
-
         }
 
         SettingsCard {
@@ -501,10 +495,9 @@ SettingsFlickable {
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignVCenter
-                                height: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                                height: Math.max(1, Math.round(Screen.devicePixelRatio))
                                 color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
                             }
-
                         }
 
                         // Cards in a Flow wrap to next row when out of
@@ -530,24 +523,17 @@ SettingsFlickable {
                                     bridge: root.bridge
                                     usagesRev: root._usagesRev
                                     usageChipTextFn: root.usageChipTextFn
-                                    onShowDetails: function(e) {
+                                    onShowDetails: function (e) {
                                         detailDialog.effect = e;
                                         detailDialog.open();
                                     }
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     ShaderBrowserDetailDialog {
@@ -557,5 +543,4 @@ SettingsFlickable {
         usagesRev: root._usagesRev
         usageHeaderTextFn: root.usageHeaderTextFn
     }
-
 }
