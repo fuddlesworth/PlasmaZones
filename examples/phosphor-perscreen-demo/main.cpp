@@ -18,17 +18,12 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
-#include <QQuickStyle>
 
 int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("Phosphor"));
     QCoreApplication::setApplicationName(QStringLiteral("phosphor-perscreen-demo"));
-
-    // Use the Basic style so the demo doesn't pull a platform theme's
-    // visual chrome — keeps the per-monitor window minimal.
-    QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     // DefaultScreenProvider mirrors QGuiApplication::screens() and
     // emits the screensChanged / primaryChanged notifier signals
@@ -53,17 +48,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // Tear PerScreen's delegates down BEFORE the engine starts
-    // destruction. PerScreen creates each Window with no QObject
-    // parent (the JS-Map holds the reference) so the Wayland
-    // compositor commits each as a true top-level surface; without
-    // this aboutToQuit hook the JS GC would destroy those Windows
-    // during the engine destructor and race the Wayland platform
-    // cleanup, SIGSEGV-ing at exit.
-    QObject* root = engine.rootObjects().first();
-    QObject::connect(&app, &QGuiApplication::aboutToQuit, root, [root]() {
-        QMetaObject::invokeMethod(root, "shutdownDelegates");
-    });
-
+    // PerScreen handles its own pre-shutdown delegate teardown via
+    // Qt.application.onAboutToQuit (see PerScreen.qml). The host
+    // doesn't need to wire anything.
     return app.exec();
 }

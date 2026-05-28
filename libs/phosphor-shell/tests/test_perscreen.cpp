@@ -50,6 +50,14 @@ private:
     // Build a delegate component whose root is a QtObject exposing
     // the four required properties PerScreen injects.
     QQmlComponent* makeDelegate(QQmlEngine& engine, QObject* parent);
+
+    // Look up the delegate currently bound to `screen` inside the
+    // PerScreen's JS Map. C++ can't introspect a JS Map directly, so
+    // we go through the engine's JS interpreter to call Map.prototype.get.
+    // Used by every test that asserts on delegate identity / required
+    // properties — extracted to avoid duplicating the toScriptValue /
+    // callWithInstance dance in three places.
+    QObject* delegateFor(QQmlEngine& engine, QObject* perScreen, QObject* screen);
 };
 
 namespace {
@@ -120,6 +128,14 @@ QQmlComponent* TestPerScreen::makeDelegate(QQmlEngine& engine, QObject* parent)
         qWarning() << "delegate setData status:" << delegate->status() << "errors:" << delegate->errorString();
     }
     return delegate;
+}
+
+QObject* TestPerScreen::delegateFor(QQmlEngine& engine, QObject* perScreen, QObject* screen)
+{
+    QJSValue map = engine.toScriptValue(perScreen->property("_instances"));
+    QJSValueList args{engine.toScriptValue(QVariant::fromValue(screen))};
+    QJSValue getResult = map.property(QStringLiteral("get")).callWithInstance(map, args);
+    return qvariant_cast<QObject*>(getResult.toVariant());
 }
 
 QObject* TestPerScreen::makePerScreen(QQmlEngine& engine, QObject* parent, FakeScreenModel* model)
@@ -226,22 +242,8 @@ void TestPerScreen::modelReset_survivingScreens_preserveDelegateIdentity()
     QVERIFY(ps != nullptr);
     QCOMPARE(ps->property("count").toInt(), 2);
 
-    // Snapshot the delegate identities by invoking the QML side: we
-    // can't introspect a JS Map from C++ directly, but we CAN ask
-    // PerScreen for the delegate associated with a given screen by
-    // calling a tiny helper. Inject one via setProperty isn't an
-    // option (PerScreen.qml has no public `delegateFor()`); instead
-    // add a temporary lookup by walking _instances via a QMetaObject
-    // invokeMethod into the QML JS context.
-    auto delegateFor = [&](QObject* screen) -> QObject* {
-        QJSValue map = engine.toScriptValue(ps->property("_instances"));
-        QJSValueList args{engine.toScriptValue(QVariant::fromValue(screen))};
-        QJSValue getResult = map.property(QStringLiteral("get")).callWithInstance(map, args);
-        return qvariant_cast<QObject*>(getResult.toVariant());
-    };
-
-    QPointer<QObject> d1Before = delegateFor(s1);
-    QPointer<QObject> d2Before = delegateFor(s2);
+    QPointer<QObject> d1Before = delegateFor(engine, ps, s1);
+    QPointer<QObject> d2Before = delegateFor(engine, ps, s2);
     QVERIFY(!d1Before.isNull());
     QVERIFY(!d2Before.isNull());
 
@@ -249,9 +251,9 @@ void TestPerScreen::modelReset_survivingScreens_preserveDelegateIdentity()
     QObject* s3 = model.addScreen(QStringLiteral("HDMI-3"));
     QCOMPARE(ps->property("count").toInt(), 3);
 
-    QPointer<QObject> d1After = delegateFor(s1);
-    QPointer<QObject> d2After = delegateFor(s2);
-    QPointer<QObject> d3After = delegateFor(s3);
+    QPointer<QObject> d1After = delegateFor(engine, ps, s1);
+    QPointer<QObject> d2After = delegateFor(engine, ps, s2);
+    QPointer<QObject> d3After = delegateFor(engine, ps, s3);
 
     // Surviving delegates MUST be the same QObjects as before.
     QCOMPARE(d1After.data(), d1Before.data());
@@ -264,8 +266,8 @@ void TestPerScreen::modelReset_survivingScreens_preserveDelegateIdentity()
     model.removeScreen(s2);
     QCOMPARE(ps->property("count").toInt(), 2);
 
-    QPointer<QObject> d1Final = delegateFor(s1);
-    QPointer<QObject> d3Final = delegateFor(s3);
+    QPointer<QObject> d1Final = delegateFor(engine, ps, s1);
+    QPointer<QObject> d3Final = delegateFor(engine, ps, s3);
     QCOMPARE(d1Final.data(), d1Before.data());
     QCOMPARE(d3Final.data(), d3After.data());
     // d2's delegate is destroyed (deleteLater runs asynchronously, so
@@ -286,15 +288,8 @@ void TestPerScreen::primarySwap_doesNotRecreateDelegates()
     QObject* ps = makePerScreen(engine, &parent, &model);
     QVERIFY(ps != nullptr);
 
-    auto delegateFor = [&](QObject* screen) -> QObject* {
-        QJSValue map = engine.toScriptValue(ps->property("_instances"));
-        QJSValueList args{engine.toScriptValue(QVariant::fromValue(screen))};
-        QJSValue getResult = map.property(QStringLiteral("get")).callWithInstance(map, args);
-        return qvariant_cast<QObject*>(getResult.toVariant());
-    };
-
-    QPointer<QObject> d1Before = delegateFor(s1);
-    QPointer<QObject> d2Before = delegateFor(s2);
+    QPointer<QObject> d1Before = delegateFor(engine, ps, s1);
+    QPointer<QObject> d2Before = delegateFor(engine, ps, s2);
     QVERIFY(!d1Before.isNull());
     QVERIFY(!d2Before.isNull());
     QCOMPARE(d1Before->property("isPrimary").toBool(), true);
@@ -305,8 +300,8 @@ void TestPerScreen::primarySwap_doesNotRecreateDelegates()
     // place; identity must be preserved.
     model.setPrimary(s2);
 
-    QPointer<QObject> d1After = delegateFor(s1);
-    QPointer<QObject> d2After = delegateFor(s2);
+    QPointer<QObject> d1After = delegateFor(engine, ps, s1);
+    QPointer<QObject> d2After = delegateFor(engine, ps, s2);
     QCOMPARE(d1After.data(), d1Before.data());
     QCOMPARE(d2After.data(), d2Before.data());
     QCOMPARE(d1After->property("isPrimary").toBool(), false);
@@ -345,15 +340,8 @@ void TestPerScreen::delegatesReceiveScreenNameIndexIsPrimaryRequiredProps()
     QObject* ps = makePerScreen(engine, &parent, &model);
     QVERIFY(ps != nullptr);
 
-    auto delegateFor = [&](QObject* screen) -> QObject* {
-        QJSValue map = engine.toScriptValue(ps->property("_instances"));
-        QJSValueList args{engine.toScriptValue(QVariant::fromValue(screen))};
-        QJSValue getResult = map.property(QStringLiteral("get")).callWithInstance(map, args);
-        return qvariant_cast<QObject*>(getResult.toVariant());
-    };
-
-    QObject* d1 = delegateFor(s1);
-    QObject* d2 = delegateFor(s2);
+    QObject* d1 = delegateFor(engine, ps, s1);
+    QObject* d2 = delegateFor(engine, ps, s2);
     QVERIFY(d1 != nullptr);
     QVERIFY(d2 != nullptr);
 

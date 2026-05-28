@@ -6,7 +6,7 @@
 # window per monitor; hot-plug add/remove correctly mirrors in the
 # instantiated delegates.
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
 # Bundle the demo QML into its own static module so qmlcachegen
 # compiles it and the resources land under
@@ -40,17 +40,13 @@ target_link_libraries(phosphor-perscreen-demo
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
-        Qt6::QuickControls2
-        # Static QML modules ship a library + a plugin registrar; link
-        # both for this demo's own module plus phosphor-shell's QML
-        # module (which exports PerScreen) and phosphor-theme.
+        # Static QML modules ship a library + a plugin registrar;
+        # link both this demo's module and phosphor-shell's
+        # PhosphorShellQml (which exports PerScreen).
         phosphor_perscreen_demo_qmlplugin
         PhosphorShell::PhosphorShell
         PhosphorShell::PhosphorShellQml
         PhosphorShellQmlplugin
-        PhosphorTheme::PhosphorTheme
-        PhosphorThemeQml
-        PhosphorThemeQmlplugin
         # DefaultScreenProvider lives in phosphor-layer.
         PhosphorLayer::PhosphorLayer
 )

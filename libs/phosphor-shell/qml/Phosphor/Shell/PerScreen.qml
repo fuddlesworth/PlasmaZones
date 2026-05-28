@@ -88,15 +88,29 @@ Item {
 
     Component.onCompleted: root._rebuild()
 
-    // App-shutdown teardown path. We intentionally do NOT call
-    // destroy() on the delegate instances here: the QML engine is
-    // itself mid-destruction by the time Component.onDestruction
-    // fires, and calling destroy() on JS-owned Windows races the
-    // engine's heap clearing — on Wayland this re-enters
-    // QQuickWindow's surface-teardown while PerScreen's own
-    // destruction is still in flight and SIGSEGVs. Just clear the
-    // Map; the engine's JS GC reclaims the delegate QObjects as
-    // part of its normal teardown.
+    // Self-contained shutdown. Hooking QGuiApplication::aboutToQuit
+    // FROM QML — via Qt.application — lets PerScreen tear its own
+    // JS-owned Window delegates down BEFORE the engine starts
+    // destruction, without requiring host code to remember to
+    // connect a slot. The previous design required the host
+    // application to wire `aboutToQuit` to a public
+    // `shutdownDelegates()` Q_INVOKABLE; that was a footgun (host
+    // forgets → SIGSEGV at exit on Wayland) and noise (every
+    // PerScreen consumer would copy the same boilerplate). Doing
+    // it here makes PerScreen self-coordinating.
+    Connections {
+        target: Qt.application
+
+        function onAboutToQuit() {
+            root._teardownAll();
+        }
+    }
+
+    // Component.onDestruction is reached AFTER aboutToQuit has
+    // already fired and torn the delegates down, so the Map is
+    // empty here. Defensive clear() in case PerScreen is used in a
+    // context that doesn't go through QGuiApplication::quit() (e.g.
+    // a test that destroys the engine directly).
     Component.onDestruction: root._instances.clear()
 
     // Model-switch (and explicit-teardown) path. `_teardownAll`
@@ -192,12 +206,13 @@ Item {
                 // popup and never commits it). JS ownership keeps
                 // the inst alive while the Map holds the JS reference.
                 //
-                // The matching shutdown hazard — JS GC destroying the
-                // Window mid-engine-teardown SIGSEGVs on Wayland —
-                // is handled by `shutdownDelegates()` below, which
-                // the host (typically main()) MUST connect to
-                // QGuiApplication::aboutToQuit to tear delegates down
-                // BEFORE the engine starts destruction.
+                // The matching shutdown hazard — JS GC destroying
+                // the Window mid-engine-teardown SIGSEGVs on Wayland
+                // — is handled by the `Qt.application.onAboutToQuit`
+                // connection above, which tears delegates down
+                // BEFORE the engine starts destruction. PerScreen
+                // self-coordinates; the host doesn't have to wire
+                // anything.
                 const inst = root.delegate.createObject(null, {
                     "phosphorScreen": screen,
                     "name": name,
@@ -214,9 +229,9 @@ Item {
     function _teardownAll() {
         // Snapshot before clearing so iteration order is independent
         // of any side effects on _instances. Calling destroy() at
-        // runtime (e.g. on a model switch) schedules the QObject for
-        // deferred delete on the next event-loop iteration; the
-        // wrapper stays valid until then.
+        // runtime (e.g. on a model switch or aboutToQuit) schedules
+        // the QObject for deferred delete on the next event-loop
+        // iteration; the wrapper stays valid until then.
         const insts = Array.from(root._instances.values());
         root._instances.clear();
         for (const inst of insts) {
@@ -224,17 +239,5 @@ Item {
                 inst.destroy();
         }
         root.count = 0;
-    }
-
-    // Public shutdown hook. Hosts MUST connect this to
-    // QGuiApplication::aboutToQuit so the JS-owned delegate Windows
-    // are torn down BEFORE the engine starts destruction. Without
-    // this, the JS GC reclaims the Windows mid-engine-teardown and
-    // their destructors race the Wayland platform cleanup, causing
-    // a SIGSEGV at exit. Calling this from C++ is equivalent to
-    // calling _teardownAll() from JS; the public-facing name makes
-    // the host-side contract explicit and grep-able.
-    function shutdownDelegates() {
-        root._teardownAll();
     }
 }

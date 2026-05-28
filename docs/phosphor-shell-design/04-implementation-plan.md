@@ -153,11 +153,17 @@ to do the work `Instantiator` cannot:
    This is what makes per-monitor wallpapers / overlays viable in
    production (a third monitor plugging in doesn't strip the wallpaper
    off the first two).
-2. **Auto-placement on the right screen.** Inject `screen` (`QScreen*`),
-   `name`, `index`, `isPrimary` into the delegate via required
-   properties; when the delegate is a `Window`, set `Window.screen`
-   directly so the window lands on the correct monitor without the
-   caller wiring geometry plumbing.
+2. **Per-monitor placement plumbing.** Inject `phosphorScreen`
+   (`QScreen*`), `name`, `index`, `isPrimary` into the delegate via
+   required properties; consumers position their delegate via the
+   screen's `geometry` rect — e.g.
+   `x: phosphorScreen.geometry.x + 40` for virtual-desktop
+   coordinates. (The QML-side `Window.screen` property is
+   read-only `QQuickScreenInfo*`, NOT `QScreen*`, so there's no
+   QML-level setter for `QQuickWindow::setScreen()`; on X11 the
+   virtual-desktop x/y route is how a QML consumer anchors a
+   Window to a specific monitor, and on Wayland the compositor
+   decides final placement regardless.)
 
 Without (1) and (2) the helper is sugar and the demo writes the same
 plain `Instantiator` binding under a different name; with them it
@@ -167,21 +173,21 @@ consumer would otherwise duplicate.
 | Deliverable                                       | Notes                                                                            |
 |---------------------------------------------------|----------------------------------------------------------------------------------|
 | `libs/phosphor-shell/qml/Phosphor/Shell/`         | First QML module shipped by `phosphor-shell` — URI `Phosphor.Shell`. Wired via `qt_add_qml_module(PhosphorShellQml ...)` alongside the existing core library target, mirroring the `phosphor-theme` / `phosphor-popout` split. No new top-level lib; `PerScreen` lives next to `ScreenModel`, which it depends on. |
-| `libs/phosphor-shell/qml/Phosphor/Shell/PerScreen.qml` | Reset-aware Instantiator wrapper as described above. Accepts a `model` (defaults to `PhosphorShell.screens`) and a `delegate` Component; emits `delegateAdded(screen, delegate)` / `delegateRemoved(screen, delegate)` so consumers can hook into lifecycle. |
+| `libs/phosphor-shell/qml/Phosphor/Shell/PerScreen.qml` | Reset-aware Instantiator wrapper as described above. Accepts a `model` (the `ScreenModel`-shaped QAbstractItemModel; the helper does NOT default it, so the file is usable from tests and non-shell processes) and a `delegate` Component. Self-coordinates pre-shutdown delegate teardown via `Qt.application.onAboutToQuit` — hosts do not need to wire anything for clean exit. |
 | `libs/phosphor-shell/tests/`                      | Test cases against a fake `QAbstractListModel` that exercises the reset semantics (add, remove, swap, reorder) and verifies delegate identity is preserved across resets for surviving rows. |
 | `examples/phosphor-perscreen-demo/`               | Opens a small floating window per monitor showing the monitor's name + index + primary flag. Hot-plug a monitor → window appears. Plug it out → window goes away. Live primary swap → only the primary-pill on the affected windows updates (no full teardown — pins the reuse path). |
 
 **Acceptance:**
-- [ ] Monitor hot-plug add/remove correctly mirrors in the instantiated delegates.
-- [ ] Delegates for surviving screens are NOT recreated on hot-plug — the same QObject identity persists (asserted in the test).
-- [ ] Primary-screen swap updates the `isPrimary` property without recreating any delegate.
-- [ ] When the delegate is a `Window`, `Window.screen` is set so the window opens on the correct monitor without explicit geometry wiring.
+- [x] Monitor hot-plug add/remove correctly mirrors in the instantiated delegates.
+- [x] Delegates for surviving screens are NOT recreated on hot-plug — the same QObject identity persists (asserted in the test).
+- [x] Primary-screen swap updates the `isPrimary` property without recreating any delegate.
+- [x] Delegates receive `phosphorScreen` (`QScreen*`), `name`, `index`, `isPrimary` as required properties so consumers can position their Window via `phosphorScreen.geometry` without manual lookup.
 
 **Effort:** M (~1 week — the reset-aware diff plus the test harness for hot-plug semantics is the main lift)
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
 
-**Phase 1 progress (as of 2026-05-27):** 4 of 5 libs shipped, 1 not started (Phase 1.5 `PerScreen` helper).
+**Phase 1 progress (as of 2026-05-28):** 4 of 5 libs shipped, 1 in PR review (Phase 1.5 `PerScreen` helper, PR #540).
 
 | Lib                   | Status                                                  |
 |-----------------------|---------------------------------------------------------|
@@ -189,7 +195,7 @@ consumer would otherwise duplicate.
 | `phosphor-popout`     | ✓ shipped (PR #535)                                     |
 | `phosphor-registry`   | ✓ shipped (PR #538)                                     |
 | `phosphor-ipc`        | ✓ shipped (PR #539)                                     |
-| `PerScreen` helper    | not started (Phase 1.5)                                 |
+| `PerScreen` helper    | in PR review (PR #540, branch `feat/phosphor-perscreen`) |
 
 The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.5 lands.
 
