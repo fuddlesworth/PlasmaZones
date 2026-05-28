@@ -137,20 +137,57 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Deferred items:** see [`phosphor-ipc-followups.md`](phosphor-ipc-followups.md) for the defense-in-depth additions (per-process MaxConnections, idle-connection timeout, SO_PEERCRED peer auth) and the fleet-wide demo cleanups (qsTr → i18n, hard-coded monospace → Tokens) that were intentionally NOT applied in PR #539.
 
-### 1.5: `PerScreen` QML helper
+### 1.5: `PerScreen` QML helper *(shipped, 2026-05-28, PR #540)*
+
+A bare `Instantiator { model: PhosphorShell.screens }` would technically
+satisfy "one delegate per monitor", but `ScreenModel` ships hot-plug
+via `beginResetModel`/`endResetModel` rather than row-incremental
+signals — so the naive binding tears down every delegate on every
+monitor change, even for screens that didn't move. `PerScreen` exists
+to do the work `Instantiator` cannot:
+
+1. **Reset-aware delegate reuse.** Diff the new screen set against the
+   live delegates keyed by `QScreen*` identity; reuse delegates whose
+   screen survived the reset, only construct delegates for genuinely
+   new screens, only destroy delegates for genuinely removed screens.
+   This is what makes per-monitor wallpapers / overlays viable in
+   production (a third monitor plugging in doesn't strip the wallpaper
+   off the first two).
+2. **Per-monitor placement plumbing.** Inject `phosphorScreen`
+   (`QScreen*`), `name`, `index`, `isPrimary` into the delegate via
+   required properties; consumers position their delegate via the
+   screen's `geometry` rect — e.g.
+   `x: phosphorScreen.geometry.x + 40` for virtual-desktop
+   coordinates. (The QML-side `Window.screen` property is
+   read-only `QQuickScreenInfo*`, NOT `QScreen*`, so there's no
+   QML-level setter for `QQuickWindow::setScreen()`; on X11 the
+   virtual-desktop x/y route is how a QML consumer anchors a
+   Window to a specific monitor, and on Wayland the compositor
+   decides final placement regardless.)
+
+Without (1) and (2) the helper is sugar and the demo writes the same
+plain `Instantiator` binding under a different name; with them it
+absorbs the per-monitor-lifecycle boilerplate every overlay/wallpaper
+consumer would otherwise duplicate.
 
 | Deliverable                                       | Notes                                                                            |
 |---------------------------------------------------|----------------------------------------------------------------------------------|
-| Add `qml/Phosphor/Helpers/PerScreen.qml`          | Declarative wrapper around `ScreenModel` + `Instantiator` / `Repeater`: one delegate instance per screen, lifecycle tied to `ScreenModel` add/remove signals. |
-| `examples/phosphor-perscreen-demo/`               | Opens a small floating window per monitor showing the monitor's name. Hot-plug a monitor → window appears.   |
+| `libs/phosphor-shell/qml/Phosphor/Shell/`         | First QML module shipped by `phosphor-shell` — URI `Phosphor.Shell`. Wired via `qt_add_qml_module(PhosphorShellQml ...)` alongside the existing core library target, mirroring the `phosphor-theme` / `phosphor-popout` split. No new top-level lib; `PerScreen` lives next to `ScreenModel`, which it depends on. |
+| `libs/phosphor-shell/qml/Phosphor/Shell/PerScreen.qml` | Reset-aware Instantiator wrapper as described above. Accepts a `model` (the `ScreenModel`-shaped QAbstractItemModel; the helper does NOT default it, so the file is usable from tests and non-shell processes) and a `delegate` Component. Self-coordinates pre-shutdown delegate teardown via `Qt.application.onAboutToQuit` — hosts do not need to wire anything for clean exit. |
+| `libs/phosphor-shell/tests/`                      | Test cases against a fake `QAbstractListModel` that exercises the reset semantics (add, remove, swap, reorder) and verifies delegate identity is preserved across resets for surviving rows. |
+| `examples/phosphor-perscreen-demo/`               | Opens a small floating window per monitor showing the monitor's name + index + primary flag. Hot-plug a monitor → window appears. Plug it out → window goes away. Live primary swap → only the primary-pill on the affected windows updates (no full teardown — pins the reuse path). |
 
-**Acceptance:** monitor hotplug add/remove correctly mirrors in the instantiated delegates.
+**Acceptance:**
+- [x] Monitor hot-plug add/remove correctly mirrors in the instantiated delegates.
+- [x] Delegates for surviving screens are NOT recreated on hot-plug — the same QObject identity persists (asserted in the test).
+- [x] Primary-screen swap updates the `isPrimary` property without recreating any delegate.
+- [x] Delegates receive `phosphorScreen` (`QScreen*`), `name`, `index`, `isPrimary` as required properties so consumers can position their Window via `phosphorScreen.geometry` without manual lookup.
 
-**Effort:** S (~3 days)
+**Effort:** M (~1 week — the reset-aware diff plus the test harness for hot-plug semantics is the main lift)
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
 
-**Phase 1 progress (as of 2026-05-27):** 4 of 5 libs shipped, 1 not started (Phase 1.5 `PerScreen` helper).
+**Phase 1 progress (as of 2026-05-28):** 5 of 5 libs shipped — Phase 1 gate met.
 
 | Lib                   | Status                                                  |
 |-----------------------|---------------------------------------------------------|
@@ -158,9 +195,9 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 | `phosphor-popout`     | ✓ shipped (PR #535)                                     |
 | `phosphor-registry`   | ✓ shipped (PR #538)                                     |
 | `phosphor-ipc`        | ✓ shipped (PR #539)                                     |
-| `PerScreen` helper    | not started (Phase 1.5)                                 |
+| `PerScreen` helper    | ✓ shipped (PR #540)                                     |
 
-The `phosphor-foundations-0.1` tag is gated on all five, do not cut it until 1.5 lands.
+All five demos run. The `phosphor-foundations-0.1` tag is now unblocked — next action.
 
 ---
 
