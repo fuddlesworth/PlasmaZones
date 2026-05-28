@@ -401,6 +401,17 @@ add_subdirectory(libs/phosphor-popout)      # central popout coordinator (lifeti
 # unconditional so third-party hosts and the demos can consume it
 # without enabling the shell binary. Phase 1.3 deliverable.
 add_subdirectory(libs/phosphor-registry)    # generic Registry<T> + 5 factory interfaces + plugin loader
+# phosphor-ipc is also unconditional. Same rationale as the prior
+# three Phase-1 libs: third-party hosts and the demos consume it
+# without enabling the shell binary. Phase 1.4 deliverable.
+add_subdirectory(libs/phosphor-ipc)         # JSON-over-Unix-socket IpcRouter + IpcTarget QML type
+# phosphorctl is the typed IPC CLI shipped alongside phosphor-ipc.
+# Unconditional: it's a user-facing tool every dev/operator wants
+# by default. Links Qt6::Core + Qt6::Network only (no GUI, no QML).
+# Source dir is cli/phosphorctl/ (not bin/) because bin/ is the
+# project's runtime output directory; a same-named source subdir
+# would collide with the binary's final path.
+add_subdirectory(cli/phosphorctl)           # phosphorctl call / list / schema / subscribe
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
@@ -652,6 +663,10 @@ add_subdirectory(examples/phosphor-popout-demo)
 # enumerates them and instantiates one widget per id. Same
 # unconditional gating as the theme + popout demos.
 add_subdirectory(examples/phosphor-registry-demo)
+# phosphor-ipc-demo. Acceptance harness for libs/phosphor-ipc.
+# Three IpcTargets driven from another terminal via phosphorctl.
+# Unconditional (same rationale as the other foundation-lib demos).
+add_subdirectory(examples/phosphor-ipc-demo)
 
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third

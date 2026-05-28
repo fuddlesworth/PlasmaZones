@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Network for QLocalServer / QLocalSocket; Qml for IpcTarget's
+# QML_ELEMENT registration. Gui is intentionally absent: no public
+# header in libs/phosphor-ipc/include/ references a QtGui type, so
+# out-of-tree CLI consumers (phosphorctl-style binaries) don't need
+# qt6-gui installed just to find_package(PhosphorIpc).
+#
+# This config file exports the `PhosphorIpc::PhosphorIpc` core
+# library only. The `PhosphorIpcQml` plugin (which DOES depend on
+# Qt6::Gui via qmltyperegistrar) is intentionally NOT installed or
+# exported; it's an in-tree convenience for projects that build
+# libs/phosphor-ipc via add_subdirectory(). Downstream consumers
+# that want IpcTarget's QML_ELEMENT registration should either
+# add_subdirectory the lib or replicate the qt_add_qml_module call
+# in their own build (the SOURCES list is one file: IpcTarget.h).
+find_dependency(Qt6 6.6 COMPONENTS Core Qml Network)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorIpcTargets.cmake")
+
+check_required_components(PhosphorIpc)
