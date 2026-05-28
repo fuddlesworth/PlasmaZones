@@ -373,6 +373,12 @@ set(plasmazones_daemon_SRCS
     daemon/daemon.h
     daemon/daemon/helpers.h
     daemon/daemon/macros.h
+    # Concrete daemon-side adapters bridging the existing services
+    # (VirtualDesktopManager + ActivityManager + ScreenModeRouter + ISettings)
+    # to the LGPL PhosphorContext::IContextResolver triple. Owned by Daemon
+    # alongside m_contextResolver — see the wiring in daemon/daemon.h.
+    daemon/contextresolverwiring.h
+    daemon/contextresolverwiring.cpp
     daemon/overlayservice.cpp
     daemon/overlayservice/animation_config.cpp
     daemon/overlayservice/lifecycle.cpp
@@ -423,6 +429,12 @@ target_link_libraries(plasmazonesd
         PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
         PhosphorSurfaces::PhosphorSurfaces  # managed surface lifecycle (engine, keep-alive)
         PhosphorOverlay::PhosphorOverlay  # per-screen shell-host + slot mechanism (Phase 2 onward)
+        # Frozen-snapshot per-screen mode + disable/lock cascade façade.
+        # The daemon owns a `ContextResolver` over three local adapters
+        # (DaemonWorkspaceStateAdapter / ScreenModeAdapter / SettingsGateAdapter
+        # in daemon/contextresolverwiring.{h,cpp}) and lets D-Bus adaptors
+        # + OverlayService borrow it via `Daemon::contextResolver()`.
+        PhosphorContextResolver::PhosphorContextResolver
         # Daemon is headless — runs under QGuiApplication. No Qt6::Widgets
         # link: it was unused and pulled QtWidgets + xcb deps into a binary
         # that never instantiates a QWidget.

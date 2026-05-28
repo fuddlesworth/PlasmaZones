@@ -5,6 +5,7 @@
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../modetracker.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
@@ -540,23 +541,21 @@ QString Daemon::currentActivity() const
 
 bool Daemon::isCurrentContextLocked(const QString& screenId) const
 {
-    // Check both snapping and tiling locks (mode-agnostic check).
-    // Spell the mode constants via AssignmentEntry::Mode so the
-    // call sites stay readable when someone greps for "Snapping" /
-    // "Autotile" — raw `0` / `1` were silent on intent.
-    if (!m_settings)
-        return false;
-    return m_settings->isContextLocked(Utils::contextLockKey(PhosphorZones::AssignmentEntry::Snapping, screenId),
-                                       currentDesktop(), currentActivity())
-        || m_settings->isContextLocked(Utils::contextLockKey(PhosphorZones::AssignmentEntry::Autotile, screenId),
-                                       currentDesktop(), currentActivity());
+    // Check both snapping and tiling locks (mode-agnostic check). Two
+    // explicit handleForMode calls instead of a Mode-Any sentinel —
+    // PhosphorContext::IContextResolver is single-Mode by handle so
+    // the "any mode locked?" semantic is composed by the consumer.
+    // Resolver guards null m_settings internally.
+    return m_contextResolver->isLocked(
+               m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Snapping))
+        || m_contextResolver->isLocked(
+            m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile));
 }
 
 bool Daemon::isCurrentContextLockedForMode(const QString& screenId, int mode) const
 {
-    if (!m_settings)
-        return false;
-    return m_settings->isContextLocked(Utils::contextLockKey(mode, screenId), currentDesktop(), currentActivity());
+    return m_contextResolver->isLocked(
+        m_contextResolver->handleForMode(screenId, static_cast<PhosphorZones::AssignmentEntry::Mode>(mode)));
 }
 
 } // namespace PlasmaZones

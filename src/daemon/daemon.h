@@ -82,6 +82,17 @@ class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
 class ScreenModeRouter;
+class DaemonScreenModeAdapter;
+class DaemonSettingsGateAdapter;
+class DaemonWorkspaceStateAdapter;
+
+} // namespace PlasmaZones
+
+namespace PhosphorContext {
+class ContextResolver;
+} // namespace PhosphorContext
+
+namespace PlasmaZones {
 class SettingsConfigStore;
 class SnapAdaptor;
 class ShaderRegistry;
@@ -160,6 +171,21 @@ public:
     PhosphorWorkspaces::ActivityManager* activityManager() const
     {
         return m_activityManager.get();
+    }
+    /**
+     * @brief Frozen-snapshot per-screen mode + disable/lock cascade façade.
+     *
+     * Borrowed by D-Bus adaptors + the OverlayService so every consumer
+     * site that used to stitch
+     * `(modeFor → currentDesktop → currentActivity → isContextDisabled
+     * → isContextLocked)` by hand goes through one resolver call. The
+     * pointer is non-null after `init()` and stays non-null for the
+     * lifetime of the daemon. See @ref m_contextResolver for the
+     * declaration-order invariant.
+     */
+    PhosphorContext::ContextResolver* contextResolver() const
+    {
+        return m_contextResolver.get();
     }
     ShortcutManager* shortcutManager() const
     {
@@ -593,6 +619,21 @@ private:
     /// dispatch paths. Owns no state of its own — just delegates to the
     /// layout manager and engine pointers it was constructed with.
     std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
+    /// PhosphorContext::ContextResolver wiring.
+    ///
+    /// DECLARATION ORDER INVARIANT: the three adapter members must be
+    /// declared (and therefore destroyed) AFTER `m_settings`,
+    /// `m_virtualDesktopManager`, `m_activityManager`, and
+    /// `m_screenModeRouter` — they hold non-owning pointers to those
+    /// services. `m_contextResolver` must be declared AFTER the three
+    /// adapters because it holds non-owning pointers to them. Reverse
+    /// destruction order is C++'s default, so this declaration order
+    /// guarantees the resolver tears down first, then the adapters,
+    /// then the underlying services.
+    std::unique_ptr<DaemonWorkspaceStateAdapter> m_workspaceStateAdapter;
+    std::unique_ptr<DaemonScreenModeAdapter> m_screenModeAdapter;
+    std::unique_ptr<DaemonSettingsGateAdapter> m_settingsGateAdapter;
+    std::unique_ptr<PhosphorContext::ContextResolver> m_contextResolver;
     /// Stateless facade over m_virtualScreenStore for VS swap/rotate.
     /// Held as a member rather than reconstructed per-call so navigation
     /// handlers don't need to know about its dependencies.

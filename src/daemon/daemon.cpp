@@ -60,6 +60,9 @@
 #include "../core/logging.h"
 #include "../core/animationbootstrap.h"
 #include "../core/screenmoderouter.h"
+#include "contextresolverwiring.h"
+
+#include <PhosphorContext/ContextResolver.h>
 #include "../core/utils.h"
 #include "../pz_i18n.h"
 #include "../config/configdefaults.h"
@@ -1023,6 +1026,19 @@ bool Daemon::init()
     m_autotileEngine = std::move(engines.autotile);
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
+
+    // Build the PhosphorContext::ContextResolver wiring NOW — after the
+    // workspace managers, settings, and router exist; before any D-Bus
+    // adaptor or OverlayService method that consumes it runs. Three
+    // narrow adapters one-line forward to the existing services; the
+    // resolver borrows them. Declaration order in daemon.h guarantees
+    // reverse-tear-down: resolver first, then adapters, then services.
+    m_workspaceStateAdapter =
+        std::make_unique<DaemonWorkspaceStateAdapter>(m_virtualDesktopManager.get(), m_activityManager.get());
+    m_screenModeAdapter = std::make_unique<DaemonScreenModeAdapter>(m_screenModeRouter.get());
+    m_settingsGateAdapter = std::make_unique<DaemonSettingsGateAdapter>(m_settings.get());
+    m_contextResolver = std::make_unique<PhosphorContext::ContextResolver>(
+        m_workspaceStateAdapter.get(), m_screenModeAdapter.get(), m_settingsGateAdapter.get());
 
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
