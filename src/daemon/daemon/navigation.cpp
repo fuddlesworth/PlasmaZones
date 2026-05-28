@@ -81,6 +81,24 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
     return nav;
 }
 
+// Local helper: per-context disable cascade gate for navigation shortcuts
+// that commit window-geometry side effects on the focused screen.
+//
+// Returns true when the handler should silently no-op (resolver null
+// during the daemon's shutdown window, or the focused (monitor, desktop,
+// activity) is on the user's disable list). Mirrors the inline check
+// every gated handler used to carry. Centralising it makes the bug class
+// from discussion #461 — "shortcut still fires on a disabled context" —
+// a single line per handler to opt into.
+//
+// Handlers that only manipulate focus (handleFocus / handleCycle) do NOT
+// use this gate because focus changes are not a geometry side effect and
+// the user expects them to keep working on a "disabled" context.
+bool Daemon::isFocusedContextGated(const QString& screenId) const
+{
+    return !m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(screenId));
+}
+
 void Daemon::handleRotate(bool clockwise)
 {
     if (m_rotateDebounce.isValid() && m_rotateDebounce.elapsed() < kShortcutDebounceMs) {
@@ -90,6 +108,9 @@ void Daemon::handleRotate(bool clockwise)
 
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Rotate")) {
+        if (isFocusedContextGated(ctx.screenId)) {
+            return;
+        }
         nav->rotateWindows(clockwise, ctx);
     }
 }
@@ -106,12 +127,7 @@ void Daemon::handleFloat()
         // a window re-runs commitSnap; without this gate that re-snaps the
         // window on a monitor / desktop / activity the user disabled
         // (discussion #461 — observed re-snapping on a disabled desktop).
-        //
-        // Null-guard the resolver: stop() resets it before the engine and
-        // router teardown, and a KGlobalAccel-queued shortcut landing in
-        // that window would NPE without the guard. Returning early is the
-        // safe fallback — the daemon is going away.
-        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+        if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
         nav->toggleFocusedFloat(ctx);
@@ -128,6 +144,9 @@ void Daemon::handleMove(NavigationDirection direction)
     const QString dirStr = navigationDirectionToString(direction);
     if (dirStr.isEmpty()) {
         qCWarning(lcDaemon) << "Unknown move navigation direction:" << static_cast<int>(direction);
+        return;
+    }
+    if (isFocusedContextGated(ctx.screenId)) {
         return;
     }
     nav->moveFocusedInDirection(dirStr, ctx);
@@ -152,14 +171,7 @@ void Daemon::handlePush()
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "PushToEmptyZone")) {
-        // Honor the per-context disable cascade — pushing to an empty zone
-        // is a side effect on the focused (monitor, desktop, activity); a
-        // user who disabled snapping on this context should not see a
-        // window relocate. Mirrors handleFloat / handleSnap / handleRetile.
-        // Null-guard the resolver: stop() resets it before the engine
-        // teardown, and a queued shortcut landing in that window would
-        // NPE without the guard.
-        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+        if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
         // Autotile adapter's impl is a deliberate no-op — empty zones don't
@@ -175,6 +187,9 @@ void Daemon::handleRestore()
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Restore")) {
         // Autotile: toggle float (restore out of layout).
         // Snap: restore to captured pre-snap geometry.
+        if (isFocusedContextGated(ctx.screenId)) {
+            return;
+        }
         nav->restoreFocusedWindow(ctx);
     }
 }
@@ -191,6 +206,9 @@ void Daemon::handleSwap(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
         return;
     }
+    if (isFocusedContextGated(ctx.screenId)) {
+        return;
+    }
     nav->swapFocusedInDirection(dirStr, ctx);
 }
 
@@ -201,10 +219,8 @@ void Daemon::handleSnap(int zoneNumber)
         // Honor the per-context disable lists. engineFor() routes purely on
         // mode and never consults them, so a keyboard snap-to-zone would
         // otherwise place a window on a monitor / desktop / activity the user
-        // disabled (discussion #461). Take the screen's mode from the router
-        // (the single source of truth) rather than inferring it from the
-        // engine-id string, which a future third engine would misroute.
-        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+        // disabled (discussion #461).
+        if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
         nav->moveFocusedToPosition(zoneNumber, ctx);
@@ -223,12 +239,7 @@ void Daemon::handleResnap()
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Resnap")) {
-        // Honor the per-context disable cascade on the focused screen —
-        // reapplyLayout commits fresh geometry onto every window on the
-        // current screen, which a user who disabled snapping on this
-        // context explicitly opted out of. Mirrors handleFloat / handleSnap
-        // / handleRetile / handlePush.
-        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+        if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
         nav->reapplyLayout(ctx);
@@ -239,10 +250,7 @@ void Daemon::handleSnapAll()
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapAllWindows")) {
-        // Honor the per-context disable cascade on the focused screen —
-        // snapAllWindows is the explicit "snap-everything" intent and
-        // should silently no-op on contexts the user disabled.
-        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+        if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
         nav->snapAllWindows(ctx);

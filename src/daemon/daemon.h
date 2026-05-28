@@ -286,6 +286,19 @@ private:
      */
     bool isAutotileScreen(const QString& screenId) const;
 
+    /**
+     * @brief Per-context disable cascade gate for navigation shortcuts.
+     *
+     * Returns true when the handler should silently no-op — either the
+     * resolver is null (shutdown window) or the focused (monitor,
+     * desktop, activity) is on the user's disable list. Centralises
+     * the inline gate every geometry-side-effect handler must carry so
+     * the discussion #461 bug class can't recur when a new handler is
+     * added. Handlers that only manipulate focus (no geometry side
+     * effect) intentionally do NOT use this gate.
+     */
+    bool isFocusedContextGated(const QString& screenId) const;
+
     void handleRotate(bool clockwise);
     void handleFloat();
     void handleMove(NavigationDirection direction);

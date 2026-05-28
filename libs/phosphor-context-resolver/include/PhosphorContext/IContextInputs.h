@@ -68,9 +68,13 @@ public:
  * ScreenModeRouter API (which carries `IPlacementEngine*` references that
  * an LGPL lib should not see).
  *
- * Unknown screen ids must resolve to the project's documented "default
- * mode" (today: `Snapping`). The resolver does not validate the screen id
- * itself — that is the daemon's responsibility upstream.
+ * Unknown screen ids must resolve to the implementation's documented
+ * default mode (typically `Snapping` per the daemon's `ScreenModeRouter`
+ * adapter, but the chosen default is observable through
+ * `IContextResolver::globalHandle()`'s mode field and may be overridden
+ * by test or future-provider implementations). The resolver does not
+ * validate the screen id itself — that is the daemon's responsibility
+ * upstream.
  */
 class PHOSPHORCONTEXTRESOLVER_EXPORT IModeProvider
 {

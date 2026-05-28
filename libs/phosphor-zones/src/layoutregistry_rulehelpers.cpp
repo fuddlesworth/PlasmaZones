@@ -91,9 +91,21 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
     entry.mode = AssignmentEntry::Snapping;
     for (const PWR::RuleAction& action : rule.actions) {
         if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
-            entry.mode = action.params.value(QLatin1String("mode")).toString() == QLatin1String("autotile")
-                ? AssignmentEntry::Autotile
-                : AssignmentEntry::Snapping;
+            // Decode through `modeFromWireString` so every token the
+            // ActionRegistry validator accepts (today: snapping / autotile
+            // / scrolling) round-trips end-to-end. The previous two-valued
+            // `== "autotile"` ternary silently coerced every non-Autotile
+            // token to Snapping — including the registered, picker-exposed
+            // "scrolling" wire string written by Settings via
+            // `modeToWireString(Scrolling)`. Unknown tokens
+            // (`modeFromWireString` returns nullopt) leave the entry on
+            // its prior value, which is the Snapping default initialized
+            // above — matching the bridge's open-vocabulary contract
+            // documented in ContextRuleBridge.h's makeAssignmentActions.
+            const QString modeToken = action.params.value(QLatin1String("mode")).toString();
+            if (const auto mode = modeFromWireString(modeToken)) {
+                entry.mode = *mode;
+            }
         } else if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
             entry.snappingLayout = action.params.value(QLatin1String("layoutId")).toString();
         } else if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {

@@ -225,13 +225,13 @@ void ActionRegistry::registerBuiltins()
     // "window-rule"), so tightening to a closed set would force those
     // tests to re-route through a different action type; (b) the open
     // vocabulary mirrors the bridge's `disableRuleMode` contract — the
-    // wire token round-trips verbatim, and consumers map it to a Mode
-    // via `PhosphorZones::modeFromWireString`. Unknown tokens survive
-    // load and silently fail to match — consumer code that wants to
-    // reject them must call `modeFromWireString` and check the
-    // optional explicitly. DisableEngine is the asymmetric case below:
-    // it gates on the closed set to fail malformed disable rules early
-    // at load (per-mode disable lists never use synthetic identifiers).
+    // wire token round-trips verbatim, and the assignment-side consumer
+    // `PhosphorZones::RuleHelpers::entryFromRuleMatchActions` maps it
+    // via `PhosphorZones::modeFromWireString`, which returns nullopt
+    // for unknown tokens and leaves the entry on its Snapping default.
+    // DisableEngine is the asymmetric case below: it gates on the
+    // closed set to fail malformed disable rules early at load
+    // (per-mode disable lists never use synthetic identifiers).
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetEngineMode),
         .slotFor = constantSlot(ActionSlot::EngineMode),

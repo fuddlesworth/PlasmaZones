@@ -1560,14 +1560,26 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
                 // rule-set size minimal and the priority-order index smaller.)
                 continue;
             }
+            // Two-phase per-rule scan: (1) admit the rule to the evaluator
+            // if ANY action is effect-consumed, (2) flag hasSetOpacity if
+            // ANY action is SetOpacity. The previous shape broke after the
+            // first effect-action match, so a rule with actions
+            // [OverrideAnimationShader, SetOpacity] would admit on the first
+            // match and skip the SetOpacity flag — silently re-introducing
+            // the asymmetric repaint bug for rules that carry SetOpacity
+            // alongside an animation override. Symmetric with the prior-rule
+            // scan above which always walks the full action list.
+            bool admitted = false;
             for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
                 if (PhosphorWindowRule::ActionType::isEffectRuleAction(action.type)) {
-                    animationRules.append(rule);
+                    admitted = true;
                     if (action.type == PhosphorWindowRule::ActionType::SetOpacity) {
                         hasSetOpacity = true;
                     }
-                    break;
                 }
+            }
+            if (admitted) {
+                animationRules.append(rule);
             }
         }
         m_shaderManager.setWindowRuleAnimationRules(std::move(animationRules));

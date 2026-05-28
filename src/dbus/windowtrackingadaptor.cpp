@@ -45,18 +45,21 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     Q_ASSERT(zoneDetector);
     Q_ASSERT(settings);
 
-    // Release-build runtime guard mirroring SnapAdaptor / WindowDragAdaptor.
-    // The Q_ASSERTs above terminate in debug; without this guard, release
-    // builds would proceed into `new DaemonGeometryResolver(settings)` and
-    // `settings->keepWindowsInZonesOnResolutionChange()` and crash on a
-    // null `settings`. Bail to a non-wired but non-crashing state; the
-    // per-slot `if (!m_service) return;` guards downstream then catch the
-    // half-constructed state.
+    // Null dependencies are a daemon-wiring bug, not a recoverable runtime
+    // condition: the earlier "refuse to wire" early-return left m_service,
+    // m_persistenceWorker, m_saveTimer, and m_sessionBackend null while
+    // many public slots (setWindowSticky, windowClosed, cursorScreenChanged,
+    // windowActivated, pruneStaleWindows, getEmptyZones, getLastUsedZoneId,
+    // findEmptyZone, zoneGeometryRect) plus the saveStateOnShutdown path
+    // dereference m_service unguarded — so the early-return just deferred
+    // the crash to the first D-Bus call. Escalate to qFatal so a missing
+    // dependency is loud and immediate, not concealed in an "it works
+    // until first slot fires" failure mode.
     if (!layoutManager || !zoneDetector || !settings) {
-        qCWarning(lcDbusWindow) << "WindowTrackingAdaptor constructed with null dependencies — refusing to wire."
-                                << "layoutManager:" << (layoutManager != nullptr)
-                                << "zoneDetector:" << (zoneDetector != nullptr) << "settings:" << (settings != nullptr);
-        return;
+        qFatal(
+            "WindowTrackingAdaptor: null dependency at construction "
+            "(layoutManager=%p, zoneDetector=%p, settings=%p) — daemon-wiring bug",
+            static_cast<void*>(layoutManager), static_cast<void*>(zoneDetector), static_cast<void*>(settings));
     }
 
     // Create geometry resolver (bridges ISettings to the library's IGeometryResolver)

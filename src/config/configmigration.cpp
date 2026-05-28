@@ -2047,10 +2047,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // were already removed by migrateV3ToV4; only the `_v4DisableStash` and
     // `_v4AnimationRulesStash` scratch keys remain to be cleaned up here.
     // Serialised under the cross-process QLockFile acquired in
-    // ensureJsonConfig (see line 235): on a successful tryLock the rewrite
-    // races no peer, so the value we read into configRoot at the top of this
-    // function is still authoritative here. The lock is best-effort — a
-    // tryLock failure logs the warning at line 242 and falls through, in
+    // `ensureJsonConfig` (see the QLockFile setup near the top of that
+    // function): on a successful tryLock the rewrite races no peer, so
+    // the value we read into configRoot at the top of this function is
+    // still authoritative here. The lock is best-effort — a tryLock
+    // failure logs a warning at the matching site and falls through, in
     // which case a concurrent peer COULD interleave; the warning is the
     // operator's signal that the serialisation guarantee was downgraded.
     // Predicate gates the rewrite so a clean config (no stash keys) isn't
