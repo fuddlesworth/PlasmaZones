@@ -77,6 +77,36 @@ struct PHOSPHORWINDOWRULE_EXPORT RuleAction
 };
 
 /**
+ * @brief Structural schema for one action param.
+ *
+ * The schema carries enough information for the editor UI to render an
+ * input widget without the UI layer hand-maintaining a parallel per-type
+ * switch. `kind` is a UI-side hint string (the canonical kinds are
+ * `string`, `number`, `percent`, `enum`, plus the picker-aware kinds
+ * `snappingLayout`, `tilingAlgorithm`, `animationEvent`, `shaderEffect`,
+ * `curveEditor`); QML loaders dispatch on it. Labels stay in the GPL
+ * settings layer because they need translation through PzI18n::tr —
+ * the lib only owns the structural part of the schema.
+ *
+ * The optional fields are populated by kind:
+ *   - `number` / `percent` may carry `min` / `max` (display-unit bounds)
+ *     and `scale` (stored = display * scale; e.g. percent uses 0.01).
+ *   - `enum` carries `enumWireValues` — the wire strings the picker
+ *     offers; labels for each are translated upstream.
+ *   - picker-aware kinds carry no schema state — the QML loader knows
+ *     to swap in the catalogue-driven ComboBox.
+ */
+struct PHOSPHORWINDOWRULE_EXPORT ParamSchema
+{
+    QString key; ///< wire param key in `RuleAction::params`
+    QString kind; ///< UI kind hint — see struct doc
+    std::optional<double> min; ///< inclusive lower bound, in display units
+    std::optional<double> max; ///< inclusive upper bound, in display units
+    std::optional<double> scale; ///< stored = display * scale; nullopt for unscaled kinds
+    QStringList enumWireValues; ///< wire values for `kind == "enum"`; empty otherwise
+};
+
+/**
  * @brief Static metadata describing one registered action type.
  *
  * Adding a future rule type is registering one of these — no new matcher, no
@@ -86,16 +116,27 @@ struct PHOSPHORWINDOWRULE_EXPORT RuleAction
  *   - a `validate` predicate run on load,
  *   - the set of param keys the action accepts (`allowedKeys`) — the strict
  *     loader rejects any action carrying a key not in this set,
- *   - whether the action is **terminal** (an `Exclude` action stops evaluation).
+ *   - whether the action is **terminal** (an `Exclude` action stops evaluation),
+ *   - the structural `params` schema consumed by the editor UI, and
+ *   - the `userAuthorable` visibility flag used by the action-type picker
+ *     to filter out actions that are registered for back-compat / loader
+ *     completeness but should not appear in the new-rule wizard.
  */
 struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
 {
+    /// Function shape that resolves the slot for a concrete action's params.
+    /// Hoisted to a type alias so the registry initialiser body stays
+    /// readable (the std::function template is verbose enough that inlining
+    /// it twelve times pushes the descriptor literal off-screen).
+    using SlotResolver = std::function<QString(const QJsonObject& params)>;
+    using Validator = std::function<bool(const QJsonObject& params)>;
+
     QString type; ///< the action type id
     /// Resolves the slot for a concrete action's params. Returning an empty
     /// string means the action contributes no slot (treated as invalid).
-    std::function<QString(const QJsonObject& params)> slotFor;
+    SlotResolver slotFor;
     /// Returns true if @p params is a well-formed payload for this type.
-    std::function<bool(const QJsonObject& params)> validate;
+    Validator validate;
     /// Terminal actions (Exclude) stop evaluation once their rule matches.
     bool terminal = false;
     /// The complete set of param keys this action type accepts. The strict
@@ -109,6 +150,16 @@ struct PHOSPHORWINDOWRULE_EXPORT ActionDescriptor
     /// rules that silently never fire (a context action against a match that
     /// pins window properties).
     ActionDomain domain = ActionDomain::Window;
+    /// Structural per-param schema consumed by the editor UI. Order is
+    /// the order the editor renders the param widgets in. An action with
+    /// no params (e.g. `Float`, `Exclude`) leaves this empty.
+    QList<ParamSchema> params{};
+    /// True when the action should appear in the editor's "add rule"
+    /// type picker. Set to false on actions that are registered for
+    /// loader / back-compat completeness but whose semantics aren't
+    /// authorable through the standard wizard (e.g. an action whose
+    /// runtime consumer hasn't shipped yet).
+    bool userAuthorable = true;
 };
 
 /**

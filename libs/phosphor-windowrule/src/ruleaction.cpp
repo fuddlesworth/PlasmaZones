@@ -171,123 +171,208 @@ QStringList ActionRegistry::registeredTypes() const
     return m_descriptors.keys();
 }
 
+namespace {
+
+/// Helper to keep the registerBuiltins body legible — every built-in shares
+/// the same constant slot pattern (no slot-from-params resolution).
+ActionDescriptor::SlotResolver constantSlot(QLatin1StringView slot)
+{
+    return [s = QString(slot)](const QJsonObject&) {
+        return s;
+    };
+}
+
+/// The two engine-token wire strings DisableEngine / SetEngineMode pickers
+/// expose. `engineModeEnum()` constructs a `ParamSchema` for either action;
+/// keeping them together makes the "both pickers share the engine enum"
+/// invariant visible at the descriptor level.
+QStringList engineModeOptions()
+{
+    return {QStringLiteral("snapping"), QStringLiteral("autotile")};
+}
+
+} // namespace
+
 void ActionRegistry::registerBuiltins()
 {
+    using P = ParamSchema;
+
     // ── engine-mode slot ──
-    registerAction(ActionDescriptor{QString(ActionType::SetEngineMode),
-                                    [](const QJsonObject&) {
-                                        return QString(ActionSlot::EngineMode);
-                                    },
-                                    [](const QJsonObject& p) {
-                                        return hasNonEmptyString(p, QLatin1StringView("mode"));
-                                    },
-                                    false, QStringList{QStringLiteral("mode")}, ActionDomain::Context});
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetEngineMode),
+        .slotFor = constantSlot(ActionSlot::EngineMode),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, QLatin1StringView("mode"));
+            },
+        .terminal = false,
+        .allowedKeys = {QStringLiteral("mode")},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QStringLiteral("mode"),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = engineModeOptions()}},
+    });
 
     // ── layout slot — both layout-shaping actions share it ──
-    registerAction(ActionDescriptor{QString(ActionType::SetSnappingLayout),
-                                    [](const QJsonObject&) {
-                                        return QString(ActionSlot::Layout);
-                                    },
-                                    [](const QJsonObject& p) {
-                                        return hasNonEmptyString(p, QLatin1StringView("layoutId"));
-                                    },
-                                    false, QStringList{QStringLiteral("layoutId")}, ActionDomain::Context});
-    registerAction(ActionDescriptor{QString(ActionType::SetTilingAlgorithm),
-                                    [](const QJsonObject&) {
-                                        return QString(ActionSlot::Layout);
-                                    },
-                                    [](const QJsonObject& p) {
-                                        return hasNonEmptyString(p, QLatin1StringView("algorithm"));
-                                    },
-                                    false, QStringList{QStringLiteral("algorithm")}, ActionDomain::Context});
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetSnappingLayout),
+        .slotFor = constantSlot(ActionSlot::Layout),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, QLatin1StringView("layoutId"));
+            },
+        .terminal = false,
+        .allowedKeys = {QStringLiteral("layoutId")},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QStringLiteral("layoutId"), .kind = QStringLiteral("snappingLayout")}},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetTilingAlgorithm),
+        .slotFor = constantSlot(ActionSlot::Layout),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, QLatin1StringView("algorithm"));
+            },
+        .terminal = false,
+        .allowedKeys = {QStringLiteral("algorithm")},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QStringLiteral("algorithm"), .kind = QStringLiteral("tilingAlgorithm")}},
+    });
 
     // ── engine-enable slot ──
     // `mode` records which engine the rule disables. It must be one of the two
     // known engine tokens — ContextRuleBridge::makeDisableRule writes exactly
     // these and disableRuleAutotileMode reads them, so anything else is a
     // malformed payload, not a future-extension placeholder.
-    registerAction(ActionDescriptor{QString(ActionType::DisableEngine),
-                                    [](const QJsonObject&) {
-                                        return QString(ActionSlot::EngineEnable);
-                                    },
-                                    [](const QJsonObject& p) {
-                                        const QString mode = p.value(QLatin1StringView("mode")).toString();
-                                        return mode == QLatin1String("snapping") || mode == QLatin1String("autotile");
-                                    },
-                                    false, QStringList{QStringLiteral("mode")}, ActionDomain::Context});
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::DisableEngine),
+        .slotFor = constantSlot(ActionSlot::EngineEnable),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString mode = p.value(QLatin1StringView("mode")).toString();
+                return mode == QLatin1String("snapping") || mode == QLatin1String("autotile");
+            },
+        .terminal = false,
+        .allowedKeys = {QStringLiteral("mode")},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QStringLiteral("mode"),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = engineModeOptions()}},
+    });
 
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
     //    `allowedKeys` opts out of the strict-key check so a future Exclude
     //    reason/scope param can be added without a schema bump. ──
-    registerAction(ActionDescriptor{QString(ActionType::Exclude),
-                                    [](const QJsonObject&) {
-                                        return QString(ActionSlot::Manage);
-                                    },
-                                    &acceptAny, true, QStringList{}, ActionDomain::Window});
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::Exclude),
+        .slotFor = constantSlot(ActionSlot::Manage),
+        .validate = &acceptAny,
+        .terminal = true,
+        .allowedKeys = {},
+        .domain = ActionDomain::Window,
+    });
 
     // ── float slot — intentionally free-form (future float-geometry hints);
     //    empty `allowedKeys` opts out of the strict-key check. ──
-    registerAction(ActionDescriptor{QString(ActionType::Float),
-                                    [](const QJsonObject&) {
-                                        return QString(ActionSlot::Float);
-                                    },
-                                    &acceptAny, false, QStringList{}, ActionDomain::Window});
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::Float),
+        .slotFor = constantSlot(ActionSlot::Float),
+        .validate = &acceptAny,
+        .terminal = false,
+        .allowedKeys = {},
+        .domain = ActionDomain::Window,
+    });
 
     // ── animation slots — event-scoped: "anim-shader:<event>" ──
     registerAction(ActionDescriptor{
-        QString(ActionType::OverrideAnimationShader),
-        [](const QJsonObject& p) -> QString {
+        .type = QString(ActionType::OverrideAnimationShader),
+        .slotFor = [](const QJsonObject& p) -> QString {
             const QString event = p.value(ActionParam::Event).toString();
             if (event.isEmpty()) {
                 return QString();
             }
             return QString(ActionSlot::AnimShaderPrefix) + event;
         },
-        [](const QJsonObject& p) {
-            return hasNonEmptyString(p, ActionParam::Event);
-        },
-        false, QStringList{QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params)},
-        ActionDomain::Window});
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, ActionParam::Event);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::EffectId), QString(ActionParam::Params)},
+        .domain = ActionDomain::Window,
+        // `params` is a free-form shader-uniform object — not authorable
+        // through a flat key/kind descriptor, so it is intentionally omitted
+        // from the structural schema; a shader-uniform editor would graduate
+        // the rule to Advanced.
+        .params = {P{.key = QString(ActionParam::Event), .kind = QStringLiteral("animationEvent")},
+                   P{.key = QString(ActionParam::EffectId), .kind = QStringLiteral("shaderEffect")}},
+    });
     registerAction(ActionDescriptor{
-        QString(ActionType::OverrideAnimationTiming),
-        [](const QJsonObject& p) -> QString {
+        .type = QString(ActionType::OverrideAnimationTiming),
+        .slotFor = [](const QJsonObject& p) -> QString {
             const QString event = p.value(ActionParam::Event).toString();
             if (event.isEmpty()) {
                 return QString();
             }
             return QString(ActionSlot::AnimTimingPrefix) + event;
         },
-        [](const QJsonObject& p) {
-            return hasNonEmptyString(p, ActionParam::Event);
-        },
-        false, QStringList{QString(ActionParam::Event), QString(ActionParam::Curve), QString(ActionParam::DurationMs)},
-        ActionDomain::Window});
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, ActionParam::Event);
+            },
+        .terminal = false,
+        // The descriptor still allows `curve` for back-compat with legacy
+        // rules; the editor does not expose it on this action — curve lives
+        // in `OverrideAnimationCurve` (separate slot) so the user can
+        // override curve and duration independently per event.
+        .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::Curve), QString(ActionParam::DurationMs)},
+        .domain = ActionDomain::Window,
+        .params =
+            {P{.key = QString(ActionParam::Event), .kind = QStringLiteral("animationEvent")},
+             P{.key = QString(ActionParam::DurationMs), .kind = QStringLiteral("number"), .min = 0.0, .max = 60000.0}},
+    });
     // Curve override — own slot so it can be combined with a Timing-slot
     // duration override on the same event without one shadowing the other.
-    registerAction(ActionDescriptor{QString(ActionType::OverrideAnimationCurve),
-                                    [](const QJsonObject& p) -> QString {
-                                        const QString event = p.value(ActionParam::Event).toString();
-                                        if (event.isEmpty()) {
-                                            return QString();
-                                        }
-                                        return QString(ActionSlot::AnimCurvePrefix) + event;
-                                    },
-                                    [](const QJsonObject& p) {
-                                        return hasNonEmptyString(p, ActionParam::Event);
-                                    },
-                                    false, QStringList{QString(ActionParam::Event), QString(ActionParam::Curve)},
-                                    ActionDomain::Window});
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OverrideAnimationCurve),
+        .slotFor = [](const QJsonObject& p) -> QString {
+            const QString event = p.value(ActionParam::Event).toString();
+            if (event.isEmpty()) {
+                return QString();
+            }
+            return QString(ActionSlot::AnimCurvePrefix) + event;
+        },
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNonEmptyString(p, ActionParam::Event);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Event), QString(ActionParam::Curve)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Event), .kind = QStringLiteral("animationEvent")},
+                   P{.key = QString(ActionParam::Curve), .kind = QStringLiteral("curveEditor")}},
+    });
 
     // ── opacity slot ──
-    registerAction(ActionDescriptor{QString(ActionType::SetOpacity),
-                                    [](const QJsonObject&) {
-                                        return QString(ActionSlot::Opacity);
-                                    },
-                                    [](const QJsonObject& p) {
-                                        const QJsonValue v = p.value(QLatin1StringView("value"));
-                                        return v.isDouble() && v.toDouble() >= 0.0 && v.toDouble() <= 1.0;
-                                    },
-                                    false, QStringList{QStringLiteral("value")}, ActionDomain::Window});
+    // The wire value is a 0.0–1.0 fraction; the editor renders a 0–100
+    // percentage, so the stored value is `display * scale`.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOpacity),
+        .slotFor = constantSlot(ActionSlot::Opacity),
+        .validate =
+            [](const QJsonObject& p) {
+                const QJsonValue v = p.value(QLatin1StringView("value"));
+                return v.isDouble() && v.toDouble() >= 0.0 && v.toDouble() <= 1.0;
+            },
+        .terminal = false,
+        .allowedKeys = {QStringLiteral("value")},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QStringLiteral("value"),
+                     .kind = QStringLiteral("percent"),
+                     .min = 0.0,
+                     .max = 100.0,
+                     .scale = 0.01}},
+    });
 }
 
 } // namespace PhosphorWindowRule

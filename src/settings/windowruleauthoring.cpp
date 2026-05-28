@@ -12,6 +12,9 @@
 
 #include <QLatin1StringView>
 #include <QList>
+#include <QSet>
+
+#include <algorithm>
 
 namespace PlasmaZones::WindowRuleAuthoring {
 
@@ -22,104 +25,99 @@ using PhosphorWindowRule::Field;
 using PhosphorWindowRule::Operator;
 using PhosphorWindowRule::RuleAction;
 
-/// Build one parameter descriptor for the action editor. @p kind is one of
-/// "string" / "number" / "enum" / "percent"; the optional trailing fields are
-/// kind-specific (see actionTypes() doc).
-QVariantMap paramDescriptor(QLatin1StringView key, const QString& kind, const QString& label)
+/// Translated label for one param key on action @p type. The structural
+/// schema (kind, min/max, scale, enum wire values) lives on the LGPL
+/// `ActionDescriptor` in PhosphorWindowRule; the GPL settings layer adds
+/// the user-visible label per `(type, key)` pair so translation runs
+/// through `PzI18n::tr` and `lupdate` extracts the strings. A missing
+/// entry falls back to the wire key — visible in the picker, so a missing
+/// entry stands out for the next translator pass.
+QString paramLabel(QLatin1StringView type, const QString& key)
 {
-    QVariantMap p;
-    p[QStringLiteral("key")] = QString::fromLatin1(key);
-    p[QStringLiteral("kind")] = kind;
-    p[QStringLiteral("label")] = label;
-    return p;
+    if (type == ActionType::SetEngineMode && key == QLatin1String("mode")) {
+        return PzI18n::tr("Engine mode");
+    }
+    if (type == ActionType::SetSnappingLayout && key == QLatin1String("layoutId")) {
+        return PzI18n::tr("Snapping layout");
+    }
+    if (type == ActionType::SetTilingAlgorithm && key == QLatin1String("algorithm")) {
+        return PzI18n::tr("Tiling algorithm");
+    }
+    if (type == ActionType::DisableEngine && key == QLatin1String("mode")) {
+        return PzI18n::tr("Engine to disable");
+    }
+    if (type == ActionType::SetOpacity && key == QLatin1String("value")) {
+        return PzI18n::tr("Opacity percentage");
+    }
+    if (key == QLatin1String("event")) {
+        return PzI18n::tr("Event");
+    }
+    if (key == QLatin1String("effectId")) {
+        return PzI18n::tr("Shader effect");
+    }
+    if (key == QLatin1String("durationMs")) {
+        return PzI18n::tr("Duration (ms)");
+    }
+    if (key == QLatin1String("curve")) {
+        return PzI18n::tr("Curve");
+    }
+    return key;
 }
 
-/// Enum-option list for the snapping/autotile engine-mode pickers. Shared by
-/// `SetEngineMode` and `DisableEngine`: both pick from the same lowercase
-/// wire tokens but show properly-cased UI labels.
-QVariantList engineModeOptions()
+/// Translated label for one enum wire value on action @p type, param @p key.
+/// Mirrors paramLabel — structural enum membership lives on the descriptor;
+/// the human-facing label is per `(type, key, wireValue)`.
+QString enumOptionLabel(QLatin1StringView type, const QString& key, const QString& wireValue)
 {
-    QVariantList options;
-    QVariantMap snap;
-    snap[QStringLiteral("value")] = QStringLiteral("snapping");
-    snap[QStringLiteral("label")] = PzI18n::tr("Snapping");
-    options.append(snap);
-    QVariantMap tile;
-    tile[QStringLiteral("value")] = QStringLiteral("autotile");
-    tile[QStringLiteral("label")] = PzI18n::tr("Autotile");
-    options.append(tile);
-    return options;
+    if ((type == ActionType::SetEngineMode || type == ActionType::DisableEngine) && key == QLatin1String("mode")) {
+        if (wireValue == QLatin1String("snapping")) {
+            return PzI18n::tr("Snapping");
+        }
+        if (wireValue == QLatin1String("autotile")) {
+            return PzI18n::tr("Autotile");
+        }
+    }
+    return wireValue;
 }
 
-/// The parameter schema for @p type — the editor `Loader` is driven entirely
-/// off this, so the per-type `if (t === "...")` ladder lives in C++ only.
+/// The parameter schema for @p type, derived from the LGPL ActionDescriptor's
+/// structural `params` and supplemented by GPL-side translated labels. The
+/// QML editor's per-param Loader dispatches on `kind`, so the wire shape
+/// here is the contract between the descriptor and the editor.
 QVariantList paramsForActionTypeImpl(QLatin1StringView type)
 {
     QVariantList params;
-    if (type == ActionType::SetEngineMode) {
-        QVariantMap p = paramDescriptor(QLatin1String("mode"), QStringLiteral("enum"), PzI18n::tr("Engine mode"));
-        p[QStringLiteral("options")] = engineModeOptions();
-        params.append(p);
-    } else if (type == ActionType::SetSnappingLayout) {
-        // `snappingLayout` is the picker-aware kind the QML editor recognises;
-        // it swaps in a ComboBox over `settingsController.layouts` so the
-        // user picks "Grid (2x2)" instead of pasting "{25828c9b-…}".
-        params.append(paramDescriptor(QLatin1String("layoutId"), QStringLiteral("snappingLayout"),
-                                      PzI18n::tr("Snapping layout")));
-    } else if (type == ActionType::SetTilingAlgorithm) {
-        // Tiling algorithms are still string tokens (`bsp`, `grid`, …) — the
-        // editor offers a ComboBox over the catalogue but stores the token
-        // verbatim.
-        params.append(paramDescriptor(QLatin1String("algorithm"), QStringLiteral("tilingAlgorithm"),
-                                      PzI18n::tr("Tiling algorithm")));
-    } else if (type == ActionType::DisableEngine) {
-        // Validator requires `mode` ∈ {snapping, autotile}; without a picker
-        // the user couldn't author the action. Same enum shape as
-        // SetEngineMode.
-        QVariantMap p = paramDescriptor(QLatin1String("mode"), QStringLiteral("enum"), PzI18n::tr("Engine to disable"));
-        p[QStringLiteral("options")] = engineModeOptions();
-        params.append(p);
-    } else if (type == ActionType::SetOpacity) {
-        // The wire value is a 0.0–1.0 fraction; the editor shows a 0–100
-        // percentage, so the stored value is `display * scale`.
-        QVariantMap p =
-            paramDescriptor(QLatin1String("value"), QStringLiteral("percent"), PzI18n::tr("Opacity percentage"));
-        p[QStringLiteral("min")] = 0;
-        p[QStringLiteral("max")] = 100;
-        p[QStringLiteral("scale")] = 0.01;
-        params.append(p);
-    } else if (type == ActionType::OverrideAnimationShader) {
-        // Wire keys must match PhosphorWindowRule::ActionRegistry's
-        // OverrideAnimationShader descriptor (`event`, `effectId`, `params`).
-        // `params` is a free-form shader-uniform object — not authorable
-        // through a flat key/kind descriptor, so it is intentionally omitted;
-        // a shader-uniform editor would graduate the rule to Advanced.
-        //
-        // `animationEvent` / `shaderEffect` are picker-aware kinds the QML
-        // editor recognises — they swap ComboBoxes driven by
-        // `AnimationsPageController::eventSections()` and
-        // `availableShaderEffects()` in place of the freeform string field.
-        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("animationEvent"), PzI18n::tr("Event")));
-        params.append(
-            paramDescriptor(QLatin1String("effectId"), QStringLiteral("shaderEffect"), PzI18n::tr("Shader effect")));
-    } else if (type == ActionType::OverrideAnimationTiming) {
-        // Duration-only override. Curve lives in `OverrideAnimationCurve`
-        // (separate slot) so the user can override curve and duration
-        // independently per event. The descriptor still allows `curve` for
-        // back-compat with legacy rules; the editor doesn't expose it here.
-        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("animationEvent"), PzI18n::tr("Event")));
-        QVariantMap p =
-            paramDescriptor(QLatin1String("durationMs"), QStringLiteral("number"), PzI18n::tr("Duration (ms)"));
-        p[QStringLiteral("min")] = 0;
-        p[QStringLiteral("max")] = 60000;
-        params.append(p);
-    } else if (type == ActionType::OverrideAnimationCurve) {
-        // Curve-only override. `OverrideAnimationDuration` lives under
-        // `OverrideAnimationTiming` (kept as the duration-only override).
-        params.append(paramDescriptor(QLatin1String("event"), QStringLiteral("animationEvent"), PzI18n::tr("Event")));
-        params.append(paramDescriptor(QLatin1String("curve"), QStringLiteral("curveEditor"), PzI18n::tr("Curve")));
+    const auto descriptor = PhosphorWindowRule::ActionRegistry::instance().descriptor(QString::fromLatin1(type));
+    if (!descriptor.has_value()) {
+        return params;
     }
-    // float / disableEngine / exclude carry no parameters — empty list.
+    for (const PhosphorWindowRule::ParamSchema& schema : descriptor->params) {
+        QVariantMap p;
+        p[QStringLiteral("key")] = schema.key;
+        p[QStringLiteral("kind")] = schema.kind;
+        p[QStringLiteral("label")] = paramLabel(type, schema.key);
+        if (schema.min.has_value()) {
+            p[QStringLiteral("min")] = *schema.min;
+        }
+        if (schema.max.has_value()) {
+            p[QStringLiteral("max")] = *schema.max;
+        }
+        if (schema.scale.has_value()) {
+            p[QStringLiteral("scale")] = *schema.scale;
+        }
+        if (!schema.enumWireValues.isEmpty()) {
+            QVariantList options;
+            options.reserve(schema.enumWireValues.size());
+            for (const QString& wire : schema.enumWireValues) {
+                QVariantMap option;
+                option[QStringLiteral("value")] = wire;
+                option[QStringLiteral("label")] = enumOptionLabel(type, schema.key, wire);
+                options.append(option);
+            }
+            p[QStringLiteral("options")] = options;
+        }
+        params.append(p);
+    }
     return params;
 }
 
@@ -270,7 +268,14 @@ QVariantList operatorsForField(int fieldValue)
 
 QVariantList actionTypes()
 {
-    static const QList<QLatin1StringView> kTypes = {
+    // The picker order is meaningful (engine-mode first, then layout-shaping,
+    // then per-window overrides), but the registry returns types in QHash
+    // iteration order. Anchoring the order here keeps the picker stable
+    // without bringing back the hand-maintained type list — registered
+    // types not in this order list are appended after, alphabetically by
+    // wire string, so a future descriptor automatically shows up in the
+    // picker the moment it sets `userAuthorable = true`.
+    static const QList<QLatin1StringView> kPreferredOrder = {
         ActionType::SetEngineMode,
         ActionType::SetSnappingLayout,
         ActionType::SetTilingAlgorithm,
@@ -282,10 +287,40 @@ QVariantList actionTypes()
         ActionType::OverrideAnimationCurve,
         ActionType::OverrideAnimationTiming,
     };
+    const PhosphorWindowRule::ActionRegistry& registry = PhosphorWindowRule::ActionRegistry::instance();
+    QList<QString> orderedTypes;
+    QSet<QString> seen;
+    for (QLatin1StringView t : kPreferredOrder) {
+        const QString type = QString::fromLatin1(t);
+        const auto desc = registry.descriptor(type);
+        if (desc.has_value() && desc->userAuthorable) {
+            orderedTypes.append(type);
+            seen.insert(type);
+        }
+    }
+    QStringList trailing;
+    for (const QString& type : registry.registeredTypes()) {
+        if (seen.contains(type)) {
+            continue;
+        }
+        const auto desc = registry.descriptor(type);
+        if (desc.has_value() && desc->userAuthorable) {
+            trailing.append(type);
+        }
+    }
+    std::sort(trailing.begin(), trailing.end());
+    orderedTypes.append(trailing);
+
     QVariantList out;
-    for (QLatin1StringView type : kTypes) {
+    for (const QString& typeStr : orderedTypes) {
+        // Materialise a stable QByteArray for the QLatin1StringView's
+        // backing storage — a temporary `toLatin1()` would dangle past
+        // the semicolon and `actionTypeLabelImpl` / `paramsForActionTypeImpl`
+        // would read invalid memory.
+        const QByteArray typeBytes = typeStr.toLatin1();
+        const QLatin1StringView type{typeBytes.constData(), static_cast<qsizetype>(typeBytes.size())};
         QVariantMap entry;
-        entry[QStringLiteral("value")] = QString::fromLatin1(type);
+        entry[QStringLiteral("value")] = typeStr;
         entry[QStringLiteral("label")] = actionTypeLabelImpl(type);
         entry[QStringLiteral("params")] = paramsForActionTypeImpl(type);
         // Domain wire string drives the picker's compatibility flag — the
