@@ -576,6 +576,10 @@ public:
         PZ_CONFIG_KEY(v1AnimationMinDistanceKey, "AnimationMinDistance")
         PZ_CONFIG_KEY(v1AnimationSequenceModeKey, "AnimationSequenceMode")
         PZ_CONFIG_KEY(v1AnimationStaggerIntervalKey, "AnimationStaggerInterval")
+        /// v1 INI key for the rendering backend selection — both the v1→v2 migration
+        /// step and the v1 INI dispatcher consume this through one accessor so a
+        /// future rename of the literal can't drift one site behind the other.
+        PZ_CONFIG_KEY(v1RenderingBackendKey, "RenderingBackend")
         PZ_CONFIG_GROUP(v1GlobalShortcutsGroup, "GlobalShortcuts")
         PZ_CONFIG_GROUP(v1EditorGroup, "Editor") // = v2 editorGroup
         PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup

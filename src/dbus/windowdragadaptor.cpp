@@ -57,13 +57,20 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
     Q_ASSERT(settings);
     Q_ASSERT(windowTracking);
 
-    // Runtime null checks for release builds - log warning but don't crash
+    // Runtime null checks for release builds — log and bail BEFORE the
+    // connect()s below dereference a null dep. The previous shape only
+    // logged the warning, then continued into `connect(m_layoutManager,
+    // ...)` which would crash on a null layoutManager in release. The
+    // debug-build assertions above already terminate; the release-build
+    // path now matches: do nothing, leaving the adaptor in a non-wired
+    // but non-crashing state.
     if (!overlay || !detector || !layoutManager || !settings || !windowTracking) {
-        qCWarning(lcDbusWindow) << "One or more required dependencies are null!"
+        qCWarning(lcDbusWindow) << "WindowDragAdaptor constructed with null dependencies — refusing to wire."
                                 << "overlay:" << (overlay != nullptr) << "detector:" << (detector != nullptr)
                                 << "layoutManager:" << (layoutManager != nullptr)
                                 << "settings:" << (settings != nullptr)
                                 << "windowTracking:" << (windowTracking != nullptr);
+        return;
     }
 
     // Connect to layout change signals to invalidate cached zone geometry mid-drag

@@ -36,6 +36,12 @@ PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& sc
     // stale assignment state during a mode transition — trust the engine
     // and downgrade to Snapping. (A second isActiveOnScreen check here
     // would be dead code given the early return above.)
+    //
+    // Scrolling reports pass through unchanged: there is no engine to
+    // cross-check (engineFor returns nullptr for Scrolling), so the
+    // cascade is authoritative for the no-engine modes. Only Autotile
+    // needs the engine cross-check because it's the one whose live
+    // state can diverge from a stale assignment.
     if (mode == PhosphorZones::AssignmentEntry::Autotile) {
         return PhosphorZones::AssignmentEntry::Snapping;
     }

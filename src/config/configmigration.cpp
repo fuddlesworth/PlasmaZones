@@ -397,8 +397,7 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
 
     const QString renderingGroup = ConfigDefaults::renderingGroup();
     const QString generalGroup = ConfigDefaults::generalGroup();
-    // Hardcoded v1 key name — the INI file uses "RenderingBackend"
-    const QString renderingKey = QStringLiteral("RenderingBackend");
+    const QString renderingKey = ConfigKeys::Legacy::v1RenderingBackendKey();
     const QString PerScreenKeyStr = PerScreenPathResolver::perScreenKey();
 
     for (auto it = flatMap.constBegin(); it != flatMap.constEnd(); ++it) {
@@ -833,7 +832,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
 
     // ── Rendering (key rename) ──────────────────────────────────────────────
     QJsonObject rendering;
-    moveKey(v1Rendering, QLatin1String("RenderingBackend"), rendering, QLatin1String("Backend"));
+    moveKey(v1Rendering, ConfigKeys::Legacy::v1RenderingBackendKey(), rendering, QLatin1String("Backend"));
     if (!rendering.isEmpty())
         root[QLatin1String("Rendering")] = rendering;
 

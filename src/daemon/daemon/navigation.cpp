@@ -300,20 +300,29 @@ void Daemon::handleRetile()
     if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
         return;
     }
-    // Gate on the focused screen's autotile-mode disable cascade, mirroring
-    // every sister handler (`HANDLE_AUTOTILE_ONLY`, master-ratio handlers).
-    // `retile()` itself is engine-global (iterates all autotile screens) but
-    // the shortcut is fired by a user on a specific monitor — if their
-    // current context has autotile disabled, the shortcut should silently
-    // no-op rather than retile every other autotile screen, matching the
-    // "this shortcut feels broken on this context" UX of the sister
-    // handlers. A null screenId (no resolvable focused screen) falls
-    // through to the legacy behaviour.
+    // Mirror every sister handler (HANDLE_AUTOTILE_ONLY at macros.h:29 and
+    // the master-ratio handlers): silently no-op when the focused screen
+    // isn't in autotile mode OR when its autotile-mode disable cascade
+    // trips. retile() itself is engine-global, but a user firing the
+    // shortcut from a Snapping/Scrolling screen (or from an
+    // autotile-disabled context) expects "nothing happens on the screen
+    // I'm focused on", not "every other autotile screen retiles". Fail
+    // closed on a null resolver — matches the rest of this file
+    // (handleSnap, handleFloat, master-ratio handlers); the resolver is
+    // null only inside the tiny shutdown window where every navigation
+    // handler should be silently inert anyway. A null focused screen
+    // (no resolvable focus) skips both checks and falls through to the
+    // legacy behaviour.
     const QString focusedScreen = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-    if (!focusedScreen.isEmpty() && m_contextResolver
-        && m_contextResolver->isDisabled(
-            m_contextResolver->handleForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile))) {
-        return;
+    if (!focusedScreen.isEmpty()) {
+        if (!isAutotileScreen(focusedScreen)) {
+            return;
+        }
+        if (!m_contextResolver
+            || m_contextResolver->isDisabled(
+                m_contextResolver->handleForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile))) {
+            return;
+        }
     }
     m_autotileEngine->retile();
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {

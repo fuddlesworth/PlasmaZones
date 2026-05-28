@@ -101,13 +101,13 @@ struct AssignmentEntry
         /// Reserved engine slot for a future scrolling-workspace engine.
         /// The settings UI exposes the mode and persists per-mode disable
         /// lists / config groups, but the router currently has no engine
-        /// to hand windows to — see `ScreenModeRouter::routerFor` for the
-        /// passthrough fallback that lets KWin place the window naturally
-        /// rather than blocking on a missing engine. A real engine
-        /// implementer adds an adapter to the router and removes the
-        /// passthrough; no daemon-internal switch needs to be edited
-        /// because the (Mode, Family) settings table here drives all
-        /// downstream config routing.
+        /// to hand windows to — see `ScreenModeRouter::engineFor` for the
+        /// passthrough fallback (returns nullptr for Scrolling) that lets
+        /// KWin place the window naturally rather than blocking on a
+        /// missing engine. A real engine implementer adds an adapter to
+        /// the router and removes the passthrough; no daemon-internal
+        /// switch needs to be edited because the (Mode, Family) settings
+        /// table here drives all downstream config routing.
         Scrolling = 2
     };
     Mode mode = Snapping;

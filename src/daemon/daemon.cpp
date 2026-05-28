@@ -1737,20 +1737,21 @@ void Daemon::stop()
     // its slot bodies could deref freed memory during the destruction
     // window between m_windowRuleStore.reset() and ~Daemon completing.
     //
-    // The other eight raw-Qt-parented adaptors (LayoutAdaptor,
+    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
-    // DBusScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor) all
-    // ship `= default` destructors (verified — see their class headers),
-    // so they have no dtor body to UAF. QDBusConnection::unregisterObject
-    // (invoked above) blocks new method dispatch to them before we begin
-    // tearing down, and Qt's sender-destruction auto-disconnect cleans
-    // up signal wiring when the borrowed sender (m_layoutManager, etc.)
-    // is destroyed during member destruction. Adding detach() to those
-    // eight would require null-guarding every slot body (they currently
-    // rely on the "borrowed pointer is always valid" invariant), which
-    // is a larger refactor than the defense-in-depth buys. If a future
-    // adaptor grows a dtor body that derefs a borrowed member, add
-    // detach() to it AND wire the call here — same pattern as these three.
+    // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
+    // SnapAdaptor, AutotileAdaptor) all ship `= default` destructors
+    // (verified — see their class headers), so they have no dtor body to
+    // UAF. QDBusConnection::unregisterObject (invoked above) blocks new
+    // method dispatch to them before we begin tearing down, and Qt's
+    // sender-destruction auto-disconnect cleans up signal wiring when the
+    // borrowed sender (m_layoutManager, etc.) is destroyed during member
+    // destruction. Adding detach() to those nine would require null-guarding
+    // every slot body (they currently rely on the "borrowed pointer is
+    // always valid" invariant), which is a larger refactor than the
+    // defense-in-depth buys. If a future adaptor grows a dtor body that
+    // derefs a borrowed member, add detach() to it AND wire the call here
+    // — same pattern as these four.
     if (m_settingsAdaptor) {
         m_settingsAdaptor->detach();
     }

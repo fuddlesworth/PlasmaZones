@@ -23,8 +23,15 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     // (the runtime warning + early return below remains for release builds).
     Q_ASSERT_X(m_engine && m_adaptor && m_settings, "SnapAdaptor::SnapAdaptor",
                "engine / adaptor / settings dependencies must not be null");
-    if (!m_engine || !adaptor) {
-        qCWarning(lcDbusWindow) << "SnapAdaptor created with null engine or adaptor";
+    // Symmetric with the assertion above — release builds bail on any null
+    // dep, not just engine/adaptor. The previous form silently constructed
+    // a no-op adaptor when settings was null in release, diverging from the
+    // debug-build assert. Per-slot defences downstream still null-check
+    // m_settings for shutdown-window safety.
+    if (!m_engine || !m_adaptor || !m_settings) {
+        qCWarning(lcDbusWindow) << "SnapAdaptor created with null engine / adaptor / settings — refusing to wire."
+                                << "engine:" << (m_engine != nullptr) << "adaptor:" << (m_adaptor != nullptr)
+                                << "settings:" << (m_settings != nullptr);
         return;
     }
 

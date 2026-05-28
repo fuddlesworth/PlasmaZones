@@ -48,7 +48,7 @@ QString paramLabel(QLatin1StringView type, const QString& key)
         return PzI18n::tr("Engine to disable");
     }
     if (type == ActionType::SetOpacity && key == ActionParam::Value) {
-        return PzI18n::tr("Opacity percentage");
+        return PzI18n::tr("Opacity (%)");
     }
     if (key == ActionParam::Event) {
         return PzI18n::tr("Event");

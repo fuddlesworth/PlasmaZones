@@ -264,13 +264,12 @@ private Q_SLOTS:
         FakeContextResolver resolver;
         resolver.m_disabled = true;
         settings.m_snapEnabled = true;
-        // Deliberately leave settings.m_monitorDisabled at its default (false).
-        // After C1 the policy reads the disabled-context gate exclusively
-        // through the resolver — a regression that reinstates the old
-        // ISettings::isMonitorDisabled probe would silently produce the
-        // same ContextDisabled answer here, hiding the regression. With
-        // the settings flag pinned to false, the bypass is unambiguously
-        // attributable to the resolver and the resolver alone.
+        // PolicyStubSettings no longer carries an isMonitorDisabled override
+        // (removed in Pass 3 — the C1 cascade routes through the resolver).
+        // A regression that reinstated `ISettings::isMonitorDisabled` as a
+        // bypass source would have to add a new override here to be
+        // exercised by the test; the test fails closed instead. The
+        // bypass is unambiguously attributable to the resolver.
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
@@ -289,10 +288,11 @@ private Q_SLOTS:
         FakeContextResolver resolver;
         resolver.m_disabled = true;
         settings.m_snapEnabled = false;
-        // See contextDisabled_overridesAutotile — settings.m_monitorDisabled
-        // pinned to false so the resolver is the unambiguous source of the
-        // ContextDisabled bypass; a future regression that re-reads from
-        // ISettings cannot mask itself behind a duplicated-flag.
+        // See contextDisabled_overridesAutotile — PolicyStubSettings carries
+        // no ISettings-side disable override (Pass 3 removed it), so the
+        // resolver is the unambiguous source of the ContextDisabled bypass.
+        // A regression that re-introduced an ISettings probe couldn't mask
+        // itself behind a duplicated-flag here.
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
