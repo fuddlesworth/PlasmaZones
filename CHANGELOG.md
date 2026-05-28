@@ -32,6 +32,22 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Backout**: the source file is renamed `assignments.json.migrated` (not deleted), so a downgrade can restore the previous schema by manually renaming it back and starting an older daemon.
 - **Recovery**: if migration aborts because the source is malformed, the original file is renamed to `~/.config/plasmazones/assignments.json.corrupt.bak`, the schema version stays at v3, and `windowrules.json` is not created — the daemon does not silently flush the old assignments to an empty rule set. The user can inspect / repair the quarantined file and rename it back to `assignments.json`; the next launch then retries the v3→v4 conversion.
 
+## [3.0.15] - 2026-05-28
+
+### Fixed
+
+- **Zone-selector popup at the screen edge switched the active layout on hover, resnapping every tiled window** ([#542](https://github.com/fuddlesworth/PlasmaZones/pull/542)): the zone-selector slot was supposed to be input-transparent during drag — cursor coordinates come in via the D-Bus `updateSelectorPosition` path and the snap commits at drag-end via `drop.cpp`, never via a Qt hover event. But the slot's QML `MouseArea`s still fired `zoneSelected` on every pointer-enter, and once snap-assist became visible the shared shell surface flipped to input-grabbing (`anyInputGrabbing = isVisible(snapAssistSlot) || isVisible(layoutPickerSlot)` in `syncPassiveShellSurfaceState`) — those leaked hover events committed `manualLayoutSelected`, which immediately resnapped every other tiled window into the new layout's zones. Visible as "my layout changes to one with more or fewer windows whenever I drag windows up". The QML hover commit path is gone (`ZoneSelectorContent` is now `interactive: false` and the daemon's `manualLayoutSelected` handler / signal are removed); cross-layout switching on drop still works because `WindowDragAdaptor::dragStopped` reads `m_selectedLayoutId` from the C++ hit-test and applies the layout when the user actually releases the drag on a zone in a different layout.
+
+### Removed
+
+- **Switching the autotile algorithm by hovering an autotile preview in the zone-selector popup** ([#542](https://github.com/fuddlesworth/PlasmaZones/pull/542)): the autotile-hover commit path went away with the input-contract fix above (`drop.cpp` resolves the selected id as a UUID and skips non-UUID autotile ids, so the hover path was the only commit point for autotile-via-zone-selector). Algorithm swaps still work through the existing on-by-default routes: `NextLayout` / `PreviousLayout`, `QuickLayout1`–`QuickLayout9`, and the Layout Picker (`Meta+Alt+Space` by default). The `IOverlayService::autotileLayoutSelected` signal and its daemon handler were removed as dead code.
+
+## [3.0.14] - 2026-05-27
+
+### Fixed
+
+- **DPMS-wake autotile orphan reassignment still triggered intermittently** ([#527](https://github.com/fuddlesworth/PlasmaZones/discussions/527), [#536](https://github.com/fuddlesworth/PlasmaZones/pull/536)): 3.0.13 closed the dropped-monitor case but missed the dual-monitor wake-up where the second output coming back simply shifts the first output's x-offset. With no output actually removed, `oldScreenStillConnected` stayed true, and `isScreenChangeInProgress()` hadn't flipped on yet because KWin emits the per-window `outputChanged` *before* the `virtualScreenGeometryChanged` that the screen-change debounce listens for — the orphan reached the autotile-delegation guard with both legs of the check false. `screenAdded` and `screenRemoved` are now also wired into the screen-change handler, latching the pending-change flag at the earliest point KWin tells us the output set is changing. The settle path that runs once `virtualScreenGeometryChanged` catches up is unchanged.
+
 ## [3.0.13] - 2026-05-26
 
 ### Fixed
@@ -1450,7 +1466,9 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.15...HEAD
+[3.0.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.14...v3.0.15
+[3.0.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...v3.0.14
 [3.0.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.12...v3.0.13
 [3.0.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.11...v3.0.12
 [3.0.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.10...v3.0.11
