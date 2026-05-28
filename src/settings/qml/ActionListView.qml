@@ -47,7 +47,9 @@ ColumnLayout {
     /// look like one consistent tree visualisation.
     readonly property real _indentStep: Kirigami.Units.gridUnit * 1.5
     readonly property color _guideColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.75)
-    readonly property int _guideThickness: Math.max(2, Math.round(Screen.devicePixelRatio * 1.5))
+    // 1 physical pixel — matches MatchExpressionView's revised guide
+    // thickness. See the rationale comment there.
+    readonly property int _guideThickness: Math.max(1, Math.round(Screen.devicePixelRatio))
 
     /// Look up the `{ value, label, params }` entry for a wire type
     /// string, or null when the type isn't in the registry.

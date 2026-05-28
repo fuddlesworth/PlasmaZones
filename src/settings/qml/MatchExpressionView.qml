@@ -229,7 +229,14 @@ ColumnLayout {
             /// non-hidpi the stroke is two physical pixels — single-pixel
             /// strokes disappear into anti-aliased edges on dark
             /// surfaces.
-            readonly property int _guideThickness: Math.max(2, Math.round(Screen.devicePixelRatio * 1.5))
+            // 1 physical pixel — the prior `Math.max(2, Math.round(Screen
+            // .devicePixelRatio * 1.5))` was tuned against the broken
+            // `Kirigami.Units.devicePixelRatio` (which evaluated to NaN and
+            // fell through to the floor of 2). Once the underlying ratio
+            // started returning the real value, the `* 1.5` made the
+            // connectors noticeably thicker than the original visual
+            // baseline. Same one-physical-pixel hairline as borders.
+            readonly property int _guideThickness: Math.max(1, Math.round(Screen.devicePixelRatio))
 
             // Size delegate to the tree's available width so the
             // rightmost spacer pushes content into a clean column.
