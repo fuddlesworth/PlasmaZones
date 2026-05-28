@@ -204,12 +204,12 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::EngineMode),
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, QLatin1StringView("mode"));
+                return hasNonEmptyString(p, ActionParam::Mode);
             },
         .terminal = false,
-        .allowedKeys = {QStringLiteral("mode")},
+        .allowedKeys = {QString(ActionParam::Mode)},
         .domain = ActionDomain::Context,
-        .params = {P{.key = QStringLiteral("mode"),
+        .params = {P{.key = QString(ActionParam::Mode),
                      .kind = QStringLiteral("enum"),
                      .enumWireValues = engineModeOptions()}},
     });
@@ -220,24 +220,24 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::Layout),
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, QLatin1StringView("layoutId"));
+                return hasNonEmptyString(p, ActionParam::LayoutId);
             },
         .terminal = false,
-        .allowedKeys = {QStringLiteral("layoutId")},
+        .allowedKeys = {QString(ActionParam::LayoutId)},
         .domain = ActionDomain::Context,
-        .params = {P{.key = QStringLiteral("layoutId"), .kind = QStringLiteral("snappingLayout")}},
+        .params = {P{.key = QString(ActionParam::LayoutId), .kind = QStringLiteral("snappingLayout")}},
     });
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetTilingAlgorithm),
         .slotFor = constantSlot(ActionSlot::Layout),
         .validate =
             [](const QJsonObject& p) {
-                return hasNonEmptyString(p, QLatin1StringView("algorithm"));
+                return hasNonEmptyString(p, ActionParam::Algorithm);
             },
         .terminal = false,
-        .allowedKeys = {QStringLiteral("algorithm")},
+        .allowedKeys = {QString(ActionParam::Algorithm)},
         .domain = ActionDomain::Context,
-        .params = {P{.key = QStringLiteral("algorithm"), .kind = QStringLiteral("tilingAlgorithm")}},
+        .params = {P{.key = QString(ActionParam::Algorithm), .kind = QStringLiteral("tilingAlgorithm")}},
     });
 
     // ── engine-enable slot ──
@@ -254,14 +254,14 @@ void ActionRegistry::registerBuiltins()
         .slotFor = constantSlot(ActionSlot::EngineEnable),
         .validate =
             [](const QJsonObject& p) {
-                const QString mode = p.value(QLatin1StringView("mode")).toString();
+                const QString mode = p.value(ActionParam::Mode).toString();
                 return mode == QLatin1String("snapping") || mode == QLatin1String("autotile")
                     || mode == QLatin1String("scrolling");
             },
         .terminal = false,
-        .allowedKeys = {QStringLiteral("mode")},
+        .allowedKeys = {QString(ActionParam::Mode)},
         .domain = ActionDomain::Context,
-        .params = {P{.key = QStringLiteral("mode"),
+        .params = {P{.key = QString(ActionParam::Mode),
                      .kind = QStringLiteral("enum"),
                      .enumWireValues = engineModeOptions()}},
     });

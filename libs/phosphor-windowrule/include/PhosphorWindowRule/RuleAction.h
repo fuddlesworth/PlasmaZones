@@ -259,6 +259,13 @@ inline constexpr QLatin1StringView Curve{"curve"};
 inline constexpr QLatin1StringView DurationMs{"durationMs"};
 // SetOpacity payload — the wire-encoded opacity is a [0.0, 1.0] double.
 inline constexpr QLatin1StringView Value{"value"};
+// SetEngineMode / DisableEngine engine-token key — the wire token vocabulary
+// is `PhosphorZones::modeToWireString(Mode)` (snapping / autotile / scrolling).
+inline constexpr QLatin1StringView Mode{"mode"};
+// SetSnappingLayout layout-id key — wire is a `{uuid-with-braces}` string.
+inline constexpr QLatin1StringView LayoutId{"layoutId"};
+// SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
+inline constexpr QLatin1StringView Algorithm{"algorithm"};
 } // namespace ActionParam
 
 // ── Built-in slot ids ──

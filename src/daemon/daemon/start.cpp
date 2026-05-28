@@ -679,11 +679,16 @@ void Daemon::pruneContextMapsForActivities(const QSet<QString>& validActivities)
 
 bool Daemon::isScreenLockedForLayoutChange(const QString& screenId)
 {
-    if (!m_layoutManager) {
+    // Route through the resolver — it composes the live (mode, desktop,
+    // activity) tuple from the bound IModeProvider/IWorkspaceState, so
+    // this site stops re-stitching the cascade Pass 1's sister sites
+    // (`layoutPickerSelected`, `toggleLayoutLockRequested`) already
+    // migrated. Null-guard the resolver for the same shutdown-window
+    // reason as the other lock-check sites.
+    if (!m_contextResolver) {
         return false;
     }
-    int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
-    if (isCurrentContextLockedForMode(screenId, mode)) {
+    if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
         showLockedPreviewOsd(screenId);
         return true;
     }

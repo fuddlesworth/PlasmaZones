@@ -58,7 +58,13 @@ class Layout;
 class LayoutComputeService;
 class LayoutRegistry;
 class ZoneDetector;
-}
+} // namespace PhosphorZones
+
+// `AssignmentEntry::Mode` appears in member-function signatures below, so
+// the full struct definition must be visible here (a forward declaration
+// can't surface a nested enum). The header is LGPL-LGPL safe (PhosphorZones
+// to daemon header is the standard direction).
+#include <PhosphorZones/AssignmentEntry.h>
 
 namespace PlasmaZones {
 
@@ -671,7 +677,7 @@ private:
     int currentDesktop() const;
     QString currentActivity() const;
     bool isCurrentContextLocked(const QString& screenId) const;
-    bool isCurrentContextLockedForMode(const QString& screenId, int mode) const;
+    bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     /**
      * @brief Sync daemon-side float state when autotile floats/unfloats a window

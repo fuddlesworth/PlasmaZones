@@ -1249,8 +1249,9 @@ bool Daemon::init()
             // pattern used for the mode-toggle locked feedback in connectShortcutSignals().
             const bool osdEnabled = m_settings && m_settings->showOsdOnLayoutSwitch();
             for (const auto& osd : std::as_const(osdEntries)) {
-                const int mode = static_cast<int>(osd.isAutotile ? PhosphorZones::AssignmentEntry::Autotile
-                                                                 : PhosphorZones::AssignmentEntry::Snapping);
+                const PhosphorZones::AssignmentEntry::Mode mode = osd.isAutotile
+                    ? PhosphorZones::AssignmentEntry::Autotile
+                    : PhosphorZones::AssignmentEntry::Snapping;
                 if (isCurrentContextLockedForMode(osd.screenId, mode)) {
                     showLockedPreviewOsd(osd.screenId);
                 } else if (!osdEnabled) {

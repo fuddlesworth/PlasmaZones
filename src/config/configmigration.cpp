@@ -1510,15 +1510,20 @@ bool parseAssignmentGroup(const QString& groupName, const QString& prefix, QStri
     return !screenId.isEmpty();
 }
 
-/// Human-readable label for a migrated assignment rule.
+/// Human-readable label for a migrated assignment rule. Reuses the same
+/// suffix helpers the disable-rule writer goes through (configkeys.h)
+/// so a future tweak to the suffix format (e.g. localising the bullet,
+/// switching to ` — Desktop `) flows to both assignment and disable
+/// rule names in lockstep — the rule editor stays scannable instead of
+/// forking visual styles.
 QString assignmentRuleName(const QString& screenId, int desktop, const QString& activity)
 {
     QString name = screenId;
     if (desktop > 0) {
-        name += QStringLiteral(" · Desktop ") + QString::number(desktop);
+        name += disableRuleDesktopSuffix(desktop);
     }
     if (!activity.isEmpty()) {
-        name += QStringLiteral(" · Activity");
+        name += disableRuleActivitySuffix();
     }
     return name;
 }

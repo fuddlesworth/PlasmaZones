@@ -235,9 +235,14 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     bool edgeActivation = false;
     if (!triggerHeld && !toggleMode && m_settings && m_settings->zoneSelectorEnabled()) {
         auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
+        // Live-mode disable check — `handleFor` not `handleForMode(Snapping)`.
+        // The user may have flipped the screen's mode between beginDrag
+        // and this cursor tick; consult the destination's actual mode
+        // so a snap-mode screen that just turned autotile doesn't
+        // continue firing edge-activation against the stale snap-disable
+        // list. Mirrors the matching fix in computeDragPolicy above.
         if (resolved.qscreen && m_contextResolver
-            && !m_contextResolver->isDisabled(
-                m_contextResolver->handleForMode(resolved.screenId, PhosphorZones::AssignmentEntry::Snapping))) {
+            && !m_contextResolver->isDisabled(m_contextResolver->handleFor(resolved.screenId))) {
             edgeActivation = isNearTriggerEdge(resolved.qscreen, cursorX, cursorY, resolved.screenId);
         }
     }

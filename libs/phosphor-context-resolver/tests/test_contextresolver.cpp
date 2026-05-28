@@ -153,6 +153,58 @@ private Q_SLOTS:
         QCOMPARE(handle.mode, AssignmentEntry::Autotile);
     }
 
+    void globalHandleDefaultsToModeProviderEmptyScreenContract()
+    {
+        // `globalHandle` delegates the "no-screen → default mode" decision
+        // to `IModeProvider::modeFor(QString())` instead of hardcoding
+        // Snapping; a regression that re-hardcoded the resolver-side
+        // fallback would pass `globalHandleHasNoScreenButSnapshotsWorkspace`
+        // (which uses the default Snapping fallback) but fail this test.
+        FakeWorkspaceState ws;
+        FakeModeProvider mp;
+        mp.fallback = AssignmentEntry::Autotile;
+        FakeGateSource gs;
+        ContextResolver resolver(&ws, &mp, &gs);
+
+        const auto handle = resolver.globalHandle();
+        QCOMPARE(handle.mode, AssignmentEntry::Autotile);
+    }
+
+    void handleForPersistedClampsNegativeVirtualDesktop()
+    {
+        // Persisted-on-disk virtualDesktop comes through a system boundary
+        // — a hand-edited config with a negative value must clamp to 0
+        // (the "pinned across all desktops" sentinel) rather than reach
+        // the IContextGateSource adapter with an undefined value.
+        FakeWorkspaceState ws;
+        FakeModeProvider mp;
+        FakeGateSource gs;
+        ContextResolver resolver(&ws, &mp, &gs);
+
+        const auto handle =
+            resolver.handleForPersisted(QStringLiteral("HDMI-1"), /*virtualDesktop=*/-5, QStringLiteral("act"));
+        QCOMPARE(handle.virtualDesktop, 0);
+    }
+
+    void handleForPersistedResolvesModeFromCurrentRouting()
+    {
+        // Persisted (desktop, activity) come from disk; mode is the
+        // screen's CURRENT routing. So `handleForPersisted("HDMI-1", 3, act)`
+        // on a screen the mode provider routes to Autotile must yield a
+        // handle whose `mode == Autotile`, even though the caller did
+        // not pass any Mode argument.
+        FakeWorkspaceState ws;
+        FakeModeProvider mp;
+        mp.modes[QStringLiteral("HDMI-1")] = AssignmentEntry::Autotile;
+        FakeGateSource gs;
+        ContextResolver resolver(&ws, &mp, &gs);
+
+        const auto handle = resolver.handleForPersisted(QStringLiteral("HDMI-1"), 3, QStringLiteral("act"));
+        QCOMPARE(handle.mode, AssignmentEntry::Autotile);
+        QCOMPARE(handle.virtualDesktop, 3);
+        QCOMPARE(handle.activity, QStringLiteral("act"));
+    }
+
     void disabledReasonNotDisabledByDefault()
     {
         FakeWorkspaceState ws;

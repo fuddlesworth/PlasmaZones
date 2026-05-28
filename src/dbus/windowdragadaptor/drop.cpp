@@ -113,14 +113,17 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     }
 
     // Release on a disabled context: do not snap to overlay zone.
-    // PhosphorContext::IContextResolver collapses the
-    // `(currentVirtualDesktop, currentActivity, isContextDisabled)`
-    // chain to one call. Mode is Snapping — this drop path is the
-    // manual overlay branch by definition.
+    // Routes through PhosphorContext::IContextResolver's `handleFor`
+    // — live mode — not `handleForMode(Snapping)`. The release screen
+    // can change mode between drag-start and drop (the daemon may have
+    // re-routed it to autotile, or the user may have toggled snap off
+    // and the autotile engine is now in charge). Gating on the
+    // hard-coded Snapping disable list would silently consult the
+    // wrong list whenever the live mode is anything else. This
+    // mirrors the same fix applied to drag_protocol.cpp::computeDragPolicy.
     bool useOverlayZone = true;
     if (releaseScreen && m_contextResolver
-        && m_contextResolver->isDisabled(
-            m_contextResolver->handleForMode(releaseScreenId, PhosphorZones::AssignmentEntry::Snapping))) {
+        && m_contextResolver->isDisabled(m_contextResolver->handleFor(releaseScreenId))) {
         useOverlayZone = false;
     }
 
@@ -216,9 +219,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             selectorCtx = m_contextResolver->handleForMode(selectorScreenId, selectorMode);
             selectorScreenLocked = m_contextResolver->isLocked(selectorCtx);
         }
-        if (screen && !selectorScreenLocked && m_contextResolver
-            && !m_contextResolver->isDisabled(
-                m_contextResolver->handleForMode(selectorScreenId, PhosphorZones::AssignmentEntry::Snapping))) {
+        // Reuse the `selectorCtx` handle built above for the lock check —
+        // that handle already carries the resolved live mode for the
+        // selector screen. Hard-coding `Snapping` here (the previous
+        // shape) would have consulted the wrong disable list whenever
+        // the user had reconfigured the screen between drag-start and
+        // drop, mirroring the same fix applied to useOverlayZone above.
+        if (screen && !selectorScreenLocked && m_contextResolver && !m_contextResolver->isDisabled(selectorCtx)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();

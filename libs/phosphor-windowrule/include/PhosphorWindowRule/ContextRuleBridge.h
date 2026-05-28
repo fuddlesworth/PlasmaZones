@@ -281,20 +281,19 @@ inline QList<RuleAction> makeAssignmentActions(bool autotileMode, const QString&
 
     RuleAction modeAction;
     modeAction.type = QString(ActionType::SetEngineMode);
-    modeAction.params.insert(QLatin1String("mode"),
-                             autotileMode ? QLatin1String("autotile") : QLatin1String("snapping"));
+    modeAction.params.insert(ActionParam::Mode, autotileMode ? QLatin1String("autotile") : QLatin1String("snapping"));
     actions.append(modeAction);
 
     if (!snappingLayout.isEmpty()) {
         RuleAction layoutAction;
         layoutAction.type = QString(ActionType::SetSnappingLayout);
-        layoutAction.params.insert(QLatin1String("layoutId"), snappingLayout);
+        layoutAction.params.insert(ActionParam::LayoutId, snappingLayout);
         actions.append(layoutAction);
     }
     if (!tilingAlgorithm.isEmpty()) {
         RuleAction tilingAction;
         tilingAction.type = QString(ActionType::SetTilingAlgorithm);
-        tilingAction.params.insert(QLatin1String("algorithm"), tilingAlgorithm);
+        tilingAction.params.insert(ActionParam::Algorithm, tilingAlgorithm);
         actions.append(tilingAction);
     }
     return actions;
@@ -382,7 +381,7 @@ inline WindowRule makeDisableRule(const QString& name, const QString& screenId, 
 
     RuleAction action;
     action.type = QString(ActionType::DisableEngine);
-    action.params.insert(QLatin1String("mode"), modeToken);
+    action.params.insert(ActionParam::Mode, modeToken);
     rule.actions.append(action);
     return rule;
 }
@@ -577,7 +576,7 @@ inline std::optional<QString> disableRuleMode(const WindowRule& rule)
     if (disableAction == nullptr) {
         return std::nullopt;
     }
-    const QString mode = disableAction->params.value(QLatin1String("mode")).toString();
+    const QString mode = disableAction->params.value(ActionParam::Mode).toString();
     if (mode.isEmpty()) {
         // An empty token is a malformed payload, not a recognised mode.
         return std::nullopt;

@@ -128,7 +128,12 @@ void Daemon::handleFloat()
         // a window re-runs commitSnap; without this gate that re-snaps the
         // window on a monitor / desktop / activity the user disabled
         // (discussion #461 — observed re-snapping on a disabled desktop).
-        if (m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+        //
+        // Null-guard the resolver: stop() resets it before the engine and
+        // router teardown, and a KGlobalAccel-queued shortcut landing in
+        // that window would NPE without the guard. Returning early is the
+        // safe fallback — the daemon is going away.
+        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
             return;
         }
         nav->toggleFocusedFloat(ctx);
@@ -211,7 +216,7 @@ void Daemon::handleSnap(int zoneNumber)
         // disabled (discussion #461). Take the screen's mode from the router
         // (the single source of truth) rather than inferring it from the
         // engine-id string, which a future third engine would misroute.
-        if (m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
             return;
         }
         nav->moveFocusedToPosition(zoneNumber, ctx);
@@ -252,7 +257,8 @@ void Daemon::handleIncreaseMasterRatio()
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
-    if (m_contextResolver->isDisabled(
+    if (!m_contextResolver
+        || m_contextResolver->isDisabled(
             m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile)))
         return;
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
@@ -266,7 +272,8 @@ void Daemon::handleDecreaseMasterRatio()
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
-    if (m_contextResolver->isDisabled(
+    if (!m_contextResolver
+        || m_contextResolver->isDisabled(
             m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile)))
         return;
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);

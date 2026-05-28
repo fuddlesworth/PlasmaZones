@@ -593,13 +593,12 @@ bool Daemon::isCurrentContextLocked(const QString& screenId) const
     return false;
 }
 
-bool Daemon::isCurrentContextLockedForMode(const QString& screenId, int mode) const
+bool Daemon::isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const
 {
     if (!m_contextResolver) {
         return false;
     }
-    return m_contextResolver->isLocked(
-        m_contextResolver->handleForMode(screenId, static_cast<PhosphorZones::AssignmentEntry::Mode>(mode)));
+    return m_contextResolver->isLocked(m_contextResolver->handleForMode(screenId, mode));
 }
 
 } // namespace PlasmaZones

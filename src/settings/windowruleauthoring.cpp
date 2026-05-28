@@ -34,31 +34,32 @@ using PhosphorWindowRule::RuleAction;
 /// entry stands out for the next translator pass.
 QString paramLabel(QLatin1StringView type, const QString& key)
 {
-    if (type == ActionType::SetEngineMode && key == QLatin1String("mode")) {
+    namespace ActionParam = PhosphorWindowRule::ActionParam;
+    if (type == ActionType::SetEngineMode && key == ActionParam::Mode) {
         return PzI18n::tr("Engine mode");
     }
-    if (type == ActionType::SetSnappingLayout && key == QLatin1String("layoutId")) {
+    if (type == ActionType::SetSnappingLayout && key == ActionParam::LayoutId) {
         return PzI18n::tr("Snapping layout");
     }
-    if (type == ActionType::SetTilingAlgorithm && key == QLatin1String("algorithm")) {
+    if (type == ActionType::SetTilingAlgorithm && key == ActionParam::Algorithm) {
         return PzI18n::tr("Tiling algorithm");
     }
-    if (type == ActionType::DisableEngine && key == QLatin1String("mode")) {
+    if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PzI18n::tr("Engine to disable");
     }
-    if (type == ActionType::SetOpacity && key == QLatin1String("value")) {
+    if (type == ActionType::SetOpacity && key == ActionParam::Value) {
         return PzI18n::tr("Opacity percentage");
     }
-    if (key == QLatin1String("event")) {
+    if (key == ActionParam::Event) {
         return PzI18n::tr("Event");
     }
-    if (key == QLatin1String("effectId")) {
+    if (key == ActionParam::EffectId) {
         return PzI18n::tr("Shader effect");
     }
-    if (key == QLatin1String("durationMs")) {
+    if (key == ActionParam::DurationMs) {
         return PzI18n::tr("Duration (ms)");
     }
-    if (key == QLatin1String("curve")) {
+    if (key == ActionParam::Curve) {
         return PzI18n::tr("Curve");
     }
     return key;
@@ -69,7 +70,8 @@ QString paramLabel(QLatin1StringView type, const QString& key)
 /// the human-facing label is per `(type, key, wireValue)`.
 QString enumOptionLabel(QLatin1StringView type, const QString& key, const QString& wireValue)
 {
-    if ((type == ActionType::SetEngineMode || type == ActionType::DisableEngine) && key == QLatin1String("mode")) {
+    namespace ActionParam = PhosphorWindowRule::ActionParam;
+    if ((type == ActionType::SetEngineMode || type == ActionType::DisableEngine) && key == ActionParam::Mode) {
         if (wireValue == QLatin1String("snapping")) {
             return PzI18n::tr("Snapping");
         }
@@ -418,10 +420,17 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // refused at save by the descriptor validator.
             const QVariant min = p.value(QStringLiteral("min"));
             if (!min.isValid()) {
-                payload[key] = QVariant(0);
+                payload[key] = QVariant(0.0);
             } else if (kind == QLatin1String("percent")) {
+                // Percent kind requires `scale` per the ParamSchema doc
+                // (`stored = display * scale`). A descriptor declaring
+                // `percent` without `scale` is a programmer error in the
+                // registry — fall back to `0.0` (scale-invariant safe
+                // default) rather than seeding the un-scaled display
+                // value, which would reintroduce the exact bug the
+                // scale multiplication was added to fix.
                 const QVariant scale = p.value(QStringLiteral("scale"));
-                payload[key] = scale.isValid() ? QVariant(min.toDouble() * scale.toDouble()) : min;
+                payload[key] = scale.isValid() ? QVariant(min.toDouble() * scale.toDouble()) : QVariant(0.0);
             } else {
                 payload[key] = min;
             }
