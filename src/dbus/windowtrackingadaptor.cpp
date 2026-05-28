@@ -444,13 +444,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // Drop frame-geometry shadow entry for this window.
     m_frameGeometry.remove(windowId);
 
-    // Clamp unknown wire values to WindowKind::Unknown rather than
-    // reinterpret_cast'ing a possibly-corrupt int into the enum.
-    const PhosphorEngine::WindowKind kind = (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Normal))
-        ? PhosphorEngine::WindowKind::Normal
-        : (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Transient))
-        ? PhosphorEngine::WindowKind::Transient
-        : PhosphorEngine::WindowKind::Unknown;
+    const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     m_service->windowClosed(windowId, kind);
 
     // Drop registry state last: consumers subscribed to windowDisappeared may

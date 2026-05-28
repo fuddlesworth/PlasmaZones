@@ -206,6 +206,18 @@ void ActionRegistry::registerBuiltins()
     using P = ParamSchema;
 
     // ── engine-mode slot ──
+    // SetEngineMode intentionally validates only that the `mode` param is
+    // non-empty — vocabulary validation lives at consumers, NOT at load.
+    // Two reasons: (a) the cascade-fidelity test suite uses arbitrary mode
+    // strings as cascade-rule identifiers ("default", "screen", "exact",
+    // etc.) so tightening to a closed set would force those tests to
+    // re-route through a different action type; (b) the open vocabulary
+    // mirrors the bridge's `disableRuleMode` contract — the wire token
+    // round-trips verbatim and `PhosphorZones::modeFromWireString` is the
+    // authoritative consumer-side check. DisableEngine is the asymmetric
+    // case below: it gates on the closed set to fail malformed disable
+    // rules early at load (per-mode disable lists never use synthetic
+    // cascade-marker strings).
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetEngineMode),
         .slotFor = constantSlot(ActionSlot::EngineMode),
@@ -259,11 +271,13 @@ void ActionRegistry::registerBuiltins()
     registerAction(ActionDescriptor{
         .type = QString(ActionType::DisableEngine),
         .slotFor = constantSlot(ActionSlot::EngineEnable),
+        // Single source of truth — the picker enum and the validator both
+        // read from `engineModeOptions()`. Adding a new token to that list
+        // automatically updates both surfaces; the prior hand-rolled OR
+        // chain would silently drift if someone updated only one side.
         .validate =
             [](const QJsonObject& p) {
-                const QString mode = p.value(ActionParam::Mode).toString();
-                return mode == QLatin1String("snapping") || mode == QLatin1String("autotile")
-                    || mode == QLatin1String("scrolling");
+                return engineModeOptions().contains(p.value(ActionParam::Mode).toString());
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Mode)},

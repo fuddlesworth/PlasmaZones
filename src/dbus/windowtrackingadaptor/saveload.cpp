@@ -598,11 +598,7 @@ void WindowTrackingAdaptor::loadState()
                     // wire ints are clamped: never reinterpret a corrupt value
                     // as a concrete enum.
                     const int kindInt = entryObj[QLatin1String("windowKind")].toInt(0);
-                    entry.windowKind = (kindInt == static_cast<int>(PhosphorEngine::WindowKind::Normal))
-                        ? PhosphorEngine::WindowKind::Normal
-                        : (kindInt == static_cast<int>(PhosphorEngine::WindowKind::Transient))
-                        ? PhosphorEngine::WindowKind::Transient
-                        : PhosphorEngine::WindowKind::Unknown;
+                    entry.windowKind = PhosphorEngine::clampWindowKindFromWire(kindInt);
                     // Disabled-context filter (discussion #461 item 2).
                     // Pre-fix sessions may contain restore entries for a
                     // monitor / desktop the user has since disabled snapping

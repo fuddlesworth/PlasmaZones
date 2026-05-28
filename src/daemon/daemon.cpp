@@ -1728,11 +1728,14 @@ void Daemon::stop()
     // and the SettingsAdaptor dtor's save-on-teardown would deref a freed
     // Settings object. Each adaptor's detach() is null-safe + idempotent.
     //
-    // WHY ONLY THESE THREE: SettingsAdaptor has the confirmed dtor-UAF
+    // WHY ONLY THESE FOUR: SettingsAdaptor has the confirmed dtor-UAF
     // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
     // non-trivial signal wiring + cached state that benefits from
     // explicit teardown for the same "queued D-Bus call lands during
-    // destruction window" defense-in-depth.
+    // destruction window" defense-in-depth. WindowRuleAdaptor borrows
+    // m_windowRuleStore (a unique_ptr) and m_settings; without detach
+    // its slot bodies could deref freed memory during the destruction
+    // window between m_windowRuleStore.reset() and ~Daemon completing.
     //
     // The other eight raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,

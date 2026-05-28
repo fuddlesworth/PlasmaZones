@@ -42,6 +42,25 @@ enum class WindowKind : int {
     Transient = 2,
 };
 
+/// Clamp an integer wire value to a valid WindowKind. Unknown wire values
+/// (out-of-range, future enum values from an older daemon) collapse to
+/// `Unknown` rather than producing an undefined enum — the consume gate
+/// treats `Unknown` permissively, which is the safe-by-default policy.
+/// Centralised here so the three persistence-layer call sites
+/// (`WindowTrackingAdaptor::windowClosed`, `SnapAdaptor::resolveWindowRestore`,
+/// saveload pending-restore load) stay in lockstep when a new kind is added.
+inline WindowKind clampWindowKindFromWire(int wire)
+{
+    switch (wire) {
+    case static_cast<int>(WindowKind::Normal):
+        return WindowKind::Normal;
+    case static_cast<int>(WindowKind::Transient):
+        return WindowKind::Transient;
+    default:
+        return WindowKind::Unknown;
+    }
+}
+
 struct ResnapEntry
 {
     QString windowId;

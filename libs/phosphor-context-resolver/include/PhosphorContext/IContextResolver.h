@@ -98,11 +98,14 @@ public:
     /**
      * @brief Build a handle without a screen scope.
      *
-     * Returns a handle whose `screenId` is empty. The `mode` field
-     * defaults to `Snapping` (matching the documented "no screen ↔
-     * default mode" contract). Convenience for adaptors that want to
-     * gate-check on (desktop, activity) only — e.g. the OSD's
-     * mode-agnostic "is anything locked right now?" probe.
+     * Returns a handle whose `screenId` is empty. The `mode` field is
+     * resolved via `IModeProvider::modeFor(QString())` — per IModeProvider's
+     * documented empty-screen contract, that returns the bound provider's
+     * default mode (today `Snapping` for the daemon's `ScreenModeRouter`
+     * adapter, but other providers may override). Callers reading the
+     * handle's mode must NOT assume `Snapping`; query the field directly.
+     * Convenience for adaptors that want to gate-check on (desktop,
+     * activity) only.
      */
     virtual ContextHandle globalHandle() const = 0;
 

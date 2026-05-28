@@ -53,9 +53,10 @@ if (m_contextResolver->isGated(ctx))
 
 ## What the resolver does NOT do
 
-- Rule evaluation. That stays in `PhosphorWindowRule`. The resolver
-  consumes `LayoutRegistry` (which already wraps the rule evaluator) when
-  it needs effective values; it does not re-implement priority math.
+- Rule evaluation. That stays in `PhosphorWindowRule`. The resolver is
+  intentionally gate-only; effective-value resolution (layouts, rule-derived
+  values) lives in the daemon-side `LayoutRegistry` / `PhosphorWindowRule`
+  plumbing and is not visible across this interface.
 - Engine routing. `ScreenModeRouter::engineFor(screenId)` /
   `navigatorForShortcut(...)` continue to dispatch placement engines.
   The resolver only consumes `modeFor()` because the gate primitives are

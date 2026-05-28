@@ -300,9 +300,24 @@ void Daemon::handleRetile()
     if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
         return;
     }
+    // Gate on the focused screen's autotile-mode disable cascade, mirroring
+    // every sister handler (`HANDLE_AUTOTILE_ONLY`, master-ratio handlers).
+    // `retile()` itself is engine-global (iterates all autotile screens) but
+    // the shortcut is fired by a user on a specific monitor — if their
+    // current context has autotile disabled, the shortcut should silently
+    // no-op rather than retile every other autotile screen, matching the
+    // "this shortcut feels broken on this context" UX of the sister
+    // handlers. A null screenId (no resolvable focused screen) falls
+    // through to the legacy behaviour.
+    const QString focusedScreen = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+    if (!focusedScreen.isEmpty() && m_contextResolver
+        && m_contextResolver->isDisabled(
+            m_contextResolver->handleForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile))) {
+        return;
+    }
     m_autotileEngine->retile();
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
-        QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
+        QString screenId = focusedScreen;
         if (screenId.isEmpty() && m_screenModeRouter) {
             QStringList autotile =
                 m_screenModeRouter

@@ -279,12 +279,15 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * algorithm" shape) yields a single `SetEngineMode` action; the mode token
  * alone preserves the user's intent.
  *
- * Open-vocabulary by design: this helper trusts the caller to pass a token
- * recognised by the `SetEngineMode` descriptor's validator. Settings routes
- * `PhosphorZones::Mode → QString` via `modeToWireString` (the authoritative
- * mapping), so an unrecognised token here is a programmer error and would
- * be rejected at load by `RuleAction::fromJson`. Empty token writes a
- * malformed rule — also caught at load.
+ * Open-vocabulary by design: the `SetEngineMode` descriptor's validator
+ * checks only that `modeToken` is non-empty — vocabulary validation lives
+ * at consumers via `PhosphorZones::modeFromWireString`, NOT at load time.
+ * Settings routes `PhosphorZones::Mode → QString` via `modeToWireString`
+ * (the authoritative mapping), so a production caller never produces an
+ * unrecognised token. An empty token writes a malformed rule that load
+ * does reject (the validator's non-empty check fires there). An unknown
+ * token like `"bogus"` survives load and is filtered out by the daemon's
+ * `modeFromWireString` lookup at consumption time.
  */
 inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
                                                const QString& tilingAlgorithm)

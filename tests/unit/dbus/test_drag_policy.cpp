@@ -43,23 +43,19 @@ using namespace PhosphorTileEngine;
 namespace {
 
 /// Subclass of StubSettings that lets the test flip snappingEnabled and the
-/// per-monitor disabled flag per-case without stamping out a new stub each
-/// time. The base stub returns defaults that are fine for everything else.
+/// per-case autotile-drag behavior. The C1 cascade refactor routes the
+/// per-monitor disable check through `IContextResolver::disabledReason`, so
+/// the historical `m_monitorDisabled` flag + `isMonitorDisabled` override
+/// is dead — `FakeContextResolver::m_disabled` is the live trigger.
 class PolicyStubSettings : public StubSettings
 {
 public:
     bool m_snapEnabled = true;
-    bool m_monitorDisabled = false;
     AutotileDragBehavior m_dragBehavior = AutotileDragBehavior::Float;
 
     bool snappingEnabled() const override
     {
         return m_snapEnabled;
-    }
-
-    bool isMonitorDisabled(PhosphorZones::AssignmentEntry::Mode, const QString&) const override
-    {
-        return m_monitorDisabled;
     }
 
     AutotileDragBehavior autotileDragBehavior() const override
@@ -161,7 +157,6 @@ private Q_SLOTS:
         PolicyStubSettings settings;
         FakeContextResolver resolver;
         settings.m_snapEnabled = true;
-        settings.m_monitorDisabled = false;
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(

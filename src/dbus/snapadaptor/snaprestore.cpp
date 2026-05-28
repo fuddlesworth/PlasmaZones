@@ -209,12 +209,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
-    // Clamp unknown wire values to WindowKind::Unknown.
-    const PhosphorEngine::WindowKind kind = (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Normal))
-        ? PhosphorEngine::WindowKind::Normal
-        : (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Transient))
-        ? PhosphorEngine::WindowKind::Transient
-        : PhosphorEngine::WindowKind::Unknown;
+    const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
     if (!result.shouldSnap) {
         return;
