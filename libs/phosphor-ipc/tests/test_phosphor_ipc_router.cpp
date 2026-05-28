@@ -7,6 +7,7 @@
 // live in test_phosphor_ipc_e2e.cpp.
 
 #include <PhosphorIpc/IpcRouter.h>
+#include <PhosphorIpc/IpcTarget.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -100,6 +101,7 @@ private Q_SLOTS:
     void invoke_overloadDispatchesByArity();
     void invoke_overloadNoMatchingArityReturnsArgCountMismatch();
     void invoke_protectedQInvokableRejected();
+    void invoke_ipcTargetWrapperMethodsRejected();
     void schemaFor_unknownReturnsEmpty();
     void schemaFor_listsFunctions();
     void schemaFor_skipsProtectedQInvokable();
@@ -424,6 +426,50 @@ void TestPhosphorIpcRouter::invoke_overloadNoMatchingArityReturnsArgCountMismatc
     QVERIFY(!r.isValid());
     QCOMPARE(outcome, IpcRouter::InvokeOutcome::ArgCountMismatch);
     QVERIFY(!err.isEmpty());
+}
+
+void TestPhosphorIpcRouter::invoke_ipcTargetWrapperMethodsRejected()
+{
+    // IpcTarget declares its own Q_INVOKABLE methods (`emitEvent`)
+    // and Q_PROPERTY signals (`targetChanged`) that are wrapper-
+    // internal — they exist for QML to inject events / observe
+    // property changes, NOT for remote wire callers. Without the
+    // IpcTarget-aware introspection floor, a client could call
+    // `phosphorctl call mytarget.emitEvent --arg signal=fake
+    // --arg args=[...]` and inject arbitrary events into every
+    // subscriber. The schema generator never advertises these
+    // methods; the dispatcher MUST refuse to dispatch them so the
+    // wire-callable surface matches what the schema advertised.
+    IpcRouter router;
+    IpcTarget t; // standalone, no QML — register manually below
+    QVERIFY(router.registerTarget(QStringLiteral("wrapped"), &t));
+
+    QString err;
+    IpcRouter::InvokeOutcome outcome = IpcRouter::InvokeOutcome::Ok;
+    const QVariant r = router.invoke(QStringLiteral("wrapped"), QStringLiteral("emitEvent"),
+                                     QVariantList{QStringLiteral("targetChanged"), QVariantList{}}, &outcome, &err);
+    QVERIFY(!r.isValid());
+    QCOMPARE(outcome, IpcRouter::InvokeOutcome::NoSuchFn);
+    QVERIFY(!err.isEmpty());
+
+    // Same defense on the schema side: the IpcTarget wrapper's
+    // methods MUST NOT appear in the advertised schema.
+    const QJsonObject schema = router.schemaFor(QStringLiteral("wrapped"));
+    const QJsonArray functions = schema.value(QStringLiteral("functions")).toArray();
+    QStringList fnNames;
+    for (const QJsonValue& v : functions) {
+        fnNames.append(v.toObject().value(QStringLiteral("name")).toString());
+    }
+    QVERIFY2(!fnNames.contains(QStringLiteral("emitEvent")),
+             "IpcTarget::emitEvent must not appear in the wire-visible schema");
+
+    const QJsonArray signals_ = schema.value(QStringLiteral("signals")).toArray();
+    QStringList sigNames;
+    for (const QJsonValue& v : signals_) {
+        sigNames.append(v.toObject().value(QStringLiteral("name")).toString());
+    }
+    QVERIFY2(!sigNames.contains(QStringLiteral("targetChanged")),
+             "IpcTarget::targetChanged must not appear in the wire-visible schema");
 }
 
 void TestPhosphorIpcRouter::invoke_protectedQInvokableRejected()

@@ -348,7 +348,7 @@ QVariant IpcRouter::invoke(const QString& targetName, const QString& fn, const Q
     // overload's arity lines up, findInvokableMethod still returns a
     // name-only fallback so we can surface a precise
     // ArgCountMismatch citing the actual expected arity.
-    const QMetaMethod method = detail::findInvokableMethod(obj->metaObject(), fn, static_cast<int>(args.size()));
+    const QMetaMethod method = detail::findInvokableMethod(obj, fn, static_cast<int>(args.size()));
     if (!method.isValid()) {
         return fail(InvokeOutcome::NoSuchFn,
                     QStringLiteral("target '%1' has no invokable method '%2'").arg(targetName, fn));
@@ -577,17 +577,16 @@ void IpcRouter::dispatch(QLocalSocket* socket, const QByteArray& line)
         const QJsonObject err = buildError(0, QString::fromUtf8(ErrorCode::MalformedRequest), parseError);
         socket->write(writeLine(err));
         // Increment per-socket malformed-frame counter. If the peer
-        // keeps streaming garbage past MaxMalformedFrames in a row,
-        // close the connection so the router doesn't keep echoing
-        // errors indefinitely.
+        // keeps streaming garbage past MaxConsecutiveMalformedFrames
+        // in a row, close the connection so the router doesn't keep
+        // echoing errors indefinitely.
         int& count = m_malformedCountBySocket[socket];
         if (++count > MaxConsecutiveMalformedFrames) {
             qWarning("PhosphorIpc::IpcRouter::dispatch: socket exceeded %d consecutive malformed frames; closing",
                      MaxConsecutiveMalformedFrames);
             // No additional diagnostic frame here — the per-frame
-            // MALFORMED_REQUEST written just above (line %d's
-            // buildError) already told the peer; we only need to
-            // flush + abort.
+            // MALFORMED_REQUEST written via socket->write above
+            // already told the peer; we only need to flush + abort.
             socket->waitForBytesWritten(100);
             socket->abort();
         }

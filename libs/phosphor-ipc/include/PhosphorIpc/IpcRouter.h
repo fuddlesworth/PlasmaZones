@@ -175,8 +175,8 @@ private:
     QHash<QLocalSocket*, QList<Subscription>> m_subscriptionsBySocket;
     // Per-socket consecutive malformed-frame counter. Reset to zero
     // on a successfully-parsed frame; closes the connection when the
-    // count exceeds MaxMalformedFrames so a peer can't pin the
-    // router on parse failures indefinitely.
+    // count exceeds MaxConsecutiveMalformedFrames so a peer can't
+    // pin the router on parse failures indefinitely.
     QHash<QLocalSocket*, int> m_malformedCountBySocket;
 };
 

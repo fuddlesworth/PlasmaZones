@@ -47,7 +47,7 @@ void IpcRouter::handleSubscribe(QLocalSocket* socket, qint64 id, const QString& 
     // advisory: broadcastEvent dispatches by string name, not by
     // metaobject index, so a future signal added via QML dynamic
     // property would also work even without recompiling.
-    if (!detail::findSignal(obj->metaObject(), signalName).isValid()) {
+    if (!detail::findSignal(obj, signalName).isValid()) {
         socket->write(
             writeLine(buildError(id, QString::fromUtf8(ErrorCode::NoSuchSignal),
                                  QStringLiteral("target '%1' has no signal '%2'").arg(targetName, signalName))));

@@ -111,41 +111,51 @@ one follow-up PR that wires `PzLocalizedContext` into every
 
 ## 5. Hardcoded `font.family: "monospace"` in QML
 
-**Where:** `examples/phosphor-ipc-demo/Main.qml:136,183,212` (and the two
-peer demos).
+**Where:** `examples/phosphor-ipc-demo/Main.qml:136,183,212` and
+`examples/phosphor-registry-plugin-demo/plugins/cpu-meter/cpumeter.cpp:61`.
 
 **Finding:** CLAUDE.md says QML should not hardcode appearance —
 `Kirigami.Theme` for colors, `Kirigami.Units` for spacing, and (by
 project precedent) `Tokens.*` for font-family choices. There is no
 `Tokens.font_family_mono` accessor today.
 
-**Why deferred:** the missing token applies to all three demos and to
-any future phosphor-theme consumer that needs a monospace surface. The
-fix is "add a token to `phosphor-theme/Tokens.qml`, then route every
-demo through it" — both edits should land together.
+**Why deferred:** the missing token applies to all four call sites and
+to any future phosphor-theme consumer that needs a monospace surface.
+The fix is "add a token to `phosphor-theme/Tokens.qml`, then route
+every consumer through it" — both edits should land together.
 
 **Change shape:**
 - Add `readonly property string font_family_mono: "monospace"` to
   `libs/phosphor-theme/Tokens.qml`.
-- Replace `font.family: "monospace"` with `font.family: Tokens.font_family_mono`
-  across all demos in a single sweep.
+- Replace each `font.family: "monospace"` site with
+  `font.family: Tokens.font_family_mono` in a single sweep:
+  `grep -rln '"monospace"' examples/ src/` lists every consumer.
 
 ---
 
-## 6. Demo IPC startup failure UX
+---
+
+## Decisions — no action required
+
+These items came up during the audit and were intentionally NOT
+deferred (the code is correct as-is). Documented here so a future
+reviewer doesn't re-flag them and start new work on a fixed point.
+
+### Demo IPC startup failure UX
 
 **Where:** `examples/phosphor-ipc-demo/main.cpp:64-73`.
 
-**Finding:** when `router.start()` fails, the demo still launches the
-window with three `IpcTarget` items that each log `"target '...' is not
-registered"` warnings on subsequent `emitEvent()` calls. The status panel
-binds to `demoController.status` which reads `"router failed to start
-(see logs)"`.
+When `router.start()` fails, the demo launches the window anyway with
+three `IpcTarget` items that each log `"target '...' is not
+registered"` warnings on subsequent `emitEvent()` calls. The status
+panel binds to `demoController.status` which reads `"router failed to
+start (see logs)"`, and the cheat-sheet panel now shows a placeholder
+instead of an empty `export PHOSPHOR_SOCKET=` line (added in audit
+pass 10).
 
-**Why deferred:** behavior matches `libs/phosphor-ipc/README.md:117`
-("Application can continue without IPC; failure is non-fatal") — the
-warnings are a debugging affordance, not a regression. No change
-required; documented here so a future reviewer doesn't re-flag it.
+**Why no action:** behaviour matches `libs/phosphor-ipc/README.md:117`
+("Application can continue without IPC; failure is non-fatal"). The
+warnings are a debugging affordance.
 
 ---
 

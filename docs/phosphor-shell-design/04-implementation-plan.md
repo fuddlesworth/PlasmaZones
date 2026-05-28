@@ -135,6 +135,8 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 **Effort:** M (~2 weeks estimated; actual ~1 session for the lib + CLI + demo + tests, plus audit cycles)
 
+**Deferred items:** see [`phosphor-ipc-followups.md`](phosphor-ipc-followups.md) for the defense-in-depth additions (per-process MaxConnections, idle-connection timeout, SO_PEERCRED peer auth) and the fleet-wide demo cleanups (qsTr → i18n, hard-coded monospace → Tokens) that were intentionally NOT applied in PR #539.
+
 ### 1.5: `PerScreen` QML helper
 
 | Deliverable                                       | Notes                                                                            |

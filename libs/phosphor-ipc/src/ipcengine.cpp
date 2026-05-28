@@ -73,9 +73,15 @@ void install(QQmlEngine* engine, IpcRouter* router)
     // below are not thread-guarded; the public contract is that
     // install / uninstall / routerFor run on the engine's owning
     // thread (QQmlEngine is itself thread-affine, so this is the
-    // natural contract). Asserting here catches a misuse early in
-    // debug builds.
+    // natural contract). We assert (catches misuse loudly in debug)
+    // AND return (refuses to corrupt unsynchronised state in
+    // release) so a misuse can't silently race the global QHash /
+    // QSet.
     Q_ASSERT(engine->thread() == QThread::currentThread());
+    if (engine->thread() != QThread::currentThread()) {
+        qWarning("PhosphorIpc::IpcEngine::install: called off the engine's owning thread; ignored");
+        return;
+    }
     if (!router) {
         qWarning("PhosphorIpc::IpcEngine::install: null router; call uninstall() to drop the binding explicitly");
         return;
@@ -139,6 +145,10 @@ void uninstall(QQmlEngine* engine)
         return;
     }
     Q_ASSERT(engine->thread() == QThread::currentThread());
+    if (engine->thread() != QThread::currentThread()) {
+        qWarning("PhosphorIpc::IpcEngine::uninstall: called off the engine's owning thread; ignored");
+        return;
+    }
     // Drop our destroyed-watcher first so an explicit uninstall
     // can't get retro-fired by the outgoing router's later
     // destruction.
@@ -152,6 +162,10 @@ IpcRouter* routerFor(QQmlEngine* engine)
         return nullptr;
     }
     Q_ASSERT(engine->thread() == QThread::currentThread());
+    if (engine->thread() != QThread::currentThread()) {
+        qWarning("PhosphorIpc::IpcEngine::routerFor: called off the engine's owning thread; returning nullptr");
+        return nullptr;
+    }
     return readStoredRouter(engine);
 }
 

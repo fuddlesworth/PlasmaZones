@@ -134,6 +134,10 @@ set_target_properties(PhosphorIpc PROPERTIES
 # Qt6::Gui is scoped onto the QML plugin specifically; the
 # qmltyperegistrar-generated registration translation unit
 # transitively expects QGuiApplication / QQmlEngine to be in scope.
+# find_package is idempotent — when the top-level project already
+# called find_package(Qt6 ... Gui) this is a no-op; when this lib
+# is consumed standalone via add_subdirectory, the call ensures
+# Qt6::Gui is found before the qt_add_qml_module below.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Gui)
 
 qt_add_qml_module(PhosphorIpcQml

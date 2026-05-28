@@ -16,6 +16,7 @@
 #include <QTextStream>
 
 #include <cmath>
+#include <limits>
 
 namespace Phosphorctl {
 
@@ -175,8 +176,14 @@ int runCall(QStringList args, QString socketPath)
         // out-of-range doubles before casting to qint64: a result
         // beyond +-2^63 would be UB on cast. isfinite() and the
         // range check together cover NaN, +/-inf, and overflow.
+        // INT64_MIN is exact as a double (single-bit mantissa at
+        // -2^63); using numeric_limits dodges the "integer literal
+        // too large to be represented" warning some compilers emit
+        // for `-9223372036854775808` even when followed by `.0`.
+        // Matches the equivalent boundary computation in
+        // libs/phosphor-ipc/src/ipcprotocol.cpp::parseIntegralJsonNumber.
         const double d = result.toDouble();
-        constexpr double Int64Min = -9223372036854775808.0;
+        constexpr double Int64Min = static_cast<double>(std::numeric_limits<qint64>::min());
         constexpr double Int64Max = 9223372036854775808.0; // 2^63, one past max
         if (std::isfinite(d) && d >= Int64Min && d < Int64Max && d == static_cast<double>(static_cast<qint64>(d))) {
             out << static_cast<qint64>(d) << "\n";

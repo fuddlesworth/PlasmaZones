@@ -11,7 +11,11 @@
 # wire format authoritative across server + client TUs (mirrors the
 # phosphor-protocol-shared-between-server-and-client precedent).
 
-find_package(Qt6 REQUIRED COMPONENTS Core Network)
+# Floor pinned to 6.6 so it matches libs/phosphor-ipc/CMakeLists.txt;
+# without an explicit floor a downstream consumer building against an
+# older Qt6 could link this CLI against a library compiled with a
+# newer Qt6 ABI.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Network)
 
 add_executable(phosphorctl
     main.cpp
