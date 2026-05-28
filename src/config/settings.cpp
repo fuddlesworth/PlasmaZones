@@ -158,13 +158,20 @@ void Settings::load()
     // changes a list. Without this, QML consumers bound through the bridge
     // never see cross-process disable-state changes until the page is
     // re-rendered.
+    // Per-mode disable-list snapshots — captured per Mode so the post-reload
+    // re-emission below can fire one signal per mode that actually changed.
+    // Iterating PhosphorZones::allModes() keeps the snapshot in lockstep
+    // with the enum: adding a future mode automatically gets snapshotted +
+    // re-emitted without touching this block.
     using Mode = PhosphorZones::AssignmentEntry::Mode;
-    const QStringList snapMonitorsBefore = disabledMonitors(Mode::Snapping);
-    const QStringList autotileMonitorsBefore = disabledMonitors(Mode::Autotile);
-    const QStringList snapDesktopsBefore = disabledDesktops(Mode::Snapping);
-    const QStringList autotileDesktopsBefore = disabledDesktops(Mode::Autotile);
-    const QStringList snapActivitiesBefore = disabledActivities(Mode::Snapping);
-    const QStringList autotileActivitiesBefore = disabledActivities(Mode::Autotile);
+    QHash<Mode, QStringList> monitorsBefore;
+    QHash<Mode, QStringList> desktopsBefore;
+    QHash<Mode, QStringList> activitiesBefore;
+    for (const Mode mode : PhosphorZones::allModes()) {
+        monitorsBefore.insert(mode, disabledMonitors(mode));
+        desktopsBefore.insert(mode, disabledDesktops(mode));
+        activitiesBefore.insert(mode, disabledActivities(mode));
+    }
 
     m_configBackend->reparseConfiguration();
 
@@ -217,21 +224,21 @@ void Settings::load()
         }
     }
 
-    // Per-mode disable lists: emit each signal once if its list changed.
+    // Per-mode disable lists: emit one signal per Mode whose list changed.
     // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
-    // of by property index.
-    if (disabledMonitors(Mode::Snapping) != snapMonitorsBefore)
-        Q_EMIT disabledMonitorsChanged(Mode::Snapping);
-    if (disabledMonitors(Mode::Autotile) != autotileMonitorsBefore)
-        Q_EMIT disabledMonitorsChanged(Mode::Autotile);
-    if (disabledDesktops(Mode::Snapping) != snapDesktopsBefore)
-        Q_EMIT disabledDesktopsChanged(Mode::Snapping);
-    if (disabledDesktops(Mode::Autotile) != autotileDesktopsBefore)
-        Q_EMIT disabledDesktopsChanged(Mode::Autotile);
-    if (disabledActivities(Mode::Snapping) != snapActivitiesBefore)
-        Q_EMIT disabledActivitiesChanged(Mode::Snapping);
-    if (disabledActivities(Mode::Autotile) != autotileActivitiesBefore)
-        Q_EMIT disabledActivitiesChanged(Mode::Autotile);
+    // of by property index. Iterates allModes so future enum extensions
+    // automatically participate without touching this block.
+    for (const Mode mode : PhosphorZones::allModes()) {
+        if (disabledMonitors(mode) != monitorsBefore.value(mode)) {
+            Q_EMIT disabledMonitorsChanged(mode);
+        }
+        if (disabledDesktops(mode) != desktopsBefore.value(mode)) {
+            Q_EMIT disabledDesktopsChanged(mode);
+        }
+        if (disabledActivities(mode) != activitiesBefore.value(mode)) {
+            Q_EMIT disabledActivitiesChanged(mode);
+        }
+    }
 
     if (anyChanged)
         Q_EMIT settingsChanged();
@@ -2485,13 +2492,19 @@ void Settings::reset()
     // Snapshot the six lists here — before the clear — and re-emit the
     // per-mode signals ourselves after load(), comparing against this
     // pre-clear state.
+    // See the matching block in load(): snapshot the six pre-clear disable
+    // lists keyed by Mode so the per-mode re-emit loop after load() can fire
+    // exactly one signal per Mode whose list actually changed. Iterating
+    // PhosphorZones::allModes() keeps this lockstep with the enum.
     using Mode = PhosphorZones::AssignmentEntry::Mode;
-    const QStringList resetSnapMonitorsBefore = disabledMonitors(Mode::Snapping);
-    const QStringList resetAutotileMonitorsBefore = disabledMonitors(Mode::Autotile);
-    const QStringList resetSnapDesktopsBefore = disabledDesktops(Mode::Snapping);
-    const QStringList resetAutotileDesktopsBefore = disabledDesktops(Mode::Autotile);
-    const QStringList resetSnapActivitiesBefore = disabledActivities(Mode::Snapping);
-    const QStringList resetAutotileActivitiesBefore = disabledActivities(Mode::Autotile);
+    QHash<Mode, QStringList> resetMonitorsBefore;
+    QHash<Mode, QStringList> resetDesktopsBefore;
+    QHash<Mode, QStringList> resetActivitiesBefore;
+    for (const Mode mode : PhosphorZones::allModes()) {
+        resetMonitorsBefore.insert(mode, disabledMonitors(mode));
+        resetDesktopsBefore.insert(mode, disabledDesktops(mode));
+        resetActivitiesBefore.insert(mode, disabledActivities(mode));
+    }
     {
         namespace CRB = PhosphorWindowRule::ContextRuleBridge;
         QList<PhosphorWindowRule::WindowRule> kept;
@@ -2512,18 +2525,17 @@ void Settings::reset()
     // could not detect that reset() removed disable rules — this loop covers
     // the gap. All six lists are empty post-clear, so any non-empty pre-clear
     // list fires exactly once.
-    if (disabledMonitors(Mode::Snapping) != resetSnapMonitorsBefore)
-        Q_EMIT disabledMonitorsChanged(Mode::Snapping);
-    if (disabledMonitors(Mode::Autotile) != resetAutotileMonitorsBefore)
-        Q_EMIT disabledMonitorsChanged(Mode::Autotile);
-    if (disabledDesktops(Mode::Snapping) != resetSnapDesktopsBefore)
-        Q_EMIT disabledDesktopsChanged(Mode::Snapping);
-    if (disabledDesktops(Mode::Autotile) != resetAutotileDesktopsBefore)
-        Q_EMIT disabledDesktopsChanged(Mode::Autotile);
-    if (disabledActivities(Mode::Snapping) != resetSnapActivitiesBefore)
-        Q_EMIT disabledActivitiesChanged(Mode::Snapping);
-    if (disabledActivities(Mode::Autotile) != resetAutotileActivitiesBefore)
-        Q_EMIT disabledActivitiesChanged(Mode::Autotile);
+    for (const Mode mode : PhosphorZones::allModes()) {
+        if (disabledMonitors(mode) != resetMonitorsBefore.value(mode)) {
+            Q_EMIT disabledMonitorsChanged(mode);
+        }
+        if (disabledDesktops(mode) != resetDesktopsBefore.value(mode)) {
+            Q_EMIT disabledDesktopsChanged(mode);
+        }
+        if (disabledActivities(mode) != resetActivitiesBefore.value(mode)) {
+            Q_EMIT disabledActivitiesChanged(mode);
+        }
+    }
 
     qCInfo(lcConfig) << "Settings reset to defaults";
 }

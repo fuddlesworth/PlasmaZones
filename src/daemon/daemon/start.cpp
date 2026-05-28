@@ -252,8 +252,7 @@ void Daemon::connectDesktopActivity()
                     // Prune both per-mode lists — a stale entry in either side leaks
                     // gates on now-deleted desktops just as effectively.
                     bool changed = false;
-                    for (const auto mode :
-                         {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                    for (const auto mode : PhosphorZones::allModes()) {
                         QStringList disabled = m_settings->disabledDesktops(mode);
                         if (pruneDisabledDesktopEntries(disabled, newCount)) {
                             m_settings->setDisabledDesktops(mode, disabled);
@@ -308,8 +307,7 @@ void Daemon::connectDesktopActivity()
             // Prune both per-mode disabled-activity lists.
             if (m_settings) {
                 bool changed = false;
-                for (const auto mode :
-                     {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                for (const auto mode : PhosphorZones::allModes()) {
                     QStringList disabled = m_settings->disabledActivities(mode);
                     if (pruneDisabledActivityEntries(disabled, validSet)) {
                         m_settings->setDisabledActivities(mode, disabled);
