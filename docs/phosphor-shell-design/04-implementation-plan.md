@@ -139,14 +139,45 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 
 ### 1.5: `PerScreen` QML helper
 
+A bare `Instantiator { model: PhosphorShell.screens }` would technically
+satisfy "one delegate per monitor", but `ScreenModel` ships hot-plug
+via `beginResetModel`/`endResetModel` rather than row-incremental
+signals — so the naive binding tears down every delegate on every
+monitor change, even for screens that didn't move. `PerScreen` exists
+to do the work `Instantiator` cannot:
+
+1. **Reset-aware delegate reuse.** Diff the new screen set against the
+   live delegates keyed by `QScreen*` identity; reuse delegates whose
+   screen survived the reset, only construct delegates for genuinely
+   new screens, only destroy delegates for genuinely removed screens.
+   This is what makes per-monitor wallpapers / overlays viable in
+   production (a third monitor plugging in doesn't strip the wallpaper
+   off the first two).
+2. **Auto-placement on the right screen.** Inject `screen` (`QScreen*`),
+   `name`, `index`, `isPrimary` into the delegate via required
+   properties; when the delegate is a `Window`, set `Window.screen`
+   directly so the window lands on the correct monitor without the
+   caller wiring geometry plumbing.
+
+Without (1) and (2) the helper is sugar and the demo writes the same
+plain `Instantiator` binding under a different name; with them it
+absorbs the per-monitor-lifecycle boilerplate every overlay/wallpaper
+consumer would otherwise duplicate.
+
 | Deliverable                                       | Notes                                                                            |
 |---------------------------------------------------|----------------------------------------------------------------------------------|
-| Add `qml/Phosphor/Helpers/PerScreen.qml`          | Declarative wrapper around `ScreenModel` + `Instantiator` / `Repeater`: one delegate instance per screen, lifecycle tied to `ScreenModel` add/remove signals. |
-| `examples/phosphor-perscreen-demo/`               | Opens a small floating window per monitor showing the monitor's name. Hot-plug a monitor → window appears.   |
+| `libs/phosphor-shell/qml/Phosphor/Shell/`         | First QML module shipped by `phosphor-shell` — URI `Phosphor.Shell`. Wired via `qt_add_qml_module(PhosphorShellQml ...)` alongside the existing core library target, mirroring the `phosphor-theme` / `phosphor-popout` split. No new top-level lib; `PerScreen` lives next to `ScreenModel`, which it depends on. |
+| `libs/phosphor-shell/qml/Phosphor/Shell/PerScreen.qml` | Reset-aware Instantiator wrapper as described above. Accepts a `model` (defaults to `PhosphorShell.screens`) and a `delegate` Component; emits `delegateAdded(screen, delegate)` / `delegateRemoved(screen, delegate)` so consumers can hook into lifecycle. |
+| `libs/phosphor-shell/tests/`                      | Test cases against a fake `QAbstractListModel` that exercises the reset semantics (add, remove, swap, reorder) and verifies delegate identity is preserved across resets for surviving rows. |
+| `examples/phosphor-perscreen-demo/`               | Opens a small floating window per monitor showing the monitor's name + index + primary flag. Hot-plug a monitor → window appears. Plug it out → window goes away. Live primary swap → only the primary-pill on the affected windows updates (no full teardown — pins the reuse path). |
 
-**Acceptance:** monitor hotplug add/remove correctly mirrors in the instantiated delegates.
+**Acceptance:**
+- [ ] Monitor hot-plug add/remove correctly mirrors in the instantiated delegates.
+- [ ] Delegates for surviving screens are NOT recreated on hot-plug — the same QObject identity persists (asserted in the test).
+- [ ] Primary-screen swap updates the `isPrimary` property without recreating any delegate.
+- [ ] When the delegate is a `Window`, `Window.screen` is set so the window opens on the correct monitor without explicit geometry wiring.
 
-**Effort:** S (~3 days)
+**Effort:** M (~1 week — the reset-aware diff plus the test harness for hot-plug semantics is the main lift)
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
 
