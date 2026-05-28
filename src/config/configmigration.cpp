@@ -1190,7 +1190,19 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
     // and at the v3-write site below.
     const QStringList v2GroupSegments =
         ConfigKeys::Legacy::v2SnappingBehaviorDisplayGroup().split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    // Frozen-literal invariant: `"Snapping.Behavior.Display"` is exactly three
+    // dot-segments. Q_ASSERT documents the contract at the test bench; the
+    // release-build guard below prevents an out-of-bounds segment access if a
+    // future freeze-policy violation ever lands the literal at a different
+    // shape. Without the runtime guard, the `v2GroupSegments[0..2]` indexing
+    // would be UB in release builds — the Q_ASSERT alone is asymmetric
+    // coverage.
     Q_ASSERT(v2GroupSegments.size() == 3);
+    if (v2GroupSegments.size() != 3) {
+        qCritical("migrateV2ToV3: frozen v2 group accessor split into %lld segments (expected 3) — aborting step",
+                  static_cast<long long>(v2GroupSegments.size()));
+        return;
+    }
     const QString& snappingSeg = v2GroupSegments[0];
     const QString& behaviorSeg = v2GroupSegments[1];
     const QString& displaySeg = v2GroupSegments[2];
@@ -1228,8 +1240,8 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
     // is the LIVE accessor that follows future renames, so using it here
     // would silently retarget the v2→v3 step to a path no v3 config ever
     // had on disk after a future rename. The v3→v4 step downstream
-    // (line 1323) already uses `Legacy::v3DisplayGroup()` for the same
-    // reason; this site was the outlier.
+    // (`migrateV3ToV4`) already uses `Legacy::v3DisplayGroup()` for the
+    // same reason; this site was the outlier.
     QJsonObject v3Display = root.value(ConfigKeys::Legacy::v3DisplayGroup()).toObject();
 
     auto writeIfNonEmpty = [&v3Display](const QString& key, const QString& value) {
@@ -1266,7 +1278,8 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 
     if (!v3Display.isEmpty()) {
         // Use the FROZEN v3 accessor — see comment above on the matching
-        // read at line 1226 for why the live accessor would break the chain.
+        // `Legacy::v3DisplayGroup()` read for why the live accessor would
+        // break the chain.
         root[ConfigKeys::Legacy::v3DisplayGroup()] = v3Display;
     }
 
@@ -1294,13 +1307,13 @@ namespace {
 // The temporary root keys migrateV3ToV4 writes and finalizeV4Conversion
 // consumes + strips. Not real schema keys — they never survive a completed
 // conversion.
-constexpr QLatin1String kV4DisableStashKey{"_v4DisableStash"};
+constexpr QLatin1StringView kV4DisableStashKey{"_v4DisableStash"};
 // Carries the v4 `Animations.AnimationAppRules` array forward to
 // finalizeV4Conversion, which converts each legacy entry into a WindowRule and
 // appends it to windowrules.json. The source key is removed from the
 // Animations group in migrateV3ToV4 so the unified rule store becomes the sole
 // home for per-window animation overrides.
-constexpr QLatin1String kV4AnimationRulesStashKey{"_v4AnimationRulesStash"};
+constexpr QLatin1StringView kV4AnimationRulesStashKey{"_v4AnimationRulesStash"};
 
 // Inner field names inside the `_v4DisableStash` object. Shared between the
 // writer (migrateV3ToV4) and the reader (finalizeV4Conversion) so a typo or

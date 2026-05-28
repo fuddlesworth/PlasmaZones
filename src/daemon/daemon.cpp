@@ -1707,9 +1707,9 @@ void Daemon::stop()
     m_screenModeAdapter.reset();
     m_workspaceStateAdapter.reset();
 
-    // Null out the router's reference before destroying it — straggler calls
-    // to engineForScreen() during the shutdown window get nullptr instead of
-    // a dangling pointer. Then destroy the router.
+    // Destroy the router. Engines below outlive it so any in-flight
+    // navigatorForShortcut path completes with the engine pointers it
+    // already captured before the router went away.
     m_screenModeRouter.reset();
 
     // Destroy engines now (during stop(), before Qt child destruction order).

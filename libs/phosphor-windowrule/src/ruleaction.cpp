@@ -194,9 +194,20 @@ ActionDescriptor::SlotResolver constantSlot(QLatin1StringView slot)
 /// enum" invariant visible at the descriptor level. The order mirrors
 /// `PhosphorZones::allModes()` so the editor's enum dropdown lists modes
 /// in the same order across surfaces.
-QStringList engineModeOptions()
+///
+/// Returns a const reference into a function-local static. The DisableEngine
+/// validator runs on every action-load (rule store load, every rule edit),
+/// so the previous by-value form rebuilt the 3-element list on every call;
+/// the static keeps the descriptor's enum-vocabulary stable across the
+/// process and the validator's `contains` cheap.
+const QStringList& engineModeOptions()
 {
-    return {QStringLiteral("snapping"), QStringLiteral("autotile"), QStringLiteral("scrolling")};
+    static const QStringList s_options{
+        QStringLiteral("snapping"),
+        QStringLiteral("autotile"),
+        QStringLiteral("scrolling"),
+    };
+    return s_options;
 }
 
 } // namespace
@@ -208,16 +219,19 @@ void ActionRegistry::registerBuiltins()
     // ── engine-mode slot ──
     // SetEngineMode intentionally validates only that the `mode` param is
     // non-empty — vocabulary validation lives at consumers, NOT at load.
-    // Two reasons: (a) the cascade-fidelity test suite uses arbitrary mode
-    // strings as cascade-rule identifiers ("default", "screen", "exact",
-    // etc.) so tightening to a closed set would force those tests to
-    // re-route through a different action type; (b) the open vocabulary
-    // mirrors the bridge's `disableRuleMode` contract — the wire token
-    // round-trips verbatim and `PhosphorZones::modeFromWireString` is the
-    // authoritative consumer-side check. DisableEngine is the asymmetric
-    // case below: it gates on the closed set to fail malformed disable
-    // rules early at load (per-mode disable lists never use synthetic
-    // cascade-marker strings).
+    // Two reasons: (a) the rule-evaluator test suites use arbitrary mode
+    // strings as per-rule identifiers (`test_ruleevaluator.cpp` uses
+    // "alpha"/"beta"/"gamma"; `test_ruleevaluator_cascade.cpp` uses
+    // "window-rule"), so tightening to a closed set would force those
+    // tests to re-route through a different action type; (b) the open
+    // vocabulary mirrors the bridge's `disableRuleMode` contract — the
+    // wire token round-trips verbatim, and consumers map it to a Mode
+    // via `PhosphorZones::modeFromWireString`. Unknown tokens survive
+    // load and silently fail to match — consumer code that wants to
+    // reject them must call `modeFromWireString` and check the
+    // optional explicitly. DisableEngine is the asymmetric case below:
+    // it gates on the closed set to fail malformed disable rules early
+    // at load (per-mode disable lists never use synthetic identifiers).
     registerAction(ActionDescriptor{
         .type = QString(ActionType::SetEngineMode),
         .slotFor = constantSlot(ActionSlot::EngineMode),

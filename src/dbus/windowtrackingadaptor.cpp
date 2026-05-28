@@ -45,6 +45,20 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     Q_ASSERT(zoneDetector);
     Q_ASSERT(settings);
 
+    // Release-build runtime guard mirroring SnapAdaptor / WindowDragAdaptor.
+    // The Q_ASSERTs above terminate in debug; without this guard, release
+    // builds would proceed into `new DaemonGeometryResolver(settings)` and
+    // `settings->keepWindowsInZonesOnResolutionChange()` and crash on a
+    // null `settings`. Bail to a non-wired but non-crashing state; the
+    // per-slot `if (!m_service) return;` guards downstream then catch the
+    // half-constructed state.
+    if (!layoutManager || !zoneDetector || !settings) {
+        qCWarning(lcDbusWindow) << "WindowTrackingAdaptor constructed with null dependencies — refusing to wire."
+                                << "layoutManager:" << (layoutManager != nullptr)
+                                << "zoneDetector:" << (zoneDetector != nullptr) << "settings:" << (settings != nullptr);
+        return;
+    }
+
     // Create geometry resolver (bridges ISettings to the library's IGeometryResolver)
     m_geometryResolver = new PlasmaZones::DaemonGeometryResolver(settings);
 
@@ -128,7 +142,6 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
                 // window would cause the shutdown inline sync() to skip a real
                 // pending write. The WTS dirty mask is the authoritative
                 // gate for async writes anyway.
-                Q_UNUSED(filePath);
             });
 
     // Active-layout changes: single handler. onLayoutChanged() covers the

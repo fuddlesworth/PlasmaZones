@@ -1276,7 +1276,7 @@ private Q_SLOTS:
         // The migration's scratch key MUST be stripped from config.json after
         // the rebuild branch consumed it. This fixture populates the stash
         // (animRules.size() > 0), so a regression that stopped stripping
-        // would fail here — distinguishing this from the line-270 assertion
+        // would fail here — distinguishing this from the matching assertion
         // in testFullConversion_producesWindowRules where the fixture never
         // populates the stash to begin with.
         const QJsonObject cfgAfter = readJson(ConfigDefaults::configFilePath());

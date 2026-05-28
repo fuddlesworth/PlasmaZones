@@ -286,8 +286,13 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * (the authoritative mapping), so a production caller never produces an
  * unrecognised token. An empty token writes a malformed rule that load
  * does reject (the validator's non-empty check fires there). An unknown
- * token like `"bogus"` survives load and is filtered out by the daemon's
- * `modeFromWireString` lookup at consumption time.
+ * token like `"bogus"` survives load and is silently inert at consumption:
+ * the cascade evaluator wraps the wire string in a `SetEngineMode` action
+ * that downstream consumers (e.g. `LayoutRegistry::entryFromRuleMatchActions`)
+ * decode by calling `modeFromWireString` — which returns `nullopt` for
+ * unknown tokens, leaving the cascade entry on its existing mode. The
+ * inertness is intentional, not a bug: see test_contextrulebridge.cpp's
+ * `testDisableRuleMode_returnsUnknownTokenVerbatim` pinning the contract.
  */
 inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
                                                const QString& tilingAlgorithm)

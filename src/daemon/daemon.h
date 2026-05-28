@@ -275,9 +275,6 @@ private:
     // Resolve screen → check mode (autotile vs zones) → delegate → OSD from backend
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /** @brief Return the active IPlacementEngine for a screen (autotile or snap) */
-    PhosphorEngine::IPlacementEngine* engineForScreen(const QString& screenId) const;
-
     /**
      * @brief Convenience mode check: routed through m_screenModeRouter.
      *
@@ -625,9 +622,10 @@ private:
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     std::unique_ptr<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     /// Single source of truth for "which engine owns screen X". Used by
-    /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
-    /// dispatch paths. Owns no state of its own — just delegates to the
-    /// layout manager and engine pointers it was constructed with.
+    /// WindowTrackingAdaptor and the daemon's navigation handlers (via
+    /// `navigatorForShortcut` in navigation.cpp). Owns no state of its
+    /// own — just delegates to the layout manager and engine pointers it
+    /// was constructed with.
     std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
     /// PhosphorContext::ContextResolver wiring.
     ///

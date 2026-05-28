@@ -1530,6 +1530,26 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
             qCWarning(lcEffect) << "loadWindowRuleAnimationsFromDbus: WindowRuleSet::fromJson refused payload";
             return;
         }
+        // Sample the prior rule set for SetOpacity BEFORE setWindowRuleAnimationRules
+        // overwrites it. Repaint is needed on BOTH bookends — rule appears
+        // (currently-natural-opacity windows need to apply it) AND rule
+        // disappears (currently-dimmed windows need to revert). The earlier
+        // single-bookend form left previously-dimmed windows stuck at their
+        // last-painted opacity when the user removed the last SetOpacity rule.
+        bool hadSetOpacity = false;
+        const auto& priorRules = m_shaderManager.animationRuleSet().rules();
+        for (const PhosphorWindowRule::WindowRule& rule : priorRules) {
+            for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
+                if (action.type == PhosphorWindowRule::ActionType::SetOpacity) {
+                    hadSetOpacity = true;
+                    break;
+                }
+            }
+            if (hadSetOpacity) {
+                break;
+            }
+        }
+
         QList<PhosphorWindowRule::WindowRule> animationRules;
         bool hasSetOpacity = false;
         for (const PhosphorWindowRule::WindowRule& rule : setOpt->rules()) {
@@ -1553,13 +1573,14 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         m_shaderManager.setWindowRuleAnimationRules(std::move(animationRules));
         qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
                           << "total animation rules to the evaluator";
-        // Force a full repaint when SetOpacity rules are present so a
-        // user-authored rule applies to static (un-damaged) windows
-        // immediately, not on the next incidental damage event.
-        // OverrideAnimation* rules fire on lifecycle events, so they don't
-        // need this kick; SetOpacity is the only effect-rule that
-        // continuously alters paint output regardless of animation state.
-        if (hasSetOpacity && KWin::effects) {
+        // Force a full repaint on EITHER bookend so a user-authored rule
+        // applies to static (un-damaged) windows immediately AND so a
+        // removed rule reverts previously-dimmed windows immediately, not
+        // on the next incidental damage event. OverrideAnimation* rules
+        // fire on lifecycle events so they don't need this kick;
+        // SetOpacity continuously alters paint output regardless of
+        // animation state and needs the kick on both transitions.
+        if ((hasSetOpacity || hadSetOpacity) && KWin::effects) {
             KWin::effects->addRepaintFull();
         }
     });

@@ -25,38 +25,6 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Engine routing
-// ═══════════════════════════════════════════════════════════════════════════════
-
-PhosphorEngine::IPlacementEngine* Daemon::engineForScreen(const QString& screenId) const
-{
-    // Single source of truth. Delegates to the central router so daemon
-    // navigation handlers, adaptor D-Bus entry points, and resnap paths
-    // all agree on the same mode-ownership decision.
-    if (m_screenModeRouter) {
-        return m_screenModeRouter->engineFor(screenId);
-    }
-    // Fallback for very-early-startup paths where the router isn't wired
-    // yet. Mirrors the router's mode→engine policy (engineFor returns
-    // nullptr for Scrolling): autotile screens get the autotile engine,
-    // snap screens get the snap engine, Scrolling screens get nullptr so
-    // KWin's native placement runs instead of misrouting Scrolling traffic
-    // to the snap engine during the shutdown window between
-    // m_screenModeRouter.reset() and m_snapEngine.reset().
-    if (isAutotileScreen(screenId)) {
-        return m_autotileEngine.get();
-    }
-    if (m_layoutManager
-        && m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity())
-            == PhosphorZones::AssignmentEntry::Scrolling) {
-        return nullptr;
-    }
-    if (m_snapEngine) {
-        return m_snapEngine.get();
-    }
-    return nullptr;
-}
-
 // Local helper: mode check with nullptr-safe fallback. Every daemon
 // navigation handler routes through this so the autotile-vs-snap branch
 // is expressed as "does the router say autotile?" rather than inspecting
@@ -184,6 +152,16 @@ void Daemon::handlePush()
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "PushToEmptyZone")) {
+        // Honor the per-context disable cascade — pushing to an empty zone
+        // is a side effect on the focused (monitor, desktop, activity); a
+        // user who disabled snapping on this context should not see a
+        // window relocate. Mirrors handleFloat / handleSnap / handleRetile.
+        // Null-guard the resolver: stop() resets it before the engine
+        // teardown, and a queued shortcut landing in that window would
+        // NPE without the guard.
+        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+            return;
+        }
         // Autotile adapter's impl is a deliberate no-op — empty zones don't
         // exist in autotile mode — so this shortcut is harmlessly absorbed
         // on autotile screens instead of the daemon branching at entry.
@@ -245,6 +223,14 @@ void Daemon::handleResnap()
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Resnap")) {
+        // Honor the per-context disable cascade on the focused screen —
+        // reapplyLayout commits fresh geometry onto every window on the
+        // current screen, which a user who disabled snapping on this
+        // context explicitly opted out of. Mirrors handleFloat / handleSnap
+        // / handleRetile / handlePush.
+        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+            return;
+        }
         nav->reapplyLayout(ctx);
     }
 }
@@ -253,6 +239,12 @@ void Daemon::handleSnapAll()
 {
     NavigationContext ctx;
     if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapAllWindows")) {
+        // Honor the per-context disable cascade on the focused screen —
+        // snapAllWindows is the explicit "snap-everything" intent and
+        // should silently no-op on contexts the user disabled.
+        if (!m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(ctx.screenId))) {
+            return;
+        }
         nav->snapAllWindows(ctx);
     }
 }
