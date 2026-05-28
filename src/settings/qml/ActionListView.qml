@@ -265,12 +265,23 @@ ColumnLayout {
                         id: paramRow
 
                         required property var modelData
+                        required property int index
 
                         spacing: Kirigami.Units.largeSpacing
 
                         Label {
                             Layout.alignment: Qt.AlignVCenter
-                            Layout.minimumWidth: Kirigami.Units.gridUnit * 8
+                            // First param keeps the 8-gridUnit floor so its
+                            // value pill lands in the same column as WHEN's
+                            // value pills (visual alignment with the operator
+                            // column above). Subsequent params shrink to
+                            // their text width — leaving the 8 gu floor on
+                            // every param turned the gap between a short
+                            // label like "SHADER EFFECT" and its value pill
+                            // into dead space because the label box itself
+                            // padded out to 8 gu before the largeSpacing to
+                            // the pill kicked in.
+                            Layout.minimumWidth: paramRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
                             text: paramRow.modelData.label
                             font.capitalization: Font.AllUppercase
                             font.pointSize: Kirigami.Theme.smallFont.pointSize
