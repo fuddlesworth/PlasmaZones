@@ -261,6 +261,17 @@ void Daemon::handleIncreaseMasterRatio()
         || m_contextResolver->isDisabled(
             m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile)))
         return;
+    // Set the engine's active-screen hint before the parameterless engine
+    // call — the engine's NavigationController resolves the target screen
+    // from `m_activeScreen`, falling back to the first entry of
+    // `m_autotileScreens` (hash-ordered) when the hint is unset. Without
+    // the hint, a Meta+Plus on screen B with B's last focus event stale
+    // would silently bump screen A's master ratio. The
+    // HANDLE_AUTOTILE_ONLY macro sets this hint for every other autotile
+    // shortcut; these two handlers exist out-of-line only to thread the
+    // per-screen `effectiveSplitRatioStep`, so they must replicate the
+    // hint-setting the macro does.
+    m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->increaseMasterRatio(step);
 }
@@ -276,6 +287,8 @@ void Daemon::handleDecreaseMasterRatio()
         || m_contextResolver->isDisabled(
             m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile)))
         return;
+    // See handleIncreaseMasterRatio for the active-screen-hint rationale.
+    m_autotileEngine->setActiveScreenHint(screenId);
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->decreaseMasterRatio(step);
 }
