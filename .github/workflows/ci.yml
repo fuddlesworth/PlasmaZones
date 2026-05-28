@@ -12,10 +12,19 @@ on:
     branches: [main, develop, v3]
   pull_request:
     branches: [main, v3]
-  # `workflow_dispatch` so we can hand-fire the draft-arch packaging job
-  # against an arbitrary ref (e.g. a back-ported hot-fix branch that
-  # isn't yet in a PR). The build / lint / nix jobs ignore this trigger
-  # because they're keyed off PR file diffs and push events.
+    # `labeled` is opt-in for the draft-PKGBUILD job below — it gates
+    # on `github.event.label.name == 'build-draft'`. The other jobs
+    # (build / lint / nix) skip the `labeled` action subtype via their
+    # own `if:` filter so adding or removing a label doesn't trigger
+    # a redundant build/lint/nix matrix run. Only the four canonical
+    # PR subtypes are subscribed; `unlabeled` would just cancel a
+    # build the maintainer already wanted, so we don't subscribe.
+    types: [opened, synchronize, reopened, labeled]
+  # `workflow_dispatch` so we can hand-fire the draft-arch packaging
+  # job against an arbitrary ref (e.g. a back-ported hot-fix branch
+  # that isn't yet in a PR). The build / lint / nix jobs explicitly
+  # skip this trigger via their `if:` filter so a manual dispatch of
+  # the packaging job doesn't double-build the matrix.
   workflow_dispatch:
 
 # Default workflow token is read-only; jobs that need writes opt in.
@@ -25,6 +34,13 @@ permissions:
 jobs:
   build:
     name: Build (arch, KDE_FRAMEWORKS=${{ matrix.kde }})
+    # Skip `labeled` and `unlabeled` PR events (those are reserved for
+    # the draft-PKGBUILD job below) and skip `workflow_dispatch` (which
+    # also only targets the draft-PKGBUILD job). Run on every push and
+    # on the canonical PR action subtypes (opened, synchronize,
+    # reopened) — same coverage as before, just gated explicitly so
+    # the new label-driven trigger doesn't double-fire the matrix.
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
@@ -120,6 +136,9 @@ jobs:
   # on PATH for the pre-commit hook to agree with CI.
   lint:
     name: Lint
+    # Same trigger gate as `build` — skip label-change events and
+    # workflow_dispatch (both reserved for the draft-PKGBUILD job).
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
@@ -203,6 +222,8 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   nix:
     name: Nix (${{ matrix.system }})
+    # Same trigger gate as `build` / `lint`.
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
     strategy:
       fail-fast: false
       matrix:
@@ -241,28 +262,49 @@ jobs:
         run: nix develop -c echo "devShell OK"
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Draft Arch Package (PR builds)
+  # Draft Arch Package (opt-in PR builds)
   # ─────────────────────────────────────────────────────────────────────────
-  # On every PR (and on hand-fired workflow_dispatch), build a .pkg.tar.zst
-  # from the PR head and publish:
-  #   1) the built package (artifact `arch-draft-package`)
-  #   2) a hand-off PKGBUILD that pulls the PR branch via `git+#branch=…`
-  #      so testers without binary trust can `makepkg -si` instead
-  #      (artifact `arch-draft-pkgbuild`)
-  #   3) a sticky PR comment with one-line install commands for both paths
+  # Manual-only. Two ways to fire:
+  #
+  #   1. Add the `build-draft` label to an open PR. The job fires once
+  #      per `labeled` event, posts the sticky comment with install
+  #      instructions and the nightly.link artifact URLs. Push events on
+  #      the PR (`synchronize`) DO NOT auto-rebuild — to refresh the
+  #      build against new commits, remove and re-add the label. The
+  #      sticky comment shows the commit SHA the build was made from so
+  #      a stale build is visible at a glance.
+  #
+  #   2. Actions UI → Run workflow (workflow_dispatch). No PR context is
+  #      auto-derived: pkgver falls back to `…prmanual.r…`, no sticky
+  #      comment is posted on any PR (the comment step gates on the
+  #      `pull_request` event). Use this for back-port hot-fix branches
+  #      that aren't yet in a PR, or to test the packaging job itself.
   #
   # The package uses pkgname=plasmazones-pr with provides+conflicts on
   # plasmazones, so a tester can swap between any PR build and the stable
   # release with a single `pacman -U` / `pacman -S plasmazones` round-trip.
   # Version derives from the upstream pkgver + PR number + commit count +
-  # short SHA so successive force-pushes to the same PR sort monotonically.
+  # short SHA so successive re-runs against the same PR sort monotonically.
+  # Publishes:
+  #   1) the built package (artifact `arch-draft-package`)
+  #   2) a hand-off PKGBUILD that pulls the PR branch via `git+#branch=…`
+  #      so testers without binary trust can `makepkg -si` instead
+  #      (artifact `arch-draft-pkgbuild`)
+  #   3) a sticky PR comment (label trigger only) with one-line install
+  #      commands for both paths.
   # ═══════════════════════════════════════════════════════════════════════════
   build-arch-draft:
     name: Draft Arch package
-    # Skips other event types (push to main, scheduled, etc). pull_request
-    # covers branch updates on the PR head; workflow_dispatch covers manual
-    # ad-hoc builds against any ref.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # Manual triggers only: explicit `build-draft` label on a PR OR
+    # workflow_dispatch from the Actions UI. Push events, opened /
+    # synchronize / reopened PR events, and labels with any other name
+    # are all skipped. The label-name gate is load-bearing: without it
+    # any label add (e.g. "needs-review", "blocked") would fire a CI
+    # build, which both wastes runner minutes and could surprise PR
+    # authors who didn't ask for one.
+    if: |
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'build-draft')
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
@@ -613,5 +655,5 @@ jobs:
 
             ---
 
-            <sub>Posted by `.github/workflows/ci.yml` → `build-arch-draft`. Each push to this PR rebuilds and updates this comment in place. nightly.link is a public third-party proxy; it has no special access — it reads the same artifact GitHub serves and exposes it without auth.</sub>
+            <sub>Posted by `.github/workflows/ci.yml` → `build-arch-draft`, fired by the `build-draft` label on this PR. Push events on the PR do **not** auto-rebuild — to refresh the artifacts against new commits, remove and re-add the `build-draft` label. nightly.link is a public third-party proxy; it has no special access — it reads the same artifact GitHub serves and exposes it without auth.</sub>
 
