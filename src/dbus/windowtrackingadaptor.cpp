@@ -313,6 +313,14 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     if (!validateWindowId(windowId, QStringLiteral("screen changed"))) {
         return;
     }
+    // An empty newScreenId would propagate through the cross-engine
+    // handoff below and store an empty toScreenId in the engine's
+    // tracking. Bail early — every downstream consumer treats an empty
+    // screen id as "no tracking", and re-running with the live screen
+    // would arrive via the next windowScreenChanged callback anyway.
+    if (newScreenId.isEmpty()) {
+        return;
+    }
 
     // Floating window with a tracked screen: refresh the engine's
     // screen-tracking via the cross-engine handoff contract so subsequent

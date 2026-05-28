@@ -101,7 +101,7 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
 
 /**
  * @brief Per-window opacity cascade — the runtime consumer for
- *        `OverrideOpacity` rules.
+ *        `SetOpacity` rules.
  *
  * Returns the rule-resolved opacity in `[0.0, 1.0]` when an enabled rule
  * matching @p windowClass fills the `opacity` slot with a valid `value`

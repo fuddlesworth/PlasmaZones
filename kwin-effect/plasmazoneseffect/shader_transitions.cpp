@@ -1531,6 +1531,7 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
             return;
         }
         QList<PhosphorWindowRule::WindowRule> animationRules;
+        bool hasSetOpacity = false;
         for (const PhosphorWindowRule::WindowRule& rule : setOpt->rules()) {
             if (!rule.enabled) {
                 // Skip disabled rules — they exist in the store but must not
@@ -1542,6 +1543,9 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
             for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
                 if (PhosphorWindowRule::ActionType::isEffectRuleAction(action.type)) {
                     animationRules.append(rule);
+                    if (action.type == PhosphorWindowRule::ActionType::SetOpacity) {
+                        hasSetOpacity = true;
+                    }
                     break;
                 }
             }
@@ -1549,6 +1553,15 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         m_shaderManager.setWindowRuleAnimationRules(std::move(animationRules));
         qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
                           << "total animation rules to the evaluator";
+        // Force a full repaint when SetOpacity rules are present so a
+        // user-authored rule applies to static (un-damaged) windows
+        // immediately, not on the next incidental damage event.
+        // OverrideAnimation* rules fire on lifecycle events, so they don't
+        // need this kick; SetOpacity is the only effect-rule that
+        // continuously alters paint output regardless of animation state.
+        if (hasSetOpacity && KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
     });
 }
 

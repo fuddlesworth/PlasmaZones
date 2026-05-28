@@ -99,6 +99,12 @@ void SnapAdaptor::clearEngine()
     m_adaptor = nullptr;
     m_settings = nullptr;
     m_screenModeRouter = nullptr;
+    // Clear the late-bound context resolver too — symmetric with the
+    // other late-bound deps above. A late-arriving D-Bus call that landed
+    // between clearEngine() and ~SnapAdaptor would otherwise dereference
+    // a possibly-stale pointer; the existing per-slot null guards now
+    // catch the cleared state instead.
+    m_contextResolver = nullptr;
 }
 
 void SnapAdaptor::setScreenModeRouter(ScreenModeRouter* router)

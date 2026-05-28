@@ -322,9 +322,14 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     //
     // Skip our own overlay/editor/snap-assist surfaces and plasma-shell
     // panels — a user-authored rule like `WindowClass contains "plasmashell"`
-    // would otherwise dim our own UI or the system panel. The shouldHandleWindow
-    // filter rejects these from snap/tile management, and the opacity hook
-    // must follow the same exclusion to stay consistent.
+    // would otherwise dim our own UI or the system panel. This is a
+    // narrower exclusion than `shouldHandleWindow` (which also rejects
+    // xdg-desktop-portal surfaces) — deliberately so. SetOpacity is a
+    // user-visible cosmetic effect that the user opts into by authoring
+    // a class-matching rule; we exclude only the surfaces whose dimming
+    // would feel like a daemon bug (our own UI, panels), and let the
+    // user-authored rule reach everything else the rule explicitly
+    // names.
     //
     // Short-circuit on an empty rule set — the common case for users without
     // any effect-side rules. The animation-cascade sister consumers

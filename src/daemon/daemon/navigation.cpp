@@ -37,9 +37,19 @@ PhosphorEngine::IPlacementEngine* Daemon::engineForScreen(const QString& screenI
         return m_screenModeRouter->engineFor(screenId);
     }
     // Fallback for very-early-startup paths where the router isn't wired
-    // yet. Mirrors the legacy logic.
+    // yet. Mirrors the router's mode→engine policy (engineFor returns
+    // nullptr for Scrolling): autotile screens get the autotile engine,
+    // snap screens get the snap engine, Scrolling screens get nullptr so
+    // KWin's native placement runs instead of misrouting Scrolling traffic
+    // to the snap engine during the shutdown window between
+    // m_screenModeRouter.reset() and m_snapEngine.reset().
     if (isAutotileScreen(screenId)) {
         return m_autotileEngine.get();
+    }
+    if (m_layoutManager
+        && m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity())
+            == PhosphorZones::AssignmentEntry::Scrolling) {
+        return nullptr;
     }
     if (m_snapEngine) {
         return m_snapEngine.get();
