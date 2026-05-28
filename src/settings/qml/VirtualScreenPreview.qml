@@ -36,7 +36,7 @@ Rectangle {
 
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
     border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.3)
-    border.width: 1
+    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
     radius: Kirigami.Units.smallSpacing
 
     // "No subdivisions" label when empty
@@ -155,7 +155,7 @@ Rectangle {
                 height: Math.round(Kirigami.Units.gridUnit * 1.5)
                 radius: 4
                 color: colDragArea.containsMouse || colDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                border.width: 1
+                border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                 border.color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: previewRoot.height > Math.round(Kirigami.Units.gridUnit * 2.5)
 
@@ -260,7 +260,7 @@ Rectangle {
                 height: Math.round(Kirigami.Units.gridUnit * 0.75)
                 radius: 4
                 color: rowDragArea.containsMouse || rowDragArea.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                border.width: 1
+                border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                 border.color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: previewRoot.width > Math.round(Kirigami.Units.gridUnit * 2.5)
 

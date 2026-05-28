@@ -121,7 +121,15 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
                     continue;
                 }
 
-                QRect geo = m_windowTracker->zoneGeometry(targetZone->id().toString(), entry->screenId);
+                // Use the loop's `screenId` (the entries-by-screen group
+                // key) rather than `entry->screenId`. The two are equal at
+                // entry time because we bucketed by entry->screenId at
+                // line 64, but the loop above already uses `screenId` for
+                // layout resolution and for the multi-zone resolveZoneGeometry
+                // call — keep the single-zone path symmetric so a future
+                // change to the grouping key (e.g. canonical screen-id form)
+                // doesn't silently leave this call against a stale field.
+                QRect geo = m_windowTracker->zoneGeometry(targetZone->id().toString(), screenId);
                 if (!geo.isValid()) {
                     continue;
                 }

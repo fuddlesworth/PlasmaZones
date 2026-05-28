@@ -398,7 +398,10 @@ QVariantMap LayoutAdaptor::getAllDesktopAssignments()
 
     const auto assignments = m_layoutManager->desktopAssignments();
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        QString key = QStringLiteral("%1|%2").arg(it.key().first).arg(it.key().second);
+        // Two-arg `.arg(QString, QString)` for symmetry with
+        // getAllActivityAssignments below; convert the desktop int to
+        // a string up-front so both helpers use the same call shape.
+        QString key = QStringLiteral("%1|%2").arg(it.key().first, QString::number(it.key().second));
         result[key] = it.value();
     }
 

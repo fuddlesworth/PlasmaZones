@@ -53,6 +53,11 @@ set(plasmazones_settings_SRCS
     # clearOverride). Same split rationale as _shaders.cpp — the main
     # TU grew past 800 lines after the F#2c async-revert addition.
     animationspagecontroller_overrides.cpp
+    # AnimationsPageController path-discovery helpers
+    # (sectionForPath / eventLabel / parentPath / parentChain). Same
+    # split rationale — small per-Q_INVOKABLE methods extracted so the
+    # main TU stays under the 800-line cap.
+    animationspagecontroller_paths.cpp
     # Shared validate+copy primitive for installing shader packs.
     # Consumed by AnimationsPageController + SnappingShadersPageController.
     # Centralises the symlink-rejection + metadata.json safety checks.
@@ -111,6 +116,11 @@ set(plasmazones_settings_SRCS
     # validation entry points. Split out so windowrulecontroller.cpp stays
     # under the 800-line cap; same class, separate TU, no API change.
     windowrulecontroller_views.cpp
+    # WindowRuleController label-lookup setters (screen/activity/layout/
+    # snapping-layout/tiling-algorithm) plus the wiring-completion gate.
+    # Five tiny pass-throughs into WindowRuleModel; split out so
+    # windowrulecontroller.cpp stays under the project's 800-line cap.
+    windowrulecontroller_lookups.cpp
     # WindowRuleController authoring metadata + templates — pure read-only
     # helpers split out so windowrulecontroller.cpp stays under the project's
     # 800-line cap. The controller's Q_INVOKABLE entry points (matchFields,

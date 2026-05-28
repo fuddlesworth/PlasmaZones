@@ -52,26 +52,10 @@ namespace animations_controller_detail {
 // TUs declare the same symbol name in their own detail namespaces.
 static constexpr QLatin1String JsonNameKey{"name"};
 
-/// Title-case a single camelCase segment: "snapIn" → "Snap In", "show" →
-/// "Show", "popIn" → "Pop In". Splits on lower→upper transitions; trivial
-/// for single-word segments.
-static QString humanizeSegment(const QString& segment)
-{
-    if (segment.isEmpty())
-        return segment;
-    QString out;
-    out.reserve(segment.size() + 4);
-    out.append(segment.front().toUpper());
-    for (int i = 1; i < segment.size(); ++i) {
-        const QChar prev = segment.at(i - 1);
-        const QChar cur = segment.at(i);
-        if (cur.isUpper() && prev.isLower()) {
-            out.append(QLatin1Char(' '));
-        }
-        out.append(cur);
-    }
-    return out;
-}
+/// `humanizeSegment` (segment title-casing for label display) lives in
+/// `animations_controller_detail.h` so animationspagecontroller_paths.cpp
+/// shares the exact same implementation. Both `eventSections` (this TU)
+/// and `eventLabel` (paths TU) call through to the header version.
 
 /// Convert a `Profile` value to its `toJson()` shape as a QVariantMap.
 /// Sparse — only engaged fields appear, matching the wire format.
@@ -626,49 +610,9 @@ void AnimationsPageController::asyncRevertPending()
 }
 
 // ─── Path discovery ────────────────────────────────────────────────────
-
-QString AnimationsPageController::sectionForPath(const QString& path) const
-{
-    if (path.isEmpty())
-        return {};
-    const int dot = path.indexOf(QLatin1Char('.'));
-    const QString topLevel = dot < 0 ? path : path.left(dot);
-
-    // Merge osd.*, popup.*, and panel.* into the "overlays" UI section.
-    if (topLevel == QLatin1String("osd") || topLevel == QLatin1String("popup") || topLevel == QLatin1String("panel"))
-        return QStringLiteral("overlays");
-
-    // Merge cursor.* into the "widget" UI section.
-    if (topLevel == QLatin1String("cursor"))
-        return QStringLiteral("widget");
-
-    return topLevel;
-}
-
-QString AnimationsPageController::eventLabel(const QString& path) const
-{
-    if (path.isEmpty())
-        return {};
-    const int dot = path.lastIndexOf(QLatin1Char('.'));
-    const QString segment = dot < 0 ? path : path.mid(dot + 1);
-    return humanizeSegment(segment);
-}
-
-QString AnimationsPageController::parentPath(const QString& path) const
-{
-    return PhosphorAnimation::ProfilePaths::parentPath(path);
-}
-
-QStringList AnimationsPageController::parentChain(const QString& path) const
-{
-    QStringList chain;
-    QString cur = path;
-    while (!cur.isEmpty()) {
-        chain.append(cur);
-        cur = PhosphorAnimation::ProfilePaths::parentPath(cur);
-    }
-    return chain;
-}
+// `sectionForPath`, `eventLabel`, `parentPath`, `parentChain` live in
+// `animationspagecontroller_paths.cpp` so this TU stays under the
+// project's 800-line cap. Same class, separate TU, no API change.
 
 QVariantList AnimationsPageController::eventSections() const
 {

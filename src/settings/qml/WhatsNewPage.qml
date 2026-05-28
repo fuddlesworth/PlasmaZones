@@ -111,6 +111,8 @@ Kirigami.Dialog {
                         model: releaseCard.modelData.highlights
 
                         RowLayout {
+                            id: highlightRow
+
                             required property string modelData
 
                             Layout.fillWidth: true
@@ -124,7 +126,13 @@ Kirigami.Dialog {
 
                             Label {
                                 Layout.fillWidth: true
-                                text: parent.modelData
+                                // Read through the row's explicit id rather
+                                // than `parent.modelData` \u2014 if the RowLayout
+                                // ever grew an intermediate wrapper (Pane,
+                                // Item) the `parent` chain would shift and
+                                // this binding would silently resolve to
+                                // undefined. Direct id avoids that fragility.
+                                text: highlightRow.modelData
                                 wrapMode: Text.WordWrap
                             }
                         }

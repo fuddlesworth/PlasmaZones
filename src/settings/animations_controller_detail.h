@@ -105,5 +105,31 @@ inline QStringList collectShaderOverrideDescendants(const PhosphorAnimationShade
     return out;
 }
 
+/// Title-case a single camelCase segment: "snapIn" → "Snap In", "show" →
+/// "Show", "popIn" → "Pop In". Splits on lower→upper transitions; trivial
+/// for single-word segments. Shared by animationspagecontroller.cpp's
+/// `eventSections` (cached event tree) and animationspagecontroller_paths.cpp's
+/// `eventLabel` (per-path lookup) so the two surfaces format identically.
+/// Inline in this header so the label format stays in one place —
+/// diverging here would silently break the path-vs-tree label match
+/// downstream consumers rely on.
+inline QString humanizeSegment(const QString& segment)
+{
+    if (segment.isEmpty())
+        return segment;
+    QString out;
+    out.reserve(segment.size() + 4);
+    out.append(segment.front().toUpper());
+    for (int i = 1; i < segment.size(); ++i) {
+        const QChar prev = segment.at(i - 1);
+        const QChar cur = segment.at(i);
+        if (cur.isUpper() && prev.isLower()) {
+            out.append(QLatin1Char(' '));
+        }
+        out.append(cur);
+    }
+    return out;
+}
+
 } // namespace animations_controller_detail
 } // namespace PlasmaZones

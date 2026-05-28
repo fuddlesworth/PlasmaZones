@@ -916,6 +916,14 @@ void WindowTrackingService::onLayoutChanged()
 
         // Preserve zone assignments for windows on other desktops. Desktop 0
         // means "all desktops" (pinned window) — always process those.
+        //
+        // Ordering note: this desktop gate is BEFORE the autotile-screen gate
+        // below. Both gates ultimately preserve the assignment (by continuing),
+        // so order is observationally irrelevant — but the intent is "windows
+        // on other desktops are preserved categorically, autotile preservation
+        // is a separate axis that only matters for windows whose desktop is
+        // current." Don't reorder these without checking that the new ordering
+        // still preserves the union {other-desktop OR autotile-screen}.
         const int windowDesktop = lcDesktops.value(it.key(), 0);
         if (windowDesktop != 0 && windowDesktop != currentDesktop) {
             continue;

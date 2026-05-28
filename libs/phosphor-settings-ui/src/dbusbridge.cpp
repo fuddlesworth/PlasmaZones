@@ -148,25 +148,36 @@ void DBusBridge::asyncCallOn(const QString& interfaceName, const QString& method
     // 128 in-flight calls is well above any normal settings-app burst
     // (a save-all batch fans out ~10) but well below the point at
     // which the queue itself becomes a memory or scheduling pressure
-    // problem. Warn once per breach so the misuse pattern is
-    // debuggable; semantics are unchanged.
+    // problem. Fire once on first breach (>= cap, not just == cap, so
+    // a burst that steps over the boundary still trips it) and latch
+    // so a steady-state near-cap doesn't re-warn on every call.
     constexpr int kPendingWatcherSoftCapWarn = 128;
-    const int outstanding = findChildren<QDBusPendingCallWatcher*>().size();
-    if (outstanding == kPendingWatcherSoftCapWarn) {
+    ++m_outstandingAsyncCalls;
+    if (!m_softCapWarned && m_outstandingAsyncCalls >= kPendingWatcherSoftCapWarn) {
+        m_softCapWarned = true;
         qWarning() << "PhosphorSettingsUi::DBusBridge::asyncCallOn: pending-watcher count reached"
-                   << kPendingWatcherSoftCapWarn
+                   << m_outstandingAsyncCalls
                    << "— caller may be issuing async calls faster than the bus is replying;"
                       " consider awaiting replies before fanning out further.";
     }
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     QObject::connect(
         watcher, &QDBusPendingCallWatcher::finished, watcher,
-        [interfaceName, method](QDBusPendingCallWatcher* w) {
+        [interfaceName, method, this](QDBusPendingCallWatcher* w) {
             QDBusPendingReply<> reply = *w;
             if (reply.isError()) {
                 qWarning() << "PhosphorSettingsUi::DBusBridge::asyncCallOn: D-Bus error on" << interfaceName << method
                            << "—" << reply.error().name() << reply.error().message();
             }
+            // Decrement under the same single-threaded discipline as the
+            // increment above (bridge is parented to its owning thread,
+            // and the asyncCallOn entry guards against cross-thread
+            // callers). Safe to capture `this` because the watcher is
+            // parented to the bridge — when the bridge is destroyed,
+            // Qt cancels and deletes the watcher before this lambda can
+            // fire on a torn-down bridge.
+            if (m_outstandingAsyncCalls > 0)
+                --m_outstandingAsyncCalls;
             w->deleteLater();
         },
         // Qt::SingleShotConnection self-disconnects after first fire.

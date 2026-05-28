@@ -19,6 +19,13 @@ if(COMMAND qt_policy)
     qt_policy(SET QTP0004 NEW)
 endif()
 
+# Pull in Widgets locally — the parent lib's find_package only lists the
+# components the framework itself needs (Core / DBus / Gui / Qml / Quick).
+# The minimal demo wants QApplication for the realistic-consumer baseline,
+# which lives in Widgets. Keep this find local to the demo so the parent
+# lib stays Widgets-free for headless or non-desktop consumers.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Widgets)
+
 add_executable(phosphor-settings-ui-minimal main.cpp)
 
 set(phosphor_settings_ui_minimal_QML_TYPE_SOURCES
@@ -55,6 +62,12 @@ target_link_libraries(phosphor-settings-ui-minimal
         PhosphorSettingsUi::PhosphorSettingsUiQml
         Qt6::Core
         Qt6::Gui
+        # QApplication (used in main.cpp instead of QGuiApplication) so the
+        # demo matches the realistic Kirigami + org.kde.desktop pattern that
+        # consumers building dialogs / file pickers / native colour choosers
+        # need. Adds a Widgets dependency but keeps the demo on the same
+        # baseline as a production settings app.
+        Qt6::Widgets
         Qt6::Qml
         Qt6::Quick
         Qt6::QuickControls2

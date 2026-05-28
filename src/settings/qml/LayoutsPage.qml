@@ -233,11 +233,15 @@ ColumnLayout {
                     }
                 }
 
+                // Void: callers don't read the return value (the no-op
+                // boolean was a misleading "did I set anything?" signal
+                // that no consumer ever inspected). Empty-string layoutId
+                // is treated as "no-op, keep current selection" so the
+                // post-add Qt.callLater path can pass through unrejected
+                // when the newly-added rule has no id yet.
                 function selectLayoutById(layoutId) {
                     if (layoutId)
                         selectedLayoutId = layoutId;
-
-                    return layoutId !== "";
                 }
 
                 // Grouping — kept in QML because group labels require i18n/i18np

@@ -205,8 +205,14 @@ Kirigami.ScrollablePage {
             // unsafe-ish — there's nothing useful to show the user.
             // mailto:foo@bar gets the same minimum-length treatment
             // (an empty mailto opens a blank composer).
+            // Trim leading/trailing whitespace once so the safety check and
+            // the rendered URL agree — a consumer who copies a value out of a
+            // browser address bar often pastes ` https://example.com` with a
+            // stray leading space, which would otherwise fail the prefix
+            // check and silently hide the button.
+            readonly property string _trimmedUrl: root.homepageUrl.trim()
             readonly property bool _safeUrl: {
-                const u = root.homepageUrl;
+                const u = _trimmedUrl;
                 if (u === "")
                     return false;
                 const lower = u.toLowerCase();
@@ -226,7 +232,7 @@ Kirigami.ScrollablePage {
                 return false;
             }
             visible: _safeUrl
-            url: root.homepageUrl
+            url: _trimmedUrl
             text: root.homepageUrl
         }
 

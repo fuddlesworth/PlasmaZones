@@ -300,6 +300,7 @@ bool screensMatch(const QString& a, const QString& b)
 
 bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId)
 {
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
     if (storedScreenId.isEmpty() || physicalScreenId.isEmpty()) {
         return false;
     }

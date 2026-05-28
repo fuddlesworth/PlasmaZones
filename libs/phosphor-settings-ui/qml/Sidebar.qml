@@ -293,7 +293,14 @@ ColumnLayout {
                 if (seen.has(child.id))
                     continue;
 
-                const grand = root._hasChildren(child.id);
+                // Fetch the child's children ONCE — _hasChildren below would
+                // have called childPagesData(child.id) and the recursion into
+                // collect() then re-calls _scopeChildren(child.id) on the next
+                // iteration. Two registry hits per recursion step is wasted
+                // work on a search-keystroke hot path. Mirrors the no-search
+                // branch's `grandKids` optimisation.
+                const grandKids = root._scopeChildren(child.id);
+                const grand = grandKids.length > 0;
                 const childBreadcrumb = breadcrumb.length === 0 ? child.title : breadcrumb + " / " + child.title;
                 // Always recurse so descendants can match.
                 if (grand)

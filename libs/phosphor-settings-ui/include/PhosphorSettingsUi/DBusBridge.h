@@ -90,6 +90,21 @@ public:
 
 private:
     DBusEndpoint m_endpoint;
+    // Tracks in-flight QDBusPendingCallWatcher children so the soft-cap
+    // warning is O(1) and burst-safe. The previous shape did
+    // `findChildren<...>().size()` on every asyncCallOn (O(N) child
+    // scan on the hot path), and the breach check fired only on the
+    // exact transition count == cap, which two near-simultaneous calls
+    // could step over without ever satisfying. Incrementing under each
+    // watcher's creation + decrementing in its `finished` lambda
+    // (single-threaded; bridge is parented to the owning thread)
+    // keeps the count accurate without the scan.
+    int m_outstandingAsyncCalls = 0;
+    // One-shot latch so the soft-cap warning fires exactly once per
+    // process even if the queue oscillates around the cap. Without
+    // this, a steady-state count near 128 would re-warn every time
+    // the count crossed back up to the cap.
+    bool m_softCapWarned = false;
 };
 
 } // namespace PhosphorSettingsUi

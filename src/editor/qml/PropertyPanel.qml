@@ -349,7 +349,7 @@ Rectangle {
                         color: zoneNameField.hasError ? Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.15) : zoneNameField.palette.base
                         radius: Kirigami.Units.smallSpacing
                         border.color: zoneNameField.hasError ? Kirigami.Theme.negativeTextColor : zoneNameField.palette.shadow
-                        border.width: zoneNameField.hasError ? 2 : 1
+                        border.width: zoneNameField.hasError ? Math.max(2, Math.round(Screen.devicePixelRatio * 2)) : Math.max(1, Math.round(Screen.devicePixelRatio))
 
                         Behavior on border.color {
                             PhosphorMotionAnimation {
@@ -721,7 +721,7 @@ Rectangle {
                         background: Rectangle {
                             color: Kirigami.Theme.backgroundColor
                             border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
-                            border.width: 1
+                            border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                             radius: Kirigami.Units.smallSpacing
                         }
                     }

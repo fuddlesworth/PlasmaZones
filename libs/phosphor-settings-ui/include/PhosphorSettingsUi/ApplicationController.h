@@ -221,9 +221,18 @@ private:
     // the second is a no-op. Without this, a domain that emits
     // applyResult synchronously and is then destroyed later in the
     // batch would tick the pending counter TWICE (once per signal),
-    // driving it negative and miscounting completion. Pointers are
-    // never dereferenced — only used as hash keys — so dangling
-    // post-destroyed entries are harmless.
+    // driving it negative and miscounting completion.
+    //
+    // Pointer-deref safety: the per-domain `destroyed` lambda removes
+    // the dying pointer from this set BEFORE the destructor returns,
+    // and the batch-timeout handler (the only other consumer that
+    // dereferences these pointers to read `objectName()`) walks the
+    // set only AFTER all live entries have been processed — by which
+    // point the set contains only pointers to still-live domains.
+    // No dangling deref is reachable along the documented call paths,
+    // but callers that introduce a new consumer of these pointers
+    // MUST honour the same single-threaded "remove-before-destroy"
+    // discipline.
     QSet<StagingDomain*> m_applyOutstanding;
     QSet<StagingDomain*> m_discardOutstanding;
     // Per-batch connection handles for the applyResult / destroyed

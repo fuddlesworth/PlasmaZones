@@ -23,6 +23,8 @@
 
 namespace PhosphorScreens {
 
-// Reserved. Additional types arrive in the lift-and-shift PRs.
+// Umbrella namespace marker. Public types live in their per-class headers
+// above; this body is intentionally empty so consumers can still write
+// `using namespace PhosphorScreens;` without dragging in inline state.
 
 } // namespace PhosphorScreens

@@ -318,10 +318,16 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
 
 void OverlayService::updateGeometries()
 {
-    for (const QString& screenId : m_screenStates.keys()) {
-        QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
+    // Iterate via constBegin/constEnd rather than `.keys()` — the prior
+    // shape allocated a QStringList copy on every geometry update; this
+    // is a hot path during multi-monitor compositor signal storms (Plasma
+    // emits screenAdded/screenRemoved/geometryChanged in tight bursts on
+    // hotplug and DPMS-wake). updateOverlayWindow does not mutate
+    // m_screenStates, so iterating in-place is safe.
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        QScreen* physScreen = it.value().overlayPhysScreen;
         if (physScreen) {
-            updateOverlayWindow(screenId, physScreen);
+            updateOverlayWindow(it.key(), physScreen);
         }
     }
     // Geometry data is now current - do NOT bump version here.

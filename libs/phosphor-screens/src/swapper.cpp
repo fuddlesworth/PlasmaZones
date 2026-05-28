@@ -269,6 +269,8 @@ QString VirtualScreenSwapper::reasonString(Result result)
         return QStringLiteral("swap_failed");
     case Result::SettingsRejected:
         return QStringLiteral("settings_rejected");
+    case Result::NoConfigStore:
+        return QStringLiteral("no_config_store");
     }
     return QString();
 }

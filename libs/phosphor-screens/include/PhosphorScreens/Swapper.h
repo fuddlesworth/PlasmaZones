@@ -67,6 +67,11 @@ public:
         /// was ever handed to the store — the caller's input is the problem.
         SwapFailed,
         SettingsRejected, ///< IConfigStore::save rejected the mutated config.
+        /// Adaptor / caller didn't wire an IConfigStore* — distinct from
+        /// SettingsRejected so the consumer can tell "store said no" apart
+        /// from "no store to talk to". DBusScreenAdaptor's swap/rotate
+        /// methods surface this when m_configStore is null.
+        NoConfigStore,
     };
 
     explicit VirtualScreenSwapper(IConfigStore* store);

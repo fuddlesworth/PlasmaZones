@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <QApplication>
 #include <QDebug>
-#include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QVariant>
@@ -11,7 +11,13 @@
 
 int main(int argc, char* argv[])
 {
-    QGuiApplication app(argc, argv);
+    // QApplication (not QGuiApplication) — Kirigami.ApplicationWindow +
+    // the `org.kde.desktop` style integrate with QWidget-based dialogs
+    // (native file pickers, color choosers) via QApplication. The demo
+    // doesn't open such dialogs today, but the realistic consumer
+    // pattern is QApplication, and using QGuiApplication here would
+    // teach reviewers a subtly wrong baseline.
+    QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("phosphor-settings-ui-minimal"));
     app.setOrganizationName(QStringLiteral("phosphor"));
 

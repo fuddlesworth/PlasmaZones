@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "updatechecker.h"
+#include "../pz_i18n.h"
 #include "version.h"
 #include <QNetworkReply>
 #include <QJsonDocument>
@@ -10,9 +11,9 @@
 #include <QDateTime>
 #include <QRegularExpression>
 
-Q_LOGGING_CATEGORY(lcUpdateChecker, "plasmazones.updatechecker", QtInfoMsg)
-
 namespace PlasmaZones {
+
+Q_LOGGING_CATEGORY(lcUpdateChecker, "plasmazones.updatechecker", QtInfoMsg)
 
 namespace {
 const QString GITHUB_API_URL = QStringLiteral("https://api.github.com/repos/%1/releases/latest").arg(GITHUB_REPO);
@@ -153,7 +154,7 @@ void UpdateChecker::onRequestFinished(QNetworkReply* reply)
     QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
 
     if (parseError.error != QJsonParseError::NoError) {
-        m_errorMessage = tr("Failed to parse response: %1").arg(parseError.errorString());
+        m_errorMessage = PzI18n::tr("Failed to parse response: %1").arg(parseError.errorString());
         qCWarning(lcUpdateChecker) << m_errorMessage;
         Q_EMIT errorMessageChanged();
         Q_EMIT checkFinished(false);
@@ -167,7 +168,7 @@ void UpdateChecker::onRequestFinished(QNetworkReply* reply)
     QString latestVersion = stripVersionPrefix(tagName);
 
     if (latestVersion.isEmpty()) {
-        m_errorMessage = tr("No version found in release data");
+        m_errorMessage = PzI18n::tr("No version found in release data");
         qCWarning(lcUpdateChecker) << m_errorMessage;
         Q_EMIT errorMessageChanged();
         Q_EMIT checkFinished(false);

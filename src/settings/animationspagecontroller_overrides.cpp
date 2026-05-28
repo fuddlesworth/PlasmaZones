@@ -247,6 +247,4 @@ bool AnimationsPageController::clearOverride(const QString& path)
     return true;
 }
 
-// ─── Preset library — delegated ────────────────────────────────────────
-
 } // namespace PlasmaZones

@@ -129,6 +129,11 @@ private:
     void connectScreenManagerSignals(ScreenManager* mgr);
     void disconnectScreenManagerSignals(ScreenManager* mgr);
     void wireQGuiApplicationSignals();
+    /// Per-screen connect(geometryChanged) + connect(qGuiApp::screenRemoved)
+    /// pair. Called both from the existing-screens loop in
+    /// wireQGuiApplicationSignals and from the screenAdded handler so the
+    /// wiring details can't drift between the two paths.
+    void wirePerScreenSignals(QScreen* screen);
 
     QString m_primaryScreenOverride;
     // QPointer-guarded so a ScreenManager / IConfigStore destroyed before

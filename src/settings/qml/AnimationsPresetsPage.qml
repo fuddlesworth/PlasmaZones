@@ -44,10 +44,17 @@ SettingsFlickable {
     }
 
     function parseSpring(curveStr) {
+        // `|| fallback` coerces falsy values to the fallback — but
+        // `0` is falsy in JS, and zeta = 0 is a semantically valid
+        // value (undamped oscillator). Test `isFinite` instead so
+        // a user-saved `spring:12,0` preset round-trips correctly
+        // rather than silently snapping to critically-damped (zeta = 1).
         var parts = curveStr.substring(7).split(",");
+        var omega = parseFloat(parts[0]);
+        var zeta = parseFloat(parts[1]);
         return {
-            "omega": parseFloat(parts[0]) || 12,
-            "zeta": parseFloat(parts[1]) || 1
+            "omega": isFinite(omega) ? omega : 12,
+            "zeta": isFinite(zeta) ? zeta : 1
         };
     }
 

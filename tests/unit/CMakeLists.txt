@@ -547,6 +547,7 @@ add_executable(test_animations_page_controller
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
@@ -570,6 +571,7 @@ add_executable(test_animations_motion_sets
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
@@ -593,6 +595,7 @@ add_executable(test_animations_shader_overrides
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_shaders.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_overrides.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/animationspagecontroller_paths.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/shaderpackinstaller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/animationpresetlibrary.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/motionsetstore.cpp
@@ -635,6 +638,10 @@ add_executable(test_window_rule_controller
     # to keep that TU under the 800-line cap; the controller's class
     # definition spans both TUs.
     ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller_views.cpp
+    # Label-lookup setters + wiring-completion gate — split out so
+    # windowrulecontroller.cpp stays under the 800-line cap; the
+    # controller's class definition spans both TUs.
+    ${CMAKE_SOURCE_DIR}/src/settings/windowrulecontroller_lookups.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/windowruletemplates.cpp
 )

@@ -9,9 +9,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScreen>
-#include "core/constants.h"
-#include "core/isettings.h"
-#include "core/utils.h"
+#include "../core/constants.h"
+#include "../core/isettings.h"
+#include "../core/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorScreens/ScreenIdentity.h>
