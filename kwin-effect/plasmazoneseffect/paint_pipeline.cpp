@@ -309,6 +309,21 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         m_restoreSuppress.erase(supIt);
     }
 
+    // SetOpacity rule consumer — sets the window's painted opacity before
+    // downstream transforms run. Absolute set (not multiplyOpacity) because
+    // SetOpacity rules describe a target opacity, not a scale factor —
+    // "make Firefox 80% opaque" should land at 0.8 regardless of whatever
+    // opacity another effect previously composed. Uses the shader-manager's
+    // animation rule evaluator because the SetOpacity action lives in the
+    // same animation-rules bag as OverrideAnimation{Shader,Curve,Timing} —
+    // sharing the evaluator also shares its per-window cache, so the paint
+    // hot path pays at most one cascade walk per window per rule-set
+    // revision.
+    if (auto opacity =
+            resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), w->windowClass(), getWindowId(w))) {
+        data.setOpacity(*opacity);
+    }
+
     m_windowAnimator->applyTransform(w, data);
 
     auto sit = m_shaderManager.m_shaderTransitions.find(w);

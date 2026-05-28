@@ -270,11 +270,6 @@ QVariantList operatorsForField(int fieldValue)
 
 QVariantList actionTypes()
 {
-    // SetOpacity is registered as an action type (and validated) but no
-    // consumer ever reads its slot — KWin per-window opacity is achievable
-    // via `EffectWindow::setOpacity`, but the plumbing was never wired up.
-    // Exposing it here would let users create rules that silently never
-    // fire. Reinstate when the effect-side handler lands.
     static const QList<QLatin1StringView> kTypes = {
         ActionType::SetEngineMode,
         ActionType::SetSnappingLayout,
@@ -282,6 +277,7 @@ QVariantList actionTypes()
         ActionType::DisableEngine,
         ActionType::Exclude,
         ActionType::Float,
+        ActionType::SetOpacity,
         ActionType::OverrideAnimationShader,
         ActionType::OverrideAnimationCurve,
         ActionType::OverrideAnimationTiming,

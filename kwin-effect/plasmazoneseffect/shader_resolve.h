@@ -9,6 +9,8 @@
 
 #include <QString>
 
+#include <optional>
+
 namespace PhosphorAnimation {
 class CurveRegistry;
 }
@@ -96,5 +98,28 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
                                                          const PhosphorAnimation::Profile& base,
                                                          const QString& windowClass, const QString& eventPath,
                                                          const PhosphorAnimation::CurveRegistry& curveRegistry);
+
+/**
+ * @brief Per-window opacity cascade — the runtime consumer for
+ *        `OverrideOpacity` rules.
+ *
+ * Returns the rule-resolved opacity in `[0.0, 1.0]` when an enabled rule
+ * matching @p windowClass fills the `opacity` slot with a valid `value`
+ * param, or `std::nullopt` when no rule matches / the param is missing /
+ * the value falls outside the documented range. Caller applies the
+ * returned value via `KWin::WindowPaintData::setOpacity` (absolute set,
+ * not multiplicative — SetOpacity semantics are "make the window THIS
+ * opaque," not "scale by this factor").
+ *
+ * Empty @p windowClass or @p windowId short-circuit to `nullopt` — same
+ * shape as the animation resolvers above; rules match exclusively on
+ * `WindowClass` so a missing class can't match anything.
+ *
+ * Caller is the effect's `paintWindow` hook. The resolver does NOT cache
+ * across calls — the evaluator's per-window cache (`resolveCached`) is
+ * the right cache scope for this lookup, and the resolver consumes it.
+ */
+std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluator& evaluator,
+                                          const QString& windowClass, const QString& windowId);
 
 } // namespace PlasmaZones

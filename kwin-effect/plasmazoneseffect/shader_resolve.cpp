@@ -17,8 +17,11 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
 #include <PhosphorWindowRule/WindowQuery.h>
 
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QtGlobal>
 
 namespace PlasmaZones {
@@ -189,6 +192,40 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
         }
     }
     return out;
+}
+
+std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluator& evaluator,
+                                          const QString& windowClass, const QString& windowId)
+{
+    // Empty inputs short-circuit — windowClass is the predicate axis SetOpacity
+    // rules match on (same WindowClass-only shape as the animation cascade),
+    // and windowId keys the evaluator's per-window cache. Either being empty
+    // means there is nothing to resolve, and avoiding the cached walk here
+    // keeps the paint hot path from churning the cache on every paint of a
+    // window with no class (sub-surfaces, drop shadows, screen-edge proxies).
+    if (windowClass.isEmpty() || windowId.isEmpty()) {
+        return std::nullopt;
+    }
+    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, animationQuery(windowClass));
+    const auto action = resolved.slot(QString(PhosphorWindowRule::ActionSlot::Opacity));
+    if (!action) {
+        return std::nullopt;
+    }
+    // The action descriptor's validator in ruleaction.cpp already rejected
+    // rules whose `value` falls outside [0.0, 1.0] at load time, but a
+    // future loader path (legacy migration, hand-edited JSON) could land an
+    // out-of-range value here. Validate at the consumer too — defence in
+    // depth keeps the paint pipeline from setting a negative opacity (which
+    // KWin renders as "invisible window the user can still focus through").
+    const QJsonValue raw = action->params.value(QLatin1String("value"));
+    if (!raw.isDouble()) {
+        return std::nullopt;
+    }
+    const double value = raw.toDouble();
+    if (value < 0.0 || value > 1.0) {
+        return std::nullopt;
+    }
+    return value;
 }
 
 } // namespace PlasmaZones
