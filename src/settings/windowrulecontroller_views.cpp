@@ -20,6 +20,7 @@
 #include <PhosphorWindowRule/MatchExpression.h>
 #include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorZones/AssignmentEntry.h>
 
 #include <QHash>
 #include <QJsonArray>
@@ -193,14 +194,29 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         // tokenised layoutId via the tiling path) just because both
         // were wired to the same generic resolver.
         const WindowRuleModel::LabelLookup* labelLookup = nullptr;
-        if (summary.engineMode == QLatin1String("autotile")) {
+        // Route the engineMode wire string through `modeFromWireString` so
+        // every token the validator accepts (snapping / autotile / scrolling
+        // — see `engineModeOptions()` in
+        // libs/phosphor-windowrule/src/ruleaction.cpp) classifies correctly.
+        // The previous inline `== "autotile"` / `== "snapping"` chain
+        // silently collapsed `"scrolling"` into the "no engine pin → prefer
+        // snapping layout" branch, which mis-labelled Scrolling-mode rules
+        // with their leftover snapping layout. Same bug class as the
+        // `entryFromRuleMatchActions` fix in libs/phosphor-zones.
+        const auto mode = PhosphorZones::modeFromWireString(summary.engineMode);
+        if (mode == PhosphorZones::AssignmentEntry::Autotile) {
             // Autotile engine pinned: only show tiling-algorithm tokens.
             layoutLabel = summary.tilingAlgorithm;
             labelLookup = &m_tilingAlgorithmLookup;
-        } else if (summary.engineMode == QLatin1String("snapping")) {
+        } else if (mode == PhosphorZones::AssignmentEntry::Snapping) {
             // Snapping engine pinned: only show snapping-layout tokens.
             layoutLabel = summary.snappingLayout;
             labelLookup = &m_snappingLayoutLookup;
+        } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
+            // Scrolling engine pinned: neither snapping layout nor tiling
+            // algorithm applies — the rule's intent is "place via the
+            // scrolling engine" and there is no layout/algorithm to label.
+            // Leave layoutLabel empty so the tile renders the engine alone.
         } else if (!summary.snappingLayout.isEmpty()) {
             // No engine pin: prefer the snapping layout (more common).
             layoutLabel = summary.snappingLayout;

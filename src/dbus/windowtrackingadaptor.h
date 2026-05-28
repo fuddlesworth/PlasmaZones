@@ -916,6 +916,14 @@ private:
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service
+    //
+    // INVARIANT: post-construction, `m_service` is non-null for the
+    // lifetime of this adaptor. The constructor `qFatal`s on any null
+    // dependency, so reaching any member function with a null `m_service`
+    // is impossible under the current contract. The few `if (!m_service)
+    // return;` guards in public slots are belt-and-braces against a
+    // future regression that introduces a clear-to-null path (none
+    // currently exists); the qFatal is the authoritative gate.
     // ═══════════════════════════════════════════════════════════════════════════════
     PhosphorPlacement::IGeometryResolver* m_geometryResolver = nullptr;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;

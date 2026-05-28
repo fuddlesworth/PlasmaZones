@@ -92,8 +92,10 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
     for (const PWR::RuleAction& action : rule.actions) {
         if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
             // Decode through `modeFromWireString` so every token the
-            // ActionRegistry validator accepts (today: snapping / autotile
-            // / scrolling) round-trips end-to-end. The previous two-valued
+            // ActionRegistry validator accepts round-trips end-to-end.
+            // The canonical vocabulary lives at `engineModeOptions()` in
+            // libs/phosphor-windowrule/src/ruleaction.cpp — today
+            // snapping / autotile / scrolling. The previous two-valued
             // `== "autotile"` ternary silently coerced every non-Autotile
             // token to Snapping — including the registered, picker-exposed
             // "scrolling" wire string written by Settings via

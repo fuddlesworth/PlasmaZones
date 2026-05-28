@@ -197,13 +197,19 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
 
     if (action.type == ActionType::SetEngineMode) {
         const QString mode = action.params.value(QLatin1String("mode")).toString();
-        // Render the wire token (`snapping` / `autotile`) as a properly-cased
-        // display label — matches the editor's enum-picker labels.
+        // Render the wire token (`snapping` / `autotile` / `scrolling` —
+        // see `engineModeOptions()` in
+        // libs/phosphor-windowrule/src/ruleaction.cpp) as a properly-cased
+        // display label matching the editor's enum-picker labels. An
+        // unknown token surfaces verbatim — the picker can't author it,
+        // so it only arrives via hand-edited windowrules.json.
         QString label;
         if (mode == QLatin1String("snapping")) {
             label = PzI18n::tr("Snapping");
         } else if (mode == QLatin1String("autotile")) {
             label = PzI18n::tr("Autotile");
+        } else if (mode == QLatin1String("scrolling")) {
+            label = PzI18n::tr("Scrolling");
         } else {
             label = mode; // unknown / future token — surface verbatim.
         }
