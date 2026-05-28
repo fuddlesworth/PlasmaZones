@@ -49,6 +49,13 @@ PhosphorEngine::IPlacementEngine* ScreenModeRouter::engineFor(const QString& scr
         return m_autotileEngine;
     case PhosphorZones::AssignmentEntry::Snapping:
         return m_snapEngine;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        // No scrolling engine is wired yet — the assignment is honoured
+        // by leaving the screen unmanaged (KWin's native placement runs
+        // unimpeded). Returning nullptr matches the existing contract:
+        // navigation.cpp / drag pipelines null-check the engine pointer
+        // and treat null as "no managed window-placement here".
+        return nullptr;
     }
     // Switch above is exhaustive over PhosphorZones::AssignmentEntry::Mode. Deliberately
     // no `default:` case so that adding a new enum value triggers -Wswitch
@@ -72,10 +79,20 @@ ScreenModeRouter::Partitioned ScreenModeRouter::partitionByMode(const QStringLis
 {
     Partitioned out;
     for (const QString& sid : screenIds) {
-        if (isAutotileMode(sid)) {
+        // Switch instead of isSnapMode/isAutotileMode pair so adding a
+        // future mode produces a -Wswitch diagnostic here rather than
+        // silently bucketing the new mode into `snap` (the original
+        // pre-Scrolling default).
+        switch (modeFor(sid)) {
+        case PhosphorZones::AssignmentEntry::Autotile:
             out.autotile.append(sid);
-        } else {
+            break;
+        case PhosphorZones::AssignmentEntry::Snapping:
             out.snap.append(sid);
+            break;
+        case PhosphorZones::AssignmentEntry::Scrolling:
+            out.passthrough.append(sid);
+            break;
         }
     }
     return out;

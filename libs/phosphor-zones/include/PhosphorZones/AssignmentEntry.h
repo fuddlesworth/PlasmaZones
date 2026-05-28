@@ -6,7 +6,10 @@
 #include <PhosphorLayoutApi/LayoutId.h>
 
 #include <QHash>
+#include <QList>
 #include <QString>
+
+#include <optional>
 
 namespace PhosphorZones {
 
@@ -84,9 +87,27 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
  */
 struct AssignmentEntry
 {
+    /// Per-context engine selection. The integer values are persisted to
+    /// the rule store via `ContextRuleBridge::makeDisableRule` / read back
+    /// via `disableRuleMode`, and they appear in the v4 windowrules.json
+    /// schema as the `DisableEngine` action's `mode` wire token (see
+    /// `modeToWireString` / `modeFromWireString` below). NEVER renumber
+    /// existing values — older rule stores would silently swap engines.
+    /// Append new modes at the end.
     enum Mode {
         Snapping = 0,
-        Autotile = 1
+        Autotile = 1,
+        /// Reserved engine slot for a future scrolling-workspace engine.
+        /// The settings UI exposes the mode and persists per-mode disable
+        /// lists / config groups, but the router currently has no engine
+        /// to hand windows to — see `ScreenModeRouter::routerFor` for the
+        /// passthrough fallback that lets KWin place the window naturally
+        /// rather than blocking on a missing engine. A real engine
+        /// implementer adds an adapter to the router and removes the
+        /// passthrough; no daemon-internal switch needs to be edited
+        /// because the (Mode, Family) settings table here drives all
+        /// downstream config routing.
+        Scrolling = 2
     };
     Mode mode = Snapping;
     QString snappingLayout; // UUID string of manual layout
@@ -148,5 +169,65 @@ struct AssignmentEntry
         return entry;
     }
 };
+
+/**
+ * @brief Canonical wire-string for an @ref AssignmentEntry::Mode.
+ *
+ * The wire vocabulary lives next to the enum so every persister/consumer
+ * (rule store via `ContextRuleBridge::makeDisableRule`, KCM debugging,
+ * D-Bus enums) reads from one source of truth. Adding a new mode means
+ * extending this switch and `modeFromWireString` together. NEVER rename
+ * an existing token — the rule store records them verbatim and a rename
+ * would orphan every persisted disable rule.
+ */
+inline QString modeToWireString(AssignmentEntry::Mode mode)
+{
+    switch (mode) {
+    case AssignmentEntry::Snapping:
+        return QStringLiteral("snapping");
+    case AssignmentEntry::Autotile:
+        return QStringLiteral("autotile");
+    case AssignmentEntry::Scrolling:
+        return QStringLiteral("scrolling");
+    }
+    return QString();
+}
+
+/**
+ * @brief Inverse of @ref modeToWireString.
+ *
+ * Returns @c std::nullopt for an unrecognised token — callers must treat
+ * that as a load failure (drop the rule / use the default). NEVER coerce
+ * an unknown token to a default mode: a typo would silently re-route a
+ * disable rule from "this engine only" to "all engines off".
+ */
+inline std::optional<AssignmentEntry::Mode> modeFromWireString(const QString& wire)
+{
+    if (wire == QLatin1String("snapping")) {
+        return AssignmentEntry::Snapping;
+    }
+    if (wire == QLatin1String("autotile")) {
+        return AssignmentEntry::Autotile;
+    }
+    if (wire == QLatin1String("scrolling")) {
+        return AssignmentEntry::Scrolling;
+    }
+    return std::nullopt;
+}
+
+/**
+ * @brief Iteration order for every @ref AssignmentEntry::Mode value.
+ *
+ * The order doubles as the UI tab order (Snapping first, Autotile second,
+ * Scrolling last). Returns a `QList<Mode>` so range-for over modes is a
+ * one-liner — both Settings::saveAll / resetAll and the KCM page builders
+ * loop over this instead of hand-coding the {Snapping, Autotile, ...} pair
+ * literally. Adding a Mode in the enum and extending this list is all that
+ * is required to fan out every (Mode, Family)-keyed routine.
+ */
+inline QList<AssignmentEntry::Mode> allModes()
+{
+    return {AssignmentEntry::Snapping, AssignmentEntry::Autotile, AssignmentEntry::Scrolling};
+}
 
 } // namespace PhosphorZones

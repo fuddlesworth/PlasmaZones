@@ -98,12 +98,12 @@ struct PHOSPHORWINDOWRULE_EXPORT RuleAction
  */
 struct PHOSPHORWINDOWRULE_EXPORT ParamSchema
 {
-    QString key; ///< wire param key in `RuleAction::params`
-    QString kind; ///< UI kind hint — see struct doc
-    std::optional<double> min; ///< inclusive lower bound, in display units
-    std::optional<double> max; ///< inclusive upper bound, in display units
-    std::optional<double> scale; ///< stored = display * scale; nullopt for unscaled kinds
-    QStringList enumWireValues; ///< wire values for `kind == "enum"`; empty otherwise
+    QString key{}; ///< wire param key in `RuleAction::params`
+    QString kind{}; ///< UI kind hint — see struct doc
+    std::optional<double> min{}; ///< inclusive lower bound, in display units
+    std::optional<double> max{}; ///< inclusive upper bound, in display units
+    std::optional<double> scale{}; ///< stored = display * scale; nullopt for unscaled kinds
+    QStringList enumWireValues{}; ///< wire values for `kind == "enum"`; empty otherwise
 };
 
 /**
