@@ -185,28 +185,23 @@ void TestPerScreen::initialPopulation_createsOneDelegatePerRow()
 
 void TestPerScreen::hotplugAdd_createsOnlyTheNewDelegate()
 {
+    // Count-only check: 2 → 3 on hot-plug add. The crown-jewel
+    // identity-preservation test
+    // (`modelReset_survivingScreens_preserveDelegateIdentity`)
+    // covers the "existing delegates aren't recreated" path against
+    // the same operation; this test pins the simpler invariant.
     QQmlEngine engine;
     FakeScreenModel model;
-    QObject* s1 = model.makeScreen(QStringLiteral("HDMI-1"), 1920, 1080, true);
-    QObject* s2 = model.makeScreen(QStringLiteral("HDMI-2"));
+    model.makeScreen(QStringLiteral("HDMI-1"), 1920, 1080, true);
+    model.makeScreen(QStringLiteral("HDMI-2"));
     QObject parent;
 
     QObject* ps = makePerScreen(engine, &parent, &model);
     QVERIFY(ps != nullptr);
     QCOMPARE(ps->property("count").toInt(), 2);
 
-    // Cache the existing delegate QObjects via QPointer before the
-    // hot-plug. If reuse works, both pointers remain alive after the
-    // reset that adds a third screen.
-    QVariantMap instances = ps->property("_instances").toMap();
-    Q_UNUSED(instances) // _instances is a JS Map; not exposed via QVariantMap.
-    // Approach: introspect by looking up the JS Map via a direct call.
-    // Easier: count and then add a screen and re-count.
     model.addScreen(QStringLiteral("HDMI-3"));
     QCOMPARE(ps->property("count").toInt(), 3);
-    // Sanity: s1 / s2 are still in the model.
-    Q_UNUSED(s1)
-    Q_UNUSED(s2)
 }
 
 void TestPerScreen::hotplugRemove_destroysOnlyThatDelegate()
