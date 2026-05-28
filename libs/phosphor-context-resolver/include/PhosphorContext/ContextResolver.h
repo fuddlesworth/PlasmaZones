@@ -44,6 +44,8 @@ public:
     ContextHandle handleFor(const QString& screenId) const override;
     ContextHandle globalHandle() const override;
     ContextHandle handleForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const override;
+    ContextHandle handleForPersisted(const QString& screenId, int virtualDesktop,
+                                     const QString& activity) const override;
     int currentVirtualDesktop() const override;
     QString currentActivity() const override;
     DisabledReason disabledReason(const ContextHandle& handle) const override;

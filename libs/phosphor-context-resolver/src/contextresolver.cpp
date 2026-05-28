@@ -74,6 +74,22 @@ ContextHandle ContextResolver::handleForMode(const QString& screenId, PhosphorZo
     return handle;
 }
 
+ContextHandle ContextResolver::handleForPersisted(const QString& screenId, int virtualDesktop,
+                                                  const QString& activity) const
+{
+    // Persisted desktop/activity come from disk; mode is the screen's
+    // CURRENT routing (so a persisted snap entry on a screen now in
+    // autotile mode reads against the autotile disable list, matching
+    // the historical `m_screenModeRouter->modeFor(screenId)` lookup in
+    // saveload.cpp).
+    ContextHandle handle;
+    handle.screenId = screenId;
+    handle.virtualDesktop = virtualDesktop;
+    handle.activity = activity;
+    handle.mode = m_modeProvider->modeFor(screenId);
+    return handle;
+}
+
 int ContextResolver::currentVirtualDesktop() const
 {
     return m_workspaceState->currentVirtualDesktop();

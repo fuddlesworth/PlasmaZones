@@ -117,6 +117,20 @@ public:
      */
     virtual ContextHandle handleForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const = 0;
 
+    /**
+     * @brief Build a handle for a PERSISTED context (not "right now").
+     *
+     * Specialised for `(WindowTrackingService::isPersistedContextDisabled)`-style
+     * checks where the desktop/activity come from a persisted entry on
+     * disk, not the live workspace state. The screen's mode is still
+     * resolved through the mode provider — the disable-list mode axis
+     * keys on the screen's CURRENT routing, not its routing at persist
+     * time. Use only for persisted lookups; `handleFor(screenId)` remains
+     * the right call for live handlers.
+     */
+    virtual ContextHandle handleForPersisted(const QString& screenId, int virtualDesktop,
+                                             const QString& activity) const = 0;
+
     // ── Workspace-axis readers (cached at snapshot, exposed for callers
     //    that still need the raw values during the same tick) ──────────
 

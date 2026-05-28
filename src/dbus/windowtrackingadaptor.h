@@ -26,6 +26,10 @@
 
 #include <PhosphorConfig/IBackend.h>
 
+namespace PhosphorContext {
+class IContextResolver;
+} // namespace PhosphorContext
+
 namespace PhosphorZones {
 class IZoneDetector;
 class Layout;
@@ -150,6 +154,19 @@ public:
      */
     void setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
                     PhosphorEngine::PlacementEngineBase* autotileEngine);
+
+    /**
+     * @brief Set the frozen-snapshot resolver used by saveload's disable
+     *        gate to short-circuit restore on a disabled context.
+     *
+     * Late-bound for the same reason as setEngines / setShortcutRegistrar —
+     * the resolver is constructed after this adaptor. Daemon calls this
+     * once after `m_contextResolver` lands. Pass nullptr during shutdown.
+     */
+    void setContextResolver(PhosphorContext::IContextResolver* resolver)
+    {
+        m_contextResolver = resolver;
+    }
 
     PhosphorSnapEngine::SnapEngine* snapEngine() const;
 
@@ -869,6 +886,11 @@ private:
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager;
     ISettings* m_settings;
+    /// Non-owning resolver pointer, late-bound via setContextResolver after
+    /// Daemon constructs `m_contextResolver`. Replaces the previous
+    /// `(m_screenModeRouter->modeFor → currentVirtualDesktop → currentActivity
+    /// → isContextDisabled)` cascade rebuild in `saveload.cpp`.
+    PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
 

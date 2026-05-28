@@ -1040,6 +1040,22 @@ bool Daemon::init()
     m_contextResolver = std::make_unique<PhosphorContext::ContextResolver>(
         m_workspaceStateAdapter.get(), m_screenModeAdapter.get(), m_settingsGateAdapter.get());
 
+    // Late-bind the resolver into the D-Bus adaptors that gate their
+    // handlers on the disable/lock cascade. Each adaptor was constructed
+    // earlier (before m_settings/m_screenModeRouter were ready); the
+    // resolver only exists now. The setters mirror setAutotileEngine /
+    // setShortcutRegistrar / setScreenModeRouter — same late-binding
+    // pattern the daemon already uses for cross-cutting deps.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setContextResolver(m_contextResolver.get());
+    }
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setContextResolver(m_contextResolver.get());
+    }
+    if (m_snapAdaptor) {
+        m_snapAdaptor->setContextResolver(m_contextResolver.get());
+    }
+
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
             m_settings->save();

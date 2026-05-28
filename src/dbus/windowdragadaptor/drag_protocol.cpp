@@ -13,6 +13,7 @@
 #include "../windowdragadaptor.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/settings_interfaces.h"
 #include "../../core/logging.h"
@@ -24,8 +25,8 @@ namespace PlasmaZones {
 
 PhosphorProtocol::DragPolicy
 WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEngine::IPlacementEngine* autotileEngine,
-                                     const QString& windowId, const QString& screenId, int curDesktop,
-                                     const QString& curActivity)
+                                     const QString& windowId, const QString& screenId,
+                                     const PhosphorContext::IContextResolver* resolver)
 {
     PhosphorProtocol::DragPolicy policy;
     policy.screenId = screenId;
@@ -35,8 +36,8 @@ WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const PhosphorEn
 
     // 1) Disabled context (activity / desktop / monitor excluded in settings).
     //    Dead drag: no overlay, no cursor stream, no float transition.
-    if (settings && !screenId.isEmpty()
-        && isContextDisabled(settings, PhosphorZones::AssignmentEntry::Snapping, screenId, curDesktop, curActivity)) {
+    if (resolver && !screenId.isEmpty()
+        && resolver->isDisabled(resolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Snapping))) {
         policy.bypassReason = PhosphorProtocol::DragBypassReason::ContextDisabled;
         return policy;
     }
@@ -118,10 +119,8 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
     }
 
-    const int curDesktop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
-    const QString curActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
     const PhosphorProtocol::DragPolicy policy =
-        computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, curDesktop, curActivity);
+        computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, m_contextResolver);
 
     // Reusable mutable copy — the reorder fallback path below may need to
     // restore immediateFloatOnStart that computeDragPolicy proactively cleared.
@@ -229,9 +228,9 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     bool edgeActivation = false;
     if (!triggerHeld && !toggleMode && m_settings && m_settings->zoneSelectorEnabled()) {
         auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
-        if (resolved.qscreen
-            && !isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, resolved.screenId,
-                                  m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
+        if (resolved.qscreen && m_contextResolver
+            && !m_contextResolver->isDisabled(
+                m_contextResolver->handleForMode(resolved.screenId, PhosphorZones::AssignmentEntry::Snapping))) {
             edgeActivation = isNearTriggerEdge(resolved.qscreen, cursorX, cursorY, resolved.screenId);
         }
     }
@@ -475,10 +474,8 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
     const QString cursorScreenId = resolved.screenId;
     if (!cursorScreenId.isEmpty()) {
-        const int curDesktop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
-        const QString curActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
         const PhosphorProtocol::DragPolicy candidate =
-            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, curDesktop, curActivity);
+            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, m_contextResolver);
         if (candidate != m_currentDragPolicy) {
             // Log both bypass reason and screenId on each side so same-reason
             // flips (snap→snap or autotile→autotile cross-VS) aren't opaque in

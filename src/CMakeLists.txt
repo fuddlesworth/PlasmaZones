@@ -209,6 +209,12 @@ target_link_libraries(plasmazones_core
         # config/configmigration.cpp builds rules during the v3→v4 conversion,
         # so consumers of plasmazones_core need the include path + link edge.
         PhosphorWindowRule::PhosphorWindowRule
+        # Frozen-snapshot per-screen mode + disable/lock resolver. PUBLIC
+        # because D-Bus adaptors compiled into plasmazones_core
+        # (windowdragadaptor / windowtrackingadaptor / snapadaptor) hold
+        # `PhosphorContext::IContextResolver*` members; consumers linking
+        # plasmazones_core need the include path + link edge to read those.
+        PhosphorContextResolver::PhosphorContextResolver
     PRIVATE
         Wayland::Client
         Qt6::Concurrent

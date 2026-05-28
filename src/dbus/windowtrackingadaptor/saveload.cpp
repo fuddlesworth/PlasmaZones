@@ -8,6 +8,7 @@
 #include "../../config/configbackends.h"
 #include "../../core/interfaces.h"
 #include "../../core/screenmoderouter.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -72,9 +73,16 @@ bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, 
     if (screenId.isEmpty()) {
         return false;
     }
-    const PhosphorZones::AssignmentEntry::Mode mode =
-        m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
-    return isContextDisabled(m_settings, mode, screenId, virtualDesktop, activity);
+    if (!m_contextResolver) {
+        // Pre-`setContextResolver` path — first call comes from this
+        // adaptor's ctor before Daemon hands the resolver over. Falls
+        // back to "nothing is disabled" so the historical "load
+        // everything when no settings/router are wired" behaviour is
+        // preserved (the legacy code did the same thing via a null
+        // m_settings).
+        return false;
+    }
+    return m_contextResolver->isDisabled(m_contextResolver->handleForPersisted(screenId, virtualDesktop, activity));
 }
 
 void WindowTrackingAdaptor::saveState()

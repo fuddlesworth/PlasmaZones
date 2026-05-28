@@ -13,6 +13,10 @@
 #include <QStringList>
 #include <QVector>
 
+namespace PhosphorContext {
+class IContextResolver;
+} // namespace PhosphorContext
+
 namespace PhosphorSnapEngine {
 class SnapEngine;
 }
@@ -80,6 +84,17 @@ public:
      * @param router ScreenModeRouter instance (not owned, must outlive adaptor)
      */
     void setScreenModeRouter(ScreenModeRouter* router);
+
+    /**
+     * @brief Set the frozen-snapshot resolver used by snaprestore's disable
+     *        gate. Late-bound for the same reason as setScreenModeRouter.
+     *
+     * @param resolver IContextResolver instance (not owned, must outlive adaptor)
+     */
+    void setContextResolver(PhosphorContext::IContextResolver* resolver)
+    {
+        m_contextResolver = resolver;
+    }
 
     /**
      * @brief Access the underlying SnapEngine (for daemon-side callers)
@@ -328,6 +343,9 @@ private:
     WindowTrackingAdaptor* m_adaptor = nullptr;
     ISettings* m_settings = nullptr;
     ScreenModeRouter* m_screenModeRouter = nullptr;
+    /// Late-bound by Daemon via setContextResolver — replaces the inline
+    /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
+    PhosphorContext::IContextResolver* m_contextResolver = nullptr;
 
     // Stored handles for the signal relays wired in the constructor so
     // clearEngine() can disconnect exactly the connections this class

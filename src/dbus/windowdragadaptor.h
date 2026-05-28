@@ -21,6 +21,10 @@ namespace PhosphorScreens {
 class ScreenManager;
 }
 
+namespace PhosphorContext {
+class IContextResolver;
+} // namespace PhosphorContext
+
 namespace PhosphorShortcutsIntegration {
 class IAdhocRegistrar;
 }
@@ -76,6 +80,19 @@ public:
     void setAutotileEngine(PhosphorEngine::IPlacementEngine* engine)
     {
         m_autotileEngine = engine;
+    }
+
+    /**
+     * @brief Set the frozen-snapshot resolver used to gate snap/drag handlers
+     *        on the per-screen disable + lock cascade.
+     *
+     * Late-bound because the resolver is constructed after both this adaptor
+     * and the daemon's ScreenModeRouter exist. Daemon calls this after
+     * `m_contextResolver` lands. Pass nullptr during shutdown.
+     */
+    void setContextResolver(PhosphorContext::IContextResolver* resolver)
+    {
+        m_contextResolver = resolver;
     }
 
     /**
@@ -336,13 +353,15 @@ public:
      * @param windowId Dragged window (used for the isWindowTracked lookup
      *                 that decides immediateFloatOnStart)
      * @param screenId Virtual-screen-aware screen ID at drag start
-     * @param curDesktop Current virtual desktop (for context-disabled check)
-     * @param curActivity Current activity (for context-disabled check)
+     * @param resolver Frozen-snapshot context resolver — supplies the
+     *        (desktop, activity, Snapping-mode) tuple used for the
+     *        context-disabled check. nullptr disables the disable gate
+     *        (matches the historical `settings == nullptr` fallback).
      */
     static PhosphorProtocol::DragPolicy computeDragPolicy(const ISettings* settings,
                                                           const PhosphorEngine::IPlacementEngine* autotileEngine,
                                                           const QString& windowId, const QString& screenId,
-                                                          int curDesktop, const QString& curActivity);
+                                                          const PhosphorContext::IContextResolver* resolver);
 
 private:
     // Helper: Find screen containing a point (returns primary screen if not found)
@@ -383,6 +402,8 @@ private:
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     PhosphorEngine::IPlacementEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
+    PhosphorContext::IContextResolver* m_contextResolver =
+        nullptr; // Non-owning; set via setContextResolver after Daemon builds it.
     PhosphorShortcutsIntegration::IAdhocRegistrar* m_shortcutRegistrar =
         nullptr; // Non-owning: owned by Daemon (ShortcutManager)
 

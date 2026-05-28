@@ -30,6 +30,7 @@
 #include <QCoreApplication>
 #include <QObject>
 
+#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include "../helpers/AutotileTestHelpers.h"
 #include "dbus/windowdragadaptor.h"
@@ -64,6 +65,64 @@ public:
     AutotileDragBehavior autotileDragBehavior() const override
     {
         return m_dragBehavior;
+    }
+};
+
+/// Minimal `IContextResolver` for the test — the only resolver methods
+/// `computeDragPolicy` reads are `handleForMode` + `disabledReason`, so
+/// every other method returns a trivial default. `m_disabled` is the
+/// test-controlled flag that drives the ContextDisabled branch. Replaces
+/// the previous `PolicyStubSettings::m_monitorDisabled` trigger now that
+/// `computeDragPolicy` consults the resolver, not ISettings, for the
+/// disable cascade.
+class FakeContextResolver : public PhosphorContext::IContextResolver
+{
+public:
+    bool m_disabled = false;
+
+    PhosphorContext::ContextHandle handleFor(const QString& screenId) const override
+    {
+        PhosphorContext::ContextHandle h;
+        h.screenId = screenId;
+        return h;
+    }
+    PhosphorContext::ContextHandle globalHandle() const override
+    {
+        return {};
+    }
+    PhosphorContext::ContextHandle handleForMode(const QString& screenId,
+                                                 PhosphorZones::AssignmentEntry::Mode mode) const override
+    {
+        PhosphorContext::ContextHandle h;
+        h.screenId = screenId;
+        h.mode = mode;
+        return h;
+    }
+    PhosphorContext::ContextHandle handleForPersisted(const QString& screenId, int virtualDesktop,
+                                                      const QString& activity) const override
+    {
+        PhosphorContext::ContextHandle h;
+        h.screenId = screenId;
+        h.virtualDesktop = virtualDesktop;
+        h.activity = activity;
+        return h;
+    }
+    int currentVirtualDesktop() const override
+    {
+        return 0;
+    }
+    QString currentActivity() const override
+    {
+        return QString();
+    }
+    PhosphorContext::DisabledReason disabledReason(const PhosphorContext::ContextHandle&) const override
+    {
+        return m_disabled ? PhosphorContext::DisabledReason::MonitorDisabled
+                          : PhosphorContext::DisabledReason::NotDisabled;
+    }
+    bool isLocked(const PhosphorContext::ContextHandle&) const override
+    {
+        return false;
     }
 };
 
@@ -107,12 +166,13 @@ private Q_SLOTS:
     void canonicalSnap_allFlagsSet()
     {
         PolicyStubSettings settings;
+        FakeContextResolver resolver;
         settings.m_snapEnabled = true;
         settings.m_monitorDisabled = false;
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), 1, QString());
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
         QVERIFY(p.streamDragMoved);
@@ -136,11 +196,12 @@ private Q_SLOTS:
     void autotileScreen_bypassAutotile()
     {
         PolicyStubSettings settings;
+        FakeContextResolver resolver;
         settings.m_snapEnabled = true;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
         QVERIFY(!p.streamDragMoved);
@@ -164,11 +225,12 @@ private Q_SLOTS:
     void snapDisabled_onNormalScreen_bypass()
     {
         PolicyStubSettings settings;
+        FakeContextResolver resolver;
         settings.m_snapEnabled = false;
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), 1, QString());
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::SnappingDisabled);
         QVERIFY(!p.streamDragMoved);
@@ -191,11 +253,12 @@ private Q_SLOTS:
     void autotileWithSnapDisabled_autotileWins()
     {
         PolicyStubSettings settings;
+        FakeContextResolver resolver;
         settings.m_snapEnabled = false;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
         QVERIFY(p.captureGeometry);
@@ -210,12 +273,14 @@ private Q_SLOTS:
     void contextDisabled_overridesAutotile()
     {
         PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        resolver.m_disabled = true;
         settings.m_snapEnabled = true;
-        settings.m_monitorDisabled = true;
+        settings.m_monitorDisabled = true; // legacy parity; resolver drives the disabled branch now
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::ContextDisabled);
         QVERIFY(!p.streamDragMoved);
@@ -227,12 +292,14 @@ private Q_SLOTS:
     void contextDisabled_overridesSnapDisabled()
     {
         PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        resolver.m_disabled = true;
         settings.m_snapEnabled = false;
-        settings.m_monitorDisabled = true;
+        settings.m_monitorDisabled = true; // legacy parity; resolver drives the disabled branch now
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), 1, QString());
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver);
 
         // Context-disabled is checked before snapping_disabled — the reason
         // is stable at ContextDisabled even though either would produce
@@ -249,8 +316,11 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     void nullDeps_returnsCanonicalSnap()
     {
+        // Defensive shutdown path — every dep is null, including the
+        // resolver. computeDragPolicy must still produce a canonical
+        // snap policy without crashing.
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(nullptr, nullptr, QStringLiteral("win-1"),
-                                                                              QStringLiteral("DP-1"), 1, QString());
+                                                                              QStringLiteral("DP-1"), nullptr);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
         QVERIFY(p.streamDragMoved);
@@ -265,11 +335,12 @@ private Q_SLOTS:
     void emptyScreenId_fallsThroughToSnapCheck()
     {
         PolicyStubSettings settings;
+        FakeContextResolver resolver;
         settings.m_snapEnabled = false;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QString(), 1, QString());
+            &settings, engine.get(), QStringLiteral("win-1"), QString(), &resolver);
 
         // Autotile check is skipped for empty screenId, so snapping_disabled wins.
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::SnappingDisabled);
@@ -290,12 +361,13 @@ private Q_SLOTS:
     void reorderMode_clearsImmediateFloatOnStart()
     {
         PolicyStubSettings settings;
+        FakeContextResolver resolver;
         settings.m_snapEnabled = true;
         settings.m_dragBehavior = AutotileDragBehavior::Reorder;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
         // Even though the engine would normally flip this on for tracked
@@ -313,12 +385,13 @@ private Q_SLOTS:
     void floatMode_allowsImmediateFloatOnStart()
     {
         PolicyStubSettings settings;
+        FakeContextResolver resolver;
         settings.m_snapEnabled = true;
         settings.m_dragBehavior = AutotileDragBehavior::Float;
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), 1, QString());
+            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
         // No windowOpened flowed through the engine so isWindowTracked

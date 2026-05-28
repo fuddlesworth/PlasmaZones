@@ -7,6 +7,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include "../../core/interfaces.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
@@ -111,13 +112,15 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         }
     }
 
-    // Release on a disabled context: do not snap to overlay zone
+    // Release on a disabled context: do not snap to overlay zone.
+    // PhosphorContext::IContextResolver collapses the
+    // `(currentVirtualDesktop, currentActivity, isContextDisabled)`
+    // chain to one call. Mode is Snapping — this drop path is the
+    // manual overlay branch by definition.
     bool useOverlayZone = true;
-    int curDesktopDrop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
-    QString curActivityDrop = m_layoutManager ? m_layoutManager->currentActivity() : QString();
-    if (releaseScreen
-        && isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, releaseScreenId, curDesktopDrop,
-                             curActivityDrop)) {
+    if (releaseScreen && m_contextResolver
+        && m_contextResolver->isDisabled(
+            m_contextResolver->handleForMode(releaseScreenId, PhosphorZones::AssignmentEntry::Snapping))) {
         useOverlayZone = false;
     }
 
@@ -199,18 +202,23 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         QString selectorScreenId = selectorResolved.screenId;
         QScreen* screen = selectorResolved.qscreen;
 
-        // Block entire zone selector snap path when screen is locked for its current mode
+        // Block entire zone selector snap path when screen is locked for its
+        // current mode. The mode lookup still routes through the layout
+        // manager (it has the (desktop, activity) override on the
+        // assignment lookup that the resolver's modeFor wrapper doesn't);
+        // the lock + disable checks then run through the resolver with
+        // the resolved mode so the cascade is the documented one.
         bool selectorScreenLocked = false;
-        if (screen && m_settings && m_layoutManager) {
-            int curDesktop = m_layoutManager->currentVirtualDesktop();
-            QString curActivity = m_layoutManager->currentActivity();
-            int curMode = static_cast<int>(m_layoutManager->modeForScreen(selectorScreenId, curDesktop, curActivity));
-            selectorScreenLocked =
-                m_settings->isContextLocked(Utils::contextLockKey(curMode, selectorScreenId), curDesktop, curActivity);
+        PhosphorContext::ContextHandle selectorCtx;
+        if (screen && m_contextResolver && m_layoutManager) {
+            const auto selectorMode = m_layoutManager->modeForScreen(
+                selectorScreenId, m_contextResolver->currentVirtualDesktop(), m_contextResolver->currentActivity());
+            selectorCtx = m_contextResolver->handleForMode(selectorScreenId, selectorMode);
+            selectorScreenLocked = m_contextResolver->isLocked(selectorCtx);
         }
-        if (screen && !selectorScreenLocked
-            && !isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, selectorScreenId,
-                                  curDesktopDrop, curActivityDrop)) {
+        if (screen && !selectorScreenLocked && m_contextResolver
+            && !m_contextResolver->isDisabled(
+                m_contextResolver->handleForMode(selectorScreenId, PhosphorZones::AssignmentEntry::Snapping))) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();
@@ -266,14 +274,18 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // We intentionally skip manualLayoutSelected to avoid a layout OSD
                     // flashing briefly before snap assist appears.
                     if (selectedLayout) {
-                        // Check lock before applying layout change from drag-drop
-                        int layoutChangeDesktop = m_layoutManager->currentVirtualDesktop();
-                        QString layoutChangeActivity = m_layoutManager->currentActivity();
-                        int lcMode = static_cast<int>(m_layoutManager->modeForScreen(
-                            selectorScreenId, layoutChangeDesktop, layoutChangeActivity));
-                        bool screenLocked = m_settings
-                            && m_settings->isContextLocked(Utils::contextLockKey(lcMode, selectorScreenId),
-                                                           layoutChangeDesktop, layoutChangeActivity);
+                        // Check lock before applying layout change from drag-drop.
+                        // Mode is resolved through the layout manager (carries
+                        // the (desktop, activity) override on lookup) and the
+                        // gate is checked through the resolver.
+                        bool screenLocked = false;
+                        if (m_contextResolver) {
+                            const auto lcMode = m_layoutManager->modeForScreen(
+                                selectorScreenId, m_contextResolver->currentVirtualDesktop(),
+                                m_contextResolver->currentActivity());
+                            screenLocked =
+                                m_contextResolver->isLocked(m_contextResolver->handleForMode(selectorScreenId, lcMode));
+                        }
                         PhosphorZones::Layout* currentLayout =
                             m_layoutManager->resolveLayoutForScreen(selectorScreenId);
                         if (currentLayout != selectedLayout && !screenLocked) {

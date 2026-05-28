@@ -9,6 +9,7 @@
 #include <PhosphorScreens/Manager.h>
 #include "../../core/isettings.h"
 #include "../../core/screenmoderouter.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 
 namespace PlasmaZones {
@@ -267,11 +268,12 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         // is not the current one — calculateRestoreFromSession and
         // calculateSnapToLastZone both return noSnap on a desktop mismatch. A
         // restored window therefore lands on the current desktop/activity.
-        const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter
-            ? m_screenModeRouter->modeFor(result.screenId)
-            : PhosphorZones::AssignmentEntry::Snapping;
-        if (isContextDisabled(m_settings, mode, result.screenId, m_engine->currentVirtualDesktop(),
-                              m_engine->currentActivity())) {
+        // Resolver's handleFor pulls (currentVirtualDesktop, currentActivity)
+        // from the daemon's VDM/AM — same values the snap engine sees on
+        // its own state surface — and routes the screen through the mode
+        // provider, collapsing the 3-step `(modeFor + currentVirtualDesktop
+        // + currentActivity)` cascade rebuild to one snapshot call.
+        if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(result.screenId))) {
             qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
                                  << "— PlasmaZones is disabled for screen" << result.screenId;
             return false;

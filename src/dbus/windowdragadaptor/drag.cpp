@@ -10,6 +10,7 @@
 #include "../../core/enums.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Layout.h>
@@ -156,8 +157,9 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
         return nullptr;
     }
     outScreenId = resolved.screenId;
-    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, outScreenId,
-                          m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
+    if (m_contextResolver
+        && m_contextResolver->isDisabled(
+            m_contextResolver->handleForMode(outScreenId, PhosphorZones::AssignmentEntry::Snapping))) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;
