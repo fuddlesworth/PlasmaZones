@@ -479,9 +479,10 @@ void Daemon::connectLayoutSignals()
     // (e.g., from D-Bus, layout picker, unified controller).
     // Also sync the unified controller's cycling index when the assignment
     // affects the current desktop — needed for D-Bus/KCM batch operations.
-    // Do NOT touch setActiveLayout here — applyEntry/manualLayoutSelected
-    // handle active layout themselves, and calling it here with QSignalBlocker
-    // steals the activeLayoutChanged transition, leaving the resnap buffer
+    // Do NOT touch setActiveLayout here — applyEntry and the drop-time
+    // cross-layout switch in WindowDragAdaptor (drop.cpp) handle active
+    // layout themselves, and calling it here with QSignalBlocker steals
+    // the activeLayoutChanged transition, leaving the resnap buffer
     // empty. Desktop switches sync active layout via syncModeFromAssignments().
     connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
             [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
@@ -578,52 +579,24 @@ void Daemon::connectLayoutSignals()
     // Record manual layout only when user explicitly selects one via zone selector
     // or unified layout controller — NOT on every internal layout change.
 
-    // Connect zone selector manual layout selection (drop on zone)
-    // Screen name comes directly from the zone selector window.
-    // Routes through UnifiedLayoutController::applyLayoutById() + resnapIfManualMode(),
-    // the same path as cycle/quick-layout shortcuts, for consistent resnap behavior.
-    connect(m_overlayService.get(), &OverlayService::manualLayoutSelected, this,
-            [this](const QString& layoutId, const QString& screenId) {
-                if (!m_layoutManager || !m_unifiedLayoutController) {
-                    return;
-                }
-                // Check if snapping layout is locked
-                // screenId is already a virtual-aware ID from the zone selector
-                if (!screenId.isEmpty() && isCurrentContextLockedForMode(screenId, 0)) {
-                    showLockedPreviewOsd(screenId);
-                    return;
-                }
-                if (!screenId.isEmpty()) {
-                    m_unifiedLayoutController->setCurrentScreenName(screenId);
-                }
-                if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
-                    return;
-                }
-                qCInfo(lcDaemon) << "Zone selector: manual layout selected, layout=" << layoutId
-                                 << "screen=" << screenId;
-                resnapIfManualMode();
-            });
+    // No handler for OverlayService::manualLayoutSelected: the zone-selector
+    // slot is input-transparent by design (ZoneSelectorContent's
+    // `interactive: false`) and the QML hover path that used to emit this is
+    // gone. Cross-layout commits happen at drop time inside WindowDragAdaptor
+    // (drop.cpp), which calls assignLayout + setActiveLayout directly when
+    // the user releases the drag on a zone in a different layout. Routing
+    // through a hover-driven handler would resnap mid-interaction, which is
+    // what produced the "layouts changing when holding alt" bug.
 }
 
 void Daemon::connectOverlaySignals()
 {
-    // Connect zone selector autotile layout selection — route through UnifiedLayoutController
-    // to avoid duplicate activation logic (the controller handles enable + algorithm + OSD)
-    connect(m_overlayService.get(), &IOverlayService::autotileLayoutSelected, this,
-            [this](const QString& algorithmId, const QString& screenId) {
-                // Check if tiling algorithm is locked
-                // screenId is already a virtual-aware ID from the zone selector
-                if (!screenId.isEmpty() && isCurrentContextLockedForMode(screenId, 1)) {
-                    showLockedPreviewOsd(screenId);
-                    return;
-                }
-                if (m_unifiedLayoutController) {
-                    if (!screenId.isEmpty()) {
-                        m_unifiedLayoutController->setCurrentScreenName(screenId);
-                    }
-                    m_unifiedLayoutController->applyLayoutById(PhosphorLayout::LayoutId::makeAutotileId(algorithmId));
-                }
-            });
+    // No autotileLayoutSelected handler: the zone-selector slot is input-
+    // transparent by design (see ZoneSelectorContent's `interactive: false`),
+    // so QML never emits a hover-driven selection. Switching the autotile
+    // algorithm via the zone-selector popup is gone — users have keyboard
+    // shortcuts (NextLayout / QuickLayoutN) and the explicit Layout Picker
+    // (Meta+Alt+Space by default) for that.
 
     // Connect Snap Assist selection: fetch authoritative zone geometry from service (same as
     // keyboard navigation) to avoid overlay coordinate drift/overlap bugs, then forward to effect

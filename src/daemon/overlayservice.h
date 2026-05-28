@@ -400,7 +400,6 @@ public Q_SLOTS:
     // teardown that the warm-surface design is meant to avoid. Pre-warmed
     // OSD windows are reused for the daemon's entire lifetime.
     void hideLayoutPicker() override;
-    void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
 
     // Shader error reporting from QML
     void onShaderError(const QString& errorLog);

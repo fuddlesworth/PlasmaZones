@@ -117,8 +117,6 @@ Item {
     property real inactiveOpacity: 0.3
     readonly property color fadeColor: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, autoScrollConstants.fadeOpacity)
 
-    signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
-
     function applyScrollDelta(angleDeltaY) {
         var step = angleDeltaY / 120 * 0.1;
         if (root.needsScrolling) {
@@ -244,7 +242,6 @@ Item {
                     anchors.topMargin: root.effectiveTopMargin
                     anchors.leftMargin: root.effectiveSideMargin
                 }
-
             },
             State {
                 name: "top"
@@ -263,7 +260,6 @@ Item {
                     target: container
                     anchors.topMargin: root.effectiveTopMargin
                 }
-
             },
             State {
                 name: "topRight"
@@ -283,7 +279,6 @@ Item {
                     anchors.topMargin: root.effectiveTopMargin
                     anchors.rightMargin: root.effectiveSideMargin
                 }
-
             },
             State {
                 name: "left"
@@ -302,7 +297,6 @@ Item {
                     target: container
                     anchors.leftMargin: root.effectiveSideMargin
                 }
-
             },
             State {
                 name: "center"
@@ -316,7 +310,6 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
-
             },
             State {
                 name: "right"
@@ -335,7 +328,6 @@ Item {
                     target: container
                     anchors.rightMargin: root.effectiveSideMargin
                 }
-
             },
             State {
                 name: "bottomLeft"
@@ -355,7 +347,6 @@ Item {
                     anchors.bottomMargin: root.effectiveTopMargin
                     anchors.leftMargin: root.effectiveSideMargin
                 }
-
             },
             State {
                 name: "bottom"
@@ -374,7 +365,6 @@ Item {
                     target: container
                     anchors.bottomMargin: root.effectiveTopMargin
                 }
-
             },
             State {
                 name: "bottomRight"
@@ -394,7 +384,6 @@ Item {
                     anchors.bottomMargin: root.effectiveTopMargin
                     anchors.rightMargin: root.effectiveSideMargin
                 }
-
             }
         ]
 
@@ -446,7 +435,18 @@ Item {
                             previewWidth: root.indicatorWidth
                             previewHeight: root.indicatorHeight
                             showCardBackground: true
-                            interactive: !(root.locked && !indicator.isActive)
+                            // The zone-selector slot is supposed to be input-transparent —
+                            // OverlayService::updateSelectorPosition pushes cursor coords from
+                            // the D-Bus drag stream and writes `selectedLayoutId` /
+                            // `selectedZoneIndex` back; the commit happens at drag-end in
+                            // WindowDragAdaptor's drop path (drop.cpp). The shared shell
+                            // surface only flips to input-grabbing when snap-assist / layout-
+                            // picker is up, and during that window the still-hiding zone-
+                            // selector slot was leaking hover events into these MouseAreas,
+                            // which switched the active layout out from under the user. Hard-
+                            // disabling interactivity here matches the design contract and is
+                            // defense in depth against any future input-grab regression.
+                            interactive: false
                             selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
                             zonePadding: root.scaledPadding
                             edgeGap: root.scaledPadding
@@ -469,22 +469,10 @@ Item {
                             animationDuration: animationConstants.normalDuration
                             shortAnimationDuration: animationConstants.shortDuration
                             labelTopMargin: root.labelTopMargin
-                            onZoneHovered: function(zoneIndex) {
-                                if (root.locked && !indicator.isActive)
-                                    return ;
-
-                                if (root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex === zoneIndex)
-                                    return ;
-
-                                root.selectedLayoutId = indicator.layoutId;
-                                root.selectedZoneIndex = zoneIndex;
-                                var zones = indicator.modelData.zones || [];
-                                var zone = zones[zoneIndex];
-                                var relGeo = zone ? (zone.relativeGeometry || {
-                                }) : {
-                                };
-                                root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
-                            }
+                            // No onZoneHovered: interactive=false above means the inner
+                            // MouseArea never fires. `selectedLayoutId` / `selectedZoneIndex`
+                            // are written from C++ (selector.cpp::updateSelectorPosition) so
+                            // the highlight still tracks the cursor.
                         }
 
                         Rectangle {
@@ -507,22 +495,17 @@ Item {
                                 hoverEnabled: true
                                 cursorShape: Qt.ForbiddenCursor
                                 Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked — switch to this layout before selecting a zone")
-                                onClicked: function(mouse) {
+                                onClicked: function (mouse) {
                                     mouse.accepted = true;
                                 }
-                                onPressed: function(mouse) {
+                                onPressed: function (mouse) {
                                     mouse.accepted = true;
                                 }
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         Rectangle {
@@ -543,9 +526,7 @@ Item {
                     position: 1
                     color: "transparent"
                 }
-
             }
-
         }
 
         Rectangle {
@@ -566,9 +547,7 @@ Item {
                     position: 1
                     color: root.fadeColor
                 }
-
             }
-
         }
 
         Rectangle {
@@ -591,9 +570,7 @@ Item {
                     position: 1
                     color: "transparent"
                 }
-
             }
-
         }
 
         Rectangle {
@@ -616,9 +593,7 @@ Item {
                     position: 1
                     color: root.fadeColor
                 }
-
             }
-
         }
 
         Label {
@@ -627,7 +602,5 @@ Item {
             color: Kirigami.Theme.disabledTextColor
             visible: root.layouts.length === 0
         }
-
     }
-
 }
