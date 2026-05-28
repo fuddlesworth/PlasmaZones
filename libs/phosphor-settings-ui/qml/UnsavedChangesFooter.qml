@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -65,7 +66,7 @@ ColumnLayout {
     // ── Persistent accent line ──────────────────────────────────────
     Rectangle {
         Layout.fillWidth: true
-        height: Math.round(Kirigami.Units.devicePixelRatio)
+        height: Math.round(Screen.devicePixelRatio)
         color: root.controller.dirty ? Kirigami.Theme.highlightColor : ThemeHelpers.withAlpha(Kirigami.Theme.textColor, ThemeHelpers.SUBTLE_BACKGROUND_ALPHA)
 
         Behavior on color {
@@ -107,7 +108,7 @@ ColumnLayout {
             Rectangle {
                 anchors.top: parent.top
                 width: parent.width
-                height: Math.round(Kirigami.Units.devicePixelRatio)
+                height: Math.round(Screen.devicePixelRatio)
                 color: ThemeHelpers.withAlpha(Kirigami.Theme.neutralTextColor, 0.4)
             }
 

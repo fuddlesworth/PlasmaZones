@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -239,7 +240,7 @@ SettingsFlickable {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 5
                     radius: Kirigami.Units.smallSpacing
                     color: _highlight ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04)
-                    border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                    border.width: Math.max(1, Math.round(Screen.devicePixelRatio))
                     border.color: _highlight ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.25)
 
                     RowLayout {
@@ -494,7 +495,7 @@ SettingsFlickable {
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignVCenter
-                                height: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                                height: Math.max(1, Math.round(Screen.devicePixelRatio))
                                 color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
                             }
                         }

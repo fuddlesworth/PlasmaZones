@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -63,7 +64,7 @@ QQC2.ItemDelegate {
             anchors.right: parent.right
             anchors.leftMargin: Kirigami.Units.smallSpacing
             anchors.rightMargin: Kirigami.Units.smallSpacing
-            height: Math.round(Kirigami.Units.devicePixelRatio)
+            height: Math.round(Screen.devicePixelRatio)
             color: ThemeHelpers.withAlpha(Kirigami.Theme.textColor, 0.1)
         }
 

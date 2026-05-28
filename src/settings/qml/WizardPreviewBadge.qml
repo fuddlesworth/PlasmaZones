@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import "WizardUtils.js" as WizardUtils
 import org.kde.kirigami as Kirigami
@@ -24,7 +25,7 @@ Rectangle {
     height: badgeLabel.implicitHeight + Kirigami.Units.smallSpacing * 2
     radius: height / 2
     color: _colors.badgeBg
-    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+    border.width: Math.round(Screen.devicePixelRatio)
     border.color: _colors.badgeBorder
 
     Label {
@@ -34,5 +35,4 @@ Rectangle {
         text: root.text
         font.weight: Font.DemiBold
     }
-
 }

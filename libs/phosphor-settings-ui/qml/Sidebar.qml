@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -90,7 +91,7 @@ ColumnLayout {
     // Active-row left-accent stripe width — Math.round so fractional DPRs
     // (1.5×, 1.25×) don't yield sub-pixel widths that anti-alias to a
     // washed-out half-pixel line.
-    readonly property int accentBarWidth: Math.round(Kirigami.Units.devicePixelRatio * 2.5)
+    readonly property int accentBarWidth: Math.round(Screen.devicePixelRatio * 2.5)
 
     function drillInto(parentId) {
         // Short-circuit on either the already-displayed scope OR a

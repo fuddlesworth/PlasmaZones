@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
@@ -31,8 +32,8 @@ Item {
     readonly property color _hoverBorder: _colors.hoverBorder
     readonly property color _defaultBorder: _colors.defaultBorder
 
-    signal clicked()
-    signal doubleClicked()
+    signal clicked
+    signal doubleClicked
 
     Layout.fillWidth: true
     Layout.preferredHeight: Kirigami.Units.gridUnit * 10
@@ -63,7 +64,7 @@ Item {
         anchors.fill: parent
         radius: Kirigami.Units.smallSpacing * 2
         color: root.selected ? root._highlightBg : root.isHovered ? root._hoverBg : root._defaultBg
-        border.width: root.activeFocus ? Math.round(Kirigami.Units.devicePixelRatio * 2) : root.selected ? Math.round(Kirigami.Units.devicePixelRatio * 2) : Math.round(Kirigami.Units.devicePixelRatio)
+        border.width: root.activeFocus ? Math.round(Screen.devicePixelRatio * 2) : root.selected ? Math.round(Screen.devicePixelRatio * 2) : Math.round(Screen.devicePixelRatio)
         border.color: root.activeFocus ? Kirigami.Theme.highlightColor : root.selected ? root._selectedBorder : root.isHovered ? root._hoverBorder : root._defaultBorder
         transform: [
             Scale {
@@ -77,7 +78,6 @@ Item {
                         profile: "widget.hover"
                         durationOverride: 200
                     }
-
                 }
 
                 Behavior on yScale {
@@ -85,9 +85,7 @@ Item {
                         profile: "widget.hover"
                         durationOverride: 200
                     }
-
                 }
-
             },
             Translate {
                 y: root.isHovered ? -1 : 0
@@ -97,9 +95,7 @@ Item {
                         profile: "widget.hover"
                         durationOverride: 200
                     }
-
                 }
-
             }
         ]
 
@@ -132,7 +128,6 @@ Item {
                 wrapMode: Text.WordWrap
                 maximumLineCount: 2
             }
-
         }
 
         // Selected badge
@@ -153,7 +148,6 @@ Item {
                 height: Kirigami.Units.iconSizes.small
                 color: Kirigami.Theme.highlightedTextColor
             }
-
         }
 
         Behavior on color {
@@ -161,7 +155,6 @@ Item {
                 profile: "widget.hover"
                 durationOverride: 200
             }
-
         }
 
         Behavior on border.color {
@@ -169,7 +162,6 @@ Item {
                 profile: "widget.hover"
                 durationOverride: 200
             }
-
         }
 
         Behavior on border.width {
@@ -177,9 +169,6 @@ Item {
                 profile: "widget.hover"
                 durationOverride: 200
             }
-
         }
-
     }
-
 }

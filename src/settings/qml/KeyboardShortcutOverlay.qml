@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -92,7 +93,7 @@ Rectangle {
         height: shortcutContent.implicitHeight + Kirigami.Units.largeSpacing * 3
         radius: Kirigami.Units.smallSpacing * 2
         color: Kirigami.Theme.backgroundColor
-        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+        border.width: Math.round(Screen.devicePixelRatio)
         border.color: root.subtleBorder
 
         // Swallow clicks inside the dialog body so curious clicks on key
@@ -155,7 +156,7 @@ Rectangle {
                         implicitHeight: keyLabel.implicitHeight + Kirigami.Units.smallSpacing
                         radius: Kirigami.Units.smallSpacing / 2
                         color: root.keyChipBg
-                        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                        border.width: Math.round(Screen.devicePixelRatio)
                         border.color: root.subtleBorder
 
                         Label {

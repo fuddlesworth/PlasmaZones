@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -30,7 +31,7 @@ Rectangle {
     /// when the sheet has more horizontal room than the baseline assumes.
     required property int tileHeight
 
-    signal activated()
+    signal activated
 
     Accessible.name: tile.label
     Accessible.description: tile.description
@@ -40,7 +41,7 @@ Rectangle {
     implicitHeight: tile.tileHeight
     radius: Kirigami.Units.smallSpacing
     color: tileMouse.pressed ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.25) : tileMouse.containsMouse ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
-    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+    border.width: Math.round(Screen.devicePixelRatio)
     border.color: tileMouse.containsMouse || tile.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
     Keys.onReturnPressed: tile.activated()
     Keys.onSpacePressed: tile.activated()
@@ -86,7 +87,6 @@ Rectangle {
             text: tile.description
             wrapMode: Text.WordWrap
         }
-
     }
 
     // Match MonitorOverviewTile's transition feel — fade the background /
@@ -96,14 +96,11 @@ Rectangle {
         PhosphorMotionAnimation {
             profile: "popup"
         }
-
     }
 
     Behavior on border.color {
         PhosphorMotionAnimation {
             profile: "popup"
         }
-
     }
-
 }

@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.phosphor.animation
 
@@ -109,7 +110,7 @@ Item {
         radius: Kirigami.Units.smallSpacing * 1.5
         // Slightly elevated from page background
         color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
-        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+        border.width: Math.round(Screen.devicePixelRatio)
         border.color: {
             if (!root.enabled)
                 return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.04);
@@ -224,7 +225,7 @@ Item {
             // remains a single physical pixel on high-DPI displays
             // instead of collapsing to ~0.5px (browser-style anti-alias
             // blur) or disappearing on integer fractional scales.
-            height: headerArea.visible ? Math.round(Kirigami.Units.devicePixelRatio) : 0
+            height: headerArea.visible ? Math.round(Screen.devicePixelRatio) : 0
             color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
         }
 
@@ -316,7 +317,7 @@ Item {
     // 1px lift stays one physical pixel on high-DPI displays instead
     // of collapsing to a sub-pixel offset.
     transform: Translate {
-        y: hoverHandler.hovered && root.enabled ? -Math.round(Kirigami.Units.devicePixelRatio) : 0
+        y: hoverHandler.hovered && root.enabled ? -Math.round(Screen.devicePixelRatio) : 0
 
         Behavior on y {
             PhosphorMotionAnimation {

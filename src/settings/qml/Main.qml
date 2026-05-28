@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -815,7 +816,7 @@ PhosphorUi.SettingsAppWindow {
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    height: Math.round(Kirigami.Units.devicePixelRatio)
+                    height: Math.round(Screen.devicePixelRatio)
                     // Subtle theme-tinted hairline. Same shape as the
                     // KeyboardShortcutOverlay subtleBorder + Toast
                     // toastBg tints documented in E32; future tweaks

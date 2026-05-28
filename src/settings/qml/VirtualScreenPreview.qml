@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -65,7 +66,7 @@ Rectangle {
             Accessible.role: Accessible.Pane
             color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
             border.color: Kirigami.Theme.highlightColor
-            border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio * 2))
+            border.width: Math.max(1, Math.round(Screen.devicePixelRatio * 2))
             radius: Kirigami.Units.smallSpacing / 2
 
             ColumnLayout {
@@ -96,11 +97,8 @@ Rectangle {
                     font.pixelSize: Math.max(Kirigami.Theme.defaultFont.pixelSize * 0.65, Math.min(Kirigami.Theme.defaultFont.pixelSize * 0.85, regionRect.width * previewRoot.detailFontScaleFraction))
                     color: Kirigami.Theme.disabledTextColor
                 }
-
             }
-
         }
-
     }
 
     // ── Column dividers (vertical lines between adjacent columns) ────────
@@ -140,7 +138,6 @@ Rectangle {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
 
                 Behavior on color {
@@ -148,9 +145,7 @@ Rectangle {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
-
             }
 
             // Drag grip indicator
@@ -173,17 +168,14 @@ Rectangle {
                         model: 3
 
                         Rectangle {
-                            width: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
-                            height: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
+                            width: Math.max(2, Math.round(Screen.devicePixelRatio * 2))
+                            height: Math.max(2, Math.round(Screen.devicePixelRatio * 2))
                             radius: 1
                             color: Kirigami.Theme.textColor
                             opacity: 0.5
                         }
-
                     }
-
                 }
-
             }
 
             MouseArea {
@@ -196,13 +188,13 @@ Rectangle {
                 anchors.margins: -4
                 cursorShape: Qt.SplitHCursor
                 hoverEnabled: true
-                onPressed: function(mouse) {
+                onPressed: function (mouse) {
                     dragStartX = mouse.x + colDividerHandle.x;
                     dragStartFraction = colDividerHandle.dividerX / previewRoot.width;
                 }
-                onPositionChanged: function(mouse) {
+                onPositionChanged: function (mouse) {
                     if (!pressed)
-                        return ;
+                        return;
 
                     var globalX = mouse.x + colDividerHandle.x;
                     var deltaFraction = (globalX - dragStartX) / previewRoot.width;
@@ -210,9 +202,7 @@ Rectangle {
                     previewRoot.columnDividerMoved(colDividerHandle.index, newFraction);
                 }
             }
-
         }
-
     }
 
     // ── Row dividers (horizontal lines between adjacent rows) ────────────
@@ -253,7 +243,6 @@ Rectangle {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
 
                 Behavior on color {
@@ -261,9 +250,7 @@ Rectangle {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
-
             }
 
             // Drag grip indicator (horizontal orientation)
@@ -286,17 +273,14 @@ Rectangle {
                         model: 3
 
                         Rectangle {
-                            width: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
-                            height: Math.max(2, Math.round(Kirigami.Units.devicePixelRatio * 2))
+                            width: Math.max(2, Math.round(Screen.devicePixelRatio * 2))
+                            height: Math.max(2, Math.round(Screen.devicePixelRatio * 2))
                             radius: 1
                             color: Kirigami.Theme.textColor
                             opacity: 0.5
                         }
-
                     }
-
                 }
-
             }
 
             MouseArea {
@@ -309,13 +293,13 @@ Rectangle {
                 anchors.margins: -4
                 cursorShape: Qt.SplitVCursor
                 hoverEnabled: true
-                onPressed: function(mouse) {
+                onPressed: function (mouse) {
                     dragStartY = mouse.y + rowDividerHandle.y;
                     dragStartFraction = rowDividerHandle.dividerY / previewRoot.height;
                 }
-                onPositionChanged: function(mouse) {
+                onPositionChanged: function (mouse) {
                     if (!pressed)
-                        return ;
+                        return;
 
                     var globalY = mouse.y + rowDividerHandle.y;
                     var deltaFraction = (globalY - dragStartY) / previewRoot.height;
@@ -323,9 +307,6 @@ Rectangle {
                     previewRoot.rowDividerMoved(rowDividerHandle.index, newFraction);
                 }
             }
-
         }
-
     }
-
 }

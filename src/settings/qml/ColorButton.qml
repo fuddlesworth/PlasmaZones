@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -12,7 +13,7 @@ Rectangle {
 
     property int buttonSize: Kirigami.Units.gridUnit * 2
 
-    signal clicked()
+    signal clicked
 
     width: buttonSize
     height: buttonSize
@@ -39,13 +40,12 @@ Rectangle {
         id: checkerboard
 
         anchors.fill: parent
-        anchors.margins: Math.round(Kirigami.Units.devicePixelRatio)
+        anchors.margins: Math.round(Screen.devicePixelRatio)
         visible: root.color.a < 1
         // Repaint when visibility changes (color alpha changed)
         onVisibleChanged: {
             if (visible)
                 requestPaint();
-
         }
         onPaint: {
             var ctx = getContext("2d");
@@ -64,9 +64,8 @@ Rectangle {
 
     Rectangle {
         anchors.fill: parent
-        anchors.margins: Math.round(Kirigami.Units.devicePixelRatio)
-        radius: Math.max(0, parent.radius - Math.round(Kirigami.Units.devicePixelRatio))
+        anchors.margins: Math.round(Screen.devicePixelRatio)
+        radius: Math.max(0, parent.radius - Math.round(Screen.devicePixelRatio))
         color: root.color
     }
-
 }
