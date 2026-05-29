@@ -180,7 +180,7 @@ Item {
 
             // Circular mask source for MultiEffect. Lives off-screen
             // (visible: false + hideSource: true). White circle on
-            // transparent background — only the circle composites
+            // transparent background: only the circle composites
             // through to the visible scene.
             Item {
                 id: artMaskShape
@@ -200,7 +200,7 @@ Item {
 
             // Album art masked to the circle via MultiEffect.maskSource
             // (QtQuick.Effects, Qt 6.5+). Qt6 has no built-in "rounded
-            // clip" — Rectangle.radius is paint-only, clip: true is
+            // clip": Rectangle.radius is paint-only, clip: true is
             // bounding-box only. MultiEffect is the canonical mask path.
             Image {
                 id: artImage
@@ -490,7 +490,7 @@ Item {
     // the per-element MouseAreas inside the Row, which puts it on top
     // of them in stacking order. Even though acceptedButtons filters
     // it to MiddleButton for click events, Qt's cursor-shape lookup
-    // walks the topmost MouseArea regardless of acceptedButtons —
+    // walks the topmost MouseArea regardless of acceptedButtons:
     // so without an explicit cursorShape here this MouseArea's
     // default Qt.ArrowCursor would override the PointingHandCursor
     // set on the title-strip MouseArea below it (the art-container

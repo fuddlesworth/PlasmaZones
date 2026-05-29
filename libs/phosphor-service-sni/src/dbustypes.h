@@ -15,7 +15,7 @@ namespace PhosphorServiceSni {
 
 /// One element of the `a(iiay)` icon-pixmap array: (width, height,
 /// ARGB32 raw byte data). The bytes are network-byte-order ARGB on the
-/// wire, regardless of the host endianness — `decode()` in
+/// wire, regardless of the host endianness: `decode()` in
 /// statusnotifieritem.cpp swaps to platform order before constructing
 /// the QImage.
 struct DBusImage
@@ -40,7 +40,7 @@ struct DBusImage
 };
 using DBusImageList = QList<DBusImage>;
 
-/// `(sa(iiay)ss)` — icon name, pixmaps, title, body. We mostly read
+/// `(sa(iiay)ss)`: icon name, pixmaps, title, body. We mostly read
 /// title + body for the hover tooltip; the icon is usually empty or
 /// duplicates the main item icon.
 struct DBusToolTip
@@ -53,7 +53,7 @@ struct DBusToolTip
 
 // ─── DBusmenu types ────────────────────────────────────────────────────────
 
-/// `(ia{sv}av)` — the recursive layout struct GetLayout() returns. The
+/// `(ia{sv}av)`: the recursive layout struct GetLayout() returns. The
 /// generated QtDBus interface unmarshalls one level at a time; we
 /// repack the variant children into nested DBusMenuLayoutItem during
 /// tree walk in DBusMenuModel.
@@ -64,7 +64,7 @@ struct DBusMenuLayoutItem
     QList<QVariant> children;
 };
 
-/// `(ia{sv})` — per-item property bundle used by ItemsPropertiesUpdated
+/// `(ia{sv})`: per-item property bundle used by ItemsPropertiesUpdated
 /// and GetGroupProperties.
 struct DBusMenuItemProperties
 {
@@ -73,7 +73,7 @@ struct DBusMenuItemProperties
 };
 using DBusMenuItemPropertiesList = QList<DBusMenuItemProperties>;
 
-/// `(ias)` — removed-property entries from ItemsPropertiesUpdated.
+/// `(ias)`: removed-property entries from ItemsPropertiesUpdated.
 struct DBusMenuItemKeys
 {
     int id = 0;
@@ -81,7 +81,7 @@ struct DBusMenuItemKeys
 };
 using DBusMenuItemKeysList = QList<DBusMenuItemKeys>;
 
-/// `(isvu)` — entries of the EventGroup() input array.
+/// `(isvu)`: entries of the EventGroup() input array.
 struct DBusMenuEvent
 {
     int id = 0;

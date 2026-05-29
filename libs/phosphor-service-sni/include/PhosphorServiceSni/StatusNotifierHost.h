@@ -24,7 +24,7 @@ namespace PhosphorServiceSni {
 /// items, and exposes them as a flat collection of StatusNotifierItem
 /// QObjects.
 ///
-/// Lifetime is the shell's — typically constructed by the shell
+/// Lifetime is the shell's: typically constructed by the shell
 /// engine and parented to it. Items emitted via itemAdded() are
 /// owned by the host and will be deleted on itemRemoved().
 class PHOSPHORSERVICESNI_EXPORT StatusNotifierHost : public QObject
@@ -47,7 +47,7 @@ Q_SIGNALS:
     void itemCountChanged();
 
 private Q_SLOTS:
-    // DBus-callback slots — invoked by name from QDBusConnection::connect()
+    // DBus-callback slots: invoked by name from QDBusConnection::connect()
     // for the cross-process StatusNotifierItemRegistered / Unregistered
     // signals. Kept private so they're not part of the public API; MOC
     // still picks them up.

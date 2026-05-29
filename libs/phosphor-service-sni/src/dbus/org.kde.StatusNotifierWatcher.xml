@@ -4,7 +4,7 @@
 SPDX-FileCopyrightText: 2026 fuddlesworth
 SPDX-License-Identifier: LGPL-2.1-or-later
 
-org.kde.StatusNotifierWatcher — session-bus service that tray items and
+org.kde.StatusNotifierWatcher: session-bus service that tray items and
 shell hosts both look up. Items call RegisterStatusNotifierItem; hosts
 call RegisterStatusNotifierHost and read the items list. Spec:
 https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem/

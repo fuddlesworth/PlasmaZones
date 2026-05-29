@@ -50,7 +50,7 @@ Item {
 
     // Shared MPRIS derived-state + flicker-free art URL (see
     // MprisPlayerState.qml). `sampling` is gated on `active` so the 1 Hz
-    // position binding stays asleep while the popup is closed — the seek
+    // position binding stays asleep while the popup is closed: the seek
     // bar and time labels are off-screen then anyway.
     MprisPlayerState {
         id: playerState

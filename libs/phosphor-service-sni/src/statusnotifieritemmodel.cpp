@@ -321,11 +321,11 @@ QHash<int, QByteArray> StatusNotifierItemModel::roleNames() const
         {TitleRole, "title"},
         {CategoryRole, "category"},
         {StatusRole, "status"},
-        // URL forms — bind these to QML `Image.source`.
+        // URL forms: bind these to QML `Image.source`.
         {IconUrlRole, "iconUrl"},
         {OverlayIconUrlRole, "overlayIconUrl"},
         {AttentionIconUrlRole, "attentionIconUrl"},
-        // Raw-QImage forms — keep for C++ / future ImageItem bindings.
+        // Raw-QImage forms: keep for C++ / future ImageItem bindings.
         {IconImageRole, "iconImage"},
         {OverlayIconImageRole, "overlayIconImage"},
         {AttentionIconImageRole, "attentionIconImage"},

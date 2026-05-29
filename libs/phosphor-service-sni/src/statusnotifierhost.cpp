@@ -25,7 +25,7 @@ Q_LOGGING_CATEGORY(lcSniHost, "phosphor.service.sni.host")
 namespace PhosphorServiceSni {
 
 namespace {
-// Inline helpers — each call returns a QStringLiteral-backed QString.
+// Inline helpers: each call returns a QStringLiteral-backed QString.
 // CLAUDE.md forbids raw "..." with QString APIs; inline-function form
 // keeps the call sites clean while honouring the rule.
 inline QString kWatcherService()
@@ -56,7 +56,7 @@ public:
     QDBusServiceWatcher* nameWatcher = nullptr;
 
     // Items in registration order. The model maps row → item by
-    // index, so the storage MUST be ordered — earlier rev used a
+    // index, so the storage MUST be ordered: earlier rev used a
     // QHash here and `itemAt(N)` returned hash-bucket order, which
     // meant new items at "row count-1" weren't the items actually at
     // the end of the visible list, and the QML Repeater bound
@@ -82,7 +82,7 @@ void StatusNotifierHost::Private::connectToWatcher()
     // single-shell setup (the common case) needs only one process.
     watcher = new StatusNotifierWatcher(q);
     qCInfo(lcSniHost) << "watcher owner?" << watcher->isServiceOwner()
-                      << "— if false, another shell (likely plasma) is the canonical watcher";
+                      << "(if false, another shell (likely plasma) is the canonical watcher)";
 
     auto bus = QDBusConnection::sessionBus();
 
@@ -150,7 +150,7 @@ void StatusNotifierHost::Private::registerHost()
 
 void StatusNotifierHost::Private::seedExistingItems()
 {
-    // Read the property — items that registered before we started
+    // Read the property: items that registered before we started
     // need to be backfilled. Async to keep the constructor cheap.
     auto bus = QDBusConnection::sessionBus();
     QDBusMessage msg = QDBusMessage::createMethodCall(

@@ -74,14 +74,14 @@ PanelWindow {
     // shadow visually darkens their top edge.
     shadowSize: 14
     // Concave inner curves at the panel's bottom-left / bottom-right
-    // corners — wallpaper "flows around" the panel instead of meeting
+    // corners: wallpaper "flows around" the panel instead of meeting
     // it at a hard 90°. Roughly 1/4..1/3 of thickness looks natural;
     // 12 px on a 38 px panel sits in the middle of that range.
     cornerCarveRadius: 12
     alignment: PanelWindow.Fill
     exclusiveZoneEnabled: true
 
-    // Translucent animated gradient — no wallpaper sampling; the
+    // Translucent animated gradient: no wallpaper sampling; the
     // compositor blends it over whatever sits behind the panel surface.
     ShaderBackground {
         anchors.fill: parent
@@ -108,7 +108,7 @@ PanelWindow {
         customColor2: "#89dceb"
     }
 
-    // Content occupies the VISIBLE panel region only — never the
+    // Content occupies the VISIBLE panel region only: never the
     // shadow strip below. Zones below anchor against this item's
     // verticalCenter so the menu button / clock / settings line up
     // with the panel midline rather than with the surface midline
@@ -228,7 +228,7 @@ PanelWindow {
         }
 
         // ─── System-tray (StatusNotifierItem) plumbing ────────────────────
-        // One host per panel — owns the DBus watcher + items collection.
+        // One host per panel: owns the DBus watcher + items collection.
         // Lives outside the Row so the Repeater can reference it via
         // anchors-of-anchors without lifetime races on Row re-layout.
         StatusNotifierHost {
@@ -320,10 +320,10 @@ PanelWindow {
                             // a cacheKey so the URL changes whenever
                             // the underlying QImage data updates. The
                             // engine routes the URL back through the
-                            // image://phosphor-service-icontheme/
-                            // provider. sourceSize keeps the on-screen
-                            // size stable regardless of the icon's
-                            // intrinsic resolution.
+                            // icon-theme image provider mounted by
+                            // PhosphorServiceIconTheme::installImageProvider.
+                            // sourceSize keeps the on-screen size stable
+                            // regardless of the icon's intrinsic resolution.
                             source: trayDelegate.iconUrl
                             sourceSize.width: root.trayIconSourceSize
                             sourceSize.height: root.trayIconSourceSize
@@ -355,7 +355,7 @@ PanelWindow {
                                 // wants to render relative to "where
                                 // the user clicked the tray icon".
                                 const global = trayDelegate.mapToGlobal(mouse.x, mouse.y);
-                                //   LEFT   → Activate() — the app's primary action,
+                                //   LEFT   → Activate(): the app's primary action,
                                 //            e.g. "open main window". Exception:
                                 //            items that set ItemIsMenu = true have
                                 //            no main window (the icon IS the menu),
@@ -363,7 +363,7 @@ PanelWindow {
                                 //            instead. KeePassXC and the per-shell
                                 //            "system tray menu" widgets are the
                                 //            common cases.
-                                //   MIDDLE → SecondaryActivate() — typically
+                                //   MIDDLE → SecondaryActivate(): typically
                                 //            play/pause for media items, "show
                                 //            quick action" for others.
                                 //   RIGHT  → open dbusmenu when the item
@@ -384,7 +384,7 @@ PanelWindow {
                                         trayModel.contextMenu(trayDelegate.index, global.x, global.y);
                                 }
                             }
-                            // Forward scroll events as SNI Scroll() —
+                            // Forward scroll events as SNI Scroll():
                             // volume widgets (PulseAudio applet, PipeWire
                             // tray), brightness controls, etc. use this
                             // for fine-grained adjustment without

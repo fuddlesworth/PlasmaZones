@@ -10,7 +10,7 @@ import QtQuick
 // sibling .qml files. Sibling components are auto-discovered by Qt
 // from this file's directory.
 Item {
-    // System data sources — owned at the top level so multiple
+    // System data sources: owned at the top level so multiple
     // panels/windows can share a single Process / FileView each.
 
     Component.onCompleted: shellRouter.togglePopup = panelPopupHost.toggle
@@ -69,7 +69,7 @@ Item {
         precision: SystemClock.Minutes
     }
 
-    // CPU + memory readouts via /proc — avoids a `sh -c` subprocess
+    // CPU + memory readouts via /proc: avoids a `sh -c` subprocess
     // every 2-5s (which over a session is hundreds of fork/exec
     // pairs). A FileView re-reads the kernel-exported file in-process
     // at the interval; onContentChanged parses and deltas the values.
@@ -77,7 +77,7 @@ Item {
         id: cpuStat
 
         // Cumulative jiffies from the last snapshot (idle + total) for
-        // delta computation between intervals. `real` (double) — `int`
+        // delta computation between intervals. `real` (double): `int`
         // is 32-bit signed in QML, and on a multi-core box at 100Hz the
         // total jiffies cross INT32_MAX in days, after which assignment
         // truncates and the next delta is bogus.
@@ -147,7 +147,7 @@ Item {
         }
     }
 
-    // Battery via UPower D-Bus — replaces the raw sysfs FileView.
+    // Battery via UPower D-Bus: replaces the raw sysfs FileView.
     // UPowerHost connects to org.freedesktop.UPower on the system bus;
     // displayDevice is the aggregate battery (percentage, state, icon).
     UPowerHost {

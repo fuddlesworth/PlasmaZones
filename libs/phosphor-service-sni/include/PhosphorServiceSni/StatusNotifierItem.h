@@ -39,8 +39,8 @@ class PHOSPHORSERVICESNI_EXPORT StatusNotifierItem : public QObject
 
 public:
     enum class Status {
-        Passive, ///< Item is dormant — could be hidden in an overflow.
-        Active, ///< Item is meaningful — show it normally.
+        Passive, ///< Item is dormant: could be hidden in an overflow.
+        Active, ///< Item is meaningful: show it normally.
         NeedsAttention ///< Use the attention icon + maybe animate.
     };
     Q_ENUM(Status)

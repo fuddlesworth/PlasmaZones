@@ -4,7 +4,7 @@
 SPDX-FileCopyrightText: 2026 fuddlesworth
 SPDX-License-Identifier: LGPL-2.1-or-later
 
-com.canonical.dbusmenu — Ubuntu-originated protocol that GTK app
+com.canonical.dbusmenu: Ubuntu-originated protocol that GTK app
 indicators and KDE tray items both publish menus through. The shell
 consumes this. Spec:
 https://github.com/AyatanaIndicators/libdbusmenu/blob/master/libdbusmenu-glib/dbus-menu.xml

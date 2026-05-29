@@ -79,7 +79,7 @@ private Q_SLOTS:
     {
         StatusNotifierItemModel m;
         // Calling activate/contextMenu/etc on an empty model must not
-        // crash — the QML side may fire late mouse events while items
+        // crash: the QML side may fire late mouse events while items
         // are being torn down.
         m.activate(-1, 0, 0);
         m.activate(0, 0, 0);

@@ -55,7 +55,7 @@ StatusNotifierWatcher::StatusNotifierWatcher(QObject* parent)
 
     // Try to claim the well-known name. If someone else already owns
     // it, fall back to passive mode: the host will register with the
-    // existing watcher and ignore us. Don't queue or replace — Plasma
+    // existing watcher and ignore us. Don't queue or replace: Plasma
     // and other shells already use NoQueue here too.
     const auto reply =
         bus.interface()->registerService(kWatcherServiceName(), QDBusConnectionInterface::DontQueueService,
@@ -64,7 +64,7 @@ StatusNotifierWatcher::StatusNotifierWatcher(QObject* parent)
 
     if (!m_serviceOwner) {
         // Don't keep the object registered if we aren't the canonical
-        // watcher — it would advertise an empty item list and confuse
+        // watcher: it would advertise an empty item list and confuse
         // any apps that introspect our process by accident.
         bus.unregisterObject(kWatcherObjectPath());
         return;
@@ -117,17 +117,17 @@ QString StatusNotifierWatcher::canonicalItemService(const QString& serviceOrPath
 {
     // Items register two forms in the wild:
     //
-    //   (a) Plain bus name (":1.42" or "org.kde.foo") — path is
+    //   (a) Plain bus name (":1.42" or "org.kde.foo"): path is
     //       implicitly "/StatusNotifierItem". This is the older KDE
     //       convention and what most C++ Qt apps emit.
-    //   (b) Full object path ("/org/ayatana/NotificationItem/foo") —
+    //   (b) Full object path ("/org/ayatana/NotificationItem/foo"):
     //       sender is the implicit service. GTK app indicators do
     //       this.
     //
     // Canonical form for OUR storage + signals is "uniqueName/path"
     // (so item proxies can dial it directly), regardless of which
     // form the registrar used. The unique name is always the bus
-    // sender — we don't trust the well-known name the caller may have
+    // sender: we don't trust the well-known name the caller may have
     // passed in.
     QString path;
     if (serviceOrPath.startsWith(QLatin1Char('/'))) {
@@ -153,7 +153,7 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
         return;
     }
     if (service.startsWith(QLatin1Char('/'))) {
-        // Object-path form: minimal sanity check — `/` followed by
+        // Object-path form: minimal sanity check: `/` followed by
         // at least one valid path character (non-empty).
         if (service.size() < 2) {
             return;
@@ -179,14 +179,20 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
 
     ItemEntry entry{sender, canonical};
     m_items.insert(canonical, entry);
+    // Compute the dedup gate BEFORE the append so "already watched" is
+    // independent of the row we're about to add. QDBusServiceWatcher
+    // appends to an internal list without dedup; the dbus-daemon match-
+    // rule is shared so repeated adds are harmless on the wire, but the
+    // watcher would accumulate stale entries we never clean up. Skip
+    // the add if THIS sender is already watched via prior items or via
+    // a host registration for the same sender; onServiceUnregistered's
+    // single removeWatchedService then matches symmetrically.
+    const bool senderAlreadyWatched = !m_byOwner.value(sender).isEmpty()
+        || std::any_of(m_hosts.cbegin(), m_hosts.cend(), [&sender](const QString& v) {
+               return v == sender;
+           });
     m_byOwner[sender].append(canonical);
-    // QDBusServiceWatcher::addWatchedService appends to an internal
-    // list without dedup; the dbus-daemon match-rule is shared so
-    // repeated adds are harmless on the wire, but the watcher would
-    // accumulate stale entries we'd never clean up. Add only on the
-    // first item for this owner; onServiceUnregistered's single
-    // removeWatchedService then matches symmetrically.
-    if (m_byOwner[sender].size() == 1) {
+    if (!senderAlreadyWatched) {
         m_busWatcher->addWatchedService(sender);
     }
 

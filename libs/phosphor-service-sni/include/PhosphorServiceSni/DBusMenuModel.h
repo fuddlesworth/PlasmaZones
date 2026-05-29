@@ -14,7 +14,7 @@ namespace PhosphorServiceSni {
 
 /// Flat model exposing ONE level of a com.canonical.dbusmenu tree at
 /// a time. Tree mode (QAbstractItemModel) is awkward to drive from
-/// QML — most shells render submenus as cascading popups instead, so
+/// QML: most shells render submenus as cascading popups instead, so
 /// each popup binds a fresh DBusMenuModel pointing at a different
 /// `rootId`.
 ///
@@ -30,7 +30,7 @@ class PHOSPHORSERVICESNI_EXPORT DBusMenuModel : public QAbstractListModel
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY sourceChanged)
     Q_PROPERTY(int rootId READ rootId WRITE setRootId NOTIFY rootIdChanged)
     Q_PROPERTY(bool valid READ valid NOTIFY validChanged)
-    // Mirror of rowCount() — QAbstractListModel doesn't expose count
+    // Mirror of rowCount(): QAbstractListModel doesn't expose count
     // as a property, so QML's `model.count` evaluates to undefined
     // without this. Worth keeping the API symmetric with
     // StatusNotifierItemModel.
@@ -43,7 +43,7 @@ public:
         LabelRole, ///< menu text, ampersands already stripped for accel
         EnabledRole,
         VisibleRole,
-        IconUrlRole, ///< data:image/png;base64,... URL — bind to Image.source
+        IconUrlRole, ///< data:image/png;base64,... URL: bind to Image.source
         IconImageRole, ///< raw QImage (kept for C++ use; not usable as Image.source)
         ToggleTypeRole, ///< "checkmark" | "radio" | empty
         ToggleStateRole, ///< 0 = off, 1 = on, -1 = indeterminate
@@ -73,10 +73,10 @@ public:
     /// Fire a click event at the given row. Calls Event(id, "clicked", ...).
     Q_INVOKABLE void triggerItem(int row);
     /// Call AboutToShow on row's submenu (if it has one) and return
-    /// its id — the QML layer uses that id as the rootId for the
+    /// its id: the QML layer uses that id as the rootId for the
     /// cascaded child model.
     Q_INVOKABLE int aboutToShowSubmenu(int row);
-    /// Tell the item we're about to display this menu — required by
+    /// Tell the item we're about to display this menu: required by
     /// the spec before showing the root. Idempotent on repeated calls.
     Q_INVOKABLE void aboutToShow();
     /// Tell the item we're hiding this menu. Fires `closed` Event in
@@ -86,7 +86,7 @@ public:
     /// debounced dismiss handler without tracking opened-state itself.
     Q_INVOKABLE void aboutToHide();
     /// Force a fresh GetLayout against the current service/path. Used
-    /// by the QML side when re-opening the SAME menu — `setService`/
+    /// by the QML side when re-opening the SAME menu: `setService`/
     /// `setPath` early-return when values are unchanged, so without
     /// this the model never re-fetches and never re-fires `loaded`,
     /// leaving the popup unable to remap.
@@ -97,12 +97,12 @@ Q_SIGNALS:
     void rootIdChanged();
     void validChanged();
     void countChanged();
-    /// Fires on EVERY successful GetLayout — not just transitions
+    /// Fires on EVERY successful GetLayout: not just transitions
     /// from invalid → valid. Used by QML to remap the popup when the
     /// same menu is re-opened (validChanged stays silent in that case
     /// because the bool didn't change).
     void loaded();
-    /// Fired when a GetLayout call returns a DBus error — usually
+    /// Fired when a GetLayout call returns a DBus error: usually
     /// means the SNI item advertised a Menu path that's stale,
     /// broken, or implemented as something other than canonical
     /// dbusmenu. QML can listen and dismiss the popup so the user

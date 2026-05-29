@@ -17,7 +17,7 @@ namespace PhosphorServiceSni {
 /// rebroadcasts changes via signals + the RegisteredStatusNotifierItems
 /// property so multiple shell-hosts can stay in sync.
 ///
-/// The class is private to the library — public API is StatusNotifierHost.
+/// The class is private to the library: public API is StatusNotifierHost.
 /// We expose the service iff no other process is already owning the
 /// well-known name; if another shell is already on the bus, our host
 /// just registers with theirs and our Watcher instance idles.
@@ -25,7 +25,7 @@ class StatusNotifierWatcher : public QObject, protected QDBusContext
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(StatusNotifierWatcher)
-    // The Watcher properties — exported via DBus adaptor.
+    // The Watcher properties: exported via DBus adaptor.
     Q_PROPERTY(QStringList RegisteredStatusNotifierItems READ registeredItems NOTIFY registeredItemsChanged)
     Q_PROPERTY(bool IsStatusNotifierHostRegistered READ isHostRegistered NOTIFY hostRegisteredChanged)
     Q_PROPERTY(int ProtocolVersion READ protocolVersion CONSTANT)
@@ -52,13 +52,13 @@ public Q_SLOTS:
     void RegisterStatusNotifierHost(const QString& service);
 
 Q_SIGNALS:
-    // DBus signals — Adaptor proxies these onto the bus.
+    // DBus signals: Adaptor proxies these onto the bus.
     void StatusNotifierItemRegistered(const QString& service);
     void StatusNotifierItemUnregistered(const QString& service);
     void StatusNotifierHostRegistered();
     void StatusNotifierHostUnregistered();
 
-    // Local-only — Watcher → Host wiring; the Adaptor ignores these.
+    // Local-only: Watcher → Host wiring; the Adaptor ignores these.
     void registeredItemsChanged();
     void hostRegisteredChanged();
 

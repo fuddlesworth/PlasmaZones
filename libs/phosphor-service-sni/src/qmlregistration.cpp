@@ -30,7 +30,7 @@ void registerQmlTypes()
     // engine setup.
     static std::once_flag once;
     std::call_once(once, [] {
-        // Instantiable types. StatusNotifierHost is the main entry point —
+        // Instantiable types. StatusNotifierHost is the main entry point:
         // QML constructs one, hands its pointer to a model, and binds the
         // model to a Repeater.
         qmlRegisterType<StatusNotifierHost>(kModule, kModuleVersionMajor, kModuleVersionMinor, "StatusNotifierHost");
@@ -38,13 +38,13 @@ void registerQmlTypes()
                                                  "StatusNotifierItemModel");
         qmlRegisterType<DBusMenuModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "DBusMenuModel");
 
-        // Pointer-receivable type — exposed as a Q_PROPERTY value from
+        // Pointer-receivable type: exposed as a Q_PROPERTY value from
         // the host / model, never directly constructed in QML, but the
         // metatype needs to be known so QML can read iconUrl, tooltip,
         // etc. off it.
         qmlRegisterUncreatableType<StatusNotifierItem>(
             kModule, kModuleVersionMajor, kModuleVersionMinor, "StatusNotifierItem",
-            QStringLiteral("StatusNotifierItem is owned by StatusNotifierHost — bind via the model"));
+            QStringLiteral("StatusNotifierItem is owned by StatusNotifierHost: bind via the model"));
     });
 }
 

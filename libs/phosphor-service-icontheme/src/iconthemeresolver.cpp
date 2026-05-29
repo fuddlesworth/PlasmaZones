@@ -218,7 +218,7 @@ public:
 
 QString IconThemeResolver::Private::detectThemeName() const
 {
-    // Qt sets QIcon::themeName() from the platform integration ,
+    // Qt sets QIcon::themeName() from the platform integration,
     // works on Wayland too, sourced from xdg-portal / xsettings /
     // GSettings as the platform supports. Falls back to "hicolor"
     // which is always present.

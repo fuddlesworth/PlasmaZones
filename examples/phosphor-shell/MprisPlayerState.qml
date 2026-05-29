@@ -33,7 +33,7 @@ QtObject {
     // Album-art URL. A plain binding is already flicker-free: it tracks
     // both `player` and `player.trackArtUrl` (NOTIFY metadataChanged),
     // and QML suppresses the change signal when the recomputed string is
-    // identical — so an Image bound to this never reloads on an
+    // identical: so an Image bound to this never reloads on an
     // unrelated metadataChanged.
     readonly property string stableArtUrl: (player && player.trackArtUrl) ? player.trackArtUrl : ""
 

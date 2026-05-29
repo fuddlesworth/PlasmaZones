@@ -29,7 +29,7 @@ class PHOSPHORSERVICESNI_EXPORT StatusNotifierItemModel : public QAbstractListMo
     Q_PROPERTY(PhosphorServiceSni::StatusNotifierHost* host READ host WRITE setHost NOTIFY hostChanged)
     // `count` mirrors rowCount() and emits countChanged on every
     // insert/remove. QAbstractListModel does NOT expose this by
-    // default — QML's `model.count` binding silently evaluates to
+    // default: QML's `model.count` binding silently evaluates to
     // `undefined` without it, and any `visible: model.count > 0`
     // expression collapses to false, hiding the whole tray.
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
@@ -40,7 +40,7 @@ public:
         TitleRole,
         CategoryRole,
         StatusRole,
-        // Icon URL forms — bind to QML's Image.source (a QUrl). The
+        // Icon URL forms: bind to QML's Image.source (a QUrl). The
         // underlying QImage is published to the
         // `image://phosphor-service-icontheme/` provider as a
         // side-effect of model attachment / item icon changes. The
@@ -51,7 +51,7 @@ public:
         IconUrlRole,
         OverlayIconUrlRole,
         AttentionIconUrlRole,
-        // Raw QImage forms — kept for C++ consumers / future ImageItem
+        // Raw QImage forms: kept for C++ consumers / future ImageItem
         // bindings. Not directly usable as Image.source.
         IconImageRole,
         OverlayIconImageRole,
@@ -76,7 +76,7 @@ public:
     [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
 
-    /// QML-friendly action invocations — looks up the item by row and
+    /// QML-friendly action invocations: looks up the item by row and
     /// dispatches. coords are in screen-logical pixels; the item's
     /// process uses them to position any popup it wants to render
     /// (some menus position relative to these).

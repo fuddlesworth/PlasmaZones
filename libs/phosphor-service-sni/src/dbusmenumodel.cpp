@@ -640,7 +640,7 @@ void DBusMenuModel::aboutToShow()
 void DBusMenuModel::refresh()
 {
     // If a rebuild was queued, the flush already issued a fresh
-    // GetLayout via refresh — UNLESS service/path were empty when the
+    // GetLayout via refresh: UNLESS service/path were empty when the
     // flush ran (in which case `buildProxy` left the proxy null and the
     // inner refresh early-returned without issuing GetLayout). We still
     // want a no-op in that case: calling refresh() on an unconfigured

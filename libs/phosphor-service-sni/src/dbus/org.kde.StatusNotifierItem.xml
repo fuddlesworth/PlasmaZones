@@ -4,7 +4,7 @@
 SPDX-FileCopyrightText: 2026 fuddlesworth
 SPDX-License-Identifier: LGPL-2.1-or-later
 
-org.kde.StatusNotifierItem — interface implemented by each tray item.
+org.kde.StatusNotifierItem: interface implemented by each tray item.
 The shell consumes this; it does NOT implement it. We mostly read
 properties + react to NewXxx signals; the only methods we call are the
 activation entry points (Activate / SecondaryActivate / ContextMenu /
@@ -23,7 +23,7 @@ statusnotifieritem.cpp before any proxy is constructed.
         <property name="Status" type="s" access="read"/>
         <property name="WindowId" type="u" access="read"/>
 
-        <!-- Icon properties — IconName is XDG-themed; IconPixmap is raw
+        <!-- Icon properties: IconName is XDG-themed; IconPixmap is raw
              ARGB32 byte data. IconThemePath overrides the system theme
              lookup root for this item (Steam / OBS-style custom themes). -->
         <property name="IconThemePath" type="s" access="read"/>
@@ -72,7 +72,7 @@ statusnotifieritem.cpp before any proxy is constructed.
             <arg name="orientation" type="s" direction="in"/>
         </method>
 
-        <!-- Property-change signals — the spec is famously vague about
+        <!-- Property-change signals: the spec is famously vague about
              whether items also fire org.freedesktop.DBus.Properties
              PropertiesChanged. They mostly don't, so we re-fetch the
              affected property when one of these arrives. -->

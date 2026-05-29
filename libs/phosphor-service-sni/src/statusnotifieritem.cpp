@@ -20,7 +20,7 @@ namespace PhosphorServiceSni {
 namespace {
 
 /// "Active" / "Passive" / "NeedsAttention" → enum. Anything else
-/// defaults to Passive — items in the wild occasionally send empty
+/// defaults to Passive: items in the wild occasionally send empty
 /// strings during startup.
 StatusNotifierItem::Status statusFromString(const QString& s)
 {
@@ -35,7 +35,7 @@ StatusNotifierItem::Status statusFromString(const QString& s)
 
 /// Convert the wire's ARGB byte data (network byte order) into a
 /// platform-native QImage. The SNI spec is explicit about
-/// "network-byte-order" — most apps that have been tested actually
+/// "network-byte-order": most apps that have been tested actually
 /// emit native-endian on little-endian platforms, but enough emit
 /// big-endian that we have to swap unconditionally on little-endian
 /// hosts.
@@ -286,7 +286,7 @@ void StatusNotifierItem::Private::refreshIcons()
         return;
     // Fetch first, compare against cached values, only emit if any
     // icon-related property actually changed. CLAUDE.md mandates
-    // "only emit signals when value actually changes" — without this
+    // "only emit signals when value actually changes": without this
     // guard, every NewIcon spam from a chatty app fires iconChanged
     // on the model, triggering full QML delegate refresh per signal.
     const auto newIconName = proxy->iconName();
@@ -356,7 +356,7 @@ StatusNotifierItem::StatusNotifierItem(const QString& dbusService, const QString
 
     // Subscribe to per-property change signals. The spec is vague
     // about whether items also fire org.freedesktop.DBus.Properties
-    // PropertiesChanged — most don't, so we rely on these instead.
+    // PropertiesChanged: most don't, so we rely on these instead.
     connect(d->proxy.get(), &OrgKdeStatusNotifierItemInterface::NewIcon, this, [this] {
         d->refreshIcons();
     });

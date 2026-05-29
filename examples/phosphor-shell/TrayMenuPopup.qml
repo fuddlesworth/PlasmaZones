@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 // One level of a com.canonical.dbusmenu tree, rendered as a popup
-// anchored to its trigger. Submenus open as cascading TrayMenuPopups
-// — each cascade is a fresh PopupWindow whose anchor is the row that
-// spawned it, so a 3-level menu produces 3 wl_surfaces (matches what
-// Plasma / Qt's QMenu cascade produces under the hood).
+// anchored to its trigger. Submenus reuse THIS popup by re-binding
+// `rootId` to the deeper layout id returned by aboutToShowSubmenu;
+// the parent context is lost when cascading, and clicking outside the
+// popup dismisses the whole tree. A future enhancement would stack
+// one fresh PopupWindow per cascade level (matching Plasma / Qt's
+// QMenu cascade) and preserve a breadcrumb.
 // Usage from TopPanel.qml:
 //   TrayMenuPopup { id: trayMenu }
 //   ...
@@ -20,7 +22,7 @@ import QtQuick
 PopupWindow {
     // popupVisible is driven imperatively by menuModel.valid
     // (Connections handler). We deliberately don't bind it as a
-    // QML expression — earlier rev bound popupVisible to service
+    // QML expression: earlier rev bound popupVisible to service
     // / menuPath / valid AND wrote those properties back in the
     // close() handler, which Qt's binding system flagged as a
     // loop (popupVisible → onPopupVisibleChanged → close →
@@ -60,13 +62,13 @@ PopupWindow {
     /// Open the popup anchored to a tray delegate. `delegate` must
     /// expose `dbusService` and `menuPath` (the tray Repeater
     /// delegates do). The popup mounts ONLY after the menu model
-    /// reaches `valid` state — see the Connections block below.
+    /// reaches `valid` state: see the Connections block below.
     function openFor(delegate: Item) {
         // Force-unmap before each open so every click gets visible
         // feedback. Two scenarios this handles:
         //   1. Same icon right-clicked twice with the popup still
         //      technically mapped between (e.g., user clicked the
-        //      icon WITHOUT first dismissing) — setting popupVisible
+        //      icon WITHOUT first dismissing): setting popupVisible
         //      to true when it's already true is a no-op, so the
         //      user sees nothing happen. False-then-true forces a
         //      remap.
@@ -85,7 +87,7 @@ PopupWindow {
         menuModel.service = delegate.dbusService;
         menuModel.path = delegate.menuPath;
         // setService/setPath early-return when the values match the
-        // current ones — that's the right behaviour for avoiding
+        // current ones: that's the right behaviour for avoiding
         // redundant GetLayout traffic when QML re-assigns the same
         // properties, but it means re-opening the SAME menu (after
         // dismissal) doesn't trigger a fresh load. Force one
@@ -104,7 +106,7 @@ PopupWindow {
     gap: root.popupGap
     popupVisible: false
     // Compositor dismisses the popup on outside-click via the Wayland
-    // popup-grab protocol — that flips popupVisible to false from
+    // popup-grab protocol: that flips popupVisible to false from
     // C++. We notify the model so its AboutToHide / Event "closed"
     // bookkeeping stays correct. No service-clearing here (that's
     // what caused the binding loop). Next openFor() reassigns
@@ -120,7 +122,7 @@ PopupWindow {
         rootId: root.rootId
     }
 
-    // Imperative show/hide driven off the model — no popupVisible
+    // Imperative show/hide driven off the model: no popupVisible
     // binding, no binding-loop hazard.
     Connections {
         // Fires on every successful GetLayout, not just the first
@@ -326,7 +328,7 @@ PopupWindow {
                         Accessible.name: menuRow.label
                         onClicked: {
                             if (menuRow.childrenDisplay === "submenu") {
-                                // Submenu — open cascade. We re-use the
+                                // Submenu: open cascade. We re-use the
                                 // SAME root popup but re-bind to a deeper
                                 // rootId. A future enhancement: stack
                                 // multiple popups so the user can click

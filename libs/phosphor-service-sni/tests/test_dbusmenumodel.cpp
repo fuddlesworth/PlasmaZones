@@ -26,7 +26,7 @@ private Q_SLOTS:
     {
         DBusMenuModel m;
         const auto roles = m.roleNames();
-        // Public contract — QML's TrayMenuPopup binds these names.
+        // Public contract: QML's TrayMenuPopup binds these names.
         // `itemType` / `itemEnabled` / `itemVisible` rather than the
         // plain forms so the QML delegate Item doesn't shadow
         // QQuickItem's FINAL `visible` and Q_PROPERTY `enabled`.
@@ -80,7 +80,7 @@ private Q_SLOTS:
     {
         DBusMenuModel m;
         // Trigger / aboutToShowSubmenu on a model that hasn't loaded
-        // yet (no service/path) must be no-ops, not crashes — the QML
+        // yet (no service/path) must be no-ops, not crashes: the QML
         // side can fire these via debounced clicks during teardown.
         m.triggerItem(0);
         QCOMPARE(m.aboutToShowSubmenu(0), -1);
