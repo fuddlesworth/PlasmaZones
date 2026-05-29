@@ -262,7 +262,7 @@ Naming notes:
 
 **Phase 2 gate:** each library has a passing CLI demo; `phosphor-services` umbrella is deleted; `phosphorctl call <ns>.<fn>` works for every service. Tag `phosphor-integrations-0.1`.
 
-### 2.1: `phosphor-service-pipewire` outline *(in flight, feat/phase-2.1-pipewire-service)*
+### 2.1: `phosphor-service-pipewire` outline *(shipped on feat/phase-2.1-pipewire-service)*
 
 Public API surface lands in implementation PRs; this section is the planning outline so a contributor can pick up the work without re-deriving the shape.
 
@@ -305,9 +305,9 @@ Public API surface lands in implementation PRs; this section is the planning out
 | U1 | Minimum supported PipeWire version: 0.3.60 (Debian stable baseline) or 1.0 (modern distros, cleaner WP metadata API)? | **Resolved: 1.0+ minimum.** Tracks Arch / Fedora 38+ / Ubuntu 24.04. One code path; WirePlumber 0.5 metadata API is the only supported surface for default-node switching. |
 | U2 | Linear vs cubic vs perceptual (M3 power-curve) volume on the public QML surface. | **Resolved: linear amplitude on the public surface.** Matches PipeWire's `SPA_PROP_channelVolumes` storage. A `Phosphor.Service.PipeWire.Mixer.Curve` QML helper converts cubic / perceptual at the UI layer; round-trips through the lib stay lossless. |
 | U3 | One process or two: keep PipeWire owned by the same `QGuiApplication` as the shell, or run a tiny `phosphor-pipewire-daemon` and talk via `phosphor-ipc`? | **Resolved: single-process.** PipeWire owned by the same `QGuiApplication` that runs the shell, matching the Phase-2.0 sni / mpris / upower pattern. The cross-thread plumbing is one `QThread` for `pw_main_loop` with queued-signal events to the GUI thread; no IPC contract to maintain. |
-| U4 | Scope of stream metadata: do we surface PipeWire's per-stream tags (`application.name`, `application.icon-name`, `media.role`) or stop at the WirePlumber-curated set? | Affects role list + cli demo `list streams` output shape. |
-| U5 | Privacy-indicator hook: should `phosphor-service-pipewire` surface a `recordingActiveStreams` signal in Phase 2.1, or defer to a separate `Phosphor.PrivacyIndicator` consumer in Phase 3+? | Decides whether milestone 3 walks `Audio/Source` stream nodes only or also `Audio/Source/Capture` plus their associated client names. |
-| U6 | CLI demo argv format: positional (`list sinks`) or subcommand-with-flags (`list --kind sink`)? Tradeoffs in the row: positional matches Phase-2.0's idiomatic feel; flags compose better with future filters. | One file in the example; cheap to flip; pick before milestone 8 lands. |
+| U4 | Scope of stream metadata: do we surface PipeWire's per-stream tags (`application.name`, `application.icon-name`, `media.role`) or stop at the WirePlumber-curated set? | **Resolved: WirePlumber-curated set on the named roles, full `properties` hash for advanced bindings.** `PwNode::name`, `nick`, `description`, `mediaClass`, `channelCount`, `volumes`, `muted` cover the common mixer use; `properties()` returns the full `node.*` / `application.*` / `media.*` hash for callers (icon lookup, privacy categorisation) without bloating the model role list. |
+| U5 | Privacy-indicator hook: should `phosphor-service-pipewire` surface a `recordingActiveStreams` signal in Phase 2.1, or defer to a separate `Phosphor.PrivacyIndicator` consumer in Phase 3+? | **Resolved: deferred to Phase 3+.** Out of scope here; the privacy consumer can derive the same view from `PwSourceModel` + the model's per-row stream filter. |
+| U6 | CLI demo argv format: positional (`list sinks`) or subcommand-with-flags (`list --kind sink`)? Tradeoffs in the row: positional matches Phase-2.0's idiomatic feel; flags compose better with future filters. | **Resolved: positional.** Matches the row in the 2.1 table and the Phase-2.0 idiomatic feel; future filters can land as additional positional words (`list sinks --json` style) without breaking existing usage. |
 
 **Out of scope for 2.1** — the mixer **UI** (slider strip, per-app expand, OSDs) is Phase 3 / 4 territory and lives in `examples/phosphor-shell/` or a dedicated `phosphor-mixer` demo. The shell's hotkey-driven volume actions wire through `phosphorctl call mixer.setVolume ...` once a Phase-3 `IpcTarget` lands on top of this lib.
 
