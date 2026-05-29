@@ -18,7 +18,6 @@
 
 #include <cstring>
 #include <mutex>
-#include <string_view>
 
 Q_LOGGING_CATEGORY(lcPipeWire, "phosphor.service.pipewire.connection")
 
@@ -119,11 +118,8 @@ const pw_core_events PipeWireConnection::Private::kCoreEvents = {
     .bound_props = nullptr,
 };
 
-const pw_registry_events PipeWireConnection::Private::kRegistryEvents = {
-    .version = PW_VERSION_REGISTRY_EVENTS,
-    .global = &PipeWireConnection::Private::onRegistryGlobal,
-    .global_remove = &PipeWireConnection::Private::onRegistryGlobalRemove,
-};
+// kRegistryEvents lives in pipewireconnection_registry.cpp alongside the
+// onRegistry* handlers it points at.
 
 const pw_node_events PipeWireConnection::Private::kNodeEvents = {
     .version = PW_VERSION_NODE_EVENTS,
@@ -175,155 +171,36 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
                             .arg(res)
                             .arg(message ? QString::fromUtf8(message) : QStringLiteral("(no message)"));
     qCWarning(lcPipeWire) << msg;
-    // Note: we deliberately flip `connected` to false here but do NOT
-    // tear core/context/registry down from this callback. The next
-    // caller-initiated connect() observes the wedged state
-    // (connected == false && core != nullptr) and runs doDisconnect
-    // first, so recovery is automatic and the teardown stays on the
-    // loop thread without us having to post another pw_loop_invoke.
+    // Synchronously flip `connected` on the loop thread BEFORE queueing
+    // the GUI-side emit. doConnect's wedge-recovery check
+    // (`if (core && !connected.load(...)) doDisconnect()`) runs on the
+    // loop thread, so it must observe the truthful value the moment the
+    // next connect() request lands — even if the queued setConnected
+    // lambda hasn't drained yet. Using exchange() here lets us capture
+    // the prior value so the GUI-side queued lambda can still emit
+    // connectedChanged exactly when the state genuinely transitioned
+    // (setConnected would otherwise no-op because the atomic is already
+    // false by the time it runs).
+    //
+    // We deliberately do NOT tear core/context/registry down from this
+    // callback. The next caller-initiated connect() observes the wedged
+    // state (connected == false && core != nullptr) and runs
+    // doDisconnect first, so recovery is automatic and the teardown
+    // stays on the loop thread without us having to post another
+    // pw_loop_invoke.
+    const bool wasConnected = d->connected.exchange(false, std::memory_order_acq_rel);
     QMetaObject::invokeMethod(
         d->q,
-        [d, msg]() {
-            d->setConnected(false);
+        [d, msg, wasConnected]() {
+            if (wasConnected)
+                Q_EMIT d->q->connectedChanged();
             Q_EMIT d->q->error(msg);
         },
         Qt::QueuedConnection);
 }
 
-void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint32_t permissions, const char* type,
-                                                   uint32_t version, const struct spa_dict* props)
-{
-    Q_UNUSED(permissions);
-    Q_UNUSED(version);
-    auto* d = static_cast<Private*>(data);
-    if (!type)
-        return;
-    const std::string_view typeView(type);
-    // Two interfaces are relevant: Node (audio sinks / sources /
-    // streams) and Metadata (WirePlumber's `default` for the runtime
-    // default audio sink + source). Dispatch into a typed helper so
-    // the C callback stays a thin router.
-    if (typeView == PW_TYPE_INTERFACE_Metadata) {
-        d->bindDefaultMetadata(id, type, detail::propsFromDict(props));
-        return;
-    }
-    if (typeView != PW_TYPE_INTERFACE_Node)
-        return;
-    const auto p = detail::propsFromDict(props);
-    const QString mediaClass = p.value(QStringLiteral("media.class"));
-    if (!detail::isAudioNodeClass(mediaClass)) {
-        qCDebug(lcPipeWire) << "skipping non-audio node" << id << "mediaClass" << mediaClass;
-        return;
-    }
-    d->bindAudioNode(id, type, mediaClass, p);
-}
-
-void PipeWireConnection::Private::bindDefaultMetadata(uint32_t id, const char* type,
-                                                      const QHash<QString, QString>& props)
-{
-    if (props.value(QStringLiteral("metadata.name")) != QLatin1String("default"))
-        return;
-    if (defaultMetadata) {
-        qCDebug(lcPipeWire) << "duplicate default-metadata global; ignoring id" << id;
-        return;
-    }
-    defaultMetadata = static_cast<pw_proxy*>(pw_registry_bind(registry, id, type, PW_VERSION_METADATA, 0));
-    if (!defaultMetadata) {
-        qCWarning(lcPipeWire) << "pw_registry_bind failed for default metadata global" << id;
-        return;
-    }
-    // Cache the registry id so onRegistryGlobalRemove can identify
-    // the metadata proxy even before its bound_id event arrives.
-    defaultMetadataId = id;
-    pw_metadata_add_listener(reinterpret_cast<pw_metadata*>(defaultMetadata), &defaultMetadataListener,
-                             &kDefaultMetadataEvents, this);
-    qCDebug(lcPipeWire) << "bound default metadata id" << id;
-}
-
-void PipeWireConnection::Private::bindAudioNode(uint32_t id, const char* type, const QString& mediaClass,
-                                                const QHash<QString, QString>& props)
-{
-    qCDebug(lcPipeWire) << "audio node added: id" << id << "mediaClass" << mediaClass << "name"
-                        << props.value(QStringLiteral("node.name"));
-
-    // Bind the proxy on the loop thread so we can subscribe to its
-    // info + param events. Track it in loopNodes for cleanup on
-    // global_remove.
-    auto* proxy = static_cast<pw_proxy*>(pw_registry_bind(registry, id, type, PW_VERSION_NODE, 0));
-    if (!proxy) {
-        qCWarning(lcPipeWire) << "pw_registry_bind failed for node" << id;
-        return;
-    }
-    auto entry = std::make_unique<LoopNode>();
-    entry->owner = this;
-    entry->id = id;
-    entry->mediaClass = mediaClass;
-    entry->proxy = proxy;
-    // Move the entry into the map BEFORE wiring the C-side listener.
-    // If the emplace throws (allocator failure), the unique_ptr cleans
-    // up the entry on scope exit; wiring the spa_hook first would
-    // leave it pointing at a freed entry.
-    LoopNode* entryPtr = entry.get();
-    loopNodes.emplace(id, std::move(entry));
-    pw_node_add_listener(reinterpret_cast<pw_node*>(proxy), &entryPtr->nodeListener, &kNodeEvents, entryPtr);
-    // Pre-arm SPA_PARAM_Props: enumerate the current pod, then
-    // subscribe so future updates (external volume changes from
-    // pavucontrol, WirePlumber policy reconciles, hotkey-driven
-    // adjustments) propagate as `param` events. Without the
-    // subscription only the initial enumeration would land; every
-    // out-of-band change would be invisible to the model.
-    pw_node_enum_params(reinterpret_cast<pw_node*>(proxy), 0, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
-    uint32_t subscribeIds[] = {SPA_PARAM_Props};
-    pw_node_subscribe_params(reinterpret_cast<pw_node*>(proxy), subscribeIds, 1);
-
-    Private* d = this;
-    QMetaObject::invokeMethod(
-        q,
-        [d, id, mediaClass, props]() {
-            d->guiNodeAdded(id, mediaClass, props);
-        },
-        Qt::QueuedConnection);
-}
-
-void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id)
-{
-    auto* d = static_cast<Private*>(data);
-    // Same id space covers nodes AND the metadata global. We can't use
-    // pw_proxy_get_bound_id to identify the metadata proxy: it returns
-    // SPA_ID_INVALID until the daemon's bound_id event arrives, and a
-    // global_remove can plausibly fire before that ack (proxy bind
-    // races a daemon-side teardown). Compare against the registry id
-    // we captured at bind time instead — that one is always valid.
-    if (d->defaultMetadata && d->defaultMetadataId != SPA_ID_INVALID && d->defaultMetadataId == id) {
-        spa_hook_remove(&d->defaultMetadataListener);
-        pw_proxy_destroy(d->defaultMetadata);
-        d->defaultMetadata = nullptr;
-        d->defaultMetadataId = SPA_ID_INVALID;
-        QMetaObject::invokeMethod(
-            d->q,
-            [d]() {
-                d->setDefaultSinkName(QString());
-                d->setDefaultSourceName(QString());
-            },
-            Qt::QueuedConnection);
-        return;
-    }
-    auto it = d->loopNodes.find(id);
-    if (it == d->loopNodes.end())
-        return;
-    auto entry = std::move(it->second);
-    d->loopNodes.erase(it);
-    if (entry->proxy) {
-        spa_hook_remove(&entry->nodeListener);
-        pw_proxy_destroy(entry->proxy);
-    }
-    QMetaObject::invokeMethod(
-        d->q,
-        [d, id]() {
-            d->guiNodeRemoved(id);
-        },
-        Qt::QueuedConnection);
-}
+// onRegistryGlobal / bindDefaultMetadata / bindAudioNode /
+// onRegistryGlobalRemove live in pipewireconnection_registry.cpp.
 
 int PipeWireConnection::Private::onDefaultMetadataProperty(void* data, uint32_t subject, const char* key,
                                                            const char* type, const char* value)
@@ -359,14 +236,19 @@ int PipeWireConnection::Private::onDefaultMetadataProperty(void* data, uint32_t 
         // we don't own.
         constexpr qsizetype kMaxMetadataPayload = 64 * 1024;
         const qsizetype len = qstrnlen(value, kMaxMetadataPayload);
-        if (len < kMaxMetadataPayload) {
-            const QJsonDocument doc = QJsonDocument::fromJson(QByteArray(value, len));
-            if (doc.isObject())
-                nodeName = doc.object().value(QStringLiteral("name")).toString();
-        } else {
+        if (len >= kMaxMetadataPayload) {
             qCWarning(lcPipeWire) << "default-metadata value exceeds" << kMaxMetadataPayload << "bytes; rejecting key"
                                   << keyStr;
+            // Return BEFORE the invokeMethod block. Falling through
+            // would queue setDefaultSinkName(QString{}) /
+            // setDefaultSourceName(QString{}) and wipe the cached
+            // default — a malicious/buggy daemon sending an oversized
+            // payload could weaponise that to nuke our state.
+            return 0;
         }
+        const QJsonDocument doc = QJsonDocument::fromJson(QByteArray(value, len));
+        if (doc.isObject())
+            nodeName = doc.object().value(QStringLiteral("name")).toString();
     }
     QMetaObject::invokeMethod(
         d->q,
@@ -433,12 +315,18 @@ void PipeWireConnection::Private::onNodeParam(void* data, int seq, uint32_t para
         if (prop->key == SPA_PROP_channelVolumes) {
             float values[SPA_AUDIO_MAX_CHANNELS] = {};
             const uint32_t n = spa_pod_copy_array(&prop->value, SPA_TYPE_Float, values, SPA_AUDIO_MAX_CHANNELS);
-            channelCount = static_cast<int>(n);
-            volumesStaging.resize(channelCount);
-            for (uint32_t i = 0; i < n; ++i) {
-                volumesStaging[static_cast<int>(i)] = static_cast<qreal>(values[i]);
+            // n == 0 means the pod carried channelVolumes with an empty
+            // array (malformed daemon payload). Treat it as "no volume
+            // data" so we don't clobber a stereo node's cached channel
+            // count + values with an empty list.
+            if (n > 0) {
+                channelCount = static_cast<int>(n);
+                volumesStaging.resize(channelCount);
+                for (uint32_t i = 0; i < n; ++i) {
+                    volumesStaging[static_cast<int>(i)] = static_cast<qreal>(values[i]);
+                }
+                haveVolumes = true;
             }
-            haveVolumes = true;
         } else if (prop->key == SPA_PROP_mute) {
             bool m = false;
             if (spa_pod_get_bool(&prop->value, &m) == 0) {
@@ -463,9 +351,21 @@ void PipeWireConnection::Private::onNodeParam(void* data, int seq, uint32_t para
             volumes.append(volumesStaging[i]);
     }
 
+    // Explicit capture list rather than `[=]` so a future `[&]`
+    // regression can't silently dangle. All captures are by-value: the
+    // copies (`Private*` is a pointer, `quint32`/`bool`/`int` are
+    // scalars, `QList<qreal>` is implicitly-shared) survive the cross-
+    // thread post by design.
+    //
+    // Post-teardown safety: this lambda may sit in the GUI event queue
+    // past a doDisconnect() that cleared guiNodes. The
+    // `it == guiNodes.end()` check above is what makes that safe — a
+    // node id observed on the loop thread is not guaranteed to still
+    // exist on the GUI thread by the time the lambda fires. Same
+    // contract for any other queued lambda that touches guiNodes.
     QMetaObject::invokeMethod(
         d->q,
-        [=]() {
+        [d, nodeId, haveVolumes, haveMute, channelCount, volumes, muted]() {
             auto it = d->guiNodes.find(nodeId);
             if (it == d->guiNodes.end())
                 return;
@@ -499,9 +399,18 @@ void PipeWireConnection::Private::doConnect()
     }
     context = pw_context_new(pw_main_loop_get_loop(mainLoop), nullptr, 0);
     if (!context) {
+        // Failure paths that leave `core` null must also reset
+        // `connected`: an earlier onCoreError may have left it stale-
+        // true on the GUI atomic until its queued lambda drained. Flip
+        // it synchronously on the loop thread so isConnected() reports
+        // the truth immediately, and queue setConnected(false) so the
+        // GUI observers still see connectedChanged on the right thread.
+        const bool wasConnected = connected.exchange(false, std::memory_order_acq_rel);
         QMetaObject::invokeMethod(
             q,
-            [this]() {
+            [this, wasConnected]() {
+                if (wasConnected)
+                    Q_EMIT q->connectedChanged();
                 setDaemonAvailable(false);
                 Q_EMIT q->error(QStringLiteral("pw_context_new returned null"));
             },
@@ -512,9 +421,12 @@ void PipeWireConnection::Private::doConnect()
     if (!core) {
         pw_context_destroy(context);
         context = nullptr;
+        const bool wasConnected = connected.exchange(false, std::memory_order_acq_rel);
         QMetaObject::invokeMethod(
             q,
-            [this]() {
+            [this, wasConnected]() {
+                if (wasConnected)
+                    Q_EMIT q->connectedChanged();
                 setDaemonAvailable(false);
                 Q_EMIT q->error(QStringLiteral("pw_context_connect returned null (no running daemon?)"));
             },
@@ -784,7 +696,14 @@ void PipeWireConnection::connect()
     pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
     if (!d->thread.isRunning() || !mainLoop)
         return;
-    pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchConnect, 0, nullptr, 0, false, d.get());
+    // connect/disconnect bypass submitLoopRequest because they carry no
+    // payload (no heap request, no ownership handoff). A negative rc
+    // means the loop refused the post; surface it as a warning so the
+    // failure isn't silently dropped, but keep the call shape simple.
+    const int rc =
+        pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchConnect, 0, nullptr, 0, false, d.get());
+    if (rc < 0)
+        qCWarning(lcPipeWire) << "pw_loop_invoke failed for connect rc" << rc;
 }
 
 void PipeWireConnection::disconnect()
@@ -792,7 +711,10 @@ void PipeWireConnection::disconnect()
     pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
     if (!d->thread.isRunning() || !mainLoop)
         return;
-    pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchDisconnect, 0, nullptr, 0, false, d.get());
+    const int rc =
+        pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchDisconnect, 0, nullptr, 0, false, d.get());
+    if (rc < 0)
+        qCWarning(lcPipeWire) << "pw_loop_invoke failed for disconnect rc" << rc;
 }
 
 } // namespace PhosphorServicePipeWire

@@ -75,6 +75,7 @@ set(phosphorservicepipewire_public_HDRS
 set(phosphorservicepipewire_SRCS
     src/qmlregistration.cpp
     src/pipewireconnection.cpp
+    src/pipewireconnection_registry.cpp
     src/pipewireconnection_writes.cpp
     src/pipewirehost.cpp
     src/pwnode.cpp
@@ -82,9 +83,10 @@ set(phosphorservicepipewire_SRCS
 )
 
 # Private header carrying the PipeWireConnection::Private declaration
-# (split out so pipewireconnection.cpp + pipewireconnection_writes.cpp
-# can both implement Private methods without re-declaring it). Not
-# installed; consumers see only the libpipewire-free public headers.
+# (split out so pipewireconnection.cpp + pipewireconnection_registry.cpp
+# + pipewireconnection_writes.cpp can all implement Private methods
+# without re-declaring it). Not installed; consumers see only the
+# libpipewire-free public headers.
 set(phosphorservicepipewire_PRIVATE_HDRS
     src/pipewireconnection_p.h
 )

@@ -94,6 +94,12 @@ void PwNodeModel::rebuildFromConnection(PipeWireConnection* connection)
     }
     d->nodeWires.clear();
     if (!d->nodes.isEmpty()) {
+        // `d->nodes.clear()` and `d->rowIndex.clear()` MUST sit
+        // between beginRemoveRows() and endRemoveRows() for the
+        // QAbstractItemModel invariant to hold: rowCount() reflects
+        // the post-removal state when views query it from
+        // endRemoveRows(), and any view-side cache rebuilt inside
+        // that callback would see stale rows if we cleared after.
         beginRemoveRows(QModelIndex(), 0, d->nodes.size() - 1);
         d->nodes.clear();
         d->rowIndex.clear();
@@ -166,7 +172,9 @@ void PwNodeModel::rebuildFromConnection(PipeWireConnection* connection)
                 d->rowIndex.remove(node);
                 // Every row after the removed one shifts down by one;
                 // patch the hash in-place so subsequent O(1) lookups
-                // stay accurate.
+                // stay accurate. Removal is O(n) in row count due to
+                // this row-shift fix-up; acceptable for low-cardinality
+                // audio-node sets.
                 for (auto it = d->rowIndex.begin(); it != d->rowIndex.end(); ++it) {
                     if (it.value() > row)
                         --it.value();
@@ -194,10 +202,13 @@ void PwNodeModel::rebuildFromConnection(PipeWireConnection* connection)
         }
     }
 
-    // Single coalesced emit at the end. countChanged is the cheapest
-    // change-signal for bindings, but firing it four times per
-    // rebuild was wasteful and observable (an intermediate-state
-    // glimpse during the remove → insert seam).
+    // Single coalesced emit at the end; rows are notified via the
+    // abstract-model row signals (beginInsertRows/endInsertRows +
+    // beginRemoveRows/endRemoveRows) — countChanged is auxiliary for
+    // QML count bindings. countChanged is the cheapest change-signal
+    // for bindings, but firing it four times per rebuild was wasteful
+    // and observable (an intermediate-state glimpse during the
+    // remove → insert seam).
     if (d->nodes.size() != oldCount) {
         Q_EMIT countChanged();
     }
@@ -213,6 +224,13 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
     if (d->mediaClasses == classes)
         return;
     d->mediaClasses = classes;
+    // Emit mediaClassesChanged BEFORE rebuildFromConnection, mirroring
+    // setConnection's signal-ordering rationale: the model's rows
+    // always describe its current filter. If we emitted after rebuild,
+    // bindings observing both signals would briefly see "rows
+    // populated for the NEW filter but `mediaClasses` still reports
+    // the OLD list", breaking the documented invariant.
+    Q_EMIT mediaClassesChanged();
     // Re-seed from the current connection so the filter change takes
     // effect immediately. Route through rebuildFromConnection
     // directly so consumers don't see a spurious connectionChanged
@@ -222,7 +240,11 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
     if (current) {
         rebuildFromConnection(current);
     }
-    Q_EMIT mediaClassesChanged();
+    // No connection means no rows; rebuildFromConnection has nothing
+    // to re-seed from. The previous setConnection(nullptr) call (or
+    // initial state) already drained any rows, so the early return
+    // here is safe — the filter has been recorded for the next
+    // setConnection(non-null) call to honour.
 }
 
 int PwNodeModel::rowCount(const QModelIndex& parent) const

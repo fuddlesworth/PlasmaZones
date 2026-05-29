@@ -106,7 +106,12 @@ public:
     /// event; if a `global_remove` fires before that ack, the registry
     /// id is our only handle for identifying the removed metadata
     /// proxy. Cleared (back to `SPA_ID_INVALID`) whenever
-    /// `defaultMetadata` is freed.
+    /// `defaultMetadata` is destroyed via `pw_proxy_destroy`; never set
+    /// unless the corresponding `defaultMetadata` is bound. The
+    /// invariant is therefore: `defaultMetadataId != SPA_ID_INVALID`
+    /// implies `defaultMetadata != nullptr`. A bind-failure path that
+    /// leaves `defaultMetadata` null never assigns the id, so the
+    /// invariant holds vacuously without an explicit reset there.
     quint32 defaultMetadataId = SPA_ID_INVALID;
     spa_hook coreListener{};
     spa_hook registryListener{};

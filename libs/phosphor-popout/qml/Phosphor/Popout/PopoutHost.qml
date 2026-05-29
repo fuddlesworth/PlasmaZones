@@ -58,10 +58,12 @@ Item {
     //
     // Math.max keeps the duration_short_4 operand even though it is
     // currently the smaller of the two: it is a defensive ceiling for a
-    // future token retune that flips the ordering (or for a downstream
-    // theme that lengthens the backdrop fade beyond the content one).
-    // A reader tempted to "simplify" to `contentAnimDuration` would
-    // remove that safety net.
+    // future token retune that flips the ordering (for example, if
+    // Motion.duration_short_4 is ever bumped above
+    // Motion.duration_medium_2 for a denser theme retune, or a
+    // downstream theme lengthens the backdrop fade beyond the content
+    // one). A reader tempted to "simplify" to `contentAnimDuration`
+    // would remove that safety net.
     readonly property int closeDuration: Math.max(contentAnimDuration, Motion.duration_short_4)
 
     // Emitted once the close animation finishes. Transport callers
@@ -294,6 +296,9 @@ Item {
     Timer {
         id: dismissEmitter
 
+        // QTimer samples interval at start(); if Motion tokens retune
+        // mid-close the binding updates this property but the armed
+        // timer keeps its original interval until the next start().
         interval: root.closeDuration
         repeat: false
         onTriggered: {

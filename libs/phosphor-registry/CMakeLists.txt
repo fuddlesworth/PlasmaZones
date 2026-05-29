@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorRegistry — generic factory-by-name registry + plugin loader
+# PhosphorRegistry: generic factory-by-name registry + plugin loader
 # for the phosphor-shell UI extension seams (bar widgets, control-center
 # tiles, launcher providers, OSDs, desktop widgets).
 #
@@ -42,7 +42,7 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
 # than fail link with a confusing "target not found" error. The
 # `if(NOT TARGET)` guard handles the in-tree case where phosphor-
 # fsloader is built as a sibling subdir and the target is already in
-# scope — there the find_package call is skipped, not silenced.
+# scope (there the find_package call is skipped, not silenced).
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader CONFIG REQUIRED)
 endif()
@@ -191,6 +191,9 @@ install(FILES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if(CMAKE_PROJECT_NAME STREQUAL "PhosphorRegistry" OR BUILD_TESTING)
+    # enable_testing() is a no-op when KDECMakeSettings already
+    # included CTest at the top level. The redundant call lets a
+    # standalone build of this subproject still discover ctest.
     enable_testing()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
         add_subdirectory(tests)

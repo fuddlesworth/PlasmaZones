@@ -1,0 +1,162 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+// Registry-event handlers and the per-global bind helpers extracted from
+// pipewireconnection.cpp to keep that TU under the 800-line cap. All
+// definitions are members of PipeWireConnection::Private and share the
+// declarations in pipewireconnection_p.h; this file does not introduce
+// any new public surface.
+
+#include "pipewireconnection_p.h"
+
+#include <PhosphorServicePipeWire/PwNode.h>
+
+#include <QHash>
+#include <QString>
+
+#include <string_view>
+
+namespace PhosphorServicePipeWire {
+
+const pw_registry_events PipeWireConnection::Private::kRegistryEvents = {
+    .version = PW_VERSION_REGISTRY_EVENTS,
+    .global = &PipeWireConnection::Private::onRegistryGlobal,
+    .global_remove = &PipeWireConnection::Private::onRegistryGlobalRemove,
+};
+
+void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint32_t permissions, const char* type,
+                                                   uint32_t version, const struct spa_dict* props)
+{
+    Q_UNUSED(permissions);
+    Q_UNUSED(version);
+    auto* d = static_cast<Private*>(data);
+    if (!type)
+        return;
+    const std::string_view typeView(type);
+    // Two interfaces are relevant: Node (audio sinks / sources /
+    // streams) and Metadata (WirePlumber's `default` for the runtime
+    // default audio sink + source). Dispatch into a typed helper so
+    // the C callback stays a thin router.
+    if (typeView == PW_TYPE_INTERFACE_Metadata) {
+        d->bindDefaultMetadata(id, type, detail::propsFromDict(props));
+        return;
+    }
+    if (typeView != PW_TYPE_INTERFACE_Node)
+        return;
+    const auto p = detail::propsFromDict(props);
+    const QString mediaClass = p.value(QStringLiteral("media.class"));
+    if (!detail::isAudioNodeClass(mediaClass)) {
+        qCDebug(lcPipeWire) << "skipping non-audio node" << id << "mediaClass" << mediaClass;
+        return;
+    }
+    d->bindAudioNode(id, type, mediaClass, p);
+}
+
+void PipeWireConnection::Private::bindDefaultMetadata(uint32_t id, const char* type,
+                                                      const QHash<QString, QString>& props)
+{
+    if (props.value(QStringLiteral("metadata.name")) != QLatin1String("default"))
+        return;
+    if (defaultMetadata) {
+        qCDebug(lcPipeWire) << "duplicate default-metadata global; ignoring id" << id;
+        return;
+    }
+    defaultMetadata = static_cast<pw_proxy*>(pw_registry_bind(registry, id, type, PW_VERSION_METADATA, 0));
+    if (!defaultMetadata) {
+        qCWarning(lcPipeWire) << "pw_registry_bind failed for default metadata global" << id;
+        return;
+    }
+    // Cache the registry id so onRegistryGlobalRemove can identify
+    // the metadata proxy even before its bound_id event arrives.
+    defaultMetadataId = id;
+    pw_metadata_add_listener(reinterpret_cast<pw_metadata*>(defaultMetadata), &defaultMetadataListener,
+                             &kDefaultMetadataEvents, this);
+    qCDebug(lcPipeWire) << "bound default metadata id" << id;
+}
+
+void PipeWireConnection::Private::bindAudioNode(uint32_t id, const char* type, const QString& mediaClass,
+                                                const QHash<QString, QString>& props)
+{
+    qCDebug(lcPipeWire) << "audio node added: id" << id << "mediaClass" << mediaClass << "name"
+                        << props.value(QStringLiteral("node.name"));
+
+    // Bind the proxy on the loop thread so we can subscribe to its
+    // info + param events. Track it in loopNodes for cleanup on
+    // global_remove.
+    auto* proxy = static_cast<pw_proxy*>(pw_registry_bind(registry, id, type, PW_VERSION_NODE, 0));
+    if (!proxy) {
+        qCWarning(lcPipeWire) << "pw_registry_bind failed for node" << id;
+        return;
+    }
+    auto entry = std::make_unique<LoopNode>();
+    entry->owner = this;
+    entry->id = id;
+    entry->mediaClass = mediaClass;
+    entry->proxy = proxy;
+    // Move the entry into the map BEFORE wiring the C-side listener.
+    // If the emplace throws (allocator failure), the unique_ptr cleans
+    // up the entry on scope exit; wiring the spa_hook first would
+    // leave it pointing at a freed entry.
+    LoopNode* entryPtr = entry.get();
+    loopNodes.emplace(id, std::move(entry));
+    pw_node_add_listener(reinterpret_cast<pw_node*>(proxy), &entryPtr->nodeListener, &kNodeEvents, entryPtr);
+    // Pre-arm SPA_PARAM_Props: enumerate the current pod, then
+    // subscribe so future updates (external volume changes from
+    // pavucontrol, WirePlumber policy reconciles, hotkey-driven
+    // adjustments) propagate as `param` events. Without the
+    // subscription only the initial enumeration would land; every
+    // out-of-band change would be invisible to the model.
+    pw_node_enum_params(reinterpret_cast<pw_node*>(proxy), 0, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
+    uint32_t subscribeIds[] = {SPA_PARAM_Props};
+    pw_node_subscribe_params(reinterpret_cast<pw_node*>(proxy), subscribeIds, 1);
+
+    Private* d = this;
+    QMetaObject::invokeMethod(
+        q,
+        [d, id, mediaClass, props]() {
+            d->guiNodeAdded(id, mediaClass, props);
+        },
+        Qt::QueuedConnection);
+}
+
+void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id)
+{
+    auto* d = static_cast<Private*>(data);
+    // Same id space covers nodes AND the metadata global. We can't use
+    // pw_proxy_get_bound_id to identify the metadata proxy: it returns
+    // SPA_ID_INVALID until the daemon's bound_id event arrives, and a
+    // global_remove can plausibly fire before that ack (proxy bind
+    // races a daemon-side teardown). Compare against the registry id
+    // we captured at bind time instead — that one is always valid.
+    if (d->defaultMetadata && d->defaultMetadataId != SPA_ID_INVALID && d->defaultMetadataId == id) {
+        spa_hook_remove(&d->defaultMetadataListener);
+        pw_proxy_destroy(d->defaultMetadata);
+        d->defaultMetadata = nullptr;
+        d->defaultMetadataId = SPA_ID_INVALID;
+        QMetaObject::invokeMethod(
+            d->q,
+            [d]() {
+                d->setDefaultSinkName(QString());
+                d->setDefaultSourceName(QString());
+            },
+            Qt::QueuedConnection);
+        return;
+    }
+    auto it = d->loopNodes.find(id);
+    if (it == d->loopNodes.end())
+        return;
+    auto entry = std::move(it->second);
+    d->loopNodes.erase(it);
+    if (entry->proxy) {
+        spa_hook_remove(&entry->nodeListener);
+        pw_proxy_destroy(entry->proxy);
+    }
+    QMetaObject::invokeMethod(
+        d->q,
+        [d, id]() {
+            d->guiNodeRemoved(id);
+        },
+        Qt::QueuedConnection);
+}
+
+} // namespace PhosphorServicePipeWire

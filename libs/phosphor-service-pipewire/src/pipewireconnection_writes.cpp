@@ -195,10 +195,13 @@ void PipeWireConnection::setDefaultSource(const QString& nodeName)
     d->submitLoopRequest(std::move(req), &Private::dispatchDefaultWrite, "setDefaultSource");
 }
 
-// Explicit instantiations so the template definition can live in this
-// TU rather than be forced into the header. ParamWriteRequest /
-// DefaultWriteRequest are only built here, so this list is the entire
-// instantiation set.
+// Explicit instantiations reserved for future out-of-TU callers; not
+// required for current call sites (writeVolumes / writeMuted /
+// setDefaultSink / setDefaultSource all live in this TU, so the
+// compiler instantiates submitLoopRequest implicitly when it sees the
+// definition above used by them). Kept so a later refactor that moves
+// a caller into a different TU doesn't silently miss the instantiation
+// and surface as a link error.
 template bool PipeWireConnection::Private::submitLoopRequest<PipeWireConnection::Private::ParamWriteRequest>(
     std::unique_ptr<PipeWireConnection::Private::ParamWriteRequest>,
     int (*)(struct spa_loop*, bool, uint32_t, const void*, size_t, void*), const char*);

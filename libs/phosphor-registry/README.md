@@ -34,7 +34,7 @@ once per UI seam.
   rescan. Added plugin directories load; removed directories
   unregister. In-place `.so` replacement (writing new bytes to the
   same path) is NOT honoured in Phase 1.3 because POSIX `dlopen`
-  refcounts loads by path — reloading the same path returns the
+  refcounts loads by path. Reloading the same path returns the
   prior mapping. Plugin authors iterating in development rename the
   plugin directory or restart the process. Removed plugins keep
   their `.so` mapping pinned for the loader's lifetime so widgets
@@ -53,10 +53,10 @@ once per UI seam.
 | `PhosphorRegistry::RegistryNotifier` | QObject signal carrier the template owns. The template itself can't be Q_OBJECT; signals route through this. Reached via `registry.notifier()`. |
 | `PhosphorRegistry::IFactoryBase` | Common base for the five interface families. Declares `id()`, `displayName()`, `capabilities()`. |
 | `PhosphorRegistry::IBarWidgetFactory` | Factory for one top-bar widget (clock, workspaces, tray, etc.). Adds `createWidget(QQmlEngine*, QObject*)`. |
-| `PhosphorRegistry::IControlCenterTileFactory` | Factory for one tile inside the Control Center popout. Adds `createTile(QQmlEngine*, QObject*)`. **No consumer in Phase 1.3** — surface lands in Phase 4.4. |
-| `PhosphorRegistry::ILauncherProviderFactory` | Factory for a launcher query provider (apps, calculator, etc.). Adds `createProvider(QObject*)`. **No consumer in Phase 1.3** — surface lands in Phase 4.2. |
-| `PhosphorRegistry::IOSDFactory` | Factory for an on-screen display (volume / mic / brightness). Adds `createOSD(QQmlEngine*, QObject*)`. **No consumer in Phase 1.3** — surface lands in Phase 3.3. |
-| `PhosphorRegistry::IDesktopWidgetFactory` | Factory for a desktop card / widget. Adds `createWidget(QQmlEngine*, QObject*)`. **No consumer in Phase 1.3** — surface lands in Phase 4.4 / 5. |
+| `PhosphorRegistry::IControlCenterTileFactory` | Factory for one tile inside the Control Center popout. Adds `createTile(QQmlEngine*, QObject*)`. **No consumer in Phase 1.3**, surface lands in Phase 4.4. |
+| `PhosphorRegistry::ILauncherProviderFactory` | Factory for a launcher query provider (apps, calculator, etc.). Adds `createProvider(QObject*)`. **No consumer in Phase 1.3**, surface lands in Phase 4.2. |
+| `PhosphorRegistry::IOSDFactory` | Factory for an on-screen display (volume / mic / brightness). Adds `createOSD(QQmlEngine*, QObject*)`. **No consumer in Phase 1.3**, surface lands in Phase 3.3. |
+| `PhosphorRegistry::IDesktopWidgetFactory` | Factory for a desktop card / widget. Adds `createWidget(QQmlEngine*, QObject*)`. **No consumer in Phase 1.3**, surface lands in Phase 4.4 / 5. |
 | `PhosphorRegistry::Manifest` | Plain-old-data mirror of `manifest.json`. `Manifest::parse` reads the file; `parseObject` exists for tests. Rejects ABI mismatch, missing fields, id / directory mismatch. |
 | `PhosphorRegistry::PluginLoader` | Scans a plugin root, loads each plugin's `.so` + manifest, registers in a `Registry<IBarWidgetFactory>`. Hot-reloads on filesystem change. |
 
@@ -109,7 +109,7 @@ private:
     PhosphorRegistry::Registry<PhosphorRegistry::IBarWidgetFactory> m_registry;
 };
 
-// barcontroller.cpp — forward the registry's signals as one factoryIdsChanged
+// barcontroller.cpp: forward the registry's signals as one factoryIdsChanged
 QObject::connect(m_registry.notifier(),
                  &PhosphorRegistry::RegistryNotifier::factoryRegistered,
                  this, &BarController::factoryIdsChanged);
@@ -140,7 +140,7 @@ QQuickItem* BarController::createWidgetFor(const QString& id, QQuickItem* parent
 **Bar QML**: a `Repeater` drives `factoryIds` and parents each widget
 under its own delegate `Item`. Repeater destroys old delegates on
 model change; QObject's parent-cascade takes the C++-owned widgets
-with them — no manual `child.destroy()` (which fails on C++-owned
+with them (no manual `child.destroy()`, which fails on C++-owned
 QQuickItems with "indestructible object" errors).
 
 ```qml
@@ -189,7 +189,7 @@ phosphor_registry_create_factory()
 ```
 
 ```json
-// in my-plugin/manifest.json — same directory as the .so
+// in my-plugin/manifest.json: same directory as the .so
 {
     "id": "my-plugin",
     "displayName": "My Plugin",
@@ -234,12 +234,12 @@ loader enforces this so on-disk layout and registry keys stay aligned.
 
 ## See also
 
-- `examples/phosphor-registry-demo/` — toy bar with two built-in widgets
+- `examples/phosphor-registry-demo/`: toy bar with two built-in widgets
   registered explicitly. Proves the registry seam.
-- `examples/phosphor-registry-plugin-demo/` — same toy bar plus a third
+- `examples/phosphor-registry-plugin-demo/`: same toy bar plus a third
   widget loaded from a separate `.so`. Proves the plugin ABI and
   hot-reload.
-- `libs/phosphor-layout-api/ILayoutSourceFactory` — the pre-existing
+- `libs/phosphor-layout-api/ILayoutSourceFactory`: the pre-existing
   registry pattern this library generalises.
-- `docs/phosphor-shell-design/04-implementation-plan.md` Phase 1.3 —
+- `docs/phosphor-shell-design/04-implementation-plan.md` Phase 1.3:
   this library's roadmap entry.

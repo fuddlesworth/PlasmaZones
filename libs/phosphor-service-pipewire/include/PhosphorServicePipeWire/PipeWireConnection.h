@@ -67,17 +67,6 @@ public:
     explicit PipeWireConnection(QObject* parent = nullptr);
     ~PipeWireConnection() override;
 
-    /// Asynchronously write a per-channel volume array to the node
-    /// with the given PipeWire global id. The write is dispatched onto
-    /// the loop thread; consumers observe completion via the node's
-    /// `propsChanged` signal once PipeWire echoes the updated Props
-    /// pod. Called by `PwNode::setVolumes` / `setVolume`; rarely
-    /// useful directly.
-    void writeVolumes(quint32 nodeId, const QList<qreal>& volumes);
-    /// Asynchronously write a mute state. Same dispatch + echo model
-    /// as `writeVolumes`.
-    void writeMuted(quint32 nodeId, bool muted);
-
     [[nodiscard]] bool isConnected() const;
     [[nodiscard]] bool isDaemonAvailable() const;
     [[nodiscard]] QString defaultSinkName() const;
@@ -115,6 +104,17 @@ public Q_SLOTS:
     void setDefaultSink(const QString& nodeName);
     /// As above for the audio source.
     void setDefaultSource(const QString& nodeName);
+    /// Asynchronously write a per-channel volume array to the node
+    /// with the given PipeWire global id. The write is dispatched onto
+    /// the loop thread; consumers observe completion via the node's
+    /// `propsChanged` signal once PipeWire echoes the updated Props
+    /// pod. Called by `PwNode::setVolumes` / `setVolume`; advanced QML
+    /// consumers may invoke directly when they have a node id but no
+    /// PwNode* handle.
+    void writeVolumes(quint32 nodeId, const QList<qreal>& volumes);
+    /// Asynchronously write a mute state. Same dispatch + echo model
+    /// as `writeVolumes`.
+    void writeMuted(quint32 nodeId, bool muted);
 
 Q_SIGNALS:
     void connectedChanged();
@@ -129,7 +129,9 @@ Q_SIGNALS:
     void error(const QString& message);
     /// Fired from the GUI thread when the registry reports a new audio
     /// node (Sink, Source, or Stream). The model classes filter by
-    /// `node->mediaClass()`.
+    /// `node->mediaClass()`. Node info / props are empty in this
+    /// signal handler; subscribe to `PwNode::infoChanged` /
+    /// `propsChanged` for populated values.
     /// NOTE: keep in sync with qRegisterMetaType in pipewireconnection.cpp
     void nodeAdded(PhosphorServicePipeWire::PwNode* node);
     /// Fired from the GUI thread BEFORE the PwNode is destroyed so

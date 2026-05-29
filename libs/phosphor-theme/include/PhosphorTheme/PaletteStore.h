@@ -14,6 +14,7 @@
 #include <memory>
 
 class QFileSystemWatcher;
+class QJsonDocument;
 class QTimer;
 
 namespace PhosphorTheme {
@@ -31,8 +32,13 @@ namespace PhosphorTheme {
 // palette file will have the underlying target file watched, not the
 // symlink itself. This is by design: hot-reload should track the file
 // whose contents change, not an indirection that may swap targets
-// without notifying the watcher. No base-dir restriction is applied;
-// callers pass paths they trust (KCM, demo, scripted setup).
+// without notifying the watcher. When canonicalFilePath() returns
+// empty (the path doesn't exist yet, or canonicalisation can't
+// resolve the target), loadFromFile falls back to
+// QFileInfo::absoluteFilePath() so the subsequent open() still
+// surfaces the user-visible path in any error message. No base-dir
+// restriction is applied; callers pass paths they trust (KCM, demo,
+// scripted setup).
 //
 // QML side: registered as a QML singleton via `QML_ELEMENT QML_SINGLETON`,
 // imported as `import Phosphor.Theme` → `PaletteStore.token("primary")`.
@@ -96,6 +102,20 @@ private:
     /// first; `reloadFromCurrentPath` calls it directly so a
     /// successful hot-reload keeps the watcher armed.
     bool parseAndApplyJson(const QByteArray& json);
+    /// Merge variant. Takes an already-parsed JsonDocument so
+    /// callers that validated the document up-front (loadFromFile)
+    /// can route through the same merge logic without paying for a
+    /// second QJsonDocument::fromJson and without losing context
+    /// about WHICH validation step failed (parse vs token-map
+    /// empty). Returns a typed error code so the caller can
+    /// surface the distinction in loadError. The QByteArray
+    /// overload above delegates to this after its own fromJson.
+    enum class ApplyResult {
+        Ok,
+        TokensKeyNotObject,
+        NoUsableTokens,
+    };
+    ApplyResult applyParsedJson(const QJsonDocument& doc);
     /// Disarms the active filesystem watch (file + parent directory),
     /// cancels any pending debounced reload, and clears m_sourcePath
     /// (emitting sourcePathChanged if it was non-empty). The

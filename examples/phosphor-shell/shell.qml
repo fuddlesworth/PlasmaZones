@@ -206,11 +206,7 @@ Item {
         // SystemClock exposes only a QDate (clock.date), not a
         // QDateTime; passing a QDate to Qt.formatTime returns an empty
         // string. String.padStart handles the zero-fill cleanly.
-        // Guard on clock.hours < 0: SystemClock's initial state before
-        // the first tick exposes hours=-1, minutes=-1, and an invalid
-        // QDate, so an unguarded binding briefly renders "-1:-1 · " in
-        // the panel until the first tick lands.
-        clockText: clock.hours < 0 ? "" : String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0") + " · " + Qt.formatDate(clock.date, "ddd MMM dd")
+        clockText: String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0") + " · " + Qt.formatDate(clock.date, "ddd MMM dd")
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent
         // Math.round drops UPower's decimal precision. Deliberate: the

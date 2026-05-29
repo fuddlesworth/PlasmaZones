@@ -7,6 +7,7 @@
 #include <PhosphorServicePipeWire/PwNodeModel.h>
 
 #include <QElapsedTimer>
+#include <QSet>
 #include <QSignalSpy>
 #include <QtTest/QtTest>
 
@@ -181,15 +182,23 @@ private Q_SLOTS:
     /// PwSinkModel / PwSourceModel / PwStreamModel pre-set their
     /// filters; verify the contract so a stray edit in the convenience
     /// constructors trips the test before it reaches a consumer.
+    /// Compare as QSet so a functionally equivalent reordering of the
+    /// internal filter list (e.g. swapping the order of the two stream
+    /// classes) doesn't flake this test. Order is not part of the
+    /// pinned contract; set membership is.
     void convenienceSubclassesPinTheirFilters()
     {
+        using QStringSet = QSet<QString>;
         PhosphorServicePipeWire::PwSinkModel sinks;
         PhosphorServicePipeWire::PwSourceModel sources;
         PhosphorServicePipeWire::PwStreamModel streams;
-        QCOMPARE(sinks.mediaClasses(), (QStringList{QStringLiteral("Audio/Sink")}));
-        QCOMPARE(sources.mediaClasses(), (QStringList{QStringLiteral("Audio/Source")}));
-        QCOMPARE(streams.mediaClasses(),
-                 (QStringList{QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")}));
+        const auto toSet = [](const QStringList& list) {
+            return QStringSet(list.cbegin(), list.cend());
+        };
+        QCOMPARE(toSet(sinks.mediaClasses()), QStringSet{QStringLiteral("Audio/Sink")});
+        QCOMPARE(toSet(sources.mediaClasses()), QStringSet{QStringLiteral("Audio/Source")});
+        QCOMPARE(toSet(streams.mediaClasses()),
+                 (QStringSet{QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")}));
     }
 
     /// Write APIs must survive being called for a non-existent node id
@@ -199,10 +208,15 @@ private Q_SLOTS:
     ///
     /// Observability: we exercise the early-out path explicitly by
     /// asserting state (disconnected before connect; still-connected
-    /// after the unknown-id writes when a daemon is present) and by
-    /// pinning that the connection does not flip to `error` (which it
-    /// would if a buggy implementation dereferenced a null proxy and
-    /// then surfaced the failure through the core-error path).
+    /// after the unknown-id writes when a daemon is present), pin that
+    /// the connection does not flip to `error` (which it would if a
+    /// buggy implementation dereferenced a null proxy and then
+    /// surfaced the failure through the core-error path), AND (when a
+    /// live daemon is available) issue a known-good write to a real
+    /// audio node afterwards and assert it still echoes via
+    /// `propsChanged`. A regression that silently swallowed every
+    /// subsequent write (e.g. by tripping a one-shot guard) would still
+    /// pass the negative half of this test but fail the positive half.
     void writeAPIsAreSafeForUnknownTargets()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
@@ -235,6 +249,43 @@ private Q_SLOTS:
             // binary or fire `error` and flip connected to false.
             QVERIFY(conn.isConnected());
             QCOMPARE(errorSpy.count(), 0);
+
+            // Positive assertion: a follow-up known-good write must
+            // still round-trip. Without this, a silent-swallow
+            // regression (e.g. a one-shot guard that latched after the
+            // bad write) would pass the negative half above.
+            PhosphorServicePipeWire::PwNode* sink = nullptr;
+            for (auto* node : conn.nodes()) {
+                if (node && node->mediaClass() == QLatin1String("Audio/Sink")) {
+                    sink = node;
+                    break;
+                }
+            }
+            if (sink) {
+                QSignalSpy propsSpy(sink, &PhosphorServicePipeWire::PwNode::propsChanged);
+                // Flip mute to the opposite of the current value so the
+                // daemon has work to do; if the node was already in the
+                // requested state the echo may not fire and that's fine
+                // for the contract this test pins (it's the live-write
+                // path we care about).
+                const bool flipTo = !sink->muted();
+                sink->setMuted(flipTo);
+                // Wait up to ~500ms for the echo to land. We don't
+                // assert the echoed value (a parallel session manager
+                // could re-flip it), only that the write path is still
+                // alive and producing signals.
+                propsSpy.wait(500);
+                QVERIFY2(propsSpy.count() >= 1,
+                         "subsequent known-good write produced no propsChanged echo (silent-swallow regression?)");
+                // Restore the previous mute state so this test is
+                // side-effect-clean for the developer host.
+                sink->setMuted(!flipTo);
+                QTest::qWait(100);
+            }
+            // No sink available (rare: a connected daemon with zero
+            // audio sinks). The negative half still pinned no-crash
+            // and no error; we skip the positive half rather than
+            // synthesise a fake assertion.
         } else {
             // No daemon: the writes early-out without a registry; we
             // only assert no crash and the disconnected state.
@@ -325,12 +376,15 @@ private Q_SLOTS:
         }
     }
 
-    /// When no default metadata has been bound (no WirePlumber, or
-    /// pre-handshake), `defaultSinkName()` / `defaultSourceName()` must
-    /// stay empty rather than echo back the sentinel strings used by
-    /// the CLI's resolveTarget(). The CLI's documented behaviour on
-    /// this path is "no node matches default sentinel" with the empty
-    /// default, so this test pins the underlying contract.
+    /// When no default metadata has been bound (no WirePlumber bound
+    /// yet, or pre-handshake), `defaultSinkName()` /
+    /// `defaultSourceName()` must stay empty and the connection must
+    /// not crash. This test only pins the library's contract; it does
+    /// NOT exercise the CLI's resolveTarget() sentinel handling (that's
+    /// the CLI's own responsibility). The empty-default contract
+    /// pinned here is what the CLI relies on to surface its
+    /// "no node matches default sentinel" diagnostic on bare-daemon
+    /// hosts.
     void defaultSentinelMissingMetadataIsHandled()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;

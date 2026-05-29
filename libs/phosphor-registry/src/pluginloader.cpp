@@ -115,6 +115,15 @@ QString PluginLoader::pluginRoot() const
 
 void PluginLoader::scanAndLoad()
 {
+    if (!m_watcher) {
+        // Symmetric with rescanNow's guard. m_watcher is constructed
+        // unconditionally in the ctor and reset only by the dtor, so
+        // the only realistic null window is "scanAndLoad called from
+        // a slot during teardown after ~PluginLoader did m_watcher.reset()
+        // but before the QObject parent's children list is fully
+        // unwound". Cheap to guard, expensive to debug if missed.
+        return;
+    }
     if (!ensurePluginRootExists()) {
         return;
     }
@@ -160,10 +169,23 @@ bool PluginLoader::ensurePluginRootExists() const
     // Per-path so a future re-config of m_pluginRoot to a different
     // path still surfaces a fresh failure the first time. Keyed on
     // the actual root string; QSet not QHash because we only need
-    // membership. Lives at function scope (file-local would be
-    // shared across PluginLoader instances; per-instance would
-    // require adding a member to the public header which the audit
-    // scope forbids).
+    // membership.
+    //
+    // Cross-instance retention: the latch is a function-scope static,
+    // so the set persists across every PluginLoader instance in the
+    // process for the program lifetime. That is intentional. Two
+    // PluginLoader instances sharing the same broken plugin root
+    // (test setups, multi-window shells) should only log the failure
+    // once total, not once per instance. The set entry is dropped
+    // the moment any instance manages to create the directory (the
+    // remove() at the top of this function), so a recoverable
+    // failure resets the latch cleanly.
+    //
+    // We deliberately did not promote this to a per-instance member.
+    // Per-instance would log once-per-instance instead of once-per-
+    // process-per-root, which is louder without being more
+    // diagnostic for the common case (the shell only constructs one
+    // PluginLoader per session).
     static QSet<QString> s_logged;
 
     QDir dir(m_pluginRoot);
@@ -256,9 +278,13 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
         if (it == m_plugins.constEnd() || !it.value()) {
             // A previously-fired pluginUnloaded slot rebounded into
             // a path that removed this entry. Skip it rather than
-            // dereffing a default-constructed shared_ptr.
-            qWarning() << "PluginLoader: plugin" << pluginId
-                       << "vanished mid-unload (rebound from prior signal slot); skipping";
+            // dereffing a default-constructed shared_ptr. This is
+            // legitimate re-entry handling, not an error condition,
+            // so log at qDebug — qWarning would fire on the happy
+            // path every time a slot wired to pluginUnloaded calls
+            // rescanNow() and flood the journal.
+            qDebug() << "PluginLoader: plugin" << pluginId
+                     << "vanished mid-unload (rebound from prior signal slot); skipping";
             continue;
         }
         // Move ownership out of the hash BEFORE any signal fires so

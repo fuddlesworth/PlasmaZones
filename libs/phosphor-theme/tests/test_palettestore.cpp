@@ -25,6 +25,7 @@ private Q_SLOTS:
     void loadFromJson_acceptsFlatShape();
     void loadFromJson_mergesNotReplaces();
     void loadFromJson_rejectsInvalidPayload();
+    void loadFromJson_failedAfterFileLoadPreservesSourcePath();
     void loadFromJson_rejectsWrappedTokensWithNonObjectValue();
     void loadFromFile_persistsSourcePath();
     void loadFromFile_emitsErrorOnMissingFile();
@@ -98,6 +99,53 @@ void TestPaletteStore::loadFromJson_rejectsInvalidPayload()
     // Active palette is unchanged.
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
     QCOMPARE(spy.count(), 0);
+}
+
+void TestPaletteStore::loadFromJson_failedAfterFileLoadPreservesSourcePath()
+{
+    // Regression for the Pass-2 finding: loadFromJson used to call
+    // dropWatcherAndClearSourcePath() BEFORE validating the payload.
+    // On a failed parse against a previously file-loaded store the
+    // watcher torn down, m_sourcePath cleared, and sourcePathChanged
+    // fired — all while the function returned false. The contract
+    // is "a failed load does not observably mutate state". This
+    // test pins that contract: load a good file, then attempt two
+    // failing loadFromJson calls (malformed JSON + valid JSON with
+    // no usable tokens), assert sourcePath survives unchanged and
+    // sourcePathChanged fires exactly ONCE (the initial loadFromFile).
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString goodPath = tmp.filePath(QStringLiteral("good.json"));
+    {
+        QFile f(goodPath);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": {"primary": "#112233"}})");
+    }
+
+    PaletteStore s;
+    QSignalSpy pathSpy(&s, &PaletteStore::sourcePathChanged);
+    QVERIFY(s.loadFromFile(goodPath));
+    const QString sourceAfterLoad = s.sourcePath();
+    QVERIFY(!sourceAfterLoad.isEmpty());
+    QCOMPARE(pathSpy.count(), 1);
+
+    // Failing loadFromJson #1: outright malformed.
+    QVERIFY(!s.loadFromJson("not json"));
+    QCOMPARE(s.sourcePath(), sourceAfterLoad);
+    QCOMPARE(pathSpy.count(), 1); // no additional fire
+
+    // Failing loadFromJson #2: valid JSON, no usable tokens.
+    QVERIFY(!s.loadFromJson(R"({"tokens": {"primary": 42}})"));
+    QCOMPARE(s.sourcePath(), sourceAfterLoad);
+    QCOMPARE(pathSpy.count(), 1); // still no additional fire
+
+    // Failing loadFromJson #3: wrapped tokens with non-object value.
+    QVERIFY(!s.loadFromJson(R"({"tokens": "see other.json"})"));
+    QCOMPARE(s.sourcePath(), sourceAfterLoad);
+    QCOMPARE(pathSpy.count(), 1);
+
+    // Palette tokens that were committed by the file load survive.
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
 }
 
 void TestPaletteStore::loadFromFile_persistsSourcePath()

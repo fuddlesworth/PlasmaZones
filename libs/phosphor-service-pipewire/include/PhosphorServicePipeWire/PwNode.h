@@ -10,7 +10,6 @@
 #include <QObject>
 #include <QString>
 
-#include <cstdint>
 #include <memory>
 
 namespace PhosphorServicePipeWire {
@@ -84,10 +83,11 @@ public Q_SLOTS:
     /// to their own UI's allowed range before invoking; the slot
     /// forwards `value` to the daemon verbatim.
     void setVolume(qreal value);
-    /// Per-channel write. Callers MUST size `values` to match
-    /// `channelCount()`; on mismatch the implementation logs a
-    /// warning and skips the write rather than letting PipeWire
-    /// clamp or drop entries silently.
+    /// Per-channel write. Forwards verbatim to
+    /// `PipeWireConnection::writeVolumes`. PipeWire clamps the array
+    /// to `SPA_AUDIO_MAX_CHANNELS` and ignores entries beyond
+    /// `channelCount()`; callers should size `values` to match
+    /// `channelCount()` to avoid silent truncation.
     ///
     /// Each entry follows the same linear-amplitude contract as
     /// `setVolume` (approximately `[0.0, 1.0]+`, caller-clamped).

@@ -89,12 +89,15 @@ void registerQmlTypes()
         // thread-affinity rule is satisfied.
         qmlRegisterSingletonType<PipeWireHost>(
             kModule, kModuleVersionMajor, kModuleVersionMinor, "PipeWireHost", [](QQmlEngine*, QJSEngine*) -> QObject* {
+                // The function-static QObject inherits the calling
+                // thread's affinity on first construction; we assume
+                // the QQmlEngine that triggers this factory lives on
+                // the main thread (which is the documented Phosphor
+                // shell contract — engines are constructed in
+                // PhosphorShell::ShellEngine on the GUI thread).
                 static std::unique_ptr<PipeWireHost> host = std::make_unique<PipeWireHost>();
-                // C++ owns the
-                // lifetime via the
-                // function-static
-                // unique_ptr; tell
-                // QML not to GC it.
+                // C++ owns the lifetime via the function-static
+                // unique_ptr; tell QML not to GC it.
                 QQmlEngine::setObjectOwnership(host.get(), QQmlEngine::CppOwnership);
                 return host.get();
             });

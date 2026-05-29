@@ -30,7 +30,7 @@ class PwNode;
 /// - `node`        (`Qt::UserRole+1`)  — the PwNode* itself; QML usually
 ///                                       binds through this for nested
 ///                                       access (`model.node.volumes[0]`).
-/// - `id`          (`Qt::UserRole+2`)  — PipeWire global id (uint).
+/// - `id`          (`Qt::UserRole+2`)  — PipeWire global id (quint32).
 /// - `name`        (`Qt::UserRole+3`)  — `node.name`.
 /// - `nick`        (`Qt::UserRole+4`)  — `node.nick`.
 /// - `description` (`Qt::UserRole+5`)  — `node.description`.
