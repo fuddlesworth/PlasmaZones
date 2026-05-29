@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/UPowerHost.h>
-#include <PhosphorServices/UPowerDevice.h>
+#include <PhosphorServiceUPower/UPowerHost.h>
+#include <PhosphorServiceUPower/UPowerDevice.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -12,7 +12,7 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 
-Q_LOGGING_CATEGORY(lcUPowerHost, "phosphorservices.upower.host")
+Q_LOGGING_CATEGORY(lcUPowerHost, "phosphor.service.upower.host")
 
 namespace {
 constexpr auto kService = "org.freedesktop.UPower";
@@ -21,7 +21,7 @@ constexpr auto kIface = "org.freedesktop.UPower";
 constexpr auto kPropsIface = "org.freedesktop.DBus.Properties";
 } // namespace
 
-namespace PhosphorServices {
+namespace PhosphorServiceUPower {
 
 class UPowerHost::Private
 {
@@ -191,4 +191,4 @@ void UPowerHost::_q_onDeviceRemoved(const QDBusObjectPath& path)
     d->removeDevice(path.path());
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceUPower

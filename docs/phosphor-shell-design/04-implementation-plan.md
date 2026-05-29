@@ -221,15 +221,17 @@ Each service follows the same shape:
 
 The umbrella already houses four tenants. Before adding new ones, extract these to follow the pattern (small, mostly-mechanical moves; update consumers in the same PRs):
 
-| Source                                             | New home                                 | Notes                                                                          |
-|----------------------------------------------------|------------------------------------------|--------------------------------------------------------------------------------|
-| `phosphor-services/src/statusnotifier/`            | `phosphor-service-sni/`                  | StatusNotifierItem host + watcher + dbusmenu. First-tenant historical context. |
-| `phosphor-services/src/mpris/`                     | `phosphor-service-mpris/`                | MPRIS client + player aggregation.                                              |
-| `phosphor-services/src/upower/`                    | `phosphor-service-upower/`               | Battery/power-supply readouts. (Already used by current `examples/phosphor-shell/`.) |
-| `phosphor-services/src/icontheme/` + `iconimageprovider.*` | `phosphor-service-icontheme/`    | Icon-theme resolution + Qt image provider. Possibly fold into `phosphor-rendering` if it's purely a Qt image provider, judgement call when extracting. |
-| `libs/phosphor-services/` umbrella                 | **deleted**                              | Once empty. No backwards-compat shim, per `feedback_no_legacy_shims`.          |
+| Source                                             | New home                                 | Status | Notes                                                                          |
+|----------------------------------------------------|------------------------------------------|--------|--------------------------------------------------------------------------------|
+| `phosphor-services/src/statusnotifier/`            | `phosphor-service-sni/`                  | pending | StatusNotifierItem host + watcher + dbusmenu. First-tenant historical context. |
+| `phosphor-services/src/mpris/`                     | `phosphor-service-mpris/`                | pending | MPRIS client + player aggregation.                                              |
+| `phosphor-services/src/upower/`                    | `phosphor-service-upower/`               | ✓ shipped | Battery/power-supply readouts. Namespace `PhosphorServiceUPower::`, QML module `Phosphor.Service.UPower 1.0`. Used by `examples/phosphor-shell/`; consumers updated in the same PR. |
+| `phosphor-services/src/icontheme/` + `iconimageprovider.*` | `phosphor-service-icontheme/`    | pending | Icon-theme resolution + Qt image provider. Possibly fold into `phosphor-rendering` if it's purely a Qt image provider, judgement call when extracting. |
+| `libs/phosphor-services/` umbrella                 | **deleted**                              | blocked | Blocked on sni / mpris / icontheme above. No backwards-compat shim, per `feedback_no_legacy_shims`. |
 
 **Effort:** S-M total. Mechanical except for any cross-tenant helper code that needs to move into `phosphor-dbus` or a new tiny `phosphor-service-icontheme`. Per CLAUDE.md, every call site updates in the same PR.
+
+**Approach:** one PR per tenant, in order of simplest-to-most-coupled (upower → mpris → sni → icontheme → delete umbrella). Keeps each diff reviewable and the integration branch green between merges.
 
 ### 2.1-2.10, New service libraries
 

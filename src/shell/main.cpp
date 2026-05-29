@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <PhosphorServices/QmlRegistration.h>
+#include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorShell/ShellEngine.h>
 #include <PhosphorShell/ShellLoader.h>
 #include <PhosphorWayland/LayerShellPluginLoader.h>
@@ -30,6 +31,10 @@ int main(int argc, char* argv[])
     // 1.0 — without this they'd surface as "not a type" errors at
     // QML load time. Idempotent under repeated calls.
     PhosphorServices::registerQmlTypes();
+    // UPower lives in its own library (post Phase 2.0 split); the
+    // bar's battery widget imports Phosphor.Service.UPower 1.0 and
+    // needs its types registered the same way.
+    PhosphorServiceUPower::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();

@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/UPowerDeviceModel.h>
-#include <PhosphorServices/UPowerDevice.h>
-#include <PhosphorServices/UPowerHost.h>
+#include <PhosphorServiceUPower/UPowerDeviceModel.h>
+#include <PhosphorServiceUPower/UPowerDevice.h>
+#include <PhosphorServiceUPower/UPowerHost.h>
 
-namespace PhosphorServices {
+namespace PhosphorServiceUPower {
 
 UPowerDeviceModel::UPowerDeviceModel(QObject* parent)
     : QAbstractListModel(parent)
@@ -133,4 +133,4 @@ void UPowerDeviceModel::connectDevice(UPowerDevice* device)
     });
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceUPower

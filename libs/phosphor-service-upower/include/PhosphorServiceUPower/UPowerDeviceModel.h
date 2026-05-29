@@ -3,19 +3,19 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceUPower/phosphorserviceupower_export.h>
 
-#include <PhosphorServices/UPowerDevice.h>
-#include <PhosphorServices/UPowerHost.h>
+#include <PhosphorServiceUPower/UPowerDevice.h>
+#include <PhosphorServiceUPower/UPowerHost.h>
 
 #include <QAbstractListModel>
 
-namespace PhosphorServices {
+namespace PhosphorServiceUPower {
 
-class PHOSPHORSERVICES_EXPORT UPowerDeviceModel : public QAbstractListModel
+class PHOSPHORSERVICEUPOWER_EXPORT UPowerDeviceModel : public QAbstractListModel
 {
     Q_OBJECT
-    Q_PROPERTY(PhosphorServices::UPowerHost* host READ host WRITE setHost NOTIFY hostChanged)
+    Q_PROPERTY(PhosphorServiceUPower::UPowerHost* host READ host WRITE setHost NOTIFY hostChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
@@ -44,9 +44,9 @@ Q_SIGNALS:
     void countChanged();
 
 private Q_SLOTS:
-    void onDeviceAdded(PhosphorServices::UPowerDevice* device);
-    void onDeviceRemoved(PhosphorServices::UPowerDevice* device);
-    void onDeviceDataChanged(PhosphorServices::UPowerDevice* device);
+    void onDeviceAdded(PhosphorServiceUPower::UPowerDevice* device);
+    void onDeviceRemoved(PhosphorServiceUPower::UPowerDevice* device);
+    void onDeviceDataChanged(PhosphorServiceUPower::UPowerDevice* device);
 
 private:
     void connectDevice(UPowerDevice* device);
@@ -58,4 +58,4 @@ private:
     QList<UPowerDevice*> m_rows;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceUPower

@@ -464,7 +464,8 @@ endforeach()
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
 if(BUILD_PHOSPHOR_SHELL)
-    add_subdirectory(libs/phosphor-services) # DBus + platform-integration primitives (SNI tray, dbusmenu, future: notifications/MPRIS/UPower)
+    add_subdirectory(libs/phosphor-services) # DBus + platform-integration primitives (SNI tray, dbusmenu, MPRIS, icon-theme)
+    add_subdirectory(libs/phosphor-service-upower) # UPower battery / power-supply readouts (extracted from phosphor-services in Phase 2.0)
 endif()
 
 # Source directories

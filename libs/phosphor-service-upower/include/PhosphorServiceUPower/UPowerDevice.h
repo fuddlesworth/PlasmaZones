@@ -3,16 +3,16 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceUPower/phosphorserviceupower_export.h>
 
 #include <QObject>
 #include <QString>
 
 #include <memory>
 
-namespace PhosphorServices {
+namespace PhosphorServiceUPower {
 
-class PHOSPHORSERVICES_EXPORT UPowerDevice : public QObject
+class PHOSPHORSERVICEUPOWER_EXPORT UPowerDevice : public QObject
 {
     Q_OBJECT
 
@@ -107,4 +107,4 @@ private:
     std::unique_ptr<Private> d;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceUPower

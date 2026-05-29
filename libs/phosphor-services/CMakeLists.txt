@@ -3,8 +3,9 @@
 #
 # PhosphorServices — DBus + platform-integration primitives for Phosphor-based
 # desktop shells. First tenant: StatusNotifierItem (system tray) host + watcher
-# + dbusmenu. Future siblings: org.freedesktop.Notifications, MPRIS, UPower,
-# NetworkManager, logind.
+# + dbusmenu. Remaining tenants are being extracted per-domain into
+# `phosphor-service-*` siblings as documented in Phase 2.0 of
+# docs/phosphor-shell-design/04-implementation-plan.md (UPower → `phosphor-service-upower`).
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -55,9 +56,9 @@ qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
     dbusmenu_interface
 )
 
-# MPRIS and UPower use hand-rolled QDBusInterface/QDBusMessage calls
-# (matching the pattern in phosphor-screens, the daemon, etc.) rather
-# than qt6_add_dbus_interface code generation.
+# MPRIS uses hand-rolled QDBusInterface/QDBusMessage calls (matching
+# the pattern in phosphor-screens, the daemon, etc.) rather than
+# qt6_add_dbus_interface code generation.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Public Headers
@@ -74,9 +75,6 @@ set(phosphorservices_public_HDRS
     include/PhosphorServices/MprisPlayer.h
     include/PhosphorServices/MprisHost.h
     include/PhosphorServices/MprisPlayerModel.h
-    include/PhosphorServices/UPowerDevice.h
-    include/PhosphorServices/UPowerHost.h
-    include/PhosphorServices/UPowerDeviceModel.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -96,9 +94,6 @@ set(phosphorservices_SRCS
     src/mpris/mprishost.cpp
     src/mpris/mprisplayer.cpp
     src/mpris/mprisplayermodel.cpp
-    src/upower/upowerhost.cpp
-    src/upower/upowerdevice.cpp
-    src/upower/upowerdevicemodel.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -11,8 +11,9 @@
 
 The spec-driven D-Bus services a desktop shell needs, each under the
 `PhosphorServices::` namespace and the `Phosphor.Services` QML import so
-a shell can pull in only what it uses. Three service families ship
-today:
+a shell can pull in only what it uses. Two service families ship here
+today; UPower has been extracted into a sibling library (see [Phase 2.0
+extraction note](#phase-20-extraction)).
 
 - **System tray** — `org.kde.StatusNotifierItem` host + watcher with
   full XDG icon-theme lookup and `com.canonical.dbusmenu` context
@@ -24,15 +25,10 @@ today:
   players appearing and disappearing; each `MprisPlayer` exposes
   playback state, track metadata, position, volume, and transport
   controls.
-- **Power** — UPower (`org.freedesktop.UPower`) battery and
-  power-supply state. `UPowerHost` exposes the aggregate display
-  device, the full device list, and the on-battery flag; each
-  `UPowerDevice` reports percentage, charge state, time estimates, and
-  health.
 
-All three are hand-rolled `QDBusMessage` async-call clients (no
-generated proxies): property fetches batch through `GetAll` and never
-block the GUI thread.
+Both are hand-rolled `QDBusMessage` async-call clients (no generated
+proxies): property fetches batch through `GetAll` and never block the
+GUI thread.
 
 ## Key types
 
@@ -57,19 +53,22 @@ block the GUI thread.
 
 ### Power (UPower)
 
-| Type | Purpose |
-|------|---------|
-| `UPowerHost`        | Connects to UPower on the system bus; exposes the display device, device list, and on-battery flag. |
-| `UPowerDevice`      | One power device: percentage, state, type, time-to-empty/full, energy, health. Owned by `UPowerHost`. |
-| `UPowerDeviceModel` | `QAbstractListModel` over `UPowerHost` for QML binding. |
+Moved to [`phosphor-service-upower`](../phosphor-service-upower/README.md). Consumers import `Phosphor.Service.UPower 1.0` and link `PhosphorServiceUPower::PhosphorServiceUPower` separately.
 
 ## QML registration
 
 `registerQmlTypes()` registers the QML-exposed types under the
 `Phosphor.Services` import URI; the host application must call it once
-before loading QML. `MprisPlayer` and `UPowerDevice` are registered
-uncreatable — they are vended by their hosts and models, never
-constructed from QML.
+before loading QML. `MprisPlayer` is registered uncreatable — it is
+vended by `MprisHost` / `MprisPlayerModel` and never constructed from
+QML.
+
+## Phase 2.0 extraction
+
+The umbrella is being dissolved per Phase 2.0 of
+`docs/phosphor-shell-design/04-implementation-plan.md`. UPower has
+already moved out; StatusNotifierItem, MPRIS, and the icon-theme
+resolver follow.
 
 ## Dependencies
 

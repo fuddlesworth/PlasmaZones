@@ -93,11 +93,11 @@ libs/                                      # C++ libraries, every concern is its
   phosphor-service-session/                # logind (DBus org.freedesktop.login1)
 
   # EXTRACTED from the existing phosphor-services umbrella (Phase 2.0 of plan).
-  # After extraction the umbrella is deleted, no compat shim.
-  phosphor-service-sni/                    # StatusNotifierItem host + watcher + dbusmenu
-  phosphor-service-mpris/                  # MPRIS controller
-  phosphor-service-upower/                 # battery + power-supply readouts
-  phosphor-service-icontheme/              # icon-theme resolver + Qt image provider
+  # After all four are extracted the umbrella is deleted, no compat shim.
+  phosphor-service-sni/                    # StatusNotifierItem host + watcher + dbusmenu (pending)
+  phosphor-service-mpris/                  # MPRIS controller (pending)
+  phosphor-service-upower/                 # ✓ battery + power-supply readouts (shipped)
+  phosphor-service-icontheme/              # icon-theme resolver + Qt image provider (pending)
                                            #   (or folded into phosphor-rendering, decide at extraction time)
 
   # Existing libs, touched only where the surface work requires.

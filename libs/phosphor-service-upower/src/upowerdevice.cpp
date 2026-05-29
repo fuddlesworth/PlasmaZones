@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/UPowerDevice.h>
+#include <PhosphorServiceUPower/UPowerDevice.h>
 
 #include <type_traits>
 
@@ -12,7 +12,7 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 
-Q_LOGGING_CATEGORY(lcUPowerDevice, "phosphorservices.upower.device")
+Q_LOGGING_CATEGORY(lcUPowerDevice, "phosphor.service.upower.device")
 
 namespace {
 constexpr auto kService = "org.freedesktop.UPower";
@@ -20,7 +20,7 @@ constexpr auto kDeviceIface = "org.freedesktop.UPower.Device";
 constexpr auto kPropsIface = "org.freedesktop.DBus.Properties";
 } // namespace
 
-namespace PhosphorServices {
+namespace PhosphorServiceUPower {
 
 class UPowerDevice::Private
 {
@@ -243,4 +243,4 @@ void UPowerDevice::_q_onPropertiesChanged(const QString& iface, const QVariantMa
         d->requestAll();
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceUPower

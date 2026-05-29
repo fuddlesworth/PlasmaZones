@@ -14,9 +14,10 @@
  *
  * First tenant: StatusNotifierItem (system tray) host + watcher with
  * full XDG icon-theme spec lookup and com.canonical.dbusmenu support.
- * Future siblings live behind the same `PhosphorServices::` namespace:
- * `org.freedesktop.Notifications`, MPRIS, UPower, NetworkManager,
- * logind, ext-session-lock-v1, ext-idle-notify-v1.
+ * MPRIS and the icon-theme resolver are co-tenants. Other desktop
+ * services are extracted per-domain into `phosphor-service-*` sibling
+ * libraries (see docs/phosphor-shell-design/04-implementation-plan.md);
+ * UPower is the first such extraction (`PhosphorServiceUPower::`).
  */
 
 #include <PhosphorServices/StatusNotifierItem.h>
