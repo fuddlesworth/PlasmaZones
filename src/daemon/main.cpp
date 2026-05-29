@@ -12,6 +12,7 @@
 #include "rendering/zoneshaderitem.h"
 #include "version.h"
 #include "vulkan_support.h"
+#include "waylandsessioncheck.h"
 
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -55,28 +56,28 @@ void signalHandler(int /*signal*/)
 
 int main(int argc, char* argv[])
 {
-    // Exit cleanly (code 0) if the Wayland socket is already gone — avoids
-    // a SIGABRT → Restart=on-failure loop. See queryPlasmaWorkspaceState()
-    // in daemon.cpp for the full phantom-session analysis.
+    // Exit cleanly (code 0) if there is no usable Wayland display — avoids a
+    // SIGABRT → Restart=on-failure loop. When systemd respawns us during the
+    // logout → SDDM handoff (or autostarts us in a session that has no live
+    // wl_display), Qt's wayland QPA can't create a wl_display, the xcb fallback
+    // also fails, and QGuiApplication's constructor calls qFatal() → abort.
+    // This is a Wayland-only daemon, so "no wayland socket" means "nothing to
+    // do". Resolving the socket path handles the empty/unset WAYLAND_DISPLAY
+    // case too (Qt's default "wayland-0"), which previously bypassed this guard
+    // and let Qt abort. See queryPlasmaWorkspaceState() in daemon.cpp for the
+    // full phantom-session analysis.
     {
         const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
-        if (!waylandDisplay.isEmpty()) {
-            QByteArray socketPath;
-            if (waylandDisplay.startsWith('/')) {
-                socketPath = waylandDisplay;
-            } else {
-                const QByteArray runtimeDir = qgetenv("XDG_RUNTIME_DIR");
-                if (!runtimeDir.isEmpty()) {
-                    socketPath = runtimeDir + '/' + waylandDisplay;
-                }
-            }
-            if (!socketPath.isEmpty() && !QFile::exists(QString::fromLocal8Bit(socketPath))) {
-                std::fprintf(stderr,
-                             "plasmazones: WAYLAND_DISPLAY=%s but socket %s missing — "
-                             "wayland session not available, exiting cleanly to avoid restart loop\n",
-                             waylandDisplay.constData(), socketPath.constData());
-                return 0;
-            }
+        const QByteArray runtimeDir = qgetenv("XDG_RUNTIME_DIR");
+        const QString socketPath = resolveWaylandSocketPath(waylandDisplay, runtimeDir);
+        if (socketPath.isEmpty() || !QFile::exists(socketPath)) {
+            std::fprintf(stderr,
+                         "plasmazones: no usable Wayland display (WAYLAND_DISPLAY=\"%s\", "
+                         "resolved socket \"%s\") — wayland session not available, "
+                         "exiting cleanly to avoid restart loop\n",
+                         waylandDisplay.constData(),
+                         socketPath.isEmpty() ? "<none>" : socketPath.toLocal8Bit().constData());
+            return 0;
         }
     }
 

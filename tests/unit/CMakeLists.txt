@@ -258,6 +258,14 @@ target_link_libraries(test_animation_profile_publication
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorAnimation::PhosphorAnimation)
 add_test(NAME test_animation_profile_publication COMMAND test_animation_profile_publication)
 
+# Startup Wayland-display guard (main.cpp). Pins resolveWaylandSocketPath()
+# so an empty/unset WAYLAND_DISPLAY resolves to Qt's default "wayland-0" and
+# the guard exits cleanly instead of letting QGuiApplication qFatal() →
+# SIGABRT → core dump. Header-only logic, so links Qt6::Core only.
+add_executable(test_wayland_session_check daemon/test_wayland_session_check.cpp)
+target_link_libraries(test_wayland_session_check PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_wayland_session_check COMMAND test_wayland_session_check)
+
 # Phase-5 SurfaceAnimator scope-prefix policy. Pins down the
 # per-instance scope construction in osd.cpp / selector.cpp /
 # snapassist.cpp so a divergence from the PzRoles base scopePrefix
