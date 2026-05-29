@@ -26,15 +26,16 @@ private Q_SLOTS:
         QCOMPARE(conn.isDaemonAvailable(), false);
     }
 
-    /// disconnect() before connect() is a documented no-op; calling it
-    /// must not emit spurious signals or crash the loop thread.
+    /// disconnectFromDaemon() before connectToDaemon() is a documented
+    /// no-op; calling it must not emit spurious signals or crash the
+    /// loop thread.
     void disconnectBeforeConnectIsNoop()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
         QSignalSpy connSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged);
         QSignalSpy availSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::daemonAvailableChanged);
 
-        conn.disconnect();
+        conn.disconnectFromDaemon();
         // Process any queued events from the loop thread to make sure
         // a misbehaving doDisconnect doesn't leak signals into the GUI
         // queue.
@@ -44,19 +45,20 @@ private Q_SLOTS:
         QCOMPARE(availSpy.count(), 0);
     }
 
-    /// Multiple connect() calls collapse into one effective attempt;
-    /// pin idempotency by spying on `connectedChanged`. Even if a real
-    /// daemon answers the handshake, the property may flip at most once
-    /// (false to true). On a no-daemon host the count stays at 0. Any
-    /// value above 1 means a second connect() re-armed the property
-    /// transition path, which is the regression we want to catch.
+    /// Multiple connectToDaemon() calls collapse into one effective
+    /// attempt; pin idempotency by spying on `connectedChanged`. Even
+    /// if a real daemon answers the handshake, the property may flip at
+    /// most once (false to true). On a no-daemon host the count stays
+    /// at 0. Any value above 1 means a second connectToDaemon()
+    /// re-armed the property transition path, which is the regression
+    /// we want to catch.
     void connectIdempotent()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
         QSignalSpy connectedSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged);
-        conn.connect();
-        conn.connect();
-        conn.connect();
+        conn.connectToDaemon();
+        conn.connectToDaemon();
+        conn.connectToDaemon();
         QTest::qWait(100);
         QVERIFY2(connectedSpy.count() <= 1,
                  qPrintable(QStringLiteral("connectedChanged fired %1 times").arg(connectedSpy.count())));
@@ -74,7 +76,7 @@ private Q_SLOTS:
         QElapsedTimer timer;
         timer.start();
         auto conn = std::make_unique<PhosphorServicePipeWire::PipeWireConnection>();
-        conn->connect();
+        conn->connectToDaemon();
         // Drop the unique_ptr without waiting; ~PipeWireConnection has
         // to win the race against the loop thread's pw_context_connect.
         conn.reset();
@@ -83,7 +85,7 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("destruction took %1ms (expected < 2000ms)").arg(elapsedMs)));
     }
 
-    /// `nodes()` returns an empty list pre-connect. The list type is
+    /// `nodes()` returns an empty list pre-connectToDaemon. The list type is
     /// QList<PwNode*> by value (snapshot semantics) — verify nothing
     /// throws and the result is the expected shape.
     void nodesEmptyBeforeConnect()
@@ -106,7 +108,7 @@ private Q_SLOTS:
         QSignalSpy removedSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::nodeRemoved);
         QSignalSpy connectedSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged);
 
-        conn.connect();
+        conn.connectToDaemon();
         // 250ms is plenty for PipeWire's local-socket handshake +
         // initial registry walk on a developer host; on a no-daemon
         // host the wait just times out cleanly.
@@ -126,13 +128,13 @@ private Q_SLOTS:
                              || mc == QLatin1String("Stream/Output/Audio") || mc == QLatin1String("Stream/Input/Audio"),
                          qPrintable(QStringLiteral("unexpected mediaClass: %1").arg(mc)));
             }
-            // disconnect() should fire a nodeRemoved for at least
-            // every node we observed. Use >= rather than == because
-            // the daemon may add or remove nodes mid-shutdown (a
-            // hot-plugged USB sink, a Firefox stream ending) and
+            // disconnectFromDaemon() should fire a nodeRemoved for at
+            // least every node we observed. Use >= rather than ==
+            // because the daemon may add or remove nodes mid-shutdown
+            // (a hot-plugged USB sink, a Firefox stream ending) and
             // exact-equality would flake on a live host.
             const int expectedRemovals = nodes.size();
-            conn.disconnect();
+            conn.disconnectFromDaemon();
             QTest::qWait(150);
             QVERIFY2(
                 removedSpy.count() >= expectedRemovals,
@@ -208,9 +210,9 @@ private Q_SLOTS:
     }
 
     /// Write APIs must survive being called for a non-existent node id
-    /// and before connect(). The dispatch goes via pw_loop_invoke, so
-    /// a buggy implementation would either crash on the unique_ptr
-    /// guard or leak the request struct.
+    /// and before connectToDaemon(). The dispatch goes via
+    /// pw_loop_invoke, so a buggy implementation would either crash on
+    /// the unique_ptr guard or leak the request struct.
     ///
     /// Observability: we exercise the early-out path explicitly by
     /// asserting state (disconnected before connect; still-connected
@@ -241,7 +243,7 @@ private Q_SLOTS:
         // safe: the loop-thread handler logs at debug level and returns
         // without touching a proxy. The connection must survive without
         // an error fire and without flipping out of the connected state.
-        conn.connect();
+        conn.connectToDaemon();
         QTest::qWait(250);
         const bool wasConnected = conn.isConnected();
         conn.writeVolumes(99999u, {0.5});
@@ -325,7 +327,7 @@ private Q_SLOTS:
         // changes without reaching for `.connection.connected`.
         QSignalSpy connSpy(&host, &PhosphorServicePipeWire::PipeWireHost::connectedChanged);
         QSignalSpy availSpy(&host, &PhosphorServicePipeWire::PipeWireHost::daemonAvailableChanged);
-        // Host construction kicked off connect() — give it a moment.
+        // Host construction kicked off connectToDaemon() — give it a moment.
         QTest::qWait(250);
         if (!host.isConnected()) {
             // Surface a real skip in the CI dashboard rather than a
@@ -338,11 +340,12 @@ private Q_SLOTS:
         QVERIFY(availSpy.count() >= 1);
         // Property forwarding matches the connection's truth.
         QCOMPARE(host.defaultSinkName(), host.connection()->defaultSinkName());
-        // reconnect() exercises the disconnect → connect cycle. After
-        // it returns, the connection accessor must still be live and the
-        // connectedChanged spy must have observed at least one more
-        // transition (the disconnect half of the cycle) plus the second
-        // reconnect half if the daemon answered the new handshake.
+        // reconnect() exercises the disconnectFromDaemon → connectToDaemon
+        // cycle. After it returns, the connection accessor must still be
+        // live and the connectedChanged spy must have observed at least
+        // one more transition (the disconnect half of the cycle) plus
+        // the second reconnect half if the daemon answered the new
+        // handshake.
         host.reconnect();
         QTest::qWait(150);
         QVERIFY(host.connection() != nullptr);
@@ -360,7 +363,7 @@ private Q_SLOTS:
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
         QSignalSpy sinkSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::defaultSinkNameChanged);
-        conn.connect();
+        conn.connectToDaemon();
         QTest::qWait(300);
         // Surface a real skip in the CI dashboard rather than a silent
         // pass; a "no-daemon" run looks identical to a "real check"
@@ -389,7 +392,7 @@ private Q_SLOTS:
         sources.setConnection(&conn);
         streams.setConnection(&conn);
 
-        conn.connect();
+        conn.connectToDaemon();
         QTest::qWait(300);
 
         // Surface a real skip in the CI dashboard rather than a silent
@@ -439,7 +442,7 @@ private Q_SLOTS:
         // default metadata never lands; on a no-daemon host the
         // connection never reaches connected. Either way the defaults
         // remain empty and the connection survives.
-        conn.connect();
+        conn.connectToDaemon();
         QTest::qWait(250);
         if (!conn.isConnected()) {
             // No daemon at all — surface a real skip in the CI dashboard
@@ -456,16 +459,17 @@ private Q_SLOTS:
         QVERIFY(conn.isConnected());
     }
 
-    /// After disconnect() any tracked nodes must be removed (the
-    /// connection emits `nodeRemoved` for each one as part of teardown
-    /// so observers/models can detach before the PwNode destructors run).
-    /// On a no-daemon host the registry never populated, so the spy
-    /// stays at zero, which is also a valid clean teardown.
+    /// After disconnectFromDaemon() any tracked nodes must be removed
+    /// (the connection emits `nodeRemoved` for each one as part of
+    /// teardown so observers/models can detach before the PwNode
+    /// destructors run). On a no-daemon host the registry never
+    /// populated, so the spy stays at zero, which is also a valid clean
+    /// teardown.
     void nodeRemovedAfterDisconnect()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
         QSignalSpy removedSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::nodeRemoved);
-        conn.connect();
+        conn.connectToDaemon();
         QTest::qWait(250);
         const int trackedBeforeDisconnect = conn.nodes().size();
         // Snapshot the removed-count BEFORE disconnect so we can assert
@@ -474,7 +478,7 @@ private Q_SLOTS:
         // handshake) would otherwise be counted against the
         // disconnect-driven removals and mask a regression.
         const int removedBeforeDisconnect = removedSpy.count();
-        conn.disconnect();
+        conn.disconnectFromDaemon();
         QTest::qWait(150);
         // Every node that was being tracked at disconnect time must
         // have a matching nodeRemoved emission attributable to the

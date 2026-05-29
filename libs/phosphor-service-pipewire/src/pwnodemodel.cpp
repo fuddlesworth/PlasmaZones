@@ -13,6 +13,20 @@ namespace PhosphorServicePipeWire {
 class PwNodeModel::Private
 {
 public:
+    explicit Private(PwNodeModel* qq)
+        : q(qq)
+    {
+    }
+
+    // Back-pointer to the owning model. Needed because
+    // `rebuildFromConnection` and the connect-lambdas drive
+    // QAbstractListModel's protected row-event machinery
+    // (`beginInsertRows` / `endInsertRows`, `beginRemoveRows` /
+    // `endRemoveRows`, `index()`) and emit `countChanged`. Private is
+    // a friend of PwNodeModel (declared in the header) so those
+    // protected/signal accesses through `q` resolve correctly.
+    PwNodeModel* q = nullptr;
+
     QPointer<PipeWireConnection> connection;
     QStringList mediaClasses;
     QList<PwNode*> nodes;
@@ -28,11 +42,21 @@ public:
     // tracks nodeAdded / nodeRemoved on the PipeWireConnection itself.
     QList<QMetaObject::Connection> connectionWires;
     QHash<PwNode*, QList<QMetaObject::Connection>> nodeWires;
+
+    // Tear down all wires + rows, attach to `newConnection`, and
+    // re-seed from its current node snapshot. Used by both
+    // `setConnection` (which then emits `connectionChanged`) and
+    // `setMediaClasses` (which only emits `mediaClassesChanged`, since
+    // the connection pointer didn't actually change). Lives on
+    // Private rather than PwNodeModel so the header doesn't have to
+    // declare an implementation helper as a private member function —
+    // every caller goes through the public slot signatures.
+    void rebuildFromConnection(PipeWireConnection* newConnection);
 };
 
 PwNodeModel::PwNodeModel(QObject* parent)
     : QAbstractListModel(parent)
-    , d(std::make_unique<Private>())
+    , d(std::make_unique<Private>(this))
 {
 }
 
@@ -47,7 +71,7 @@ PwNodeModel::~PwNodeModel()
     // would invite slots to read connection() after `d` has begun
     // unwinding. rebuildFromConnection(nullptr) drops every wire +
     // row without firing the property-NOTIFY signal.
-    rebuildFromConnection(nullptr);
+    d->rebuildFromConnection(nullptr);
 }
 
 PipeWireConnection* PwNodeModel::connection() const
@@ -70,135 +94,136 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
     // current `connection` property.
     d->connection = connection;
     Q_EMIT connectionChanged();
-    rebuildFromConnection(connection);
+    d->rebuildFromConnection(connection);
 }
 
-void PwNodeModel::rebuildFromConnection(PipeWireConnection* connection)
+void PwNodeModel::Private::rebuildFromConnection(PipeWireConnection* newConnection)
 {
     // Cache the row count up-front so we only emit countChanged once
     // at the end if the count actually moved. Previously we fired
     // countChanged up to four times per rebuild (one per remove +
     // insert phase) which forced every count-bound QML view to
     // re-evaluate four times for a single logical state change.
-    const int oldCount = d->nodes.size();
+    const int oldCount = nodes.size();
 
     // Drop wires + nodes from any previous connection.
-    for (const auto& wire : d->connectionWires) {
+    for (const auto& wire : connectionWires) {
         QObject::disconnect(wire);
     }
-    d->connectionWires.clear();
-    for (auto* node : d->nodes) {
-        for (const auto& wire : d->nodeWires.value(node)) {
+    connectionWires.clear();
+    for (auto* node : nodes) {
+        for (const auto& wire : nodeWires.value(node)) {
             QObject::disconnect(wire);
         }
     }
-    d->nodeWires.clear();
-    if (!d->nodes.isEmpty()) {
-        // `d->nodes.clear()` and `d->rowIndex.clear()` MUST sit
-        // between beginRemoveRows() and endRemoveRows() for the
+    nodeWires.clear();
+    if (!nodes.isEmpty()) {
+        // `nodes.clear()` and `rowIndex.clear()` MUST sit between
+        // beginRemoveRows() and endRemoveRows() for the
         // QAbstractItemModel invariant to hold: rowCount() reflects
         // the post-removal state when views query it from
         // endRemoveRows(), and any view-side cache rebuilt inside
         // that callback would see stale rows if we cleared after.
-        beginRemoveRows(QModelIndex(), 0, d->nodes.size() - 1);
-        d->nodes.clear();
-        d->rowIndex.clear();
-        endRemoveRows();
+        q->beginRemoveRows(QModelIndex(), 0, nodes.size() - 1);
+        nodes.clear();
+        rowIndex.clear();
+        q->endRemoveRows();
     }
 
     // setConnection has already assigned d->connection and emitted
     // connectionChanged when it called us; the dtor path assigns
     // nullptr here directly. Either way, mirror the parameter so the
     // rest of this function uses the same handle the caller passed.
-    d->connection = connection;
+    connection = newConnection;
 
     // Local wire-up helper: subscribe one PwNode to info / props
     // changes so the model emits dataChanged on the matching roles.
     // Lives inside the member function (not as a free helper) so it
-    // can access `this->d` directly without the privacy escape hatch
-    // a separate function would need. The lambda captures only `this`
-    // and `node`; row lookups go through `this->d->rowIndex` inside
-    // the connect-lambdas, not via captured references to Private's
-    // containers (which would be fragile if Private's layout changed).
+    // can access Private's members directly without the privacy
+    // escape hatch a separate function would need. The lambdas
+    // capture `this` (the Private instance) and `node`; row lookups
+    // go through `this->rowIndex` inside the connect-lambdas, not via
+    // captured references to specific containers (which would be
+    // fragile if Private's layout changed).
     auto wireNode = [this](PwNode* node) {
-        auto& wires = d->nodeWires[node];
-        wires.append(QObject::connect(node, &PwNode::infoChanged, this, [this, node]() {
-            const int r = d->rowIndex.value(node, -1);
+        auto& wires = nodeWires[node];
+        wires.append(QObject::connect(node, &PwNode::infoChanged, q, [this, node]() {
+            const int r = rowIndex.value(node, -1);
             if (r < 0)
                 return;
-            const QModelIndex idx = index(r);
-            Q_EMIT dataChanged(idx, idx, {Qt::DisplayRole, NameRole, NickRole, DescriptionRole});
+            const QModelIndex idx = q->index(r);
+            Q_EMIT q->dataChanged(idx, idx, {Qt::DisplayRole, NameRole, NickRole, DescriptionRole});
         }));
-        wires.append(QObject::connect(node, &PwNode::propsChanged, this, [this, node]() {
-            const int r = d->rowIndex.value(node, -1);
+        wires.append(QObject::connect(node, &PwNode::propsChanged, q, [this, node]() {
+            const int r = rowIndex.value(node, -1);
             if (r < 0)
                 return;
-            const QModelIndex idx = index(r);
-            Q_EMIT dataChanged(idx, idx, {ChannelCountRole, VolumesRole, MutedRole});
+            const QModelIndex idx = q->index(r);
+            Q_EMIT q->dataChanged(idx, idx, {ChannelCountRole, VolumesRole, MutedRole});
         }));
     };
 
-    if (d->connection) {
-        // Hook the new connection. Use a captured raw `this`; we
-        // disconnect on teardown and the model is the receiver, so Qt
-        // takes care of automatic disconnect on `this`'s destruction.
-        // Capture wireNode by value into the connect-lambda: a copy of
-        // the wire-up closure outlives the enclosing rebuildFromConnection
-        // stack frame and stays valid for as long as the connect-lambda
-        // is registered (until model teardown or the next rebuild).
-        d->connectionWires.append(QObject::connect(d->connection.data(), &PipeWireConnection::nodeAdded, this,
-                                                   [this, wireNode](PwNode* node) {
-                                                       if (!node || !d->mediaClasses.contains(node->mediaClass()))
-                                                           return;
-                                                       const int row = d->nodes.size();
-                                                       beginInsertRows(QModelIndex(), row, row);
-                                                       d->nodes.append(node);
-                                                       d->rowIndex.insert(node, row);
-                                                       wireNode(node);
-                                                       endInsertRows();
-                                                       Q_EMIT countChanged();
-                                                   }));
-        d->connectionWires.append(
-            QObject::connect(d->connection.data(), &PipeWireConnection::nodeRemoved, this, [this](PwNode* node) {
-                const int row = d->rowIndex.value(node, -1);
+    if (connection) {
+        // Hook the new connection. The receiver is `q` so Qt
+        // auto-disconnects on the model's destruction; we also
+        // disconnect explicitly on the next rebuild. Capture wireNode
+        // by value into the connect-lambda: a copy of the wire-up
+        // closure outlives the enclosing rebuildFromConnection stack
+        // frame and stays valid for as long as the connect-lambda is
+        // registered (until model teardown or the next rebuild).
+        connectionWires.append(
+            QObject::connect(connection.data(), &PipeWireConnection::nodeAdded, q, [this, wireNode](PwNode* node) {
+                if (!node || !mediaClasses.contains(node->mediaClass()))
+                    return;
+                const int row = nodes.size();
+                q->beginInsertRows(QModelIndex(), row, row);
+                nodes.append(node);
+                rowIndex.insert(node, row);
+                wireNode(node);
+                q->endInsertRows();
+                Q_EMIT q->countChanged();
+            }));
+        connectionWires.append(
+            QObject::connect(connection.data(), &PipeWireConnection::nodeRemoved, q, [this](PwNode* node) {
+                const int row = rowIndex.value(node, -1);
                 if (row < 0)
                     return;
-                for (const auto& wire : d->nodeWires.value(node)) {
+                for (const auto& wire : nodeWires.value(node)) {
                     QObject::disconnect(wire);
                 }
-                d->nodeWires.remove(node);
-                beginRemoveRows(QModelIndex(), row, row);
-                d->nodes.removeAt(row);
-                d->rowIndex.remove(node);
+                nodeWires.remove(node);
+                q->beginRemoveRows(QModelIndex(), row, row);
+                nodes.removeAt(row);
+                rowIndex.remove(node);
                 // Every row after the removed one shifts down by one;
                 // patch the hash in-place so subsequent O(1) lookups
                 // stay accurate. Removal is O(n) in row count due to
                 // this row-shift fix-up; acceptable for low-cardinality
                 // audio-node sets.
-                for (auto it = d->rowIndex.begin(); it != d->rowIndex.end(); ++it) {
+                for (auto it = rowIndex.begin(); it != rowIndex.end(); ++it) {
                     if (it.value() > row)
                         --it.value();
                 }
-                endRemoveRows();
-                Q_EMIT countChanged();
+                q->endRemoveRows();
+                Q_EMIT q->countChanged();
             }));
         // Seed from current snapshot: any nodes already surfaced
         // before this model attached.
-        const auto snapshot = d->connection->nodes();
+        const auto snapshot = connection->nodes();
         QList<PwNode*> matching;
         matching.reserve(snapshot.size());
         for (auto* node : snapshot) {
-            if (node && d->mediaClasses.contains(node->mediaClass()))
+            if (node && mediaClasses.contains(node->mediaClass()))
                 matching.append(node);
         }
         if (!matching.isEmpty()) {
-            beginInsertRows(QModelIndex(), 0, matching.size() - 1);
-            d->nodes = matching;
+            q->beginInsertRows(QModelIndex(), 0, matching.size() - 1);
+            nodes = matching;
             for (int i = 0; i < matching.size(); ++i) {
-                d->rowIndex.insert(matching.at(i), i);
+                rowIndex.insert(matching.at(i), i);
                 wireNode(matching.at(i));
             }
-            endInsertRows();
+            q->endInsertRows();
         }
     }
 
@@ -209,8 +234,8 @@ void PwNodeModel::rebuildFromConnection(PipeWireConnection* connection)
     // for bindings, but firing it four times per rebuild was wasteful
     // and observable (an intermediate-state glimpse during the
     // remove → insert seam).
-    if (d->nodes.size() != oldCount) {
-        Q_EMIT countChanged();
+    if (nodes.size() != oldCount) {
+        Q_EMIT q->countChanged();
     }
 }
 
@@ -238,7 +263,7 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
     // when only the filter moved.
     auto* current = d->connection.data();
     if (current) {
-        rebuildFromConnection(current);
+        d->rebuildFromConnection(current);
     }
     // No connection means no rows; rebuildFromConnection has nothing
     // to re-seed from. The previous setConnection(nullptr) call (or

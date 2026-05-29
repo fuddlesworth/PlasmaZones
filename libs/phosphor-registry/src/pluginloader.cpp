@@ -171,21 +171,20 @@ bool PluginLoader::ensurePluginRootExists() const
     // the actual root string; QSet not QHash because we only need
     // membership.
     //
-    // Cross-instance retention: the latch is a function-scope static,
-    // so the set persists across every PluginLoader instance in the
-    // process for the program lifetime. That is intentional. Two
-    // PluginLoader instances sharing the same broken plugin root
-    // (test setups, multi-window shells) should only log the failure
-    // once total, not once per instance. The set entry is dropped
-    // the moment any instance manages to create the directory (the
-    // remove() at the top of this function), so a recoverable
-    // failure resets the latch cleanly.
-    //
-    // We deliberately did not promote this to a per-instance member.
-    // Per-instance would log once-per-instance instead of once-per-
-    // process-per-root, which is louder without being more
-    // diagnostic for the common case (the shell only constructs one
-    // PluginLoader per session).
+    // Per-instance retention: m_loggedPluginRoots is a member, so
+    // the set's lifetime is tied to the PluginLoader instance. Each
+    // instance logs once per (instance, root) pair. The set entry
+    // is dropped the moment this instance manages to create the
+    // directory (the remove() at the top of this function), so a
+    // recoverable failure resets the latch cleanly for that instance.
+    // The previous design used a function-scope static to share the
+    // latch process-wide; the per-instance design is structurally
+    // cleaner (no shared mutable state across PluginLoader instances,
+    // no test-isolation footgun where one test's failure suppresses
+    // another's diagnostic) at the cost of one extra log line per
+    // additional PluginLoader instance sharing a broken root — an
+    // acceptable trade since the shell only constructs one
+    // PluginLoader per session in practice.
     //
     // Thread-safety: this set is intentionally NOT guarded by a
     // mutex. The PluginLoader contract (documented on the class) is
@@ -196,25 +195,23 @@ bool PluginLoader::ensurePluginRootExists() const
     // it racily mutated this set; a lock here would mask that misuse
     // rather than catch it. If a future refactor moves any
     // PluginLoader operation off the GUI thread, this set MUST be
-    // promoted to either a QMutex-guarded structure or an instance
-    // member (whichever the new threading model supports), and the
-    // class contract docs MUST be updated in lockstep.
-    static QSet<QString> s_logged;
+    // promoted to a QMutex-guarded structure and the class contract
+    // docs MUST be updated in lockstep.
 
     QDir dir(m_pluginRoot);
     if (dir.exists()) {
-        s_logged.remove(m_pluginRoot);
+        m_loggedPluginRoots.remove(m_pluginRoot);
         return true;
     }
     if (!QDir().mkpath(m_pluginRoot)) {
-        if (!s_logged.contains(m_pluginRoot)) {
+        if (!m_loggedPluginRoots.contains(m_pluginRoot)) {
             qWarning() << "PluginLoader: failed to create plugin root" << m_pluginRoot
                        << "(subsequent rescans silently retry)";
-            s_logged.insert(m_pluginRoot);
+            m_loggedPluginRoots.insert(m_pluginRoot);
         }
         return false;
     }
-    s_logged.remove(m_pluginRoot);
+    m_loggedPluginRoots.remove(m_pluginRoot);
     return true;
 }
 

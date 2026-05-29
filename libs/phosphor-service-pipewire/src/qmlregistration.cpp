@@ -19,12 +19,6 @@ Q_LOGGING_CATEGORY(lcPipeWireQml, "phosphor.service.pipewire.qml")
 
 namespace PhosphorServicePipeWire {
 
-namespace {
-constexpr int kModuleVersionMajor = 1;
-constexpr int kModuleVersionMinor = 0;
-constexpr const char* kModule = "Phosphor.Service.PipeWire";
-} // namespace
-
 void registerQmlTypes()
 {
     // qmlRegisterType is process-global, not per-engine. Repeat calls
@@ -49,14 +43,14 @@ void registerQmlTypes()
         // or construct one in C++ and expose it manually. Direct QML
         // instantiation would mean each scope spawns its own loop
         // thread + handshake, which we want to discourage.
-        qmlRegisterUncreatableType<PipeWireConnection>(kModule, kModuleVersionMajor, kModuleVersionMinor,
+        qmlRegisterUncreatableType<PipeWireConnection>(kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor,
                                                        "PipeWireConnection",
                                                        QStringLiteral("PipeWireConnection is vended by PipeWireHost"));
         // PwNode is also uncreatable — vended by the models, never by
         // QML directly. Registering the type makes QML aware of its
         // properties and signals so bindings like `model.node.volumes`
         // work.
-        qmlRegisterUncreatableType<PwNode>(kModule, kModuleVersionMajor, kModuleVersionMinor, "PwNode",
+        qmlRegisterUncreatableType<PwNode>(kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwNode",
                                            QStringLiteral("PwNode is vended by PwNodeModel"));
         // The base PwNodeModel is uncreatable from QML; QML uses the
         // pre-filtered subclasses below. Keeping the base type
@@ -66,12 +60,12 @@ void registerQmlTypes()
         // tests use it directly — but we still steer QML toward the
         // pinned subclasses for clarity.)
         qmlRegisterUncreatableType<PwNodeModel>(
-            kModule, kModuleVersionMajor, kModuleVersionMinor, "PwNodeModel",
+            kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwNodeModel",
             QStringLiteral("PwNodeModel is registered for role-enum access; instantiate PwSinkModel, "
                            "PwSourceModel, or PwStreamModel from QML"));
-        qmlRegisterType<PwSinkModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "PwSinkModel");
-        qmlRegisterType<PwSourceModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "PwSourceModel");
-        qmlRegisterType<PwStreamModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "PwStreamModel");
+        qmlRegisterType<PwSinkModel>(kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwSinkModel");
+        qmlRegisterType<PwSourceModel>(kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwSourceModel");
+        qmlRegisterType<PwStreamModel>(kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PwStreamModel");
         // PipeWireHost — singleton. The header (PipeWireHost.h) is
         // explicit that the host's purpose is process-wide loop-thread
         // sharing: spinning one extra thread per process, not one per
@@ -88,7 +82,7 @@ void registerQmlTypes()
         // (guarded at the top of registerQmlTypes), so QObject's
         // thread-affinity rule is satisfied.
         qmlRegisterSingletonType<PipeWireHost>(
-            kModule, kModuleVersionMajor, kModuleVersionMinor, "PipeWireHost", [](QQmlEngine*, QJSEngine*) -> QObject* {
+            kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PipeWireHost", [](QQmlEngine*, QJSEngine*) -> QObject* {
                 // The function-static QObject inherits the calling
                 // thread's affinity on first construction; we assume
                 // the QQmlEngine that triggers this factory lives on

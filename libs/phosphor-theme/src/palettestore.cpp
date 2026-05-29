@@ -381,14 +381,16 @@ bool PaletteStore::loadFromFile(const QString& path)
     // ups can hot-reload without re-triggering load. The cost is a
     // single re-open of a file the kernel just had in cache.
     //
-    // Path-equality is case-sensitive here. PlasmaZones is Linux-
-    // only (Wayland-only per the project rules), and Linux
-    // filesystems used in practice (ext4, btrfs, xfs, tmpfs) are
-    // case-sensitive at the inode level. A future port to a case-
-    // insensitive filesystem (HFS+, exFAT, NTFS) would need this
-    // comparison switched to QFileInfo-based equality so two
-    // capitalisations of the same path don't trigger a redundant
-    // watcher swap. Today this is YAGNI.
+    // Path-equality below uses a canonicalFilePath round-trip on
+    // both sides so case-insensitive mounts (HFS+ bind-mount,
+    // exFAT, NTFS surfaced through ntfs-3g, FAT32 USB sticks,
+    // SMB/CIFS shares) treat the same logical file under different
+    // capitalisations as equal. PlasmaZones is Linux/Wayland-only,
+    // but case-insensitive filesystems do appear on Linux hosts
+    // (removable media, network shares, Windows interop mounts)
+    // and the watcher must not churn when a path arrives differing
+    // only in case from the currently-loaded one. The canonical
+    // round-trip also folds in any post-load symlink chain change.
     {
         QFile preflight(absolutePath);
         if (!preflight.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -414,7 +416,18 @@ bool PaletteStore::loadFromFile(const QString& path)
     // (new path → new palette). Otherwise paletteChanged would fire
     // with sourcePath still pointing at the prior source, then
     // sourcePathChanged would catch up on the next event-loop tick.
-    const bool sourcePathMoved = (m_sourcePath != absolutePath);
+    // Canonicalise both sides before comparing so case-only
+    // differences on case-insensitive mounts (and any post-load
+    // symlink chain rewrite) don't read as a path move. When
+    // either side fails to canonicalise (the prior path was
+    // unlinked, or the new path doesn't exist yet) the raw
+    // string is used as a deterministic fallback so the
+    // comparison still terminates.
+    const QString currentCanonical = m_sourcePath.isEmpty() ? QString() : QFileInfo(m_sourcePath).canonicalFilePath();
+    const QString currentForCompare = currentCanonical.isEmpty() ? m_sourcePath : currentCanonical;
+    const QString incomingCanonical = QFileInfo(absolutePath).canonicalFilePath();
+    const QString incomingForCompare = incomingCanonical.isEmpty() ? absolutePath : incomingCanonical;
+    const bool sourcePathMoved = (currentForCompare != incomingForCompare);
     if (sourcePathMoved) {
         m_sourcePath = absolutePath;
     }

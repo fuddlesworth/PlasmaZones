@@ -28,22 +28,29 @@ class PwNode;
 ///
 /// Lifecycle:
 /// - Construction starts the loop thread but does NOT connect to the
-///   daemon. Call `connect()` to begin the handshake. `connected` flips
-///   to true when `pw_core` reports the `done` event for the initial
-///   sync, signalling that PipeWire acknowledged us.
-/// - `disconnect()` tears down `pw_core` + `pw_context` and pauses the
-///   loop. The thread itself stays alive; a subsequent `connect()`
-///   re-creates the context cheaply.
+///   daemon. Call `connectToDaemon()` to begin the handshake. `connected`
+///   flips to true when `pw_core` reports the `done` event for the
+///   initial sync, signalling that PipeWire acknowledged us.
+/// - `disconnectFromDaemon()` tears down `pw_core` + `pw_context` and
+///   pauses the loop. The thread itself stays alive; a subsequent
+///   `connectToDaemon()` re-creates the context cheaply.
 /// - Destruction quits the loop, joins the thread, and frees all
 ///   PipeWire state in the correct order (core → context → loop).
 ///
 /// Error handling: PipeWire core errors (daemon restart, version
 /// mismatch, transport drop) fire `error(message)` from the GUI thread
 /// and flip `connected` back to false. The class does NOT auto-retry;
-/// shells observe the error, decide on a backoff, and call `connect()`
-/// again. This keeps the policy in the shell rather than baked into the
-/// library, mirroring how `phosphor-service-sni`'s host treats the
-/// watcher-respawn case.
+/// shells observe the error, decide on a backoff, and call
+/// `connectToDaemon()` again. This keeps the policy in the shell rather
+/// than baked into the library, mirroring how `phosphor-service-sni`'s
+/// host treats the watcher-respawn case.
+///
+/// Slot naming: `connectToDaemon()` / `disconnectFromDaemon()` rather
+/// than the bare `connect()` / `disconnect()` we'd otherwise pick — the
+/// short names shadow QObject::connect / QObject::disconnect statics
+/// (Qt machinery for wiring signals), and that shadow is a public API
+/// trap any subclasser would hit. The verb-object form also mirrors the
+/// sibling `reconnect()` on PipeWireHost.
 class PHOSPHORSERVICEPIPEWIRE_EXPORT PipeWireConnection : public QObject
 {
     Q_OBJECT
@@ -98,12 +105,14 @@ public:
 public Q_SLOTS:
     /// Asynchronously establish a `pw_context` + `pw_core` and complete
     /// the initial sync. Safe to call from the GUI thread at any time;
-    /// re-issuing while already connected is a no-op.
-    void connect();
+    /// re-issuing while already connected is a no-op. Named with the
+    /// `ToDaemon` suffix to avoid shadowing QObject::connect.
+    void connectToDaemon();
     /// Asynchronously tear down `pw_core` + `pw_context`. The loop
-    /// thread stays alive so a subsequent `connect()` is cheap. Safe to
-    /// call from the GUI thread at any time.
-    void disconnect();
+    /// thread stays alive so a subsequent `connectToDaemon()` is cheap.
+    /// Safe to call from the GUI thread at any time. Named with the
+    /// `FromDaemon` suffix to avoid shadowing QObject::disconnect.
+    void disconnectFromDaemon();
     /// Write the WirePlumber `default.configured.audio.sink` metadata
     /// key. PipeWire treats "configured" as the persistent default;
     /// the runtime `default.audio.sink` follows it. Pass the canonical

@@ -133,7 +133,7 @@ public:
     /// doConnect gates its wedge-recovery teardown on this flag rather
     /// than inferring it from `!connected.load()` — an in-flight
     /// handshake also has `connected == false` but is not wedged, and
-    /// must not be torn down by a re-entrant connect() call.
+    /// must not be torn down by a re-entrant connectToDaemon() call.
     bool wedged = false;
 
     /// Per-node loop-thread state. We hold the pw_proxy for the node

@@ -9,8 +9,7 @@
  *
  * Native PipeWire mixer surface (sinks / sources / streams,
  * default-node switching, per-app volume + mute) for Phosphor-based
- * desktop shells. Phase 2.1 of `docs/phosphor-shell-design/04-
- * implementation-plan.md`.
+ * desktop shells. Phase 2.1 of `docs/phosphor-shell-design/04-implementation-plan.md`.
  *
  * The library is non-visual; QML consumers bind to the host singleton's
  * connection state and the (forthcoming) sink / source / stream models

@@ -573,11 +573,11 @@ int cmdSetDefault(PhosphorServicePipeWire::PipeWireConnection& conn, const QStri
 /// Explicit disconnect + a brief settle so the loop thread has time to
 /// flush any in-flight write before the connection destructor runs. The
 /// destructor handles teardown safely on its own, but routing through
-/// disconnect() first makes the teardown order deterministic for the
-/// metadata/volume write paths the CLI exercises.
+/// disconnectFromDaemon() first makes the teardown order deterministic
+/// for the metadata/volume write paths the CLI exercises.
 void cleanShutdown(PhosphorServicePipeWire::PipeWireConnection& conn)
 {
-    conn.disconnect();
+    conn.disconnectFromDaemon();
     QEventLoop loop;
     QTimer::singleShot(kDefaultShutdownSettleMs, &loop, &QEventLoop::quit);
     loop.exec();
@@ -635,7 +635,7 @@ int main(int argc, char** argv)
 
     PhosphorServicePipeWire::PipeWireConnection conn;
     const int timeoutMs = connectTimeoutMs();
-    conn.connect();
+    conn.connectToDaemon();
     // waitForConnect early-outs if the connection is already connected,
     // otherwise it blocks on a local QEventLoop driven by the
     // connectedChanged signal. Async handshakes via pw_loop_invoke /

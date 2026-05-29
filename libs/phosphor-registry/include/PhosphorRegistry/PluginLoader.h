@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QLibrary>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QtCore/qtclasshelpermacros.h>
@@ -206,6 +207,15 @@ private:
     // and refcount-gated unload. See pluginloader.cpp for the full
     // Phase-1.3 vs Phase-5 rationale.
     std::vector<std::unique_ptr<QLibrary>> m_pinnedLibraries;
+    // Per-path warn-once latch for ensurePluginRootExists. Mutated
+    // from the const ensurePluginRootExists via `mutable` since the
+    // logical "did we already complain about this root?" state is
+    // not part of the loader's observable contract — the public API
+    // (loadedPluginIds, liveWidgetCount, pluginRoot) returns the
+    // same values whether or not we have logged. See
+    // ensurePluginRootExists in pluginloader.cpp for the GUI-thread-
+    // only thread-safety rationale.
+    mutable QSet<QString> m_loggedPluginRoots;
 };
 
 } // namespace PhosphorRegistry

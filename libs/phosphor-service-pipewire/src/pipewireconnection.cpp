@@ -174,9 +174,9 @@ void PipeWireConnection::Private::onCoreDone(void* data, uint32_t id, int seq)
     // loop thread BEFORE queueing the GUI-side setConnected lambda.
     // doConnect's wedge-recovery check (`if (core && !connected.load())
     // doDisconnect()`) runs on the loop thread; without this store, a
-    // re-issued connect() landing between the queue-and-drain window
-    // would see connected == false and tear down a freshly-completed
-    // handshake. setConnected does a shadow-compare early return (the
+    // re-issued connectToDaemon() landing between the queue-and-drain
+    // window would see connected == false and tear down a freshly-
+    // completed handshake. setConnected does a shadow-compare early return (the
     // GUI-thread `lastEmittedConnected` shadow, NOT the atomic) so the
     // queued mutation emits connectedChanged exactly once even if a
     // later loop-thread path pre-flips the atomic before the GUI drains.
@@ -205,8 +205,8 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
     // the GUI-side work. doConnect's wedge-recovery check
     // (`if (core && !connected.load(...)) doDisconnect()`) runs on the
     // loop thread, so it must observe the truthful value the moment the
-    // next connect() request lands — even if no queued lambda has
-    // drained yet.
+    // next connectToDaemon() request lands — even if no queued lambda
+    // has drained yet.
     //
     // L1-override pattern: a prior onCoreDone may have already queued a
     // setConnected(true) lambda (L1) that hasn't drained on the GUI
@@ -224,8 +224,8 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
     // after this callback returns.
     //
     // We deliberately do NOT tear core/context/registry down from this
-    // callback. The next caller-initiated connect() observes the wedged
-    // state (connected == false && core != nullptr) and runs
+    // callback. The next caller-initiated connectToDaemon() observes the
+    // wedged state (connected == false && core != nullptr) and runs
     // doDisconnect first, so recovery is automatic and the teardown
     // stays on the loop thread without us having to post another
     // pw_loop_invoke.
@@ -449,7 +449,7 @@ void PipeWireConnection::Private::doConnect()
     // connected == false because the sync hasn't acked yet) would
     // otherwise look identical to the post-error wedge and we'd tear
     // down a perfectly healthy mid-handshake state on a re-entrant
-    // connect() call.
+    // connectToDaemon() call.
     if (core && wedged)
         doDisconnect();
     if (core)
@@ -531,9 +531,9 @@ void PipeWireConnection::Private::doConnect()
         // loop refused leaves the handshake unable to complete, so
         // tear down core/context/registry/listeners on the loop thread
         // and flip BOTH atomics. Without the teardown a subsequent
-        // connect() would short-circuit on `if (core) return;` and the
-        // caller would be stuck with a wedged-but-not-wedged core that
-        // never acks. resetGuiSnapshot mirrors the pw_context_connect
+        // connectToDaemon() would short-circuit on `if (core) return;`
+        // and the caller would be stuck with a wedged-but-not-wedged
+        // core that never acks. resetGuiSnapshot mirrors the pw_context_connect
         // failure path so observers see one round of NOTIFY signals on
         // the GUI thread.
         if (registry) {
@@ -839,22 +839,23 @@ QString PipeWireConnection::defaultSourceName() const
     return d->defaultSourceName;
 }
 
-void PipeWireConnection::connect()
+void PipeWireConnection::connectToDaemon()
 {
     pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
     if (!d->thread.isRunning() || !mainLoop)
         return;
-    // connect/disconnect bypass submitLoopRequest because they carry no
-    // payload (no heap request, no ownership handoff). A negative rc
-    // means the loop refused the post; surface it as a warning so the
-    // failure isn't silently dropped, but keep the call shape simple.
+    // connectToDaemon/disconnectFromDaemon bypass submitLoopRequest
+    // because they carry no payload (no heap request, no ownership
+    // handoff). A negative rc means the loop refused the post; surface
+    // it as a warning so the failure isn't silently dropped, but keep
+    // the call shape simple.
     const int rc =
         pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchConnect, 0, nullptr, 0, false, d.get());
     if (rc < 0)
-        qCWarning(lcPipeWire) << "pw_loop_invoke failed for connect rc" << rc;
+        qCWarning(lcPipeWire) << "pw_loop_invoke failed for connectToDaemon rc" << rc;
 }
 
-void PipeWireConnection::disconnect()
+void PipeWireConnection::disconnectFromDaemon()
 {
     pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
     if (!d->thread.isRunning() || !mainLoop)
@@ -862,7 +863,7 @@ void PipeWireConnection::disconnect()
     const int rc =
         pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchDisconnect, 0, nullptr, 0, false, d.get());
     if (rc < 0)
-        qCWarning(lcPipeWire) << "pw_loop_invoke failed for disconnect rc" << rc;
+        qCWarning(lcPipeWire) << "pw_loop_invoke failed for disconnectFromDaemon rc" << rc;
 }
 
 } // namespace PhosphorServicePipeWire

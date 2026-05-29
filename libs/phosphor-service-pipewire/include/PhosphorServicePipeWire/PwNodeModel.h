@@ -27,22 +27,22 @@ class PwNode;
 ///
 /// Roles (the int values are pinned by smoke tests so QML code keyed
 /// on the role-name strings stays stable across versions):
-/// - `node`        (`Qt::UserRole+1`)  — the PwNode* itself; QML usually
-///                                       binds through this for nested
-///                                       access (`model.node.volumes[0]`).
-/// - `id`          (`Qt::UserRole+2`)  — PipeWire global id (quint32).
-/// - `name`        (`Qt::UserRole+3`)  — `node.name`.
-/// - `nick`        (`Qt::UserRole+4`)  — `node.nick`.
-/// - `description` (`Qt::UserRole+5`)  — `node.description`.
-/// - `mediaClass`  (`Qt::UserRole+6`)  — e.g. `Audio/Sink`.
-/// - `channelCount`(`Qt::UserRole+7`)  — channel count from
-///                                       SPA_PROP_channelVolumes.
-/// - `volumes`     (`Qt::UserRole+8`)  — `QList<qreal>` linear amplitudes.
-/// - `muted`       (`Qt::UserRole+9`)  — bool.
-/// - `display`     (`Qt::DisplayRole`) — falls back through nick →
-///                                       description → name so plain
-///                                       `model.display` always has
-///                                       something usable.
+/// - `node`        (`Qt::UserRole + 1`) — the PwNode* itself; QML usually
+///                                        binds through this for nested
+///                                        access (`model.node.volumes[0]`).
+/// - `id`          (`Qt::UserRole + 2`) — PipeWire global id (quint32).
+/// - `name`        (`Qt::UserRole + 3`) — `node.name`.
+/// - `nick`        (`Qt::UserRole + 4`) — `node.nick`.
+/// - `description` (`Qt::UserRole + 5`) — `node.description`.
+/// - `mediaClass`  (`Qt::UserRole + 6`) — e.g. `Audio/Sink`.
+/// - `channelCount`(`Qt::UserRole + 7`) — channel count from
+///                                        SPA_PROP_channelVolumes.
+/// - `volumes`     (`Qt::UserRole + 8`) — `QList<qreal>` linear amplitudes.
+/// - `muted`       (`Qt::UserRole + 9`) — bool.
+/// - `display`     (`Qt::DisplayRole`)  — falls back through nick →
+///                                        description → name so plain
+///                                        `model.display` always has
+///                                        something usable.
 ///
 /// `mediaClasses` is a list so a model can show e.g. both Audio/Sink and
 /// Audio/Source if needed; the convenience subclasses below pin a single
@@ -81,7 +81,26 @@ public:
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
 
 public Q_SLOTS:
+    /// Attach the model to a `PipeWireConnection` (or detach by passing
+    /// `nullptr`). Tears down every existing row, swaps the connection
+    /// handle, then re-seeds from the new connection's current node
+    /// snapshot — filtered through `mediaClasses` — and subscribes to
+    /// `nodeAdded` / `nodeRemoved` so subsequent registry events keep
+    /// the model live. Idempotent: passing the current connection
+    /// pointer is a no-op (no signals fire, no rows churn). The
+    /// `connectionChanged` notification is emitted BEFORE the rebuild
+    /// so any QML binding watching `connection` sees the new pointer
+    /// before any `countChanged` / row events for the new connection's
+    /// nodes — this preserves the invariant that the model's rows
+    /// always describe its current `connection` property.
     void setConnection(PipeWireConnection* connection);
+    /// Replace the media-class filter set. Tears down every existing
+    /// row and re-seeds from the current connection's snapshot through
+    /// the new filter; if no connection is attached, just records the
+    /// filter for the next `setConnection(non-null)` call. Idempotent
+    /// on the current filter list (no signals, no rebuild). The
+    /// `mediaClassesChanged` notification is emitted BEFORE the
+    /// rebuild for the same row-invariant reason as `setConnection`.
     void setMediaClasses(const QStringList& classes);
 
 Q_SIGNALS:
@@ -90,34 +109,36 @@ Q_SIGNALS:
     void countChanged();
 
 private:
-    /// Tear down all wires + rows, attach to `connection`, and re-seed
-    /// from its current node snapshot. Used by both `setConnection`
-    /// (which then emits `connectionChanged`) and `setMediaClasses`
-    /// (which only emits `mediaClassesChanged`, since the connection
-    /// pointer didn't actually change).
-    void rebuildFromConnection(PipeWireConnection* connection);
-
     class Private;
+    // Private is befriended so it can drive the QAbstractListModel
+    // protected row-event machinery (`beginInsertRows` /
+    // `endInsertRows`, `beginRemoveRows` / `endRemoveRows`, `index()`)
+    // and emit our `countChanged` signal from inside the rebuild path,
+    // without forcing the rebuild logic to live on PwNodeModel itself.
+    friend class Private;
     std::unique_ptr<Private> d;
 };
 
 /// Convenience subclass pre-pinned to `Audio/Sink`. Designed for QML
 /// `PwSinkModel { connection: PipeWireHost.connection }`. Mirrors the
 /// pattern used in `phosphor-service-mpris`' `MprisPlayerModel`.
+///
+/// Copy/move suppression is inherited from `PwNodeModel`; redeclaring
+/// `Q_DISABLE_COPY_MOVE` here would only add noise to the moc table
+/// without changing the contract.
 class PHOSPHORSERVICEPIPEWIRE_EXPORT PwSinkModel : public PwNodeModel
 {
     Q_OBJECT
-    Q_DISABLE_COPY_MOVE(PwSinkModel)
 
 public:
     explicit PwSinkModel(QObject* parent = nullptr);
 };
 
-/// Convenience subclass pre-pinned to `Audio/Source`.
+/// Convenience subclass pre-pinned to `Audio/Source`. Copy/move
+/// suppression inherited from `PwNodeModel`.
 class PHOSPHORSERVICEPIPEWIRE_EXPORT PwSourceModel : public PwNodeModel
 {
     Q_OBJECT
-    Q_DISABLE_COPY_MOVE(PwSourceModel)
 
 public:
     explicit PwSourceModel(QObject* parent = nullptr);
@@ -127,10 +148,10 @@ public:
 /// `Stream/Input/Audio`. Streams are application-level audio endpoints
 /// (Firefox's playback stream, the OBS capture stream, etc.) and the
 /// mixer UI typically wants them in one list grouped by direction.
+/// Copy/move suppression inherited from `PwNodeModel`.
 class PHOSPHORSERVICEPIPEWIRE_EXPORT PwStreamModel : public PwNodeModel
 {
     Q_OBJECT
-    Q_DISABLE_COPY_MOVE(PwStreamModel)
 
 public:
     explicit PwStreamModel(QObject* parent = nullptr);

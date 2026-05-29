@@ -35,6 +35,16 @@ class PipeWireConnection;
 /// format). Consumers that want cubic / perceptual mapping for a UI
 /// slider should run them through a `Mixer.Curve` helper (added in a
 /// later milestone) — round-trips through the lib stay lossless.
+///
+/// Post-removal slot behavior: once the underlying daemon-side
+/// `pw_node` has been removed (between the daemon's `global_remove`
+/// event and the GUI's `nodeRemoved` firing, plus any tail where a
+/// QML binding still holds a stale pointer), `setVolume` /
+/// `setVolumes` / `setMuted` route the write through the owning
+/// `PipeWireConnection` to the loop thread. There, the registry
+/// lookup for the (now-gone) node id misses and the write is
+/// silently dropped — no error, no signal, no crash. Treat these
+/// slots as best-effort once the model has signalled removal.
 class PHOSPHORSERVICEPIPEWIRE_EXPORT PwNode : public QObject
 {
     Q_OBJECT
@@ -70,6 +80,24 @@ public:
     /// dispatch is encapsulated.
     [[nodiscard]] PipeWireConnection* connection() const;
 
+    /// @internal Called by `PipeWireConnection`'s loop→GUI thread bounce
+    /// when the underlying `pw_node` reports new info (name, description,
+    /// properties hash). Emits `infoChanged` only when at least one
+    /// observable field actually moved. NOT for general use — this is
+    /// public solely because `PipeWireConnection::Private` (a nested
+    /// implementation class) needs to invoke it, and granting nested-
+    /// friend access portably is brittler than documenting the
+    /// callability contract here. Callers other than
+    /// `PipeWireConnection`'s loop handlers should treat this method as
+    /// non-existent.
+    void applyInfo(QHash<QString, QString> props);
+    /// @internal Called by `PipeWireConnection`'s loop→GUI thread bounce
+    /// when the underlying SPA_PARAM_Props pod refreshes. Emits
+    /// `propsChanged` only when an observable field actually moved.
+    /// Same "internal API" caveat as `applyInfo` — public only because
+    /// `PipeWireConnection::Private` needs to call it.
+    void applyProps(int channelCount, QList<qreal> volumes, bool muted);
+
 public Q_SLOTS:
     /// Set every channel's linear amplitude to `value`. Convenience
     /// for QML sliders that drive a single bar across the whole node.
@@ -79,9 +107,12 @@ public Q_SLOTS:
     /// Expected input range: linear amplitude, approximately
     /// `[0.0, 1.0]` for the normal mixer range, with values above
     /// `1.0` permitted for boost (PipeWire accepts them but most
-    /// hardware sinks clip). Callers are responsible for clamping
-    /// to their own UI's allowed range before invoking; the slot
-    /// forwards `value` to the daemon verbatim.
+    /// hardware sinks clip). Negative values are not part of the
+    /// linear-amplitude contract: PipeWire may interpret them as
+    /// phase-inverted (driver-dependent) or clamp them to zero,
+    /// neither of which is a useful UI behaviour. Callers should
+    /// clamp to `[0.0, expected upper bound]` at the UI layer before
+    /// invoking; the slot forwards `value` to the daemon verbatim.
     void setVolume(qreal value);
     /// Per-channel write. Forwards verbatim to
     /// `PipeWireConnection::writeVolumes`. PipeWire clamps the array
@@ -110,16 +141,6 @@ private:
     /// the friended connection can instantiate nodes — downstream
     /// code cannot fabricate nodes the registry never reported.
     PwNode(quint32 id, QString mediaClass, PipeWireConnection* parent);
-
-    /// Called by `PipeWireConnection` from the GUI thread when the
-    /// underlying `pw_node` reports new info (name, description,
-    /// properties hash). Emits `infoChanged` only when at least one
-    /// observable field actually moved.
-    void applyInfo(QHash<QString, QString> props);
-    /// Called by `PipeWireConnection` from the GUI thread when the
-    /// underlying SPA_PARAM_Props pod refreshes. Emits `propsChanged`
-    /// only when an observable field actually moved.
-    void applyProps(int channelCount, QList<qreal> volumes, bool muted);
 
     class Private;
     std::unique_ptr<Private> d;
