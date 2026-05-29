@@ -265,16 +265,21 @@ inline bool isAnimationOverrideAction(const QString& type)
     return type == OverrideAnimationShader || type == OverrideAnimationTiming || type == OverrideAnimationCurve;
 }
 
-/// True when @p type is one of the actions the KWin effect's window-rule
-/// evaluator consumes — the three OverrideAnimation* variants plus SetOpacity.
-/// The shader-transition manager loads rules carrying any of these so the
-/// effect side can resolve them per paint; rules without one of these actions
-/// never need to reach the effect-side evaluator. Keeping the predicate
-/// alongside `isAnimationOverrideAction` ensures adding a new effect-consumed
-/// action type updates the filter list in one place.
+/// True when @p type is one of the actions the KWin effect's **shader
+/// manager** loads into its OverrideAnimation rule set — the three
+/// OverrideAnimation* variants plus SetOpacity. ExcludeAnimations is
+/// DELIBERATELY NOT in this set even though the effect consumes it: it
+/// flows into the effect's separate `m_animationExclusionRuleSet`
+/// (filtered by `ExclusionRules::excludeAnimationsRulesFrom`), and
+/// admitting it into the shader manager would surface it through the
+/// rule-override `hasAnyMatch` path in `shouldAnimateWindow` and INVERT
+/// the user's exclude intent into an opt-in. The two slices are
+/// disjoint by action type by construction; do NOT re-admit
+/// ExcludeAnimations here without restructuring the rule-override
+/// path's `hasAnyMatch` query to filter on action type.
 inline bool isEffectRuleAction(const QString& type)
 {
-    return isAnimationOverrideAction(type) || type == SetOpacity || type == ExcludeAnimations;
+    return isAnimationOverrideAction(type) || type == SetOpacity;
 }
 } // namespace ActionType
 

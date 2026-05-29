@@ -491,10 +491,11 @@ public:
      * the return value is greater than zero, so the next debounced save
      * persists the prune.
      *
-     * @param exclusionPatterns combined list of excludedApplications and
-     *                          excludedWindowClasses entries. Empty
-     *                          patterns are skipped. An empty list is a
-     *                          no-op.
+     * @param exclusionPatterns AppId patterns derived from `Exclude`-action
+     *                          WindowRules via
+     *                          `PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom`.
+     *                          Empty patterns are skipped. An empty list
+     *                          is a no-op.
      * @return number of appId entries fully removed.
      */
     int pruneExcludedPendingRestores(const QStringList& exclusionPatterns);

@@ -314,14 +314,14 @@ void Settings::purgeStaleKeys()
     // would silently destroy those values.
     // Mixed list of (a) root-level GROUP names that must survive Pass 2's
     // blanket-delete loop ("General", "TilingQuickLayoutSlots", "Updates")
-    // and (b) root-level KEYS holding stash data — `_v4DisableStash` and
-    // `_v4ExclusionStash` are JSON OBJECTS and survive via the Pass 2
-    // listing below; the `_v4AnimationRulesStash` is a JSON ARRAY and is
-    // actually preserved by Pass 2 NOT enumerating non-object root values
-    // (jsonbackend's `groupList()` filter), with the listing here as
-    // defence-in-depth against future Pass 2 restructuring. All three
-    // stashes feed the v4 chain-stall retry path in
-    // configmigration.cpp::finalizeV4Conversion.
+    // and (b) root-level KEYS holding stash data — `_v4DisableStash`,
+    // `_v4ExclusionStash` and `_v4AnimationExclusionStash` are JSON
+    // OBJECTS and survive via the Pass 2 listing below; the
+    // `_v4AnimationRulesStash` is a JSON ARRAY and is actually preserved
+    // by Pass 2 NOT enumerating non-object root values (jsonbackend's
+    // `groupList()` filter), with the listing here as defence-in-depth
+    // against future Pass 2 restructuring. All four stashes feed the v4
+    // chain-stall retry path in configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
         ConfigDefaults::generalGroup(),
         ConfigDefaults::tilingQuickLayoutSlotsGroup(),
@@ -1657,10 +1657,10 @@ PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey
 //
 // Mirrors the Exclusions block above but lives in
 // `Animations.WindowFiltering` so animation-time filtering is independent
-// of snapping/tiling exclusions. Scalar accessors use the same macro
-// pattern; the QStringList accessors mirror the comma-list canonicalisation
-// trick from `setExcludedApplications` (post-write read-back so addX /
-// removeXAt don't fire spurious signals on no-op writes).
+// of snapping/tiling exclusions. Five scalar accessors using the same
+// PZ_STORE_GET / PZ_STORE_SET_{BOOL,INT} macros — no QStringList
+// accessors remain after the v4 fold drained the per-app /per-class
+// lists into ExcludeAnimations WindowRules.
 
 PZ_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
 PZ_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,

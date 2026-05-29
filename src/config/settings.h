@@ -1093,9 +1093,8 @@ private:
     /// + post-write read-back compare the open-coded list setters use, so
     /// `addX` / `removeXAt` helpers can reuse the dedupe + signal-on-real-
     /// change semantics without duplicating the body. New list settings
-    /// should call this; pre-existing list setters (`setExcludedApplications`
-    /// / `setExcludedWindowClasses`, the snap-assist trigger ones) keep
-    /// their open-coded form to avoid touching established code paths.
+    /// should call this; the snap-assist trigger setters keep their
+    /// open-coded form to avoid touching established code paths.
     void writeCommaList(const QString& group, const QString& key, const QStringList& list,
                         CommaListSignalFn specificSignal);
 

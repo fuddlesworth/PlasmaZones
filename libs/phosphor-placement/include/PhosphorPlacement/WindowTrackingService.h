@@ -510,11 +510,11 @@ public:
      * DirtyPendingRestores so the next debounced save persists the pruned
      * set.
      *
-     * Called from the daemon at startup (kicked once after the unified
-     * rule store's rules-changed subscription wires up) and from the
-     * daemon's finalizeStartup once AutotileEngine::loadState has
-     * populated the autotile queue. Live edits to the rule store
-     * re-trigger via the same subscription.
+     * Called from the daemon at startup (kicked eagerly at the same
+     * point the unified rule store's rules-changed subscription is
+     * wired) and from the daemon's finalizeStartup once
+     * AutotileEngine::loadState has populated the autotile queue. Live
+     * edits to the rule store re-trigger via the same subscription.
      *
      * @param exclusionPatterns AppId patterns extracted from the
      *                          unified rule store's Exclude rules via

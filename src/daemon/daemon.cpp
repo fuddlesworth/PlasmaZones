@@ -1089,15 +1089,27 @@ bool Daemon::init()
     // Filter the unified rule store down to its Exclude-shaped slice and
     // hand the address to SnapEngine for its isAppIdExcluded probe. The
     // filtered slice is held as a stable Daemon member (m_excludeRuleSet)
-    // so SnapEngine's bound RuleEvaluator's per-revision cache stays valid
-    // across back-to-back resolves. Rebuilt whenever the unified store
-    // emits rulesChanged, so a settings-app rule edit propagates without
-    // a manual refresh. Replaces the legacy
-    // ExclusionListBridge::toDaemonRuleSet path that derived the same set
-    // from two flat QStringList settings.
-    auto refilterExcludeRules = [this, snapEngine] {
-        m_excludeRuleSet = PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet());
-        snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
+    // and refreshed in-place via setRules so the bound RuleEvaluator's
+    // per-revision sort index and resolve cache actually invalidate on
+    // each rules-changed edit (a copy-assigned fresh WindowRuleSet would
+    // re-import revision=1 every cycle, freezing the cache on the next
+    // resolveCached-bearing migration of the call sites). Rebuilt
+    // whenever the unified store emits rulesChanged, so a settings-app
+    // rule edit propagates without a manual refresh.
+    auto refilterExcludeRules = [this, snapEnginePtr = QPointer(snapEngine)] {
+        // QPointer null-checks defend the rulesChanged subscription
+        // against the shutdown window where m_snapEngine.reset() has
+        // already fired but the subscription has not yet auto-
+        // disconnected via ~Daemon (the connection's `this`-context only
+        // breaks on Daemon destruction, not on a member reset). Mirrors
+        // the QPointer pattern used by the persistence-delegate and
+        // signal-relay lambdas below.
+        if (!snapEnginePtr) {
+            return;
+        }
+        m_excludeRuleSet.setRules(
+            PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
+        snapEnginePtr->setExcludeRuleSet(&m_excludeRuleSet);
         // Prune any pending-restore queues for apps now covered by an
         // Exclude rule. Snap-engine's resolveWindowRestore already refuses
         // them at runtime, but stale queue entries spam logs and bloat the
@@ -1111,7 +1123,7 @@ bool Daemon::init()
     };
     refilterExcludeRules();
     connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
-            [this, refilterExcludeRules](bool /*persisted*/) {
+            [refilterExcludeRules](bool /*persisted*/) {
                 refilterExcludeRules();
             });
 

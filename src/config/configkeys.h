@@ -722,11 +722,10 @@ public:
         // Fourth v4 scratch-root key — set on the root by `migrateV3ToV4`
         // from the legacy `Animations.WindowFiltering.{Applications,WindowClasses}`
         // lists and consumed by `finalizeV4Conversion`, which converts each
-        // surviving pattern into a `WindowClass`/`DesktopFile Contains
-        // <pattern> → ExcludeAnimations` WindowRule (same shape the legacy
-        // effect-side `ExclusionRules::toRuleSet` produced for the animation
-        // pipeline). Same purge-protection semantics as the three sibling
-        // stash keys above.
+        // surviving pattern into a `DesktopFile`/`WindowClass Contains
+        // <pattern> → ExcludeAnimations` WindowRule (preserving the
+        // legacy effect-bridge match-field split). Same purge-protection
+        // semantics as the three sibling stash keys above.
         PZ_CONFIG_KEY(v4AnimationExclusionStashKey, "_v4AnimationExclusionStash")
 
         // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and

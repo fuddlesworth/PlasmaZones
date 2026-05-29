@@ -114,10 +114,11 @@ SettingsFlickable {
         target: page.appSettings
     }
 
-    // The standalone window-filtering picker retired alongside the two
-    // ExclusionListCards below — the legacy lists folded into
-    // ExcludeAnimations WindowRules, and Window Rules has its own
-    // running-window picker on the AppId match leaf.
+    // The standalone window-filtering picker retired in v4 alongside the
+    // per-app and per-class exclusion list cards — the legacy lists
+    // folded into ExcludeAnimations WindowRules, and the unified Window
+    // Rules page hosts its own running-window picker on the AppId match
+    // leaf.
 
     ColumnLayout {
         id: content

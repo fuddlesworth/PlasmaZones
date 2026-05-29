@@ -503,8 +503,12 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::exclusionsGroup()] = {
-        {CD::applicationsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::windowClassesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        // The `Applications` / `WindowClasses` leaf keys retired in v4 —
+        // the v4 migration drains them into Application-subject Exclude
+        // WindowRules. Re-declaring them here would let the schema-driven
+        // backend silently re-write dead defaults under the Exclusions
+        // group, re-introducing keys we explicitly migrated out in v3→v4.
+        // Only the three global knobs survive in this group.
         {CD::transientWindowsKey(), CD::excludeTransientWindows(), QMetaType::Bool},
         {CD::minimumWindowWidthKey(),
          CD::minimumWindowWidth(),

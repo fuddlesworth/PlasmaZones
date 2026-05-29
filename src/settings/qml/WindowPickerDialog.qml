@@ -9,10 +9,12 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Dialog for picking from currently running windows
  *
- * Shows a filterable list of running windows with their window class and caption.
- * Emits picked(value) when a window is selected. Used by the Exclusions tab
- * and App Rules card to let users pick window classes without needing
- * to manually type them.
+ * Shows a filterable list of running windows with their window class and
+ * caption. Emits picked(value) when a window is selected. Hosted by the
+ * Window Rules page (WindowRulesPage); MatchLeafEditor calls the
+ * appropriate openFor* helper based on the match leaf's Field so the
+ * user can pick an AppId / WindowClass / DesktopFile / Title without
+ * typing it.
  */
 Kirigami.Dialog {
     id: dialog
@@ -27,11 +29,11 @@ Kirigami.Dialog {
     /// the window caption. Drives the title, the row's primary text, and
     /// the value passed to `picked`.
     property string mode: "apps"
-    /// Convenience boolean read by AnimationsGeneralPage inside its
-    /// `onPicked` handler to branch between the "application" and "window
-    /// class" lists. Derived from `mode` so the open* helpers don't have to
-    /// keep two properties in sync; new callers should consult `mode`
-    /// directly.
+    /// Convenience boolean, derived from `mode`. Has zero consumers after
+    /// the v4 fold retired the standalone Exclusions / Animations exclusion
+    /// pickers. New callers should consult `mode` directly; this property
+    /// is retained for QML-API stability against external out-of-tree
+    /// consumers that may have bound to it.
     readonly property bool forApps: mode === "apps"
     property var windowList: []
     // Set by the Connections block below when the controller signals a

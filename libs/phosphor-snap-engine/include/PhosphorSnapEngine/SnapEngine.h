@@ -593,20 +593,21 @@ private:
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
     /// Check whether the window is excluded from the given navigation
-    /// action by the user's excluded-apps / excluded-classes rules.
-    /// Emits navigationFeedback(false, action, "excluded", ...) and returns
-    /// true when excluded so callers can early-return. False otherwise.
+    /// action by a terminal `Exclude` action in the unified WindowRule
+    /// store. Emits navigationFeedback(false, action, "excluded", ...)
+    /// and returns true when excluded so callers can early-return. False
+    /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
     /// True if @p appId is excluded by any user-authored or migrated
     /// `Exclude`-action WindowRule. The daemon hands a pre-filtered
     /// `WindowRuleSet` containing only Exclude rules (built via
-    /// `ExcludeRuleFilter::excludeRulesFrom` over the unified
-    /// `WindowRuleStore::ruleSet()`) into @ref setExcludeRuleSet; the
-    /// snap engine binds a `RuleEvaluator` to that set on first access
-    /// and evaluates a `query.appId = @p appId` against it. Returns false
-    /// when the rule set hasn't been wired (early-init paths) or when
-    /// the filtered set is empty.
+    /// `PhosphorWindowRule::ExclusionRules::excludeRulesFrom` over the
+    /// unified `WindowRuleStore::ruleSet()`) into @ref setExcludeRuleSet;
+    /// the snap engine binds a `RuleEvaluator` to that set on first
+    /// access and evaluates a `query.appId = @p appId` against it.
+    /// Returns false when the rule set hasn't been wired (early-init
+    /// paths) or when the filtered set is empty.
     bool isAppIdExcluded(const QString& appId) const;
 
     /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr

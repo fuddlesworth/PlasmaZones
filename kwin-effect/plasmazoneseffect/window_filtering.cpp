@@ -298,19 +298,28 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // Rule-override path. ANY animation rule whose match expression matches
     // the window signals deliberate user intent to animate this app — the
     // event-scoped slot (shader vs timing, which eventPath) is NOT narrowed
-    // here because the user's act of creating a class-targeted rule is
-    // itself the opt-in signal. `hasAnyMatch` is the event-agnostic query
-    // for exactly this — a yes/no over the bound animation rule set without
-    // allocating a ResolvedActions. The `!isEmpty()` fast path keeps the
-    // default-state cost to two pointer reads. The animation rules are
-    // WindowClass-only, so a query carrying just the windowClass is
-    // sufficient (and an empty windowClass naturally matches nothing — a
-    // `Contains` predicate rejects an empty pattern, and the migrated rules
-    // never carry an empty pattern).
-    if (!windowClass.isEmpty() && !m_shaderManager.animationRuleSet().isEmpty()) {
-        PhosphorWindowRule::WindowQuery query;
-        query.windowClass = windowClass;
-        if (m_shaderManager.animationRuleEvaluator().hasAnyMatch(query)) {
+    // here because the user's act of creating a rule whose match resolves
+    // for this window is itself the opt-in signal. `hasAnyMatch` is the
+    // event-agnostic query for exactly this — a yes/no over the bound
+    // animation rule set without allocating a ResolvedActions. The
+    // `!isEmpty()` fast path keeps the default-state cost to two pointer
+    // reads.
+    //
+    // The query carries every window-side field a user-authored rule may
+    // match on: a user can pin an OverrideAnimation* rule to AppId,
+    // Title, isFullscreen, etc. — not just WindowClass — so the rule's
+    // match-expression has to see the full window context here, same
+    // shape the exclusion gates below use. `exclusionQueryFor(w)` also
+    // gates each string assignment on a non-empty value so the
+    // `Contains ""` / `Equals ""` foot-guns stay disengaged.
+    //
+    // `m_shaderManager.animationRuleSet()` is filtered to OverrideAnimation*
+    // /SetOpacity rules at admission (shader_transitions.cpp's
+    // `isEffectRuleAction` loop), so this `hasAnyMatch` never surfaces
+    // an `ExcludeAnimations` rule and the exclusion gate below stays
+    // authoritative for that path.
+    if (!m_shaderManager.animationRuleSet().isEmpty()) {
+        if (m_shaderManager.animationRuleEvaluator().hasAnyMatch(exclusionQueryFor(w))) {
             return true;
         }
     }

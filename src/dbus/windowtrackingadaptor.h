@@ -580,14 +580,21 @@ public Q_SLOTS:
      * DirtyPendingRestores or DirtyAutotilePending as appropriate so the
      * next debounced save persists the pruned state.
      *
-     * Called from two sites.
-     *   1. WTA's own constructor, right after loadState. The snap queues
-     *      are populated by then but the autotile queue is not. The daemon
-     *      derives @p patterns from the unified WindowRule store and
-     *      passes them in.
-     *   2. The daemon's WindowRuleStore::rulesChanged subscription, so a
-     *      user-authored Exclude rule prunes queued restores live; and the
-     *      daemon's finalizeStartup, after AutotileEngine::loadState runs.
+     * Called from two daemon-side sites — WTA's own constructor no longer
+     * runs the prune (the snap queues are loaded before the rule store
+     * has been filtered; the daemon kicks the prune eagerly at the same
+     * point it wires the rules-changed subscription, which lands after
+     * WTA::loadState in the daemon's init order).
+     *   1. Daemon::init's `refilterExcludeRules` lambda — fired once
+     *      eagerly at wire-up AND again on every `WindowRuleStore::
+     *      rulesChanged` so a settings-app rule edit prunes queued
+     *      restores live. The autotile queue is not yet loaded at the
+     *      eager-init call, so the autotile-side prune is a no-op there.
+     *   2. Daemon::finalizeStartup, after AutotileEngine::loadState has
+     *      populated the autotile queue, so the autotile-side prune
+     *      actually has something to process.
+     * The daemon derives @p patterns from the unified WindowRule store
+     * via `PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom`.
      *
      * Calling this before either engine is wired is safe. Engines that are
      * missing contribute zero removals. An empty @p patterns short-circuits.

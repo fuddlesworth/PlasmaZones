@@ -1395,14 +1395,21 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 // Window-rule consolidation — Phase 3.
 //
 // The v4 conversion produces the new windowrules.json store: every zone
-// Assignment and per-mode disable entry becomes a context-only WindowRule.
+// Assignment, per-mode disable entry, animation app rule, exclusion list
+// entry, AND animation exclusion list entry becomes a WindowRule.
 // windowrules.json SUPERSEDES assignments.json and the config.json
-// Display.*Disabled* keys — the runtime LayoutRegistry and Settings now read
-// the rule store exclusively, so the v3 inputs are removed once converted.
+// Display.*Disabled* / Exclusions.* / Animations.AnimationAppRules /
+// Animations.WindowFiltering.{Applications,WindowClasses} keys — the
+// runtime LayoutRegistry, Settings, SnapEngine and effect now read the
+// rule store exclusively, so the v3 inputs are removed once converted.
 //
-// Each migration step has signature `void(QJsonObject&)` — it can only touch config.json.
-// This step REMOVES the six Display.*Disabled* keys (their values are stashed
-// into a temporary `_v4DisableStash` root key for finalizeV4Conversion to
+// Each migration step has signature `void(QJsonObject&)` — it can only touch
+// config.json. This step REMOVES the six Display.*Disabled* keys, the
+// Animations.AnimationAppRules array, both Exclusions.{Applications,
+// WindowClasses} leaf keys, and both Animations.WindowFiltering.{Applications,
+// WindowClasses} leaf keys. The values are stashed into four temporary
+// root keys (`_v4DisableStash`, `_v4AnimationRulesStash`, `_v4ExclusionStash`,
+// `_v4AnimationExclusionStash`) for finalizeV4Conversion to
 // consume) and stamps `_version = 4`. finalizeV4Conversion (a post-chain step)
 // reads that stash + assignments.json, writes windowrules.json, then deletes
 // assignments.json as the irreversible commit.
@@ -1571,29 +1578,38 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // upgrading user does not change. Read both raw values, surface non-string
     // disk values (same diagnostic shape as the moveDisableKey logger above),
     // strip the keys, and drop the group entirely if it's now empty.
-    QJsonObject exclusions = root.value(ConfigKeys::Legacy::v3ExclusionsGroup()).toObject();
-    QJsonObject exclusionStash;
-    const auto stashExclusionList = [&exclusions, &exclusionStash](const QString& configKey) {
-        const QJsonValue raw = exclusions.value(configKey);
-        if (exclusions.contains(configKey) && !raw.isString() && !raw.isNull() && !raw.isUndefined()) {
+    // Single helper for both the snapping-side and animation-side exclusion
+    // list stash drains — same shape, same diagnostic on non-string disk
+    // values, same skip-on-empty. The `sourceLabel` argument is the dotted
+    // group path the warning text uses for operator forensics; the rest is
+    // mechanical. Captures `groupSrc`/`stashDst` by reference so the helper
+    // works as either a free read-modify-write on the source group OR (in
+    // the dot-path animation case) on the nested object the caller already
+    // extracted.
+    const auto stashListEntry = [](QJsonObject& groupSrc, QJsonObject& stashDst, const QString& configKey,
+                                   const char* sourceLabel) {
+        const QJsonValue raw = groupSrc.value(configKey);
+        if (groupSrc.contains(configKey) && !raw.isString() && !raw.isNull() && !raw.isUndefined()) {
             qWarning(
-                "ConfigMigration::migrateV3ToV4: discarding non-string value at Exclusions.%s "
+                "ConfigMigration::migrateV3ToV4: discarding non-string value at %s.%s "
                 "(type=%d) — only comma-joined string pattern lists are migrated.",
-                qPrintable(configKey), static_cast<int>(raw.type()));
+                sourceLabel, qPrintable(configKey), static_cast<int>(raw.type()));
         }
         const QString value = raw.toString();
         if (!value.isEmpty()) {
             // Field name = source-key name (Applications / WindowClasses).
-            // finalizeV4Conversion treats both fields identically — both
-            // historically matched against `appId` — but keeping the field
-            // name distinguishes the two on disk for forensics if a user ever
-            // has to inspect a half-migrated config.
-            exclusionStash.insert(configKey, value);
+            // finalizeV4Conversion uses the field name to choose the rule's
+            // match-leaf field (DesktopFile / WindowClass for the animation
+            // fold; both feed AppId for the snapping fold).
+            stashDst.insert(configKey, value);
         }
-        exclusions.remove(configKey);
+        groupSrc.remove(configKey);
     };
-    stashExclusionList(ConfigKeys::Legacy::v3ExcludedApplicationsKey());
-    stashExclusionList(ConfigKeys::Legacy::v3ExcludedWindowClassesKey());
+
+    QJsonObject exclusions = root.value(ConfigKeys::Legacy::v3ExclusionsGroup()).toObject();
+    QJsonObject exclusionStash;
+    stashListEntry(exclusions, exclusionStash, ConfigKeys::Legacy::v3ExcludedApplicationsKey(), "Exclusions");
+    stashListEntry(exclusions, exclusionStash, ConfigKeys::Legacy::v3ExcludedWindowClassesKey(), "Exclusions");
     if (exclusions.isEmpty()) {
         root.remove(ConfigKeys::Legacy::v3ExclusionsGroup());
     } else {
@@ -1608,8 +1624,8 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // historically fed the effect's `m_animationExclusionRuleSet` via the
     // bridge's `Contains`-leaf builder. v4 promotes those into first-class
     // `ExcludeAnimations` WindowRules so the effect can drop both the
-    // QStringList settings and the per-effect rebuild. Identical structure
-    // to the snapping-side stash above — read raw, surface non-string disk
+    // QStringList settings and the per-effect rebuild. Same shape as the
+    // snapping-side stash above — read raw, surface non-string disk
     // values, strip the keys, and drop the (dot-path) group if it's now
     // empty. Note the group lookup walks the dot-path itself rather than
     // relying on the live accessor: a v3 config wrote
@@ -1618,23 +1634,10 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     QJsonObject animationsForFiltering = root.value(QStringLiteral("Animations")).toObject();
     QJsonObject animationFiltering = animationsForFiltering.value(QStringLiteral("WindowFiltering")).toObject();
     QJsonObject animationExclusionStash;
-    const auto stashAnimationList = [&animationFiltering, &animationExclusionStash](const QString& configKey) {
-        const QJsonValue raw = animationFiltering.value(configKey);
-        if (animationFiltering.contains(configKey) && !raw.isString() && !raw.isNull() && !raw.isUndefined()) {
-            qWarning(
-                "ConfigMigration::migrateV3ToV4: discarding non-string value at "
-                "Animations.WindowFiltering.%s (type=%d) — only comma-joined string "
-                "pattern lists are migrated.",
-                qPrintable(configKey), static_cast<int>(raw.type()));
-        }
-        const QString value = raw.toString();
-        if (!value.isEmpty()) {
-            animationExclusionStash.insert(configKey, value);
-        }
-        animationFiltering.remove(configKey);
-    };
-    stashAnimationList(ConfigKeys::Legacy::v3ExcludedApplicationsKey());
-    stashAnimationList(ConfigKeys::Legacy::v3ExcludedWindowClassesKey());
+    stashListEntry(animationFiltering, animationExclusionStash, ConfigKeys::Legacy::v3ExcludedApplicationsKey(),
+                   "Animations.WindowFiltering");
+    stashListEntry(animationFiltering, animationExclusionStash, ConfigKeys::Legacy::v3ExcludedWindowClassesKey(),
+                   "Animations.WindowFiltering");
     if (animationFiltering.isEmpty()) {
         animationsForFiltering.remove(QStringLiteral("WindowFiltering"));
     } else {
@@ -1967,10 +1970,26 @@ void appendAnimationRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
 /// list-builder. The constant is byte-identical to the one the legacy
 /// helper used so a daemon that bridge-built a rule from the same
 /// `(field, op, pattern)` tuple at runtime (pre-v4) produces the same id
-/// post-migration. That guarantees `WindowRuleStore::addRule` (or a
-/// downstream dedupe) collapses to a no-op rather than producing a
-/// duplicate — including the case where the user had
-/// already hand-authored the equivalent Application-subject Exclude rule.
+/// post-migration. Two consequences of the deterministic derivation:
+///   - re-runs of the migration on the same v3 inputs produce
+///     byte-identical rule ids, so `WindowRuleStore::addRule`'s id-
+///     collision check collapses the second run to a no-op rather than
+///     duplicating every rule on every startup, and
+///   - the LEGACY runtime bridge's id (pre-v4 daemons that built the
+///     same rule from the same lists via `ExclusionListBridge::
+///     toDaemonRuleSet`) matches the migration's id, so a v4 store that
+///     somehow saw both producers stays consistent.
+/// This is NOT a dedup against hand-authored rules: a user authoring an
+/// `AppId AppIdMatches firefox → Exclude` rule through the Window Rules
+/// page receives a fresh `QUuid::createUuid()` random id at allocation
+/// time (windowrulecontroller.cpp / WindowRule default-constructed `id`),
+/// not the deterministic UUIDv5 the migration derives. The migration's
+/// rule and the user's rule will coexist as two distinct entries with
+/// semantically-equivalent matches — the store dedups on id, not on
+/// match-leaf identity. Acceptable: both rules resolve to Excluded for
+/// the same window, so the user-visible behaviour is correct, just
+/// slightly redundant; the picker shows two entries the user can
+/// reconcile manually.
 inline const QUuid& exclusionMigrationNamespace()
 {
     static const QUuid ns(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
@@ -2086,9 +2105,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     //       rebuilt-and-overwritten from the dead assignments.json again.
     //
     //   "Is post-conversion cleanup done?" ⇒ assignments.json removed AND
-    //       `_v4DisableStash` stripped from config.json. These tail steps are
-    //       safe and idempotent; if they failed (read-only fs, lock) they are
-    //       retried on the next run — but the rebuild is NOT.
+    //       all four `_v4*Stash` scratch keys (`_v4DisableStash`,
+    //       `_v4AnimationRulesStash`, `_v4ExclusionStash`,
+    //       `_v4AnimationExclusionStash`) stripped from config.json. These
+    //       tail steps are safe and idempotent; if they failed (read-only
+    //       fs, lock) they are retried on the next run — but the rebuild
+    //       is NOT.
     //
     // Probe "conversion done" by actually loading windowrules.json as a
     // WindowRuleSet (named SchemaVersion check, not a bare `_version >= 4` on
@@ -2207,11 +2229,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // ensureJsonConfigImpl then proceeds here with a still-v1
     // configRoot. Writing an empty/stub windowrules.json now would set
     // `windowRulesAlreadyConverted=true` on the next run; the cleanup-
-    // only branch above would then strip `_v4DisableStash` /
-    // `_v4AnimationRulesStash` (populated by a later successful chain
-    // run) without porting them into rules — permanently losing the
-    // user's disable lists and animation app rules. Bail out and let
-    // the next run retry the chain.
+    // only branch above would then strip all four stash keys
+    // (populated by a later successful chain run) without porting them
+    // into rules — permanently losing the user's disable lists,
+    // animation app rules, snapping exclusion lists, AND animation
+    // exclusion lists. Bail out and let the next run retry the chain.
     if (haveConfig) {
         const int configVersion = configRoot.value(ConfigKeys::versionKey()).toInt(0);
         if (configVersion < ConfigSchemaVersion) {
@@ -2505,9 +2527,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     qInfo("ConfigMigration: wrote %d window rules to %s", ruleSet.count(), qPrintable(windowRulesPath));
 
     // ── Rewrite config.json: strip the temporary stash keys ────────────────
-    // The real Display.*Disabled* keys and Animations.AnimationAppRules array
-    // were already removed by migrateV3ToV4; only the `_v4DisableStash` and
-    // `_v4AnimationRulesStash` scratch keys remain to be cleaned up here.
+    // The real Display.*Disabled* / Exclusions.{Applications,WindowClasses} /
+    // Animations.WindowFiltering.{Applications,WindowClasses} / Animations.
+    // AnimationAppRules keys were already removed by migrateV3ToV4; only
+    // the four `_v4*Stash` scratch keys (`_v4DisableStash`,
+    // `_v4AnimationRulesStash`, `_v4ExclusionStash`,
+    // `_v4AnimationExclusionStash`) remain to be cleaned up here.
     // Serialised under the cross-process QLockFile acquired in
     // `ensureJsonConfig` (see the QLockFile setup near the top of that
     // function): on a successful tryLock the rewrite races no peer, so

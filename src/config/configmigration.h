@@ -107,7 +107,11 @@ public:
     ///   - Removes the `Exclusions.Applications` and `Exclusions.WindowClasses`
     ///     comma-joined pattern lists and stashes them under the temporary
     ///     `_v4ExclusionStash` root key.
-    /// All three stashes feed @ref finalizeV4Conversion. Empty inputs produce
+    ///   - Removes the `Animations.WindowFiltering.Applications` and
+    ///     `Animations.WindowFiltering.WindowClasses` comma-joined pattern
+    ///     lists and stashes them under the temporary
+    ///     `_v4AnimationExclusionStash` root key.
+    /// All four stashes feed @ref finalizeV4Conversion. Empty inputs produce
     /// no stash entries (the finalizer treats an absent key as a no-op for
     /// that input). Stamps `_version = 4`.
     static void migrateV3ToV4(QJsonObject& root);
@@ -117,12 +121,14 @@ public:
     /// single `void(QJsonObject&)` migration step, so this runs after the
     /// chain, from @ref ensureJsonConfigImpl.
     ///
-    /// It reads assignments.json + the `_v4DisableStash` and
-    /// `_v4AnimationRulesStash` left in config.json, builds the
+    /// It reads assignments.json + the four `_v4*` stashes left in
+    /// config.json (`_v4DisableStash`, `_v4AnimationRulesStash`,
+    /// `_v4ExclusionStash`, `_v4AnimationExclusionStash`), builds the
     /// WindowRuleSet (assignment rules + disable-list rules + per-window
     /// animation-override rules ported from the legacy AnimationAppRule
-    /// JSON), writes windowrules.json (atomic), relocates the QuickLayouts
-    /// slots into the quicklayouts.json sidecar, strips both stash keys
+    /// JSON + `Exclude`-action rules + `ExcludeAnimations`-action rules),
+    /// writes windowrules.json (atomic), relocates the QuickLayouts slots
+    /// into the quicklayouts.json sidecar, strips all four stash keys
     /// from config.json, then — as the last, irreversible step — deletes
     /// assignments.json.
     ///
