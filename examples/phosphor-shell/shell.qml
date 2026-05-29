@@ -188,15 +188,12 @@ Item {
         // assigned, leaving downstream bindings reading from an
         // undefined value.
         shellState: root.shellState
-        // Time as locale-neutral HH:mm; the date portion via Qt.formatDate
+        // Time formatted as locale-neutral HH:mm; date via Qt.formatDate
         // so day/month names follow the user's locale (the hand-rolled
         // English arrays this replaced were an i18n regression).
-        clockText: {
-            const pad = n => {
-                return n < 10 ? "0" + n : "" + n;
-            };
-            return pad(clock.hours) + ":" + pad(clock.minutes) + " · " + Qt.formatDate(clock.date, "ddd MMM dd");
-        }
+        // Qt.formatTime + Qt.formatDate share the same locale handling
+        // so HH:mm zero-padding doesn't need a hand-rolled helper.
+        clockText: Qt.formatTime(clock.date, "HH:mm") + " · " + Qt.formatDate(clock.date, "ddd MMM dd")
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent
         batteryPercent: battery.displayDevice ? Math.round(battery.displayDevice.percentage).toString() : ""

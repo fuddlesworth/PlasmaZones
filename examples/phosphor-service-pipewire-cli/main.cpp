@@ -199,7 +199,7 @@ int cmdList(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ki
         wanted = {QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")};
     } else {
         err() << "unknown list kind: " << kind << " (use sinks, sources, or streams)\n";
-        return usage();
+        return 1;
     }
     int count = 0;
     for (auto* node : conn.nodes()) {
@@ -271,6 +271,19 @@ int main(int argc, char** argv)
         return usage();
     const QString cmd = args.at(1);
 
+    // Reject unknown commands BEFORE paying the daemon-connect cost.
+    // A typo'd subcommand previously waited 2s for the handshake, then
+    // returned usage().
+    static const QStringList knownCommands = {QStringLiteral("list"),
+                                              QStringLiteral("default"),
+                                              QStringLiteral("set-volume"),
+                                              QStringLiteral("mute"),
+                                              QStringLiteral("unmute"),
+                                              QStringLiteral("set-default-sink"),
+                                              QStringLiteral("set-default-source")};
+    if (!knownCommands.contains(cmd))
+        return usage();
+
     PhosphorServicePipeWire::PipeWireConnection conn;
     const int timeoutMs = connectTimeoutMs();
     conn.connect();
@@ -311,7 +324,10 @@ int main(int argc, char** argv)
     if (cmd == QLatin1String("set-default-sink")) {
         if (args.size() < 3)
             return usage();
-        const QString name = args.at(2);
+        // Trim BEFORE the sentinel check so trailing whitespace
+        // ("default.audio.sink ") doesn't bypass the rejection and
+        // write a corrupt name into WirePlumber's metadata.
+        const QString name = args.at(2).trimmed();
         // The `default.audio.*` sentinels are read-side only; the
         // configured-default key needs a real node.name to do anything
         // meaningful. Reject up-front so callers don't silently write
@@ -329,7 +345,7 @@ int main(int argc, char** argv)
     if (cmd == QLatin1String("set-default-source")) {
         if (args.size() < 3)
             return usage();
-        const QString name = args.at(2);
+        const QString name = args.at(2).trimmed();
         if (name.isEmpty() || name == QLatin1String("default.audio.sink")
             || name == QLatin1String("default.audio.source")) {
             err() << "set-default-source requires a real node.name (see `list sources`)\n";

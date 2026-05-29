@@ -33,6 +33,7 @@ private Q_SLOTS:
     void resetToDefaults_clearsSourcePath();
     void resetToDefaults_releasesDirectoryWatch();
     void hotReload_picksUpInPlaceEdit();
+    void hotReload_survivesConsecutiveInPlaceEdits();
     void hotReload_picksUpAtomicRename();
     void hotReload_debouncesBurstOfFileChanges();
     void hotReload_resetCancelsPendingDebounce();
@@ -203,6 +204,57 @@ void TestPaletteStore::hotReload_picksUpInPlaceEdit()
     // fires or the deadline expires. 5s ceiling matches sibling tests.
     QVERIFY(palSpy.wait(5000));
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#445566"));
+}
+
+void TestPaletteStore::hotReload_survivesConsecutiveInPlaceEdits()
+{
+    // Regression for the Pass-2 PaletteStore::reloadFromCurrentPath
+    // bug: a successful hot-reload was routing through the public
+    // loadFromJson, which dropped the watcher + cleared m_sourcePath
+    // every time, silently breaking the next on-disk edit. This test
+    // performs TWO consecutive edits and asserts both are picked up,
+    // pinning the parseAndApplyJson(false) routing.
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath(QStringLiteral("p.json"));
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": {"primary": "#101010"}})");
+    }
+
+    PaletteStore s;
+    QVERIFY(s.loadFromFile(path));
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#101010"));
+    const QString sourceAfterLoad = s.sourcePath();
+    QVERIFY(!sourceAfterLoad.isEmpty());
+
+    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
+
+    // First edit.
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(R"({"tokens": {"primary": "#202020"}})");
+    }
+    QVERIFY(palSpy.wait(5000));
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#202020"));
+    // Watcher must still be armed after the first reload.
+    QCOMPARE(s.sourcePath(), sourceAfterLoad);
+
+    palSpy.clear();
+
+    // Second edit. Without the parseAndApplyJson(false) fix this
+    // edit never fires paletteChanged because the watcher was
+    // disarmed during the first reload.
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(R"({"tokens": {"primary": "#303030"}})");
+    }
+    QVERIFY(palSpy.wait(5000));
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#303030"));
+    QCOMPARE(s.sourcePath(), sourceAfterLoad);
 }
 
 void TestPaletteStore::hotReload_picksUpAtomicRename()

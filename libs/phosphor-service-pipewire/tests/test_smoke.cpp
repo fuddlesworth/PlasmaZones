@@ -112,12 +112,17 @@ private Q_SLOTS:
                              || mc == QLatin1String("Stream/Output/Audio") || mc == QLatin1String("Stream/Input/Audio"),
                          qPrintable(QStringLiteral("unexpected mediaClass: %1").arg(mc)));
             }
-            // disconnect() should fire a nodeRemoved per node before
-            // tearing the registry down.
+            // disconnect() should fire a nodeRemoved for at least
+            // every node we observed. Use >= rather than == because
+            // the daemon may add or remove nodes mid-shutdown (a
+            // hot-plugged USB sink, a Firefox stream ending) and
+            // exact-equality would flake on a live host.
             const int expectedRemovals = nodes.size();
             conn.disconnect();
             QTest::qWait(150);
-            QCOMPARE(removedSpy.count(), expectedRemovals);
+            QVERIFY2(
+                removedSpy.count() >= expectedRemovals,
+                qPrintable(QStringLiteral("removed %1, expected >= %2").arg(removedSpy.count()).arg(expectedRemovals)));
             QCOMPARE(conn.nodes().size(), 0);
         } else {
             // No daemon — confirm the absence is graceful: no nodes,

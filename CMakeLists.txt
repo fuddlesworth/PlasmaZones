@@ -483,7 +483,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-sni)       # StatusNotifierItem host + watcher + dbusmenu
     add_subdirectory(libs/phosphor-service-upower)    # UPower battery / power-supply readouts
     add_subdirectory(libs/phosphor-service-mpris)     # MPRIS2 media-player discovery + control
-    add_subdirectory(libs/phosphor-service-pipewire)  # PipeWire mixer (Phase 2.1, in flight)
+    add_subdirectory(libs/phosphor-service-pipewire)  # PipeWire mixer (Phase 2.1, shipped)
 endif()
 
 # Source directories

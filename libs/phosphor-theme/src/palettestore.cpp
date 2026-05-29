@@ -313,7 +313,12 @@ void PaletteStore::reloadFromCurrentPath()
     }
     const auto data = file.readAll();
     file.close();
-    if (!loadFromJson(data)) {
+    // Route through parseAndApplyJson with dropWatchedSource=false so
+    // a successful hot-reload doesn't disarm the watcher that just
+    // triggered it. Calling the public loadFromJson here would clear
+    // m_sourcePath + the watcher on every reload (header contract for
+    // the JSON-blob entry), permanently silencing future on-disk edits.
+    if (!parseAndApplyJson(data, /*dropWatchedSource=*/false)) {
         Q_EMIT loadError(m_sourcePath, QStringLiteral("invalid JSON or empty token map"));
     }
 }
