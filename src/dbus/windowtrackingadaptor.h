@@ -925,7 +925,12 @@ private:
     // future regression that introduces a clear-to-null path (none
     // currently exists); the qFatal is the authoritative gate.
     // ═══════════════════════════════════════════════════════════════════════════════
-    PhosphorPlacement::IGeometryResolver* m_geometryResolver = nullptr;
+    // Owned: DaemonGeometryResolver is a plain non-QObject and the
+    // adaptor's destructor would otherwise leak it. WindowTrackingService
+    // borrows the resolver by raw pointer (no ownership transfer), so this
+    // unique_ptr must outlive m_service — declare it BEFORE m_service so
+    // reverse-order member destruction tears m_service down first.
+    std::unique_ptr<PhosphorPlacement::IGeometryResolver> m_geometryResolver;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
 
     // Shared registry: compositor-supplied instance id → current metadata.

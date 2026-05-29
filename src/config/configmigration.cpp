@@ -291,9 +291,11 @@ bool ConfigMigration::ensureJsonConfigImpl()
                         // here, after the chain. Idempotent — safe to always run.
                         return finalizeV4Conversion(jsonPath);
                     }
-                    // Already at current version — finalizeV4Conversion is a
-                    // no-op once windowrules.json exists, but run it so a
-                    // crash that left assignments.json behind still completes.
+                    // Already at OR above current version — finalizeV4Conversion's
+                    // cleanup-only branch runs idempotently: it strips any leftover
+                    // assignments.json artifacts or `_v4*Stash` keys that a prior
+                    // crash may have left behind, and is a no-op once the file is
+                    // already clean.
                     return finalizeV4Conversion(jsonPath);
                 }
                 corrupt = true;
@@ -1085,13 +1087,19 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // retry. A partial commit here would silently lose session state.
     bool allSideEffectsSucceeded = true;
 
-    const QString wtGroup = ConfigKeys::windowTrackingGroup();
-    if (root.contains(wtGroup)) {
+    // Source read uses the frozen v1 group accessor per the configkeys.h
+    // freeze policy — a future runtime rename of `windowTrackingGroup`
+    // must not silently miss this read. Destination write into
+    // session.json's root uses the live runtime group accessor — that
+    // file is the live shape's home.
+    const QString srcWtGroup = ConfigKeys::Legacy::v1WindowTrackingGroup();
+    const QString dstWtGroup = ConfigKeys::windowTrackingGroup();
+    if (root.contains(srcWtGroup)) {
         QJsonObject sessionRoot;
-        sessionRoot[wtGroup] = root.value(wtGroup);
+        sessionRoot[dstWtGroup] = root.value(srcWtGroup);
         const QString sessionPath = ConfigDefaults::sessionFilePath();
         if (PhosphorConfig::JsonBackend::writeJsonAtomically(sessionPath, sessionRoot)) {
-            root.remove(wtGroup);
+            root.remove(srcWtGroup);
         } else {
             qWarning(
                 "ConfigMigration: failed to write session state to %s — "

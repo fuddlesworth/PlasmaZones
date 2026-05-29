@@ -620,10 +620,17 @@ void WindowDragAdaptor::clearForCompositorReconnect()
     // until the next beginDrag's `clearPendingSnapDragState()` ran. Be
     // explicit here so the post-reconnect state is well-defined.
     clearPendingSnapDragState();
-    // Clear the last-computed drag policy. handleWindowClosed (line 305,
-    // 311) already does this on the equivalent "session torn down"
-    // paths; clearForCompositorReconnect should match.
+    // Clear the last-computed drag policy. Both code paths in
+    // `handleWindowClosed` clear it on the equivalent "session torn down"
+    // events; clearForCompositorReconnect should match.
     m_currentDragPolicy = {};
+    // Clear the last-logged activation-transition state. Otherwise the
+    // first dragMoved tick of the next drag may suppress its
+    // transition log because the stale value matches the new tick.
+    // beginDrag() resets this at the start of every drag, but the
+    // reconnect path can leave a window where the next beginDrag has
+    // not yet fired.
+    m_lastLoggedActivationActive = false;
     // Drop any picker-nav lambda registrations: their captures
     // include OverlayService* which the compositor-reconnect path
     // may tear down before the next picker-show re-registers.
@@ -667,12 +674,6 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // would never fire — snap assist would never show. The compositor-
     // reconnect concern is handled in clearForCompositorReconnect.
     // computeAndEmitSnapAssist consumes-and-clears the IDs after reading.
-}
-
-void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId)
-{
-    // Delegate to overload - wasSnapped param is now unused but kept for compatibility
-    tryStorePreSnapGeometry(windowId, m_wasSnapped, m_originalGeometry);
 }
 
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, bool wasSnapped, const QRect& originalGeometry)

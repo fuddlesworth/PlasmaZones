@@ -887,7 +887,7 @@ private:
     /// The v4 group / key names are pinned as inline `QStringLiteral`
     /// literals — the test's role is to be an INDEPENDENT WITNESS of the
     /// frozen v4 on-disk wire format. If a future maintainer violates the
-    /// freeze policy (forbidden by configkeys.h:638-651) and renames
+    /// freeze policy (forbidden by configkeys.h:637-651) and renames
     /// `Legacy::v4AnimationAppRulesKey` from "AnimationAppRules", the
     /// accessor-based form would silently update in lockstep with
     /// production; inline-literal pins catch the drift. Mirrors the

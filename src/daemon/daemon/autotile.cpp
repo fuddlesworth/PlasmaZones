@@ -51,9 +51,18 @@ void Daemon::updateAutotileScreens()
     QHash<QString, QString> screenAlgorithms;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
-        // Skip screens/desktops/activities where PlasmaZones is disabled
-        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, desktop,
-                              activity)) {
+        // Skip screens/desktops/activities where PlasmaZones is disabled.
+        // Routes through ContextResolver when wired (post-init) so this
+        // path shares the same cascade as every other consumer — see
+        // libs/phosphor-context-resolver/README.md. Falls back to the
+        // direct settings check only if the resolver isn't yet available
+        // (early-init path before init() finishes wiring it).
+        const bool disabled = m_contextResolver
+            ? m_contextResolver->isDisabled(
+                  m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
+            : isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, desktop,
+                                activity);
+        if (disabled) {
             continue;
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);

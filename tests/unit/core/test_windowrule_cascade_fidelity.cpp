@@ -88,7 +88,7 @@ private:
         if (!slot) {
             return QString();
         }
-        return slot->params.value(QLatin1String("mode")).toString();
+        return slot->params.value(PWR::ActionParam::Mode).toString();
     }
 
     /// The layout slot's layoutId / algorithm for a query.
@@ -100,9 +100,9 @@ private:
             return QString();
         }
         if (slot->type == QString(PWR::ActionType::SetSnappingLayout)) {
-            return slot->params.value(QLatin1String("layoutId")).toString();
+            return slot->params.value(PWR::ActionParam::LayoutId).toString();
         }
-        return slot->params.value(QLatin1String("algorithm")).toString();
+        return slot->params.value(PWR::ActionParam::Algorithm).toString();
     }
 
     /// Per-test fixture for the LayoutRegistry-boundary cases: an isolated XDG

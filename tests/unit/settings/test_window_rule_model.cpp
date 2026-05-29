@@ -38,7 +38,7 @@ WindowRule monitorRule(const QString& screenId, const QString& name)
     rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, screenId);
     RuleAction engine;
     engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(QLatin1String("mode"), QStringLiteral("autotile"));
+    engine.params.insert(ActionParam::Mode, QStringLiteral("autotile"));
     rule.actions = {engine};
     return rule;
 }
@@ -67,8 +67,8 @@ WindowRule animationRule(const QString& windowClass, const QString& name)
     rule.match = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, windowClass);
     RuleAction shader;
     shader.type = QString(ActionType::OverrideAnimationShader);
-    shader.params.insert(QLatin1String("event"), QStringLiteral("window.open"));
-    shader.params.insert(QLatin1String("effectId"), QStringLiteral("dissolve"));
+    shader.params.insert(ActionParam::Event, QStringLiteral("window.open"));
+    shader.params.insert(ActionParam::EffectId, QStringLiteral("dissolve"));
     rule.actions = {shader};
     return rule;
 }
@@ -144,7 +144,7 @@ void TestWindowRuleModel::sectionDerivation()
     activity.match = MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("{uuid}"));
     RuleAction engine;
     engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(QLatin1String("mode"), QStringLiteral("snapping"));
+    engine.params.insert(ActionParam::Mode, QStringLiteral("snapping"));
     activity.actions = {engine};
     QCOMPARE(WindowRuleModel::sectionFor(activity), WindowRuleModel::Section::Activity);
 }
@@ -295,7 +295,7 @@ void TestWindowRuleModel::validationIssueCountRole()
     badRule.match = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox"));
     RuleAction engine;
     engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(QLatin1String("mode"), QStringLiteral("autotile"));
+    engine.params.insert(ActionParam::Mode, QStringLiteral("autotile"));
     badRule.actions = {engine};
 
     WindowRuleModel model;
@@ -325,7 +325,7 @@ void TestWindowRuleModel::screenIdsRoleHandlesInOperator()
                                            QVariantList{QStringLiteral("DP-2"), QStringLiteral("DP-3")});
     RuleAction engine;
     engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(QLatin1String("mode"), QStringLiteral("autotile"));
+    engine.params.insert(ActionParam::Mode, QStringLiteral("autotile"));
     rule.actions = {engine};
 
     WindowRuleModel model;
@@ -371,7 +371,7 @@ void TestWindowRuleModel::actionSummaryRendersAllEngineModes()
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
         RuleAction engine;
         engine.type = QString(ActionType::SetEngineMode);
-        engine.params.insert(QLatin1String("mode"), modeToken);
+        engine.params.insert(ActionParam::Mode, modeToken);
         rule.actions = {engine};
         return rule;
     };
@@ -407,7 +407,7 @@ void TestWindowRuleModel::disableEngineNamesTheModeBeingDisabled()
         rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
         RuleAction disable;
         disable.type = QString(ActionType::DisableEngine);
-        disable.params.insert(QLatin1String("mode"), modeToken);
+        disable.params.insert(ActionParam::Mode, modeToken);
         rule.actions = {disable};
         return rule;
     };

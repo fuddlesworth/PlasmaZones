@@ -179,6 +179,30 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
                                     resolveOne(predicate.value.toString()));
 }
 
+/// Localise a single engine-mode wire token (`snapping` / `autotile` /
+/// `scrolling` — see `engineModeOptions()` in
+/// libs/phosphor-windowrule/src/ruleaction.cpp). Returns an empty
+/// QString for an empty input so callers can branch on it; unknown
+/// tokens (a future picker option, a hand-edited rule) round-trip
+/// verbatim. Shared between SetEngineMode and DisableEngine so a
+/// future enum extension lands in one place.
+static QString engineModeDisplayLabel(const QString& wire)
+{
+    if (wire.isEmpty()) {
+        return {};
+    }
+    if (wire == QLatin1String("snapping")) {
+        return PzI18n::tr("Snapping");
+    }
+    if (wire == QLatin1String("autotile")) {
+        return PzI18n::tr("Autotile");
+    }
+    if (wire == QLatin1String("scrolling")) {
+        return PzI18n::tr("Scrolling");
+    }
+    return wire;
+}
+
 /// Human label for one action ("Snapping", "Float", "Excluded"). @p
 /// snappingLayoutLookup resolves SetSnappingLayout's layoutId UUIDs;
 /// @p tilingAlgorithmLookup resolves SetTilingAlgorithm's wire tokens
@@ -197,23 +221,8 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
 
     if (action.type == ActionType::SetEngineMode) {
         const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
-        // Render the wire token (`snapping` / `autotile` / `scrolling` —
-        // see `engineModeOptions()` in
-        // libs/phosphor-windowrule/src/ruleaction.cpp) as a properly-cased
-        // display label matching the editor's enum-picker labels. An
-        // unknown token surfaces verbatim — the picker can't author it,
-        // so it only arrives via hand-edited windowrules.json.
-        QString label;
-        if (mode == QLatin1String("snapping")) {
-            label = PzI18n::tr("Snapping");
-        } else if (mode == QLatin1String("autotile")) {
-            label = PzI18n::tr("Autotile");
-        } else if (mode == QLatin1String("scrolling")) {
-            label = PzI18n::tr("Scrolling");
-        } else {
-            label = mode; // unknown / future token — surface verbatim.
-        }
-        return PzI18n::tr("Engine: %1").arg(label);
+        const QString label = engineModeDisplayLabel(mode);
+        return PzI18n::tr("Engine: %1").arg(label.isEmpty() ? mode : label);
     }
     if (action.type == ActionType::SetSnappingLayout) {
         const QString layoutId = action.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
@@ -231,24 +240,13 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     if (action.type == ActionType::DisableEngine) {
         // Name the engine being disabled — a rules list with "Disable
         // Snapping on DP-1" and "Disable Autotile on DP-2" otherwise reads
-        // as two identical "Disabled" rows. Same vocabulary as
-        // SetEngineMode above (`engineModeOptions()` in
-        // libs/phosphor-windowrule/src/ruleaction.cpp), same
-        // localised-label switch so the i18n cost stays flat.
+        // as two identical "Disabled" rows. Empty mode → fall back to
+        // the generic "Disabled" label so a malformed rule still reads
+        // sensibly.
         const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
-        QString label;
-        if (mode == QLatin1String("snapping")) {
-            label = PzI18n::tr("Snapping");
-        } else if (mode == QLatin1String("autotile")) {
-            label = PzI18n::tr("Autotile");
-        } else if (mode == QLatin1String("scrolling")) {
-            label = PzI18n::tr("Scrolling");
-        } else if (mode.isEmpty()) {
-            // No mode wire string at all — fall back to the generic
-            // "Disabled" label so a malformed rule still reads sensibly.
+        const QString label = engineModeDisplayLabel(mode);
+        if (label.isEmpty()) {
             return PzI18n::tr("Disabled");
-        } else {
-            label = mode; // unknown / future token — surface verbatim.
         }
         return PzI18n::tr("Disable: %1").arg(label);
     }

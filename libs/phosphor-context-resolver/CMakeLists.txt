@@ -6,12 +6,13 @@
 # Wraps the four interlocking sources every PlasmaZones consumer currently
 # stitches by hand (mode router + virtual-desktop + activity + disable/lock
 # settings) into a single `ContextHandle` snapshot + `IContextResolver`
-# façade. The 22+ open-coded `(modeFor(screenId) → currentDesktop()
+# façade. The open-coded `(modeFor(screenId) → currentDesktop()
 # → currentActivity() → isContextDisabled(mode, …) → isContextLocked(…))`
-# chains across the daemon, the D-Bus adaptors, and the KWin effect collapse
-# to one resolver call per site, and adding a new override axis (per-
-# application, per-window-type, future per-mode "scrolling" leaf) gains
-# one resolver method instead of a fan-out sweep.
+# chains across the daemon and the D-Bus adaptors collapse to one resolver
+# call per site, and adding a new override axis (per-application,
+# per-window-type, future per-mode "scrolling" leaf) gains one resolver
+# method instead of a fan-out sweep. The KWin effect does NOT consume
+# this library — effect-side state has no disable/lock cascade.
 #
 # This library does NOT own any QObject / QML / D-Bus surface — those belong
 # to the higher-level GPL settings app and adaptors. It also does NOT

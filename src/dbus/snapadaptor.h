@@ -34,7 +34,7 @@ class ISettings;
  *
  * Owns the snap-specific D-Bus surface: commit/uncommit, snap-restore
  * (appRule / persisted / emptyZone / lastZone / resolveWindowRestore),
- * resnap, calculateSnapAll, windowsSnappedBatch, snap-mode navigation
+ * resnap, calculateSnapAllWindows, windowsSnappedBatch, snap-mode navigation
  * (move/focus/swap/push/snap-by-number/rotate/cycle/restore),
  * snap-mode convenience (moveWindowToZone, swapWindowsById), and
  * snap-mode float (toggleFloat, setWindowFloat, calculateUnfloatRestore,

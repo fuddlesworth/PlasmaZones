@@ -287,7 +287,10 @@ private:
      * screen in autotile mode?" use this method instead of checking the
      * engine pointer directly. Centralising the lookup behind one call
      * is how the single-source-of-truth invariant is enforced inside the
-     * daemon.
+     * daemon. The router itself (src/core/screenmoderouter.cpp) IS the
+     * underlying source and inspects `m_autotileEngine->isActiveOnScreen`
+     * directly — every other caller (navigation/signal/start/osd paths)
+     * routes through `isAutotileScreen` or `m_screenModeRouter->isAutotileMode`.
      */
     bool isAutotileScreen(const QString& screenId) const;
 

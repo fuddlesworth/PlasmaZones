@@ -314,9 +314,10 @@ void Daemon::setupAnimationProfiles()
     using namespace PhosphorAnimation;
 
     // Wipe any entries left over from prior wiring on this same daemon
-    // instance. setupAnimationProfiles is called exactly once per
-    // Daemon::init() today, so the registry is always empty when we get
-    // here — the narrow-clear is a no-op in current code paths.
+    // instance. setupAnimationProfiles is called exactly once per Daemon
+    // construction (from the ctor — not init()), so the registry is
+    // always empty when we get here — the narrow-clear is a no-op in
+    // current code paths.
     //
     // Narrow the clear to the two partitions we publish under: the
     // loader-owned user-JSON partition (clearOwner by tag) and each
@@ -1052,9 +1053,8 @@ bool Daemon::init()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setContextResolver(m_contextResolver.get());
     }
-    if (m_snapAdaptor) {
-        m_snapAdaptor->setContextResolver(m_contextResolver.get());
-    }
+    // m_snapAdaptor is constructed below at the engine-adaptor block; its
+    // contextResolver wire lives there.
 
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
@@ -1118,7 +1118,6 @@ bool Daemon::init()
     // Config arg for m_screenManager). The swapper is constructed here
     // because navigation handlers don't run before init() returns anyway.
     m_virtualScreenSwapper = std::make_unique<PhosphorScreens::VirtualScreenSwapper>(m_virtualScreenStore.get());
-    Q_ASSERT(m_virtualScreenSwapper);
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
     // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking
@@ -1186,6 +1185,7 @@ bool Daemon::init()
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
     m_snapAdaptor->setScreenModeRouter(m_screenModeRouter.get());
+    m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
 
     // Control adaptor - high-level convenience API for third-party integrations.
@@ -1560,18 +1560,22 @@ void Daemon::stop()
         m_layoutManager->setSnappingPreferredProvider({});
     }
 
-    if (!m_running) {
-        return;
-    }
-
-    // Null the QML static registry / manager pointers before our owned
-    // members are destroyed (unique_ptr / value-typed member destruction
-    // runs AFTER ~Daemon body completes — tearing the static borrowed
-    // pointers now guarantees no QML callsite landing during teardown
-    // or in a subsequent Daemon instance dereferences freed memory.
+    // Null the QML static registry / manager pointers BEFORE the m_running
+    // gate. These three statics are published unconditionally from
+    // `setupAnimationProfiles()` in the ctor — which runs before `init()`
+    // or `start()`. A Daemon constructed but never started (test fixtures,
+    // early-fail init paths) still has them pinned to the about-to-die
+    // members, so the clear must run on every teardown path, not just the
+    // post-start one. Same "borrowed-pointer + late member destruction"
+    // window as the provider lambdas above. The setDefault*(nullptr)
+    // calls are unconditionally null-safe.
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
     PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
+
+    if (!m_running) {
+        return;
+    }
 
     // Tear down the daemon-owned PhosphorProfileRegistry entries this
     // Daemon published so a later Daemon reconstruction (tests, or a
@@ -1701,6 +1705,12 @@ void Daemon::stop()
     }
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setContextResolver(nullptr);
+        // m_screenModeRouter is destroyed below; null its WTA borrow
+        // before that reset so any D-Bus call landing in the gap
+        // between this teardown and the bus unregister can't deref
+        // a freed router pointer. SnapAdaptor's clearEngine() does
+        // the symmetric clear (snapadaptor.cpp).
+        m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
     }
     m_contextResolver.reset();
     m_settingsGateAdapter.reset();
@@ -1743,9 +1753,13 @@ void Daemon::stop()
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, AutotileAdaptor) all ship `= default` destructors
-    // (verified — see their class headers), so they have no dtor body to
-    // UAF. QDBusConnection::unregisterObject (invoked above) blocks new
+    // SnapAdaptor, AutotileAdaptor) all ship no-op destructors —
+    // either explicit `= default` in their headers, an empty body
+    // declared inline, or an empty out-of-line body (`{}`) in their
+    // .cpp (DBusScreenAdaptor + WindowTrackingAdaptor follow that
+    // shape). The substantive safety claim is "no member deref runs
+    // in any of their destructors" — confirmed by inspecting each
+    // header + cpp pair, not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
     // method dispatch to them before we begin tearing down, and Qt's
     // sender-destruction auto-disconnect cleans up signal wiring when the
     // borrowed sender (m_layoutManager, etc.) is destroyed during member

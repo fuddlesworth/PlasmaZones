@@ -541,9 +541,8 @@ private:
      */
     void computeAndEmitSnapAssist();
 
-    // Pre-snap geometry helper (reduces code duplication)
-    // Overload with captured values to prevent race conditions in dragStopped()
-    void tryStorePreSnapGeometry(const QString& windowId);
+    // Pre-snap geometry helper (reduces code duplication). Takes captured
+    // values to prevent race conditions in dragStopped().
     void tryStorePreSnapGeometry(const QString& windowId, bool wasSnapped, const QRect& originalGeometry);
 
 private Q_SLOTS:

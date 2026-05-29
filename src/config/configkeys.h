@@ -410,11 +410,11 @@ public:
     PZ_CONFIG_KEY(quickLayoutKeyPattern, "QuickLayout%1")
     static QString quickLayoutKey(int n)
     {
-        Q_ASSERT_X(n >= 1 && n <= 9, "quickLayoutKey", "n out of range");
-        // Release-build guard: Q_ASSERT_X is compiled out in release builds,
-        // so an out-of-range `n` would silently yield "QuickLayout100" (or
-        // similar) and ghost the config namespace. qFatal aborts unambiguously
-        // in both build modes — the contract is "n in 1..9, no exceptions".
+        // qFatal aborts unambiguously in both debug and release builds —
+        // the contract is "n in 1..9, no exceptions". A bare Q_ASSERT_X
+        // would compile out in release and let an out-of-range value
+        // silently yield "QuickLayout100" (or similar), ghosting the
+        // config namespace.
         if (n < 1 || n > 9) {
             qFatal("quickLayoutKey: n out of range: %d", n);
         }
@@ -442,9 +442,7 @@ public:
     PZ_CONFIG_KEY(snapToZoneKeyPattern, "SnapToZone%1")
     static QString snapToZoneKey(int n)
     {
-        Q_ASSERT_X(n >= 1 && n <= 9, "snapToZoneKey", "n out of range");
-        // See quickLayoutKey above for the rationale on the release-build
-        // qFatal guard — same contract, same failure mode if violated.
+        // See quickLayoutKey above for the rationale on the qFatal guard.
         if (n < 1 || n > 9) {
             qFatal("snapToZoneKey: n out of range: %d", n);
         }
@@ -585,6 +583,13 @@ public:
         PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup
         PZ_CONFIG_GROUP(v1RenderingGroup, "Rendering") // = v2 renderingGroup
         PZ_CONFIG_GROUP(v1ShadersGroup, "Shaders") // = v2 shadersGroup
+        // v1 WindowTracking group — only read in the v1→v2 step where it's
+        // moved out to session.json. The live runtime accessor
+        // `ConfigKeys::windowTrackingGroup()` happens to return the same
+        // "WindowTracking" string today, but a future rename of the live
+        // accessor must not silently retarget this read at a path no v1
+        // INI ever held — that would drop user session state.
+        PZ_CONFIG_GROUP(v1WindowTrackingGroup, "WindowTracking")
 
         // v2 legacy keys — used ONLY by migrateV2ToV3.
         // The v2 group itself (Snapping.Behavior.Display) lives on past v3 — it

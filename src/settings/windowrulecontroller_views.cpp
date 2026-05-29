@@ -101,16 +101,17 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     struct Summary
     {
         int ruleCount = 0;
-        // Wire-string set of engine tokens any `DisableEngine` action on
-        // this screen targets. Resolved against the screen's effective
-        // `engineMode` at output time to compute the tile's
-        // `engineDisabled` flag — a `DisableEngine{mode:"scrolling"}`
-        // rule on a Snapping-mode screen must NOT flip the tile to
-        // "Engine off" (the active engine is still Snapping). The
-        // earlier shape used a single `tilingEnabled` bool flipped on
-        // ANY DisableEngine, which mis-labelled every cross-mode
-        // disable rule.
-        QSet<QString> disabledEngineModes;
+        // Wire-string engine token (or empty) the highest-priority
+        // matching `DisableEngine` action on this screen targets.
+        // Resolved against the screen's effective `engineMode` at
+        // output time to compute the tile's `engineDisabled` flag —
+        // a `DisableEngine{mode:"scrolling"}` rule on a Snapping-mode
+        // screen must NOT flip the tile to "Engine off" (the active
+        // engine is still Snapping). Stored as a scalar QString
+        // (first-non-empty-wins below mirrors the daemon's per-slot
+        // cascade winner; a QSet would over-state by accumulating
+        // every matching rule).
+        QString disabledEngineMode;
         QString snappingLayout;
         QString tilingAlgorithm;
         // Mode the rule's `SetEngineMode` action selects (if any). Used to
@@ -156,20 +157,17 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
             Summary& s = byScreen[screenId];
             ++s.ruleCount;
             for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::DisableEngine && s.disabledEngineModes.isEmpty()) {
+                if (a.type == ActionType::DisableEngine && s.disabledEngineMode.isEmpty()) {
                     // First-non-empty wins, mirroring the daemon's per-slot
                     // cascade resolution: `RuleEvaluator::highestPriorityMatch`
                     // selects ONE winner per slot, and the `engine-enable`
                     // slot's winning rule is the only one consulted for
                     // DisableEngine. Indices here are pre-sorted priority-DESC,
                     // so the first DisableEngine action seen IS the cascade
-                    // winner; accumulating from every matching rule (as the
-                    // earlier QSet insert did) over-reports when two
-                    // overlapping rules target different engines on the same
-                    // screen. Output-time resolution against the active mode
+                    // winner. Output-time resolution against the active mode
                     // still prevents a Snapping-disable rule from labelling
                     // an Autotile-mode screen as "Engine off".
-                    s.disabledEngineModes.insert(a.params.value(PhosphorWindowRule::ActionParam::Mode).toString());
+                    s.disabledEngineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
                 } else if (a.type == ActionType::SetEngineMode && s.engineMode.isEmpty()) {
                     s.engineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
                 } else if (a.type == ActionType::SetSnappingLayout && s.snappingLayout.isEmpty()) {
@@ -270,7 +268,8 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         const QString effectiveModeWire = summary.engineMode.isEmpty()
             ? PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping)
             : summary.engineMode;
-        const bool engineDisabled = summary.disabledEngineModes.contains(effectiveModeWire);
+        const bool engineDisabled =
+            !summary.disabledEngineMode.isEmpty() && summary.disabledEngineMode == effectiveModeWire;
         tile[QStringLiteral("tilingEnabled")] = !engineDisabled;
         tile[QStringLiteral("ruleCount")] = summary.ruleCount;
         tile[QStringLiteral("assigned")] = assigned;

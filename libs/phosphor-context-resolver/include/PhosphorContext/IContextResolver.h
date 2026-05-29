@@ -160,7 +160,7 @@ public:
     // interface to expose the snapshot-vs-live distinction in the API
     // surface (so a future consumer doesn't reach into `IWorkspaceState`
     // and bypass the snapshot semantics by accident) and to support
-    // testing of the raw-read path (`livenessRawReadersBypassSnapshot`).
+    // testing of the raw-read path (`rawWorkspaceAccessorsMatchSnapshot`).
 
     /// Live read of the workspace's current virtual desktop, equivalent
     /// to calling the bound `IWorkspaceState::currentVirtualDesktop`.

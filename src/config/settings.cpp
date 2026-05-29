@@ -257,9 +257,10 @@ void Settings::load()
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
 
-// Groups that save() writes exhaustively — shared by reset().
-// Does NOT include unmanaged groups (TilingQuickLayoutSlots, Updates) which are
-// written independently and must survive a normal save.
+// Groups that reset() deletes exhaustively. NOT used by save() — save()
+// iterates the schema and lets purgeStaleKeys() handle cleanup. Does NOT
+// include unmanaged groups (TilingQuickLayoutSlots, Updates) which are
+// written independently and must survive a forced default-restore.
 QStringList Settings::managedGroupNames()
 {
     return {
@@ -267,7 +268,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
         ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to windowrules.json);
-                                        // kept here so a partial-v3 migration leftover gets purged on save()
+                                        // listed so reset() drops any partial-v3 migration husk left in this group
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
         ConfigDefaults::renderingGroup(), // "Rendering"
@@ -301,8 +302,10 @@ void Settings::deletePerScreenGroups(PhosphorConfig::IBackend* backend)
 void Settings::purgeStaleKeys()
 {
     // Root-level groups that must survive a save() cycle — written
-    // independently of Settings::save(). Assignment:* and QuickLayouts
-    // live in assignments.json and aren't seen here.
+    // independently of Settings::save(). Assignment rules live in
+    // windowrules.json (rule-store sidecar) and QuickLayout slots live
+    // in quicklayouts.json (separate sidecar) — neither is visible to
+    // this purge after the v4 migration retired assignments.json.
     //
     // "General" is preserved because JsonBackend uses it as the default
     // rootGroupName for writeRootString/readRootString — any caller
@@ -1201,11 +1204,6 @@ enum class DisableAxis {
     Activity
 };
 
-bool isAutotileMode(PhosphorZones::AssignmentEntry::Mode mode)
-{
-    return mode == PhosphorZones::AssignmentEntry::Autotile;
-}
-
 // Classify a context rule's pinned-dimension shape into a disable axis.
 // Returns nullopt for a catch-all or a shape that pins no screen — those are
 // not valid disable rules. Delegates to the bridge so the cascade-axis
@@ -1570,7 +1568,7 @@ QStringList Settings::excludedApplications() const
 
 void Settings::setExcludedApplications(const QStringList& apps)
 {
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
+    // Post-write compare — see writeDisableEntries for the canonicalisation
     // rationale. Callers like addExcludedApplication rely on this setter not
     // firing the changed signal when the de-duplicated / trimmed form
     // already matches storage.
@@ -1616,7 +1614,7 @@ QStringList Settings::excludedWindowClasses() const
 
 void Settings::setExcludedWindowClasses(const QStringList& classes)
 {
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
+    // Post-write compare — see writeDisableEntries for the canonicalisation
     // rationale.
     const QString before =
         m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey());
@@ -2378,7 +2376,7 @@ QStringList Settings::lockedScreens() const
 }
 void Settings::setLockedScreens(const QStringList& screens)
 {
-    // Post-write compare — see setDisabledMonitors for the canonicalisation
+    // Post-write compare — see writeDisableEntries for the canonicalisation
     // rationale.
     const QString before =
         m_store->read<QString>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey());

@@ -209,6 +209,13 @@ void PlasmaZonesEffect::postPaintScreen()
         }
     }
     KWin::effects->postPaintScreen();
+    // Unpin the per-frame clock. Any paintWindow() invocation outside
+    // the prePaintScreen→postPaintScreen bracket (defensive bootstrap,
+    // future test harness, an unexpected mid-cycle paint) then falls
+    // back to the live `shaderClockNowMs()` via the -1 sentinel branch
+    // in shader_resolve.cpp's resolveShaderClock(), instead of reading
+    // a stale pinned timestamp from this cycle.
+    m_shaderManager.setCurrentFrameClockMs(-1);
 }
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,

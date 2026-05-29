@@ -62,12 +62,14 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
             static_cast<void*>(layoutManager), static_cast<void*>(zoneDetector), static_cast<void*>(settings));
     }
 
-    // Create geometry resolver (bridges ISettings to the library's IGeometryResolver)
-    m_geometryResolver = new PlasmaZones::DaemonGeometryResolver(settings);
+    // Create geometry resolver (bridges ISettings to the library's
+    // IGeometryResolver). Owned via unique_ptr — WindowTrackingService
+    // takes a non-owning raw pointer to it.
+    m_geometryResolver = std::make_unique<PlasmaZones::DaemonGeometryResolver>(settings);
 
     // Create business logic service
     m_service = new PhosphorPlacement::WindowTrackingService(
-        layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver,
+        layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver.get(),
         PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
 
     // Wire the disabled-context gate consulted before recording a snap-side
@@ -733,6 +735,20 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     int pruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine) {
         pruned += m_autotileEngine->pruneStaleWindows(alive);
+    }
+    // Defensive sweep of the frame-geometry shadow store. The primary
+    // cleanup path is `windowClosed`, but if a window dies without a
+    // matching close signal reaching the adaptor (effect bug, compositor
+    // crash, lost D-Bus call), the entry would otherwise leak forever.
+    // The effect calls pruneStaleWindows precisely for this defensive
+    // case — extend the same alive-set filter to m_frameGeometry.
+    for (auto it = m_frameGeometry.begin(); it != m_frameGeometry.end();) {
+        if (!alive.contains(it.key())) {
+            it = m_frameGeometry.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
     }
     if (pruned > 0) {
         qCInfo(lcDbusWindow) << "Pruned" << pruned << "stale window assignments (not in KWin)";

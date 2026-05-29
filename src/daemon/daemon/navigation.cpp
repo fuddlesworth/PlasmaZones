@@ -321,34 +321,30 @@ void Daemon::handleRetile()
     // (handleSnap, handleFloat, master-ratio handlers); the resolver is
     // null only inside the tiny shutdown window where every navigation
     // handler should be silently inert anyway. A null focused screen
-    // (no resolvable focus) skips both checks and falls through to the
-    // legacy behaviour.
+    // (no resolvable focus) is treated the same as the macro at
+    // macros.h:29 does: silent no-op, NOT a fallthrough to the legacy
+    // engine-global retile. Without this symmetry, a user with no
+    // focused window — e.g. all windows minimised, or focus lost mid-
+    // session — would trigger a global retile across every autotile
+    // screen, ignoring the per-screen disable cascade.
     const QString focusedScreen = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-    if (!focusedScreen.isEmpty()) {
-        if (!isAutotileScreen(focusedScreen)) {
-            return;
-        }
-        if (!m_contextResolver
-            || m_contextResolver->isDisabled(
-                m_contextResolver->handleForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile))) {
-            return;
-        }
+    if (focusedScreen.isEmpty()) {
+        return;
+    }
+    if (!isAutotileScreen(focusedScreen)) {
+        return;
+    }
+    if (!m_contextResolver
+        || m_contextResolver->isDisabled(
+            m_contextResolver->handleForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile))) {
+        return;
     }
     m_autotileEngine->retile();
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
-        QString screenId = focusedScreen;
-        if (screenId.isEmpty() && m_screenModeRouter) {
-            QStringList autotile =
-                m_screenModeRouter
-                    ->partitionByMode(m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList{})
-                    .autotile;
-            autotile.sort();
-            if (!autotile.isEmpty()) {
-                screenId = autotile.first();
-            }
-        }
+        // focusedScreen is guaranteed non-empty here — the early-return
+        // above the retile call rejects the empty case.
         m_overlayService->showNavigationOsd(true, QStringLiteral("retile"), QStringLiteral("retiled"), QString(),
-                                            QString(), screenId);
+                                            QString(), focusedScreen);
     }
 }
 
@@ -389,10 +385,12 @@ void Daemon::resnapIfManualMode()
         // "every desktop got the same layout".
         // Use the `Daemon::currentDesktop()` helper (defined in
         // osd.cpp) for the null-safe VDM read — the same pattern used
-        // by autotile.cpp, signals.cpp, and osd.cpp; start.cpp keeps a
-        // mix of inline `m_virtualDesktopManager->currentDesktop()`
-        // reads and helper calls because its early-init paths predate
-        // the VDM construction.
+        // by autotile.cpp, signals.cpp, and osd.cpp. start.cpp keeps a
+        // mix of inline reads and helper calls: the screenAdded lambda
+        // path (start.cpp:127) fires before connectDesktopActivity()
+        // runs VDM::init()/start(), so even the helper would see the
+        // unpopulated default; the signal-handler reads at start.cpp
+        // ~812/~897 already null-guard inline and predate the helper.
         m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop());
     }
     m_suppressResnapOsd = 1;
