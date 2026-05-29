@@ -692,6 +692,16 @@ add_subdirectory(examples/phosphor-ipc-demo)
 # hot-plug a display → window appears.
 add_subdirectory(examples/phosphor-perscreen-demo)
 
+# phosphor-service-pipewire-cli. Acceptance harness for the
+# phosphor-service-pipewire library (Phase 2.1). Headless driver
+# exercising the read paths (list sinks/sources/streams, default),
+# write paths (set-volume, mute/unmute), and metadata writes
+# (set-default-sink/source) against a live PipeWire + WirePlumber
+# daemon.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-pipewire-cli)
+endif()
+
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third
 # (CPU-meter) widget builds as a separate .so + manifest.json and
