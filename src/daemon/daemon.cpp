@@ -86,6 +86,7 @@
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../dbus/windowruleadaptor.h"
+#include <PhosphorWindowRule/ExcludeRuleFilter.h>
 #include <PhosphorWindowRule/WindowRuleStore.h>
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -1084,6 +1085,25 @@ bool Daemon::init()
     // AutotileEngine/TilingState). WTS references it for zone queries.
     m_windowTrackingAdaptor->service()->setSnapState(snapEngine->snapState());
     m_windowTrackingAdaptor->service()->setSnapEngine(snapEngine);
+
+    // Filter the unified rule store down to its Exclude-shaped slice and
+    // hand the address to SnapEngine for its isAppIdExcluded probe. The
+    // filtered slice is held as a stable Daemon member (m_excludeRuleSet)
+    // so SnapEngine's bound RuleEvaluator's per-revision cache stays valid
+    // across back-to-back resolves. Rebuilt whenever the unified store
+    // emits rulesChanged, so a settings-app rule edit propagates without
+    // a manual refresh. Replaces the legacy
+    // ExclusionListBridge::toDaemonRuleSet path that derived the same set
+    // from two flat QStringList settings.
+    auto refilterExcludeRules = [this, snapEngine] {
+        m_excludeRuleSet = PhosphorWindowRule::ExcludeRuleFilter::excludeRulesFrom(m_windowRuleStore->ruleSet());
+        snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
+    };
+    refilterExcludeRules();
+    connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
+            [this, refilterExcludeRules](bool /*persisted*/) {
+                refilterExcludeRules();
+            });
 
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.

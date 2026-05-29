@@ -5,7 +5,6 @@
 
 #include <PhosphorEngine/EngineTypes.h>
 #include <QObject>
-#include <QStringList>
 
 namespace PhosphorEngine {
 
@@ -22,8 +21,12 @@ public:
     // stay in lockstep.
     virtual bool snappingEnabled() const = 0;
 
-    virtual QStringList excludedApplications() const = 0;
-    virtual QStringList excludedWindowClasses() const = 0;
+    // excludedApplications() / excludedWindowClasses() are gone — the v4
+    // migration folded those flat lists into the unified WindowRule store.
+    // The daemon now wires a filtered Exclude rule set directly into the
+    // SnapEngine via `setExcludeRuleSet`; consumers that previously called
+    // these accessors evaluate against the rule set instead.
+
     virtual StickyWindowHandling stickyWindowHandling() const = 0;
     virtual bool moveNewWindowsToLastZone() const = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;

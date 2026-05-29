@@ -49,6 +49,13 @@ class ActivityManager;
 class VirtualDesktopManager;
 }
 
+// PhosphorWindowRule::WindowRuleSet is held as a value member below
+// (m_excludeRuleSet) — needs a complete type, so include the header
+// rather than forward-declare. WindowRuleStore stays in the header by
+// pointer only; including WindowRuleSet.h leaves the store forward
+// declared here.
+#include <PhosphorWindowRule/WindowRuleSet.h>
+
 namespace PhosphorWindowRule {
 class WindowRuleStore;
 }
@@ -520,6 +527,19 @@ private:
     // rule-backed assignment cascade — construction order must build the
     // store first. The WindowRuleAdaptor borrows it too.
     std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_windowRuleStore;
+    // Filtered slice of m_windowRuleStore — only rules whose action list
+    // contains a terminal `Exclude`. Built via
+    // `PhosphorWindowRule::ExcludeRuleFilter::excludeRulesFrom` and kept in
+    // lockstep with the unified store via the rulesChanged subscription
+    // wired in init(). SnapEngine borrows a pointer into this set for its
+    // `isAppIdExcluded` probe; the WindowTrackingAdaptor extracts AppId
+    // patterns from the same filtered slice for its pending-restore prune.
+    // Held as a member (stable address) rather than rebuilt per access so
+    // the bound RuleEvaluator's per-revision cache stays valid across
+    // back-to-back resolves. Replaces the legacy
+    // ExclusionListBridge::toDaemonRuleSet path that derived the equivalent
+    // set from two flat QStringList settings.
+    PhosphorWindowRule::WindowRuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is

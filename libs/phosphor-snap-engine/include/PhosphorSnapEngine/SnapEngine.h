@@ -12,12 +12,14 @@
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 #include <PhosphorProtocol/WindowTypes.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
 #include <QString>
 #include <QStringList>
 #include <functional>
+#include <optional>
 #include <memory>
 
 namespace PhosphorZones {
@@ -25,10 +27,12 @@ class IZoneDetector;
 class LayoutRegistry;
 }
 
-namespace PhosphorWindowRule {
-class RuleEvaluator;
-class WindowRuleSet;
-}
+// PhosphorWindowRule::RuleEvaluator is included as a member type of
+// std::optional below (needs a complete type at declaration); WindowRuleSet
+// is referenced only by pointer / reference, so a forward declaration would
+// suffice — but including RuleEvaluator.h pulls in WindowRuleSet.h
+// transitively anyway, so leave the explicit forward decls out and let
+// RuleEvaluator.h provide both.
 
 namespace PhosphorSnapEngine {
 
@@ -489,6 +493,16 @@ public:
         return m_lastActiveScreenId;
     }
 
+    /// Wire the daemon's filtered Exclude rule set into the snap engine.
+    /// See the comment block on the private members and the impl in
+    /// navigation_actions.cpp for the lifetime contract — the pointer is
+    /// borrowed and the cached evaluator drops on a pointer change.
+    /// Declared OUTSIDE the Q_SIGNALS section below: MOC treats every
+    /// declaration in `Q_SIGNALS:` as a signal and generates a stub body
+    /// for it, so placing this setter inside that section makes the
+    /// translation unit redefine the function and the link fails.
+    void setExcludeRuleSet(const PhosphorWindowRule::WindowRuleSet* ruleSet);
+
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
     // Signals (relayed via SnapAdaptor -> WTA -> D-Bus -> effect)
@@ -584,37 +598,28 @@ private:
     /// true when excluded so callers can early-return. False otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
-    /// True if @p appId matches any excluded-applications / excluded-window-
-    /// classes pattern. Resolution runs through the unified RuleEvaluator: the
-    /// two settings lists are converted to a daemon-flavour `Exclude` rule set
-    /// (`AppId AppIdMatches` leaves — the segment-aware reverse-DNS match) and
-    /// the @p appId is resolved against it. Returns false when settings are
-    /// unavailable or no pattern matches.
-    ///
-    /// The derived rule set and its evaluator are memoized: rebuilding the
-    /// WindowRuleSet and constructing a fresh RuleEvaluator on every call
-    /// (per window-open, per navigation keystroke) was wasteful. The cache is
-    /// rebuilt only when the excludedApplications / excludedWindowClasses
-    /// lists actually change — ISnapSettings exposes no change signal, so the
-    /// cache is keyed by the two lists' contents.
+    /// True if @p appId is excluded by any user-authored or migrated
+    /// `Exclude`-action WindowRule. The daemon hands a pre-filtered
+    /// `WindowRuleSet` containing only Exclude rules (built via
+    /// `ExcludeRuleFilter::excludeRulesFrom` over the unified
+    /// `WindowRuleStore::ruleSet()`) into @ref setExcludeRuleSet; the
+    /// snap engine binds a `RuleEvaluator` to that set on first access
+    /// and evaluates a `query.appId = @p appId` against it. Returns false
+    /// when the rule set hasn't been wired (early-init paths) or when
+    /// the filtered set is empty.
     bool isAppIdExcluded(const QString& appId) const;
 
-    /// Cached exclusion rule set + evaluator. Rebuilt by ensureExclusionCache()
-    /// only when the underlying settings lists differ from the cached keys.
-    /// The RuleEvaluator holds a reference to the WindowRuleSet, so the set is
-    /// heap-allocated (a stable address) and the evaluator is rebuilt in
-    /// lockstep with it. A non-null m_exclusionEvaluator IS the "cache valid"
-    /// signal — the rule set, evaluator and key fields are always set and
-    /// cleared together, so no separate validity flag is needed.
-    void ensureExclusionCache() const;
-    // These mutable members are daemon-main-thread-only — every access path
-    // (window-open, navigation keystrokes) runs on the daemon's main thread,
-    // so the cache is intentionally unsynchronised. Do not access from another
-    // thread without adding locking.
-    mutable std::unique_ptr<PhosphorWindowRule::WindowRuleSet> m_exclusionRuleSet;
-    mutable std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_exclusionEvaluator;
-    mutable QStringList m_exclusionCacheAppsKey;
-    mutable QStringList m_exclusionCacheClassesKey;
+    /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
+    /// in early-init paths (before the daemon wires the store) — the
+    /// `isAppIdExcluded` fast path short-circuits to false in that case.
+    const PhosphorWindowRule::WindowRuleSet* m_excludeRuleSet = nullptr;
+    /// Lazily constructed evaluator bound to @ref m_excludeRuleSet. Reset
+    /// in `setExcludeRuleSet` when the pointer changes; the evaluator's
+    /// internal prio-sort index and resolve cache key off the bound rule
+    /// set's revision counter, so an in-place rule edit through the store
+    /// invalidates the evaluator's per-revision state automatically — only
+    /// a different rule-set pointer needs the explicit reset.
+    mutable std::optional<PhosphorWindowRule::RuleEvaluator> m_excludeEvaluator;
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;
