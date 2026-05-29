@@ -196,7 +196,7 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     };
 
     if (action.type == ActionType::SetEngineMode) {
-        const QString mode = action.params.value(QLatin1String("mode")).toString();
+        const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
         // Render the wire token (`snapping` / `autotile` / `scrolling` —
         // see `engineModeOptions()` in
         // libs/phosphor-windowrule/src/ruleaction.cpp) as a properly-cased
@@ -216,12 +216,12 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return PzI18n::tr("Engine: %1").arg(label);
     }
     if (action.type == ActionType::SetSnappingLayout) {
-        const QString layoutId = action.params.value(QLatin1String("layoutId")).toString();
+        const QString layoutId = action.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
         return layoutId.isEmpty() ? PzI18n::tr("Snapping layout")
                                   : PzI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetTilingAlgorithm) {
-        const QString algo = action.params.value(QLatin1String("algorithm")).toString();
+        const QString algo = action.params.value(PhosphorWindowRule::ActionParam::Algorithm).toString();
         // Algorithms are wire tokens (`bsp`, `grid`, …). The dedicated
         // tilingAlgorithm lookup knows about autotile entries — the
         // WindowRuleController wires it from settingsController.layouts,
@@ -235,7 +235,7 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         // SetEngineMode above (`engineModeOptions()` in
         // libs/phosphor-windowrule/src/ruleaction.cpp), same
         // localised-label switch so the i18n cost stays flat.
-        const QString mode = action.params.value(QLatin1String("mode")).toString();
+        const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
         QString label;
         if (mode == QLatin1String("snapping")) {
             label = PzI18n::tr("Snapping");
@@ -259,19 +259,19 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return PzI18n::tr("Float");
     }
     if (action.type == ActionType::SetOpacity) {
-        const double v = action.params.value(QLatin1String("value")).toDouble();
+        const double v = action.params.value(PhosphorWindowRule::ActionParam::Value).toDouble();
         return PzI18n::tr("Opacity %1%").arg(static_cast<int>(v * 100.0 + 0.5));
     }
     if (action.type == ActionType::OverrideAnimationShader) {
-        const QString id = action.params.value(QLatin1String("effectId")).toString();
+        const QString id = action.params.value(PhosphorWindowRule::ActionParam::EffectId).toString();
         return id.isEmpty() ? PzI18n::tr("Block animation shader") : PzI18n::tr("Shader \"%1\"").arg(id);
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
-        const int ms = action.params.value(QLatin1String("durationMs")).toInt();
+        const int ms = action.params.value(PhosphorWindowRule::ActionParam::DurationMs).toInt();
         return ms > 0 ? PzI18n::tr("Duration %1 ms").arg(ms) : PzI18n::tr("Animation duration");
     }
     if (action.type == ActionType::OverrideAnimationCurve) {
-        const QString curve = action.params.value(QLatin1String("curve")).toString();
+        const QString curve = action.params.value(PhosphorWindowRule::ActionParam::Curve).toString();
         return curve.isEmpty() ? PzI18n::tr("Animation curve") : PzI18n::tr("Curve %1").arg(curve);
     }
     return WindowRuleModel::actionTypeFallbackLabel(action.type);

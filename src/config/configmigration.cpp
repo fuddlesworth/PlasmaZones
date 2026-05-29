@@ -388,6 +388,27 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
     root[ConfigKeys::versionKey()] = 1;
     runMigrationChainInMemory(root);
 
+    // Verify the chain ran to completion before persisting. The v1→v2
+    // step has side-effect writes (session.json, assignments.json) and
+    // SKIPS its version bump when those fail — see migrateV1ToV2's
+    // `allSideEffectsSucceeded` guard. Without this check, a failed
+    // side-effect write would write a v1-stamped, partially-mutated
+    // JSON to disk; `ensureJsonConfigImpl` would then rename the
+    // original INI to `.bak` and finalizeV4Conversion would proceed
+    // against the half-migrated root — silently losing both the
+    // original INI and most of the v1 groups. Mirrors the
+    // `MigrationRunner::runOnFile` semantic at runMigrationChain
+    // above, which detects an unbumped version and skips the disk
+    // write.
+    const int finalVersion = root.value(ConfigKeys::versionKey()).toInt(0);
+    if (finalVersion < ConfigSchemaVersion) {
+        qWarning(
+            "ConfigMigration::migrateIniToJson: chain did not advance to v%d (stopped at v%d) — "
+            "refusing disk write to avoid persisting a partially-migrated root",
+            ConfigSchemaVersion, finalVersion);
+        return false;
+    }
+
     return PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, root);
 }
 

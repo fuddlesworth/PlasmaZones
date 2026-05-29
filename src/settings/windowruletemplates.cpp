@@ -10,6 +10,8 @@
 #include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/WindowRule.h>
 
+#include <PhosphorZones/AssignmentEntry.h>
+
 #include <QLatin1StringView>
 #include <QUuid>
 
@@ -113,7 +115,8 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         // template's whole point is the snap layout.
         RuleAction engineMode;
         engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
-        engineMode.params.insert(QStringLiteral("mode"), QStringLiteral("snapping"));
+        engineMode.params.insert(QStringLiteral("mode"),
+                                 PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping));
         rule.actions.append(engineMode);
         RuleAction layoutAction;
         layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
@@ -127,7 +130,8 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         // algorithm picker. Same rationale: this is the assignment flow.
         RuleAction engineMode;
         engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
-        engineMode.params.insert(QStringLiteral("mode"), QStringLiteral("autotile"));
+        engineMode.params.insert(QStringLiteral("mode"),
+                                 PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Autotile));
         rule.actions.append(engineMode);
         RuleAction algoAction;
         algoAction.type = QString::fromLatin1(ActionType::SetTilingAlgorithm);

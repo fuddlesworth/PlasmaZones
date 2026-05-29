@@ -193,18 +193,26 @@ inline QString modeToWireString(AssignmentEntry::Mode mode)
     }
     // Switch is exhaustive over `Mode`. A `static_cast<Mode>(99)` reaching
     // this line means either (a) a future Mode enum value was added without
-    // a case here — `Q_UNREACHABLE` produces a -Wswitch diagnostic at the
-    // missing-case site, or (b) callers fabricated an out-of-range value
-    // via cast. Q_UNREACHABLE aborts in debug; for release builds where
-    // it's a softer hint, return a sentinel the registry validators
-    // reject (`engineModeOptions()` in
-    // libs/phosphor-windowrule/src/ruleaction.cpp lists snapping /
-    // autotile / scrolling — "invalid" is rejected) so a malformed rule
-    // fails load loudly instead of silently corrupting persistence with
-    // `mode:""` (which `disableRuleMode` would round-trip as nullopt,
-    // making the rule invisible).
-    Q_UNREACHABLE();
-    return QStringLiteral("invalid");
+    // a case here — Qt's -Wswitch diagnostic fires at the missing-case
+    // site, or (b) callers fabricated an out-of-range value via cast.
+    // `Q_UNREACHABLE_RETURN` aborts in debug AND keeps a reliable
+    // sentinel return in release (plain `Q_UNREACHABLE` + a trailing
+    // `return` may be discarded by the optimizer since the function is
+    // documented as unreachable from that point).
+    //
+    // The sentinel `"invalid"` is rejected by the `DisableEngine`
+    // descriptor's closed-vocabulary validator
+    // (`engineModeOptions().contains(...)`), so a malformed disable rule
+    // fails load loudly. NOTE: `SetEngineMode`'s validator only checks
+    // `hasNonEmptyString` (open-vocabulary by design — see
+    // `libs/phosphor-windowrule/src/ruleaction.cpp:225-238`), so a
+    // malformed assignment rule survives load but is silently coerced
+    // back to Snapping at consumption via
+    // `entryFromRuleMatchActions → modeFromWireString → nullopt`. The
+    // sentinel makes the corruption visible to operators inspecting
+    // windowrules.json by eye, but is not a load-time gate for the
+    // assignment path.
+    Q_UNREACHABLE_RETURN(QStringLiteral("invalid"));
 }
 
 /**

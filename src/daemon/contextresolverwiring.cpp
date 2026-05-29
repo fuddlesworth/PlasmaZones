@@ -3,7 +3,6 @@
 
 #include "contextresolverwiring.h"
 
-#include "../config/settings.h"
 #include "../core/isettings.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"

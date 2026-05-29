@@ -614,6 +614,16 @@ void WindowDragAdaptor::clearForCompositorReconnect()
     // snapAssistReady would never be emitted.
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
+    // Drop any pending snap-drag state — if a beginDrag landed snap-path
+    // but activation never fired (no trigger held), the pending fields
+    // would survive compositor reconnect and bleed into the next drag
+    // until the next beginDrag's `clearPendingSnapDragState()` ran. Be
+    // explicit here so the post-reconnect state is well-defined.
+    clearPendingSnapDragState();
+    // Clear the last-computed drag policy. handleWindowClosed (line 305,
+    // 311) already does this on the equivalent "session torn down"
+    // paths; clearForCompositorReconnect should match.
+    m_currentDragPolicy = {};
     // Drop any picker-nav lambda registrations: their captures
     // include OverlayService* which the compositor-reconnect path
     // may tear down before the next picker-show re-registers.

@@ -1735,7 +1735,8 @@ void Daemon::stop()
     // destruction window" defense-in-depth. WindowRuleAdaptor borrows
     // m_windowRuleStore (a unique_ptr) and m_settings; without detach
     // its slot bodies could deref freed memory during the destruction
-    // window between m_windowRuleStore.reset() and ~Daemon completing.
+    // window between m_windowRuleStore's destructor running and ~Daemon
+    // completing.
     //
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,

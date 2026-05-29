@@ -387,8 +387,9 @@ void Daemon::resnapIfManualMode()
         // physically reposition windows on other desktops to the
         // just-cycled layout's zones, which the user perceives as
         // "every desktop got the same layout".
-        const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop);
+        // Use the `Daemon::currentDesktop()` helper for the null-safe
+        // VDM read pattern shared by signals.cpp / osd.cpp / start.cpp.
+        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop());
     }
     m_suppressResnapOsd = 1;
     if (m_snapAdaptor) {

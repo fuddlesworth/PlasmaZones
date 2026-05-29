@@ -31,13 +31,18 @@ namespace PhosphorContext {
  *       return;
  * @endcode
  *
- * 22 such chains existed across the daemon / D-Bus adaptors / KWin effect
- * (pre-refactor; see the audit on PR #541's predecessor). Each one had to
- * be updated whenever the disable cascade changed shape, when a new mode
- * was added, or when the lock key composition was tweaked. The cascade
- * shape was duplicated; the snapshot point was inconsistent (handlers
- * could read desktop N at line 5 and act on desktop N+1 at line 12 if the
- * user virtual-desktop-switched mid-handler).
+ * Many such chains existed across the daemon's navigation / start / OSD
+ * paths and the three D-Bus adaptors (SnapAdaptor, WindowDragAdaptor,
+ * WindowTrackingAdaptor). Each one had to be updated whenever the
+ * disable cascade changed shape, when a new mode was added, or when
+ * the lock key composition was tweaked. The cascade shape was
+ * duplicated; the snapshot point was inconsistent (handlers could
+ * read desktop N at line 5 and act on desktop N+1 at line 12 if the
+ * user virtual-desktop-switched mid-handler). OverlayService is the
+ * remaining consumer still on the legacy inline cascade — see
+ * `src/daemon/daemon.h::contextResolver()` for the migration status.
+ * The KWin effect does not have a cascade to migrate; effect-side
+ * paint state has no disable/lock gate.
  *
  * `IContextResolver` collapses the chain into:
  *
@@ -104,8 +109,14 @@ public:
      * default mode (today `Snapping` for the daemon's `ScreenModeRouter`
      * adapter, but other providers may override). Callers reading the
      * handle's mode must NOT assume `Snapping`; query the field directly.
-     * Convenience for adaptors that want to gate-check on (desktop,
-     * activity) only.
+     *
+     * Intended for adaptors that want to gate-check on `(desktop,
+     * activity)` only. Currently no production caller exercises this
+     * path — every consumer in the daemon and the D-Bus adaptors has a
+     * concrete screen at the call site and uses `handleFor(screenId)`.
+     * Kept on the interface for the documented future use-case and to
+     * pin the empty-screen mode-provider contract under test
+     * (`globalHandleHasNoScreenButSnapshotsWorkspace`).
      */
     virtual ContextHandle globalHandle() const = 0;
 
@@ -142,6 +153,14 @@ public:
     // snapshot is required (e.g. when composing a (screenId, desktop,
     // activity) tuple that must agree byte-for-byte with the disabled-
     // context check the same tick made).
+    //
+    // No production caller currently uses these — consumers that need a
+    // live workspace value call `m_layoutManager->currentVirtualDesktop()`
+    // / `m_activityManager->currentActivity()` directly. Kept on the
+    // interface to expose the snapshot-vs-live distinction in the API
+    // surface (so a future consumer doesn't reach into `IWorkspaceState`
+    // and bypass the snapshot semantics by accident) and to support
+    // testing of the raw-read path (`livenessRawReadersBypassSnapshot`).
 
     /// Live read of the workspace's current virtual desktop, equivalent
     /// to calling the bound `IWorkspaceState::currentVirtualDesktop`.
@@ -184,11 +203,17 @@ public:
     virtual bool isLocked(const ContextHandle& handle) const = 0;
 
     /**
-     * @brief The composite gate every consumer wants.
+     * @brief Composite convenience that ORs the disable and lock legs.
      *
-     * Combines @ref isDisabled with @ref isLocked. Returns true iff
-     * either leg trips. This is the single-line replacement for the
-     * 6-line cascade quoted in the class doc above.
+     * Returns true iff either `isDisabled(handle)` or `isLocked(handle)`
+     * trips. Provided as a one-liner for consumers that need both
+     * checks at the same site — today's actual consumers gate on only
+     * one or the other and call those methods directly (see
+     * `src/daemon/daemon/navigation.cpp::isFocusedContextGated` for the
+     * disable-only pattern, `src/daemon/daemon/start.cpp:597` for the
+     * lock-only pattern). Kept on the interface for symmetry with the
+     * documented cascade collapse and to support future call sites
+     * that genuinely need both gates atomically.
      */
     bool isGated(const ContextHandle& handle) const
     {

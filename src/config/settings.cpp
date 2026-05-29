@@ -228,19 +228,30 @@ void Settings::load()
     // Mirrors the Q_PROPERTY loop above but keyed by (signal, mode) instead
     // of by property index. Iterates allModes so future enum extensions
     // automatically participate without touching this block.
+    bool anyDisableChanged = false;
     for (const Mode mode : PhosphorZones::allModes()) {
         if (disabledMonitors(mode) != monitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);
+            anyDisableChanged = true;
         }
         if (disabledDesktops(mode) != desktopsBefore.value(mode)) {
             Q_EMIT disabledDesktopsChanged(mode);
+            anyDisableChanged = true;
         }
         if (disabledActivities(mode) != activitiesBefore.value(mode)) {
             Q_EMIT disabledActivitiesChanged(mode);
+            anyDisableChanged = true;
         }
     }
 
-    if (anyChanged)
+    // Aggregate signal — fires when ANY property OR ANY per-mode
+    // disable list changed. Without `anyDisableChanged` in the
+    // predicate, a cross-process write (daemon shortcut, KCM D-Bus
+    // call) that updates only a disable list would emit the per-mode
+    // signals but NOT the aggregate — inconsistent with the direct
+    // setter path (`writeDisableEntries` unconditionally emits
+    // `settingsChanged()`).
+    if (anyChanged || anyDisableChanged)
         Q_EMIT settingsChanged();
 }
 
@@ -255,7 +266,8 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::generalGroup(), // "General"
         ConfigDefaults::snappingGroup(), // "Snapping"
         ConfigDefaults::tilingGroup(), // "Tiling"
-        ConfigDefaults::displayGroup(), // "Display" — mode-neutral, holds per-mode disable lists (v3+)
+        ConfigDefaults::displayGroup(), // "Display" — dead in v4 (per-mode disable lists moved to windowrules.json);
+                                        // kept here so a partial-v3 migration leftover gets purged on save()
         ConfigDefaults::exclusionsGroup(), // "Exclusions"
         ConfigDefaults::performanceGroup(), // "Performance"
         ConfigDefaults::renderingGroup(), // "Rendering"

@@ -190,8 +190,9 @@ public:
      * its disabled-context gates still call the legacy
      * `isContextDisabled(m_settings, ...)` directly; migrating it is
      * follow-up work. The pointer is non-null after `init()` and stays
-     * non-null for the lifetime of the daemon. See @ref m_contextResolver
-     * for the declaration-order invariant.
+     * non-null until `stop()` runs (which calls `m_contextResolver.reset()`
+     * in the teardown order documented at @ref m_contextResolver). See
+     * @ref m_contextResolver for the declaration-order invariant.
      */
     PhosphorContext::ContextResolver* contextResolver() const
     {

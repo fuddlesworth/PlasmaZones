@@ -101,7 +101,16 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     struct Summary
     {
         int ruleCount = 0;
-        bool tilingEnabled = true;
+        // Wire-string set of engine tokens any `DisableEngine` action on
+        // this screen targets. Resolved against the screen's effective
+        // `engineMode` at output time to compute the tile's
+        // `engineDisabled` flag — a `DisableEngine{mode:"scrolling"}`
+        // rule on a Snapping-mode screen must NOT flip the tile to
+        // "Engine off" (the active engine is still Snapping). The
+        // earlier shape used a single `tilingEnabled` bool flipped on
+        // ANY DisableEngine, which mis-labelled every cross-mode
+        // disable rule.
+        QSet<QString> disabledEngineModes;
         QString snappingLayout;
         QString tilingAlgorithm;
         // Mode the rule's `SetEngineMode` action selects (if any). Used to
@@ -148,13 +157,18 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
             ++s.ruleCount;
             for (const RuleAction& a : rule.actions) {
                 if (a.type == ActionType::DisableEngine) {
-                    s.tilingEnabled = false;
+                    // Record which engine this rule disables — we don't
+                    // know yet which engine the screen will resolve to.
+                    // Output-time resolution against the active mode
+                    // prevents a Snapping-disable rule from labelling an
+                    // Autotile-mode screen as "Engine off".
+                    s.disabledEngineModes.insert(a.params.value(PhosphorWindowRule::ActionParam::Mode).toString());
                 } else if (a.type == ActionType::SetEngineMode && s.engineMode.isEmpty()) {
-                    s.engineMode = a.params.value(QLatin1String("mode")).toString();
+                    s.engineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
                 } else if (a.type == ActionType::SetSnappingLayout && s.snappingLayout.isEmpty()) {
-                    s.snappingLayout = a.params.value(QLatin1String("layoutId")).toString();
+                    s.snappingLayout = a.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
                 } else if (a.type == ActionType::SetTilingAlgorithm && s.tilingAlgorithm.isEmpty()) {
-                    s.tilingAlgorithm = a.params.value(QLatin1String("algorithm")).toString();
+                    s.tilingAlgorithm = a.params.value(PhosphorWindowRule::ActionParam::Algorithm).toString();
                 }
             }
         }
@@ -236,7 +250,20 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
             }
         }
         tile[QStringLiteral("layoutName")] = layoutLabel;
-        tile[QStringLiteral("tilingEnabled")] = summary.tilingEnabled;
+        // Resolve `engineDisabled` against the screen's effective engine
+        // mode. The accumulator collected every DisableEngine token any
+        // matching rule targets; the tile reads "engine off" only when
+        // a disable rule targets the engine the screen actually runs.
+        // For an unset engineMode (no SetEngineMode rule) the screen
+        // defaults to Snapping per the cascade — match against that
+        // sentinel. The QML reads this as `tilingEnabled` (kept for
+        // backwards-compatibility with the existing tile component);
+        // the field's semantics are now "the engine running on this
+        // screen is NOT disabled".
+        const QString effectiveModeWire =
+            summary.engineMode.isEmpty() ? QStringLiteral("snapping") : summary.engineMode;
+        const bool engineDisabled = summary.disabledEngineModes.contains(effectiveModeWire);
+        tile[QStringLiteral("tilingEnabled")] = !engineDisabled;
         tile[QStringLiteral("ruleCount")] = summary.ruleCount;
         tile[QStringLiteral("assigned")] = assigned;
         out.append(tile);
@@ -292,17 +319,27 @@ QVariantList WindowRuleController::validationIssuesForJson(const QVariantMap& ru
         // out leaves: the issue only surfaces once a window-property leaf
         // lands AND a context action is present.
     }
+    // Preserve every original action slot — including malformed entries
+    // and non-object JSON values — as a placeholder `RuleAction{}` so
+    // `probe.actions` index N corresponds to ruleJson.actions[N] in the
+    // editor. The previous shape `continue`'d past invalid entries,
+    // which made the validator's `issue.actionIndex` point at the wrong
+    // QML editor row (every malformed entry above an issue shifted
+    // subsequent indices down by one). The placeholder is structurally
+    // invalid (empty type), so `validationIssues()` skips it cleanly.
     const QJsonValue actionsValue = obj.value(QLatin1String("actions"));
     if (actionsValue.isArray()) {
         for (const QJsonValue& v : actionsValue.toArray()) {
-            if (!v.isObject()) {
-                continue;
+            if (v.isObject()) {
+                if (const auto action = RuleAction::fromJson(v.toObject())) {
+                    probe.actions.append(*action);
+                    continue;
+                }
             }
-            if (const auto action = RuleAction::fromJson(v.toObject())) {
-                probe.actions.append(*action);
-            }
-            // Malformed actions are silently dropped — the editor will fail
-            // its own structural gates (param fields empty etc.) before save.
+            // Malformed action (non-object JSON or descriptor-rejected
+            // payload) — preserve a placeholder so index alignment with
+            // the editor's actions array stays intact.
+            probe.actions.append(RuleAction{});
         }
     }
 

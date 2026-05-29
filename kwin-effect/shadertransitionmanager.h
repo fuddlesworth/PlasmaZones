@@ -84,24 +84,27 @@ public:
         return m_shaderProfileTree;
     }
 
-    /// Rebuild the animation `WindowRuleSet` from `m_windowRuleAnimationRules`
-    /// — the rules from `windowrules.json` that carry an `OverrideAnimation*`
-    /// action. Call after every mutation of that list. The bound
-    /// `RuleEvaluator` picks up the new revision transparently and its match
-    /// cache is invalidated.
+    /// Rebuild the effect-rule `WindowRuleSet` from `m_windowRuleAnimationRules`
+    /// — the rules from `windowrules.json` that carry any effect-consumed
+    /// action (the `OverrideAnimation*` triple plus `SetOpacity`; see
+    /// `PhosphorWindowRule::ActionType::isEffectRuleAction`). Call after
+    /// every mutation of that list. The bound `RuleEvaluator` picks up
+    /// the new revision transparently and its match cache is invalidated.
     void rebuildAnimationRuleSet();
 
-    /// Replace the set of `windowrules.json` rules that carry an
-    /// `overrideAnimation*` action. The effect refreshes this on the
+    /// Replace the set of `windowrules.json` rules that carry any
+    /// effect-consumed action (`OverrideAnimation*` or `SetOpacity` —
+    /// see `isEffectRuleAction`). The effect refreshes this on the
     /// `org.plasmazones.WindowRules.rulesChanged` D-Bus signal so a new
-    /// animation rule authored in the settings UI fires without a restart.
+    /// effect rule authored in the settings UI fires without a restart.
     /// Triggers `rebuildAnimationRuleSet()` only when the list actually
     /// changes — a no-op rewrite keeps the evaluator's match cache warm.
     void setWindowRuleAnimationRules(QList<PhosphorWindowRule::WindowRule> rules);
 
-    /// The evaluator bound to the animation rule set. Resolution of the
-    /// per-window animation override cascade (WindowRules carrying any
-    /// `OverrideAnimation*` action) routes through this evaluator.
+    /// The evaluator bound to the effect-rule set. Resolution of the
+    /// per-window cascade for every effect-consumed action (the
+    /// `OverrideAnimation*` triple plus `SetOpacity`) routes through
+    /// this evaluator.
     const PhosphorWindowRule::RuleEvaluator& animationRuleEvaluator() const
     {
         return m_animationRuleEvaluator;
@@ -312,9 +315,11 @@ private:
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorAnimation::ProfileTree m_motionProfileTree;
-    // Rules from windowrules.json that carry an OverrideAnimation* action.
-    // Refreshed from the daemon's org.plasmazones.WindowRules interface on
-    // every `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
+    // Rules from windowrules.json that carry any effect-consumed action
+    // (`OverrideAnimation*` triple OR `SetOpacity` — see
+    // `PhosphorWindowRule::ActionType::isEffectRuleAction`). Refreshed
+    // from the daemon's org.plasmazones.WindowRules interface on every
+    // `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
     // bound RuleEvaluator picks up the new revision.
     QList<PhosphorWindowRule::WindowRule> m_windowRuleAnimationRules;
 
