@@ -136,7 +136,7 @@ option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 
 # Opt-in build for the in-progress phosphor-shell desktop shell and its
 # supporting libraries (libs/phosphor-shell + the gated phosphor-service-*
-# group — see the add_subdirectory block farther down in this file for
+# group; see the add_subdirectory block farther down in this file for
 # the authoritative list) + the bundled `phosphor-shell` example binary
 # + the example QML/shader tree under examples/phosphor-shell. Default
 # OFF so packaging / downstream installs of PlasmaZones don't pick up

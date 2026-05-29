@@ -218,9 +218,21 @@ void StatusNotifierWatcher::RegisterStatusNotifierHost(const QString& service)
     if (m_hosts.contains(service)) {
         return;
     }
+    // Match the item-registration symmetry: addWatchedService is gated
+    // on "first tracking for this sender" so the single
+    // removeWatchedService in onServiceUnregistered clears cleanly.
+    // The owner is "already watched" if it has items OR another host
+    // entry (a sender that already registered an item then registers a
+    // host should not re-add).
+    const bool senderAlreadyWatched = !m_byOwner.value(sender).isEmpty()
+        || std::any_of(m_hosts.cbegin(), m_hosts.cend(), [&sender](const QString& v) {
+               return v == sender;
+           });
     const bool wasEmpty = m_hosts.isEmpty();
     m_hosts.insert(service, sender);
-    m_busWatcher->addWatchedService(sender);
+    if (!senderAlreadyWatched) {
+        m_busWatcher->addWatchedService(sender);
+    }
     // Fire hostRegisteredChanged only on the false → true transition
     // (i.e., first host). Subsequent host registrations keep it true
     // and don't need a re-emit per CLAUDE.md "only emit on change".

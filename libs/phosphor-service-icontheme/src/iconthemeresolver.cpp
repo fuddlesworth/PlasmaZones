@@ -52,9 +52,9 @@ namespace {
 
 // File extensions we accept for icon files, in priority order. PNG
 // wins over SVG when both exist at the same theme directory (themed
-// rasters are usually hand-tuned), SVG over XPM. Keep this single list
-// — the themed walk, the fallback scan, and the IconThemePath flat
-// probe all share it.
+// rasters are usually hand-tuned), SVG over XPM. Keep this single
+// list; the themed walk, the fallback scan, and the IconThemePath
+// flat probe all share it.
 const QStringList& iconFileExtensions()
 {
     static const QStringList kExts = {

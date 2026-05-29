@@ -15,7 +15,7 @@ namespace PhosphorServiceIconTheme {
 
 /// Register the `IconThemeResolver` QML singleton under the
 /// `Phosphor.Service.IconTheme` module at version 1.0. Idempotent on
-/// repeat calls — internally guarded by `std::call_once` so a hot-
+/// repeat calls: internally guarded by `std::call_once` so a hot-
 /// reloading shell that builds a fresh `QQmlEngine` per reload can
 /// safely call this from every engine setup without triggering Qt's
 /// duplicate-registration warning. Must be called after

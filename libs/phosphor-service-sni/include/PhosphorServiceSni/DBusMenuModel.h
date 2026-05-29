@@ -79,6 +79,11 @@ public:
     /// Tell the item we're about to display this menu — required by
     /// the spec before showing the root. Idempotent on repeated calls.
     Q_INVOKABLE void aboutToShow();
+    /// Tell the item we're hiding this menu. Fires `closed` Event in
+    /// LIFO order for every level previously opened via aboutToShow /
+    /// aboutToShowSubmenu. Safe to call without a paired aboutToShow
+    /// (no events fired in that case) so QML can wire it to a
+    /// debounced dismiss handler without tracking opened-state itself.
     Q_INVOKABLE void aboutToHide();
     /// Force a fresh GetLayout against the current service/path. Used
     /// by the QML side when re-opening the SAME menu — `setService`/
