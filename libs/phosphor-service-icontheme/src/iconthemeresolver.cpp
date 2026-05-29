@@ -182,6 +182,11 @@ bool isUnsafeIconDir(const QString& dir)
 {
     // IconThemePath values are full filesystem paths so they legitimately
     // contain `/`; only reject parent-dir traversal patterns and NUL.
+    // The bare `..` value would let a hostile SNI peer probe the
+    // calling process's cwd-parent via QFile::exists; reject explicitly
+    // since the substring checks below miss the no-separator form.
+    if (dir == QLatin1String(".."))
+        return true;
     if (dir.contains(QLatin1String("/../")) || dir.startsWith(QLatin1String("../"))
         || dir.endsWith(QLatin1String("/..")))
         return true;

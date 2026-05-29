@@ -41,12 +41,17 @@ public:
     [[nodiscard]] QString themeName() const;
 
     /// Look up an icon by name. `extraThemeDir` is the SNI item's
-    /// IconThemePath (if any), when set, it's prepended to the
-    /// search path so an app's custom theme wins over the system
-    /// one. `size` is the desired logical-pixel size; `scale` is
-    /// the device pixel ratio (1 for traditional, 2 for HiDPI).
-    /// Returns an empty QImage when no match exists, when `name` is
-    /// empty, or when either `size` or `scale` is non-positive.
+    /// IconThemePath (if any); when set, it is probed as a flat
+    /// directory containing raw `<name>.{png,svg,xpm}` files BEFORE
+    /// the themed walk runs, matching the SNI convention that most
+    /// apps dump custom icons straight into the override dir rather
+    /// than a themed `NN/context` subtree. Unsafe paths (`..`, NUL,
+    /// `\\`, `/../` patterns) are rejected at the boundary; safe
+    /// paths must be absolute. `size` is the desired logical-pixel
+    /// size; `scale` is the device pixel ratio (1 for traditional,
+    /// 2 for HiDPI). Returns an empty QImage when no match exists,
+    /// when `name` is empty, or when either `size` or `scale` is
+    /// non-positive.
     [[nodiscard]] QImage iconForName(const QString& name, int size, int scale = 1,
                                      const QString& extraThemeDir = {}) const;
 

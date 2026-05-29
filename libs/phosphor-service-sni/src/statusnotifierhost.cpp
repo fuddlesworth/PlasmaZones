@@ -55,6 +55,15 @@ public:
     StatusNotifierWatcher* watcher = nullptr;
     QString hostServiceName; ///< "org.kde.StatusNotifierHost-1234"
     QDBusServiceWatcher* nameWatcher = nullptr;
+    /// Set true when our passive watcher gets promoted to canonical
+    /// owner. The next `seedExistingItems` reply will see an empty
+    /// authoritative list (items registered with the prior owner, not
+    /// with us), so the zombie reconciliation must be SKIPPED for that
+    /// one cycle: tray apps generally do not re-register on ownership
+    /// change, and reaping their canonicals would empty the tray. The
+    /// flag is cleared on the seed call so subsequent same-watcher
+    /// recovery cycles still get reconciled.
+    bool skipNextZombieReap = false;
 
     // Items in registration order. The model maps row → item by
     // index, so the storage MUST be ordered: earlier rev used a
@@ -119,14 +128,26 @@ void StatusNotifierHost::Private::connectToWatcher()
             bus.disconnect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
                            QStringLiteral("StatusNotifierItemUnregistered"), q,
                            SLOT(_q_remoteItemUnregistered(QString)));
-            QObject::connect(watcher, &StatusNotifierWatcher::StatusNotifierItemRegistered, q,
-                             [this](const QString& c) {
-                                 onItemRegistered(c);
-                             });
-            QObject::connect(watcher, &StatusNotifierWatcher::StatusNotifierItemUnregistered, q,
-                             [this](const QString& c) {
-                                 onItemUnregistered(c);
-                             });
+            // Qt::UniqueConnection on both wires for parity with the
+            // watcher-side rewire; defensive even though
+            // onOwnershipReleased ensures one-shot promotion today.
+            QObject::connect(
+                watcher, &StatusNotifierWatcher::StatusNotifierItemRegistered, q,
+                [this](const QString& c) {
+                    onItemRegistered(c);
+                },
+                Qt::UniqueConnection);
+            QObject::connect(
+                watcher, &StatusNotifierWatcher::StatusNotifierItemUnregistered, q,
+                [this](const QString& c) {
+                    onItemUnregistered(c);
+                },
+                Qt::UniqueConnection);
+            // The next seedExistingItems will see an empty authoritative
+            // list (items registered with the prior owner, not with us).
+            // Skip the zombie reaper for that one cycle so tray apps that
+            // do not re-register on ownership change keep their slots.
+            skipNextZombieReap = true;
         });
     }
 }
@@ -194,15 +215,28 @@ void StatusNotifierHost::Private::seedExistingItems()
         // watcher was down. The new watcher's authoritative set is the
         // canonicals it just published; anything we still hold that's
         // not in that set has lost its NameOwnerChanged signal source.
-        const QSet<QString> incoming(list.cbegin(), list.cend());
-        QStringList zombies;
-        for (auto it = itemsByCanonical.cbegin(); it != itemsByCanonical.cend(); ++it) {
-            if (!incoming.contains(it.key()))
-                zombies.append(it.key());
-        }
-        for (const auto& canonical : zombies) {
-            qCInfo(lcSniHost) << "reaping zombie item after watcher respawn:" << canonical;
-            onItemUnregistered(canonical);
+        //
+        // EXCEPT after a passive→active promotion: the items we
+        // accumulated via bus-subscription belonged to the prior owner
+        // (Plasma), the freshly-queried list dispatches to our own
+        // watcher whose m_items is empty, and tray apps do not
+        // re-register on ownership change. Reaping under that
+        // condition would empty the tray. The promotedToOwner handler
+        // sets skipNextZombieReap; honour it once.
+        if (!skipNextZombieReap) {
+            const QSet<QString> incoming(list.cbegin(), list.cend());
+            QStringList zombies;
+            for (auto it = itemsByCanonical.cbegin(); it != itemsByCanonical.cend(); ++it) {
+                if (!incoming.contains(it.key()))
+                    zombies.append(it.key());
+            }
+            for (const auto& canonical : zombies) {
+                qCInfo(lcSniHost) << "reaping zombie item after watcher respawn:" << canonical;
+                onItemUnregistered(canonical);
+            }
+        } else {
+            qCInfo(lcSniHost) << "skipping zombie reconciliation: this is a passive→active promotion seed";
+            skipNextZombieReap = false;
         }
         for (const auto& canonical : list) {
             onItemRegistered(canonical);

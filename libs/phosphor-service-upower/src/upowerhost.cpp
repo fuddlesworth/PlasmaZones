@@ -44,7 +44,7 @@ public:
     /// when PropertiesChanged carries OnBattery in `invalidated` rather
     /// than `changed`. `receiver` parents the watcher so it cancels
     /// cleanly if the host is destroyed mid-flight.
-    void requestOnBattery(QObject* receiver) const
+    void requestOnBattery(QObject* receiver)
     {
         auto bus = QDBusConnection::systemBus();
         if (!bus.isConnected())
@@ -58,7 +58,7 @@ public:
             const QDBusPendingReply<QDBusVariant> reply = *call;
             if (reply.isError())
                 return;
-            const_cast<Private*>(this)->setOnBattery(reply.value().variant().toBool());
+            setOnBattery(reply.value().variant().toBool());
         });
     }
 
@@ -82,13 +82,14 @@ public:
         // `bus.connect` and GetAll silently fail. Normalize to the
         // "no display device" state instead.
         const bool hasReal = !path.isEmpty() && isValidDevicePath(path);
+        if (!hasReal && !path.isEmpty())
+            qCDebug(lcUPowerHost) << "Ignoring DisplayDevice with non-device path:" << path;
         if (!hasReal && !displayDevice && displayDevicePath.isEmpty()) {
             // No-op: an invalid non-empty path against an already-empty
-            // displayDevice slot is a wire artifact. Log once and skip
-            // the displayDeviceChanged emit so QML doesn't see a
-            // notification for a value that didn't move.
-            if (!path.isEmpty())
-                qCDebug(lcUPowerHost) << "Ignoring DisplayDevice with non-device path:" << path;
+            // displayDevice slot is a wire artifact. Skip the
+            // displayDeviceChanged emit so QML doesn't see a
+            // notification for a value that didn't move. (The check
+            // above already logged the rejection.)
             return;
         }
         if (displayDevice) {
@@ -98,8 +99,6 @@ public:
         displayDevicePath = hasReal ? path : QString();
         if (hasReal)
             displayDevice = new UPowerDevice(path, owner);
-        else if (!path.isEmpty())
-            qCDebug(lcUPowerHost) << "Ignoring DisplayDevice with non-device path:" << path;
         Q_EMIT owner->displayDeviceChanged();
     }
 
