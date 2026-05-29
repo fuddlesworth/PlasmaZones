@@ -188,10 +188,12 @@ inline int contextPriority(bool screenPinned, bool desktopPinned, bool activityP
  *        for a given (screen, desktop, activity) tuple.
  *
  * Exposing the id derivation as a public helper lets callers look up a stored
- * assignment rule by its identity tuple in O(1) (via
- * `WindowRuleSet::ruleById`) instead of scanning the rule list. Two callers
- * deriving the same tuple necessarily land on the same id, so the lookup
- * stays correct across processes and across persistence round-trips.
+ * assignment rule by deterministic id derivation rather than evaluating each
+ * rule's match shape — `WindowRuleSet::ruleById` itself is still a linear
+ * scan, but the per-rule comparison collapses to a single QUuid equality
+ * instead of a tuple-shape predicate. Two callers deriving the same tuple
+ * necessarily land on the same id, so the lookup stays correct across
+ * processes and across persistence round-trips.
  */
 inline QUuid assignmentRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity)
 {

@@ -27,9 +27,9 @@ namespace PhosphorContext {
  *      reads exactly once per consumer call site instead of once per gate
  *      or value query inside that site.
  *
- *   3. **Single-line gate.** The handle is a POD whose presence at a call
- *      site documents the intent ("we are about to act on screen X with
- *      mode Y"). The accompanying `IContextResolver::isGated(handle)` call
+ *   3. **Single-line gate.** The handle is a value type whose presence at
+ *      a call site documents the intent ("we are about to act on screen X
+ *      with mode Y"). The accompanying `IContextResolver::isGated(handle)` call
  *      shrinks the typical 6-line `(modeFor → currentDesktop → currentActivity
  *      → isContextDisabled → isContextLocked)` chain to two lines.
  *

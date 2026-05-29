@@ -33,7 +33,7 @@ behaviour-preserving.
 
 The lib owns:
 
-- **The handle value type:** `ContextHandle` POD that carries the
+- **The handle value type:** `ContextHandle` carries the
   frozen tuple between call sites without re-resolution.
 - **The gate primitive:** `IContextResolver` exposes
   `disabledReason()`, `isLocked()`, `isDisabled()`, `isGated()`. Every

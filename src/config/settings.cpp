@@ -1380,7 +1380,18 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         kept.append(CRB::makeDisableRule(name, screenId, desktop, activity, modeToken));
     }
 
-    m_windowRuleStore->setAllRules(kept);
+    if (!m_windowRuleStore->setAllRules(kept)) {
+        // Persistence failed — the in-memory rule set still advanced,
+        // so consumers wired to `rulesChanged(persisted=false)` already
+        // know. Surface it on the settings-side log too so users
+        // grepping `lcConfig` see the failure, and skip the aggregate
+        // `settingsChanged()` emit so dirty-state trackers don't
+        // believe the write made it to disk.
+        qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
+                            << axisInt;
+        Q_EMIT(this->*signalFn)(mode);
+        return;
+    }
 
     Q_EMIT(this->*signalFn)(mode);
     Q_EMIT settingsChanged();

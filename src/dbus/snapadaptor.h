@@ -76,18 +76,8 @@ public:
     void clearEngine();
 
     /**
-     * @brief Set the ScreenModeRouter for resnap screen filtering
-     *
-     * Required for resnapCurrentAssignments and resnapForVirtualScreenReconfigure
-     * to correctly partition screens by mode.
-     *
-     * @param router ScreenModeRouter instance (not owned, must outlive adaptor)
-     */
-    void setScreenModeRouter(ScreenModeRouter* router);
-
-    /**
      * @brief Set the frozen-snapshot resolver used by snaprestore's disable
-     *        gate. Late-bound for the same reason as setScreenModeRouter.
+     *        gate. Late-bound: created post-construction by Daemon::init.
      *
      * @param resolver IContextResolver instance (not owned, must outlive adaptor)
      */
@@ -342,7 +332,6 @@ private:
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
     ISettings* m_settings = nullptr;
-    ScreenModeRouter* m_screenModeRouter = nullptr;
     /// Late-bound by Daemon via setContextResolver — replaces the inline
     /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;

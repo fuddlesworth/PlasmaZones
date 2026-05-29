@@ -1184,7 +1184,6 @@ bool Daemon::init()
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
-    m_snapAdaptor->setScreenModeRouter(m_screenModeRouter.get());
     m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
 

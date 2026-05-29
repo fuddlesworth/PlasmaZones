@@ -9,7 +9,7 @@
  *
  * Consumers can include this for convenience or pick individual headers
  * for a smaller compile-time footprint. The lib's public surface is
- * intentionally narrow: one POD (`ContextHandle`), one enum
+ * intentionally narrow: one value type (`ContextHandle`), one enum
  * (`DisabledReason`), three adapter interfaces (`IWorkspaceState`,
  * `IModeProvider`, `IContextGateSource`), one façade interface
  * (`IContextResolver`), and one concrete resolver (`ContextResolver`).

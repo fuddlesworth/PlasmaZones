@@ -124,10 +124,8 @@ void Daemon::connectScreenSignals()
                 // refreshVirtualConfigs() in response to its own change signal.
                 const QString physId = screen.identifier;
                 const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
-                const int desktop = m_virtualDesktopManager->currentDesktop();
-                const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-                    ? m_activityManager->currentActivity()
-                    : QString();
+                const int desktop = currentDesktop();
+                const QString activity = currentActivity();
                 for (const QString& sid : vsIds) {
                     PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
                     if (screenLayout) {

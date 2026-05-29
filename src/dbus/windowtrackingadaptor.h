@@ -824,19 +824,6 @@ private:
     // applySnapResult moved to SnapAdaptor.
 
     /**
-     * @brief Build a unified window state JSON object for windowStateChanged emission
-     * @param windowId Window identifier
-     * @param zoneId Primary zone ID (may be empty for unsnap)
-     * @param zoneIds All zone IDs (QJsonArray)
-     * @param screenId Screen identifier
-     * @param isFloating Current float state
-     * @param changeType One of: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
-     * @return QJsonObject ready for serialization
-     */
-    QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
-                                 const QString& screenId, bool isFloating, const QString& changeType) const;
-
-    /**
      * @brief Test whether the given (screen, virtualDesktop, activity) tuple is currently disabled.
      *
      * Used by the save/load filters to drop entries persisted before the user

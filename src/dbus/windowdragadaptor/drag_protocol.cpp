@@ -511,11 +511,13 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     // Snap path: forward to legacy dragMoved so overlay/zone-detection
     // state stays current. Bypass paths still run dragMoved because it
     // also drives the autotile drag-insert preview block (drag.cpp
-    // ~501-564) — which the autotile bypass needs. The snap-path
-    // overlay/zone state machine inside dragMoved (m_snapCancelled,
-    // m_draggedWindowId branches) stays untouched on bypass paths
-    // because m_draggedWindowId was never set by dragStarted, so its
-    // snap-side branches early-return.
+    // ~501-564). beginDrag's bypass branch (line ~145) DOES set
+    // m_draggedWindowId, so dragMoved's `windowId != m_draggedWindowId`
+    // guard would NOT early-return. The snap-side overlay branches
+    // inside dragMoved instead become no-ops because `prepareHandlerContext`
+    // (drag.cpp:166,180) suppresses the overlay path when the cursor
+    // screen is in autotile mode or context-disabled — the same gate
+    // that decided the bypass branch at beginDrag.
     dragMoved(windowId, cursorX, cursorY, modifiers, mouseButtons);
 }
 

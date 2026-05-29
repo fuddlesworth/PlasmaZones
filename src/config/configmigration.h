@@ -92,9 +92,6 @@ public:
     /// Run the migration chain in-memory (for INI→JSON + upgrade in one pass).
     static void runMigrationChainInMemory(QJsonObject& root);
 
-    /// The ordered list of all migration steps.
-    static std::span<const MigrationStep> migrationSteps();
-
     // Schema migration functions (one per version bump).
     // Public so the MigrationStep function pointers can reference them.
     static void migrateV1ToV2(QJsonObject& root);

@@ -815,19 +815,4 @@ QRect WindowTrackingAdaptor::zoneGeometryRect(const QString& zoneId, const QStri
     return geo;
 }
 
-QJsonObject WindowTrackingAdaptor::buildStateObject(const QString& windowId, const QString& zoneId,
-                                                    const QJsonArray& zoneIds, const QString& screenId, bool isFloating,
-                                                    const QString& changeType) const
-{
-    QJsonObject obj;
-    obj[QLatin1String("windowId")] = windowId;
-    obj[QLatin1String("zoneId")] = zoneId;
-    obj[QLatin1String("zoneIds")] = zoneIds;
-    obj[QLatin1String("screenId")] = screenId;
-    obj[QLatin1String("isFloating")] = isFloating;
-    obj[QLatin1String("isSticky")] = m_service ? m_service->isWindowSticky(windowId) : false;
-    obj[QLatin1String("changeType")] = changeType;
-    return obj;
-}
-
 } // namespace PlasmaZones

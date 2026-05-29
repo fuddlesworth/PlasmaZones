@@ -354,26 +354,6 @@ QVariantList actionTypes()
     return out;
 }
 
-QVariantList paramsForActionType(const QString& typeWire)
-{
-    // Materialise a stable QByteArray for the QLatin1StringView backing —
-    // see the matching helper in `actionTypes()`. A temporary `toLatin1()`
-    // would dangle past the end of the full expression.
-    const QByteArray bytes = typeWire.toLatin1();
-    return paramsForActionTypeImpl(QLatin1StringView{bytes.constData(), static_cast<qsizetype>(bytes.size())});
-}
-
-QString actionTypeLabel(const QString& typeWire)
-{
-    const QByteArray bytes = typeWire.toLatin1();
-    return actionTypeLabelImpl(QLatin1StringView{bytes.constData(), static_cast<qsizetype>(bytes.size())});
-}
-
-QString operatorLabel(int operatorValue)
-{
-    return operatorLabelImpl(static_cast<Operator>(operatorValue));
-}
-
 QVariantMap defaultPayloadFor(const QString& typeWire)
 {
     // Walk the action's parameter descriptor and seed each entry with a

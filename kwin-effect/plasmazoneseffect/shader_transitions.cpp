@@ -811,7 +811,14 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // Symmetric: if neither prior nor new transition holds the grab, no
     // ref work happens — supersession of two non-close transitions is a
     // no-op for ref accounting.
+    // Capture EVERY supersession-carry flag from the prior transition
+    // BEFORE the erase below — `existingIt` is invalidated by erase, and
+    // any later read (e.g. for transition.addedGrabHeld) would be UB.
+    // closeGrabHeld + addedGrabHeld both need to carry through so ref/
+    // unref stay balanced; if EITHER prior or new install holds the
+    // grab, the new transition's endShaderTransition will balance.
     const bool existingHeldGrab = isSameWindowSupersession ? existingIt->second.closeGrabHeld : false;
+    const bool existingAddedHeldGrab = isSameWindowSupersession ? existingIt->second.addedGrabHeld : false;
     if (isSameWindowSupersession) {
         // Erase the prior bookkeeping but skip the unredirect — we're
         // about to re-shader this same window. setShader() below
@@ -999,7 +1006,6 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // EITHER the prior or new install wants the grab, we treat it as
     // held — the new transition's endShaderTransition will balance.
     transition.closeGrabHeld = holdCloseGrab || existingHeldGrab;
-    const bool existingAddedHeldGrab = isSameWindowSupersession ? existingIt->second.addedGrabHeld : false;
     transition.addedGrabHeld = holdAddedGrab || existingAddedHeldGrab;
     if (durationMs > 0) {
         transition.durationMs = durationMs;

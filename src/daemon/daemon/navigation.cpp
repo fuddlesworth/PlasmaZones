@@ -385,13 +385,8 @@ void Daemon::resnapIfManualMode()
         // "every desktop got the same layout".
         // Use the `Daemon::currentDesktop()` helper (defined in
         // osd.cpp) for the null-safe VDM read — the same pattern used
-        // by autotile.cpp, signals.cpp, osd.cpp, and (since the
-        // Pass 3 migration) start.cpp's `onVirtualScreensReconfigured`
-        // and `onVirtualScreenRegionsChanged`. The one inline read
-        // that remains in start.cpp is the `screenAdded` lambda
-        // (start.cpp:127), which fires before `connectDesktopActivity`
-        // runs `VDM::init()/start()` — even the helper would see the
-        // unpopulated default there.
+        // by every daemon-side site that needs the current desktop
+        // (autotile.cpp, signals.cpp, osd.cpp, start.cpp).
         m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop());
     }
     m_suppressResnapOsd = 1;

@@ -56,18 +56,6 @@ PhosphorConfig::Schema makeMigrationSchema()
 }
 } // namespace
 
-std::span<const MigrationStep> ConfigMigration::migrationSteps()
-{
-    // Kept for callers/tests that want a flat list of PZ-native steps. Built
-    // once lazily; the underlying function pointers never change at runtime.
-    static const std::array<MigrationStep, 3> s_steps{{
-        {1, &ConfigMigration::migrateV1ToV2},
-        {2, &ConfigMigration::migrateV2ToV3},
-        {3, &ConfigMigration::migrateV3ToV4},
-    }};
-    return {s_steps.data(), s_steps.size()};
-}
-
 // ── Migration chain runner (delegates to PhosphorConfig::MigrationRunner) ──
 
 void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
@@ -1778,16 +1766,32 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         bool ok = true;
 
         // Strip the v4 scratch keys (`_v4DisableStash`, `_v4AnimationRulesStash`)
-        // from config.json if any survived a partial earlier run.
+        // from config.json if any survived a partial earlier run. Log every
+        // failure mode (open / parse / not-object / write) so a leftover-stash
+        // configuration that can't be cleaned surfaces as an actionable
+        // warning rather than silently succeeding.
         if (QFile::exists(jsonPath)) {
             QFile cf(jsonPath);
-            if (cf.open(QIODevice::ReadOnly)) {
+            if (!cf.open(QIODevice::ReadOnly)) {
+                qWarning("ConfigMigration: cleanup retry: failed to open %s for reading: %s", qPrintable(jsonPath),
+                         qPrintable(cf.errorString()));
+                ok = false;
+            } else {
                 QJsonParseError err;
                 const QJsonDocument doc = QJsonDocument::fromJson(cf.readAll(), &err);
                 cf.close();
-                if (err.error == QJsonParseError::NoError && doc.isObject()
-                    && (doc.object().contains(kV4DisableStashKey)
-                        || doc.object().contains(kV4AnimationRulesStashKey))) {
+                if (err.error != QJsonParseError::NoError) {
+                    qWarning("ConfigMigration: cleanup retry: %s did not parse as JSON: %s", qPrintable(jsonPath),
+                             qPrintable(err.errorString()));
+                    ok = false;
+                } else if (!doc.isObject()) {
+                    qWarning(
+                        "ConfigMigration: cleanup retry: %s parsed but root is not an object — cannot strip "
+                        "stash keys",
+                        qPrintable(jsonPath));
+                    ok = false;
+                } else if (doc.object().contains(kV4DisableStashKey)
+                           || doc.object().contains(kV4AnimationRulesStashKey)) {
                     QJsonObject configRoot = doc.object();
                     configRoot.remove(kV4DisableStashKey);
                     configRoot.remove(kV4AnimationRulesStashKey);
