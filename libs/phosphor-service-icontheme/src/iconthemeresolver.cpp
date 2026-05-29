@@ -8,14 +8,11 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
-#include <QFileInfo>
-#include <QGuiApplication>
 #include <QIcon>
 #include <QImageReader>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSet>
-#include <QSettings>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QtEndian>
@@ -135,16 +132,7 @@ QStringList xdgIconSearchPath()
 class IconThemeResolver::Private
 {
 public:
-    // `q` is currently unused; impl helpers reach into the parsed
-    // theme + cache state directly. Kept for future signal emission
-    // patterns that need to call back into the outer class without
-    // moving every helper to non-static membership.
-    explicit Private(IconThemeResolver* q)
-        : q(q)
-    {
-    }
-
-    IconThemeResolver* q;
+    Private() = default;
 
     mutable QMutex mutex;
     QString configuredTheme; ///< empty => autodetect
@@ -163,8 +151,7 @@ public:
     [[nodiscard]] QString lookupIcon(const QString& iconName, int size, int scale, const QString& themeName,
                                      QSet<QString>* visited = nullptr);
     [[nodiscard]] QString lookupFallbackIcon(const QString& iconName) const;
-    [[nodiscard]] QString themeIconPath(const QString& iconName, int size, int scale, const QString& themeName,
-                                        const QString& extraDir);
+    [[nodiscard]] QString themeIconPath(const QString& iconName, int size, int scale, const QString& themeName);
 };
 
 QString IconThemeResolver::Private::detectThemeName() const
@@ -285,20 +272,21 @@ const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& the
 }
 
 QString IconThemeResolver::Private::themeIconPath(const QString& iconName, int size, int scale,
-                                                  const QString& themeName, const QString& extraDir)
+                                                  const QString& themeName)
 {
     const auto& idx = parseThemeIndex(themeName);
 
     // Try every directory in the theme. First pass: directories whose
     // size matches. Second pass: closest by size distance.
-    QStringList exts = {QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")};
+    static const QStringList exts = {QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")};
 
-    // Prepend the per-item override dir if any. The override is
-    // searched at the "theme root" level — the directory inside is
-    // expected to follow the same NN/apps layout as a real theme.
+    // Per-item overrides (`extraThemeDir`) are handled as a flat probe
+    // at the top of `iconForName`, not threaded through the themed
+    // walk: SNI's IconThemePath typically points at a dir containing
+    // raw `<iconName>.<ext>` files rather than a themed `NN/apps`
+    // subtree.
     QStringList roots;
-    if (!extraDir.isEmpty())
-        roots.append(extraDir);
+    roots.reserve(searchPath.size());
     for (const auto& r : searchPath) {
         roots.append(r + QLatin1Char('/') + themeName);
     }
@@ -354,7 +342,7 @@ QString IconThemeResolver::Private::lookupIcon(const QString& iconName, int size
     }
     v->insert(themeName);
 
-    auto path = themeIconPath(iconName, size, scale, themeName, QString());
+    auto path = themeIconPath(iconName, size, scale, themeName);
     if (!path.isEmpty())
         return path;
 
@@ -414,7 +402,7 @@ IconThemeResolver* IconThemeResolver::instance()
 
 IconThemeResolver::IconThemeResolver(QObject* parent)
     : QObject(parent)
-    , d(std::make_unique<Private>(this))
+    , d(std::make_unique<Private>())
 {
     d->searchPath = xdgIconSearchPath();
 }
@@ -496,10 +484,9 @@ QImage IconThemeResolver::iconForName(const QString& name, int size, int scale, 
     // > 32 items × < 4 sizes; we hit the cap only during pathological
     // churn (icon-theme switches mid-flight). Cache hits return at
     // the top of iconForName(), so when we reach this point the key
-    // is guaranteed not to be in the cache; the contains() check is
-    // a belt-and-braces guard against a future code path that
-    // reaches the insert without going through the early return.
-    if (!d->resolvedCache.contains(cacheKey) && d->resolvedCache.size() >= Private::kCacheLimit) {
+    // is guaranteed not to be in the cache; the eviction can be
+    // unconditional.
+    if (d->resolvedCache.size() >= Private::kCacheLimit) {
         d->resolvedCache.erase(d->resolvedCache.begin());
     }
     d->resolvedCache.insert(cacheKey, img);

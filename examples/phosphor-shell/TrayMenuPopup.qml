@@ -249,8 +249,12 @@ PopupWindow {
                             // Reserved: 16 icon + 8 + 8 label-side
                             // padding + 16 right slot (chevron or
                             // shortcut) + the shortcut's intrinsic
-                            // width when present.
-                            width: row.width - 16 - 8 - 8 - 16 - 8 - shortcutText.width - (shortcutText.text.length > 0 ? 8 : 0)
+                            // width when present. Clamp to >=0 so an
+                            // absurdly long shortcut string can't make
+                            // the label width go negative (Qt would
+                            // clamp to 0 and elide silently, leaving
+                            // an unlabelled row).
+                            width: Math.max(0, row.width - 16 - 8 - 8 - 16 - 8 - shortcutText.width - (shortcutText.text.length > 0 ? 8 : 0))
                             elide: Text.ElideRight
                         }
 
@@ -259,13 +263,16 @@ PopupWindow {
 
                             // Right-aligned shortcut display ("Ctrl+S")
                             // matching KDE's tray menus. Empty string
-                            // → width 0 → no spacing reservation in
-                            // the label binding above.
+                            // means width 0 and no spacing reservation
+                            // in the label binding above. Cap the
+                            // intrinsic width so a pathological shortcut
+                            // string can't crowd out the label slot.
                             text: menuRow.shortcut
                             color: "#7f849c"
                             font.pixelSize: 11
                             anchors.verticalCenter: parent.verticalCenter
                             visible: text.length > 0
+                            width: Math.min(80, implicitWidth)
                         }
 
                         // Submenu chevron — only renders when the item

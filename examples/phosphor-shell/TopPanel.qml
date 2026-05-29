@@ -220,12 +220,10 @@ PanelWindow {
             // Tray icons. Each delegate is a 22-px clickable image with
             // hover background + cascade-popup menu on right-click. The
             // model auto-refreshes when items register/unregister/change
-            // status — no manual binding needed. The Row's width collapses
-            // to 0 when empty, but the OUTER rightZone Row's `spacing: 14`
-            // still allocates 14px between this Row and the CPU readout
-            // even when the tray is empty. Gate `visible` on the (now
-            // properly declared) count Q_PROPERTY so the spacing collapses
-            // along with the children.
+            // status — no manual binding needed. Qt6 Row/Column collapse
+            // both an invisible child AND its adjacent spacing slot, so
+            // gating `visible` on the count Q_PROPERTY removes both the
+            // tray Row and the 14 px gap when the tray is empty.
             Row {
                 spacing: 6
                 anchors.verticalCenter: parent.verticalCenter

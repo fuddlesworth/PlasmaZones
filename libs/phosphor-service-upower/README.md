@@ -76,4 +76,4 @@ Repeater {
 
 ## Status
 
-Phase 2.0 extraction from the original `phosphor-services` umbrella. The C++ + QML API is unchanged from its pre-extraction form (`PhosphorServices::UPower*` → `PhosphorServiceUPower::UPower*`, `Phosphor.Services` QML module → `Phosphor.Service.UPower`).
+Phase 2.0 extraction from the original `phosphor-services` umbrella. The C++ + QML API surface (types, properties, signals, methods, role names, enum values) is unchanged from its pre-extraction form; only the C++ namespace and the QML module URI moved (`PhosphorServices::UPower*` becomes `PhosphorServiceUPower::UPower*`, `Phosphor.Services` becomes `Phosphor.Service.UPower`).

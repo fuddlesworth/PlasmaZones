@@ -44,10 +44,12 @@ void installImageProvider(QQmlEngine* engine)
         return;
     }
     // QQmlEngine takes ownership of the provider; the documented
-    // pattern is to pass a raw `new`. Re-installing on the same
-    // engine with the same host name would make Qt warn and drop the
-    // new one, but shells construct a fresh QQmlEngine on every hot
-    // reload so the per-engine mount is the expected lifecycle.
+    // pattern is to pass a raw `new`. Per Qt's contract,
+    // addImageProvider replaces the existing provider for the same
+    // host (delete-old + install-new), so re-installing on the same
+    // engine is well-defined; shells still construct a fresh
+    // QQmlEngine per hot reload, so re-install is the steady-state
+    // pattern.
     engine->addImageProvider(QString::fromLatin1(kImageProviderHost), new IconImageProvider());
     qCInfo(lcIconThemeQml).nospace() << "image provider mounted at image://" << kImageProviderHost << "/ on engine "
                                      << static_cast<void*>(engine);

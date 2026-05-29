@@ -3,14 +3,14 @@
 
 #include <PhosphorServiceUPower/UPowerDevice.h>
 
-#include <type_traits>
-
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
+
+#include <type_traits>
 
 Q_LOGGING_CATEGORY(lcUPowerDevice, "phosphor.service.upower.device")
 
