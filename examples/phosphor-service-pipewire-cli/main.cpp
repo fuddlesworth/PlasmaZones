@@ -36,9 +36,14 @@ int usage()
           << "  list sources                        list every Audio/Source node\n"
           << "  list streams                        list every audio stream node\n"
           << "  default                             print current default sink + source names\n"
-          << "  set-volume <id> <pct>               set every channel of <id> to <pct> (0..100)\n"
-          << "  mute <id>                           mute node\n"
-          << "  unmute <id>                         unmute node\n"
+          << "  set-volume <target> <pct>           set every channel of <target> to <pct> (0..100)\n"
+          << "  mute <target>                       mute node\n"
+          << "  unmute <target>                     unmute node\n"
+          << "\n"
+          << "  <target> is one of:\n"
+          << "    - a numeric PipeWire id (from `list sinks`)\n"
+          << "    - a node.name string (e.g. alsa_output.pci-0000_00_1f.3.iec958-stereo)\n"
+          << "    - `default.audio.sink` or `default.audio.source` for the current default\n"
           << "  set-default-sink <name>             write default.configured.audio.sink\n"
           << "  set-default-source <name>           write default.configured.audio.source\n";
     return 64; // EX_USAGE
@@ -79,6 +84,33 @@ PhosphorServicePipeWire::PwNode* findNode(PhosphorServicePipeWire::PipeWireConne
 {
     for (auto* node : conn.nodes()) {
         if (node && node->id() == id)
+            return node;
+    }
+    return nullptr;
+}
+
+/// Resolve a target spec to a PwNode. Accepted forms:
+/// - numeric id (e.g. `55`) — exact id match
+/// - `default.audio.sink` / `default.audio.source` — the WirePlumber
+///   default at command time
+/// - a `node.name` string (e.g. `alsa_output.pci-0000_00_1f.3.iec958-stereo`)
+///   — exact name match
+/// Returns nullptr if nothing resolves.
+PhosphorServicePipeWire::PwNode* resolveTarget(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& spec)
+{
+    bool isNumeric = false;
+    const uint id = spec.toUInt(&isNumeric);
+    if (isNumeric)
+        return findNode(conn, id);
+    QString name = spec;
+    if (spec == QLatin1String("default.audio.sink"))
+        name = conn.defaultSinkName();
+    else if (spec == QLatin1String("default.audio.source"))
+        name = conn.defaultSourceName();
+    if (name.isEmpty())
+        return nullptr;
+    for (auto* node : conn.nodes()) {
+        if (node && node->name() == name)
             return node;
     }
     return nullptr;
@@ -152,11 +184,11 @@ int cmdDefault(PhosphorServicePipeWire::PipeWireConnection& conn)
     return 0;
 }
 
-int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, uint id, double pct)
+int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& target, double pct)
 {
-    auto* node = findNode(conn, id);
+    auto* node = resolveTarget(conn, target);
     if (!node) {
-        err() << "no node with id " << id << "\n";
+        err() << "no node matches target '" << target << "'\n";
         return 1;
     }
     // Map 0..100 to linear amplitude 0.0..1.0. Cubic / perceptual
@@ -164,22 +196,23 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, uint id, dou
     // CLI takes a raw linear percentage so the call is unambiguous.
     const qreal linear = qBound<qreal>(0.0, pct / 100.0, 1.5);
     node->setVolume(linear);
-    out() << "set node " << id << " volume = " << QString::number(linear, 'f', 3) << " (linear)\n";
+    out() << "set node " << node->id() << " (" << node->name() << ") volume = " << QString::number(linear, 'f', 3)
+          << " (linear)\n";
     // The write is async; settle briefly so a subsequent read sees the
     // echoed pod.
     settleRegistry(120);
     return 0;
 }
 
-int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, uint id, bool muted)
+int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& target, bool muted)
 {
-    auto* node = findNode(conn, id);
+    auto* node = resolveTarget(conn, target);
     if (!node) {
-        err() << "no node with id " << id << "\n";
+        err() << "no node matches target '" << target << "'\n";
         return 1;
     }
     node->setMuted(muted);
-    out() << "set node " << id << " muted = " << (muted ? "true" : "false") << "\n";
+    out() << "set node " << node->id() << " (" << node->name() << ") muted = " << (muted ? "true" : "false") << "\n";
     settleRegistry(120);
     return 0;
 }
@@ -212,22 +245,16 @@ int main(int argc, char** argv)
     if (cmd == QLatin1String("set-volume")) {
         if (args.size() < 4)
             return usage();
-        bool okId = false;
         bool okPct = false;
-        const uint id = args.at(2).toUInt(&okId);
         const double pct = args.at(3).toDouble(&okPct);
-        if (!okId || !okPct)
+        if (!okPct)
             return usage();
-        return cmdSetVolume(conn, id, pct);
+        return cmdSetVolume(conn, args.at(2), pct);
     }
     if (cmd == QLatin1String("mute") || cmd == QLatin1String("unmute")) {
         if (args.size() < 3)
             return usage();
-        bool ok = false;
-        const uint id = args.at(2).toUInt(&ok);
-        if (!ok)
-            return usage();
-        return cmdMute(conn, id, cmd == QLatin1String("mute"));
+        return cmdMute(conn, args.at(2), cmd == QLatin1String("mute"));
     }
     if (cmd == QLatin1String("set-default-sink")) {
         if (args.size() < 3)
