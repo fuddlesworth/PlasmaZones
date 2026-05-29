@@ -188,6 +188,18 @@ SettingsFlickable {
             page.modelRevision++;
         }
 
+        // moveRule fires through beginMoveRows / endMoveRows, which emits
+        // rowsMoved (and never countChanged / dataChanged on a summary role).
+        // Without this handler the section buckets stay frozen on the
+        // pre-move ordering: the dragged row's `y` re-binds to its OLD
+        // cumulative position and the user sees a snap-back even though the
+        // C++ model has accepted the move. The Animation section's drag
+        // container is the only place this surfaces today, but the bump is
+        // model-wide so future reorderable sections inherit the fix.
+        function onRowsMoved() {
+            page.modelRevision++;
+        }
+
         function onDataChanged(topLeft, bottomRight, roles) {
             // A roles vector with overlap against the summary roles drives a
             // rebuild. An empty roles vector means "any role" (Qt convention
@@ -527,7 +539,7 @@ SettingsFlickable {
 
                     // Animation section — manual-positioning drag container,
                     // mirrors OrderingPage's pattern. Each delegate Item is
-                    // y-positioned by `index * rowHeight + visualOffset`; a
+                    // y-positioned by `cumulativeY(index) + visualOffset`; a
                     // MouseArea on the dedicated handle column sets
                     // `drag.target: delegateRoot`, which a ColumnLayout-based
                     // Repeater would silently snap back. visualOffset shifts
@@ -535,10 +547,22 @@ SettingsFlickable {
                     // ordering; release commits via controller.moveRule
                     // (translating the (from, to) index pair into the
                     // before-id reference the controller expects).
+                    //
+                    // Rows carry variable heights — the WindowRuleRow
+                    // expansion body is opt-in per row, and the container
+                    // keys per-ruleId heights through `delegateHeights` so
+                    // baseY / totalHeight / drop-slot math all walk the
+                    // actual heights rather than assuming a fixed stride.
                     Item {
                         id: animationOrderContainer
 
-                        readonly property real rowHeight: Kirigami.Units.gridUnit * 4
+                        // Default height for a freshly-instantiated delegate
+                        // before its WindowRuleRow has reported its
+                        // implicitHeight back. Matches the collapsed-row
+                        // height the previous fixed-stride layout assumed,
+                        // so the first paint frame doesn't show overlap
+                        // before the publish lands.
+                        readonly property real headerRowHeight: Kirigami.Units.gridUnit * 4
                         // Snapshot the section's rules array onto the container
                         // so the inner Repeater delegate can reach it as
                         // `animationOrderContainer.rules` — within the inner
@@ -555,9 +579,86 @@ SettingsFlickable {
                         property int dropTargetIndex: -1
                         property bool isDragging: false
 
+                        // Per-ruleId published height. Keyed by ruleId (not
+                        // index) so reorders don't invalidate the map. The
+                        // whole object is reassigned on each publish so QML
+                        // bindings that read it (heightOf / totalHeight /
+                        // cumulativeY) re-evaluate.
+                        property var delegateHeights: ({})
+
+                        function setDelegateHeight(ruleId, h) {
+                            // Drop 0 / negative publishes. The delegate's
+                            // `actualHeight` binding fires once at creation
+                            // before the inner RowLayout's children have
+                            // computed their preferred heights — at that
+                            // moment `animRow.implicitHeight` is 0. Letting
+                            // that land in the map would peg every dependant
+                            // baseY / totalHeight / drag.maximumY at 0,
+                            // collapsing the layout AND clamping
+                            // drag.maximumY = max(0, 0 - actualHeight) = 0
+                            // so the drag can't move the row at all. The
+                            // headerRowHeight fallback in `heightOf` covers
+                            // the unpublished case, so dropping the 0 is
+                            // strictly safer than recording it.
+                            if (!ruleId || h <= 0 || delegateHeights[ruleId] === h)
+                                return;
+                            var copy = Object.assign({}, delegateHeights);
+                            copy[ruleId] = h;
+                            delegateHeights = copy;
+                        }
+
+                        function heightOf(idx) {
+                            if (idx < 0 || idx >= rules.length)
+                                return headerRowHeight;
+                            var rule = rules[idx];
+                            if (!rule)
+                                return headerRowHeight;
+                            var h = delegateHeights[rule.ruleId];
+                            // Same defence as setDelegateHeight's guard —
+                            // never let a stale 0 collapse the cumulative
+                            // math. Should be unreachable given the publish
+                            // guard above, but cheap insurance.
+                            return (h !== undefined && h > 0) ? h : headerRowHeight;
+                        }
+
+                        function cumulativeY(idx) {
+                            var y = 0;
+                            for (var i = 0; i < idx; ++i)
+                                y += heightOf(i);
+                            return y;
+                        }
+
+                        // Find the slot whose original (pre-cascade) range
+                        // contains @p centerY — used by the drag MouseArea
+                        // to resolve dropTargetIndex against variable
+                        // heights. Walking the cumulative sum once per
+                        // pointer event is cheap for typical animation-rule
+                        // counts; the prior fixed-stride formula
+                        // `floor(centerY / rowHeight)` only worked when
+                        // every row was the same height.
+                        function slotIndexAt(centerY) {
+                            var y = 0;
+                            for (var i = 0; i < rules.length; ++i) {
+                                var h = heightOf(i);
+                                if (centerY < y + h)
+                                    return i;
+                                y += h;
+                            }
+                            return Math.max(0, rules.length - 1);
+                        }
+
+                        readonly property real totalHeight: {
+                            var y = 0;
+                            for (var i = 0; i < rules.length; ++i)
+                                y += heightOf(i);
+                            return y;
+                        }
+
+                        readonly property real draggedHeight: dragFromIndex >= 0 ? heightOf(dragFromIndex) : headerRowHeight
+
                         visible: _isAnimationSection
                         Layout.fillWidth: true
-                        Layout.preferredHeight: _isAnimationSection ? rules.length * rowHeight : 0
+                        Layout.preferredHeight: _isAnimationSection ? totalHeight : 0
                         clip: true
 
                         Repeater {
@@ -568,7 +669,14 @@ SettingsFlickable {
 
                                 required property var modelData
                                 required property int index
-                                readonly property real baseY: index * animationOrderContainer.rowHeight
+                                readonly property real baseY: animationOrderContainer.cumulativeY(index)
+                                // Cascade displacement = ± the dragged
+                                // row's own height (not a fixed stride) so
+                                // displaced rows slide exactly into the
+                                // gap the dragged row leaves behind. With
+                                // a fixed stride a tall expanded source
+                                // row would leave a gap larger than the
+                                // shift, breaking the slot-in preview.
                                 readonly property real visualOffset: {
                                     if (!animationOrderContainer.isDragging || index === animationOrderContainer.dragFromIndex)
                                         return 0;
@@ -580,15 +688,27 @@ SettingsFlickable {
 
                                     if (from < to) {
                                         if (index > from && index <= to)
-                                            return -animationOrderContainer.rowHeight;
+                                            return -animationOrderContainer.draggedHeight;
                                     } else if (index >= to && index < from) {
-                                        return animationOrderContainer.rowHeight;
+                                        return animationOrderContainer.draggedHeight;
                                     }
                                     return 0;
                                 }
 
+                                // Publish the rendered height back to the
+                                // container so cumulativeY / totalHeight
+                                // pick up the expansion. animRow.height
+                                // resolves to the inner RowLayout's
+                                // implicitHeight (no anchors.fill on the
+                                // row → its own ColumnLayout child drives
+                                // the height), which grows as WindowRuleRow
+                                // expands.
+                                readonly property real actualHeight: animRow.implicitHeight
+                                onActualHeightChanged: animationOrderContainer.setDelegateHeight(modelData.ruleId, actualHeight)
+                                Component.onCompleted: animationOrderContainer.setDelegateHeight(modelData.ruleId, actualHeight)
+
                                 width: animationOrderContainer.width
-                                height: animationOrderContainer.rowHeight
+                                height: actualHeight
                                 y: baseY + visualOffset
                                 z: animDragArea.drag.active ? 100 : 0
                                 // Make the delegate receive keyboard focus so
@@ -657,7 +777,16 @@ SettingsFlickable {
                                 }
 
                                 RowLayout {
-                                    anchors.fill: parent
+                                    id: animRow
+
+                                    // Top-anchored (not anchors.fill) so the
+                                    // delegate Item's height can come from
+                                    // animRow.implicitHeight without a
+                                    // circular binding through anchors.fill
+                                    // → parent.height → animRow.implicitHeight.
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
                                     spacing: 0
 
                                     // Drag-handle column. The drag MouseArea
@@ -665,9 +794,21 @@ SettingsFlickable {
                                     // the row's toolbar buttons (edit /
                                     // duplicate / delete) still reach them.
                                     Item {
-                                        Layout.alignment: Qt.AlignVCenter
+                                        // Pin the handle column to the
+                                        // collapsed-row height — anchoring
+                                        // it via `Layout.fillHeight` would
+                                        // stretch the column down through
+                                        // the expansion body, centering the
+                                        // grip icon mid-expansion and
+                                        // giving the user a tall but
+                                        // visually unanchored drag strip.
+                                        // Pinning to headerRowHeight keeps
+                                        // the handle aligned with the
+                                        // header row whether the body is
+                                        // collapsed or expanded.
+                                        Layout.alignment: Qt.AlignTop
                                         Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium + Kirigami.Units.largeSpacing
-                                        Layout.fillHeight: true
+                                        Layout.preferredHeight: animationOrderContainer.headerRowHeight
 
                                         Kirigami.Icon {
                                             anchors.centerIn: parent
@@ -686,7 +827,15 @@ SettingsFlickable {
                                             drag.target: animDelegateRoot
                                             drag.axis: Drag.YAxis
                                             drag.minimumY: 0
-                                            drag.maximumY: Math.max(0, (animationOrderContainer.rules.length - 1) * animationOrderContainer.rowHeight)
+                                            // Constrain the dragged row's top
+                                            // so its bottom edge can reach
+                                            // — but not exceed — the
+                                            // container's bottom. With
+                                            // variable heights this is
+                                            // `totalHeight - actualHeight`,
+                                            // not the old fixed-stride
+                                            // `(length-1) * rowHeight`.
+                                            drag.maximumY: Math.max(0, animationOrderContainer.totalHeight - animDelegateRoot.actualHeight)
                                             // Captured at onPressed so we
                                             // move the rule the user actually
                                             // grabbed even if the rules array
@@ -743,8 +892,19 @@ SettingsFlickable {
                                             }
                                             onPositionChanged: {
                                                 if (drag.active) {
-                                                    var centerY = animDelegateRoot.y + animationOrderContainer.rowHeight / 2;
-                                                    var targetIndex = Math.max(0, Math.min(animationOrderContainer.rules.length - 1, Math.floor(centerY / animationOrderContainer.rowHeight)));
+                                                    // Pick the slot whose
+                                                    // original (pre-cascade)
+                                                    // vertical range contains
+                                                    // the dragged row's
+                                                    // centerY. slotIndexAt
+                                                    // walks the variable-
+                                                    // height cumulative sum,
+                                                    // so an expanded row
+                                                    // earlier in the list
+                                                    // shifts the targets
+                                                    // downward correctly.
+                                                    var centerY = animDelegateRoot.y + animDelegateRoot.actualHeight / 2;
+                                                    var targetIndex = animationOrderContainer.slotIndexAt(centerY);
                                                     if (targetIndex !== animationOrderContainer.dropTargetIndex)
                                                         animationOrderContainer.dropTargetIndex = targetIndex;
                                                 }
@@ -754,7 +914,15 @@ SettingsFlickable {
 
                                     WindowRuleRow {
                                         Layout.fillWidth: true
-                                        Layout.fillHeight: true
+                                        // No Layout.fillHeight — animRow's
+                                        // implicitHeight drives the delegate
+                                        // and the delegate sizes to fit, so
+                                        // fillHeight here would induce a
+                                        // self-referential cycle. The
+                                        // WindowRuleRow's own ColumnLayout
+                                        // (header + collapsible body)
+                                        // supplies the implicit height the
+                                        // outer animRow inherits.
                                         ruleId: animDelegateRoot.modelData.ruleId
                                         ruleName: animDelegateRoot.modelData.name
                                         ruleEnabled: animDelegateRoot.modelData.enabled
@@ -770,14 +938,6 @@ SettingsFlickable {
                                         matchFieldOptions: page.matchFieldOptions
                                         actionTypeOptions: page.actionTypeOptions
                                         appSettings: page._editorAppSettings
-                                        // Drag container uses a fixed
-                                        // rowHeight for its visual-offset
-                                        // cascade; an expanded row would
-                                        // throw off the drag math. Disable
-                                        // expansion here — the row's pencil
-                                        // button still opens the full
-                                        // editor for inspecting the match.
-                                        expandable: false
                                         onToggleRequested: function (en) {
                                             page.controller.setRuleEnabled(animDelegateRoot.modelData.ruleId, en);
                                         }
