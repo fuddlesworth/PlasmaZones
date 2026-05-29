@@ -54,12 +54,12 @@ Item {
         property alias activeWorkspace: shellStatePersistent.activeWorkspace
         // Function reference assigned in Component.onCompleted. TopPanel
         // and widget MouseAreas call this to toggle panel popups; the
-        // host swaps the active popup in-place inside a single shared
-        // xdg_popup so popup-to-popup transitions can't race the Wayland
-        // grab handoff. Function refs are NOT persisted (Persistent-
-        // Properties drops non-POD types on save), which is why
-        // togglePopup lives on the router rather than alongside the
-        // bool/int state.
+        // host (PanelPopupHost) keeps a per-kind PanelPopup instance and
+        // arbitrates ownership across them so popup-to-popup transitions
+        // don't race the Wayland grab handoff. Function refs are NOT
+        // persisted (PersistentProperties drops non-POD types on save),
+        // which is why togglePopup lives on the router rather than
+        // alongside the bool/int state.
         property var togglePopup
     }
 
@@ -206,8 +206,9 @@ Item {
     Taskbar {}
 
     // ─── Popups ──────────────────────────────────────────────────────────
-    // Single shared xdg_popup that hosts the calendar / media / menu
-    // contents. See PanelPopupHost.qml.
+    // PanelPopupHost owns per-kind PanelPopup instances (calendar, media,
+    // menu) and arbitrates ownership so transitions between them don't
+    // race the Wayland grab handoff. See PanelPopupHost.qml.
     PanelPopupHost {
         id: panelPopupHost
 

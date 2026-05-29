@@ -34,7 +34,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
 # WatchedDirectorySet + IScanStrategy live in phosphor-fsloader. The
 # plugin loader hot-reload path consumes both directly. REQUIRED is
 # load-bearing: target_link_libraries below names the imported target
@@ -108,7 +108,6 @@ target_compile_definitions(PhosphorRegistry
 target_link_libraries(PhosphorRegistry
     PUBLIC
         Qt6::Core
-        Qt6::Gui
         Qt6::Qml
     PRIVATE
         PhosphorFsLoader::PhosphorFsLoader

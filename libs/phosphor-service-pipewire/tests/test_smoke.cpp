@@ -241,12 +241,8 @@ private Q_SLOTS:
         // After handshake + initial registry walk, defaults should
         // have landed if WirePlumber is running. If they didn't, we
         // accept that (bare-daemon edge case) without failing.
-        if (!conn.defaultSinkName().isEmpty()) {
-            QVERIFY2(
-                !conn.defaultSinkName().isEmpty(),
-                qPrintable(QStringLiteral("expected non-empty default sink, got: %1").arg(conn.defaultSinkName())));
+        if (!conn.defaultSinkName().isEmpty())
             QVERIFY(sinkSpy.count() >= 1);
-        }
     }
 
     /// Models hooked to a live connection should populate based on the

@@ -63,14 +63,14 @@ ColumnLayout {
 }
 ```
 
-The CLI in `examples/phosphor-service-pipewire-cli/` is the canonical C++ usage example — see `phosphor-service-pipewire-cli list sinks` and `set-volume <id> <pct>`.
+The CLI in `examples/phosphor-service-pipewire-cli/` is the canonical C++ usage example: see `phosphor-service-pipewire-cli list sinks`, `set-volume <target> <pct>`, `set-default-sink <name>`, `mute <target>`, `default`, and the rest of the subcommand surface.
 
 ## Design notes
 
 - **Threading.** PipeWire's `pw_main_loop` is not a Qt event loop. Every PipeWire API call must happen on the loop's thread. The library owns one `QThread` named `PipeWireLoop` whose `run()` body calls `pw_main_loop_run` directly (Qt's `exec()` never runs there). Work from the GUI thread reaches the loop via `pw_loop_invoke` (PipeWire's documented MT-safe dispatch); events from the loop bounce back via `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`. Consumers never see a non-GUI-thread signal emission.
 - **Pimpl + public-header purity.** `PipeWireConnection.h`, `PwNode.h`, `PwNodeModel.h`, and `PipeWireHost.h` are libpipewire-free; every `pw_*` and `spa_*` type lives in `src/`. Consumers can `target_link_libraries(... PhosphorServicePipeWire::PhosphorServicePipeWire)` without dragging `libpipewire-0.3` into their own include set.
 - **Linear amplitude on the surface.** `PwNode::volumes` is per-channel linear amplitude `[0.0, 1.0]` (PipeWire's storage format). Cubic / perceptual curves for UI sliders live in a higher layer; round-trips through the lib stay lossless. (U2 resolution.)
-- **No auto-reconnect.** Daemon restarts (driver hotplug, kernel module reload) fire `error(QString)` and flip `connected` to false. The shell decides on a backoff and calls `connect()` again — `PipeWireHost.reconnect()` is the QML one-liner.
+- **No auto-reconnect.** Daemon restarts (driver hotplug, kernel module reload) fire `error(QString)` and flip `connected` to false. The shell decides on a backoff and calls `connect()` again. `PipeWireHost.reconnect()` is the QML one-liner.
 - **WirePlumber default-node switching** goes through the `default` metadata global. Reads track `default.audio.sink` / `default.audio.source` (the runtime defaults); writes target `default.configured.audio.sink` / `default.configured.audio.source` (the persistent setting WirePlumber promotes on the next reconcile). The connection silently no-ops the write if no WirePlumber-managed metadata is present.
 - **Per-listener context for node events.** Each `LoopNode` is passed as the `data` for its own `pw_node_add_listener` registration, so the param/info callbacks can recover both the node id and the owning `Private*` without walking the loop-side hashmap on every event.
 

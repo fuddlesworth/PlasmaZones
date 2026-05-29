@@ -9,6 +9,7 @@
 #include <QLatin1String>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
+#include <QSaveFile>
 #include <QString>
 #include <QVariant>
 
@@ -136,16 +137,25 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
     const auto rendered = render(src, tokens);
     const auto payload = rendered.toUtf8();
 
-    QFile out(outPath);
-    if (!out.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+    // Atomic write: QSaveFile writes to a temp sibling and renames
+    // into place on commit(). A crash mid-write leaves the previous
+    // contents intact at outPath rather than a half-written file. This
+    // matters because consumers often render into live config paths
+    // (e.g. ~/.config/gtk-3.0/gtk.css) where a partial file would
+    // break the user's session.
+    QSaveFile out(outPath);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qWarning().noquote() << "phosphor-theme: cannot write rendered output" << outPath << ", " << out.errorString();
         return false;
     }
     const qint64 written = out.write(payload);
-    out.close();
-    if (written != payload.size() || out.error() != QFileDevice::NoError) {
-        qWarning().noquote() << "phosphor-theme: short write or IO error on rendered output" << outPath << ", "
-                             << out.errorString();
+    if (written != payload.size()) {
+        qWarning().noquote() << "phosphor-theme: short write on rendered output" << outPath << ", " << out.errorString();
+        out.cancelWriting();
+        return false;
+    }
+    if (!out.commit()) {
+        qWarning().noquote() << "phosphor-theme: commit failed on rendered output" << outPath << ", " << out.errorString();
         return false;
     }
     return true;

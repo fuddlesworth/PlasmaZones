@@ -1,45 +1,42 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServicePipeWire/PipeWireConnection.h>
+#include "pipewireconnection_p.h"
 
 #include <PhosphorServicePipeWire/PwNode.h>
 
-#include <QHash>
+#include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QLoggingCategory>
-#include <QSemaphore>
-#include <QThread>
 
-#include <pipewire/extensions/metadata.h>
-#include <pipewire/pipewire.h>
 #include <spa/param/audio/raw.h>
 #include <spa/param/props.h>
-#include <spa/pod/builder.h>
 #include <spa/pod/iter.h>
 #include <spa/pod/parser.h>
 #include <spa/utils/result.h>
 
-#include <atomic>
 #include <mutex>
-#include <unordered_map>
+#include <string_view>
 
 Q_LOGGING_CATEGORY(lcPipeWire, "phosphor.service.pipewire.connection")
 
 namespace PhosphorServicePipeWire {
 
-namespace {
+namespace detail {
 
-/// `pw_init` / `pw_deinit` are process-global and not idempotent. Guard
-/// them with a `call_once` so multiple `PipeWireConnection` instances
-/// (rare but possible in test fixtures) don't double-initialise.
+namespace {
 std::once_flag g_pwInitOnce;
+} // namespace
 
 void ensurePipeWireInit()
 {
     std::call_once(g_pwInitOnce, [] {
         pw_init(nullptr, nullptr);
+        // PwNode* needs to be registered with Qt's metatype system so
+        // QSignalSpy and queued connections can carry it. The
+        // registration is idempotent but takes a global mutex; pin it
+        // to one-time-init alongside pw_init.
+        qRegisterMetaType<PwNode*>("PhosphorServicePipeWire::PwNode*");
     });
 }
 
@@ -64,219 +61,28 @@ QHash<QString, QString> propsFromDict(const struct spa_dict* dict)
     return out;
 }
 
-} // namespace
+} // namespace detail
 
-class PipeWireConnection::Private
+void PipeWireConnection::Private::LoopThread::run()
 {
-public:
-    explicit Private(PipeWireConnection* qPtr)
-        : q(qPtr)
-    {
+    owner->loop = pw_main_loop_new(nullptr);
+    // Signal startup completion to the constructor whether or not the
+    // loop was created. The constructor blocks on this semaphore so the
+    // destructor never races against a worker that hasn't yet reached
+    // pw_main_loop_new.
+    owner->startupReady.release();
+    if (!owner->loop) {
+        qCWarning(lcPipeWire) << "pw_main_loop_new failed; PipeWire integration disabled";
+        return;
     }
-
-    PipeWireConnection* q = nullptr;
-
-    /// Worker thread that runs `pw_main_loop_run`. Qt's QThread default
-    /// `run()` starts a Qt event loop via `exec()`. We can't use it:
-    /// `pw_main_loop_run` blocks for the lifetime of the connection
-    /// and Qt's event loop would never get scheduling time. Subclass
-    /// `QThread` and override `run()` to call `pw_main_loop_run`
-    /// directly; the Qt event loop on this thread is intentionally
-    /// never started.
-    class LoopThread : public QThread
-    {
-    public:
-        explicit LoopThread(Private* owner)
-            : QThread(nullptr)
-            , owner(owner)
-        {
-            setObjectName(QStringLiteral("PipeWireLoop"));
-        }
-
-    protected:
-        void run() override
-        {
-            owner->loop = pw_main_loop_new(nullptr);
-            // Signal startup completion to the constructor whether or
-            // not the loop was created. The constructor blocks on this
-            // semaphore so the destructor never races against a worker
-            // that hasn't yet reached pw_main_loop_new.
-            owner->startupReady.release();
-            if (!owner->loop) {
-                qCWarning(lcPipeWire) << "pw_main_loop_new failed; PipeWire integration disabled";
-                return;
-            }
-            // Blocks until pw_main_loop_quit fires.
-            pw_main_loop_run(owner->loop);
-            // Tear down any remaining loop-owned state on the loop
-            // thread, in the correct order, before exit. doDisconnect
-            // is idempotent.
-            owner->doDisconnect();
-            pw_main_loop_destroy(owner->loop);
-            owner->loop = nullptr;
-        }
-
-    private:
-        Private* owner = nullptr;
-    };
-
-    LoopThread thread{this};
-
-    /// Released by the worker thread once `pw_main_loop_new` has
-    /// either succeeded or failed (so `loop` has its final value).
-    /// The constructor acquires this before returning so the
-    /// destructor never observes the worker mid-startup.
-    QSemaphore startupReady{0};
-
-    // Loop-side state. ONLY accessed from the loop thread.
-    pw_main_loop* loop = nullptr;
-    pw_context* context = nullptr;
-    pw_core* core = nullptr;
-    pw_registry* registry = nullptr;
-    /// WirePlumber's `default` metadata proxy. Bound lazily when the
-    /// registry surfaces a Metadata global whose `metadata.name`
-    /// property equals `"default"`. Null when no session manager is
-    /// present (rare — only a bare PipeWire daemon without
-    /// WirePlumber) or pre-handshake.
-    pw_proxy* defaultMetadata = nullptr;
-    spa_hook coreListener{};
-    spa_hook registryListener{};
-    spa_hook defaultMetadataListener{};
-    int pendingSyncSeq = 0;
-
-    /// Per-node loop-thread state. We hold the pw_proxy for the node
-    /// (for SPA_PARAM_Props enumeration) and the spa_hook for its
-    /// listener wire. Keyed by PipeWire global id. Only touched on
-    /// the loop thread. `owner` is the back-pointer the node-listener
-    /// callbacks use to post results onto the GUI thread; each
-    /// LoopNode is passed as the listener `data` so the callbacks can
-    /// recover both the node id and the Private* in one indirection.
-    struct LoopNode
-    {
-        Private* owner = nullptr;
-        quint32 id = 0;
-        QString mediaClass;
-        pw_proxy* proxy = nullptr;
-        spa_hook nodeListener{};
-    };
-    /// std::unordered_map (not QHash) because QHash requires its value
-    /// type to be copyable for rehashing and std::unique_ptr is move-
-    /// only. The owning-pointer pattern is essential: each LoopNode's
-    /// address is baked into the spa_hook listener wires, so the
-    /// pointer must stay stable for the listener's lifetime.
-    std::unordered_map<quint32, std::unique_ptr<LoopNode>> loopNodes;
-
-    /// GUI-thread state. Authoritative map of typed PwNode QObjects;
-    /// keyed by PipeWire global id. The QObject parent is `q` so the
-    /// nodes are torn down automatically when the connection dies.
-    /// Touched only on the GUI thread.
-    QHash<quint32, PwNode*> guiNodes;
-
-    // Snapshot of state for GUI-thread getters. Updated by the GUI
-    // thread itself via queued cross-thread signals; the atomics let
-    // a property-system getter return the cached value without a
-    // round-trip to the worker thread.
-    std::atomic<bool> connected{false};
-    std::atomic<bool> daemonAvailable{false};
-
-    // String state touched only on the GUI thread (read via the
-    // accessors, written by the GUI-thread setter slots posted from
-    // loop callbacks). No mutex needed.
-    QString defaultSinkName;
-    QString defaultSourceName;
-
-    // Core listener callbacks. Each runs on the loop thread; bounce
-    // state back to the GUI thread via QMetaObject::invokeMethod with
-    // QueuedConnection (which targets the GUI thread, NOT the loop
-    // thread, because q lives on the GUI thread).
-    static void onCoreInfo(void* data, const struct pw_core_info* info);
-    static void onCoreDone(void* data, uint32_t id, int seq);
-    static void onCoreError(void* data, uint32_t id, int seq, int res, const char* message);
-    static const pw_core_events kCoreEvents;
-
-    // Registry callbacks.
-    static void onRegistryGlobal(void* data, uint32_t id, uint32_t permissions, const char* type, uint32_t version,
-                                 const struct spa_dict* props);
-    static void onRegistryGlobalRemove(void* data, uint32_t id);
-    static const pw_registry_events kRegistryEvents;
-
-    // Per-node listener callbacks (loop thread).
-    static void onNodeInfo(void* data, const struct pw_node_info* info);
-    static void onNodeParam(void* data, int seq, uint32_t id, uint32_t index, uint32_t next,
-                            const struct spa_pod* param);
-    static const pw_node_events kNodeEvents;
-
-    // WirePlumber default-metadata listener (loop thread).
-    static int onDefaultMetadataProperty(void* data, uint32_t subject, const char* key, const char* type,
-                                         const char* value);
-    static const pw_metadata_events kDefaultMetadataEvents;
-
-    /// Called on the loop thread. Creates `pw_context` + `pw_core` and
-    /// kicks off the handshake. Idempotent: re-entry while already
-    /// connected is a no-op.
-    void doConnect();
-    /// Called on the loop thread. Tears down `pw_core` + `pw_context`.
-    /// Idempotent.
-    void doDisconnect();
-
-    // Cross-thread dispatch shims. pw_loop_invoke is the documented
-    // mechanism for posting work onto the PipeWire loop thread from
-    // outside; it queues `fn` to run on the loop thread the next time
-    // the loop processes its event queue. The `data` parameter is
-    // ignored here (we pass user_data = this and ignore the typed
-    // payload).
-    static int dispatchConnect(struct spa_loop* loop, bool async, uint32_t seq, const void* data, size_t size,
-                               void* user_data);
-    static int dispatchDisconnect(struct spa_loop* loop, bool async, uint32_t seq, const void* data, size_t size,
-                                  void* user_data);
-
-    /// Loop-thread request carrying a volume + mute write to a single
-    /// node. The non-POD members (QList) are why we heap-allocate the
-    /// struct and pass the pointer through pw_loop_invoke's user_data
-    /// rather than the data payload, which is memcpy'd internally.
-    struct ParamWriteRequest
-    {
-        Private* owner = nullptr;
-        quint32 nodeId = 0;
-        bool writeVolumes = false;
-        bool writeMute = false;
-        QList<qreal> volumes;
-        bool muted = false;
-    };
-    static int dispatchParamWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data, size_t size,
-                                  void* user_data);
-    void doParamWrite(const ParamWriteRequest& req);
-
-    /// Loop-thread default-metadata write. Distinct from the param
-    /// write path because the WirePlumber metadata interface uses
-    /// pw_metadata_set_property rather than pw_node_set_param.
-    struct DefaultWriteRequest
-    {
-        Private* owner = nullptr;
-        QString key;
-        QString nodeName;
-    };
-    static int dispatchDefaultWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data, size_t size,
-                                    void* user_data);
-    void doDefaultWrite(const DefaultWriteRequest& req);
-
-    // GUI-thread setters. Always invoked via queued cross-thread
-    // signals so the NOTIFY emits and atomic writes both happen on
-    // the GUI thread.
-    void setConnected(bool value);
-    void setDaemonAvailable(bool value);
-    void setDefaultSinkName(QString name);
-    void setDefaultSourceName(QString name);
-
-    // GUI-thread handlers, posted from the loop callbacks via
-    // QueuedConnection. These mutate `guiNodes` and emit nodeAdded /
-    // nodeRemoved on q.
-    void guiNodeAdded(quint32 id, QString mediaClass, QHash<QString, QString> props);
-    void guiNodeInfo(quint32 id, QHash<QString, QString> props);
-    void guiNodeProps(quint32 id, int channelCount, QList<qreal> volumes, bool muted);
-    void guiNodeRemoved(quint32 id);
-    void guiNodesReset();
-};
+    // Blocks until pw_main_loop_quit fires.
+    pw_main_loop_run(owner->loop);
+    // Tear down any remaining loop-owned state on the loop thread, in
+    // the correct order, before exit. doDisconnect is idempotent.
+    owner->doDisconnect();
+    pw_main_loop_destroy(owner->loop);
+    owner->loop = nullptr;
+}
 
 const pw_core_events PipeWireConnection::Private::kCoreEvents = {
     .version = PW_VERSION_CORE_EVENTS,
@@ -317,11 +123,7 @@ void PipeWireConnection::Private::onCoreInfo(void* data, const struct pw_core_in
     // fast-failing test can distinguish "no daemon" from "daemon
     // present, handshake mid-flight".
     QMetaObject::invokeMethod(
-        d->q,
-        [d]() {
-            d->setDaemonAvailable(true);
-        },
-        Qt::QueuedConnection);
+        d->q, [d]() { d->setDaemonAvailable(true); }, Qt::QueuedConnection);
 }
 
 void PipeWireConnection::Private::onCoreDone(void* data, uint32_t id, int seq)
@@ -329,13 +131,9 @@ void PipeWireConnection::Private::onCoreDone(void* data, uint32_t id, int seq)
     auto* d = static_cast<Private*>(data);
     if (id != PW_ID_CORE || seq != d->pendingSyncSeq)
         return;
-    qCDebug(lcPipeWire) << "pw_core done seq" << seq << "— handshake complete";
+    qCDebug(lcPipeWire) << "pw_core done seq" << seq << "handshake complete";
     QMetaObject::invokeMethod(
-        d->q,
-        [d]() {
-            d->setConnected(true);
-        },
-        Qt::QueuedConnection);
+        d->q, [d]() { d->setConnected(true); }, Qt::QueuedConnection);
 }
 
 void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, int res, const char* message)
@@ -369,7 +167,7 @@ void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint
     // streams) and Metadata (WirePlumber's `default` for the runtime
     // default audio sink + source).
     if (typeView == PW_TYPE_INTERFACE_Metadata) {
-        const auto metaProps = propsFromDict(props);
+        const auto metaProps = detail::propsFromDict(props);
         if (metaProps.value(QStringLiteral("metadata.name")) != QLatin1String("default"))
             return;
         if (d->defaultMetadata) {
@@ -388,9 +186,9 @@ void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint
     }
     if (typeView != PW_TYPE_INTERFACE_Node)
         return;
-    const auto p = propsFromDict(props);
+    const auto p = detail::propsFromDict(props);
     const QString mediaClass = p.value(QStringLiteral("media.class"));
-    if (!isAudioNodeClass(mediaClass)) {
+    if (!detail::isAudioNodeClass(mediaClass)) {
         qCDebug(lcPipeWire) << "skipping non-audio node" << id << "mediaClass" << mediaClass;
         return;
     }
@@ -412,28 +210,31 @@ void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint
     entry->proxy = proxy;
     LoopNode* entryPtr = entry.get();
     pw_node_add_listener(reinterpret_cast<pw_node*>(proxy), &entryPtr->nodeListener, &kNodeEvents, entryPtr);
-    // Pre-arm SPA_PARAM_Props subscription so the next param event
-    // delivers the current volume + mute. The Props pod streams in
-    // via onNodeParam.
+    // Pre-arm SPA_PARAM_Props: enumerate the current pod, then
+    // subscribe so future updates (external volume changes from
+    // pavucontrol, WirePlumber policy reconciles, hotkey-driven
+    // adjustments) propagate as `param` events. Without the
+    // subscription only the initial enumeration would land; every
+    // out-of-band change would be invisible to the model.
     pw_node_enum_params(reinterpret_cast<pw_node*>(proxy), 0, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
+    uint32_t subscribeIds[] = { SPA_PARAM_Props };
+    pw_node_subscribe_params(reinterpret_cast<pw_node*>(proxy), subscribeIds, 1);
     d->loopNodes.emplace(id, std::move(entry));
 
     QMetaObject::invokeMethod(
-        d->q,
-        [d, id, mediaClass, p]() {
-            d->guiNodeAdded(id, mediaClass, p);
-        },
-        Qt::QueuedConnection);
+        d->q, [d, id, mediaClass, p]() { d->guiNodeAdded(id, mediaClass, p); }, Qt::QueuedConnection);
 }
 
 void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id)
 {
     auto* d = static_cast<Private*>(data);
-    // Same id space covers nodes AND the metadata global, so check
-    // the metadata first.
+    // Same id space covers nodes AND the metadata global. Guard the
+    // metadata check against SPA_ID_INVALID: if the bind hasn't yet
+    // been acknowledged, pw_proxy_get_bound_id returns invalid, and
+    // we'd otherwise misclassify the removal.
     if (d->defaultMetadata) {
         const uint32_t metaId = pw_proxy_get_bound_id(d->defaultMetadata);
-        if (metaId == id) {
+        if (metaId != SPA_ID_INVALID && metaId == id) {
             spa_hook_remove(&d->defaultMetadataListener);
             pw_proxy_destroy(d->defaultMetadata);
             d->defaultMetadata = nullptr;
@@ -457,18 +258,20 @@ void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id
         pw_proxy_destroy(entry->proxy);
     }
     QMetaObject::invokeMethod(
-        d->q,
-        [d, id]() {
-            d->guiNodeRemoved(id);
-        },
-        Qt::QueuedConnection);
+        d->q, [d, id]() { d->guiNodeRemoved(id); }, Qt::QueuedConnection);
 }
 
 int PipeWireConnection::Private::onDefaultMetadataProperty(void* data, uint32_t subject, const char* key,
                                                            const char* type, const char* value)
 {
-    Q_UNUSED(subject);
     Q_UNUSED(type);
+    // WirePlumber's `default` metadata global only carries the system
+    // defaults under subject PW_ID_CORE. Other subjects can legitimately
+    // use the same key names for per-route or per-stream entries;
+    // without this filter, those entries would clobber the cached
+    // default-sink / -source names.
+    if (subject != PW_ID_CORE)
+        return 0;
     if (!key)
         return 0;
     auto* d = static_cast<Private*>(data);
@@ -484,7 +287,7 @@ int PipeWireConnection::Private::onDefaultMetadataProperty(void* data, uint32_t 
     QString nodeName;
     if (value) {
         // WirePlumber stores the value as a Spa:String:JSON object
-        // shaped `{"name": "<node.name>"}`. Parse defensively — a
+        // shaped `{"name": "<node.name>"}`. Parse defensively: a
         // future schema bump could add fields and we should still pick
         // up the name.
         const QJsonDocument doc = QJsonDocument::fromJson(QByteArray(value));
@@ -512,13 +315,9 @@ void PipeWireConnection::Private::onNodeInfo(void* data, const struct pw_node_in
         return;
     auto* d = entry->owner;
     const quint32 id = entry->id;
-    const auto props = propsFromDict(info->props);
+    const auto props = detail::propsFromDict(info->props);
     QMetaObject::invokeMethod(
-        d->q,
-        [d, id, props]() {
-            d->guiNodeInfo(id, props);
-        },
-        Qt::QueuedConnection);
+        d->q, [d, id, props]() { d->guiNodeInfo(id, props); }, Qt::QueuedConnection);
 }
 
 void PipeWireConnection::Private::onNodeParam(void* data, int seq, uint32_t paramId, uint32_t index, uint32_t next,
@@ -567,8 +366,7 @@ void PipeWireConnection::Private::onNodeParam(void* data, int seq, uint32_t para
     }
 
     if (!haveVolumes && !haveMute) {
-        // Pod carried neither field — nothing observable changed for
-        // our purposes. Skip the GUI hop entirely.
+        // Pod carried neither field; nothing observable changed.
         return;
     }
 
@@ -695,101 +493,6 @@ int PipeWireConnection::Private::dispatchConnect(struct spa_loop* loop, bool asy
     return 0;
 }
 
-int PipeWireConnection::Private::dispatchParamWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data,
-                                                    size_t size, void* user_data)
-{
-    Q_UNUSED(loop);
-    Q_UNUSED(async);
-    Q_UNUSED(seq);
-    Q_UNUSED(data);
-    Q_UNUSED(size);
-    // The request was heap-allocated by writeVolumes/writeMuted; take
-    // ownership via unique_ptr so it's released after the handler
-    // returns (even if doParamWrite throws — unlikely in C-bound
-    // code, but the guarantee is cheap).
-    std::unique_ptr<ParamWriteRequest> req(static_cast<ParamWriteRequest*>(user_data));
-    if (req && req->owner)
-        req->owner->doParamWrite(*req);
-    return 0;
-}
-
-int PipeWireConnection::Private::dispatchDefaultWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data,
-                                                      size_t size, void* user_data)
-{
-    Q_UNUSED(loop);
-    Q_UNUSED(async);
-    Q_UNUSED(seq);
-    Q_UNUSED(data);
-    Q_UNUSED(size);
-    std::unique_ptr<DefaultWriteRequest> req(static_cast<DefaultWriteRequest*>(user_data));
-    if (req && req->owner)
-        req->owner->doDefaultWrite(*req);
-    return 0;
-}
-
-void PipeWireConnection::Private::doDefaultWrite(const DefaultWriteRequest& req)
-{
-    if (!defaultMetadata) {
-        qCDebug(lcPipeWire) << "default-write before metadata bind; dropping" << req.key;
-        return;
-    }
-    // WirePlumber stores defaults as Spa:String:JSON values shaped
-    // `{"name": "<node.name>"}`. Build the JSON via QJsonDocument so
-    // the encoding (quoting, escaping) is consistent with the
-    // metadata reader path.
-    QJsonObject obj;
-    obj.insert(QStringLiteral("name"), req.nodeName);
-    const QByteArray payload = QJsonDocument(obj).toJson(QJsonDocument::Compact);
-    pw_metadata_set_property(reinterpret_cast<pw_metadata*>(defaultMetadata), 0, req.key.toUtf8().constData(),
-                             "Spa:String:JSON", payload.constData());
-}
-
-void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
-{
-    auto it = loopNodes.find(req.nodeId);
-    if (it == loopNodes.end() || !it->second || !it->second->proxy) {
-        qCDebug(lcPipeWire) << "param write for unknown / detached node" << req.nodeId;
-        return;
-    }
-    auto* node = reinterpret_cast<pw_node*>(it->second->proxy);
-
-    // Build a Props pod containing only the field(s) we're updating.
-    // The buffer size budget: 1KiB is enough for a single Props
-    // object with up to ~64 channel-volume floats plus the SPA
-    // bookkeeping overhead — SPA_AUDIO_MAX_CHANNELS is 64 today, so
-    // the worst case is well under 512 bytes.
-    uint8_t buffer[1024];
-    spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
-    spa_pod_frame frame;
-    spa_pod_builder_push_object(&b, &frame, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
-    if (req.writeVolumes) {
-        const int n = std::min<int>(req.volumes.size(), SPA_AUDIO_MAX_CHANNELS);
-        if (n > 0) {
-            float values[SPA_AUDIO_MAX_CHANNELS] = {};
-            for (int i = 0; i < n; ++i) {
-                // Clamp to PipeWire's documented [0.0, 1.0] linear
-                // amplitude domain. Values > 1.0 are valid (boosts)
-                // but uncommon; we leave that to the caller and only
-                // refuse negatives so a stray -0 doesn't poison the
-                // pod.
-                values[i] = static_cast<float>(std::max<qreal>(0.0, req.volumes[i]));
-            }
-            spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
-            spa_pod_builder_array(&b, sizeof(float), SPA_TYPE_Float, static_cast<uint32_t>(n), values);
-        }
-    }
-    if (req.writeMute) {
-        spa_pod_builder_prop(&b, SPA_PROP_mute, 0);
-        spa_pod_builder_bool(&b, req.muted);
-    }
-    auto* pod = static_cast<spa_pod*>(spa_pod_builder_pop(&b, &frame));
-    if (!pod) {
-        qCWarning(lcPipeWire) << "spa_pod_builder_pop returned null for node" << req.nodeId;
-        return;
-    }
-    pw_node_set_param(node, SPA_PARAM_Props, 0, pod);
-}
-
 int PipeWireConnection::Private::dispatchDisconnect(struct spa_loop* loop, bool async, uint32_t seq, const void* data,
                                                     size_t size, void* user_data)
 {
@@ -850,14 +553,6 @@ void PipeWireConnection::Private::guiNodeInfo(quint32 id, QHash<QString, QString
     it.value()->applyInfo(std::move(props));
 }
 
-void PipeWireConnection::Private::guiNodeProps(quint32 id, int channelCount, QList<qreal> volumes, bool muted)
-{
-    auto it = guiNodes.find(id);
-    if (it == guiNodes.end())
-        return;
-    it.value()->applyProps(channelCount, std::move(volumes), muted);
-}
-
 void PipeWireConnection::Private::guiNodeRemoved(quint32 id)
 {
     auto it = guiNodes.find(id);
@@ -885,11 +580,7 @@ PipeWireConnection::PipeWireConnection(QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Private>(this))
 {
-    // QSignalSpy / QML queued connections need PwNode* known to Qt's
-    // metatype system. The registration is idempotent so paying for it
-    // in every constructor is fine.
-    qRegisterMetaType<PwNode*>("PhosphorServicePipeWire::PwNode*");
-    ensurePipeWireInit();
+    detail::ensurePipeWireInit();
     d->thread.start();
     // Block until the worker has either created the loop or given up.
     // After this point `d->loop` is stable (either a valid pointer or
@@ -913,6 +604,14 @@ PipeWireConnection::~PipeWireConnection()
         d->thread.terminate();
         d->thread.wait();
     }
+    // The loop thread's final doDisconnect posts QMetaObject::invokeMethod
+    // lambdas to `this` (setConnected(false), guiNodesReset, etc.) via
+    // QueuedConnection. By the time the destructor runs, those events
+    // are sitting in the GUI thread's event queue but `this` and `d` are
+    // about to be destroyed. Drain the queue here: after thread.wait()
+    // returns the worker is gone, so no new posts can race, preventing a
+    // use-after-free when the GUI thread next processes events.
+    QCoreApplication::removePostedEvents(this);
 }
 
 bool PipeWireConnection::isConnected() const
@@ -952,55 +651,6 @@ void PipeWireConnection::disconnect()
     if (!d->thread.isRunning() || !d->loop)
         return;
     pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDisconnect, 0, nullptr, 0, false, d.get());
-}
-
-void PipeWireConnection::writeVolumes(quint32 nodeId, const QList<qreal>& volumes)
-{
-    if (!d->thread.isRunning() || !d->loop)
-        return;
-    auto* req = new Private::ParamWriteRequest;
-    req->owner = d.get();
-    req->nodeId = nodeId;
-    req->writeVolumes = true;
-    req->volumes = volumes;
-    pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false, req);
-}
-
-void PipeWireConnection::writeMuted(quint32 nodeId, bool muted)
-{
-    if (!d->thread.isRunning() || !d->loop)
-        return;
-    auto* req = new Private::ParamWriteRequest;
-    req->owner = d.get();
-    req->nodeId = nodeId;
-    req->writeMute = true;
-    req->muted = muted;
-    pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false, req);
-}
-
-void PipeWireConnection::setDefaultSink(const QString& nodeName)
-{
-    if (!d->thread.isRunning() || !d->loop)
-        return;
-    auto* req = new Private::DefaultWriteRequest;
-    req->owner = d.get();
-    // Write the "configured" key so the choice persists across
-    // restarts; WirePlumber promotes it into the runtime
-    // default.audio.sink on the next reconcile.
-    req->key = QStringLiteral("default.configured.audio.sink");
-    req->nodeName = nodeName;
-    pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false, req);
-}
-
-void PipeWireConnection::setDefaultSource(const QString& nodeName)
-{
-    if (!d->thread.isRunning() || !d->loop)
-        return;
-    auto* req = new Private::DefaultWriteRequest;
-    req->owner = d.get();
-    req->key = QStringLiteral("default.configured.audio.source");
-    req->nodeName = nodeName;
-    pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false, req);
 }
 
 } // namespace PhosphorServicePipeWire

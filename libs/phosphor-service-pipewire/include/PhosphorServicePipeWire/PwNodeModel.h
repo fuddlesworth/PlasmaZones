@@ -89,6 +89,13 @@ Q_SIGNALS:
     void countChanged();
 
 private:
+    /// Tear down all wires + rows, attach to `connection`, and re-seed
+    /// from its current node snapshot. Used by both `setConnection`
+    /// (which then emits `connectionChanged`) and `setMediaClasses`
+    /// (which only emits `mediaClassesChanged`, since the connection
+    /// pointer didn't actually change).
+    void rebuildFromConnection(PipeWireConnection* connection);
+
     class Private;
     std::unique_ptr<Private> d;
 };

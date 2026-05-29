@@ -22,6 +22,37 @@ public:
     QHash<PwNode*, QList<QMetaObject::Connection>> nodeWires;
 };
 
+namespace {
+
+/// Wire a single PwNode to the model: subscribe to info / props
+/// changes so the model emits dataChanged on the matching roles.
+/// Extracted to one helper so the nodeAdded path and the snapshot-
+/// seed path stay in sync — the previous code duplicated 14 lines of
+/// wire-up across both call sites.
+void wireNode(PwNodeModel* model, PwNode* node, QList<PwNode*>& nodes,
+              QHash<PwNode*, QList<QMetaObject::Connection>>& nodeWires)
+{
+    nodeWires[node].append(QObject::connect(node, &PwNode::infoChanged, model, [model, node, &nodes]() {
+        const int r = nodes.indexOf(node);
+        if (r < 0)
+            return;
+        const QModelIndex idx = model->index(r);
+        Q_EMIT model->dataChanged(idx, idx,
+                                  { Qt::DisplayRole, PwNodeModel::NameRole, PwNodeModel::NickRole,
+                                    PwNodeModel::DescriptionRole });
+    }));
+    nodeWires[node].append(QObject::connect(node, &PwNode::propsChanged, model, [model, node, &nodes]() {
+        const int r = nodes.indexOf(node);
+        if (r < 0)
+            return;
+        const QModelIndex idx = model->index(r);
+        Q_EMIT model->dataChanged(idx, idx,
+                                  { PwNodeModel::ChannelCountRole, PwNodeModel::VolumesRole, PwNodeModel::MutedRole });
+    }));
+}
+
+} // namespace
+
 PwNodeModel::PwNodeModel(QObject* parent)
     : QAbstractListModel(parent)
     , d(std::make_unique<Private>())
@@ -45,7 +76,12 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
 {
     if (d->connection == connection)
         return;
+    rebuildFromConnection(connection);
+    Q_EMIT connectionChanged();
+}
 
+void PwNodeModel::rebuildFromConnection(PipeWireConnection* connection)
+{
     // Drop wires + nodes from any previous connection.
     for (const auto& wire : d->connectionWires) {
         QObject::disconnect(wire);
@@ -67,7 +103,7 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
     d->connection = connection;
 
     if (d->connection) {
-        // Hook the new connection. Use a captured raw `this` — we
+        // Hook the new connection. Use a captured raw `this`; we
         // disconnect on teardown and the model is the receiver, so Qt
         // takes care of automatic disconnect on `this`'s destruction.
         d->connectionWires.append(
@@ -77,22 +113,7 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
                 const int row = d->nodes.size();
                 beginInsertRows(QModelIndex(), row, row);
                 d->nodes.append(node);
-                // Subscribe to per-node updates so the model
-                // emits dataChanged when names or volumes move.
-                d->nodeWires[node].append(QObject::connect(node, &PwNode::infoChanged, this, [this, node]() {
-                    const int r = d->nodes.indexOf(node);
-                    if (r < 0)
-                        return;
-                    const QModelIndex idx = index(r);
-                    Q_EMIT dataChanged(idx, idx, {Qt::DisplayRole, NameRole, NickRole, DescriptionRole});
-                }));
-                d->nodeWires[node].append(QObject::connect(node, &PwNode::propsChanged, this, [this, node]() {
-                    const int r = d->nodes.indexOf(node);
-                    if (r < 0)
-                        return;
-                    const QModelIndex idx = index(r);
-                    Q_EMIT dataChanged(idx, idx, {ChannelCountRole, VolumesRole, MutedRole});
-                }));
+                wireNode(this, node, d->nodes, d->nodeWires);
                 endInsertRows();
                 Q_EMIT countChanged();
             }));
@@ -110,7 +131,7 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
                 endRemoveRows();
                 Q_EMIT countChanged();
             }));
-        // Seed from current snapshot — any nodes already surfaced
+        // Seed from current snapshot: any nodes already surfaced
         // before this model attached.
         const auto snapshot = d->connection->nodes();
         QList<PwNode*> matching;
@@ -123,27 +144,12 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
             beginInsertRows(QModelIndex(), 0, matching.size() - 1);
             d->nodes = matching;
             for (auto* node : matching) {
-                d->nodeWires[node].append(QObject::connect(node, &PwNode::infoChanged, this, [this, node]() {
-                    const int r = d->nodes.indexOf(node);
-                    if (r < 0)
-                        return;
-                    const QModelIndex idx = index(r);
-                    Q_EMIT dataChanged(idx, idx, {Qt::DisplayRole, NameRole, NickRole, DescriptionRole});
-                }));
-                d->nodeWires[node].append(QObject::connect(node, &PwNode::propsChanged, this, [this, node]() {
-                    const int r = d->nodes.indexOf(node);
-                    if (r < 0)
-                        return;
-                    const QModelIndex idx = index(r);
-                    Q_EMIT dataChanged(idx, idx, {ChannelCountRole, VolumesRole, MutedRole});
-                }));
+                wireNode(this, node, d->nodes, d->nodeWires);
             }
             endInsertRows();
             Q_EMIT countChanged();
         }
     }
-
-    Q_EMIT connectionChanged();
 }
 
 QStringList PwNodeModel::mediaClasses() const
@@ -157,12 +163,13 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
         return;
     d->mediaClasses = classes;
     // Re-seed from the current connection so the filter change takes
-    // effect immediately. Bouncing through setConnection clears + re-
-    // attaches all the wires and re-walks the snapshot in one place.
+    // effect immediately. Route through rebuildFromConnection
+    // directly so consumers don't see a spurious connectionChanged
+    // (which would re-evaluate every QML binding on `connection`)
+    // when only the filter moved.
     auto* current = d->connection.data();
     if (current) {
-        setConnection(nullptr);
-        setConnection(current);
+        rebuildFromConnection(current);
     }
     Q_EMIT mediaClassesChanged();
 }

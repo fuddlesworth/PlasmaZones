@@ -142,6 +142,22 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
         return false;
     }
 
+    // Drop the watched source so the documented contract holds: after
+    // loadFromJson the palette is sourced from an in-process blob, not
+    // a watched file, and a later on-disk edit on a previously-watched
+    // path must NOT clobber the just-applied tokens. (Header doc on
+    // `sourcePath` says it's empty in this case.)
+    if (!m_watcher->files().isEmpty()) {
+        m_watcher->removePaths(m_watcher->files());
+    }
+    if (!m_watcher->directories().isEmpty()) {
+        m_watcher->removePaths(m_watcher->directories());
+    }
+    if (!m_sourcePath.isEmpty()) {
+        m_sourcePath.clear();
+        Q_EMIT sourcePathChanged();
+    }
+
     applyPalette(parsed);
     return true;
 }

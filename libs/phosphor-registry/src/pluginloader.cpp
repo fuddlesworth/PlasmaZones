@@ -277,14 +277,14 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
         return;
     }
     // Wrap the raw factory in a shared_ptr with a custom deleter
-    // IMMEDIATELY. The factory was allocated via `new` inside the
-    // plugin's TU (linked against the plugin's libstdc++ / new+delete
-    // pair); a raw `delete` from inside the loader's TU on any error
-    // path would invoke the loader's `operator delete`, which may
-    // differ (e.g. plugin built against tcmalloc, loader against
-    // glibc). Routing through this shared_ptr keeps `delete` inside
-    // the plugin's TU on EVERY exit path including the id-mismatch
-    // branch below.
+    // IMMEDIATELY. The deleter lambda is compiled into the loader's TU,
+    // so the `delete p;` call uses the loader's `operator delete`. The
+    // contract is therefore "plugin must allocate the factory with the
+    // SAME operator new the loader sees" — in practice that means both
+    // sides link against the same libstdc++ ABI. This shared_ptr is
+    // about exception-safety + early-exit-path coverage (it runs the
+    // deleter on every code path below, including the id-mismatch
+    // branch), not about isolating cross-TU allocators.
     std::shared_ptr<IBarWidgetFactory> factory(rawFactory, [](IBarWidgetFactory* p) {
         delete p;
     });

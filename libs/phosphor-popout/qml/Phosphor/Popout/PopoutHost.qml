@@ -65,7 +65,7 @@ Item {
     // do not have a direct path to the host because they sit several
     // parent levels deep inside contentFrame. The transport injects
     // a reference to this host on the content so the content can call
-    // popoutHost.dismiss() rather than walk the parent chain.
+    // _popoutHost.dismiss() rather than walk the parent chain.
     function dismiss() {
         open = false;
     }
