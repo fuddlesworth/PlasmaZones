@@ -61,4 +61,4 @@ Repeater {
 
 ## Status
 
-Phase 2.0 extraction from the original `phosphor-services` umbrella. The C++ + QML API is unchanged from its pre-extraction form (`PhosphorServices::Mpris*` → `PhosphorServiceMpris::Mpris*`, `Phosphor.Services` QML module → `Phosphor.Service.Mpris`).
+Phase 2.0: shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings; the umbrella is gone, no backwards-compat shim (per `feedback_no_legacy_shims`). The C++ + QML API is unchanged from its pre-extraction form (`PhosphorServices::Mpris*` → `PhosphorServiceMpris::Mpris*`, `Phosphor.Services` QML module → `Phosphor.Service.Mpris`). See `docs/phosphor-shell-design/04-implementation-plan.md` § 2.0 for the extraction rationale.

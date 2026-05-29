@@ -80,7 +80,7 @@ const QString url = QStringLiteral("image://")
 
 ## Status
 
-Phase 2.0 extraction from the original `phosphor-services` umbrella. URL host renamed from `phosphor-services` to `phosphor-service-icontheme` for consistency with the new library name; consumers of the old URL fail loudly rather than silently fall back. Namespace `PhosphorServices::IconThemeResolver` becomes `PhosphorServiceIconTheme::IconThemeResolver`.
+Phase 2.0: shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings; the umbrella is gone, no backwards-compat shim (per `feedback_no_legacy_shims`). URL host renamed from `phosphor-services` to `phosphor-service-icontheme` for consistency with the new library name; consumers of the old URL fail loudly rather than silently fall back. Namespace `PhosphorServices::IconThemeResolver` → `PhosphorServiceIconTheme::IconThemeResolver`, QML module `Phosphor.Services` → `Phosphor.Service.IconTheme`. See `docs/phosphor-shell-design/04-implementation-plan.md` § 2.0 for the extraction rationale.
 
 ## Current consumers
 
