@@ -12,7 +12,6 @@
 #include <QLoggingCategory>
 #include <QQmlEngine>
 
-#include <memory>
 #include <mutex>
 
 Q_LOGGING_CATEGORY(lcPipeWireQml, "phosphor.service.pipewire.qml")
@@ -74,26 +73,42 @@ void registerQmlTypes()
         // engine, each reload would start a fresh handshake and tear
         // the previous one down — defeating the singleton contract.
         //
-        // Lifetime: a function-static unique_ptr owns the host for the
-        // duration of the process. QML treats the pointer as borrowed
-        // (we deliberately do NOT setParent on the engine, since the
-        // static owns lifetime). The QObject is constructed on first
-        // factory call, which happens after QCoreApplication exists
-        // (guarded at the top of registerQmlTypes), so QObject's
-        // thread-affinity rule is satisfied.
+        // Lifetime: parented to QCoreApplication so the host is
+        // destroyed during app shutdown (children are deleted before
+        // QCoreApplication's own destructor runs), NOT at static-
+        // cleanup time after QGuiApplication has gone. The previous
+        // function-static `unique_ptr<PipeWireHost>` destructed at
+        // process exit, and `~PipeWireConnection` reaches into Qt
+        // internals (signal disconnects, possibly object-deletion
+        // bookkeeping) that have already been torn down by then —
+        // risking a crash on shutdown. Parenting to the app lets Qt
+        // destroy the host on the right side of the shutdown boundary.
+        //
+        // The function-static `hostPtr` caches the raw pointer so
+        // call_once still guarantees one-time construction and the
+        // factory returns the same instance on every call. QML treats
+        // the pointer as borrowed (CppOwnership) — the parent app owns
+        // lifetime.
         qmlRegisterSingletonType<PipeWireHost>(
             kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PipeWireHost", [](QQmlEngine*, QJSEngine*) -> QObject* {
-                // The function-static QObject inherits the calling
-                // thread's affinity on first construction; we assume
-                // the QQmlEngine that triggers this factory lives on
-                // the main thread (which is the documented Phosphor
-                // shell contract — engines are constructed in
-                // PhosphorShell::ShellEngine on the GUI thread).
-                static std::unique_ptr<PipeWireHost> host = std::make_unique<PipeWireHost>();
-                // C++ owns the lifetime via the function-static
-                // unique_ptr; tell QML not to GC it.
-                QQmlEngine::setObjectOwnership(host.get(), QQmlEngine::CppOwnership);
-                return host.get();
+                // The QObject inherits the calling thread's affinity
+                // on first construction; we assume the QQmlEngine that
+                // triggers this factory lives on the main thread
+                // (which is the documented Phosphor shell contract —
+                // engines are constructed in PhosphorShell::ShellEngine
+                // on the GUI thread).
+                static PipeWireHost* hostPtr = nullptr;
+                static std::once_flag hostOnce;
+                std::call_once(hostOnce, [] {
+                    hostPtr = new PipeWireHost();
+                    // Parent to the app so Qt destroys the host
+                    // during app shutdown (before QCoreApplication's
+                    // own dtor), not at static-cleanup time when Qt
+                    // internals are gone.
+                    hostPtr->setParent(QCoreApplication::instance());
+                    QQmlEngine::setObjectOwnership(hostPtr, QQmlEngine::CppOwnership);
+                });
+                return hostPtr;
             });
     });
 }

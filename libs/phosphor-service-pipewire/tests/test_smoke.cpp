@@ -85,9 +85,7 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("destruction took %1ms (expected < 2000ms)").arg(elapsedMs)));
     }
 
-    /// `nodes()` returns an empty list pre-connectToDaemon. The list type is
-    /// QList<PwNode*> by value (snapshot semantics) — verify nothing
-    /// throws and the result is the expected shape.
+    /// `nodes()` returns an empty list pre-connectToDaemon.
     void nodesEmptyBeforeConnect()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
@@ -301,7 +299,7 @@ private Q_SLOTS:
                 // so the test's actual contract (the known-good write
                 // echoes) isn't dragged down by cleanup flakiness.
                 if (propsSpy.count() <= beforeRestore) {
-                    qWarning("restore write produced no propsChanged echo (cleanup may have left dirty state)");
+                    QWARN("restore write produced no propsChanged echo (cleanup may have left dirty state)");
                 }
             }
             // No sink available (rare: a connected daemon with zero
@@ -427,8 +425,8 @@ private Q_SLOTS:
     /// post-handshake survival, NOT a daemon-side empty-defaults
     /// assertion. The populated-default path lives in
     /// `defaultSinkNameSurfacesFromWirePlumber`. CLI sentinel handling
-    /// (resolveTarget) is the CLI's own responsibility and is covered
-    /// by the CLI tests.
+    /// (resolveTarget) is the CLI's own responsibility and the CLI
+    /// rejects them up-front in cmdSetDefault.
     void connectionSurvivesPostHandshake()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;

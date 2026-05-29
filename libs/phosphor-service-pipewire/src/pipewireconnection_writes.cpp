@@ -110,12 +110,15 @@ void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
 
     // Build a Props pod containing only the field(s) we're updating.
     // The buffer size budget: 1KiB is enough for a single Props
-    // object with up to ~64 channel-volume floats plus the SPA
-    // bookkeeping overhead. SPA_AUDIO_MAX_CHANNELS is 64 today, so
-    // the worst case is well under 512 bytes. Pin that arithmetic at
-    // compile time so a future SPA bump can't silently overflow the
-    // stack buffer.
-    static_assert(SPA_AUDIO_MAX_CHANNELS * sizeof(float) + 128 <= 1024,
+    // object with up to SPA_AUDIO_MAX_CHANNELS channel-volume floats
+    // (the array dominates the size) plus a bounded constant for the
+    // SPA bookkeeping overhead (object header, the channelVolumes
+    // property header, and the optional mute property header — all
+    // three are fixed-size and fit comfortably in a 256-byte slack
+    // budget). SPA_AUDIO_MAX_CHANNELS is 64 today, so the worst case
+    // is well under 768 bytes. Pin that arithmetic at compile time so
+    // a future SPA bump can't silently overflow the stack buffer.
+    static_assert(SPA_AUDIO_MAX_CHANNELS * sizeof(float) + 256 <= 1024,
                   "raise pod buffer: SPA_AUDIO_MAX_CHANNELS grew");
     uint8_t buffer[1024];
     spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
@@ -195,13 +198,21 @@ void PipeWireConnection::setDefaultSource(const QString& nodeName)
     d->submitLoopRequest(std::move(req), &Private::dispatchDefaultWrite, "setDefaultSource");
 }
 
-// Explicit instantiations reserved for future out-of-TU callers; not
-// required for current call sites (writeVolumes / writeMuted /
-// setDefaultSink / setDefaultSource all live in this TU, so the
-// compiler instantiates submitLoopRequest implicitly when it sees the
-// definition above used by them). Kept so a later refactor that moves
-// a caller into a different TU doesn't silently miss the instantiation
-// and surface as a link error.
+// Forward-compatibility instantiations only. Every current caller
+// (writeVolumes / writeMuted / setDefaultSink / setDefaultSource)
+// lives in this TU, so the compiler already instantiates
+// submitLoopRequest implicitly for ParamWriteRequest and
+// DefaultWriteRequest from the call sites above; these explicit
+// instantiations are functionally dead code today.
+//
+// They are kept (not deleted) so a later refactor that moves a caller
+// into a different TU — e.g. splitting writeVolumes/writeMuted out
+// into a dedicated nodewrite TU — surfaces the now-needed
+// instantiation as already-present here rather than as a confusing
+// undefined-reference link error. Cost: two emitted symbol bodies;
+// benefit: a refactor-time landmine defused. If a future cleanup
+// audits truly-dead-code aggressively, drop these and accept that the
+// refactorer will get a link error pointing them at this file.
 template bool PipeWireConnection::Private::submitLoopRequest<PipeWireConnection::Private::ParamWriteRequest>(
     std::unique_ptr<PipeWireConnection::Private::ParamWriteRequest>,
     int (*)(struct spa_loop*, bool, uint32_t, const void*, size_t, void*), const char*);

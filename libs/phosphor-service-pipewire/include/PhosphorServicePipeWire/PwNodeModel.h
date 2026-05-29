@@ -88,19 +88,23 @@ public Q_SLOTS:
     /// `nodeAdded` / `nodeRemoved` so subsequent registry events keep
     /// the model live. Idempotent: passing the current connection
     /// pointer is a no-op (no signals fire, no rows churn). The
-    /// `connectionChanged` notification is emitted BEFORE the rebuild
-    /// so any QML binding watching `connection` sees the new pointer
-    /// before any `countChanged` / row events for the new connection's
-    /// nodes — this preserves the invariant that the model's rows
-    /// always describe its current `connection` property.
+    /// `connectionChanged` notification is emitted AFTER the rebuild
+    /// completes so any QML binding awakened by the signal observes a
+    /// consistent state: `connection()` returns the new pointer AND
+    /// the model's rows already describe it. This preserves the
+    /// invariant that the model's rows always describe its current
+    /// `connection` property — emitting before the rebuild would
+    /// briefly expose "new connection but stale rows" to observers.
     void setConnection(PipeWireConnection* connection);
     /// Replace the media-class filter set. Tears down every existing
     /// row and re-seeds from the current connection's snapshot through
     /// the new filter; if no connection is attached, just records the
     /// filter for the next `setConnection(non-null)` call. Idempotent
     /// on the current filter list (no signals, no rebuild). The
-    /// `mediaClassesChanged` notification is emitted BEFORE the
-    /// rebuild for the same row-invariant reason as `setConnection`.
+    /// `mediaClassesChanged` notification is emitted AFTER the rebuild
+    /// for the same row-invariant reason as `setConnection` — bindings
+    /// awakened by the signal see `mediaClasses()` returning the new
+    /// list AND the rows already filtered to match.
     void setMediaClasses(const QStringList& classes);
 
 Q_SIGNALS:
@@ -116,6 +120,18 @@ private:
     // and emit our `countChanged` signal from inside the rebuild path,
     // without forcing the rebuild logic to live on PwNodeModel itself.
     friend class Private;
+    // Pinned subclasses (PwSinkModel / PwSourceModel / PwStreamModel)
+    // seed the media-class filter directly into `d` from their
+    // constructors rather than calling the public `setMediaClasses`
+    // slot. At construction the model is empty (no connection, no
+    // rows), so there's nothing for `setMediaClasses` to rebuild —
+    // and emitting `mediaClassesChanged` from a constructor would
+    // wake any binding before the subclass is fully constructed.
+    // Direct assignment via friendship keeps the seeding contained
+    // without exposing a public mutator that bypasses the rebuild.
+    friend class PwSinkModel;
+    friend class PwSourceModel;
+    friend class PwStreamModel;
     std::unique_ptr<Private> d;
 };
 

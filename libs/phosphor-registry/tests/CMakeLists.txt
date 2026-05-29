@@ -51,6 +51,25 @@ function(phosphorregistry_add_fake_plugin target sourceDir source linkQt)
     # version bump.
     set(manifestIn "${CMAKE_CURRENT_SOURCE_DIR}/${sourceDir}/manifest.json.in")
     if(EXISTS "${manifestIn}")
+        # Guard against a templated manifest that forgot to reference
+        # the abi-version variable: the configure_file call would
+        # happily produce a stale literal and the drift would only
+        # surface at test runtime as a confusing abi mismatch. Read
+        # the source and fail configure if the placeholder is missing.
+        file(READ "${manifestIn}" _manifestInContents)
+        string(FIND "${_manifestInContents}"
+                    "@PHOSPHOR_PLUGIN_ABI_VERSION@"
+                    _manifestAbiIdx)
+        if(_manifestAbiIdx EQUAL -1)
+            message(FATAL_ERROR
+                "Manifest template ${manifestIn} does not reference "
+                "@PHOSPHOR_PLUGIN_ABI_VERSION@. The abi value would "
+                "drift from PhosphorRegistry::PluginAbiVersion on the "
+                "next bump. Either reference the variable or stop "
+                "templating this manifest.")
+        endif()
+        unset(_manifestInContents)
+        unset(_manifestAbiIdx)
         configure_file(${manifestIn}
                        ${CMAKE_CURRENT_BINARY_DIR}/${target}/manifest.json @ONLY)
     endif()
@@ -95,6 +114,12 @@ endfunction()
 phosphorregistry_add_test(test_phosphor_registry)
 phosphorregistry_add_test(test_phosphor_registry_manifest)
 phosphorregistry_add_test(test_phosphor_registry_pluginloader)
+# test_phosphor_registry_pluginloader_lifecycle holds the rescan-
+# reentry + destructor-pin slots, split out of the primary
+# pluginloader test TU to keep both files under the project's 800-line
+# cap. Both share tests/test_pluginloader_helpers.h for the
+# WarningCapture + plugin-fixture install scaffolding.
+phosphorregistry_add_test(test_phosphor_registry_pluginloader_lifecycle)
 
 # QT_FATAL_WARNINGS is NOT set at the process level here. A process-
 # wide promotion of qWarning() to abort() conflicts with
@@ -107,22 +132,32 @@ phosphorregistry_add_test(test_phosphor_registry_pluginloader)
 # a per-test message handler to enforce the "no qWarning fires"
 # contract locally instead. See those tests' implementations.
 
-# Plugin-loader test consumes the five MODULE fixtures via per-fixture
+# Plugin-loader tests consume the five MODULE fixtures via per-fixture
 # compile definitions + an explicit build-time dependency. Other test
 # binaries don't get the macros (they don't load .so files) so the
 # define surface stays minimal and parallel builds don't accidentally
 # run a test before its fixtures exist.
-target_compile_definitions(test_phosphor_registry_pluginloader
-    PRIVATE
-        PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin"
-        PHOSPHOR_REGISTRY_FAKE_PLUGIN_SECONDARY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_secondary"
-        PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_idmismatch"
-        PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_nullfactory"
-        PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_noentry"
-)
-add_dependencies(test_phosphor_registry_pluginloader
-    phosphor_registry_test_fake_plugin
-    phosphor_registry_test_fake_plugin_secondary
-    phosphor_registry_test_fake_plugin_idmismatch
-    phosphor_registry_test_fake_plugin_nullfactory
-    phosphor_registry_test_fake_plugin_noentry)
+#
+# Both the primary pluginloader TU and the lifecycle TU need the full
+# macro set + fixture dependency. Wrap the wiring once so adding a
+# third pluginloader TU in the future is one line; otherwise the macro
+# list silently drifts between binaries.
+function(phosphorregistry_wire_pluginloader_fixtures target)
+    target_compile_definitions(${target}
+        PRIVATE
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin"
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_SECONDARY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_secondary"
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_idmismatch"
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_nullfactory"
+            PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR="${CMAKE_CURRENT_BINARY_DIR}/phosphor_registry_test_fake_plugin_noentry"
+    )
+    add_dependencies(${target}
+        phosphor_registry_test_fake_plugin
+        phosphor_registry_test_fake_plugin_secondary
+        phosphor_registry_test_fake_plugin_idmismatch
+        phosphor_registry_test_fake_plugin_nullfactory
+        phosphor_registry_test_fake_plugin_noentry)
+endfunction()
+
+phosphorregistry_wire_pluginloader_fixtures(test_phosphor_registry_pluginloader)
+phosphorregistry_wire_pluginloader_fixtures(test_phosphor_registry_pluginloader_lifecycle)

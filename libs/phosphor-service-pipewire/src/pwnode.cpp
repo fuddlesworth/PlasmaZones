@@ -89,6 +89,13 @@ void PwNode::applyInfo(QHash<QString, QString> props)
     // (`device.description`) when the PW-native key is absent so
     // upstream apps that haven't migrated still get a usable label.
     const QString newName = props.value(QStringLiteral("node.name"));
+    // No Pulse-equivalent fallback for nick — PipeWire-native field;
+    // PulseAudio surfaces a short user-facing label via
+    // `device.description`, which we already use as the description
+    // fallback, and there's no separate "nick" concept on the Pulse
+    // side to map back through. Leaving nick empty lets the display-
+    // role fallback (nick → description → name) pick up the Pulse
+    // description correctly.
     const QString newNick = props.value(QStringLiteral("node.nick"));
     const QString newDescription =
         props.value(QStringLiteral("node.description"), props.value(QStringLiteral("device.description")));

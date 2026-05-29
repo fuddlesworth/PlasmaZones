@@ -430,6 +430,16 @@ add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace manage
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 
+# Canonical list of engine library target names. Consumed by the
+# engine QML firewall below; declared here next to the engine
+# subdirs so the list moves with the targets it gates.
+set(PHOSPHOR_ENGINE_TARGETS
+    PhosphorZones
+    PhosphorSnapEngine
+    PhosphorTileEngine
+    PhosphorEngine
+)
+
 # ─── Engine QML firewall ─────────────────────────────────────────────────────
 #
 # Engine libraries hold authoritative placement/snap/zone state and must
@@ -444,7 +454,7 @@ add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 # Refuse to configure if any engine target ever picks up a Qml/Quick
 # link. Cheap guardrail; failures here mean someone added a dependency
 # that drags Qml in transitively or wired a target up wrong.
-foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine PhosphorEngine)
+foreach(_pz_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
     if(TARGET ${_pz_engine_lib})
         get_target_property(_pz_engine_links ${_pz_engine_lib} LINK_LIBRARIES)
         if(_pz_engine_links)
@@ -761,40 +771,4 @@ feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                      OPTIONAL_PACKAGES_FOUND OPTIONAL_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CPack: source tarball generation (`cpack --config CPackSourceConfig.cmake`
-# or `make package_source`). Distro builds in release.yml still hand-roll
-# tarballs for filename-control reasons; this exists so a release engineer
-# can also bootstrap a tarball locally without the workflow.
-# ═══════════════════════════════════════════════════════════════════════════════
-set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_VENDOR "fuddlesworth")
-set(CPACK_PACKAGE_CONTACT "fuddlesworth <fuddlesworth@users.noreply.github.com>")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Window tiling and autotiling for KDE Plasma")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-set(CPACK_SOURCE_GENERATOR "TXZ;TGZ")
-set(CPACK_SOURCE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}")
-set(CPACK_SOURCE_IGNORE_FILES
-    "/\\\\.git/"
-    "/\\\\.github/"
-    "/\\\\.claude/"
-    "/\\\\.zed/"
-    "/\\\\.ccache/"
-    "/build/"
-    "/build-.*/"
-    "/install/"
-    "/dist/"
-    "/node_modules/"
-    "/\\\\.cache/"
-    "/\\\\.idea/"
-    "/\\\\.vscode/"
-    "/\\\\.DS_Store"
-    "/CMakeUserPresets\\\\.json$"
-    "/CMakeLists\\\\.txt\\\\.user"
-    "/compile_commands\\\\.json$"
-    "\\\\.qm$"
-    "\\\\.swp$"
-    "~$"
-)
-include(CPack)
+include(cmake/PhosphorCPack.cmake)

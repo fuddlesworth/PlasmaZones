@@ -190,12 +190,15 @@ install(FILES
 # Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
-if(CMAKE_PROJECT_NAME STREQUAL "PhosphorRegistry" OR BUILD_TESTING)
-    # enable_testing() is a no-op when KDECMakeSettings already
-    # included CTest at the top level. The redundant call lets a
-    # standalone build of this subproject still discover ctest.
-    enable_testing()
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
-        add_subdirectory(tests)
-    endif()
+# Shared standalone-or-tests gate. Lives in the repo's cmake/ helpers so
+# every phosphor library can drop the boilerplate. The relative path
+# resolves under both an in-tree configure (root CMakeLists.txt drives
+# us) and a standalone configure of this subproject (the lib's own
+# project() takes effect; the helper still resolves via the two-level-
+# up cmake/ dir in the repo checkout). EXISTS-guarded so a tarball
+# missing the helper still builds the library itself (just without the
+# tests gate).
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../cmake/PhosphorLibTesting.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/PhosphorLibTesting.cmake)
+    phosphor_lib_enable_tests(PhosphorRegistry)
 endif()

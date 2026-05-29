@@ -19,7 +19,8 @@ function(_phosphorservicepipewire_test target source)
 endfunction()
 
 # Smoke test: connection lifecycle without a guaranteed PipeWire daemon
-# on the CI runner. The test exercises the QThread + loop teardown path
-# and the idempotency contract; live-daemon coverage is its own follow-
-# up once a `pw-fixture` test fixture lands.
+# on the CI runner. The test exercises the QThread + loop teardown path,
+# the idempotency contract, and the rest of the public surface; per
+# docs/phosphor-shell-design/04-implementation-plan.md § 2.1 milestone 9,
+# this is the canonical contract coverage for the lib.
 _phosphorservicepipewire_test(test_phosphorservicepipewire_smoke test_smoke.cpp)

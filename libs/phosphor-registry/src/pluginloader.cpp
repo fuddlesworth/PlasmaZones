@@ -26,13 +26,13 @@ namespace PhosphorRegistry {
 //
 // In-place .so REPLACEMENT (writing new bytes to the same path) is
 // NOT a supported hot-reload path in Phase 1.3. The reason: POSIX
-// dlopen refcounts loads by path. After scheduleUnload pins the old
-// QLibrary, a subsequent QLibrary::load() on the same path returns
-// the same mapping — so an "mtime changed" loop would re-register
-// the OLD code, not the new bytes. Supported hot-reload is
-// add/remove of plugin DIRECTORIES (or rename + re-add), not
-// in-place .so writes. Plugin authors iterating in development can
-// rename their plugin directory or restart the demo.
+// dlopen refcounts loads by path. After the unload path pins the
+// old QLibrary in m_pinnedLibraries, a subsequent QLibrary::load()
+// on the same path returns the same mapping — so an "mtime changed"
+// loop would re-register the OLD code, not the new bytes. Supported
+// hot-reload is add/remove of plugin DIRECTORIES (or rename + re-add),
+// not in-place .so writes. Plugin authors iterating in development
+// can rename their plugin directory or restart the demo.
 //
 // Phase 5's sandbox work will revisit with a versioned-path scheme
 // (copy the .so to .so.<hash> before loading) so in-place edits can
@@ -93,9 +93,8 @@ PluginLoader::~PluginLoader()
     // wired to it (e.g. the demo controller) is fully entitled to
     // mutate Registry / PluginLoader state in response. Iterating
     // m_plugins directly while signals can rebound into us is a
-    // QHash-iterator-invalidation hazard. m_registry is non-null by
-    // construction (qFatal in the ctor on null), so no runtime guard
-    // here — caller-lifetime is the contract.
+    // QHash-iterator-invalidation hazard. (m_registry assumed non-
+    // null — see the class invariant on the field.)
     const QList<QString> ids = m_plugins.keys();
     for (const QString& id : ids) {
         m_registry->unregisterFactory(id);
@@ -186,17 +185,9 @@ bool PluginLoader::ensurePluginRootExists() const
     // acceptable trade since the shell only constructs one
     // PluginLoader per session in practice.
     //
-    // Thread-safety: this set is intentionally NOT guarded by a
-    // mutex. The PluginLoader contract (documented on the class) is
-    // GUI-thread-only: ensurePluginRootExists is called only from
-    // performScanCycle (via the watcher's rescan tick) and from
-    // scanAndLoad, both of which are on the GUI thread. A
-    // multi-thread caller would violate the class contract before
-    // it racily mutated this set; a lock here would mask that misuse
-    // rather than catch it. If a future refactor moves any
-    // PluginLoader operation off the GUI thread, this set MUST be
-    // promoted to a QMutex-guarded structure and the class contract
-    // docs MUST be updated in lockstep.
+    // Thread-safety: unguarded — PluginLoader is GUI-thread-only per
+    // the class contract. Promote to a QMutex-guarded set and update
+    // the class docs in lockstep if any caller ever moves off-thread.
 
     QDir dir(m_pluginRoot);
     if (dir.exists()) {
@@ -363,24 +354,22 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
         library->unload();
         return;
     }
-    IBarWidgetFactory* rawFactory = entryFn();
-    if (!rawFactory) {
+    // Wrap entryFn()'s raw pointer into the shared_ptr ON THE SAME
+    // statement so an exception escaping the deleter binding never
+    // strands the allocation. The deleter lambda is compiled into the
+    // loader's TU so `delete p;` runs against the loader's
+    // `operator delete` — the plugin must allocate the factory with
+    // the SAME libstdc++ ABI the loader sees. The shared_ptr also
+    // gives every early-exit branch below automatic cleanup without a
+    // per-branch raw `delete`.
+    std::shared_ptr<IBarWidgetFactory> factory(entryFn(), [](IBarWidgetFactory* p) {
+        delete p;
+    });
+    if (!factory) {
         qWarning().noquote() << "PluginLoader: entry point returned null for" << libraryPath;
         library->unload();
         return;
     }
-    // Wrap the raw factory in a shared_ptr with a custom deleter
-    // IMMEDIATELY. The deleter lambda is compiled into the loader's TU,
-    // so the `delete p;` call uses the loader's `operator delete`. The
-    // contract is therefore "plugin must allocate the factory with the
-    // SAME operator new the loader sees" — in practice that means both
-    // sides link against the same libstdc++ ABI. This shared_ptr is
-    // about exception-safety + early-exit-path coverage (it runs the
-    // deleter on every code path below, including the id-mismatch
-    // branch), not about isolating cross-TU allocators.
-    std::shared_ptr<IBarWidgetFactory> factory(rawFactory, [](IBarWidgetFactory* p) {
-        delete p;
-    });
     if (factory->id() != manifest.id) {
         // Anchor the warning to the .so path so a triager scanning a
         // log full of plugin failures can correlate factory-id
@@ -401,8 +390,6 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
 
     const QString pluginId = manifest.id;
     m_plugins.insert(pluginId, entryRecord);
-    // m_registry is non-null by construction (qFatal in the ctor on
-    // null), so no runtime guard — caller-lifetime is the contract.
     m_registry->registerFactory(factory);
 
     Q_EMIT pluginLoaded(pluginId);

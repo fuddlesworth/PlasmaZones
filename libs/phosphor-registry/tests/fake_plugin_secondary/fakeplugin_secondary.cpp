@@ -37,9 +37,7 @@ public:
     }
     [[nodiscard]] QQuickItem* createWidget(QQmlEngine* /*engine*/, QObject* parent) override
     {
-        // Mirror the primary fake plugin's parent handling so future
-        // tests that DO build widgets from this fixture get the same
-        // shape they would from the primary.
+        // Parent handling mirrors fake_plugin/fakeplugin.cpp.
         auto* parentItem = qobject_cast<QQuickItem*>(parent);
         auto* item = new QQuickItem(parentItem);
         if (parent && !parentItem) {

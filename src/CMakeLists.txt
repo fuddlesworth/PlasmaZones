@@ -489,8 +489,8 @@ if(BUILD_PHOSPHOR_SHELL)
     target_link_libraries(phosphor-shell
         PRIVATE
             PhosphorShell::PhosphorShell
-            PhosphorServiceSni::PhosphorServiceSni
             PhosphorServiceIconTheme::PhosphorServiceIconTheme
+            PhosphorServiceSni::PhosphorServiceSni
             PhosphorServiceUPower::PhosphorServiceUPower
             PhosphorServiceMpris::PhosphorServiceMpris
             PhosphorServicePipeWire::PhosphorServicePipeWire

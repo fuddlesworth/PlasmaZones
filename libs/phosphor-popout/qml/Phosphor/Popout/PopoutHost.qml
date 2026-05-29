@@ -23,11 +23,14 @@ Item {
 
     // The popout's content. The host accepts either a pre-built Item
     // which the host reparents, or a Component the host instantiates
-    // inline. One of the two must be set. The host takes parenting
-    // ownership of any Item assigned to contentItem. Reassigning
-    // contentItem orphans the previous value (parent set to null),
-    // not restored to its prior parent. Callers handing in a pre-built
-    // Item should expect to give up its parenting.
+    // inline. One of the two must be set; the host warns on
+    // Component.onCompleted if neither is provided (a misconfigured
+    // host renders nothing, which is otherwise silent in QML). The
+    // host takes parenting ownership of any Item assigned to
+    // contentItem. Reassigning contentItem orphans the previous value
+    // (parent set to null), not restored to its prior parent. Callers
+    // handing in a pre-built Item should expect to give up its
+    // parenting.
     property Component contentComponent: null
     property Item contentItem: null
     // Open state. Driving this from false to true plays the open
@@ -41,7 +44,13 @@ Item {
     property bool dismissOnClickOutside: true
     // Background dim. The transport binds this. Cooperative popouts
     // may want a translucent dim. Modal popouts want an opaque scrim.
-    // Detached popouts want transparent.
+    // Detached popouts want transparent. The literal "transparent"
+    // default is the sentinel for "no dim, no scrim" - the backdrop
+    // Rectangle below treats this (alpha == 0) as "do not draw" and
+    // skips its child MouseArea hit-tests unless dismissOnClickOutside
+    // is also set. Keep the string literal: Qt's color converter
+    // normalises "transparent" to a zero-alpha QColor, matching the
+    // backdropShown check.
     property color backdropColor: "transparent"
 
     // Internal: duration token shared by the content frame's
@@ -114,7 +123,16 @@ Item {
     // Component.onCompleted covers the case where contentItem was
     // assigned before the host finished construction.
     onContentItemChanged: contentFrame.rebindContentItem()
-    Component.onCompleted: contentFrame.rebindContentItem()
+    Component.onCompleted: {
+        contentFrame.rebindContentItem();
+        // Diagnostic: a host with neither contentItem nor
+        // contentComponent renders an empty frame, which is silent in
+        // QML and confusing in practice. Warn once at construction so
+        // a missed transport assignment surfaces in the log rather
+        // than as a missing UI.
+        if (root.contentItem === null && root.contentComponent === null)
+            console.warn("PopoutHost: neither contentItem nor contentComponent set; the host will render empty");
+    }
     // If the host is destroyed mid-cycle (open was set true but the
     // close-animation timer hasn't emitted dismissed yet), fire
     // dismissed here so the transport's bookkeeping never leaks a
@@ -125,8 +143,11 @@ Item {
     // This is the last signal this host will ever emit: the QObject
     // is mid-destruction. Transport callers handling dismissed here
     // MUST NOT re-enter the host (calling dismiss(), reading
-    // properties, or rebinding contentItem will operate on a partially
-    // torn-down object). Treat the handler as bookkeeping-only.
+    // properties, rebinding contentItem, OR reading child items such
+    // as contentFrame / _visibleDelegate / backdrop will operate on a
+    // partially torn-down object - QML's child destruction order is
+    // not guaranteed to outlive this handler). Treat the handler as
+    // bookkeeping-only.
     Component.onDestruction: {
         if (dismissLatch.everOpened && !dismissLatch.dismissedFired) {
             dismissEmitter.stop();
@@ -174,18 +195,32 @@ Item {
         anchors.fill: parent
         color: root.backdropColor
         opacity: root.open ? 1 : 0
-        visible: backdropShown && opacity > 0
+        // Bind visible to discrete cycle state (open OR a pending
+        // close-animation), not to opacity > 0. The opacity binding
+        // re-fires every animation frame, and a `visible: opacity > 0`
+        // dependency would re-evaluate visible on every step too.
+        // dismissEmitter.running covers the fade-out window between
+        // open=false and the close-animation completion.
+        visible: backdropShown && (root.open || dismissEmitter.running)
 
         MouseArea {
             anchors.fill: parent
             // Gate hit-tests on the original boolean expression
-            // (backdropShown + open), NOT on the parent's opacity-
-            // sensitive `visible`. A backdrop mid-fade-out has
+            // (open + dismissOnClickOutside), NOT on the parent's
+            // opacity-sensitive `visible`. A backdrop mid-fade-out has
             // visible=true but `open=false`, and accepting clicks then
             // would double-fire dismiss (or fire dismiss on an
-            // already-dismissing popout).
-            enabled: backdrop.backdropShown && root.dismissOnClickOutside && root.open
-            onClicked: root.open = false
+            // already-dismissing popout). backdropShown is redundant
+            // here: dismissOnClickOutside == true implies
+            // backdropShown == true (see the readonly above), so the
+            // two-term gate is equivalent and clearer.
+            enabled: root.dismissOnClickOutside && root.open
+            // Route via dismiss() rather than setting open=false
+            // directly so any future logic added to dismiss() (focus
+            // restore, transport callback, telemetry) applies to the
+            // click-outside path too.
+            onClicked: root.dismiss()
+            Accessible.name: qsTr("Dismiss popout")
         }
 
         Behavior on opacity {
@@ -213,8 +248,23 @@ Item {
         readonly property Item _visibleDelegate: root.contentItem ?? contentLoader.item
 
         function rebindContentItem() {
-            if (_lastBound && _lastBound !== root.contentItem)
-                _lastBound.parent = null;
+            // Only orphan _lastBound if it is still parented under
+            // contentFrame. A Loader-instantiated previous item
+            // (contentComponent path) is owned by the Loader; setting
+            // its parent to null here would detach a child the Loader
+            // is about to destroy on its own, which is at best a
+            // redundant write and at worst a transient double-parent
+            // shuffle during the swap. Warn if we are dropping a
+            // non-null prior bind without a replacement: a contentItem
+            // -> null assignment silently orphans the existing item,
+            // which is occasionally intentional (transport tear-down)
+            // but more often a contract slip.
+            if (_lastBound && _lastBound !== root.contentItem) {
+                if (_lastBound.parent === contentFrame)
+                    _lastBound.parent = null;
+                if (!root.contentItem)
+                    console.warn("PopoutHost.rebindContentItem: contentItem set to null while a previous item was bound; detaching without successor");
+            }
 
             if (root.contentItem) {
                 // Contract: the host takes parenting ownership of any
@@ -241,6 +291,17 @@ Item {
         // Bind to the visible delegate's intrinsic size. childrenRect
         // would include invisible children, and a preloaded but
         // hidden contentItem would inflate the frame.
+        //
+        // contentFrame can momentarily collapse to 0x0 during Loader
+        // spin-up (between Loader.active flipping true and the
+        // instantiated item reporting its implicit size). The opacity
+        // Behavior masks this for the user (frame is invisible while
+        // open=false), and the next binding evaluation - once the
+        // delegate's implicitWidth/Height settle - inflates the frame
+        // before opacity reaches 1. Holding open until implicitWidth
+        // > 0 would require an extra state machine and trade one
+        // hidden transient for another; the opacity-gated transient
+        // is preferable.
         width: _visibleDelegate ? _visibleDelegate.implicitWidth : 0
         height: _visibleDelegate ? _visibleDelegate.implicitHeight : 0
         opacity: root.open ? 1 : 0
@@ -255,6 +316,12 @@ Item {
         // propagate through to inner MouseAreas in the content.
         MouseArea {
             anchors.fill: parent
+            // preventStealing is inert in this context (no Flickable
+            // or gesture filter is sitting between the content frame
+            // and the backdrop), but kept as defensive future-proofing
+            // against a transport wrapping the host in a Flickable
+            // (e.g. for scrollable popouts) and inadvertently letting
+            // a swipe gesture eat the hit-blocker's press.
             preventStealing: true
             acceptedButtons: Qt.LeftButton
             onPressed: mouse => {
@@ -264,10 +331,16 @@ Item {
 
         // Inline component instantiation when contentComponent is
         // set. Loader keeps the lifecycle simple. Pre-built
-        // contentItem wins if both are provided.
+        // contentItem wins if both are provided. anchors.fill makes
+        // the Loader fill contentFrame so the loaded item sees a
+        // sized parent for any anchors-based layout the delegate uses
+        // (an unanchored Loader collapses to 0x0 and the loaded item
+        // inherits a zero-size parent until contentFrame's
+        // implicitWidth/Height binding settles).
         Loader {
             id: contentLoader
 
+            anchors.fill: parent
             active: root.contentItem === null && root.contentComponent !== null
             sourceComponent: root.contentComponent
         }

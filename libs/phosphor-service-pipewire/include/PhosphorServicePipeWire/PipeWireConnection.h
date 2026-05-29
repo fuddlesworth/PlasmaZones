@@ -93,6 +93,10 @@ public:
     /// locking; the underlying hash is mutated only on the GUI thread.
     /// Iteration order is unspecified — the underlying storage is a
     /// hash, not a sequence; do not rely on registry-insertion order.
+    /// Call only from the GUI thread (the thread that owns this
+    /// PipeWireConnection). The internal `guiNodes` hash is not
+    /// synchronised; a cross-thread reader would race against the
+    /// queued `nodeAdded` / `nodeRemoved` mutations that run here.
     ///
     /// QML consumers must NOT use this accessor: a by-value
     /// `QList<QObject*>` return is not bindable from QML. The

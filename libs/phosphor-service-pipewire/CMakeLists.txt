@@ -7,11 +7,8 @@
 #
 # Single-process by design (U3): the PipeWire main loop runs on a dedicated
 # QThread inside the same QGuiApplication that hosts the shell. Public API
-# is libpipewire-free (pimpl); consumers only need Qt deps. WirePlumber 0.5
-# powers default-node switching (milestone 6 of the Phase 2.1 plan). All ten
-# milestones in docs/phosphor-shell-design/04-implementation-plan.md § 2.1
-# have shipped on feat/phase-2.1-pipewire-service; see the README "Status"
-# section for the full milestone-by-milestone landing record.
+# is libpipewire-free (pimpl); consumers only need Qt deps. See the README
+# "Status" section for the milestone-by-milestone landing record.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -75,6 +72,7 @@ set(phosphorservicepipewire_public_HDRS
 set(phosphorservicepipewire_SRCS
     src/qmlregistration.cpp
     src/pipewireconnection.cpp
+    src/pipewireconnection_lifecycle.cpp
     src/pipewireconnection_registry.cpp
     src/pipewireconnection_writes.cpp
     src/pipewirehost.cpp
@@ -83,10 +81,10 @@ set(phosphorservicepipewire_SRCS
 )
 
 # Private header carrying the PipeWireConnection::Private declaration
-# (split out so pipewireconnection.cpp + pipewireconnection_registry.cpp
-# + pipewireconnection_writes.cpp can all implement Private methods
-# without re-declaring it). Not installed; consumers see only the
-# libpipewire-free public headers.
+# (split out so pipewireconnection.cpp + pipewireconnection_lifecycle.cpp
+# + pipewireconnection_registry.cpp + pipewireconnection_writes.cpp can
+# all implement Private methods without re-declaring it). Not installed;
+# consumers see only the libpipewire-free public headers.
 set(phosphorservicepipewire_PRIVATE_HDRS
     src/pipewireconnection_p.h
 )
@@ -182,12 +180,15 @@ install(FILES
 # Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
-if(CMAKE_PROJECT_NAME STREQUAL "PhosphorServicePipeWire" OR BUILD_TESTING)
-    # enable_testing() is a no-op when KDECMakeSettings already
-    # included CTest at the top level. The redundant call lets a
-    # standalone build of this subproject still discover ctest.
-    enable_testing()
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
-        add_subdirectory(tests)
-    endif()
+# Shared standalone-or-tests gate. Lives in the repo's cmake/ helpers so
+# every phosphor library can drop the boilerplate. The relative path
+# resolves under both an in-tree configure (root CMakeLists.txt drives
+# us) and a standalone configure of this subproject (the lib's own
+# project() takes effect; the helper still resolves via the two-level-
+# up cmake/ dir in the repo checkout). EXISTS-guarded so a tarball
+# missing the helper still builds the library itself (just without the
+# tests gate).
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../cmake/PhosphorLibTesting.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/PhosphorLibTesting.cmake)
+    phosphor_lib_enable_tests(PhosphorServicePipeWire)
 endif()

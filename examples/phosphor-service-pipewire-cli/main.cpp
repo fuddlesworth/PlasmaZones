@@ -31,10 +31,15 @@ namespace {
 // PHOSPHOR_PW_POST_WRITE_SETTLE_MS, and the post-metadata
 // (set-default-sink/source echo) deadline via
 // PHOSPHOR_PW_POST_METADATA_SETTLE_MS.
-constexpr int kDefaultPostReadSettleMs = 80;
+constexpr int kDefaultPostReadSettleMs = 80; // no env override: settle hint only, not an echo deadline
 constexpr int kDefaultPostWriteSettleMs = 200;
 constexpr int kDefaultPostMetadataSettleMs = 500;
 constexpr int kDefaultConnectTimeoutMs = 2000;
+// Volume echo tolerance: the daemon may quantise the linear amplitude
+// on its way through SPA_PARAM_Props, so set-volume's predicate uses a
+// non-zero epsilon. Overridable via PHOSPHOR_PW_VOLUME_ECHO_EPSILON for
+// hosts whose daemon quantises more aggressively.
+constexpr qreal kDefaultVolumeEchoEpsilon = 0.01;
 // Shutdown settle: small fixed budget for the loop thread to flush any
 // in-flight write before ~PipeWireConnection runs. Not env-overridable
 // because the destructor handles teardown safely on its own; this is
@@ -77,8 +82,8 @@ int usage()
           << "  set-volume <target> <pct>           set every channel of <target> to <pct> (0..100)\n"
           << "  mute <target>                       mute node\n"
           << "  unmute <target>                     unmute node\n"
-          << "  set-default-sink <name>             write default.configured.audio.sink\n"
-          << "  set-default-source <name>           write default.configured.audio.source\n"
+          << "  set-default-sink <target>           write default.configured.audio.sink\n"
+          << "  set-default-source <target>         write default.configured.audio.source\n"
           << "\n"
           << "  <target> is one of:\n"
           << "    - a numeric PipeWire id (from `list sinks`)\n"
@@ -95,7 +100,8 @@ int usage()
           << "env overrides (positive int ms; malformed values fall back to defaults):\n"
           << "  PHOSPHOR_PW_CONNECT_TIMEOUT_MS         daemon-connect timeout       (default 2000)\n"
           << "  PHOSPHOR_PW_POST_WRITE_SETTLE_MS       volume/mute echo deadline    (default 200)\n"
-          << "  PHOSPHOR_PW_POST_METADATA_SETTLE_MS    set-default echo deadline    (default 500)\n";
+          << "  PHOSPHOR_PW_POST_METADATA_SETTLE_MS    set-default echo deadline    (default 500)\n"
+          << "  PHOSPHOR_PW_VOLUME_ECHO_EPSILON        set-volume echo tolerance    (positive double, default 0.01)\n";
     return 64; // EX_USAGE
 }
 
@@ -114,11 +120,35 @@ int envOverrideMs(const char* name, int fallbackMs)
     return (ok && v > 0) ? v : fallbackMs;
 }
 
+/// Parallel to envOverrideMs for positive double-valued env vars (e.g.
+/// the volume-echo tolerance epsilon). Empty / malformed / non-finite /
+/// non-positive values fall back to `fallback`; a typo'd env value
+/// never silently routes through to 0 (which would defeat the echo
+/// check entirely).
+qreal envOverrideDouble(const char* name, qreal fallback)
+{
+    const QByteArray overrideEnv = qgetenv(name);
+    if (overrideEnv.isEmpty())
+        return fallback;
+    bool ok = false;
+    const double v = QString::fromUtf8(overrideEnv).toDouble(&ok);
+    return (ok && std::isfinite(v) && v > 0.0) ? v : fallback;
+}
+
 /// Connect-timeout sourced from the env var so users hitting slow-boot
 /// scenarios can override without recompiling.
 int connectTimeoutMs()
 {
     return envOverrideMs("PHOSPHOR_PW_CONNECT_TIMEOUT_MS", kDefaultConnectTimeoutMs);
+}
+
+/// Volume-echo tolerance: daemons may quantise linear amplitude on
+/// SPA_PARAM_Props, so the set-volume predicate uses a non-zero epsilon.
+/// Overridable via PHOSPHOR_PW_VOLUME_ECHO_EPSILON for hosts whose
+/// daemon quantises more aggressively.
+qreal volumeEchoEpsilon()
+{
+    return envOverrideDouble("PHOSPHOR_PW_VOLUME_ECHO_EPSILON", kDefaultVolumeEchoEpsilon);
 }
 
 /// Post-write (volume/mute) settle deadline. Loaded CI hosts can extend
@@ -326,8 +356,9 @@ int cmdDefault(PhosphorServicePipeWire::PipeWireConnection& conn)
 ///
 /// After the deadline elapses we run the predicate one final time so a
 /// late echo that landed during the disconnect / loop-exit window is
-/// still caught. This mirrors waitForString's post-loop recheck pattern
-/// (the guard handling differs: waitForString has no guarded receiver).
+/// still caught. This mirrors waitForString's post-deadline
+/// `accessor() == expected` final read (the guard handling differs:
+/// waitForString has no guarded receiver).
 bool waitForPropsEchoAndVerify(PhosphorServicePipeWire::PwNode* node, const std::function<bool()>& predicate,
                                int timeoutMs, const char* label)
 {
@@ -348,12 +379,12 @@ bool waitForPropsEchoAndVerify(PhosphorServicePipeWire::PwNode* node, const std:
         // Receiver is &loop (not guard.data()) so the connection auto-disconnects
         // when the loop is destroyed at scope exit; Qt no-ops a disconnect on a
         // dead sender, so a daemon-side node removal mid-wait is also safe.
-        auto conn1 = QObject::connect(guard.data(), &PhosphorServicePipeWire::PwNode::propsChanged, &loop, [&loop]() {
+        auto qtConn = QObject::connect(guard.data(), &PhosphorServicePipeWire::PwNode::propsChanged, &loop, [&loop]() {
             loop.quit();
         });
         QTimer::singleShot(remaining, &loop, &QEventLoop::quit);
         loop.exec();
-        QObject::disconnect(conn1);
+        QObject::disconnect(qtConn);
         if (!guard)
             break;
         if (predicate())
@@ -394,20 +425,22 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
     // because the daemon may quantise the linear amplitude on its way
     // through SPA_PARAM_Props. waitForPropsEchoAndVerify re-arms on
     // unrelated emissions so a parallel app tweaking another channel
-    // can't cause an early-quit.
-    constexpr qreal kVolumeEpsilon = 0.01;
+    // can't cause an early-quit. Epsilon is env-overridable via
+    // PHOSPHOR_PW_VOLUME_ECHO_EPSILON for hosts with aggressive
+    // quantisation.
+    const qreal volumeEpsilon = volumeEchoEpsilon();
     // Capture the matched snapshot inside the predicate so a later
     // unrelated propsChanged can't clobber the values we print. Without
     // this, `node->volumes()` re-read after the wait could show a
     // divergent snapshot (e.g. another channel updated between match
     // and read) that doesn't reflect what we actually saw match.
     QList<qreal> matchedVolumes;
-    const auto matchesRequest = [node, linear, &matchedVolumes]() {
+    const auto matchesRequest = [node, linear, volumeEpsilon, &matchedVolumes]() {
         const auto echoed = node->volumes();
         if (echoed.isEmpty())
             return false;
         for (const qreal v : echoed) {
-            if (std::fabs(v - linear) > kVolumeEpsilon)
+            if (std::fabs(v - linear) > volumeEpsilon)
                 return false;
         }
         matchedVolumes = echoed;
@@ -454,9 +487,11 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
     node->setMuted(muted);
     // Shares postWriteSettleMs() with set-volume: both ride the same
     // SPA_PARAM_Props echo path so a single tunable governs both
-    // deadlines. The predicate above narrows to muted == requested, so
-    // a parallel session manager re-flipping mute can only delay the
-    // match — never spuriously satisfy it.
+    // deadlines. The predicate narrows to muted == requested: a
+    // parallel session manager committing the OPPOSITE state only
+    // delays the match; one committing the requested state satisfies
+    // the predicate, which is acceptable because the observable
+    // end-state is what we contracted for.
     const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, postWriteSettleMs(), "mute");
     const bool echoedMuted = echoed ? muted : node->muted();
     out() << "set node " << node->id() << " (" << node->name() << ") muted = " << (muted ? "true" : "false")
@@ -490,12 +525,12 @@ bool waitForString(PhosphorServicePipeWire::PipeWireConnection& conn,
         const int remaining = timeoutMs - static_cast<int>(timer.elapsed());
         if (remaining <= 0)
             break;
-        auto conn1 = QObject::connect(&conn, signal, &loop, [&loop]() {
+        auto qtConn = QObject::connect(&conn, signal, &loop, [&loop]() {
             loop.quit();
         });
         QTimer::singleShot(remaining, &loop, &QEventLoop::quit);
         loop.exec();
-        QObject::disconnect(conn1);
+        QObject::disconnect(qtConn);
         if (accessor() == expected)
             return true;
         // Unrelated emission: fall through and re-arm for any remaining
@@ -691,7 +726,7 @@ int main(int argc, char** argv)
         // hint in release builds (UB), so emit a real diagnostic and
         // return a distinct exit code so the misbehaviour surfaces
         // observably instead of silently exiting 0.
-        err() << "internal logic error: unhandled command " << cmd << "\n";
+        err() << "internal logic error: unhandled command " << cmd << " (rc=70, EX_SOFTWARE)\n";
         cleanShutdown(conn);
         return 70; // EX_SOFTWARE
     }

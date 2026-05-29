@@ -110,6 +110,14 @@ public:
     // sourcePath and loadError must be prepared to see the new
     // path arrive together with a loadError on the same edit.
     Q_INVOKABLE bool loadFromFile(const QString& path) override;
+    // Fire-and-forget by IThemeService design: a token map that
+    // normalises to zero usable colors is a no-op rather than an
+    // error. The underlying applyPalette() returns a bool reporting
+    // whether any token changed, but that signal is not propagated
+    // through the IThemeService boundary because every QML/script
+    // caller already observes the result via the paletteChanged
+    // signal — duplicating the verdict in the return value would
+    // force the interface to widen without any consumer needing it.
     Q_INVOKABLE void applyTokens(const QVariantMap& tokens) override;
     Q_INVOKABLE void resetToDefaults() override;
 
@@ -140,42 +148,31 @@ private:
     /// Single source of truth for the wrapped-vs-flat shape
     /// traversal. Given a parsed JSON document, returns the tokens
     /// object the merge step would iterate (empty QJsonObject on
-    /// shape error). Both validateDoc and applyParsedJson route
-    /// through this helper so the two cannot drift on the shape
-    /// rules: a future failure mode added here surfaces in BOTH
-    /// the validator and the applier in lockstep. See the file-
-    /// top comment in palettestore.cpp for the rationale.
+    /// shape error). Every payload-inspecting code path routes
+    /// through this helper so the shape rules can't drift: a future
+    /// failure mode added here surfaces in every caller in lockstep.
+    /// See the file-top comment in palettestore.cpp for the rationale.
     ///
     /// On shape error (`tokens` key present but not an object) the
     /// returned object is empty AND outShapeError is set to
     /// TokensKeyNotObject. On a syntactically fine but empty /
     /// no-usable-color payload the returned object may be non-empty
-    /// (the validator/applier walks its entries to determine usability)
-    /// and outShapeError stays Ok — the NoUsableTokens verdict only
+    /// (the caller walks its entries to determine usability) and
+    /// outShapeError stays Ok — the NoUsableTokens verdict only
     /// surfaces after the entry walk.
     static QJsonObject extractTokensOrEmpty(const QJsonDocument& doc, ApplyResult& outShapeError);
-    /// Pure shape-validator for a parsed JSON document. Returns the
-    /// same ApplyResult value applyParsedJson would return for the
-    /// document, but WITHOUT applying or mutating any state. Lets
-    /// loadFromJson decide whether the payload will succeed BEFORE
-    /// touching the watcher / m_sourcePath, satisfying the "failed
-    /// load does not observably mutate state" contract without
-    /// duplicating the shape-check logic across two call sites.
-    /// Implemented via extractValidTokens so it can't drift from
-    /// applyParsedJson on the shape rules — both call sites consume
-    /// the same already-normalised token map.
-    static ApplyResult validateDoc(const QJsonDocument& doc);
-    /// Shared extraction + normalisation step that both validateDoc
-    /// and applyParsedJson route through. Walks the wrapped/flat
+    /// Shared extraction + normalisation step. Walks the wrapped/flat
     /// shape via extractTokensOrEmpty, then QColor-parses every
-    /// string entry exactly once and caches the validated map. On
-    /// shape error returns the matching ApplyResult variant; on an
-    /// otherwise valid payload returns the normalised QVariantMap
-    /// (empty if no usable colors were found — applyParsedJson maps
-    /// that to NoUsableTokens). Caching the parsed map prevents
-    /// double QColor-parsing in the load-then-validate-then-apply
-    /// path and ensures the validator and applier accept the exact
-    /// same byte sequence.
+    /// string entry exactly once and caches the validated map.
+    ///
+    /// loadFromJson calls this directly and reuses the cached map
+    /// for the merge step — no second parse pass. applyParsedJson
+    /// also routes through it so the file-load + hot-reload paths
+    /// share the same accept set as the JSON-blob path. On shape
+    /// error returns the matching ApplyResult variant (and nullopt);
+    /// on an otherwise valid payload returns the normalised
+    /// QVariantMap (empty if no usable colors were found — callers
+    /// map that to NoUsableTokens).
     static std::optional<QVariantMap> extractValidTokens(const QJsonDocument& doc, ApplyResult& outError);
     ApplyResult applyParsedJson(const QJsonDocument& doc);
     /// Post-path-resolution pipeline shared by loadFromFile and
@@ -185,11 +182,8 @@ private:
     /// debounce-driven reloadFromCurrentPath) handles watcher and
     /// sourcePath management around this; this helper is a pure
     /// "read these bytes off disk, push them through the apply
-    /// pipeline, surface the typed result" operation. isReload is
-    /// retained for future divergence in the diagnostic wording but
-    /// is unused today — the contract is identical messages across
-    /// both paths.
-    ApplyResult readParseAndApply(const QString& absolutePath, bool isReload);
+    /// pipeline, surface the typed result" operation.
+    ApplyResult readParseAndApply(const QString& absolutePath);
     /// Disarms the active filesystem watch (file + parent directory),
     /// cancels any pending debounced reload, and clears m_sourcePath
     /// (emitting sourcePathChanged if it was non-empty). The

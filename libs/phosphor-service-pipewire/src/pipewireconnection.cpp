@@ -5,7 +5,6 @@
 
 #include <PhosphorServicePipeWire/PwNode.h>
 
-#include <QCoreApplication>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QVarLengthArray>
@@ -14,12 +13,40 @@
 #include <spa/param/props.h>
 #include <spa/pod/iter.h>
 #include <spa/pod/parser.h>
-#include <spa/utils/result.h>
 
 #include <cstring>
 #include <mutex>
 
 Q_LOGGING_CATEGORY(lcPipeWire, "phosphor.service.pipewire.connection")
+
+// ── Cross-thread invariants ────────────────────────────────────────────────
+//
+// Every loop-thread callback that bounces state back to the GUI thread
+// does so via QMetaObject::invokeMethod(d->q, [d, ...], QueuedConnection).
+// The captured `d` (or `this` from a Private member) must outlive the
+// queued lambda. The PipeWireConnection destructor guarantees that by:
+//
+//   1. Posting pw_main_loop_quit and waiting up to 5s for the loop
+//      thread to exit. That gives the worker time to run its final
+//      doDisconnect, which itself queues one last GUI lambda.
+//   2. Calling QCoreApplication::sendPostedEvents(this, 0) to drain
+//      every queued lambda already in the GUI event queue while
+//      Private is still alive.
+//   3. Calling QCoreApplication::removePostedEvents(this) to discard
+//      anything still pending after the drain.
+//
+// So `d` is live for the duration of every lambda that ever gets a
+// chance to run. The lambda-site comments below previously repeated
+// this invariant at every callback; they now reference this block.
+
+// Subclassing note: the destructor's drain runs AFTER the subclass
+// destructors have replaced the vtable with the base PipeWireConnection
+// one. A subclass that connects its OWN slots to nodeAdded /
+// nodeRemoved / error and relies on subclass-side state in those slots
+// will not see the final drain — by that point the subclass is gone.
+// Observers should be external QObjects connected with
+// Qt::QueuedConnection, not subclass methods. See LoopThread::run and
+// the doDisconnect path it triggers.
 
 namespace PhosphorServicePipeWire {
 
@@ -47,17 +74,31 @@ bool isAudioNodeClass(const QString& mediaClass)
 {
     // Called on every registry global (Device, Port, Link, Factory,
     // Client, Node, ...). Compare UTF-8 bytes against fixed C literals
-    // so the hot path pays one toUtf8 + a handful of strcmps rather
-    // than constructing QString temporaries for each candidate.
+    // so the hot path pays one toUtf8 + a handful of length-bounded
+    // memcmps rather than constructing QString temporaries for each
+    // candidate.
+    //
+    // Use size+memcmp rather than strcmp so an embedded NUL in the
+    // mediaClass UTF-8 buffer (legal in a QString, plausible in a
+    // malformed daemon-supplied value) cannot trick a shorter literal
+    // into a false positive. QByteArray::size() is the buffer length
+    // excluding the trailing NUL it adds, which is exactly what we
+    // want to compare against the literal's strlen-equivalent.
     const QByteArray bytes = mediaClass.toUtf8();
-    static constexpr const char* kAudioClasses[] = {
-        "Audio/Sink",
-        "Audio/Source",
-        "Stream/Output/Audio",
-        "Stream/Input/Audio",
+    struct Candidate
+    {
+        const char* str;
+        qsizetype len;
     };
-    for (const char* candidate : kAudioClasses) {
-        if (std::strcmp(bytes.constData(), candidate) == 0)
+    static constexpr Candidate kAudioClasses[] = {
+        {"Audio/Sink", 10},
+        {"Audio/Source", 12},
+        {"Stream/Output/Audio", 19},
+        {"Stream/Input/Audio", 18},
+    };
+    const qsizetype bytesLen = bytes.size();
+    for (const auto& candidate : kAudioClasses) {
+        if (bytesLen == candidate.len && std::memcmp(bytes.constData(), candidate.str, candidate.len) == 0)
             return true;
     }
     return false;
@@ -80,30 +121,8 @@ QHash<QString, QString> propsFromDict(const struct spa_dict* dict)
 
 } // namespace detail
 
-void PipeWireConnection::Private::LoopThread::run()
-{
-    pw_main_loop* createdLoop = pw_main_loop_new(nullptr);
-    // Release-store so the GUI thread either sees null (the failure
-    // path below) or the fully constructed loop pointer.
-    owner->loop.store(createdLoop, std::memory_order_release);
-    // Signal startup completion to the constructor whether or not the
-    // loop was created. The constructor blocks on this semaphore so the
-    // destructor never races against a worker that hasn't yet reached
-    // pw_main_loop_new.
-    owner->startupReady.release();
-    if (!createdLoop) {
-        qCWarning(lcPipeWire) << "pw_main_loop_new failed; PipeWire integration disabled";
-        return;
-    }
-    // Blocks until pw_main_loop_quit fires or the loop exits on a
-    // libpipewire-internal error.
-    pw_main_loop_run(createdLoop);
-    // Tear down any remaining loop-owned state on the loop thread, in
-    // the correct order, before exit. doDisconnect is idempotent.
-    owner->doDisconnect();
-    pw_main_loop_destroy(createdLoop);
-    owner->loop.store(nullptr, std::memory_order_release);
-}
+// LoopThread::run lives in pipewireconnection_lifecycle.cpp alongside
+// the rest of the connect/disconnect state machine it drives.
 
 const pw_core_events PipeWireConnection::Private::kCoreEvents = {
     .version = PW_VERSION_CORE_EVENTS,
@@ -143,9 +162,8 @@ void PipeWireConnection::Private::onCoreInfo(void* data, const struct pw_core_in
     // on the loop thread (loop-thread truth) so isDaemonAvailable()
     // reports the correct value the moment the next caller looks; the
     // queued GUI lambda then only does the shadow-dedup + NOTIFY emit,
-    // never touching the atomic. Lifetime: `d` outlives every queued
-    // lambda — the destructor flushes posted events before tearing
-    // Private down (see ~PipeWireConnection).
+    // never touching the atomic. Lifetime: see top-of-file
+    // "Cross-thread invariants" block.
     d->daemonAvailable.store(true, std::memory_order_release);
     QMetaObject::invokeMethod(
         d->q,
@@ -176,13 +194,12 @@ void PipeWireConnection::Private::onCoreDone(void* data, uint32_t id, int seq)
     // doDisconnect()`) runs on the loop thread; without this store, a
     // re-issued connectToDaemon() landing between the queue-and-drain
     // window would see connected == false and tear down a freshly-
-    // completed handshake. setConnected does a shadow-compare early return (the
-    // GUI-thread `lastEmittedConnected` shadow, NOT the atomic) so the
-    // queued mutation emits connectedChanged exactly once even if a
-    // later loop-thread path pre-flips the atomic before the GUI drains.
-    // Lifetime: `d` outlives every queued lambda — the destructor
-    // flushes posted events before tearing Private down (see
-    // ~PipeWireConnection).
+    // completed handshake. setConnected does a shadow-compare early
+    // return (the GUI-thread `lastEmittedConnected` shadow, NOT the
+    // atomic) so the queued mutation emits connectedChanged exactly
+    // once even if a later loop-thread path pre-flips the atomic
+    // before the GUI drains. Lifetime: see top-of-file "Cross-thread
+    // invariants" block.
     d->connected.store(true, std::memory_order_release);
     QMetaObject::invokeMethod(
         d->q,
@@ -230,9 +247,7 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
     // stays on the loop thread without us having to post another
     // pw_loop_invoke.
     //
-    // Lifetime: `d` outlives every queued lambda — the destructor
-    // flushes posted events before tearing Private down (see
-    // ~PipeWireConnection).
+    // Lifetime: see top-of-file "Cross-thread invariants" block.
     d->connected.store(false, std::memory_order_release);
     // Clear pendingSyncSeq so a stale `done` event echoing the original
     // syncRc can't pass onCoreDone's sentinel check and re-flip
@@ -292,8 +307,14 @@ int PipeWireConnection::Private::onDefaultMetadataProperty(void* data, uint32_t 
         constexpr qsizetype kMaxMetadataPayload = 64 * 1024;
         const qsizetype len = qstrnlen(value, kMaxMetadataPayload);
         if (len >= kMaxMetadataPayload) {
-            qCWarning(lcPipeWire) << "default-metadata value exceeds" << kMaxMetadataPayload << "bytes; rejecting key"
-                                  << keyStr;
+            // qstrnlen caps at kMaxMetadataPayload, so `len` ==
+            // kMaxMetadataPayload here means "at least that many
+            // bytes" — the actual payload could be larger. Log both
+            // the cap and the measured length so the warning is
+            // self-describing without the reader having to look up
+            // the constant.
+            qCWarning(lcPipeWire) << "default-metadata value exceeds" << kMaxMetadataPayload << "bytes (measured len"
+                                  << len << "); rejecting key" << keyStr;
             // Return BEFORE the invokeMethod block. Falling through
             // would queue setDefaultSinkName(QString{}) /
             // setDefaultSourceName(QString{}) and wipe the cached
@@ -414,10 +435,11 @@ void PipeWireConnection::Private::onNodeParam(void* data, int seq, uint32_t para
     //
     // Post-teardown safety: this lambda may sit in the GUI event queue
     // past a doDisconnect() that cleared guiNodes. The
-    // `it == guiNodes.end()` check above is what makes that safe — a
+    // `it == guiNodes.end()` check below is what makes that safe — a
     // node id observed on the loop thread is not guaranteed to still
     // exist on the GUI thread by the time the lambda fires. Same
     // contract for any other queued lambda that touches guiNodes.
+    // Lifetime of `d`: see top-of-file "Cross-thread invariants" block.
     QMetaObject::invokeMethod(
         d->q,
         [d, nodeId, haveVolumes, haveMute, channelCount, volumes, muted]() {
@@ -435,213 +457,8 @@ void PipeWireConnection::Private::onNodeParam(void* data, int seq, uint32_t para
         Qt::QueuedConnection);
 }
 
-void PipeWireConnection::Private::doConnect()
-{
-    // Recovery path: an earlier onCoreError flagged the connection
-    // wedged but left core/context/registry hanging. Tear them down
-    // first so this reconnect starts from a clean slate. This is the
-    // counterpart to the deliberate "don't teardown from the error
-    // callback" choice in onCoreError — recovery happens here, on the
-    // loop thread, exactly when the next caller asks to reconnect.
-    //
-    // Gate on the explicit `wedged` flag, NOT on inferred
-    // `!connected.load()`: an in-flight handshake (core != nullptr,
-    // connected == false because the sync hasn't acked yet) would
-    // otherwise look identical to the post-error wedge and we'd tear
-    // down a perfectly healthy mid-handshake state on a re-entrant
-    // connectToDaemon() call.
-    if (core && wedged)
-        doDisconnect();
-    if (core)
-        return; // already connected (or mid-handshake)
-    // Past the recovery gate; we're about to build a fresh core, so
-    // any prior wedge is resolved. Clear the flag before any failure
-    // path so a fresh wedge from this attempt isn't masked by the old
-    // one.
-    wedged = false;
-    pw_main_loop* mainLoop = loop.load(std::memory_order_acquire);
-    if (!mainLoop) {
-        qCWarning(lcPipeWire) << "doConnect called before loop creation";
-        return;
-    }
-    context = pw_context_new(pw_main_loop_get_loop(mainLoop), nullptr, 0);
-    if (!context) {
-        // Failure paths that leave `core` null must also reset every
-        // piece of cached connection state. Flip the atomics
-        // synchronously on the loop thread (both `connected` AND
-        // `daemonAvailable`, since the GUI-side setters no longer
-        // touch the atomic — see setConnected/setDaemonAvailable) so
-        // isConnected() / isDaemonAvailable() report the truth
-        // immediately, then queue the GUI-side snapshot reset
-        // (setConnected/setDaemonAvailable handle their own dedupe via
-        // shadow-equal-skip, mirroring the onCoreError L1-override
-        // pattern) so observers see one round of NOTIFY signals on the
-        // right thread. resetGuiSnapshot() also clears default
-        // sink/source names — without that, a previous connection's
-        // stale defaults would survive a failed reconnect and ghost
-        // the UI.
-        connected.store(false, std::memory_order_release);
-        daemonAvailable.store(false, std::memory_order_release);
-        QMetaObject::invokeMethod(
-            q,
-            [this]() {
-                resetGuiSnapshot();
-                Q_EMIT q->error(QStringLiteral("pw_context_new returned null"));
-            },
-            Qt::QueuedConnection);
-        return;
-    }
-    core = pw_context_connect(context, nullptr, 0);
-    if (!core) {
-        pw_context_destroy(context);
-        context = nullptr;
-        connected.store(false, std::memory_order_release);
-        daemonAvailable.store(false, std::memory_order_release);
-        QMetaObject::invokeMethod(
-            q,
-            [this]() {
-                resetGuiSnapshot();
-                Q_EMIT q->error(QStringLiteral("pw_context_connect returned null (no running daemon?)"));
-            },
-            Qt::QueuedConnection);
-        return;
-    }
-    pw_core_add_listener(core, &coreListener, &kCoreEvents, this);
-
-    registry = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
-    if (registry) {
-        pw_registry_add_listener(registry, &registryListener, &kRegistryEvents, this);
-    } else {
-        qCWarning(lcPipeWire) << "pw_core_get_registry returned null; registry walking disabled";
-    }
-
-    // Sync request: the matching `done` event signals "PipeWire has
-    // processed every prior request". We use it as our handshake
-    // completion marker. A negative return value is an errno code
-    // from the loop layer (e.g. -EINVAL on a torn-down core), in
-    // which case the handshake will never complete; surface it as a
-    // hard error and leave pendingSyncSeq at the kNoPendingSync
-    // sentinel so onCoreDone's equality check can never spuriously
-    // match an unrelated daemon-side done event (PipeWire emits only
-    // non-negative seq values, so the sentinel is permanently out of
-    // band).
-    const int syncRc = pw_core_sync(core, PW_ID_CORE, 0);
-    if (syncRc < 0) {
-        // Mirror the other doConnect failure paths: a sync request the
-        // loop refused leaves the handshake unable to complete, so
-        // tear down core/context/registry/listeners on the loop thread
-        // and flip BOTH atomics. Without the teardown a subsequent
-        // connectToDaemon() would short-circuit on `if (core) return;`
-        // and the caller would be stuck with a wedged-but-not-wedged
-        // core that never acks. resetGuiSnapshot mirrors the pw_context_connect
-        // failure path so observers see one round of NOTIFY signals on
-        // the GUI thread.
-        if (registry) {
-            spa_hook_remove(&registryListener);
-            pw_proxy_destroy(reinterpret_cast<pw_proxy*>(registry));
-            registry = nullptr;
-        }
-        spa_hook_remove(&coreListener);
-        pw_core_disconnect(core);
-        core = nullptr;
-        pw_context_destroy(context);
-        context = nullptr;
-        pendingSyncSeq = kNoPendingSync;
-        connected.store(false, std::memory_order_release);
-        daemonAvailable.store(false, std::memory_order_release);
-        QMetaObject::invokeMethod(
-            q,
-            [this, syncRc]() {
-                resetGuiSnapshot();
-                Q_EMIT q->error(QStringLiteral("pw_core_sync failed: %1").arg(syncRc));
-            },
-            Qt::QueuedConnection);
-        return;
-    }
-    pendingSyncSeq = syncRc;
-}
-
-void PipeWireConnection::Private::doDisconnect()
-{
-    // Tear down per-node state before the registry / core so the
-    // listener removals run while the proxy + core still exist.
-    for (auto& kv : loopNodes) {
-        auto& entry = kv.second;
-        if (entry && entry->proxy) {
-            spa_hook_remove(&entry->nodeListener);
-            pw_proxy_destroy(entry->proxy);
-            entry->proxy = nullptr;
-        }
-    }
-    loopNodes.clear();
-
-    if (defaultMetadata) {
-        spa_hook_remove(&defaultMetadataListener);
-        pw_proxy_destroy(defaultMetadata);
-        defaultMetadata = nullptr;
-    }
-    defaultMetadataId = SPA_ID_INVALID;
-
-    if (registry) {
-        spa_hook_remove(&registryListener);
-        pw_proxy_destroy(reinterpret_cast<pw_proxy*>(registry));
-        registry = nullptr;
-    }
-    if (core) {
-        spa_hook_remove(&coreListener);
-        pw_core_disconnect(core);
-        core = nullptr;
-    }
-    if (context) {
-        pw_context_destroy(context);
-        context = nullptr;
-    }
-    pendingSyncSeq = kNoPendingSync;
-    // Clear the wedged flag: after a full teardown there is no stale
-    // core/context to recover from, so the next doConnect must NOT
-    // misinterpret a fresh in-flight handshake as a wedge.
-    wedged = false;
-    // Synchronously flip the atomics on the loop thread BEFORE queueing
-    // the GUI-side reset. After this point both isConnected() and
-    // isDaemonAvailable() report false the moment the next caller
-    // looks, matching the real loop-side state. The queued
-    // resetGuiSnapshot() only does shadow-dedup + NOTIFY emits; it no
-    // longer writes the atomics (see setConnected /
-    // setDaemonAvailable), so we have to flip them here.
-    connected.store(false, std::memory_order_release);
-    daemonAvailable.store(false, std::memory_order_release);
-    QMetaObject::invokeMethod(
-        q,
-        [this]() {
-            resetGuiSnapshot();
-            guiNodesReset();
-        },
-        Qt::QueuedConnection);
-}
-
-int PipeWireConnection::Private::dispatchConnect(struct spa_loop* loop, bool async, uint32_t seq, const void* data,
-                                                 size_t size, void* user_data)
-{
-    Q_UNUSED(loop);
-    Q_UNUSED(async);
-    Q_UNUSED(seq);
-    Q_UNUSED(data);
-    Q_UNUSED(size);
-    static_cast<Private*>(user_data)->doConnect();
-    return 0;
-}
-
-int PipeWireConnection::Private::dispatchDisconnect(struct spa_loop* loop, bool async, uint32_t seq, const void* data,
-                                                    size_t size, void* user_data)
-{
-    Q_UNUSED(loop);
-    Q_UNUSED(async);
-    Q_UNUSED(seq);
-    Q_UNUSED(data);
-    Q_UNUSED(size);
-    static_cast<Private*>(user_data)->doDisconnect();
-    return 0;
-}
+// doConnect, doDisconnect, dispatchConnect, dispatchDisconnect live in
+// pipewireconnection_lifecycle.cpp.
 
 void PipeWireConnection::Private::setConnected(bool value)
 {
@@ -702,15 +519,20 @@ void PipeWireConnection::Private::resetGuiSnapshot()
     // is its own dedupe (shadow-equal-skip for the booleans,
     // value-equal-skip for the strings) so calling these on
     // already-clean state is free and produces no spurious NOTIFY.
-    // Observers chaining off connectedChanged that re-read
-    // defaultSinkName/defaultSourceName will see whatever order this
-    // function imposes, but every name change ALSO emits its own
-    // setDefault*NameChanged so the consumer side doesn't need to
-    // chain — pick whichever order is convenient.
-    setConnected(false);
-    setDaemonAvailable(false);
+    //
+    // Ordering matters: clear the strings FIRST, then flip the
+    // booleans. Observers chaining off connectedChanged /
+    // daemonAvailableChanged that re-read defaultSinkName /
+    // defaultSourceName expect to see them already cleared by the
+    // time the boolean transitions; the previous boolean-first order
+    // gave them a window in which `connected == false` but the
+    // default-name strings still held the previous session's values,
+    // surfacing as ghost UI rows in observers that grab a fresh
+    // snapshot inside the connectedChanged handler.
     setDefaultSinkName(QString());
     setDefaultSourceName(QString());
+    setDaemonAvailable(false);
+    setConnected(false);
 }
 
 void PipeWireConnection::Private::guiNodeAdded(quint32 id, QString mediaClass, QHash<QString, QString> props)
@@ -758,70 +580,25 @@ void PipeWireConnection::Private::guiNodesReset()
     }
 }
 
-PipeWireConnection::PipeWireConnection(QObject* parent)
-    : QObject(parent)
-    , d(std::make_unique<Private>(this))
-{
-    detail::ensurePipeWireInit();
-    d->thread.start();
-    // Block until the worker has either created the loop or given up.
-    // After this point `d->loop` is stable (either a valid pointer or
-    // null with the thread already exiting) so the destructor's quit
-    // path can't race against worker startup.
-    d->startupReady.acquire();
-}
-
-PipeWireConnection::~PipeWireConnection()
-{
-    if (pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire)) {
-        // pw_main_loop_quit is MT-safe (it routes through
-        // pw_loop_signal_event internally) so we can call it from the
-        // GUI thread directly. The loop thread's run() body picks up
-        // the quit, tears down any remaining state via doDisconnect,
-        // and exits. Quitting before the loop has started running is
-        // also safe: pw_main_loop records the request and exits on
-        // entry to pw_main_loop_run.
-        pw_main_loop_quit(mainLoop);
-    }
-    if (!d->thread.wait(5000)) {
-        // FATAL-BY-DESIGN: a stuck pw_main_loop_run means libpipewire
-        // internal state cannot be reclaimed cleanly. We accept the
-        // leak because the only path that gets here is process
-        // shutdown — the OS reaps the address space immediately
-        // after. A future reader should NOT try to soften this into
-        // a recovery loop: the loop thread is wedged inside foreign
-        // code, and forcibly resuming it would risk corrupting any
-        // global libpipewire state still in use elsewhere.
-        qCCritical(lcPipeWire) << "PipeWire loop thread did not exit within 5s; terminating "
-                                  "(libpipewire state leaked; only acceptable at process shutdown)";
-        d->thread.terminate();
-        d->thread.wait();
-    }
-    // The loop thread's final doDisconnect — and every other loop-side
-    // callback that ran before quit — posts QMetaObject::invokeMethod
-    // lambdas targeting `this` via QueuedConnection. By the time the
-    // destructor runs they are sitting in the GUI thread's event
-    // queue, and observers wired to nodeAdded / nodeRemoved have not
-    // yet seen them.
-    //
-    // First flush: deliver every queued cross-thread post targeting
-    // `this` so observers (PwNodeModel, KCM widgets, ...) receive the
-    // final round of add/remove signals and drop any pointers to
-    // PwNode children that are about to be destroyed. Then drop
-    // anything else still queued for `this` so the GUI event loop
-    // doesn't dispatch into a half-destroyed object after we return.
-    QCoreApplication::sendPostedEvents(this, 0);
-    QCoreApplication::removePostedEvents(this);
-}
+// The PipeWireConnection ctor/dtor live in
+// pipewireconnection_lifecycle.cpp.
 
 bool PipeWireConnection::isConnected() const
 {
-    return d->connected.load();
+    // memory_order_acquire pairs with the release-stores on the loop
+    // thread (onCoreInfo, onCoreDone, onCoreError, doConnect failure
+    // paths, doDisconnect). The default seq_cst would also be
+    // correct, but using acquire matches the rest of the loop-thread
+    // synchronisation pattern (see the `loop` atomic) and stays
+    // consistent at compile-time review time.
+    return d->connected.load(std::memory_order_acquire);
 }
 
 bool PipeWireConnection::isDaemonAvailable() const
 {
-    return d->daemonAvailable.load();
+    // Acquire for the same reason as isConnected — pair with the
+    // release-stores on the loop thread.
+    return d->daemonAvailable.load(std::memory_order_acquire);
 }
 
 QList<PwNode*> PipeWireConnection::nodes() const
@@ -839,31 +616,7 @@ QString PipeWireConnection::defaultSourceName() const
     return d->defaultSourceName;
 }
 
-void PipeWireConnection::connectToDaemon()
-{
-    pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
-    if (!d->thread.isRunning() || !mainLoop)
-        return;
-    // connectToDaemon/disconnectFromDaemon bypass submitLoopRequest
-    // because they carry no payload (no heap request, no ownership
-    // handoff). A negative rc means the loop refused the post; surface
-    // it as a warning so the failure isn't silently dropped, but keep
-    // the call shape simple.
-    const int rc =
-        pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchConnect, 0, nullptr, 0, false, d.get());
-    if (rc < 0)
-        qCWarning(lcPipeWire) << "pw_loop_invoke failed for connectToDaemon rc" << rc;
-}
-
-void PipeWireConnection::disconnectFromDaemon()
-{
-    pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
-    if (!d->thread.isRunning() || !mainLoop)
-        return;
-    const int rc =
-        pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchDisconnect, 0, nullptr, 0, false, d.get());
-    if (rc < 0)
-        qCWarning(lcPipeWire) << "pw_loop_invoke failed for disconnectFromDaemon rc" << rc;
-}
+// connectToDaemon / disconnectFromDaemon live in
+// pipewireconnection_lifecycle.cpp.
 
 } // namespace PhosphorServicePipeWire

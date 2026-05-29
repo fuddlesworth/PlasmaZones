@@ -124,7 +124,20 @@ public:
     /// our sync request landed cannot be misread as our handshake.
     /// Reset back to the sentinel on disconnect and on sync-submission
     /// failure.
+    ///
+    /// Loop-thread only — written from doConnect and the core
+    /// callbacks (onCoreDone, onCoreError) and read from onCoreDone's
+    /// equality check, all of which execute on the PipeWire loop
+    /// thread. Same lifetime model as the wedged flag below; no
+    /// cross-thread synchronisation needed.
+private:
+    /// Implementation constant for the pendingSyncSeq sentinel.
+    /// Scoped private explicitly so it is consumed only via the
+    /// member callbacks above, never by external code reaching into
+    /// the pimpl through a header it shouldn't have seen.
     static constexpr int kNoPendingSync = -1;
+
+public:
     int pendingSyncSeq = kNoPendingSync;
 
     /// Loop-thread flag: set by onCoreError when a core-level error

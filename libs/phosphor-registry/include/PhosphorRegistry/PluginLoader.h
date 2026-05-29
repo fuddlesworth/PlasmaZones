@@ -183,6 +183,12 @@ private:
     // Non-owning. Caller guarantees lifetime per the ctor contract.
     // Cannot use QPointer because Registry<T> is not a QObject (the
     // QObject-derived RegistryNotifier lives inside the template).
+    //
+    // Class invariant: m_registry is non-null after the ctor returns
+    // (the ctor qFatals on null), so every use site below assumes
+    // non-null without a runtime guard. If a future refactor adds a
+    // path that can null this pointer post-construction, the
+    // assumption (and the qFatal that backs it) must be revisited.
     Registry<IBarWidgetFactory>* m_registry = nullptr;
     QString m_pluginRoot;
     std::unique_ptr<ScanStrategyImpl> m_strategy;

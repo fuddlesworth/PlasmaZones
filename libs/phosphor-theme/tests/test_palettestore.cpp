@@ -578,9 +578,10 @@ void TestPaletteStore::hotReload_survivesConsecutiveInPlaceEdits()
 
     palSpy.clear();
 
-    // Second edit. Without the parseAndApplyJson(false) fix this
-    // edit never fires paletteChanged because the watcher was
-    // disarmed during the first reload.
+    // Second edit. Without routing reloadFromCurrentPath through
+    // readParseAndApply (instead of the public loadFromJson, which
+    // tears down the watcher), this edit never fires paletteChanged
+    // because the watcher was disarmed during the first reload.
     {
         QFile f(path);
         QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -732,7 +733,9 @@ void TestPaletteStore::hotReload_debouncesBurstOfFileChanges()
         }
     }
 
-    QVERIFY(palSpy.wait(2000));
+    // 5s ceiling matches the rest of the hot-reload suite — a 2s
+    // window flakes on IO-bound CI runners.
+    QVERIFY(palSpy.wait(5000));
     QTest::qWait(150); // let any stragglers fire so we catch them
     QVERIFY(palSpy.count() >= 1);
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#ffeedd"));

@@ -83,25 +83,33 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
 {
     if (d->connection == connection)
         return;
-    // Emit connectionChanged BEFORE rebuildFromConnection so the
-    // connection-coherence invariant holds: any QML binding watching
-    // `connection` sees the new pointer before any `countChanged` /
-    // `dataChanged` row events fire for the new connection's nodes.
-    // If we emitted after rebuild, bindings that observe both signals
-    // would briefly see "rows populated for the NEW connection but
-    // `connection` still reports the OLD one", which breaks the
+    // Assign the new connection FIRST so connection() reports the
+    // post-mutation pointer for the rebuild duration, then run
+    // rebuildFromConnection so every row event (beginRemoveRows /
+    // beginInsertRows + the coalesced countChanged) fires against the
+    // new connection, and only THEN emit connectionChanged. Qt's
+    // convention for NOTIFY signals is to fire after the property
+    // mutation completes, meaning any binding awakened by
+    // connectionChanged observes a consistent state: connection()
+    // returns the new pointer AND the model's rows already describe
+    // it. Emitting before the rebuild would invert that — bindings
+    // would wake to "new connection() but stale rows", breaking the
     // documented invariant that the model's rows always describe its
     // current `connection` property.
     d->connection = connection;
-    Q_EMIT connectionChanged();
     d->rebuildFromConnection(connection);
+    Q_EMIT connectionChanged();
 }
 
 void PwNodeModel::Private::rebuildFromConnection(PipeWireConnection* newConnection)
 {
-    // Cache the row count up-front so we only emit countChanged once
-    // at the end if the count actually moved. Previously we fired
-    // countChanged up to four times per rebuild (one per remove +
+    // Cache the ORIGINAL row count (before any removes) so we only
+    // emit countChanged once at the end if the count actually moved
+    // net-net. Reading `nodes.size()` later would yield the
+    // intermediate zero after the clear()/endRemoveRows() pair, so a
+    // rebuild that lands on the same count would still fire a
+    // spurious countChanged. Previously the rebuild fired
+    // countChanged up to four times per call (one per remove +
     // insert phase) which forced every count-bound QML view to
     // re-evaluate four times for a single logical state change.
     const int oldCount = nodes.size();
@@ -112,6 +120,11 @@ void PwNodeModel::Private::rebuildFromConnection(PipeWireConnection* newConnecti
     }
     connectionWires.clear();
     for (auto* node : nodes) {
+        // Catch wire-up / teardown asymmetry: every node in `nodes`
+        // must have a corresponding entry in `nodeWires` (the inserts
+        // are paired inside wireNode + the snapshot/append paths).
+        // If this fires we've leaked the wire pair somewhere.
+        Q_ASSERT(nodeWires.contains(node));
         for (const auto& wire : nodeWires.value(node)) {
             QObject::disconnect(wire);
         }
@@ -140,11 +153,16 @@ void PwNodeModel::Private::rebuildFromConnection(PipeWireConnection* newConnecti
     // changes so the model emits dataChanged on the matching roles.
     // Lives inside the member function (not as a free helper) so it
     // can access Private's members directly without the privacy
-    // escape hatch a separate function would need. The lambdas
-    // capture `this` (the Private instance) and `node`; row lookups
-    // go through `this->rowIndex` inside the connect-lambdas, not via
-    // captured references to specific containers (which would be
-    // fragile if Private's layout changed).
+    // escape hatch a separate function would need. The connect-
+    // lambdas capture `this` (the Private instance) and `node` by
+    // value because the connect-lambda outlives the
+    // rebuildFromConnection stack frame: it stays registered until
+    // model teardown or the next rebuild. Private outlives both via
+    // the model's `std::unique_ptr<Private> d`, so the captured
+    // `this` stays valid for the full lifetime of any connection the
+    // lambda is wired to. Row lookups go through `this->rowIndex`
+    // inside the lambdas rather than through references to specific
+    // containers — keeps the wiring robust against Private's layout.
     auto wireNode = [this](PwNode* node) {
         auto& wires = nodeWires[node];
         wires.append(QObject::connect(node, &PwNode::infoChanged, q, [this, node]() {
@@ -175,6 +193,14 @@ void PwNodeModel::Private::rebuildFromConnection(PipeWireConnection* newConnecti
             QObject::connect(connection.data(), &PipeWireConnection::nodeAdded, q, [this, wireNode](PwNode* node) {
                 if (!node || !mediaClasses.contains(node->mediaClass()))
                     return;
+                // Guard against a race window between connect() and
+                // the nodes() snapshot below: if nodeAdded fires for
+                // a node that's already in the snapshot we seed from,
+                // we'd double-insert without this check. rowIndex is
+                // the O(1) hash, so the lookup is cheap on the hot
+                // path even when the race doesn't happen.
+                if (rowIndex.contains(node))
+                    return;
                 const int row = nodes.size();
                 q->beginInsertRows(QModelIndex(), row, row);
                 nodes.append(node);
@@ -200,6 +226,10 @@ void PwNodeModel::Private::rebuildFromConnection(PipeWireConnection* newConnecti
                 // stay accurate. Removal is O(n) in row count due to
                 // this row-shift fix-up; acceptable for low-cardinality
                 // audio-node sets.
+                //
+                // Views handle row-index shifts on remove via
+                // beginRemoveRows / endRemoveRows; no dataChanged
+                // needed for the shifted rows.
                 for (auto it = rowIndex.begin(); it != rowIndex.end(); ++it) {
                     if (it.value() > row)
                         --it.value();
@@ -248,28 +278,31 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
 {
     if (d->mediaClasses == classes)
         return;
+    // Assign the new filter FIRST so mediaClasses() reports the
+    // post-mutation list for the rebuild, then re-seed from the
+    // current connection so the filter change takes effect, and
+    // finally emit mediaClassesChanged so any binding awakened by the
+    // signal sees consistent state: mediaClasses() returns the new
+    // list AND the model's rows already reflect it. Emitting before
+    // rebuild would briefly expose "new mediaClasses() but stale
+    // rows", breaking the documented invariant that the model's rows
+    // always describe its current filter. Route through
+    // rebuildFromConnection directly (not setConnection) so consumers
+    // don't see a spurious connectionChanged when only the filter
+    // moved.
     d->mediaClasses = classes;
-    // Emit mediaClassesChanged BEFORE rebuildFromConnection, mirroring
-    // setConnection's signal-ordering rationale: the model's rows
-    // always describe its current filter. If we emitted after rebuild,
-    // bindings observing both signals would briefly see "rows
-    // populated for the NEW filter but `mediaClasses` still reports
-    // the OLD list", breaking the documented invariant.
-    Q_EMIT mediaClassesChanged();
-    // Re-seed from the current connection so the filter change takes
-    // effect immediately. Route through rebuildFromConnection
-    // directly so consumers don't see a spurious connectionChanged
-    // (which would re-evaluate every QML binding on `connection`)
-    // when only the filter moved.
     auto* current = d->connection.data();
     if (current) {
         d->rebuildFromConnection(current);
+    } else {
+        // No connection means no rows; rebuildFromConnection has
+        // nothing to re-seed from. Lock the invariant: whoever last
+        // detached this model (setConnection(nullptr) or the initial
+        // empty state) must have drained the row list, so a filter
+        // change with no connection cannot leave stragglers behind.
+        Q_ASSERT(d->nodes.isEmpty());
     }
-    // No connection means no rows; rebuildFromConnection has nothing
-    // to re-seed from. The previous setConnection(nullptr) call (or
-    // initial state) already drained any rows, so the early return
-    // here is safe — the filter has been recorded for the next
-    // setConnection(non-null) call to honour.
+    Q_EMIT mediaClassesChanged();
 }
 
 int PwNodeModel::rowCount(const QModelIndex& parent) const
@@ -341,22 +374,30 @@ QHash<int, QByteArray> PwNodeModel::roleNames() const
     };
 }
 
+// The pinned subclasses seed `mediaClasses` directly into Private
+// rather than calling `setMediaClasses`. At construction the model has
+// no connection and no rows, so the rebuildFromConnection path inside
+// `setMediaClasses` would be a no-op anyway — and emitting
+// `mediaClassesChanged` from a constructor would notify observers
+// before the subclass is fully constructed. The friend declarations
+// in PwNodeModel.h authorise this direct reach into `d`.
+
 PwSinkModel::PwSinkModel(QObject* parent)
     : PwNodeModel(parent)
 {
-    setMediaClasses({QStringLiteral("Audio/Sink")});
+    d->mediaClasses = {QStringLiteral("Audio/Sink")};
 }
 
 PwSourceModel::PwSourceModel(QObject* parent)
     : PwNodeModel(parent)
 {
-    setMediaClasses({QStringLiteral("Audio/Source")});
+    d->mediaClasses = {QStringLiteral("Audio/Source")};
 }
 
 PwStreamModel::PwStreamModel(QObject* parent)
     : PwNodeModel(parent)
 {
-    setMediaClasses({QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")});
+    d->mediaClasses = {QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")};
 }
 
 } // namespace PhosphorServicePipeWire
