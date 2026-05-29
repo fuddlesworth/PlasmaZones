@@ -110,6 +110,7 @@ private Q_SLOTS:
     void screenIdsRoleHandlesInOperator();
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
+    void setOpacityRendersValidValuesAndGuardsRejectPaths();
 };
 
 void TestWindowRuleModel::rolesExposed()
@@ -425,6 +426,56 @@ void TestWindowRuleModel::disableEngineNamesTheModeBeingDisabled()
     QVERIFY(s0 != s1);
     QVERIFY(s1 != s2);
     QVERIFY(s0 != s2);
+}
+
+void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
+{
+    // Pin that the SetOpacity actionLabel matches every resolver reject
+    // path (shader_resolve.cpp::resolveWindowOpacity): valid in-range
+    // values render as a percentage; null/undefined Value renders as
+    // bare "Opacity"; bool / out-of-range values render as
+    // "Opacity (invalid)". Without this guard the label would lie about
+    // a behaviour the runtime won't honour.
+    const auto buildRule = [](std::function<void(RuleAction&)> tweakAction) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 200;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        RuleAction action;
+        action.type = QString(ActionType::SetOpacity);
+        tweakAction(action);
+        rule.actions = {action};
+        return rule;
+    };
+
+    WindowRuleModel model;
+    model.setRules({
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, 0.5);
+        }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, 1.0);
+        }),
+        buildRule([](RuleAction&) { }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, true);
+        }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, 2.0);
+        }),
+    });
+
+    const auto labelAt = [&](int row) {
+        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+    };
+    QVERIFY2(labelAt(0).contains(QStringLiteral("50")), qPrintable(labelAt(0)));
+    QVERIFY2(labelAt(1).contains(QStringLiteral("100")), qPrintable(labelAt(1)));
+    // Missing Value: bare "Opacity" placeholder (no percent number)
+    QCOMPARE(labelAt(2), QStringLiteral("Opacity"));
+    // Bool payload: rejected with the (invalid) marker
+    QVERIFY2(labelAt(3).contains(QStringLiteral("invalid")), qPrintable(labelAt(3)));
+    // Out-of-range: same marker
+    QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
 }
 
 QTEST_MAIN(TestWindowRuleModel)

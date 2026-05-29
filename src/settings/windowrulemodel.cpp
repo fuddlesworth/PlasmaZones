@@ -262,15 +262,23 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return PzI18n::tr("Float");
     }
     if (action.type == ActionType::SetOpacity) {
-        // Mirror the resolver's null/undefined gate (shader_resolve.cpp).
-        // Without this, a rule whose Value key was hand-stripped or
-        // legacy-migrated away would surface as "Opacity 0%" — misleading
-        // and exactly the visible/invisible confusion the resolver avoids.
+        // Mirror EVERY resolver reject path (shader_resolve.cpp's
+        // resolveWindowOpacity) so the label never claims a behaviour
+        // the runtime won't honour: null/undefined → label-only,
+        // bool payload → "Opacity (invalid)", out-of-range value → same.
         const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
         if (raw.isNull() || raw.isUndefined()) {
             return PzI18n::tr("Opacity");
         }
-        const double v = raw.toVariant().toDouble();
+        const QVariant rv = raw.toVariant();
+        if (rv.typeId() == QMetaType::Bool) {
+            return PzI18n::tr("Opacity (invalid)");
+        }
+        bool ok = false;
+        const double v = rv.toDouble(&ok);
+        if (!ok || v < 0.0 || v > 1.0) {
+            return PzI18n::tr("Opacity (invalid)");
+        }
         return PzI18n::tr("Opacity %1%").arg(static_cast<int>(v * 100.0 + 0.5));
     }
     if (action.type == ActionType::OverrideAnimationShader) {

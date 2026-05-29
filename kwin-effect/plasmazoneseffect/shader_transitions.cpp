@@ -1086,7 +1086,40 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     // redirected with a shader installed but no bookkeeping. RAII guard
     // erases the entry if we don't successfully reach the bottom of the
     // function (either of the two op paths below threw).
+    // Snapshot the grab flags BEFORE the move-into-map so the scope-guard
+    // rollback path doesn't have to read them back through the inserted
+    // pointer (which is null on a contract-violating duplicate-key insert,
+    // see insertTransition's docstring). These values came from
+    // `holdCloseGrab || existingHeldGrab` / `holdAddedGrab ||
+    // existingAddedHeldGrab` computed above.
+    const bool transitionHadCloseGrab = transition.closeGrabHeld;
+    const bool transitionHadAddedGrab = transition.addedGrabHeld;
     auto* inserted = m_shaderManager.insertTransition(window, std::move(transition));
+    if (!inserted) {
+        // Contract violation: the supersession branch above did not erase
+        // the prior entry, or a concurrent install raced us. Release the
+        // grab refs we just acquired so the window doesn't strand in
+        // closing/added state, then bail. The new shader/redirect is not
+        // installed because we never reach setShader/redirect below.
+        if (transitionHadAddedGrab && window) {
+            window->setData(KWin::WindowAddedGrabRole, QVariant());
+        }
+        if (transitionHadCloseGrab && window) {
+            window->setData(KWin::WindowClosedGrabRole, QVariant());
+            QPointer<PlasmaZonesEffect> selfGuard(this);
+            KWin::EffectWindow* heldWindow = window;
+            QMetaObject::invokeMethod(
+                this,
+                [selfGuard, heldWindow]() {
+                    if (!selfGuard) {
+                        return;
+                    }
+                    heldWindow->unrefWindow();
+                },
+                Qt::QueuedConnection);
+        }
+        return false;
+    }
     bool emplaceCommitted = false;
     auto emplaceGuard = qScopeGuard([&]() {
         if (emplaceCommitted) {
@@ -1103,14 +1136,11 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         // endShaderTransition's grab-release sequence here so the
         // ref + role clear stay balanced on the rollback path.
         //
-        // Read the held flag from the inserted entry — the local
-        // `transition` was moved-from into the map and is no longer
-        // safe to inspect. The entry is guaranteed to be present
-        // (insertTransition asserts the insert succeeded; the map
-        // contains no prior entry for this window because the
-        // supersession branch above erased it).
-        const bool releaseCloseGrab = inserted->closeGrabHeld;
-        const bool releaseAddedGrab = inserted->addedGrabHeld;
+        // Use the pre-move snapshot rather than reading through
+        // `inserted->` — `transitionHadCloseGrab` / `transitionHadAddedGrab`
+        // captured the values that landed in the map.
+        const bool releaseCloseGrab = transitionHadCloseGrab;
+        const bool releaseAddedGrab = transitionHadAddedGrab;
         if (releaseAddedGrab && window) {
             // Symmetric WindowAddedGrabRole rollback. No ref to release.
             window->setData(KWin::WindowAddedGrabRole, QVariant());

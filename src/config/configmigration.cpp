@@ -1338,7 +1338,7 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 // Display.*Disabled* keys — the runtime LayoutRegistry and Settings now read
 // the rule store exclusively, so the v3 inputs are removed once converted.
 //
-// A MigrationStep is `void(QJsonObject&)` — it can only touch config.json.
+// Each migration step has signature `void(QJsonObject&)` — it can only touch config.json.
 // This step REMOVES the six Display.*Disabled* keys (their values are stashed
 // into a temporary `_v4DisableStash` root key for finalizeV4Conversion to
 // consume) and stamps `_version = 4`. finalizeV4Conversion (a post-chain step)

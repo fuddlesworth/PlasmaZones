@@ -55,6 +55,14 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
+    // Empty windowId is a precondition violation that the sibling slots
+    // (snapToAppRule, snapToEmptyZone, restoreToPersistedZone) all guard;
+    // mirror their early-return so the input contract is symmetric across
+    // the snap-restore family.
+    if (windowId.isEmpty()) {
+        return;
+    }
+
     if (!m_adaptor || !m_adaptor->service()) {
         return;
     }

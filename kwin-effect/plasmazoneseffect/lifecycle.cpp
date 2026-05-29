@@ -635,6 +635,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_daemonReadyRestoresDone = false;
         m_daemonReadyWindowStateProcessed = false;
         m_snapRestoreCache.clear();
+        // Reset the rules-subscription gate so the next daemon's
+        // `rulesChanged` broadcasts can be re-subscribed. Without this,
+        // the daemonReady disconnect+reconnect dance below would re-wire
+        // daemonReady against the new bus name but the rulesChanged
+        // subscription guard would still latch and skip the re-subscribe
+        // — silently dropping rule edits across daemon restarts.
+        m_windowRulesSubscribed = false;
         // Release any pending first-frame open suppression. Without the
         // daemon there is no `resolveWindowRestore` reply coming and no
         // autotile reposition either, so the suppression entry would just

@@ -90,6 +90,7 @@
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -1266,8 +1267,15 @@ bool Daemon::init()
                 } else if (!osdEnabled) {
                     continue;
                 } else if (osd.isAutotile) {
-                    if (!osd.algoId.isEmpty())
-                        showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
+                    if (!osd.algoId.isEmpty()) {
+                        // Resolve the algorithm's human-readable display
+                        // name via the registry instead of surfacing the
+                        // wire-format id (e.g. "bsp" → "Binary Split").
+                        // Mirrors osd.cpp:548-551.
+                        const auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(osd.algoId) : nullptr;
+                        const QString displayName = algo ? algo->name() : osd.algoId;
+                        showLayoutOsdForAlgorithm(osd.algoId, displayName, osd.screenId);
+                    }
                 } else {
                     PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
                     if (layout)

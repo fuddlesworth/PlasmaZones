@@ -769,6 +769,13 @@ void WindowTrackingAdaptor::loadState()
     }
     if (m_snapEngine) {
         m_snapEngine->setUnmanagedGeometries(unmanagedGeometries);
+    } else {
+        // The adaptor's ctor calls loadState() before the daemon calls
+        // setEngines(), so on initial startup m_snapEngine is null here
+        // and the push would silently drop the persisted pre-tile
+        // geometries. Stash them for replay from setEngines() once the
+        // engine is wired.
+        m_pendingUnmanagedGeometries = unmanagedGeometries;
     }
 
     // Load last used zone info. Only the id is persisted by saveState

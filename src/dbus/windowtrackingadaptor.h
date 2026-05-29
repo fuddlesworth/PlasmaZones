@@ -882,6 +882,14 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
 
+    // Pre-tile geometries loaded by loadState BEFORE m_snapEngine was
+    // wired (the ctor calls loadState, but setEngines is called later by
+    // the daemon). Replayed into the snap engine the moment setEngines
+    // wires it. Without this buffer, every restart silently drops the
+    // persisted unmanaged-geometry map and breaks drag-out-unsnap
+    // pre-snap-size restore across sessions.
+    QHash<QString, PhosphorEngine::PlacementEngineBase::UnmanagedEntry> m_pendingUnmanagedGeometries;
+
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.
     // Null until setScreenModeRouter is called (Daemon wires during init).

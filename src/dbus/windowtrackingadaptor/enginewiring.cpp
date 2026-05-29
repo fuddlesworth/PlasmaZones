@@ -49,6 +49,16 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     m_autotileEngine = autotileEngine;
     m_cachedSnapEngine = qobject_cast<PhosphorSnapEngine::SnapEngine*>(snapEngine);
 
+    // Replay any pre-tile geometries loadState() stashed because the
+    // snap engine wasn't wired yet at startup. Without this, the
+    // disk-persisted unmanaged-geometry map would silently never reach
+    // the snap engine and drag-out-unsnap pre-snap-size restore would
+    // break across sessions.
+    if (snapEngine && !m_pendingUnmanagedGeometries.isEmpty()) {
+        snapEngine->setUnmanagedGeometries(m_pendingUnmanagedGeometries);
+        m_pendingUnmanagedGeometries.clear();
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Cross-engine references — SnapEngine needs AutotileEngine for
     // isActiveOnScreen() routing and ZoneDetectionAdaptor for adjacency queries.

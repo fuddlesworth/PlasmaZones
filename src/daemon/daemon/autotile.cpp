@@ -107,7 +107,7 @@ void Daemon::updateAutotileScreens()
             // Inject algorithm from layout assignment (authoritative source)
             if (screenAlgorithms.contains(screenId)) {
                 const QString screenAlgo = screenAlgorithms.value(screenId);
-                overrides[QStringLiteral("Algorithm")] = screenAlgo;
+                overrides[PerScreenKeys::Algorithm] = screenAlgo;
 
                 // When the per-screen algorithm differs from the engine's
                 // current global algorithm and there's no explicit MaxWindows
@@ -143,7 +143,7 @@ void Daemon::updateAutotileScreens()
                         // setAlgorithm syncs settings via QSignalBlocker.
                         const int runtimeMaxWindows = m_autotileEngine->runtimeMaxWindows();
                         if (!globalAlgoPtr || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
-                            overrides[QStringLiteral("MaxWindows")] = screenAlgoPtr->defaultMaxWindows();
+                            overrides[PerScreenKeys::MaxWindows] = screenAlgoPtr->defaultMaxWindows();
                         }
                     } else {
                         qCWarning(lcDaemon) << "updateAutotileScreens: unknown per-screen algorithm" << screenAlgo

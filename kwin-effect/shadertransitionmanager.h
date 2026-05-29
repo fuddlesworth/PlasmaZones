@@ -16,6 +16,7 @@
 #include <opengl/gltexture.h>
 
 #include <QHash>
+#include <QLoggingCategory>
 #include <QPointF>
 #include <QPointer>
 #include <QSet>
@@ -36,6 +37,8 @@ class EffectWindow;
 }
 
 namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 class PlasmaZonesEffect;
 
@@ -229,6 +232,14 @@ public:
         auto result = m_shaderTransitions.emplace(window, std::move(transition));
         Q_ASSERT(result.second);
         if (!result.second) {
+            // Forensic breadcrumb so a release-build duplicate-key event
+            // surfaces in the journal instead of only showing up as the
+            // caller's downstream rollback. Q_ASSERT above already covers
+            // debug.
+            qCWarning(lcEffect,
+                      "ShaderTransitionManager::insertTransition: duplicate key for window %p — "
+                      "caller failed to eraseTransition first",
+                      static_cast<void*>(window));
             return nullptr;
         }
         return &result.first->second;

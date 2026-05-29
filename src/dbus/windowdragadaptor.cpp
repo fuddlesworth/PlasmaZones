@@ -50,27 +50,21 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
     , m_settings(settings)
     , m_windowTracking(windowTracking)
 {
-    // Debug-only assertions for development
-    Q_ASSERT(overlay);
-    Q_ASSERT(detector);
-    Q_ASSERT(layoutManager);
-    Q_ASSERT(settings);
-    Q_ASSERT(windowTracking);
-
-    // Runtime null checks for release builds — log and bail BEFORE the
-    // connect()s below dereference a null dep. The previous shape only
-    // logged the warning, then continued into `connect(m_layoutManager,
-    // ...)` which would crash on a null layoutManager in release. The
-    // debug-build assertions above already terminate; the release-build
-    // path now matches: do nothing, leaving the adaptor in a non-wired
-    // but non-crashing state.
+    // Every dep is mandatory — a misordered Daemon wiring that
+    // constructs WindowDragAdaptor before its dependencies would
+    // otherwise produce a silently-no-op (but D-Bus-callable) object
+    // that crashes on the first slot dispatch instead of at
+    // construction. qFatal aborts in both debug and release, matching
+    // the sibling WindowTrackingAdaptor + SnapAdaptor defensive
+    // pattern, so a wiring regression is loud and immediate.
     if (!overlay || !detector || !layoutManager || !settings || !windowTracking) {
-        qCWarning(lcDbusWindow) << "WindowDragAdaptor constructed with null dependencies — refusing to wire."
-                                << "overlay:" << (overlay != nullptr) << "detector:" << (detector != nullptr)
-                                << "layoutManager:" << (layoutManager != nullptr)
-                                << "settings:" << (settings != nullptr)
-                                << "windowTracking:" << (windowTracking != nullptr);
-        return;
+        qFatal(
+            "WindowDragAdaptor: null dependency at construction "
+            "(overlay=%p, detector=%p, layoutManager=%p, settings=%p, windowTracking=%p) "
+            "— daemon-wiring bug",
+            static_cast<void*>(overlay), static_cast<void*>(detector), static_cast<void*>(layoutManager),
+            static_cast<void*>(settings), static_cast<void*>(windowTracking));
+        return; // See snapadaptor.cpp's matching `return` for the MSVC noreturn caveat.
     }
 
     // Connect to layout change signals to invalidate cached zone geometry mid-drag
@@ -608,7 +602,8 @@ void WindowDragAdaptor::hideOverlayAndSelector()
         // AND set m_zoneDataDirty = false to protect the blank state.
         // Calling clearHighlight() here would redundantly re-write the
         // same properties AND flip m_zoneDataDirty back to true — the
-        // next shader-timer tick (shader.cpp:245) would then re-run
+        // next shader-timer tick (overlayservice/shader.cpp's
+        // `updateShaderUniforms` m_zoneDataDirty branch) would then re-run
         // updateZonesForAllWindows() and repopulate the zones, leaving
         // the overlay visibly showing zones after drag-end.
         if (!didIdle) {
