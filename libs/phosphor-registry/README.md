@@ -227,7 +227,7 @@ loader enforces this so on-disk layout and registry keys stay aligned.
 
 ## Dependencies
 
-- `QtCore`, `QtGui`, `QtQml`. The library does not link `QtQuick`;
+- `QtCore`, `QtQml`. The library does not link `QtGui` or `QtQuick`;
   consumers that build widgets do.
 - `phosphor-fsloader` (private link): `WatchedDirectorySet` +
   `IScanStrategy` drive the plugin loader's hot-reload path.

@@ -150,12 +150,14 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
     }
     const qint64 written = out.write(payload);
     if (written != payload.size()) {
-        qWarning().noquote() << "phosphor-theme: short write on rendered output" << outPath << ", " << out.errorString();
+        qWarning().noquote() << "phosphor-theme: short write on rendered output" << outPath << ", "
+                             << out.errorString();
         out.cancelWriting();
         return false;
     }
     if (!out.commit()) {
-        qWarning().noquote() << "phosphor-theme: commit failed on rendered output" << outPath << ", " << out.errorString();
+        qWarning().noquote() << "phosphor-theme: commit failed on rendered output" << outPath << ", "
+                             << out.errorString();
         return false;
     }
     return true;

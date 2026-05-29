@@ -37,9 +37,8 @@ void wireNode(PwNodeModel* model, PwNode* node, QList<PwNode*>& nodes,
         if (r < 0)
             return;
         const QModelIndex idx = model->index(r);
-        Q_EMIT model->dataChanged(idx, idx,
-                                  { Qt::DisplayRole, PwNodeModel::NameRole, PwNodeModel::NickRole,
-                                    PwNodeModel::DescriptionRole });
+        Q_EMIT model->dataChanged(
+            idx, idx, {Qt::DisplayRole, PwNodeModel::NameRole, PwNodeModel::NickRole, PwNodeModel::DescriptionRole});
     }));
     nodeWires[node].append(QObject::connect(node, &PwNode::propsChanged, model, [model, node, &nodes]() {
         const int r = nodes.indexOf(node);
@@ -47,7 +46,7 @@ void wireNode(PwNodeModel* model, PwNode* node, QList<PwNode*>& nodes,
             return;
         const QModelIndex idx = model->index(r);
         Q_EMIT model->dataChanged(idx, idx,
-                                  { PwNodeModel::ChannelCountRole, PwNodeModel::VolumesRole, PwNodeModel::MutedRole });
+                                  {PwNodeModel::ChannelCountRole, PwNodeModel::VolumesRole, PwNodeModel::MutedRole});
     }));
 }
 

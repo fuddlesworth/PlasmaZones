@@ -123,7 +123,11 @@ void PipeWireConnection::Private::onCoreInfo(void* data, const struct pw_core_in
     // fast-failing test can distinguish "no daemon" from "daemon
     // present, handshake mid-flight".
     QMetaObject::invokeMethod(
-        d->q, [d]() { d->setDaemonAvailable(true); }, Qt::QueuedConnection);
+        d->q,
+        [d]() {
+            d->setDaemonAvailable(true);
+        },
+        Qt::QueuedConnection);
 }
 
 void PipeWireConnection::Private::onCoreDone(void* data, uint32_t id, int seq)
@@ -133,7 +137,11 @@ void PipeWireConnection::Private::onCoreDone(void* data, uint32_t id, int seq)
         return;
     qCDebug(lcPipeWire) << "pw_core done seq" << seq << "handshake complete";
     QMetaObject::invokeMethod(
-        d->q, [d]() { d->setConnected(true); }, Qt::QueuedConnection);
+        d->q,
+        [d]() {
+            d->setConnected(true);
+        },
+        Qt::QueuedConnection);
 }
 
 void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, int res, const char* message)
@@ -208,7 +216,12 @@ void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint
     entry->id = id;
     entry->mediaClass = mediaClass;
     entry->proxy = proxy;
+    // Move the entry into the map BEFORE wiring the C-side listener.
+    // If the emplace throws (allocator failure), the unique_ptr cleans
+    // up the entry on scope exit; wiring the spa_hook first would
+    // leave it pointing at a freed entry.
     LoopNode* entryPtr = entry.get();
+    d->loopNodes.emplace(id, std::move(entry));
     pw_node_add_listener(reinterpret_cast<pw_node*>(proxy), &entryPtr->nodeListener, &kNodeEvents, entryPtr);
     // Pre-arm SPA_PARAM_Props: enumerate the current pod, then
     // subscribe so future updates (external volume changes from
@@ -217,12 +230,15 @@ void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint
     // subscription only the initial enumeration would land; every
     // out-of-band change would be invisible to the model.
     pw_node_enum_params(reinterpret_cast<pw_node*>(proxy), 0, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
-    uint32_t subscribeIds[] = { SPA_PARAM_Props };
+    uint32_t subscribeIds[] = {SPA_PARAM_Props};
     pw_node_subscribe_params(reinterpret_cast<pw_node*>(proxy), subscribeIds, 1);
-    d->loopNodes.emplace(id, std::move(entry));
 
     QMetaObject::invokeMethod(
-        d->q, [d, id, mediaClass, p]() { d->guiNodeAdded(id, mediaClass, p); }, Qt::QueuedConnection);
+        d->q,
+        [d, id, mediaClass, p]() {
+            d->guiNodeAdded(id, mediaClass, p);
+        },
+        Qt::QueuedConnection);
 }
 
 void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id)
@@ -258,7 +274,11 @@ void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id
         pw_proxy_destroy(entry->proxy);
     }
     QMetaObject::invokeMethod(
-        d->q, [d, id]() { d->guiNodeRemoved(id); }, Qt::QueuedConnection);
+        d->q,
+        [d, id]() {
+            d->guiNodeRemoved(id);
+        },
+        Qt::QueuedConnection);
 }
 
 int PipeWireConnection::Private::onDefaultMetadataProperty(void* data, uint32_t subject, const char* key,
@@ -317,7 +337,11 @@ void PipeWireConnection::Private::onNodeInfo(void* data, const struct pw_node_in
     const quint32 id = entry->id;
     const auto props = detail::propsFromDict(info->props);
     QMetaObject::invokeMethod(
-        d->q, [d, id, props]() { d->guiNodeInfo(id, props); }, Qt::QueuedConnection);
+        d->q,
+        [d, id, props]() {
+            d->guiNodeInfo(id, props);
+        },
+        Qt::QueuedConnection);
 }
 
 void PipeWireConnection::Private::onNodeParam(void* data, int seq, uint32_t paramId, uint32_t index, uint32_t next,

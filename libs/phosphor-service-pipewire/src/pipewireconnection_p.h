@@ -74,13 +74,13 @@ public:
         Private* owner = nullptr;
     };
 
-    LoopThread thread { this };
+    LoopThread thread{this};
 
     /// Released by the worker thread once `pw_main_loop_new` has
     /// either succeeded or failed (so `loop` has its final value).
     /// The constructor acquires this before returning so the
     /// destructor never observes the worker mid-startup.
-    QSemaphore startupReady { 0 };
+    QSemaphore startupReady{0};
 
     // Loop-side state. ONLY accessed from the loop thread.
     pw_main_loop* loop = nullptr;
@@ -93,9 +93,9 @@ public:
     /// present (rare: only a bare PipeWire daemon without
     /// WirePlumber) or pre-handshake.
     pw_proxy* defaultMetadata = nullptr;
-    spa_hook coreListener {};
-    spa_hook registryListener {};
-    spa_hook defaultMetadataListener {};
+    spa_hook coreListener{};
+    spa_hook registryListener{};
+    spa_hook defaultMetadataListener{};
     int pendingSyncSeq = 0;
 
     /// Per-node loop-thread state. We hold the pw_proxy for the node
@@ -111,7 +111,7 @@ public:
         quint32 id = 0;
         QString mediaClass;
         pw_proxy* proxy = nullptr;
-        spa_hook nodeListener {};
+        spa_hook nodeListener{};
     };
     /// std::unordered_map (not QHash) because QHash requires its value
     /// type to be copyable for rehashing and std::unique_ptr is move-
@@ -130,8 +130,8 @@ public:
     // thread itself via queued cross-thread signals; the atomics let
     // a property-system getter return the cached value without a
     // round-trip to the worker thread.
-    std::atomic<bool> connected { false };
-    std::atomic<bool> daemonAvailable { false };
+    std::atomic<bool> connected{false};
+    std::atomic<bool> daemonAvailable{false};
 
     // String state touched only on the GUI thread (read via the
     // accessors, written by the GUI-thread setter slots posted from

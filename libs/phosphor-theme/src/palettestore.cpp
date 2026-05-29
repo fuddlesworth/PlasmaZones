@@ -95,6 +95,14 @@ QColor PaletteStore::token(const QString& name) const
 
 bool PaletteStore::loadFromJson(const QByteArray& json)
 {
+    // Public entry point: caller passed a raw blob, so drop the watched
+    // source per the header contract (sourcePath empty after a JSON-blob
+    // load).
+    return parseAndApplyJson(json, /*dropWatchedSource=*/true);
+}
+
+bool PaletteStore::parseAndApplyJson(const QByteArray& json, bool dropWatchedSource)
+{
     QJsonParseError err{};
     const auto doc = QJsonDocument::fromJson(json, &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject()) {
@@ -142,20 +150,24 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
         return false;
     }
 
-    // Drop the watched source so the documented contract holds: after
-    // loadFromJson the palette is sourced from an in-process blob, not
-    // a watched file, and a later on-disk edit on a previously-watched
-    // path must NOT clobber the just-applied tokens. (Header doc on
-    // `sourcePath` says it's empty in this case.)
-    if (!m_watcher->files().isEmpty()) {
-        m_watcher->removePaths(m_watcher->files());
-    }
-    if (!m_watcher->directories().isEmpty()) {
-        m_watcher->removePaths(m_watcher->directories());
-    }
-    if (!m_sourcePath.isEmpty()) {
-        m_sourcePath.clear();
-        Q_EMIT sourcePathChanged();
+    if (dropWatchedSource) {
+        // Drop the watched source so the documented contract holds:
+        // after a public loadFromJson the palette is sourced from an
+        // in-process blob, not a watched file, and a later on-disk edit
+        // on a previously-watched path must NOT clobber the just-
+        // applied tokens. reloadFromCurrentPath is the only caller that
+        // passes false here so a successful hot-reload doesn't disarm
+        // the watcher it was just triggered by.
+        if (!m_watcher->files().isEmpty()) {
+            m_watcher->removePaths(m_watcher->files());
+        }
+        if (!m_watcher->directories().isEmpty()) {
+            m_watcher->removePaths(m_watcher->directories());
+        }
+        if (!m_sourcePath.isEmpty()) {
+            m_sourcePath.clear();
+            Q_EMIT sourcePathChanged();
+        }
     }
 
     applyPalette(parsed);
@@ -180,7 +192,12 @@ bool PaletteStore::loadFromFile(const QString& path)
     const auto data = file.readAll();
     file.close();
 
-    if (!loadFromJson(data)) {
+    // Bypass the public loadFromJson entry so the watcher-drop side
+    // effect doesn't fire here: loadFromFile is the explicit "watch
+    // this path" branch and arms the watcher below. Calling
+    // loadFromJson would drop the just-armed watcher on a subsequent
+    // load (and emit a spurious sourcePathChanged-to-empty).
+    if (!parseAndApplyJson(data, /*dropWatchedSource=*/false)) {
         Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON or empty token map"));
         return false;
     }

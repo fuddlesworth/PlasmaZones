@@ -99,7 +99,7 @@ bool waitForConnect(PhosphorServicePipeWire::PipeWireConnection& conn, int timeo
 /// connected the nodes are already enumerated. Still, give a short
 /// extra tick for late-arriving SPA_PARAM_Props events (volumes,
 /// mute) before we render output.
-void settleRegistry(int extraMs = 80)
+void settleRegistry(int extraMs = kDefaultPostReadSettleMs)
 {
     QEventLoop loop;
     QTimer::singleShot(extraMs, &loop, &QEventLoop::quit);
@@ -273,10 +273,14 @@ int main(int argc, char** argv)
 
     PhosphorServicePipeWire::PipeWireConnection conn;
     const int timeoutMs = connectTimeoutMs();
-    // Install the connect-watcher BEFORE calling connect() so a daemon
-    // that flips us into the connected state synchronously can't race
-    // past the QObject::connect installation.
     conn.connect();
+    // waitForConnect re-checks isConnected() before exec()'ing its
+    // QEventLoop, so a daemon that synchronously flips us into the
+    // connected state between conn.connect() and the QObject::connect
+    // installation is handled by the explicit early-out at the top of
+    // waitForConnect, not by ordering. (Async handshakes via
+    // pw_loop_invoke / queued signals can't complete synchronously
+    // anyway, so this is belt-and-suspenders.)
     if (!waitForConnect(conn, timeoutMs)) {
         err() << "failed to connect to PipeWire daemon within " << timeoutMs << "ms\n";
         return 2;

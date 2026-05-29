@@ -33,8 +33,8 @@ int PipeWireConnection::Private::dispatchParamWrite(struct spa_loop* loop, bool 
     return 0;
 }
 
-int PipeWireConnection::Private::dispatchDefaultWrite(struct spa_loop* loop, bool async, uint32_t seq,
-                                                      const void* data, size_t size, void* user_data)
+int PipeWireConnection::Private::dispatchDefaultWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data,
+                                                      size_t size, void* user_data)
 {
     Q_UNUSED(loop);
     Q_UNUSED(async);
@@ -123,16 +123,13 @@ void PipeWireConnection::writeVolumes(quint32 nodeId, const QList<qreal>& volume
     req->nodeId = nodeId;
     req->writeVolumes = true;
     req->volumes = volumes;
-    // pw_loop_invoke returns 0 on success; on failure the handler is
-    // never called so the request would leak. Release ownership only
-    // when the call has accepted the work.
-    const int rc = pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false,
-                                  req.get());
     // pw_loop_invoke returns a sequence number (positive) on async
     // success or the invoked function's return value on sync; only a
     // negative value signals a queue-side failure where the dispatcher
     // won't fire. Release ownership to the dispatcher unless we hit
     // that rare negative case (unique_ptr cleans up on scope exit).
+    const int rc =
+        pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false, req.get());
     if (rc >= 0) {
         (void)req.release();
     } else {
@@ -149,8 +146,8 @@ void PipeWireConnection::writeMuted(quint32 nodeId, bool muted)
     req->nodeId = nodeId;
     req->writeMuted = true;
     req->muted = muted;
-    const int rc = pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false,
-                                  req.get());
+    const int rc =
+        pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false, req.get());
     if (rc >= 0) {
         (void)req.release();
     } else {
@@ -169,8 +166,8 @@ void PipeWireConnection::setDefaultSink(const QString& nodeName)
     // default.audio.sink on the next reconcile.
     req->key = QStringLiteral("default.configured.audio.sink");
     req->nodeName = nodeName;
-    const int rc = pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false,
-                                  req.get());
+    const int rc =
+        pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false, req.get());
     if (rc >= 0) {
         (void)req.release();
     } else {
@@ -186,8 +183,8 @@ void PipeWireConnection::setDefaultSource(const QString& nodeName)
     req->owner = d.get();
     req->key = QStringLiteral("default.configured.audio.source");
     req->nodeName = nodeName;
-    const int rc = pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false,
-                                  req.get());
+    const int rc =
+        pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false, req.get());
     if (rc >= 0) {
         (void)req.release();
     } else {

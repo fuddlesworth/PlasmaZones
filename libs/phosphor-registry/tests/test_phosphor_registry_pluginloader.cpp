@@ -207,7 +207,12 @@ void TestPluginLoader::ignoresPluginWithoutSo()
     QDir().mkpath(pluginDir);
     QFile mf(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
     QVERIFY(mf.open(QIODevice::WriteOnly | QIODevice::Text));
-    mf.write(QStringLiteral("{\"id\":\"manifest-only\",\"displayName\":\"Bad\",\"abi\":1}").toUtf8());
+    // ABI value follows the build-time constant so the test pins the
+    // "no .so under" rejection path regardless of future ABI bumps.
+    // Hardcoding `1` would silently shift the test to the abi-mismatch
+    // path if PluginAbiVersion were ever incremented to 2.
+    mf.write(
+        QStringLiteral("{\"id\":\"manifest-only\",\"displayName\":\"Bad\",\"abi\":%1}").arg(PluginAbiVersion).toUtf8());
     mf.close();
 
     Registry<IBarWidgetFactory> registry;
@@ -265,7 +270,12 @@ void TestPluginLoader::rejectsAbiVersionMismatch()
     QDir().mkpath(pluginDir);
     QFile mf(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
     QVERIFY(mf.open(QIODevice::WriteOnly | QIODevice::Text));
-    mf.write(QStringLiteral("{\"id\":\"future-plugin\",\"displayName\":\"Future\",\"abi\":99}").toUtf8());
+    // PluginAbiVersion + 99 guarantees a mismatch across any future
+    // bump of the constant, mirroring parseObject_rejectsAbiMismatch
+    // in test_phosphor_registry_manifest.cpp.
+    mf.write(QStringLiteral("{\"id\":\"future-plugin\",\"displayName\":\"Future\",\"abi\":%1}")
+                 .arg(PluginAbiVersion + 99)
+                 .toUtf8());
     mf.close();
 
     Registry<IBarWidgetFactory> registry;

@@ -76,6 +76,14 @@ Q_SIGNALS:
     void loadError(const QString& path, const QString& reason);
 
 private:
+    /// Parse a JSON blob and apply its tokens to the current palette.
+    /// `dropWatchedSource` controls whether m_sourcePath + the watcher
+    /// are reset on success. The public `loadFromJson` passes true (the
+    /// header contract says the palette came from an in-process blob,
+    /// not a watched file); `reloadFromCurrentPath` passes false so a
+    /// successful hot-reload doesn't disarm the watcher it was just
+    /// triggered by.
+    bool parseAndApplyJson(const QByteArray& json, bool dropWatchedSource);
     void applyPalette(const QVariantMap& tokens);
     void reloadFromCurrentPath();
 
