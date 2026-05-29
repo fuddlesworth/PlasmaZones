@@ -44,6 +44,15 @@ namespace PhosphorRegistry {
 //      The loader never calls it twice on the same QLibrary; a
 //      hot-reload involves a fresh QLibrary instance pointing at
 //      a different path.
+//   6. The plugin .so must be linked against a libstdc++ ABI
+//      compatible with the loader's. The loader wraps the returned
+//      factory in a shared_ptr whose deleter compiles `delete p;`
+//      against the LOADER's `operator delete`, so the factory
+//      must have been allocated via the SAME `operator new` pair.
+//      In practice this means both binaries must link against
+//      the same libstdc++ (or libc++) implementation; mixing
+//      stdlibs across the boundary is undefined behaviour even
+//      if the C++ standard versions match.
 //
 // Phase 1.3 wires this entry point for IBarWidgetFactory only. When
 // the four other surfaces (control-center tile, launcher provider,

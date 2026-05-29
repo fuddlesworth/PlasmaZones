@@ -6,6 +6,7 @@
 #include "defaultpalette.h"
 
 #include <QColor>
+#include <QDebug>
 #include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
@@ -13,6 +14,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLatin1String>
+#include <QSet>
 #include <QString>
 #include <QTimer>
 
@@ -53,6 +55,12 @@ PaletteStore::PaletteStore(QObject* parent)
     //
     // Watching just the file path is therefore not sufficient on its own;
     // we always pair it with a parent-directory watch.
+    //
+    // Re-entry safety: loadFromFile swaps the watcher BEFORE
+    // parseAndApplyJson runs, so by the time any user slot wired to
+    // paletteChanged / sourcePathChanged executes, the watcher
+    // already reflects the new source. Stale-watcher reads inside a
+    // signal slot are therefore not possible.
     connect(m_watcher.get(), &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
         if (QFileInfo::exists(path) && !m_watcher->files().contains(path)) {
             m_watcher->addPath(path);
@@ -90,18 +98,56 @@ QColor PaletteStore::token(const QString& name) const
     if (it == m_palette.constEnd()) {
         return QColor();
     }
+    // applyPalette normalises every stored value to QColor before
+    // insert, so a non-QColor variant here is a contract violation
+    // (direct map mutation, deserialisation skipping the normaliser,
+    // or a memory corruption indicator). Log instead of silently
+    // returning a default QColor and hiding the bug downstream.
+    if (it.value().userType() != QMetaType::QColor) {
+        qWarning().noquote() << "phosphor-theme: PaletteStore::token(" << name
+                             << ") expected QColor but stored variant has typeId" << it.value().userType()
+                             << "; returning default QColor()";
+        return QColor();
+    }
     return it.value().value<QColor>();
 }
 
+// Single-line forwarder: the public JSON-blob entry drops any watched
+// source per the IThemeService contract, then delegates to the shared
+// parser. See parseAndApplyJson for the parse + merge logic.
 bool PaletteStore::loadFromJson(const QByteArray& json)
 {
-    // Public entry point: caller passed a raw blob, so drop the watched
-    // source per the header contract (sourcePath empty after a JSON-blob
-    // load).
-    return parseAndApplyJson(json, /*dropWatchedSource=*/true);
+    dropWatcherAndClearSourcePath();
+    return parseAndApplyJson(json);
 }
 
-bool PaletteStore::parseAndApplyJson(const QByteArray& json, bool dropWatchedSource)
+void PaletteStore::dropWatcherAndClearSourcePath()
+{
+    // The IThemeService::loadFromJson contract says the palette is
+    // sourced from an in-process blob, not a watched file, after a
+    // public JSON-blob load. Drop both the file and the paired
+    // parent-directory watch so a later on-disk edit on a previously-
+    // watched path doesn't clobber the just-applied tokens, and clear
+    // m_sourcePath so QML bindings re-evaluate.
+    //
+    // Also stop any pending debounce so a queued reload tick can't
+    // run reloadFromCurrentPath against the (now empty) source. This
+    // mirrors resetToDefaults's debounce-stop and keeps the two
+    // watcher-dropping paths symmetric.
+    m_reloadDebounce->stop();
+    if (!m_watcher->files().isEmpty()) {
+        m_watcher->removePaths(m_watcher->files());
+    }
+    if (!m_watcher->directories().isEmpty()) {
+        m_watcher->removePaths(m_watcher->directories());
+    }
+    if (!m_sourcePath.isEmpty()) {
+        m_sourcePath.clear();
+        Q_EMIT sourcePathChanged();
+    }
+}
+
+bool PaletteStore::parseAndApplyJson(const QByteArray& json)
 {
     QJsonParseError err{};
     const auto doc = QJsonDocument::fromJson(json, &err);
@@ -150,26 +196,6 @@ bool PaletteStore::parseAndApplyJson(const QByteArray& json, bool dropWatchedSou
         return false;
     }
 
-    if (dropWatchedSource) {
-        // Drop the watched source so the documented contract holds:
-        // after a public loadFromJson the palette is sourced from an
-        // in-process blob, not a watched file, and a later on-disk edit
-        // on a previously-watched path must NOT clobber the just-
-        // applied tokens. reloadFromCurrentPath is the only caller that
-        // passes false here so a successful hot-reload doesn't disarm
-        // the watcher it was just triggered by.
-        if (!m_watcher->files().isEmpty()) {
-            m_watcher->removePaths(m_watcher->files());
-        }
-        if (!m_watcher->directories().isEmpty()) {
-            m_watcher->removePaths(m_watcher->directories());
-        }
-        if (!m_sourcePath.isEmpty()) {
-            m_sourcePath.clear();
-            Q_EMIT sourcePathChanged();
-        }
-    }
-
     applyPalette(parsed);
     return true;
 }
@@ -182,7 +208,18 @@ bool PaletteStore::loadFromFile(const QString& path)
     // between the load and a later reload (Qt FileDialogs, plugins,
     // KDE-service-launched daemons) would make the two resolve to
     // different files. Storing the absolute path closes that gap.
-    const QString absolutePath = QFileInfo(path).absoluteFilePath();
+    //
+    // canonicalFilePath also resolves symlinks (e.g. a desktop-theme
+    // pack ships theme.json as a symlink into the package data dir),
+    // so the watcher tracks the file whose contents actually change
+    // rather than an indirection that may be re-pointed without
+    // notifying QFileSystemWatcher. canonicalFilePath returns empty
+    // when the path doesn't exist; fall back to absoluteFilePath in
+    // that case so the open() below still reports the user-visible
+    // path in the error message.
+    const QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    const QString absolutePath = canonical.isEmpty() ? info.absoluteFilePath() : canonical;
 
     QFile file(absolutePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -192,41 +229,32 @@ bool PaletteStore::loadFromFile(const QString& path)
     const auto data = file.readAll();
     file.close();
 
-    // Set m_sourcePath BEFORE applying the palette so QML bindings that
-    // observe both palette and sourcePath see a coherent transition
-    // (new palette → new path). Otherwise paletteChanged fires with
-    // sourcePath still empty / pointing at the prior source, then
-    // sourcePathChanged catches up on the next event-loop tick. Roll
-    // back on parse failure so a bad file doesn't leave sourcePath
-    // pointing at a file whose tokens never actually loaded.
-    const QString previousSourcePath = m_sourcePath;
-    const bool sourcePathMoved = (m_sourcePath != absolutePath);
-    if (sourcePathMoved) {
-        m_sourcePath = absolutePath;
-        Q_EMIT sourcePathChanged();
-    }
-
-    // Bypass the public loadFromJson entry so the watcher-drop side
-    // effect doesn't fire here: loadFromFile is the explicit "watch
-    // this path" branch and arms the watcher below. Calling
-    // loadFromJson would drop the just-armed watcher on a subsequent
-    // load (and emit a spurious sourcePathChanged-to-empty).
-    if (!parseAndApplyJson(data, /*dropWatchedSource=*/false)) {
-        if (sourcePathMoved) {
-            m_sourcePath = previousSourcePath;
-            Q_EMIT sourcePathChanged();
-        }
+    // Parse + validate FIRST against a local map so a failed parse
+    // doesn't observably mutate sourcePath / the watcher. The
+    // previous order (set m_sourcePath, parse, roll back on failure)
+    // emitted sourcePathChanged twice (new → old) for a single
+    // failed load, which QML bindings would see as two transient
+    // states.
+    QJsonParseError err{};
+    const auto doc = QJsonDocument::fromJson(data, &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
         Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON or empty token map"));
         return false;
     }
 
-    // Drop any pending debounce from the previous source so a queued
-    // tick can't fire a redundant reload of the file we just loaded
-    // synchronously.
-    m_reloadDebounce->stop();
+    // Commit the path BEFORE parseAndApplyJson so QML bindings that
+    // observe both palette and sourcePath see a coherent transition
+    // (new path → new palette). Otherwise paletteChanged would fire
+    // with sourcePath still pointing at the prior source, then
+    // sourcePathChanged would catch up on the next event-loop tick.
+    const bool sourcePathMoved = (m_sourcePath != absolutePath);
+    if (sourcePathMoved) {
+        m_sourcePath = absolutePath;
+    }
 
-    // Replace any previous watch so the store never accumulates stale
-    // paths across `loadFromFile` calls. Pair the file watch with a
+    // Swap the watcher BEFORE running parseAndApplyJson so any user
+    // slot wired to paletteChanged that reads the watcher observes
+    // the NEW state, not the stale one. Pair the file watch with a
     // parent-directory watch so atomic-rename saves still trigger a
     // reload after the unlink + create cycle drops the file watch
     // (see the constructor's directoryChanged handler).
@@ -241,6 +269,27 @@ bool PaletteStore::loadFromFile(const QString& path)
     if (!parentDir.isEmpty()) {
         m_watcher->addPath(parentDir);
     }
+
+    // Drop any pending debounce from the previous source so a queued
+    // tick can't fire a redundant reload of the file we just loaded
+    // synchronously.
+    m_reloadDebounce->stop();
+
+    if (sourcePathMoved) {
+        Q_EMIT sourcePathChanged();
+    }
+
+    // Parse the (already-validated) payload. parseAndApplyJson can
+    // still return false on an empty token map, in which case we
+    // emit loadError but leave sourcePath + the watcher pointed at
+    // the new file — the file exists, the JSON is syntactically
+    // fine, the contents just had no usable tokens. That is the
+    // shape a user can fix in-editor without re-triggering load,
+    // so keeping the watcher armed is the right call.
+    if (!parseAndApplyJson(data)) {
+        Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON or empty token map"));
+        return false;
+    }
     return true;
 }
 
@@ -254,31 +303,77 @@ void PaletteStore::applyTokens(const QVariantMap& tokens)
 
 void PaletteStore::resetToDefaults()
 {
-    // The header contract is "stops any active filesystem watch". That
-    // covers both the file watch and its paired parent-directory watch.
-    // Leaking the directory watch would hold an inotify slot forever
-    // even after the user dropped back to defaults.
+    // Clear m_sourcePath BEFORE stopping the debounce so a future
+    // refactor that reorders the watcher-drop or signal emit still
+    // benefits from reloadFromCurrentPath's empty-source short-
+    // circuit. The header contract is "stops any active filesystem
+    // watch" — that covers both the file watch and its paired
+    // parent-directory watch. Leaking the directory watch would
+    // hold an inotify slot forever even after the user dropped
+    // back to defaults.
+    const bool sourcePathWasSet = !m_sourcePath.isEmpty();
+    if (sourcePathWasSet) {
+        m_sourcePath.clear();
+    }
+    m_reloadDebounce->stop();
     if (!m_watcher->files().isEmpty()) {
         m_watcher->removePaths(m_watcher->files());
     }
     if (!m_watcher->directories().isEmpty()) {
         m_watcher->removePaths(m_watcher->directories());
     }
-    m_reloadDebounce->stop();
-    if (!m_sourcePath.isEmpty()) {
-        m_sourcePath.clear();
+    if (sourcePathWasSet) {
         Q_EMIT sourcePathChanged();
     }
-    // Discard the current palette so any extra tokens layered in by a
-    // previous loadFromJson / loadFromFile (matugen-extended brand_*,
-    // hand-edited custom keys) don't survive the reset. applyPalette's
-    // merge semantics make sense for mid-session edits, but reset is
-    // explicitly a "back to canonical defaults" action — leaving stray
-    // user tokens behind contradicts the IThemeService contract. After
-    // the clear, every entry in defaultDarkPalette() is an insert, so
-    // applyPalette's `changed` flag fires paletteChanged.
-    m_palette.clear();
-    applyPalette(detail::defaultDarkPalette());
+
+    // True replace-with-defaults: drop any user-extended tokens
+    // that aren't part of the canonical default set, then apply
+    // the defaults. The previous implementation did
+    // `m_palette.clear(); applyPalette(defaults);` which always
+    // fired paletteChanged because every insert into the empty map
+    // looked like a fresh change — even when resetToDefaults was
+    // called on a store already holding exactly the defaults. The
+    // contract is "no paletteChanged unless the palette actually
+    // changed", so compute the diff honestly.
+    const QVariantMap defaults = detail::defaultDarkPalette();
+
+    // Drop any token in the current palette that's absent from the
+    // defaults (matugen-extended brand_*, hand-edited custom keys).
+    // Track whether a key was actually removed so we can decide
+    // whether to emit paletteChanged when applyPalette below
+    // happens to be a no-op (store was already at defaults).
+    bool droppedExtras = false;
+    QSet<QString> defaultsKeys;
+    defaultsKeys.reserve(defaults.size());
+    for (auto it = defaults.constBegin(); it != defaults.constEnd(); ++it) {
+        defaultsKeys.insert(it.key());
+    }
+    const QList<QString> existingKeys = m_palette.keys();
+    for (const QString& key : existingKeys) {
+        if (!defaultsKeys.contains(key)) {
+            m_palette.remove(key);
+            droppedExtras = true;
+        }
+    }
+
+    // applyPalette emits paletteChanged itself if any value
+    // changed. If it doesn't (store already at defaults for every
+    // default key) but we dropped at least one extra key above,
+    // we still need to fire paletteChanged because the palette
+    // observably changed. Use a one-shot connection to detect
+    // applyPalette's emit so we don't double-fire.
+    bool applyEmitted = false;
+    const auto conn = connect(
+        this, &PaletteStore::paletteChanged, this,
+        [&applyEmitted]() {
+            applyEmitted = true;
+        },
+        Qt::DirectConnection);
+    applyPalette(defaults);
+    disconnect(conn);
+    if (droppedExtras && !applyEmitted) {
+        Q_EMIT paletteChanged();
+    }
 }
 
 QString PaletteStore::sourcePath() const
@@ -286,6 +381,10 @@ QString PaletteStore::sourcePath() const
     return m_sourcePath;
 }
 
+// Merge incoming tokens over the current palette. The watcher-drop
+// side effect that used to live here moved into the dedicated
+// dropWatcherAndClearSourcePath() helper — applyPalette is now
+// purely a token-merge primitive with no watcher coupling.
 void PaletteStore::applyPalette(const QVariantMap& tokens)
 {
     // Merge over the current palette: tokens absent from the new payload
@@ -335,12 +434,12 @@ void PaletteStore::reloadFromCurrentPath()
     }
     const auto data = file.readAll();
     file.close();
-    // Route through parseAndApplyJson with dropWatchedSource=false so
-    // a successful hot-reload doesn't disarm the watcher that just
-    // triggered it. Calling the public loadFromJson here would clear
-    // m_sourcePath + the watcher on every reload (header contract for
-    // the JSON-blob entry), permanently silencing future on-disk edits.
-    if (!parseAndApplyJson(data, /*dropWatchedSource=*/false)) {
+    // Route through parseAndApplyJson WITHOUT dropping the watcher
+    // (parseAndApplyJson no longer drops the watcher at all — that's
+    // dropWatcherAndClearSourcePath's job now, and only loadFromJson
+    // calls it). A successful hot-reload therefore keeps the watcher
+    // armed, so the next on-disk edit fires too.
+    if (!parseAndApplyJson(data)) {
         Q_EMIT loadError(m_sourcePath, QStringLiteral("invalid JSON or empty token map"));
     }
 }

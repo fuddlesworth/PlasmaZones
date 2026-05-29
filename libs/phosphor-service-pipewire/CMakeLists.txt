@@ -8,7 +8,10 @@
 # Single-process by design (U3): the PipeWire main loop runs on a dedicated
 # QThread inside the same QGuiApplication that hosts the shell. Public API
 # is libpipewire-free (pimpl); consumers only need Qt deps. WirePlumber 0.5
-# powers default-node switching (added in milestone 6, not here in M1/M2).
+# powers default-node switching (milestone 6 of the Phase 2.1 plan). All ten
+# milestones in docs/phosphor-shell-design/04-implementation-plan.md § 2.1
+# have shipped on feat/phase-2.1-pipewire-service; see the README "Status"
+# section for the full milestone-by-milestone landing record.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -41,6 +44,18 @@ include(GenerateExportHeader)
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3>=1.0.0)
+
+# Surface the PipeWire dependency in the top-level feature_summary
+# (mirrors the WrapVulkanHeaders pattern in the project root
+# CMakeLists.txt). add_feature_info is the FeatureSummary entry point
+# for pkg-config-discovered modules; set_package_properties only applies
+# to find_package targets. Guarded so a standalone configure of this
+# subproject (which does not include(FeatureSummary)) stays valid.
+if(COMMAND add_feature_info)
+    add_feature_info("PipeWire"
+                     PIPEWIRE_FOUND
+                     "Native PipeWire mixer (sinks / sources / streams) for phosphor-service-pipewire")
+endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -166,6 +181,9 @@ install(FILES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if(CMAKE_PROJECT_NAME STREQUAL "PhosphorServicePipeWire" OR BUILD_TESTING)
+    # enable_testing() is a no-op when KDECMakeSettings already
+    # included CTest at the top level. The redundant call lets a
+    # standalone build of this subproject still discover ctest.
     enable_testing()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
         add_subdirectory(tests)

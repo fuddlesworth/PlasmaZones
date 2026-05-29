@@ -15,7 +15,14 @@ Item {
     // System data sources: owned at the top level so multiple
     // panels/windows can share a single Process / FileView each.
 
-    Component.onCompleted: shellRouter.togglePopup = panelPopupHost.toggle
+    // Wrap in a closure rather than assigning the bare method reference:
+    // a bare `panelPopupHost.toggle` loses its `this` binding at the
+    // call site, so any future maintenance that makes toggle() depend
+    // on `this` (instead of lexically-captured ids) would silently
+    // break. The closure binds the receiver explicitly.
+    Component.onCompleted: shellRouter.togglePopup = function (kind) {
+        panelPopupHost.toggle(kind);
+    }
 
     // Persistent UI state that survives hot-reload. The persistence
     // path serialises typed POD properties only (PersistentProperties
@@ -192,15 +199,24 @@ Item {
         // day/month names follow the user's locale (the hand-rolled
         // English arrays this replaced were an i18n regression).
         //
-        // Binding on clock.hours/clock.minutes (each Q_PROPERTY with
-        // its own NOTIFY) so this re-evaluates every minute when
-        // timeChanged fires. Qt.formatTime can't be used here because
+        // Binding reads clock.hours, clock.minutes, and clock.date
+        // (each a Q_PROPERTY with its own NOTIFY), so it re-evaluates
+        // every minute when timeChanged fires AND on day rollover when
+        // dateChanged fires. Qt.formatTime can't be used here because
         // SystemClock exposes only a QDate (clock.date), not a
         // QDateTime; passing a QDate to Qt.formatTime returns an empty
         // string. String.padStart handles the zero-fill cleanly.
-        clockText: String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0") + " · " + Qt.formatDate(clock.date, "ddd MMM dd")
+        // Guard on clock.hours < 0: SystemClock's initial state before
+        // the first tick exposes hours=-1, minutes=-1, and an invalid
+        // QDate, so an unguarded binding briefly renders "-1:-1 · " in
+        // the panel until the first tick lands.
+        clockText: clock.hours < 0 ? "" : String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0") + " · " + Qt.formatDate(clock.date, "ddd MMM dd")
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent
+        // Math.round drops UPower's decimal precision. Deliberate: the
+        // panel readout is a single integer-% glyph row, and a fractional
+        // percentage there would be visual noise. Other panel fields
+        // (CPU, memory) are already integer-rounded upstream.
         batteryPercent: battery.displayDevice ? Math.round(battery.displayDevice.percentage).toString() : ""
         batteryVisible: battery.displayDevice !== null
     }

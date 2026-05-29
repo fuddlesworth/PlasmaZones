@@ -16,7 +16,7 @@ public:
     QString description;
     QString mediaClass;
     QHash<QString, QString> properties;
-    int channelCount = 0;
+    quint32 channelCount = 0;
     QList<qreal> volumes;
     bool muted = false;
 };
@@ -61,7 +61,7 @@ QString PwNode::mediaClass() const
     return d->mediaClass;
 }
 
-int PwNode::channelCount() const
+quint32 PwNode::channelCount() const
 {
     return d->channelCount;
 }
@@ -105,6 +105,14 @@ void PwNode::applyInfo(QHash<QString, QString> props)
         d->description = newDescription;
         moved = true;
     }
+    // Any diff in the full property hash flips `moved`, even for keys
+    // we don't surface as named accessors. That's intentional: the
+    // raw hash is observable through `properties()`, so a QML binding
+    // like `node.properties["application.name"]` would otherwise miss
+    // changes. The cost is occasional spurious infoChanged emissions
+    // when only an unsurfaced key moved — acceptable: PipeWire
+    // info-event cadence is low enough (one per pw_node info update)
+    // that this isn't a hot path.
     if (d->properties != props) {
         d->properties = std::move(props);
         moved = true;
@@ -122,10 +130,10 @@ void PwNode::setVolume(qreal value)
     // channel count if known; if the node hasn't published a Props pod
     // yet, fall back to a single-channel write so the request still
     // has effect.
-    const int count = d->channelCount > 0 ? d->channelCount : 1;
+    const quint32 count = d->channelCount > 0 ? d->channelCount : 1u;
     QList<qreal> values;
-    values.reserve(count);
-    for (int i = 0; i < count; ++i) {
+    values.reserve(static_cast<qsizetype>(count));
+    for (quint32 i = 0; i < count; ++i) {
         values.append(value);
     }
     conn->writeVolumes(d->id, values);
@@ -150,8 +158,15 @@ void PwNode::setMuted(bool muted)
 void PwNode::applyProps(int channelCount, QList<qreal> volumes, bool muted)
 {
     bool moved = false;
-    if (d->channelCount != channelCount) {
-        d->channelCount = channelCount;
+    // applyProps takes `int` (PipeWire pod traversal yields signed
+    // counts) but the surfaced property is `quint32`. Clamp negative
+    // values to zero so the cast never aliases as a huge positive
+    // count: PipeWire shouldn't deliver negatives here, but a
+    // defensive clamp is cheaper than tracking down a phantom
+    // multi-billion-channel node downstream.
+    const quint32 newChannelCount = channelCount < 0 ? 0u : static_cast<quint32>(channelCount);
+    if (d->channelCount != newChannelCount) {
+        d->channelCount = newChannelCount;
         moved = true;
     }
     if (d->volumes != volumes) {

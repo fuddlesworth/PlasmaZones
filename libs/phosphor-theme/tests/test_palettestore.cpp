@@ -32,6 +32,7 @@ private Q_SLOTS:
     void applyTokens_normalisesStringHexToColor();
     void resetToDefaults_clearsSourcePath();
     void resetToDefaults_dropsExtraUserTokens();
+    void resetToDefaults_signalOrderIsSourceBeforePalette();
     void resetToDefaults_releasesDirectoryWatch();
     void hotReload_picksUpInPlaceEdit();
     void hotReload_survivesConsecutiveInPlaceEdits();
@@ -190,6 +191,19 @@ void TestPaletteStore::resetToDefaults_dropsExtraUserTokens()
     QVERIFY(s.palette().contains(QStringLiteral("ghost_token")));
     QVERIFY(s.palette().contains(QStringLiteral("brand_custom")));
 
+    // Observe both signals through ONE lambda so we can pin the
+    // chronological order. Previously the test only checked counts,
+    // letting an implementation that emits paletteChanged BEFORE
+    // sourcePathChanged pass — which would force QML bindings to
+    // re-evaluate against a half-transitioned state.
+    QStringList signalOrder;
+    QObject::connect(&s, &PaletteStore::paletteChanged, &s, [&signalOrder] {
+        signalOrder.append(QStringLiteral("paletteChanged"));
+    });
+    QObject::connect(&s, &PaletteStore::sourcePathChanged, &s, [&signalOrder] {
+        signalOrder.append(QStringLiteral("sourcePathChanged"));
+    });
+
     QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
     s.resetToDefaults();
 
@@ -198,7 +212,46 @@ void TestPaletteStore::resetToDefaults_dropsExtraUserTokens()
              "resetToDefaults left a non-canonical user token behind");
     QVERIFY2(!s.palette().contains(QStringLiteral("brand_custom")),
              "resetToDefaults left a non-canonical brand token behind");
-    QVERIFY(palSpy.count() >= 1);
+    // Pin the single-emit contract — drop-then-apply must collapse
+    // to exactly one paletteChanged, not two (one for the drop +
+    // one for the apply).
+    QCOMPARE(palSpy.count(), 1);
+    // sourcePath was not loaded from a file here (we used
+    // loadFromJson), so sourcePathChanged should not fire on reset.
+    // The only signal emitted should be paletteChanged.
+    QCOMPARE(signalOrder, QStringList{QStringLiteral("paletteChanged")});
+}
+
+void TestPaletteStore::resetToDefaults_signalOrderIsSourceBeforePalette()
+{
+    // Pins the implementation-only signal ordering convention:
+    // when resetToDefaults drops a watched source AND mutates the
+    // palette (the common case after loadFromFile), QML bindings
+    // see sourcePathChanged FIRST and then paletteChanged. The
+    // reverse order would let a binding read the new palette
+    // against the stale sourcePath for one event-loop tick.
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath(QStringLiteral("p.json"));
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": {"primary": "#abcdef"}})");
+    }
+    PaletteStore s;
+    QVERIFY(s.loadFromFile(path));
+
+    QStringList signalOrder;
+    QObject::connect(&s, &PaletteStore::paletteChanged, &s, [&signalOrder] {
+        signalOrder.append(QStringLiteral("paletteChanged"));
+    });
+    QObject::connect(&s, &PaletteStore::sourcePathChanged, &s, [&signalOrder] {
+        signalOrder.append(QStringLiteral("sourcePathChanged"));
+    });
+
+    s.resetToDefaults();
+
+    QCOMPARE(signalOrder, (QStringList{QStringLiteral("sourcePathChanged"), QStringLiteral("paletteChanged")}));
 }
 
 void TestPaletteStore::hotReload_picksUpInPlaceEdit()

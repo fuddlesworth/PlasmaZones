@@ -47,6 +47,28 @@ if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader CONFIG REQUIRED)
 endif()
 
+# Surface the PhosphorFsLoader dependency in the top-level
+# feature_summary (mirrors the WrapVulkanHeaders pattern in the project
+# root CMakeLists.txt). Guarded so a standalone configure of this
+# subproject (which does not include(FeatureSummary)) stays valid.
+# PhosphorFsLoader is REQUIRED here because the plugin-loader hot-reload
+# path consumes WatchedDirectorySet + IScanStrategy unconditionally.
+if(COMMAND set_package_properties)
+    set_package_properties(PhosphorFsLoader PROPERTIES
+        TYPE REQUIRED
+        PURPOSE "WatchedDirectorySet + IScanStrategy for phosphor-registry's plugin hot-reload path")
+endif()
+if(COMMAND add_feature_info)
+    set(_phosphor_registry_fsloader_found FALSE)
+    if(TARGET PhosphorFsLoader::PhosphorFsLoader)
+        set(_phosphor_registry_fsloader_found TRUE)
+    endif()
+    add_feature_info("PhosphorFsLoader"
+                     _phosphor_registry_fsloader_found
+                     "Filesystem watcher backing phosphor-registry's plugin hot-reload")
+    unset(_phosphor_registry_fsloader_found)
+endif()
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -89,6 +111,7 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
 
 target_include_directories(PhosphorRegistry
@@ -124,11 +147,6 @@ set_target_properties(PhosphorRegistry PROPERTIES
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
-
-if(NOT DEFINED KDE_INSTALL_BINDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
-endif()
 
 install(TARGETS PhosphorRegistry
     EXPORT PhosphorRegistryTargets

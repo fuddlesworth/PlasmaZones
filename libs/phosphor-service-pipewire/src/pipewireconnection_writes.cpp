@@ -64,6 +64,34 @@ void PipeWireConnection::Private::doDefaultWrite(const DefaultWriteRequest& req)
                              "Spa:String:JSON", payload.constData());
 }
 
+template<typename Req>
+bool PipeWireConnection::Private::submitLoopRequest(std::unique_ptr<Req> req,
+                                                    int (*dispatcher)(struct spa_loop*, bool, uint32_t, const void*,
+                                                                      size_t, void*),
+                                                    const char* label)
+{
+    // Centralised guard: thread not started, loop not yet created,
+    // or loop already destroyed → silently drop. The public API
+    // contract is fire-and-forget; surfacing these as errors would
+    // produce noise during shutdown ordering.
+    pw_main_loop* mainLoop = loop.load(std::memory_order_acquire);
+    if (!thread.isRunning() || !mainLoop)
+        return false;
+    // pw_loop_invoke returns a sequence number (>= 0) on async
+    // success or the dispatcher's return value on sync; only a
+    // negative value signals a queue-side failure where the
+    // dispatcher won't fire. Release ownership to the dispatcher on
+    // success, log + drop on failure (unique_ptr cleans up on
+    // scope exit).
+    const int rc = pw_loop_invoke(pw_main_loop_get_loop(mainLoop), dispatcher, 0, nullptr, 0, false, req.get());
+    if (rc < 0) {
+        qCWarning(lcPipeWire) << "pw_loop_invoke failed for" << label << "rc" << rc;
+        return false;
+    }
+    (void)req.release();
+    return true;
+}
+
 void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
 {
     // If neither field is set, there's nothing to push to the daemon.
@@ -84,7 +112,11 @@ void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
     // The buffer size budget: 1KiB is enough for a single Props
     // object with up to ~64 channel-volume floats plus the SPA
     // bookkeeping overhead. SPA_AUDIO_MAX_CHANNELS is 64 today, so
-    // the worst case is well under 512 bytes.
+    // the worst case is well under 512 bytes. Pin that arithmetic at
+    // compile time so a future SPA bump can't silently overflow the
+    // stack buffer.
+    static_assert(SPA_AUDIO_MAX_CHANNELS * sizeof(float) + 128 <= 1024,
+                  "raise pod buffer: SPA_AUDIO_MAX_CHANNELS grew");
     uint8_t buffer[1024];
     spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
     spa_pod_frame frame;
@@ -116,80 +148,62 @@ void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
 
 void PipeWireConnection::writeVolumes(quint32 nodeId, const QList<qreal>& volumes)
 {
-    if (!d->thread.isRunning() || !d->loop)
-        return;
-    auto req = std::make_unique<Private::ParamWriteRequest>();
-    req->owner = d.get();
-    req->nodeId = nodeId;
-    req->writeVolumes = true;
-    req->volumes = volumes;
-    // pw_loop_invoke returns a sequence number (positive) on async
-    // success or the invoked function's return value on sync; only a
-    // negative value signals a queue-side failure where the dispatcher
-    // won't fire. Release ownership to the dispatcher unless we hit
-    // that rare negative case (unique_ptr cleans up on scope exit).
-    const int rc =
-        pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false, req.get());
-    if (rc >= 0) {
-        (void)req.release();
-    } else {
-        qCWarning(lcPipeWire) << "pw_loop_invoke failed for writeVolumes" << nodeId << "rc" << rc;
-    }
+    auto req = std::unique_ptr<Private::ParamWriteRequest>(new Private::ParamWriteRequest{
+        .owner = d.get(),
+        .nodeId = nodeId,
+        .writeVolumes = true,
+        .writeMuted = false,
+        .volumes = volumes,
+        .muted = false,
+    });
+    d->submitLoopRequest(std::move(req), &Private::dispatchParamWrite, "writeVolumes");
 }
 
 void PipeWireConnection::writeMuted(quint32 nodeId, bool muted)
 {
-    if (!d->thread.isRunning() || !d->loop)
-        return;
-    auto req = std::make_unique<Private::ParamWriteRequest>();
-    req->owner = d.get();
-    req->nodeId = nodeId;
-    req->writeMuted = true;
-    req->muted = muted;
-    const int rc =
-        pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false, req.get());
-    if (rc >= 0) {
-        (void)req.release();
-    } else {
-        qCWarning(lcPipeWire) << "pw_loop_invoke failed for writeMuted" << nodeId << "rc" << rc;
-    }
+    auto req = std::unique_ptr<Private::ParamWriteRequest>(new Private::ParamWriteRequest{
+        .owner = d.get(),
+        .nodeId = nodeId,
+        .writeVolumes = false,
+        .writeMuted = true,
+        .volumes = {},
+        .muted = muted,
+    });
+    d->submitLoopRequest(std::move(req), &Private::dispatchParamWrite, "writeMuted");
 }
 
 void PipeWireConnection::setDefaultSink(const QString& nodeName)
 {
-    if (!d->thread.isRunning() || !d->loop)
-        return;
-    auto req = std::make_unique<Private::DefaultWriteRequest>();
-    req->owner = d.get();
     // Write the "configured" key so the choice persists across
     // restarts; WirePlumber promotes it into the runtime
     // default.audio.sink on the next reconcile.
-    req->key = QStringLiteral("default.configured.audio.sink");
-    req->nodeName = nodeName;
-    const int rc =
-        pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false, req.get());
-    if (rc >= 0) {
-        (void)req.release();
-    } else {
-        qCWarning(lcPipeWire) << "pw_loop_invoke failed for setDefaultSink" << nodeName << "rc" << rc;
-    }
+    auto req = std::unique_ptr<Private::DefaultWriteRequest>(new Private::DefaultWriteRequest{
+        .owner = d.get(),
+        .key = QStringLiteral("default.configured.audio.sink"),
+        .nodeName = nodeName,
+    });
+    d->submitLoopRequest(std::move(req), &Private::dispatchDefaultWrite, "setDefaultSink");
 }
 
 void PipeWireConnection::setDefaultSource(const QString& nodeName)
 {
-    if (!d->thread.isRunning() || !d->loop)
-        return;
-    auto req = std::make_unique<Private::DefaultWriteRequest>();
-    req->owner = d.get();
-    req->key = QStringLiteral("default.configured.audio.source");
-    req->nodeName = nodeName;
-    const int rc =
-        pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false, req.get());
-    if (rc >= 0) {
-        (void)req.release();
-    } else {
-        qCWarning(lcPipeWire) << "pw_loop_invoke failed for setDefaultSource" << nodeName << "rc" << rc;
-    }
+    auto req = std::unique_ptr<Private::DefaultWriteRequest>(new Private::DefaultWriteRequest{
+        .owner = d.get(),
+        .key = QStringLiteral("default.configured.audio.source"),
+        .nodeName = nodeName,
+    });
+    d->submitLoopRequest(std::move(req), &Private::dispatchDefaultWrite, "setDefaultSource");
 }
+
+// Explicit instantiations so the template definition can live in this
+// TU rather than be forced into the header. ParamWriteRequest /
+// DefaultWriteRequest are only built here, so this list is the entire
+// instantiation set.
+template bool PipeWireConnection::Private::submitLoopRequest<PipeWireConnection::Private::ParamWriteRequest>(
+    std::unique_ptr<PipeWireConnection::Private::ParamWriteRequest>,
+    int (*)(struct spa_loop*, bool, uint32_t, const void*, size_t, void*), const char*);
+template bool PipeWireConnection::Private::submitLoopRequest<PipeWireConnection::Private::DefaultWriteRequest>(
+    std::unique_ptr<PipeWireConnection::Private::DefaultWriteRequest>,
+    int (*)(struct spa_loop*, bool, uint32_t, const void*, size_t, void*), const char*);
 
 } // namespace PhosphorServicePipeWire

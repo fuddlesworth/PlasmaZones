@@ -6,6 +6,7 @@
 #include <PhosphorServicePipeWire/PwNode.h>
 #include <PhosphorServicePipeWire/PwNodeModel.h>
 
+#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QtTest/QtTest>
 
@@ -43,31 +44,42 @@ private Q_SLOTS:
     }
 
     /// Multiple connect() calls collapse into one effective attempt;
-    /// the test asserts at minimum that the calls don't crash. We
-    /// cannot pin a `connectedChanged` count without a controlled
-    /// PipeWire fixture, so this is a survivability check.
+    /// pin idempotency by spying on `connectedChanged`. Even if a real
+    /// daemon answers the handshake, the property may flip at most once
+    /// (false to true). On a no-daemon host the count stays at 0. Any
+    /// value above 1 means a second connect() re-armed the property
+    /// transition path, which is the regression we want to catch.
     void connectIdempotent()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
+        QSignalSpy connectedSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged);
         conn.connect();
         conn.connect();
         conn.connect();
         QTest::qWait(100);
-        QVERIFY(true);
+        QVERIFY2(connectedSpy.count() <= 1,
+                 qPrintable(QStringLiteral("connectedChanged fired %1 times").arg(connectedSpy.count())));
     }
 
     /// Destruction must join the loop thread cleanly even when a
     /// connect attempt is in flight. The test crashes with use-after-
     /// free or hangs if the teardown sequence in ~PipeWireConnection
-    /// regresses.
+    /// regresses. Bound the join with an elapsed-time check: 2s is far
+    /// longer than any healthy teardown but well under any sane CI
+    /// per-test timeout, so a hang surfaces as a failed assertion here
+    /// rather than a watchdog-killed process.
     void destructionWhileConnectInFlightIsSafe()
     {
+        QElapsedTimer timer;
+        timer.start();
         auto conn = std::make_unique<PhosphorServicePipeWire::PipeWireConnection>();
         conn->connect();
         // Drop the unique_ptr without waiting; ~PipeWireConnection has
         // to win the race against the loop thread's pw_context_connect.
         conn.reset();
-        QVERIFY(true);
+        const qint64 elapsedMs = timer.elapsed();
+        QVERIFY2(elapsedMs < 2000,
+                 qPrintable(QStringLiteral("destruction took %1ms (expected < 2000ms)").arg(elapsedMs)));
     }
 
     /// `nodes()` returns an empty list pre-connect. The list type is
@@ -104,6 +116,7 @@ private Q_SLOTS:
             // the system's default audio sink. Don't assert the count
             // (varies by host) but every node we received must have a
             // valid audio media class.
+            QVERIFY(connectedSpy.count() >= 1);
             const auto nodes = conn.nodes();
             for (auto* node : nodes) {
                 QVERIFY(node != nullptr);
@@ -130,7 +143,6 @@ private Q_SLOTS:
             QCOMPARE(addedSpy.count(), 0);
             QCOMPARE(conn.nodes().size(), 0);
         }
-        Q_UNUSED(connectedSpy);
     }
 
     /// Pin the role-name → integer mapping. QML consumers key on the
@@ -154,6 +166,7 @@ private Q_SLOTS:
         QCOMPARE(names.value(PwNodeModel::MutedRole), QByteArrayLiteral("muted"));
         QCOMPARE(names.value(Qt::DisplayRole), QByteArrayLiteral("display"));
 
+        QCOMPARE(int(Qt::DisplayRole), 0);
         QCOMPARE(int(PwNodeModel::NodeRole), int(Qt::UserRole) + 1);
         QCOMPARE(int(PwNodeModel::IdRole), int(Qt::UserRole) + 2);
         QCOMPARE(int(PwNodeModel::NameRole), int(Qt::UserRole) + 3);
@@ -173,8 +186,8 @@ private Q_SLOTS:
         PhosphorServicePipeWire::PwSinkModel sinks;
         PhosphorServicePipeWire::PwSourceModel sources;
         PhosphorServicePipeWire::PwStreamModel streams;
-        QCOMPARE(sinks.mediaClasses(), QStringList{QStringLiteral("Audio/Sink")});
-        QCOMPARE(sources.mediaClasses(), QStringList{QStringLiteral("Audio/Source")});
+        QCOMPARE(sinks.mediaClasses(), (QStringList{QStringLiteral("Audio/Sink")}));
+        QCOMPARE(sources.mediaClasses(), (QStringList{QStringLiteral("Audio/Source")}));
         QCOMPARE(streams.mediaClasses(),
                  (QStringList{QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")}));
     }
@@ -183,25 +196,51 @@ private Q_SLOTS:
     /// and before connect(). The dispatch goes via pw_loop_invoke, so
     /// a buggy implementation would either crash on the unique_ptr
     /// guard or leak the request struct.
+    ///
+    /// Observability: we exercise the early-out path explicitly by
+    /// asserting state (disconnected before connect; still-connected
+    /// after the unknown-id writes when a daemon is present) and by
+    /// pinning that the connection does not flip to `error` (which it
+    /// would if a buggy implementation dereferenced a null proxy and
+    /// then surfaced the failure through the core-error path).
     void writeAPIsAreSafeForUnknownTargets()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
+        QSignalSpy errorSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::error);
+
         // Pre-connect writes must early-out cleanly (loop running but
         // no core/registry yet, so the node id lookup will fail).
         conn.writeVolumes(99999, {0.5, 0.5});
         conn.writeMuted(99999, true);
         QTest::qWait(50);
-        QVERIFY(true);
+        // Pre-connect: still disconnected, no error surfaced.
+        QCOMPARE(conn.isConnected(), false);
+        QCOMPARE(errorSpy.count(), 0);
 
         // Post-connect writes for a non-existent id should still be
-        // safe — the loop-thread handler logs and returns without
-        // touching a proxy.
+        // safe: the loop-thread handler logs at debug level and returns
+        // without touching a proxy. The connection must survive without
+        // an error fire and without flipping out of the connected state.
         conn.connect();
-        QTest::qWait(150);
+        QTest::qWait(250);
+        const bool wasConnected = conn.isConnected();
         conn.writeVolumes(99999, {0.5});
         conn.writeMuted(99999, false);
-        QTest::qWait(50);
-        QVERIFY(true);
+        QTest::qWait(100);
+
+        if (wasConnected) {
+            // Live daemon: the connection survived and stays connected
+            // after the unknown-id writes. A regression here (e.g. null
+            // deref in the loop handler) would either crash the test
+            // binary or fire `error` and flip connected to false.
+            QVERIFY(conn.isConnected());
+            QCOMPARE(errorSpy.count(), 0);
+        } else {
+            // No daemon: the writes early-out without a registry; we
+            // only assert no crash and the disconnected state.
+            QCOMPARE(conn.isConnected(), false);
+            QCOMPARE(errorSpy.count(), 0);
+        }
     }
 
     /// PipeWireHost auto-connects on construction and forwards every
@@ -284,6 +323,64 @@ private Q_SLOTS:
             QVERIFY2(mc == QLatin1String("Stream/Output/Audio") || mc == QLatin1String("Stream/Input/Audio"),
                      qPrintable(mc));
         }
+    }
+
+    /// When no default metadata has been bound (no WirePlumber, or
+    /// pre-handshake), `defaultSinkName()` / `defaultSourceName()` must
+    /// stay empty rather than echo back the sentinel strings used by
+    /// the CLI's resolveTarget(). The CLI's documented behaviour on
+    /// this path is "no node matches default sentinel" with the empty
+    /// default, so this test pins the underlying contract.
+    void defaultSentinelMissingMetadataIsHandled()
+    {
+        PhosphorServicePipeWire::PipeWireConnection conn;
+        // Pre-connect: no metadata has been bound yet.
+        QCOMPARE(conn.defaultSinkName(), QString());
+        QCOMPARE(conn.defaultSourceName(), QString());
+
+        // Post-connect on a bare-daemon (no WirePlumber) host the
+        // default metadata never lands; on a no-daemon host the
+        // connection never reaches connected. Either way the defaults
+        // remain empty and the connection survives.
+        conn.connect();
+        QTest::qWait(250);
+        if (!conn.isConnected()) {
+            // No daemon at all — must still expose empty defaults
+            // without crashing.
+            QCOMPARE(conn.defaultSinkName(), QString());
+            QCOMPARE(conn.defaultSourceName(), QString());
+        }
+        // If a daemon + WirePlumber are present the defaults will be
+        // populated; we don't assert that here (the
+        // `defaultSinkNameSurfacesFromWirePlumber` test covers the
+        // populated path). The contract this test pins is: empty stays
+        // empty when metadata is absent, no crashes either way.
+    }
+
+    /// After disconnect() any tracked nodes must be removed (the
+    /// connection emits `nodeRemoved` for each one as part of teardown
+    /// so observers/models can detach before the PwNode destructors run).
+    /// On a no-daemon host the registry never populated, so the spy
+    /// stays at zero, which is also a valid clean teardown.
+    void nodeRemovedAfterDisconnect()
+    {
+        PhosphorServicePipeWire::PipeWireConnection conn;
+        QSignalSpy removedSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::nodeRemoved);
+        conn.connect();
+        QTest::qWait(250);
+        const int trackedBeforeDisconnect = conn.nodes().size();
+        conn.disconnect();
+        QTest::qWait(150);
+        // Every node that was being tracked at disconnect time must
+        // have a matching nodeRemoved emission. Use >= because the
+        // daemon may also remove nodes mid-shutdown.
+        QVERIFY2(
+            removedSpy.count() >= trackedBeforeDisconnect,
+            qPrintable(
+                QStringLiteral("removed %1, expected >= %2").arg(removedSpy.count()).arg(trackedBeforeDisconnect)));
+        // Post-disconnect the snapshot must be empty regardless of
+        // whether a daemon was present.
+        QCOMPARE(conn.nodes().size(), 0);
     }
 };
 

@@ -40,21 +40,16 @@ class PHOSPHORSERVICEPIPEWIRE_EXPORT PwNode : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(PwNode)
-    Q_PROPERTY(uint id READ id CONSTANT)
+    Q_PROPERTY(quint32 id READ id CONSTANT)
     Q_PROPERTY(QString name READ name NOTIFY infoChanged)
     Q_PROPERTY(QString nick READ nick NOTIFY infoChanged)
     Q_PROPERTY(QString description READ description NOTIFY infoChanged)
     Q_PROPERTY(QString mediaClass READ mediaClass CONSTANT)
-    Q_PROPERTY(int channelCount READ channelCount NOTIFY propsChanged)
+    Q_PROPERTY(quint32 channelCount READ channelCount NOTIFY propsChanged)
     Q_PROPERTY(QList<qreal> volumes READ volumes NOTIFY propsChanged)
     Q_PROPERTY(bool muted READ muted NOTIFY propsChanged)
 
 public:
-    /// Constructed by `PipeWireConnection` on the GUI thread once the
-    /// registry's `global_added` event has bounced back from the loop
-    /// thread. The connection becomes the QObject parent so destruction
-    /// is automatic when the connection tears down.
-    PwNode(quint32 id, QString mediaClass, PipeWireConnection* parent);
     ~PwNode() override;
 
     [[nodiscard]] quint32 id() const;
@@ -62,7 +57,7 @@ public:
     [[nodiscard]] QString nick() const;
     [[nodiscard]] QString description() const;
     [[nodiscard]] QString mediaClass() const;
-    [[nodiscard]] int channelCount() const;
+    [[nodiscard]] quint32 channelCount() const;
     [[nodiscard]] QList<qreal> volumes() const;
     [[nodiscard]] bool muted() const;
     /// Full property hash (`node.name`, `application.name`,
@@ -81,10 +76,21 @@ public Q_SLOTS:
     /// for QML sliders that drive a single bar across the whole node.
     /// The write is asynchronous: `propsChanged` fires after the
     /// daemon echoes the new SPA_PARAM_Props pod, not immediately.
+    ///
+    /// Expected input range: linear amplitude, approximately
+    /// `[0.0, 1.0]` for the normal mixer range, with values above
+    /// `1.0` permitted for boost (PipeWire accepts them but most
+    /// hardware sinks clip). Callers are responsible for clamping
+    /// to their own UI's allowed range before invoking; the slot
+    /// forwards `value` to the daemon verbatim.
     void setVolume(qreal value);
-    /// Per-channel write. The array length should equal
-    /// `channelCount`; PipeWire silently clamps or drops mismatched
-    /// arrays so callers are responsible for sizing.
+    /// Per-channel write. Callers MUST size `values` to match
+    /// `channelCount()`; on mismatch the implementation logs a
+    /// warning and skips the write rather than letting PipeWire
+    /// clamp or drop entries silently.
+    ///
+    /// Each entry follows the same linear-amplitude contract as
+    /// `setVolume` (approximately `[0.0, 1.0]+`, caller-clamped).
     void setVolumes(const QList<qreal>& values);
     /// Asynchronous mute write. `propsChanged` fires once the daemon
     /// confirms.
@@ -96,6 +102,14 @@ Q_SIGNALS:
 
 private:
     friend class PipeWireConnection;
+
+    /// Constructed by `PipeWireConnection` on the GUI thread once the
+    /// registry's `global_added` event has bounced back from the loop
+    /// thread. The connection becomes the QObject parent so destruction
+    /// is automatic when the connection tears down. Private so only
+    /// the friended connection can instantiate nodes — downstream
+    /// code cannot fabricate nodes the registry never reported.
+    PwNode(quint32 id, QString mediaClass, PipeWireConnection* parent);
 
     /// Called by `PipeWireConnection` from the GUI thread when the
     /// underlying `pw_node` reports new info (name, description,

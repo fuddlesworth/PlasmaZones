@@ -131,7 +131,17 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
         qWarning().noquote() << "phosphor-theme: cannot open template" << templatePath << ", " << in.errorString();
         return false;
     }
-    const auto src = QString::fromUtf8(in.readAll());
+    const auto raw = in.readAll();
+    if (in.error() != QFileDevice::NoError) {
+        // readAll() returns whatever it managed to read on a short
+        // read (truncated NFS mounts, signal-interrupted reads).
+        // Without this check we'd silently render a partial template
+        // and atomically commit a half-rendered output, which is
+        // exactly the failure mode QSaveFile is supposed to prevent.
+        qWarning().noquote() << "phosphor-theme: short read on template" << templatePath << ", " << in.errorString();
+        return false;
+    }
+    const auto src = QString::fromUtf8(raw);
     in.close();
 
     const auto rendered = render(src, tokens);
@@ -144,6 +154,16 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
     // (e.g. ~/.config/gtk-3.0/gtk.css) where a partial file would
     // break the user's session.
     QSaveFile out(outPath);
+    // setDirectWriteFallback(true) covers filesystems where the
+    // rename(2) step fails (network mounts that deny cross-link
+    // operations, some FUSE setups, /tmp-on-overlayfs in
+    // containers). Without it, QSaveFile silently refuses to commit
+    // on those mounts and renderFile reports failure even though
+    // the user just wants the file written. With the fallback,
+    // QSaveFile writes in place if-and-only-if the atomic rename
+    // path is unavailable — atomicity is preserved on every
+    // filesystem that supports it.
+    out.setDirectWriteFallback(true);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qWarning().noquote() << "phosphor-theme: cannot write rendered output" << outPath << ", " << out.errorString();
         return false;

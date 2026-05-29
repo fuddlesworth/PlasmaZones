@@ -82,12 +82,20 @@ public:
     [[nodiscard]] bool isDaemonAvailable() const;
     [[nodiscard]] QString defaultSinkName() const;
     [[nodiscard]] QString defaultSourceName() const;
-    /// Snapshot of every node the registry has reported so far. Live
-    /// pointers — they're owned by this connection (QObject parent
-    /// chain) and survive until the corresponding `nodeRemoved` signal
-    /// fires. Returned by value so QML / C++ callers can iterate
-    /// without locking; the list itself is mutated only on the GUI
-    /// thread.
+    /// Snapshot of every node the registry has reported so far, for
+    /// C++ callers only. Live pointers — they're owned by this
+    /// connection (QObject parent chain) and survive until the
+    /// corresponding `nodeRemoved` signal fires. Returned by value
+    /// (a copy of the internal vector), so the caller can iterate
+    /// without locking; the underlying list is mutated only on the
+    /// GUI thread.
+    ///
+    /// QML consumers must NOT use this accessor: a by-value
+    /// `QList<QObject*>` return is not bindable from QML. The
+    /// supported QML view is `PwNodeModel` (and its `PwSinkModel`
+    /// / `PwSourceModel` / `PwStreamModel` convenience subclasses),
+    /// which observes `nodeAdded` / `nodeRemoved` and exposes the
+    /// nodes as a live model.
     [[nodiscard]] QList<PwNode*> nodes() const;
 
 public Q_SLOTS:
@@ -122,10 +130,12 @@ Q_SIGNALS:
     /// Fired from the GUI thread when the registry reports a new audio
     /// node (Sink, Source, or Stream). The model classes filter by
     /// `node->mediaClass()`.
+    /// NOTE: keep in sync with qRegisterMetaType in pipewireconnection.cpp
     void nodeAdded(PhosphorServicePipeWire::PwNode* node);
     /// Fired from the GUI thread BEFORE the PwNode is destroyed so
     /// observers (models) can detach. The pointer is still valid
     /// during this signal.
+    /// NOTE: keep in sync with qRegisterMetaType in pipewireconnection.cpp
     void nodeRemoved(PhosphorServicePipeWire::PwNode* node);
 
 private:

@@ -31,8 +31,9 @@ namespace detail {
 /// possible in test fixtures) don't double-initialise.
 void ensurePipeWireInit();
 
-/// True when the node's `media.class` property is one of the four
-/// classes the mixer surface cares about.
+/// True when the node's `media.class` property is one of the audio
+/// classes the mixer surface cares about. The authoritative list lives
+/// in the implementation; do not duplicate it here.
 bool isAudioNodeClass(const QString& mediaClass);
 
 /// Convert a SPA dict to a QHash of QString → QString.
@@ -82,8 +83,14 @@ public:
     /// destructor never observes the worker mid-startup.
     QSemaphore startupReady{0};
 
-    // Loop-side state. ONLY accessed from the loop thread.
-    pw_main_loop* loop = nullptr;
+    /// `pw_main_loop*` is touched from both threads: the loop thread
+    /// owns its lifetime (allocates in LoopThread::run, clears on exit),
+    /// while the GUI thread reads it on every connect/disconnect/quit
+    /// call. A raw pointer would be a torn-read race on architectures
+    /// where pointer loads aren't atomic. Use a std::atomic with
+    /// acquire/release ordering so the GUI thread either sees the fully
+    /// constructed loop or null — never a half-published pointer.
+    std::atomic<pw_main_loop*> loop{nullptr};
     pw_context* context = nullptr;
     pw_core* core = nullptr;
     pw_registry* registry = nullptr;
@@ -93,6 +100,14 @@ public:
     /// present (rare: only a bare PipeWire daemon without
     /// WirePlumber) or pre-handshake.
     pw_proxy* defaultMetadata = nullptr;
+    /// Registry id captured at bind time for `defaultMetadata`. We
+    /// cache it ourselves because `pw_proxy_get_bound_id` returns
+    /// `SPA_ID_INVALID` until the daemon answers with a `bound_id`
+    /// event; if a `global_remove` fires before that ack, the registry
+    /// id is our only handle for identifying the removed metadata
+    /// proxy. Cleared (back to `SPA_ID_INVALID`) whenever
+    /// `defaultMetadata` is freed.
+    quint32 defaultMetadataId = SPA_ID_INVALID;
     spa_hook coreListener{};
     spa_hook registryListener{};
     spa_hook defaultMetadataListener{};
@@ -112,6 +127,12 @@ public:
         QString mediaClass;
         pw_proxy* proxy = nullptr;
         spa_hook nodeListener{};
+        // The spa_hook is intrusively linked through the entry's
+        // storage; a silent copy would clone the link node and split
+        // it from its real owner, leaving dangling list pointers in
+        // the listener wire. Forbid copies at compile time.
+        Q_DISABLE_COPY(LoopNode)
+        LoopNode() = default;
     };
     /// std::unordered_map (not QHash) because QHash requires its value
     /// type to be copyable for rehashing and std::unique_ptr is move-
@@ -153,6 +174,12 @@ public:
                                  const struct spa_dict* props);
     static void onRegistryGlobalRemove(void* data, uint32_t id);
     static const pw_registry_events kRegistryEvents;
+
+    // onRegistryGlobal dispatch helpers. Split out so the C callback
+    // stays a thin type-routing switch instead of an 80-line blob that
+    // mixes metadata binding with audio-node binding-and-tracking.
+    void bindDefaultMetadata(uint32_t id, const char* type, const QHash<QString, QString>& props);
+    void bindAudioNode(uint32_t id, const char* type, const QString& mediaClass, const QHash<QString, QString>& props);
 
     // Per-node listener callbacks (loop thread).
     static void onNodeInfo(void* data, const struct pw_node_info* info);
@@ -213,6 +240,18 @@ public:
     static int dispatchDefaultWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data, size_t size,
                                     void* user_data);
     void doDefaultWrite(const DefaultWriteRequest& req);
+
+    /// Submit a heap-allocated loop request via pw_loop_invoke.
+    /// Centralises the running/loop guard, the rc < 0 check, the
+    /// ownership-release dance, and the warning log line so each
+    /// public write entry point becomes a 2-line request builder.
+    /// Returns true if the request was queued (ownership transferred
+    /// to the dispatcher); false on guard failure or dispatch error
+    /// (req is then destroyed by the unique_ptr going out of scope).
+    template<typename Req>
+    bool submitLoopRequest(std::unique_ptr<Req> req,
+                           int (*dispatcher)(struct spa_loop*, bool, uint32_t, const void*, size_t, void*),
+                           const char* label);
 
     // GUI-thread setters. Always invoked via queued cross-thread
     // signals so the NOTIFY emits and atomic writes both happen on

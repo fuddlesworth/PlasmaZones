@@ -6,8 +6,8 @@
 #include <PhosphorServicePipeWire/phosphorservicepipewire_export.h>
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QList>
-#include <QPointer>
 #include <QStringList>
 
 #include <memory>
@@ -74,14 +74,15 @@ public:
     ~PwNodeModel() override;
 
     [[nodiscard]] PipeWireConnection* connection() const;
-    void setConnection(PipeWireConnection* connection);
-
     [[nodiscard]] QStringList mediaClasses() const;
-    void setMediaClasses(const QStringList& classes);
 
     [[nodiscard]] int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
+
+public Q_SLOTS:
+    void setConnection(PipeWireConnection* connection);
+    void setMediaClasses(const QStringList& classes);
 
 Q_SIGNALS:
     void connectionChanged();

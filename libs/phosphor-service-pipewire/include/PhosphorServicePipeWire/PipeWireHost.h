@@ -16,7 +16,10 @@ class PipeWireConnection;
 
 /// Process-wide PipeWire host: owns the single `PipeWireConnection`
 /// instance the shell binds to and re-exposes its observable state as
-/// QML-friendly properties. Registered as a QML singleton so QML reads
+/// QML-friendly properties. Registered as a QML singleton (see
+/// qmlregistration.cpp; the class deliberately omits QML_ELEMENT /
+/// QML_SINGLETON macros and is wired imperatively, matching every
+/// sibling phosphor-service-* lib) so QML reads
 /// `PipeWireHost.connection.defaultSinkName` rather than maintaining
 /// its own `PipeWireConnection` instance.
 ///

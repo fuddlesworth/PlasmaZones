@@ -44,13 +44,25 @@ Item {
     // Detached popouts want transparent.
     property color backdropColor: "transparent"
 
+    // Internal: duration token shared by the content frame's
+    // opacity/scale Behaviors. Exposed as a property so the Behaviors
+    // and any future timer/Animation referencing the content fade-out
+    // bind a single source of truth.
+    readonly property int contentAnimDuration: Motion.duration_medium_2
     // Internal: longest animation duration across the host's
-    // Behaviors (content opacity/scale on duration_medium_2, backdrop
+    // Behaviors (content opacity/scale on contentAnimDuration, backdrop
     // opacity on duration_short_4). Single source of truth so the
     // dismiss timer and the Behaviors stay aligned through any token
     // retuning. Bound rather than computed at startup so a runtime
     // theme switch picks up the new value.
-    readonly property int closeDuration: Math.max(Motion.duration_medium_2, Motion.duration_short_4)
+    //
+    // Math.max keeps the duration_short_4 operand even though it is
+    // currently the smaller of the two: it is a defensive ceiling for a
+    // future token retune that flips the ordering (or for a downstream
+    // theme that lengthens the backdrop fade beyond the content one).
+    // A reader tempted to "simplify" to `contentAnimDuration` would
+    // remove that safety net.
+    readonly property int closeDuration: Math.max(contentAnimDuration, Motion.duration_short_4)
 
     // Emitted once the close animation finishes. Transport callers
     // wire this to their bookkeeping so the IPopoutTransport's
@@ -107,6 +119,12 @@ Item {
     // handle. Skipped when the host never opened (no cycle to
     // bookend) and when the timer already fired (everOpened guards
     // the first case, dismissedFired guards the second).
+    //
+    // This is the last signal this host will ever emit: the QObject
+    // is mid-destruction. Transport callers handling dismissed here
+    // MUST NOT re-enter the host (calling dismiss(), reading
+    // properties, or rebinding contentItem will operate on a partially
+    // torn-down object). Treat the handler as bookkeeping-only.
     Component.onDestruction: {
         if (dismissLatch.everOpened && !dismissLatch.dismissedFired) {
             dismissEmitter.stop();
@@ -136,18 +154,35 @@ Item {
     // that miss the content and routes them to dismiss. Skipped
     // entirely for fully-transparent backdrops that also disable
     // click-outside dismiss (Detached popouts) so the host doesn't
-    // pay for a draw call or a no-op hit-test region.
+    // pay for a draw call or a no-op hit-test region. When the
+    // Rectangle is invisible, its child MouseArea is also hidden
+    // (Qt skips hit-tests on invisible item subtrees), so the
+    // detached-popout path pays nothing for hit-testing either.
     Rectangle {
         id: backdrop
+
+        // backdropShown gates whether the backdrop conceptually exists
+        // for this configuration (visible scrim and/or click-outside).
+        // visible derives from this AND opacity > 0 so the Rectangle
+        // stays drawn through the fade-out, instead of vanishing the
+        // instant `open` flips to false and stealing the fade frames
+        // from the Behavior below.
+        readonly property bool backdropShown: root.backdropColor.a > 0 || root.dismissOnClickOutside
 
         anchors.fill: parent
         color: root.backdropColor
         opacity: root.open ? 1 : 0
-        visible: root.backdropColor.a > 0 || root.dismissOnClickOutside
+        visible: backdropShown && opacity > 0
 
         MouseArea {
             anchors.fill: parent
-            enabled: root.dismissOnClickOutside && root.open
+            // Gate hit-tests on the original boolean expression
+            // (backdropShown + open), NOT on the parent's opacity-
+            // sensitive `visible`. A backdrop mid-fade-out has
+            // visible=true but `open=false`, and accepting clicks then
+            // would double-fire dismiss (or fire dismiss on an
+            // already-dismissing popout).
+            enabled: backdrop.backdropShown && root.dismissOnClickOutside && root.open
             onClicked: root.open = false
         }
 
@@ -179,8 +214,23 @@ Item {
             if (_lastBound && _lastBound !== root.contentItem)
                 _lastBound.parent = null;
 
-            if (root.contentItem)
+            if (root.contentItem) {
+                // Contract: the host takes parenting ownership of any
+                // Item assigned to contentItem (see the contentItem
+                // property docs above). Hand-in items are expected to
+                // arrive parent-less or already parented under this
+                // contentFrame from a previous rebind. A non-null
+                // parent that isn't contentFrame indicates a caller
+                // is stashing the item in another subtree (which we
+                // will now silently steal), which is a contract break
+                // and surfaces here as a console.warn rather than as
+                // a mysterious detached UI elsewhere. QML lacks
+                // assertions; this is the closest diagnostic available.
+                if (root.contentItem.parent && root.contentItem.parent !== contentFrame)
+                    console.warn("PopoutHost.rebindContentItem: contentItem already has a non-host parent; the host is taking ownership and detaching it from", root.contentItem.parent);
+
                 root.contentItem.parent = contentFrame;
+            }
 
             _lastBound = root.contentItem;
         }
@@ -222,26 +272,25 @@ Item {
 
         Behavior on opacity {
             NumberAnimation {
-                id: openOpacityAnim
-
-                duration: Motion.duration_medium_2
+                duration: root.contentAnimDuration
                 easing: Motion.emphasized
             }
         }
 
         Behavior on scale {
             NumberAnimation {
-                duration: Motion.duration_medium_2
+                duration: root.contentAnimDuration
                 easing: Motion.emphasized
             }
         }
     }
 
     // dismissed fires once the close animation has had time to
-    // settle. The interval and the host's Behaviors both bind
-    // closeDuration, so retuning the Motion tokens (or swapping the
-    // Behaviors to longer/shorter tokens) keeps the timer aligned
-    // without a second edit.
+    // settle. The interval binds closeDuration, which tracks the same
+    // Motion tokens (contentAnimDuration / duration_short_4) as the
+    // host's Behaviors, so retuning the tokens (or swapping the
+    // Behaviors to longer/shorter tokens) keeps them aligned without
+    // a second edit.
     Timer {
         id: dismissEmitter
 

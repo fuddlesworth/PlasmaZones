@@ -3,6 +3,7 @@
 
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
 #include <PhosphorServiceMpris/QmlRegistration.h>
+#include <PhosphorServicePipeWire/QmlRegistration.h>
 #include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorShell/ShellEngine.h>
@@ -34,6 +35,7 @@ int main(int argc, char* argv[])
     //   IconTheme Phosphor.Service.IconTheme 1.0 (IconThemeResolver singleton)
     //   UPower    Phosphor.Service.UPower 1.0    (UPowerHost, devices, model)
     //   Mpris     Phosphor.Service.Mpris 1.0     (MprisHost, players, model)
+    //   PipeWire  Phosphor.Service.PipeWire 1.0  (PipeWireHost, node models)
     // One call per lib here at startup is sufficient. The wrapper
     // functions are idempotent (each lib guards its registration with
     // std::call_once internally), so a future hot-reload hook that
@@ -45,6 +47,7 @@ int main(int argc, char* argv[])
     PhosphorServiceIconTheme::registerQmlTypes();
     PhosphorServiceUPower::registerQmlTypes();
     PhosphorServiceMpris::registerQmlTypes();
+    PhosphorServicePipeWire::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();

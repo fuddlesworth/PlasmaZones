@@ -93,12 +93,12 @@ PluginLoader::~PluginLoader()
     // wired to it (e.g. the demo controller) is fully entitled to
     // mutate Registry / PluginLoader state in response. Iterating
     // m_plugins directly while signals can rebound into us is a
-    // QHash-iterator-invalidation hazard.
-    if (m_registry) {
-        const QList<QString> ids = m_plugins.keys();
-        for (const QString& id : ids) {
-            m_registry->unregisterFactory(id);
-        }
+    // QHash-iterator-invalidation hazard. m_registry is non-null by
+    // construction (qFatal in the ctor on null), so no runtime guard
+    // here — caller-lifetime is the contract.
+    const QList<QString> ids = m_plugins.keys();
+    for (const QString& id : ids) {
+        m_registry->unregisterFactory(id);
     }
     m_plugins.clear();
     // Pinned libraries from prior removals — drop them too. Same
@@ -154,14 +154,32 @@ QString PluginLoader::resolveDefaultPluginRoot() const
 
 bool PluginLoader::ensurePluginRootExists() const
 {
+    // Per-path warn-once latch. Without it, every rescanNow() (the
+    // watcher's timer, the demo's reload button) re-logs the same
+    // "failed to create plugin root" line and floods the journal.
+    // Per-path so a future re-config of m_pluginRoot to a different
+    // path still surfaces a fresh failure the first time. Keyed on
+    // the actual root string; QSet not QHash because we only need
+    // membership. Lives at function scope (file-local would be
+    // shared across PluginLoader instances; per-instance would
+    // require adding a member to the public header which the audit
+    // scope forbids).
+    static QSet<QString> s_logged;
+
     QDir dir(m_pluginRoot);
     if (dir.exists()) {
+        s_logged.remove(m_pluginRoot);
         return true;
     }
     if (!QDir().mkpath(m_pluginRoot)) {
-        qWarning() << "PluginLoader: failed to create plugin root" << m_pluginRoot;
+        if (!s_logged.contains(m_pluginRoot)) {
+            qWarning() << "PluginLoader: failed to create plugin root" << m_pluginRoot
+                       << "(subsequent rescans silently retry)";
+            s_logged.insert(m_pluginRoot);
+        }
         return false;
     }
+    s_logged.remove(m_pluginRoot);
     return true;
 }
 
@@ -218,23 +236,38 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
     // unmapped first, that destructor call would jump into freed
     // memory and segfault. Future refactors of this block MUST
     // preserve the library-move-before-factory-destroy ordering.
+    //
+    // Re-entry-safety: pluginUnloaded (line emit below) and the
+    // registry's factoryUnregistered (via unregisterFactory above)
+    // are both wired to user slots in the demo controller. Those
+    // slots can mutate m_plugins (e.g. call rescanNow or a follow-
+    // up unregister). Since we iterate a SNAPSHOT id list, a slot
+    // can race us by removing m_plugins[pluginId] before this
+    // iteration body sees it. Take ownership BEFORE any signal
+    // fires by erasing the QHash entry first, and tolerate the
+    // entry already being gone with a checked constFind early-
+    // continue.
     const QList<QString> currentIds = m_plugins.keys();
     for (const QString& pluginId : currentIds) {
-        if (!discoveredIds.contains(pluginId)) {
-            auto entry = m_plugins.value(pluginId);
-            // m_plugins.value returns a default-constructed shared_ptr
-            // for unknown keys, but we just enumerated keys() — every
-            // id in currentIds must still exist. Assert the invariant
-            // so a future refactor that drops or inserts default
-            // entries mid-loop is caught immediately.
-            Q_ASSERT(entry);
-            m_pinnedLibraries.push_back(std::move(entry->library));
-            m_plugins.remove(pluginId);
-            if (m_registry) {
-                m_registry->unregisterFactory(pluginId);
-            }
-            Q_EMIT pluginUnloaded(pluginId);
+        if (discoveredIds.contains(pluginId)) {
+            continue;
         }
+        const auto it = m_plugins.constFind(pluginId);
+        if (it == m_plugins.constEnd() || !it.value()) {
+            // A previously-fired pluginUnloaded slot rebounded into
+            // a path that removed this entry. Skip it rather than
+            // dereffing a default-constructed shared_ptr.
+            qWarning() << "PluginLoader: plugin" << pluginId
+                       << "vanished mid-unload (rebound from prior signal slot); skipping";
+            continue;
+        }
+        // Move ownership out of the hash BEFORE any signal fires so
+        // a re-entrant slot can't observe the entry in two states.
+        std::shared_ptr<LoadedPlugin> entry = it.value();
+        m_plugins.remove(pluginId);
+        m_pinnedLibraries.push_back(std::move(entry->library));
+        m_registry->unregisterFactory(pluginId);
+        Q_EMIT pluginUnloaded(pluginId);
     }
 
     return watchedFiles;
@@ -243,10 +276,26 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
 void PluginLoader::loadPluginFromDir(const QString& pluginDir)
 {
     QDir dir(pluginDir);
-    const QStringList soFiles = dir.entryList(QStringList() << QStringLiteral("*.so"), QDir::Files | QDir::Readable);
+    // QDir::Name forces lexicographic sort so the "first" pick is
+    // deterministic across runs and across filesystems with no
+    // stable entry order (tmpfs, some FUSE mounts). Without an
+    // explicit sort, QFileSystemEngine returns directory entries
+    // in inode-allocation order on most ext4 setups, which makes
+    // the choice of .so depend on the order the files were
+    // created — a fragile invariant for tests and packaging.
+    const QStringList soFiles =
+        dir.entryList(QStringList() << QStringLiteral("*.so"), QDir::Files | QDir::Readable, QDir::Name);
     if (soFiles.isEmpty()) {
         qWarning() << "PluginLoader: no .so under" << pluginDir;
         return;
+    }
+    if (soFiles.size() > 1) {
+        // Multiple .so files in one plugin directory is almost
+        // certainly a packaging mistake. Surface it so the author
+        // notices instead of silently picking the lexicographically
+        // first match.
+        qWarning().noquote() << "PluginLoader:" << pluginDir << "contains" << soFiles.size() << ".so files; picking"
+                             << soFiles.first() << "(deterministic by lexicographic order)";
     }
     const QString libraryPath = dir.absoluteFilePath(soFiles.first());
     const QString manifestPath = dir.absoluteFilePath(QStringLiteral("manifest.json"));
@@ -308,9 +357,9 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
 
     const QString pluginId = manifest.id;
     m_plugins.insert(pluginId, entryRecord);
-    if (m_registry) {
-        m_registry->registerFactory(factory);
-    }
+    // m_registry is non-null by construction (qFatal in the ctor on
+    // null), so no runtime guard — caller-lifetime is the contract.
+    m_registry->registerFactory(factory);
 
     Q_EMIT pluginLoaded(pluginId);
 }

@@ -20,8 +20,19 @@ namespace PhosphorTheme {
 
 // Concrete IThemeService backed by an in-memory QVariantMap. JSON files are
 // loaded eagerly and watched for hot-reload; the file's `tokens` object
-// (token name → "#RRGGBB" or "#AARRGGBB") replaces the active palette in
-// place and `paletteChanged` fires once per reload.
+// (token name → "#RRGGBB" or "#AARRGGBB") merges into the active palette
+// (existing tokens absent from the new payload survive) and
+// `paletteChanged` fires once per reload that actually changed at least
+// one token. Use `resetToDefaults()` for a true replace-with-defaults.
+//
+// Path handling: `loadFromFile(path)` canonicalises through
+// QFileInfo::canonicalFilePath() before storing as the watched source,
+// so symlinks are resolved to their target. A passed-in symlink to a
+// palette file will have the underlying target file watched, not the
+// symlink itself. This is by design: hot-reload should track the file
+// whose contents change, not an indirection that may swap targets
+// without notifying the watcher. No base-dir restriction is applied;
+// callers pass paths they trust (KCM, demo, scripted setup).
 //
 // QML side: registered as a QML singleton via `QML_ELEMENT QML_SINGLETON`,
 // imported as `import Phosphor.Theme` → `PaletteStore.token("primary")`.
@@ -49,6 +60,7 @@ class PHOSPHORTHEME_EXPORT PaletteStore : public QObject, public IThemeService
 public:
     explicit PaletteStore(QObject* parent = nullptr);
     ~PaletteStore() override;
+    Q_DISABLE_COPY_MOVE(PaletteStore)
 
     // The canonical built-in dark palette. Static accessor for callers
     // that need the defaults without paying for a PaletteStore instance
@@ -76,14 +88,26 @@ Q_SIGNALS:
     void loadError(const QString& path, const QString& reason);
 
 private:
-    /// Parse a JSON blob and apply its tokens to the current palette.
-    /// `dropWatchedSource` controls whether m_sourcePath + the watcher
-    /// are reset on success. The public `loadFromJson` passes true (the
-    /// header contract says the palette came from an in-process blob,
-    /// not a watched file); `reloadFromCurrentPath` passes false so a
-    /// successful hot-reload doesn't disarm the watcher it was just
-    /// triggered by.
-    bool parseAndApplyJson(const QByteArray& json, bool dropWatchedSource);
+    /// Parse a JSON blob and merge its tokens into the current
+    /// palette. Pure parser + merge primitive: it does NOT touch
+    /// the watcher or m_sourcePath. Callers that need the
+    /// IThemeService::loadFromJson contract (in-process blob, drop
+    /// the watched source) invoke `dropWatcherAndClearSourcePath()`
+    /// first; `reloadFromCurrentPath` calls it directly so a
+    /// successful hot-reload keeps the watcher armed.
+    bool parseAndApplyJson(const QByteArray& json);
+    /// Disarms the active filesystem watch (file + parent directory),
+    /// cancels any pending debounced reload, and clears m_sourcePath
+    /// (emitting sourcePathChanged if it was non-empty). The
+    /// implementation counterpart to IThemeService::loadFromJson's
+    /// "in-process blob, not a watched file" contract.
+    void dropWatcherAndClearSourcePath();
+    /// Merges incoming tokens over the current palette. Existing
+    /// keys absent from `tokens` are preserved; values are
+    /// normalised to QColor. Emits paletteChanged when at least
+    /// one stored value differs from the incoming one. Pure
+    /// in-memory merge: does NOT touch the watcher, the source
+    /// path, or trigger any file I/O.
     void applyPalette(const QVariantMap& tokens);
     void reloadFromCurrentPath();
 

@@ -55,6 +55,7 @@ private Q_SLOTS:
     void pluginRootReturnsConfiguredPath();
     void pluginRootResolvesXdgWhenEmpty();
     void destructorPinsLibraryBeforeFactoryDestruction();
+    void destructorWithoutPriorRescanDoesNotCrash();
 
 private:
     // Helper: install one of the templated fake-plugin fixtures into
@@ -64,69 +65,80 @@ private:
     // the .so's filename WITHOUT extension (e.g.
     // "libphosphor_registry_test_fake_plugin"). The .so is copied
     // into the destination as <subdir>.so so the loader's manifest-
-    // id-vs-directory-basename rule resolves cleanly. Returns the
-    // installed plugin directory path.
-    QString installPluginFixture(const QString& pluginRoot, const QString& subdir, const QString& fixtureDir,
-                                 const QString& soBasename) const;
+    // id-vs-directory-basename rule resolves cleanly. Out-param
+    // destDir receives the installed plugin directory path on
+    // success. Returns false on any setup failure so the caller can
+    // QVERIFY the result — Qt's QVERIFY macro inside a helper only
+    // returns from the helper, so wrapping the checks in throwaway
+    // lambdas (the previous shape) silently swallowed failures and
+    // left the test running against an incomplete fixture.
+    [[nodiscard]] bool installPluginFixture(const QString& pluginRoot, const QString& subdir, const QString& fixtureDir,
+                                            const QString& soBasename, QString& destDir) const;
 
-    QString installFakePlugin(const QString& pluginRoot, const QString& subdir) const
+    [[nodiscard]] bool installFakePlugin(const QString& pluginRoot, const QString& subdir, QString& destDir) const
     {
         return installPluginFixture(pluginRoot, subdir, QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR),
-                                    QStringLiteral("libphosphor_registry_test_fake_plugin"));
+                                    QStringLiteral("libphosphor_registry_test_fake_plugin"), destDir);
     }
 
-    QString installFakePluginIdMismatch(const QString& pluginRoot) const
+    [[nodiscard]] bool installFakePluginIdMismatch(const QString& pluginRoot, QString& destDir) const
     {
         return installPluginFixture(pluginRoot, QStringLiteral("id-mismatch-plugin"),
                                     QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR),
-                                    QStringLiteral("libphosphor_registry_test_fake_plugin_idmismatch"));
+                                    QStringLiteral("libphosphor_registry_test_fake_plugin_idmismatch"), destDir);
     }
 
-    QString installFakePluginNullFactory(const QString& pluginRoot) const
+    [[nodiscard]] bool installFakePluginNullFactory(const QString& pluginRoot, QString& destDir) const
     {
         return installPluginFixture(pluginRoot, QStringLiteral("null-factory-plugin"),
                                     QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR),
-                                    QStringLiteral("libphosphor_registry_test_fake_plugin_nullfactory"));
+                                    QStringLiteral("libphosphor_registry_test_fake_plugin_nullfactory"), destDir);
     }
 
-    QString installFakePluginNoEntry(const QString& pluginRoot) const
+    [[nodiscard]] bool installFakePluginNoEntry(const QString& pluginRoot, QString& destDir) const
     {
         return installPluginFixture(pluginRoot, QStringLiteral("no-entry-plugin"),
                                     QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR),
-                                    QStringLiteral("libphosphor_registry_test_fake_plugin_noentry"));
+                                    QStringLiteral("libphosphor_registry_test_fake_plugin_noentry"), destDir);
     }
 };
 
-QString TestPluginLoader::installPluginFixture(const QString& pluginRoot, const QString& subdir,
-                                               const QString& fixtureDir, const QString& soBasename) const
+bool TestPluginLoader::installPluginFixture(const QString& pluginRoot, const QString& subdir, const QString& fixtureDir,
+                                            const QString& soBasename, QString& destDir) const
 {
-    const QString destDir = QDir(pluginRoot).absoluteFilePath(subdir);
-    [&] {
-        QVERIFY(QDir().mkpath(destDir));
-    }();
+    // No QVERIFY here: QVERIFY inside a non-test-slot helper only
+    // returns from the helper itself (in the previous shape, even
+    // worse: from throwaway lambdas inside the helper). Each
+    // failure path returns false so the caller's QVERIFY surfaces
+    // the problem at the test slot scope.
+    destDir = QDir(pluginRoot).absoluteFilePath(subdir);
+    if (!QDir().mkpath(destDir)) {
+        qWarning().noquote() << "installPluginFixture: mkpath failed for" << destDir;
+        return false;
+    }
     const QString fixtureSo = QDir(fixtureDir).absoluteFilePath(soBasename + QStringLiteral(".so"));
     const QString fixtureManifest = QDir(fixtureDir).absoluteFilePath(QStringLiteral("manifest.json"));
-    [&] {
-        QVERIFY2(QFileInfo::exists(fixtureSo), qPrintable(QStringLiteral("missing fixture .so: %1").arg(fixtureSo)));
-        QVERIFY2(QFileInfo::exists(fixtureManifest),
-                 qPrintable(QStringLiteral("missing fixture manifest: %1").arg(fixtureManifest)));
-    }();
+    if (!QFileInfo::exists(fixtureSo)) {
+        qWarning().noquote() << "installPluginFixture: missing fixture .so:" << fixtureSo;
+        return false;
+    }
+    if (!QFileInfo::exists(fixtureManifest)) {
+        qWarning().noquote() << "installPluginFixture: missing fixture manifest:" << fixtureManifest;
+        return false;
+    }
 
     const QString destSo = QDir(destDir).absoluteFilePath(subdir + QStringLiteral(".so"));
     const QString destManifest = QDir(destDir).absoluteFilePath(QStringLiteral("manifest.json"));
 
-    // Surface QFile::copy failures as test failures with a clear
-    // message instead of silently proceeding and tripping a downstream
-    // "loadedSpy.count() == 0" assertion that gives no clue what went
-    // wrong.
-    [&] {
-        QVERIFY2(QFile::copy(fixtureSo, destSo),
-                 qPrintable(QStringLiteral("failed to copy %1 -> %2").arg(fixtureSo, destSo)));
-        QVERIFY2(QFile::copy(fixtureManifest, destManifest),
-                 qPrintable(QStringLiteral("failed to copy %1 -> %2").arg(fixtureManifest, destManifest)));
-    }();
-
-    return destDir;
+    if (!QFile::copy(fixtureSo, destSo)) {
+        qWarning().noquote() << "installPluginFixture: failed to copy" << fixtureSo << "->" << destSo;
+        return false;
+    }
+    if (!QFile::copy(fixtureManifest, destManifest)) {
+        qWarning().noquote() << "installPluginFixture: failed to copy" << fixtureManifest << "->" << destManifest;
+        return false;
+    }
+    return true;
 }
 
 void TestPluginLoader::loadsPluginAtScan()
@@ -134,7 +146,8 @@ void TestPluginLoader::loadsPluginAtScan()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -159,7 +172,8 @@ void TestPluginLoader::unloadsRemovedPluginOnRescan()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    const QString installedDir = installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -228,7 +242,8 @@ void TestPluginLoader::duplicateIdAcrossRescansNoOp()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -248,7 +263,8 @@ void TestPluginLoader::rejectsFactoryIdManifestMismatch()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePluginIdMismatch(pluginRoot);
+    QString installedDir;
+    QVERIFY(installFakePluginIdMismatch(pluginRoot, installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -319,7 +335,8 @@ void TestPluginLoader::rejectsNullFactoryReturn()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePluginNullFactory(pluginRoot);
+    QString installedDir;
+    QVERIFY(installFakePluginNullFactory(pluginRoot, installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -340,7 +357,8 @@ void TestPluginLoader::rejectsPluginWithoutEntryPoint()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePluginNoEntry(pluginRoot);
+    QString installedDir;
+    QVERIFY(installFakePluginNoEntry(pluginRoot, installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -397,7 +415,8 @@ void TestPluginLoader::loadsNewPluginAddedOnRescan()
     QCOMPARE(registry.size(), 0);
 
     // Drop a plugin into the watched root.
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
     loader.rescanNow();
 
     QCOMPARE(loadedSpy.count(), 1);
@@ -410,7 +429,8 @@ void TestPluginLoader::emitsRescanCompletedSignal()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -433,7 +453,8 @@ void TestPluginLoader::liveWidgetCountReturnsMinusOneForLoadedPlugin()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -487,7 +508,8 @@ void TestPluginLoader::destructorPinsLibraryBeforeFactoryDestruction()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    const QString installedDir = installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     {
         Registry<IBarWidgetFactory> registry;
@@ -501,6 +523,39 @@ void TestPluginLoader::destructorPinsLibraryBeforeFactoryDestruction()
         // loader + registry destruct here; m_pinnedLibraries holds
         // the .so until ~PluginLoader runs, and only after the
         // pinned-library destructor unmaps does the test exit.
+    }
+}
+
+void TestPluginLoader::destructorWithoutPriorRescanDoesNotCrash()
+{
+    // Companion to destructorPinsLibraryBeforeFactoryDestruction.
+    // That test exercises the unload-via-rescan path (entry moves
+    // into m_pinnedLibraries before destruct). This test exercises
+    // the second tear-down path: load the plugin, then drop the
+    // PluginLoader WITHOUT removing the directory or rescanning.
+    // The factory still lives in m_plugins, not m_pinnedLibraries,
+    // and ~PluginLoader iterates m_plugins.keys() to unregister
+    // before clear(). The ordering rule (QLibrary must outlive
+    // the factory destructor's vtable dispatch) applies here too:
+    // m_plugins.clear() runs the LoadedPlugin destructor, which
+    // destroys the factory shared_ptr (calling the in-.so factory
+    // destructor) before its unique_ptr<QLibrary> destructs. If a
+    // future refactor reordered LoadedPlugin's members so the
+    // library is destroyed first, the factory destructor would
+    // jump into freed memory and crash here.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+
+    {
+        Registry<IBarWidgetFactory> registry;
+        PluginLoader loader(&registry, pluginRoot);
+        loader.scanAndLoad();
+        QCOMPARE(registry.size(), 1);
+        // No rescan, no directory removal — fall straight through
+        // to ~PluginLoader. If ordering is wrong, this crashes.
     }
 }
 
