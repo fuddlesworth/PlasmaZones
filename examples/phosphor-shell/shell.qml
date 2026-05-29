@@ -10,6 +10,8 @@ import QtQuick
 // sibling .qml files. Sibling components are auto-discovered by Qt
 // from this file's directory.
 Item {
+    id: root
+
     // System data sources: owned at the top level so multiple
     // panels/windows can share a single Process / FileView each.
 
@@ -179,7 +181,13 @@ Item {
     TopPanel {
         id: topPanel
 
-        shellState: shellState
+        // Qualified with `root.` so QML's binding scope resolution
+        // doesn't shadow the alias with TopPanel's own (initially
+        // undefined) `shellState` required property. Unqualified
+        // `shellState: shellState` resolves to the property being
+        // assigned, leaving downstream bindings reading from an
+        // undefined value.
+        shellState: root.shellState
         // Time as locale-neutral HH:mm; the date portion via Qt.formatDate
         // so day/month names follow the user's locale (the hand-rolled
         // English arrays this replaced were an i18n regression).
@@ -203,13 +211,13 @@ Item {
     PanelPopupHost {
         id: panelPopupHost
 
-        shellState: shellState
+        shellState: root.shellState
         topPanel: topPanel
     }
 
     // ─── Floating windows ────────────────────────────────────────────────
     SettingsWindow {
-        shellState: shellState
+        shellState: root.shellState
         hostname: hostnameFile.content.trim()
     }
 }
