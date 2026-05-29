@@ -43,7 +43,7 @@ MprisPlayerModel { id: players; host: mpris }
 Repeater {
     model: players
     delegate: Label {
-        text: identity + " · " + trackTitle + " — " + trackArtist
+        text: identity + " · " + trackTitle + " · " + trackArtist
     }
 }
 ```

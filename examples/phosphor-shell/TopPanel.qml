@@ -181,6 +181,7 @@ PanelWindow {
                         MouseArea {
                             anchors.fill: parent
                             hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
                             Accessible.role: Accessible.Button
                             Accessible.name: qsTr("Switch to workspace %1").arg(parent.index + 1)
                             onClicked: root.shellState.activeWorkspace = parent.index

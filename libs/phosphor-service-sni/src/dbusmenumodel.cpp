@@ -640,9 +640,12 @@ void DBusMenuModel::aboutToShow()
 void DBusMenuModel::refresh()
 {
     // If a rebuild was queued, the flush already issued a fresh
-    // GetLayout via refresh; calling d->refresh() again here would
-    // cancel that watcher and issue a duplicate request for the
-    // same rootId.
+    // GetLayout via refresh — UNLESS service/path were empty when the
+    // flush ran (in which case `buildProxy` left the proxy null and the
+    // inner refresh early-returned without issuing GetLayout). We still
+    // want a no-op in that case: calling refresh() on an unconfigured
+    // model is nonsensical and the early-return mirrors the unflushed
+    // d->refresh() check below.
     const bool flushed = d->flushPendingRebuild();
     qCDebug(lcSniMenu) << "refresh() invoked for" << d->service << d->path << "proxy=" << (d->proxy ? "live" : "null");
     if (!flushed)
@@ -656,6 +659,12 @@ void DBusMenuModel::aboutToHide()
         d->openedIds.clear();
         return;
     }
+    // No paired aboutToShow ever ran (animation race, hide-before-show
+    // QML toggle, fresh model that the user dismissed). Firing closed
+    // here would be unbalanced and a strict app maintaining a depth
+    // counter could underflow; skip.
+    if (d->openedIds.isEmpty())
+        return;
     // Fire closed for every level we opened on the way in, in inverse
     // open order so apps tracking a depth counter unwind LIFO. Append
     // the current rootId if it wasn't already in the list so a

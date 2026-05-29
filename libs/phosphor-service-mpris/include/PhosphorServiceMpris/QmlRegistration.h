@@ -8,10 +8,11 @@
 namespace PhosphorServiceMpris {
 
 /// Register every PhosphorServiceMpris QML type under the
-/// `Phosphor.Service.Mpris` module at version 1.0. Intended to be
-/// called once per process at startup; `qmlRegisterType` is not a
-/// true no-op on repeat calls (the second registration overwrites
-/// and Qt logs a warning-level duplicate-registration message).
+/// `Phosphor.Service.Mpris` module at version 1.0. Idempotent on
+/// repeat calls — internally guarded by `std::call_once` so a hot-
+/// reloading shell that builds a fresh `QQmlEngine` per reload can
+/// safely call this from every engine setup without triggering Qt's
+/// duplicate-registration warning.
 PHOSPHORSERVICEMPRIS_EXPORT void registerQmlTypes();
 
 } // namespace PhosphorServiceMpris

@@ -10,6 +10,8 @@
 #include <QLoggingCategory>
 #include <QQmlEngine>
 
+#include <mutex>
+
 Q_LOGGING_CATEGORY(lcIconThemeQml, "phosphor.service.icontheme.qml")
 
 namespace PhosphorServiceIconTheme {
@@ -23,18 +25,29 @@ constexpr const char* kImageProviderHost = "phosphor-service-icontheme";
 
 void registerQmlTypes()
 {
-    // Singleton resolver: exposes themeName + iconForName() to QML
-    // shells that want to resolve their own theme icons (e.g. for an
-    // application-launcher widget that needs the same XDG lookup as
-    // the tray). IconThemeResolver::instance() parents the QObject
-    // to QCoreApplication, so the singleton outlives every
-    // QQmlEngine the shell may construct during hot reload.
+    // qmlRegisterSingletonInstance is process-global; a repeat call
+    // with a different instance pointer is undefined per Qt's docs.
+    // The IconThemeResolver singleton is parented to QCoreApplication
+    // and has process lifetime so the pointer is stable across calls,
+    // but a hot-reloading shell that calls this from every engine
+    // setup would still trigger Qt's duplicate-registration warning.
+    // Guard with call_once so the function is safe to invoke per
+    // engine, matching the sibling phosphor-service-sni pattern.
     if (!QCoreApplication::instance()) {
         qCWarning(lcIconThemeQml) << "registerQmlTypes called before QCoreApplication; refusing to register";
         return;
     }
-    qmlRegisterSingletonInstance<IconThemeResolver>(kModule, kModuleVersionMajor, kModuleVersionMinor,
-                                                    "IconThemeResolver", IconThemeResolver::instance());
+    static std::once_flag once;
+    std::call_once(once, [] {
+        // Singleton resolver: exposes themeName + iconForName() to QML
+        // shells that want to resolve their own theme icons (e.g. for an
+        // application-launcher widget that needs the same XDG lookup as
+        // the tray). IconThemeResolver::instance() parents the QObject
+        // to QCoreApplication, so the singleton outlives every
+        // QQmlEngine the shell may construct during hot reload.
+        qmlRegisterSingletonInstance<IconThemeResolver>(kModule, kModuleVersionMajor, kModuleVersionMinor,
+                                                        "IconThemeResolver", IconThemeResolver::instance());
+    });
 }
 
 void installImageProvider(QQmlEngine* engine)

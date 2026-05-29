@@ -135,12 +135,13 @@ add_compile_definitions(PLASMAZONES_SHADERS_ENABLED)
 option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 
 # Opt-in build for the in-progress phosphor-shell desktop shell and its
-# supporting libraries (libs/phosphor-shell + the phosphor-service-*
-# group, currently sni / icontheme / upower / mpris) + the bundled
-# `phosphor-shell` example binary + the example QML/shader tree under
-# examples/phosphor-shell. Default OFF so packaging / downstream
-# installs of PlasmaZones don't pick up shell artefacts before the
-# shell ships. Enable explicitly for shell development:
+# supporting libraries (libs/phosphor-shell + the gated phosphor-service-*
+# group — see the add_subdirectory block farther down in this file for
+# the authoritative list) + the bundled `phosphor-shell` example binary
+# + the example QML/shader tree under examples/phosphor-shell. Default
+# OFF so packaging / downstream installs of PlasmaZones don't pick up
+# shell artefacts before the shell ships. Enable explicitly for shell
+# development:
 #   cmake -DBUILD_PHOSPHOR_SHELL=ON
 option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in progress)" OFF)
 

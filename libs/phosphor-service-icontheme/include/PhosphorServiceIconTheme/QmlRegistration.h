@@ -14,11 +14,13 @@ QT_END_NAMESPACE
 namespace PhosphorServiceIconTheme {
 
 /// Register the `IconThemeResolver` QML singleton under the
-/// `Phosphor.Service.IconTheme` module at version 1.0. Intended to be
-/// called once per process at startup; `qmlRegisterSingletonInstance`
-/// is not a true no-op on repeat calls (Qt logs a warning-level
-/// duplicate-registration message and rebinds the singleton instance,
-/// which is well-defined but wasteful).
+/// `Phosphor.Service.IconTheme` module at version 1.0. Idempotent on
+/// repeat calls — internally guarded by `std::call_once` so a hot-
+/// reloading shell that builds a fresh `QQmlEngine` per reload can
+/// safely call this from every engine setup without triggering Qt's
+/// duplicate-registration warning. Must be called after
+/// `QCoreApplication::instance()` exists (the singleton instance is
+/// parented to it); calling earlier is a logged no-op.
 PHOSPHORSERVICEICONTHEME_EXPORT void registerQmlTypes();
 
 /// Mount the icon image provider on `engine` under the URL scheme

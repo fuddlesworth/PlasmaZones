@@ -180,9 +180,15 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
     ItemEntry entry{sender, canonical};
     m_items.insert(canonical, entry);
     m_byOwner[sender].append(canonical);
-    // QDBusServiceWatcher::addWatchedService is idempotent — checking
-    // watchedServices() first is just an O(n) scan for no benefit.
-    m_busWatcher->addWatchedService(sender);
+    // QDBusServiceWatcher::addWatchedService appends to an internal
+    // list without dedup; the dbus-daemon match-rule is shared so
+    // repeated adds are harmless on the wire, but the watcher would
+    // accumulate stale entries we'd never clean up. Add only on the
+    // first item for this owner; onServiceUnregistered's single
+    // removeWatchedService then matches symmetrically.
+    if (m_byOwner[sender].size() == 1) {
+        m_busWatcher->addWatchedService(sender);
+    }
 
     Q_EMIT StatusNotifierItemRegistered(canonical);
     Q_EMIT registeredItemsChanged();

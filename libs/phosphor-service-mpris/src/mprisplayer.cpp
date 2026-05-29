@@ -736,11 +736,15 @@ void MprisPlayer::seek(qreal offsetSeconds)
     // about 9.22e18; 1e13 * 1e6 = 1e19 already overflows, so the safe
     // limit is ~9e12 seconds, about 285 millennia, well beyond any
     // legitimate seek).
-    if (!std::isfinite(offsetSeconds))
+    if (!std::isfinite(offsetSeconds)) {
+        qCDebug(lcMprisPlayer) << "seek dropped: non-finite offset for" << d->service;
         return;
+    }
     constexpr qreal kMaxSeekSeconds = 9.0e12;
-    if (std::abs(offsetSeconds) > kMaxSeekSeconds)
+    if (std::abs(offsetSeconds) > kMaxSeekSeconds) {
+        qCDebug(lcMprisPlayer) << "seek dropped: offset" << offsetSeconds << "exceeds cap for" << d->service;
         return;
+    }
     QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
                                                       QLatin1String(kPlayerIface), QStringLiteral("Seek"));
     msg << static_cast<qint64>(offsetSeconds * 1e6);
@@ -750,11 +754,15 @@ void MprisPlayer::seek(qreal offsetSeconds)
 void MprisPlayer::setPosition(qreal absoluteSeconds)
 {
     // Same overflow rationale as seek().
-    if (!std::isfinite(absoluteSeconds))
+    if (!std::isfinite(absoluteSeconds)) {
+        qCDebug(lcMprisPlayer) << "setPosition dropped: non-finite value for" << d->service;
         return;
+    }
     constexpr qreal kMaxPositionSeconds = 9.0e12;
-    if (std::abs(absoluteSeconds) > kMaxPositionSeconds)
+    if (std::abs(absoluteSeconds) > kMaxPositionSeconds) {
+        qCDebug(lcMprisPlayer) << "setPosition dropped: value" << absoluteSeconds << "exceeds cap for" << d->service;
         return;
+    }
     QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
                                                       QLatin1String(kPlayerIface), QStringLiteral("SetPosition"));
     // If trackId is empty we have not seen any Metadata yet; the spec
