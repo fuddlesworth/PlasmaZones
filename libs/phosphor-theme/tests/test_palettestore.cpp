@@ -29,6 +29,7 @@ private Q_SLOTS:
     void loadFromJson_rejectsWrappedTokensWithNonObjectValue();
     void loadFromFile_persistsSourcePath();
     void loadFromFile_emitsErrorOnMissingFile();
+    void loadFromFile_malformedJsonLeavesSourcePathUntouched();
     void loadFromFile_tokensKeyNotObjectKeepsWatcherArmed();
     void loadFromFile_noUsableTokensKeepsWatcherArmed();
     void applyTokens_emptyIsNoOp();
@@ -138,12 +139,18 @@ void TestPaletteStore::loadFromJson_failedAfterFileLoadPreservesSourcePath()
     QVERIFY(!sourceAfterLoad.isEmpty());
     QCOMPARE(pathSpy.count(), 1);
 
-    // The watcher is constructed with `this` as parent (see ctor),
-    // so findChildren surfaces it. We pin watcher state through every
-    // failing call below — a regression that re-introduced the
-    // watcher-torn-down-on-failed-load bug would only be visible by
-    // direct watcher inspection because sourcePath alone could be
-    // restored on rollback while the underlying watch stayed dropped.
+    // White-box assertion against the watcher's tracked paths —
+    // matches the convention used by resetToDefaults_releasesDirectoryWatch.
+    // A purely behavioural test that routed through fileChanged /
+    // directoryChanged would silently pass on a regression that
+    // restored m_sourcePath on rollback but left the watcher
+    // dropped: the handler short-circuits on m_sourcePath !=
+    // event-path, and a missing watch entry produces no event at
+    // all, so the test would observe "no reload" and conclude
+    // success. Direct watcher inspection via findChildren is the
+    // only way to prove the underlying inotify watch survived
+    // each failing call. The watcher is constructed with `this`
+    // as parent (see PaletteStore ctor), so findChildren surfaces it.
     const auto watchers = s.findChildren<QFileSystemWatcher*>();
     QCOMPARE(watchers.size(), 1);
     QFileSystemWatcher* watcher = watchers.first();
@@ -199,6 +206,79 @@ void TestPaletteStore::loadFromFile_emitsErrorOnMissingFile()
     QSignalSpy errSpy(&s, &PaletteStore::loadError);
     QVERIFY(!s.loadFromFile(QStringLiteral("/definitely/does/not/exist.json")));
     QCOMPARE(errSpy.count(), 1);
+}
+
+void TestPaletteStore::loadFromFile_malformedJsonLeavesSourcePathUntouched()
+{
+    // PaletteStore.h documents that outright parse failures DO NOT
+    // commit sourcePath (asymmetric with the shape-failure paths,
+    // which DO commit). This pins that half of the contract: load
+    // a good file first to arm the watcher + populate sourcePath,
+    // then attempt loadFromFile against a file with non-JSON bytes.
+    // The malformed load must:
+    //   1. Return false.
+    //   2. Emit loadError exactly once.
+    //   3. Leave sourcePath pointing at the FIRST (good) file —
+    //      sourcePathChanged must not fire a second time.
+    //   4. Leave the watcher still tracking the FIRST file +
+    //      its parent directory.
+    // A regression that committed sourcePath before the parse step
+    // would be visible by either watcher inspection or pathSpy count.
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString goodPath = tmp.filePath(QStringLiteral("good.json"));
+    const QString badPath = tmp.filePath(QStringLiteral("malformed.json"));
+    {
+        QFile f(goodPath);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": {"primary": "#112233"}})");
+    }
+    {
+        QFile f(badPath);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("this is not json at all { ]]} ");
+    }
+
+    PaletteStore s;
+    QSignalSpy pathSpy(&s, &PaletteStore::sourcePathChanged);
+    QSignalSpy errSpy(&s, &PaletteStore::loadError);
+
+    QVERIFY(s.loadFromFile(goodPath));
+    const QString sourceAfterGood = s.sourcePath();
+    QVERIFY(!sourceAfterGood.isEmpty());
+    QCOMPARE(pathSpy.count(), 1);
+
+    // White-box: pin the watcher's tracked paths BEFORE the bad
+    // load so we can compare them post-failure. See
+    // resetToDefaults_releasesDirectoryWatch for the rationale
+    // — a behavioural test would miss a watcher drop because
+    // sourcePath alone could be restored on rollback while the
+    // underlying watch stayed dropped.
+    const auto watchers = s.findChildren<QFileSystemWatcher*>();
+    QCOMPARE(watchers.size(), 1);
+    QFileSystemWatcher* watcher = watchers.first();
+    const QStringList filesBefore = watcher->files();
+    const QStringList dirsBefore = watcher->directories();
+    QVERIFY(!filesBefore.isEmpty());
+    QVERIFY(!dirsBefore.isEmpty());
+
+    // Attempt the malformed load.
+    QVERIFY(!s.loadFromFile(badPath));
+
+    // loadError fires (carries the malformed-JSON message), but
+    // sourcePathChanged stays at its post-good-load count.
+    QCOMPARE(errSpy.count(), 1);
+    QCOMPARE(errSpy.first().at(1).toString(), QStringLiteral("invalid JSON"));
+    QCOMPARE(s.sourcePath(), sourceAfterGood);
+    QCOMPARE(pathSpy.count(), 1);
+
+    // Watcher is unchanged: still pointed at the first file +
+    // its parent directory.
+    QCOMPARE(watcher->files(), filesBefore);
+    QCOMPARE(watcher->directories(), dirsBefore);
+
+    // The good file's palette tokens still apply.
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
 }
 
 void TestPaletteStore::loadFromFile_tokensKeyNotObjectKeepsWatcherArmed()
@@ -385,9 +465,17 @@ void TestPaletteStore::resetToDefaults_signalOrderIsSourceBeforePalette()
     // Pins the implementation-only signal ordering convention:
     // when resetToDefaults drops a watched source AND mutates the
     // palette (the common case after loadFromFile), QML bindings
-    // see sourcePathChanged FIRST and then paletteChanged. The
-    // reverse order would let a binding read the new palette
-    // against the stale sourcePath for one event-loop tick.
+    // see sourcePathChanged FIRST and then paletteChanged. QML
+    // binding evaluation visits its dependencies in property-
+    // notification order: a binding that reads both sourcePath
+    // and a palette token re-evaluates on whichever signal arrives
+    // first, then again on the second. The reverse signal order
+    // would make the FIRST evaluation read the new palette against
+    // the stale sourcePath — visibly wrong in any binding that
+    // formats the source path alongside a palette swatch.
+    // (Direct connections fire synchronously; there is no event-
+    // loop tick between the two, so the order on the wire is the
+    // order the slots run, full stop.)
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     const QString path = tmp.filePath(QStringLiteral("p.json"));
@@ -450,7 +538,9 @@ void TestPaletteStore::hotReload_survivesConsecutiveInPlaceEdits()
     // loadFromJson, which dropped the watcher + cleared m_sourcePath
     // every time, silently breaking the next on-disk edit. This test
     // performs TWO consecutive edits and asserts both are picked up,
-    // pinning the parseAndApplyJson(false) routing.
+    // pinning the no-watcher-drop routing in reloadFromCurrentPath
+    // (the only watcher-tearing path is dropWatcherAndClearSourcePath,
+    // which only loadFromJson + resetToDefaults call).
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     const QString path = tmp.filePath(QStringLiteral("p.json"));

@@ -49,18 +49,17 @@ namespace {
 // ...), and Qt's default handler aborts on a fatal-warning trigger
 // before the ignore-message infrastructure can match. Per-test
 // instrumentation it is.
+//
+// g_warningSink is global (not an instance member) because
+// qInstallMessageHandler takes a plain function pointer — the
+// callback has no `this` to capture, so the sink pointer has to
+// live somewhere with static storage duration. The prior-handler
+// pointer, however, moves onto the instance below so nesting two
+// WarningCapture scopes can save+restore correctly without the
+// inner scope clobbering the outer's saved handler.
 QStringList* g_warningSink = nullptr;
-QtMessageHandler g_priorHandler = nullptr;
 
-void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
-{
-    if (type == QtWarningMsg && g_warningSink) {
-        g_warningSink->append(message);
-    }
-    if (g_priorHandler) {
-        g_priorHandler(type, context, message);
-    }
-}
+void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, const QString& message);
 
 // RAII guard: installs warningCapturingHandler on construction and
 // restores the previous handler on destruction. Pointed at a
@@ -68,22 +67,70 @@ void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, 
 // cross-test bleed-through. Restoring the handler in the destructor
 // (not just clearing the sink) protects sibling tests that rely on
 // the default handler's QTest::ignoreMessage routing.
+//
+// The prior handler is held per-instance so nesting is structurally
+// safe: an outer WarningCapture's destructor restores the handler
+// that was live BEFORE the outer scope opened, not whatever the
+// inner scope happened to leave behind. Today the test file never
+// nests two captures, but the global previously made nesting silently
+// corrupt — a future test that wraps an existing captured block
+// would have leaked warningCapturingHandler as "the prior handler"
+// for the inner scope's restore, leaving warningCapturingHandler
+// installed indefinitely after both scopes unwound.
+//
+// The g_warningSink global is still required (the message handler
+// callback is a C-style function pointer with no `this`), but a
+// Q_ASSERT in the constructor catches the only remaining nesting
+// hazard: two concurrent captures would clobber the sink pointer
+// and re-route the outer scope's captured warnings into the inner
+// scope's sink. Asserting g_warningSink is null on entry surfaces
+// that misuse immediately in debug builds.
 class WarningCapture
 {
 public:
     explicit WarningCapture(QStringList& sink)
     {
+        Q_ASSERT(g_warningSink == nullptr);
+        Q_ASSERT(s_activeCapture == nullptr);
         g_warningSink = &sink;
-        g_priorHandler = qInstallMessageHandler(warningCapturingHandler);
+        s_activeCapture = this;
+        m_priorHandler = qInstallMessageHandler(warningCapturingHandler);
     }
     ~WarningCapture()
     {
-        qInstallMessageHandler(g_priorHandler);
-        g_priorHandler = nullptr;
+        qInstallMessageHandler(m_priorHandler);
+        s_activeCapture = nullptr;
         g_warningSink = nullptr;
     }
     Q_DISABLE_COPY_MOVE(WarningCapture)
+
+    QtMessageHandler priorHandler() const
+    {
+        return m_priorHandler;
+    }
+
+    // Single-active pointer the C-style message-handler callback
+    // chains through to invoke the saved prior handler. Set in
+    // the ctor, cleared in the dtor — the matching Q_ASSERT in
+    // the ctor guarantees nesting can't quietly swap the active
+    // capture out from under the outer scope.
+    static WarningCapture* s_activeCapture;
+
+private:
+    QtMessageHandler m_priorHandler = nullptr;
 };
+
+WarningCapture* WarningCapture::s_activeCapture = nullptr;
+
+void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
+{
+    if (type == QtWarningMsg && g_warningSink) {
+        g_warningSink->append(message);
+    }
+    if (WarningCapture::s_activeCapture && WarningCapture::s_activeCapture->priorHandler()) {
+        WarningCapture::s_activeCapture->priorHandler()(type, context, message);
+    }
+}
 
 } // namespace
 
@@ -728,14 +775,20 @@ void TestPluginLoader::rescanReentryRemovingSecondPluginExercisesConstFindGuard(
     QCOMPARE(registry.size(), 2);
     QCOMPARE(loader.loadedPluginIds().size(), 2);
 
-    // Wire the re-entry slot. The latch ensures only the FIRST
-    // pluginUnloaded triggers the inner rescan — without the latch
-    // every unload would recurse, blowing the stack on a many-plugin
-    // tree. In the two-plugin case the inner rescan unloads the
-    // remaining sibling itself, so by the time control returns to
-    // the outer loop the second snapshot id is already gone — exactly
-    // the state the constFind early-continue guard is meant to
-    // handle.
+    // Wire the re-entry slot. The latch makes the test deterministic
+    // and iteration-order independent: only the FIRST pluginUnloaded
+    // triggers the inner rescan, regardless of which plugin id the
+    // outer cycle dequeues first from its keys-snapshot. Without
+    // the latch BOTH pluginUnloaded fires (one per plugin) would
+    // schedule a recursive rescanNow; the second one would be a
+    // no-op (m_plugins already empty) but the order in which the
+    // outer loop processed `a` vs `b` would silently change which
+    // pluginUnloaded carried the re-entrant call. The latch pins
+    // a single observable re-entry path — the inner rescan runs
+    // EXACTLY once and the outer loop's second iteration is the
+    // one that exercises the constFind early-continue branch. This
+    // is determinism, not stack-overflow defense (a QHash with two
+    // entries can't blow the stack on a recursive walk).
     bool reentered = false;
     QObject::connect(&loader, &PluginLoader::pluginUnloaded, &loader, [&]() {
         if (!reentered) {

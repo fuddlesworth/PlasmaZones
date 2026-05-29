@@ -101,6 +101,13 @@ public:
     // for the same reason. Callers that need atomic-commit
     // semantics across every failure mode should validate the
     // file out-of-band and route through loadFromJson instead.
+    //
+    // Note: on shape-failure paths (TokensKeyNotObject /
+    // NoUsableTokens) the new sourcePath is still committed before
+    // the failure surfaces, so `sourcePathChanged` may fire even
+    // when this returns false. QML bindings observing both
+    // sourcePath and loadError must be prepared to see the new
+    // path arrive together with a loadError on the same edit.
     Q_INVOKABLE bool loadFromFile(const QString& path) override;
     Q_INVOKABLE void applyTokens(const QVariantMap& tokens) override;
     Q_INVOKABLE void resetToDefaults() override;
@@ -117,27 +124,35 @@ Q_SIGNALS:
     void loadError(const QString& path, const QString& reason);
 
 private:
-    /// Parse a JSON blob and merge its tokens into the current
-    /// palette. Pure parser + merge primitive: it does NOT touch
-    /// the watcher or m_sourcePath. Callers that need the
-    /// IThemeService::loadFromJson contract (in-process blob, drop
-    /// the watched source) invoke `dropWatcherAndClearSourcePath()`
-    /// first; `reloadFromCurrentPath` calls it directly so a
-    /// successful hot-reload keeps the watcher armed.
-    bool parseAndApplyJson(const QByteArray& json);
     /// Merge variant. Takes an already-parsed JsonDocument so
-    /// callers that validated the document up-front (loadFromFile)
-    /// can route through the same merge logic without paying for a
-    /// second QJsonDocument::fromJson and without losing context
-    /// about WHICH validation step failed (parse vs token-map
-    /// empty). Returns a typed error code so the caller can
-    /// surface the distinction in loadError. The QByteArray
-    /// overload above delegates to this after its own fromJson.
+    /// callers that validated the document up-front (loadFromFile,
+    /// reloadFromCurrentPath) can route through the same merge
+    /// logic without paying for a second QJsonDocument::fromJson
+    /// and without losing context about WHICH validation step
+    /// failed (parse vs token-map empty). Returns a typed error
+    /// code so the caller can surface the distinction in loadError.
     enum class ApplyResult {
         Ok,
         TokensKeyNotObject,
         NoUsableTokens,
     };
+    /// Single source of truth for the wrapped-vs-flat shape
+    /// traversal. Given a parsed JSON document, returns the tokens
+    /// object the merge step would iterate (empty QJsonObject on
+    /// shape error). Both validateDoc and applyParsedJson route
+    /// through this helper so the two cannot drift on the shape
+    /// rules: a future failure mode added here surfaces in BOTH
+    /// the validator and the applier in lockstep. See the file-
+    /// top comment in palettestore.cpp for the rationale.
+    ///
+    /// On shape error (`tokens` key present but not an object) the
+    /// returned object is empty AND outShapeError is set to
+    /// TokensKeyNotObject. On a syntactically fine but empty /
+    /// no-usable-color payload the returned object may be non-empty
+    /// (the validator/applier walks its entries to determine usability)
+    /// and outShapeError stays Ok — the NoUsableTokens verdict only
+    /// surfaces after the entry walk.
+    static QJsonObject extractTokensOrEmpty(const QJsonDocument& doc, ApplyResult& outShapeError);
     /// Pure shape-validator for a parsed JSON document. Returns the
     /// same ApplyResult value applyParsedJson would return for the
     /// document, but WITHOUT applying or mutating any state. Lets
@@ -145,6 +160,8 @@ private:
     /// touching the watcher / m_sourcePath, satisfying the "failed
     /// load does not observably mutate state" contract without
     /// duplicating the shape-check logic across two call sites.
+    /// Implemented via extractTokensOrEmpty so it can't drift from
+    /// applyParsedJson on the shape rules.
     static ApplyResult validateDoc(const QJsonDocument& doc);
     ApplyResult applyParsedJson(const QJsonDocument& doc);
     /// Disarms the active filesystem watch (file + parent directory),

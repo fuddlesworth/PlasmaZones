@@ -1,5 +1,27 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
+//
+// Shape-traversal contract — `extractTokensOrEmpty` is THE single
+// source of truth for the wrapped-vs-flat JSON layout rules used
+// by every code path that inspects a parsed payload:
+//
+//   - validateDoc       (read-only shape check, runs in loadFromJson)
+//   - applyParsedJson   (the actual merge into m_palette)
+//
+// Both callers route through extractTokensOrEmpty so any future
+// failure mode added to the shape rules is visible to BOTH the
+// validator and the applier in lockstep. A previous version of
+// this file open-coded the wrapped/flat traversal in both
+// validateDoc and applyParsedJson and relied on a Q_ASSERT after
+// the apply step to catch drift; in release builds the assert
+// would compile out and a half-committed loadFromJson (watcher
+// dropped, sourcePath cleared, paletteChanged NOT fired) would
+// surface silently. Routing both call sites through one helper
+// makes the divergence structurally impossible.
+//
+// If you add a new ApplyResult variant or change the shape rules,
+// update extractTokensOrEmpty and its callers stay correct by
+// construction.
 
 #include <PhosphorTheme/PaletteStore.h>
 
@@ -57,7 +79,7 @@ PaletteStore::PaletteStore(QObject* parent)
     // we always pair it with a parent-directory watch.
     //
     // Re-entry safety: loadFromFile swaps the watcher BEFORE
-    // parseAndApplyJson runs, so by the time any user slot wired to
+    // applyParsedJson runs, so by the time any user slot wired to
     // paletteChanged / sourcePathChanged executes, the watcher
     // already reflects the new source. Stale-watcher reads inside a
     // signal slot are therefore not possible.
@@ -154,32 +176,56 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
 
     dropWatcherAndClearSourcePath();
     const auto applied = applyParsedJson(doc);
-    // validateDoc agrees with applyParsedJson on every payload
-    // because both run the same shape rules. A divergence would
-    // indicate the two have drifted — pin it so a future refactor
-    // that adds a new failure mode to one but not the other trips
-    // immediately in a debug build.
+    // validateDoc and applyParsedJson cannot disagree because both
+    // route through extractTokensOrEmpty (the single source of
+    // truth for the shape rules). This invariant pin catches a
+    // hypothetical regression that introduces a second extraction
+    // path in only one of the two callers. Kept as Q_ASSERT for the
+    // debug-build tripwire; the structural guarantee from the
+    // shared helper is the real safety net.
     Q_ASSERT(applied == ApplyResult::Ok);
     return applied == ApplyResult::Ok;
 }
 
+QJsonObject PaletteStore::extractTokensOrEmpty(const QJsonDocument& doc, ApplyResult& outShapeError)
+{
+    // Two accepted layouts:
+    //   1. `{ "tokens": { "primary": "#RRGGBB", ... } }` (wrapped,
+    //      matugen-style — leaves room for sibling metadata keys).
+    //   2. `{ "primary": "#RRGGBB", ... }` (flat top-level — hand-edited
+    //      palette files where the wrapper feels like noise).
+    // Layout 1 takes precedence if `tokens` is present.
+    //
+    // Shape failure: `tokens` key present but value isn't an object.
+    // The caller's intent is unambiguous but malformed; fail explicitly
+    // instead of silently falling through to flat parsing, which would
+    // treat sibling metadata keys as tokens and change the palette
+    // in a surprising way.
+    outShapeError = ApplyResult::Ok;
+    const auto root = doc.object();
+    if (root.contains(QLatin1String("tokens"))) {
+        const auto tokensValue = root.value(QLatin1String("tokens"));
+        if (!tokensValue.isObject()) {
+            outShapeError = ApplyResult::TokensKeyNotObject;
+            return QJsonObject();
+        }
+        return tokensValue.toObject();
+    }
+    return root;
+}
+
 PaletteStore::ApplyResult PaletteStore::validateDoc(const QJsonDocument& doc)
 {
-    // Mirror applyParsedJson's two accepted layouts:
-    //   1. `{ "tokens": { ... } }` (wrapped, matugen-style)
-    //   2. `{ "primary": "#...", ... }` (flat top-level)
-    // and apply the same two failure conditions:
-    //   - `tokens` key present but not an object → TokensKeyNotObject
-    //   - no string token parses to a valid QColor → NoUsableTokens
-    // We deliberately use QColor(QString) here so the validity probe
-    // matches the merge step's accept set exactly. The full QColor
-    // instance is discarded; we only need the validity bit.
-    const auto root = doc.object();
-    if (root.contains(QLatin1String("tokens")) && !root.value(QLatin1String("tokens")).isObject()) {
-        return ApplyResult::TokensKeyNotObject;
+    // Route through extractTokensOrEmpty so the wrapped/flat shape
+    // rules cannot drift between the validator and the merger. The
+    // validity probe uses QColor(QString) explicitly so the accept
+    // set matches applyParsedJson's merge step exactly. The full
+    // QColor instance is discarded; we only need the validity bit.
+    ApplyResult shapeError = ApplyResult::Ok;
+    const QJsonObject tokens = extractTokensOrEmpty(doc, shapeError);
+    if (shapeError != ApplyResult::Ok) {
+        return shapeError;
     }
-    const QJsonObject tokens =
-        root.contains(QLatin1String("tokens")) ? root.value(QLatin1String("tokens")).toObject() : root;
     for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
         if (!it.value().isString()) {
             continue;
@@ -228,38 +274,16 @@ void PaletteStore::dropWatcherAndClearSourcePath()
     }
 }
 
-bool PaletteStore::parseAndApplyJson(const QByteArray& json)
-{
-    QJsonParseError err{};
-    const auto doc = QJsonDocument::fromJson(json, &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        return false;
-    }
-    return applyParsedJson(doc) == ApplyResult::Ok;
-}
-
 PaletteStore::ApplyResult PaletteStore::applyParsedJson(const QJsonDocument& doc)
 {
-    const auto root = doc.object();
-
-    // Two accepted layouts:
-    //   1. `{ "tokens": { "primary": "#RRGGBB", ... } }`, full document with
-    //      room for metadata alongside the tokens (matugen-style output).
-    //   2. `{ "primary": "#RRGGBB", ... }`, flat top-level map (hand-edited
-    //      palette files where the wrapper feels like noise).
-    // Layout 1 takes precedence if `tokens` is present.
-    QJsonObject tokens;
-    if (root.contains(QLatin1String("tokens"))) {
-        // Caller signalled the wrapped layout. If the value isn't an
-        // object the caller's intent is unambiguous but malformed. Fail
-        // explicitly instead of silently treating sibling metadata keys
-        // as tokens, which would change the palette in a surprising way.
-        if (!root.value(QLatin1String("tokens")).isObject()) {
-            return ApplyResult::TokensKeyNotObject;
-        }
-        tokens = root.value(QLatin1String("tokens")).toObject();
-    } else {
-        tokens = root;
+    // Route through extractTokensOrEmpty (the single source of
+    // truth for the wrapped-vs-flat shape rules). validateDoc
+    // uses the same helper, so the two cannot disagree on which
+    // payloads pass the shape check.
+    ApplyResult shapeError = ApplyResult::Ok;
+    const QJsonObject tokens = extractTokensOrEmpty(doc, shapeError);
+    if (shapeError != ApplyResult::Ok) {
+        return shapeError;
     }
 
     QVariantMap parsed;
@@ -552,21 +576,42 @@ void PaletteStore::reloadFromCurrentPath()
     if (file.error() != QFileDevice::NoError) {
         // Short-read guard — same rationale as loadFromFile. A
         // truncated NFS read or signal-interrupted readAll() would
-        // otherwise feed parseAndApplyJson a partial buffer and
-        // either silently mutate the palette from a half-payload or
-        // emit a misleading "invalid JSON" error. Mirrors
+        // otherwise feed the parser a partial buffer and either
+        // silently mutate the palette from a half-payload or emit
+        // a misleading "invalid JSON" error. Mirrors
         // TemplateEngine::renderFile.
         Q_EMIT loadError(m_sourcePath, file.errorString());
         return;
     }
     file.close();
-    // Route through parseAndApplyJson WITHOUT dropping the watcher
-    // (parseAndApplyJson no longer drops the watcher at all — that's
-    // dropWatcherAndClearSourcePath's job now, and only loadFromJson
-    // calls it). A successful hot-reload therefore keeps the watcher
-    // armed, so the next on-disk edit fires too.
-    if (!parseAndApplyJson(data)) {
-        Q_EMIT loadError(m_sourcePath, QStringLiteral("invalid JSON or empty token map"));
+
+    // Mirror loadFromFile's parse-first + typed-apply pattern so
+    // hot-reload surfaces the SAME precise error messages a fresh
+    // load would. The previous catch-all "invalid JSON or empty
+    // token map" string conflated malformed JSON, non-object
+    // `tokens`, and empty token maps — three distinct failures the
+    // user fixes in different ways. Routing through the typed
+    // ApplyResult switch keeps the diagnostic granularity
+    // consistent across loadFromFile and reloadFromCurrentPath.
+    //
+    // The watcher stays armed throughout: this method is reached
+    // only via the debounced timer, and dropWatcherAndClearSourcePath
+    // is the sole watcher-tearing path (loadFromJson, resetToDefaults).
+    QJsonParseError err{};
+    const auto doc = QJsonDocument::fromJson(data, &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        Q_EMIT loadError(m_sourcePath, QStringLiteral("invalid JSON"));
+        return;
+    }
+    switch (applyParsedJson(doc)) {
+    case ApplyResult::Ok:
+        return;
+    case ApplyResult::TokensKeyNotObject:
+        Q_EMIT loadError(m_sourcePath, QStringLiteral("tokens key must be a JSON object"));
+        return;
+    case ApplyResult::NoUsableTokens:
+        Q_EMIT loadError(m_sourcePath, QStringLiteral("no usable color tokens"));
+        return;
     }
 }
 

@@ -126,7 +126,7 @@ Item {
                 const dTotal = total - prevTotal;
                 const dIdle = idle - prevIdle;
                 if (dTotal > 0)
-                    percent = Math.round((1 - dIdle / dTotal) * 100).toString();
+                    percent = Math.max(0, Math.min(100, Math.round((1 - dIdle / dTotal) * 100))).toString();
             }
             prevIdle = idle;
             prevTotal = total;
@@ -213,8 +213,8 @@ Item {
         // panel readout is a single integer-% glyph row, and a fractional
         // percentage there would be visual noise. Other panel fields
         // (CPU, memory) are already integer-rounded upstream.
-        batteryPercent: battery.displayDevice ? Math.round(battery.displayDevice.percentage).toString() : ""
-        batteryVisible: battery.displayDevice !== null
+        batteryPercent: !!battery.displayDevice ? Math.round(battery.displayDevice.percentage).toString() : ""
+        batteryVisible: !!battery.displayDevice
     }
 
     Taskbar {}
@@ -233,6 +233,6 @@ Item {
     // ─── Floating windows ────────────────────────────────────────────────
     SettingsWindow {
         shellState: root.shellState
-        hostname: hostnameFile.content.trim()
+        hostname: hostnameFile.content ? hostnameFile.content.trim() : ""
     }
 }

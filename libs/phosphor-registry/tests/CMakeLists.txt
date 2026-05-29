@@ -100,14 +100,14 @@ phosphorregistry_add_test(test_phosphor_registry_pluginloader)
 # wide promotion of qWarning() to abort() conflicts with
 # QTest::ignoreMessage in the sibling tests that intentionally
 # trigger qWarning paths (ignoresInvalidManifest,
-# rejectsAbiVersionMismatch, etc.) — Qt's default handler aborts
+# rejectsAbiVersionMismatch, etc.). Qt's default handler aborts
 # before the ignore-message infrastructure can match.
 # rescanReentryFromPluginUnloadedSlotIsSafe and
 # rescanReentryRemovingSecondPluginExercisesConstFindGuard install
 # a per-test message handler to enforce the "no qWarning fires"
 # contract locally instead. See those tests' implementations.
 
-# Plugin-loader test consumes the four MODULE fixtures via per-fixture
+# Plugin-loader test consumes the five MODULE fixtures via per-fixture
 # compile definitions + an explicit build-time dependency. Other test
 # binaries don't get the macros (they don't load .so files) so the
 # define surface stays minimal and parallel builds don't accidentally

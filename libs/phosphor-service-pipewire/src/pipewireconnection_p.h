@@ -289,9 +289,10 @@ public:
     /// API exposes (connected, daemonAvailable, default sink/source
     /// names). Used by doConnect's failure paths and doDisconnect so a
     /// failed reconnect can't leave stale defaults from a previous
-    /// session ghosting the UI. Each setter dedupes via
-    /// exchange-equal-skip / equality compare, so observers see at
-    /// most one NOTIFY per genuinely-changed property.
+    /// session ghosting the UI. Each setter dedupes via shadow-equal-
+    /// skip (booleans) or value-equality compare (strings), so
+    /// observers see at most one NOTIFY per genuinely-changed
+    /// property.
     void resetGuiSnapshot();
 
     // GUI-thread handlers, posted from the loop callbacks via

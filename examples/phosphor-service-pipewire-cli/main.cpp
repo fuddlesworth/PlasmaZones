@@ -53,6 +53,9 @@ QTextStream& err()
 //   64  usage error (bad/missing subcommand or arguments). Matches BSD
 //       sysexits.h EX_USAGE so wrapper scripts can distinguish "you
 //       typed the command wrong" from "the system is broken".
+//   70  internal software error (e.g., maintainer-introduced dispatch gap
+//       where a command was added to knownCommands without a matching
+//       dispatch arm). Matches BSD sysexits.h EX_SOFTWARE.
 int usage()
 {
     err() << "usage: phosphor-service-pipewire-cli <command> [args]\n"
@@ -78,6 +81,7 @@ int usage()
           << "  1   runtime error (unknown target, mismatched echo, etc.)\n"
           << "  2   connect timeout (daemon unreachable)\n"
           << "  64  usage error (bad/missing arguments)\n"
+          << "  70  internal software error (e.g., maintainer-introduced dispatch gap)\n"
           << "\n"
           << "  PHOSPHOR_PW_CONNECT_TIMEOUT_MS overrides the daemon-connect timeout\n"
           << "  (default 2000 ms). Use a larger value if the daemon is slow to start.\n";
@@ -286,8 +290,8 @@ int cmdDefault(PhosphorServicePipeWire::PipeWireConnection& conn)
 ///
 /// After the deadline elapses we run the predicate one final time so a
 /// late echo that landed during the disconnect / loop-exit window is
-/// still caught. This keeps the function symmetric with waitForString's
-/// post-loop recheck.
+/// still caught. This mirrors waitForString's post-loop recheck pattern
+/// (the guard handling differs: waitForString has no guarded receiver).
 bool waitForPropsEchoAndVerify(PhosphorServicePipeWire::PwNode* node, const std::function<bool()>& predicate,
                                int timeoutMs, const char* label)
 {
@@ -305,6 +309,9 @@ bool waitForPropsEchoAndVerify(PhosphorServicePipeWire::PwNode* node, const std:
         const int remaining = timeoutMs - static_cast<int>(timer.elapsed());
         if (remaining <= 0)
             break;
+        // Receiver is &loop (not guard.data()) so the connection auto-disconnects
+        // when the loop is destroyed at scope exit; Qt no-ops a disconnect on a
+        // dead sender, so a daemon-side node removal mid-wait is also safe.
         auto conn1 = QObject::connect(guard.data(), &PhosphorServicePipeWire::PwNode::propsChanged, &loop, [&loop]() {
             loop.quit();
         });
@@ -384,27 +391,10 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
         out() << QString::number(echoedVolumes.at(i), 'f', 3);
     }
     out() << "]\n";
-    if (!echoed) {
-        // Distinguish a true timeout (no matching echo) from a mismatch
-        // (echo arrived but values diverged). Both route through rc=1
-        // because the contract is the same: we couldn't confirm the
-        // requested value landed. waitForPropsEchoAndVerify already
-        // logged the timeout itself; we only add a divergence note when
-        // values actually arrived but didn't match.
-        if (echoedVolumes.isEmpty()) {
-            // No echo at all — the timeout diagnostic from
-            // waitForPropsEchoAndVerify already covers it.
-            return 1;
-        }
-        for (const qreal v : echoedVolumes) {
-            if (std::fabs(v - linear) > kVolumeEpsilon) {
-                err() << "set-volume: echoed value " << QString::number(v, 'f', 3) << " differs from requested "
-                      << QString::number(linear, 'f', 3) << "\n";
-                return 1;
-            }
-        }
+    // On timeout, waitForPropsEchoAndVerify already logged the timeout
+    // diagnostic; we just route through rc=1 to surface the failure.
+    if (!echoed)
         return 1;
-    }
     return 0;
 }
 
@@ -419,29 +409,21 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
     // PipeWire actually committed the new mute state; otherwise the
     // CLI returns success even when the write was silently dropped.
     //
-    // Capture the matched snapshot so an unrelated propsChanged
-    // (e.g. a parallel volume tweak) between predicate match and the
-    // output print can't clobber the value we report.
-    bool matchedMuted = false;
-    const auto matchesRequest = [node, muted, &matchedMuted]() {
-        if (node->muted() == muted) {
-            matchedMuted = node->muted();
-            return true;
-        }
-        return false;
+    // The predicate narrows to muted == requested, so on success the
+    // observed mute state is by definition equal to the requested
+    // value. No need to capture a separate snapshot.
+    const auto matchesRequest = [node, muted]() {
+        return node->muted() == muted;
     };
     node->setMuted(muted);
     const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, kDefaultPostWriteSettleMs, "mute");
-    const bool echoedMuted = echoed ? matchedMuted : node->muted();
+    const bool echoedMuted = echoed ? muted : node->muted();
     out() << "set node " << node->id() << " (" << node->name() << ") muted = " << (muted ? "true" : "false")
           << ", echoed = " << (echoedMuted ? "true" : "false") << "\n";
-    if (!echoed) {
-        if (echoedMuted != muted) {
-            err() << "mute: echoed value " << (echoedMuted ? "true" : "false") << " differs from requested "
-                  << (muted ? "true" : "false") << "\n";
-        }
+    // On timeout, waitForPropsEchoAndVerify already logged the timeout
+    // diagnostic; we just route through rc=1 to surface the failure.
+    if (!echoed)
         return 1;
-    }
     return 0;
 }
 
@@ -668,7 +650,7 @@ int main(int argc, char** argv)
         // observably instead of silently exiting 0.
         err() << "internal logic error: unhandled command " << cmd << "\n";
         cleanShutdown(conn);
-        return 64;
+        return 70; // EX_SOFTWARE
     }
     cleanShutdown(conn);
     return rc;

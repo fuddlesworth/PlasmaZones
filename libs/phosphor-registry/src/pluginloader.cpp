@@ -275,7 +275,7 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             continue;
         }
         const auto it = m_plugins.constFind(pluginId);
-        if (it == m_plugins.constEnd() || !it.value()) {
+        if (it == m_plugins.constEnd()) {
             // A previously-fired pluginUnloaded slot rebounded into
             // a path that removed this entry. Skip it rather than
             // dereffing a default-constructed shared_ptr. This is
@@ -283,6 +283,14 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             // so log at qDebug — qWarning would fire on the happy
             // path every time a slot wired to pluginUnloaded calls
             // rescanNow() and flood the journal.
+            //
+            // We don't also check `!it.value()`: loadPluginFromDir is
+            // the only code path that inserts into m_plugins, and it
+            // always stores a freshly-constructed std::make_shared
+            // (never null). A null-entry guard here would be dead
+            // defensive code masking a contract violation rather than
+            // catching one — if a future insert path landed a null
+            // shared_ptr we'd want a crash, not a silent skip.
             qDebug() << "PluginLoader: plugin" << pluginId
                      << "vanished mid-unload (rebound from prior signal slot); skipping";
             continue;

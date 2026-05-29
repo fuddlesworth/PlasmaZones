@@ -139,7 +139,14 @@ void PipeWireConnection::Private::onCoreInfo(void* data, const struct pw_core_in
                         << (info ? info->version : "(null)");
     // Daemon answered; flip daemonAvailable BEFORE the done event so a
     // fast-failing test can distinguish "no daemon" from "daemon
-    // present, handshake mid-flight".
+    // present, handshake mid-flight". Pre-flip the atomic synchronously
+    // on the loop thread (loop-thread truth) so isDaemonAvailable()
+    // reports the correct value the moment the next caller looks; the
+    // queued GUI lambda then only does the shadow-dedup + NOTIFY emit,
+    // never touching the atomic. Lifetime: `d` outlives every queued
+    // lambda — the destructor flushes posted events before tearing
+    // Private down (see ~PipeWireConnection).
+    d->daemonAvailable.store(true, std::memory_order_release);
     QMetaObject::invokeMethod(
         d->q,
         [d]() {
@@ -159,15 +166,23 @@ void PipeWireConnection::Private::onCoreDone(void* data, uint32_t id, int seq)
     if (id != PW_ID_CORE || d->pendingSyncSeq == kNoPendingSync || seq != d->pendingSyncSeq)
         return;
     qCDebug(lcPipeWire) << "pw_core done seq" << seq << "handshake complete";
+    // Sync request satisfied. Clear the sentinel so a stray daemon-side
+    // done event with the same seq cannot re-trigger this branch (e.g.
+    // after a reconnect that re-uses seq=0 from a fresh pw_core_sync).
+    d->pendingSyncSeq = kNoPendingSync;
     // Symmetric with onCoreError: synchronously flip `connected` on the
     // loop thread BEFORE queueing the GUI-side setConnected lambda.
     // doConnect's wedge-recovery check (`if (core && !connected.load())
     // doDisconnect()`) runs on the loop thread; without this store, a
     // re-issued connect() landing between the queue-and-drain window
     // would see connected == false and tear down a freshly-completed
-    // handshake. setConnected's exchange-equal-skip early return dedupes
-    // the queued mutation so the GUI thread emits connectedChanged
-    // exactly once.
+    // handshake. setConnected does a shadow-compare early return (the
+    // GUI-thread `lastEmittedConnected` shadow, NOT the atomic) so the
+    // queued mutation emits connectedChanged exactly once even if a
+    // later loop-thread path pre-flips the atomic before the GUI drains.
+    // Lifetime: `d` outlives every queued lambda — the destructor
+    // flushes posted events before tearing Private down (see
+    // ~PipeWireConnection).
     d->connected.store(true, std::memory_order_release);
     QMetaObject::invokeMethod(
         d->q,
@@ -195,14 +210,18 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
     //
     // L1-override pattern: a prior onCoreDone may have already queued a
     // setConnected(true) lambda (L1) that hasn't drained on the GUI
-    // thread yet. If L1 runs after this callback returns, it would flip
-    // the atomic back to true and emit connectedChanged. To prevent
-    // that we ALSO queue an explicit setConnected(false) lambda (L2)
-    // that lands strictly AFTER any stale L1: FIFO delivery of
-    // QueuedConnection posts on the same target guarantees ordering.
-    // setConnected's exchange-equal-skip early return makes the
-    // double-mutation idempotent — the GUI thread sees at most one
-    // connectedChanged for the transition that actually happened.
+    // thread yet. If L1 runs after this callback returns, it would emit
+    // connectedChanged claiming we're connected. To prevent that we
+    // ALSO queue an explicit setConnected(false) lambda (L2) that lands
+    // strictly AFTER any stale L1: FIFO delivery of QueuedConnection
+    // posts on the same target guarantees ordering. setConnected does a
+    // shadow-equal-skip against `lastEmittedConnected` (a GUI-thread
+    // shadow, NOT the atomic) so the double-mutation is idempotent: the
+    // GUI thread sees at most one connectedChanged per genuine flip.
+    // Crucially, the GUI-side setter no longer writes the atomic — only
+    // this loop-thread store does — so a freshly pre-flipped `false`
+    // can never be clobbered back to `true` by a stale L1 draining
+    // after this callback returns.
     //
     // We deliberately do NOT tear core/context/registry down from this
     // callback. The next caller-initiated connect() observes the wedged
@@ -210,6 +229,10 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
     // doDisconnect first, so recovery is automatic and the teardown
     // stays on the loop thread without us having to post another
     // pw_loop_invoke.
+    //
+    // Lifetime: `d` outlives every queued lambda — the destructor
+    // flushes posted events before tearing Private down (see
+    // ~PipeWireConnection).
     d->connected.store(false, std::memory_order_release);
     QMetaObject::invokeMethod(
         d->q,
@@ -421,17 +444,21 @@ void PipeWireConnection::Private::doConnect()
     context = pw_context_new(pw_main_loop_get_loop(mainLoop), nullptr, 0);
     if (!context) {
         // Failure paths that leave `core` null must also reset every
-        // piece of cached connection state. Flip `connected`
-        // synchronously on the loop thread so isConnected() reports
-        // the truth immediately, then queue the GUI-side snapshot
-        // reset (setConnected handles its own dedupe via
-        // exchange-equal-skip, mirroring the onCoreError L1-override
+        // piece of cached connection state. Flip the atomics
+        // synchronously on the loop thread (both `connected` AND
+        // `daemonAvailable`, since the GUI-side setters no longer
+        // touch the atomic — see setConnected/setDaemonAvailable) so
+        // isConnected() / isDaemonAvailable() report the truth
+        // immediately, then queue the GUI-side snapshot reset
+        // (setConnected/setDaemonAvailable handle their own dedupe via
+        // shadow-equal-skip, mirroring the onCoreError L1-override
         // pattern) so observers see one round of NOTIFY signals on the
         // right thread. resetGuiSnapshot() also clears default
         // sink/source names — without that, a previous connection's
         // stale defaults would survive a failed reconnect and ghost
         // the UI.
         connected.store(false, std::memory_order_release);
+        daemonAvailable.store(false, std::memory_order_release);
         QMetaObject::invokeMethod(
             q,
             [this]() {
@@ -446,6 +473,7 @@ void PipeWireConnection::Private::doConnect()
         pw_context_destroy(context);
         context = nullptr;
         connected.store(false, std::memory_order_release);
+        daemonAvailable.store(false, std::memory_order_release);
         QMetaObject::invokeMethod(
             q,
             [this]() {
@@ -524,6 +552,15 @@ void PipeWireConnection::Private::doDisconnect()
         context = nullptr;
     }
     pendingSyncSeq = kNoPendingSync;
+    // Synchronously flip the atomics on the loop thread BEFORE queueing
+    // the GUI-side reset. After this point both isConnected() and
+    // isDaemonAvailable() report false the moment the next caller
+    // looks, matching the real loop-side state. The queued
+    // resetGuiSnapshot() only does shadow-dedup + NOTIFY emits; it no
+    // longer writes the atomics (see setConnected /
+    // setDaemonAvailable), so we have to flip them here.
+    connected.store(false, std::memory_order_release);
+    daemonAvailable.store(false, std::memory_order_release);
     QMetaObject::invokeMethod(
         q,
         [this]() {
@@ -559,13 +596,23 @@ int PipeWireConnection::Private::dispatchDisconnect(struct spa_loop* loop, bool 
 
 void PipeWireConnection::Private::setConnected(bool value)
 {
-    // Update the cross-thread atomic AND the GUI-thread shadow, then
-    // decide whether to emit based on the shadow. Using the shadow
-    // (rather than the atomic) for the dedup is essential: loop-thread
-    // callbacks pre-flip the atomic synchronously to keep
-    // isConnected() honest for re-entrant connect() calls, so an
-    // atomic-based dedup would swallow the GUI-side NOTIFY entirely.
-    connected.store(value, std::memory_order_release);
+    // GUI-side observability only. The atomic is loop-thread truth and
+    // is written synchronously by the loop-thread callers (onCoreDone,
+    // onCoreError, doConnect failure paths, doDisconnect); this setter
+    // must NOT touch it.
+    //
+    // Why: a stale L1=setConnected(true) draining AFTER an Error
+    // pre-flipped the atomic to false would re-write the atomic to true
+    // and wedge doConnect's recovery check (`if (core &&
+    // !connected.load()) doDisconnect()`) into reading true and
+    // skipping the teardown — a permanent wedge until the next manual
+    // disconnect. Keeping the atomic out of this setter makes that
+    // race structurally impossible: late drains only emit NOTIFY,
+    // never mutate cross-thread state.
+    //
+    // Dedup uses the GUI-thread `lastEmittedConnected` shadow so each
+    // observable transition emits connectedChanged exactly once, even
+    // when L1/L2 lambdas straddle a pre-flipped atomic.
     if (lastEmittedConnected == value)
         return;
     lastEmittedConnected = value;
@@ -574,10 +621,10 @@ void PipeWireConnection::Private::setConnected(bool value)
 
 void PipeWireConnection::Private::setDaemonAvailable(bool value)
 {
-    // Same shadow-vs-atomic split as setConnected — for symmetry and
-    // future-proofing: if a loop-thread path ever pre-flips
-    // daemonAvailable synchronously, the dedup remains correct.
-    daemonAvailable.store(value, std::memory_order_release);
+    // Same atomic-vs-emit split as setConnected: the atomic is owned
+    // by loop-thread paths (onCoreInfo pre-flips to true; doDisconnect
+    // and doConnect failure paths pre-flip to false). This setter
+    // only does GUI-side shadow-dedup and emits the NOTIFY signal.
     if (lastEmittedDaemonAvailable == value)
         return;
     lastEmittedDaemonAvailable = value;
@@ -602,11 +649,15 @@ void PipeWireConnection::Private::setDefaultSourceName(QString name)
 
 void PipeWireConnection::Private::resetGuiSnapshot()
 {
-    // Order is intentional: flip the connection-state booleans before
-    // wiping the strings so any observer chained off
-    // connectedChanged sees the cleared names when it reads back.
-    // Each setter is its own dedupe; calling them on already-clean
-    // state is free.
+    // Reset every cached snapshot the public API exposes. Each setter
+    // is its own dedupe (shadow-equal-skip for the booleans,
+    // value-equal-skip for the strings) so calling these on
+    // already-clean state is free and produces no spurious NOTIFY.
+    // Observers chaining off connectedChanged that re-read
+    // defaultSinkName/defaultSourceName will see whatever order this
+    // function imposes, but every name change ALSO emits its own
+    // setDefault*NameChanged so the consumer side doesn't need to
+    // chain — pick whichever order is convenient.
     setConnected(false);
     setDaemonAvailable(false);
     setDefaultSinkName(QString());

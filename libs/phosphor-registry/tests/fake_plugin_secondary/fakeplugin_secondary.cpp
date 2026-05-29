@@ -5,7 +5,7 @@
 // regression test in test_pluginloader.cpp. Identical shape to
 // fake_plugin/fakeplugin.cpp except the id is "fake-plugin-secondary"
 // so the loader can hold BOTH this fixture and the primary fake
-// plugin in m_plugins simultaneously — necessary to construct the
+// plugin in m_plugins simultaneously, necessary to construct the
 // two-iteration unload snapshot the constFind branch needs.
 
 #include <PhosphorRegistry/IBarWidgetFactory.h>
