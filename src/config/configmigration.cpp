@@ -1561,6 +1561,48 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         root[ConfigKeys::Legacy::v4AnimationsGroup()] = animations;
     }
 
+    // Exclusions stash: the legacy `Exclusions.Applications` and
+    // `Exclusions.WindowClasses` keys hold comma-joined pattern lists that the
+    // runtime previously folded into terminal `Exclude` rules at evaluation
+    // time via `ExclusionListBridge::toDaemonRuleSet`. v4 promotes those into
+    // first-class WindowRules: finalizeV4Conversion appends one
+    // `AppId AppIdMatches <pattern> → Exclude` rule per surviving pattern to
+    // windowrules.json, so the daemon's runtime exclusion behaviour for an
+    // upgrading user does not change. Read both raw values, surface non-string
+    // disk values (same diagnostic shape as the moveDisableKey logger above),
+    // strip the keys, and drop the group entirely if it's now empty.
+    QJsonObject exclusions = root.value(ConfigKeys::Legacy::v3ExclusionsGroup()).toObject();
+    QJsonObject exclusionStash;
+    const auto stashExclusionList = [&exclusions, &exclusionStash](const QString& configKey) {
+        const QJsonValue raw = exclusions.value(configKey);
+        if (exclusions.contains(configKey) && !raw.isString() && !raw.isNull() && !raw.isUndefined()) {
+            qWarning(
+                "ConfigMigration::migrateV3ToV4: discarding non-string value at Exclusions.%s "
+                "(type=%d) — only comma-joined string pattern lists are migrated.",
+                qPrintable(configKey), static_cast<int>(raw.type()));
+        }
+        const QString value = raw.toString();
+        if (!value.isEmpty()) {
+            // Field name = source-key name (Applications / WindowClasses).
+            // finalizeV4Conversion treats both fields identically — both
+            // historically matched against `appId` — but keeping the field
+            // name distinguishes the two on disk for forensics if a user ever
+            // has to inspect a half-migrated config.
+            exclusionStash.insert(configKey, value);
+        }
+        exclusions.remove(configKey);
+    };
+    stashExclusionList(ConfigKeys::Legacy::v3ExcludedApplicationsKey());
+    stashExclusionList(ConfigKeys::Legacy::v3ExcludedWindowClassesKey());
+    if (exclusions.isEmpty()) {
+        root.remove(ConfigKeys::Legacy::v3ExclusionsGroup());
+    } else {
+        root[ConfigKeys::Legacy::v3ExclusionsGroup()] = exclusions;
+    }
+    if (!exclusionStash.isEmpty()) {
+        root[ConfigKeys::Legacy::v4ExclusionStashKey()] = exclusionStash;
+    }
+
     // Stamp literal 4 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
     root[ConfigKeys::versionKey()] = 4;
 }
@@ -1873,6 +1915,64 @@ void appendAnimationRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
     }
 }
 
+/// Fixed v5-UUID namespace for migrated exclusion-rule identities. Held
+/// byte-for-byte the same as `PhosphorWindowRule::ExclusionListBridge::detail::namespaceUuid()`
+/// so a daemon that bridge-built a rule from the same `(field, op, pattern)`
+/// tuple at runtime produces the same id post-migration. That guarantees
+/// `WindowRuleStore::addRule` (or a downstream dedupe) collapses to a no-op
+/// rather than producing a duplicate — including the case where the user had
+/// already hand-authored the equivalent Application-subject Exclude rule.
+inline const QUuid& exclusionMigrationNamespace()
+{
+    static const QUuid ns(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
+    return ns;
+}
+
+/// Drain the v4 exclusion stash into @p rules. The stash carries two
+/// comma-joined string fields (`Applications` and `WindowClasses`) — the v3
+/// schema split them by intent (one matched against desktopFileName, one
+/// against windowClass) but the daemon's runtime bridge always folded BOTH
+/// against the resolved `appId` using the segment-aware `AppIdMatches`
+/// operator. Preserve that bridge-flavoured semantics here so the migration
+/// is behaviour-preserving: each surviving pattern, from either list, becomes
+/// one `AppId AppIdMatches <pattern>` matcher with a terminal `Exclude`
+/// action. Empty / whitespace-only patterns are dropped, mirroring the
+/// runtime bridge's `pattern.trimmed().isEmpty()` skip.
+void appendExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules, const QJsonObject& stash)
+{
+    using namespace PhosphorWindowRule;
+    const auto appendOne = [&rules](const QString& rawCsv) {
+        for (const QString& part : rawCsv.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+            const QString pattern = part.trimmed();
+            if (pattern.isEmpty()) {
+                continue;
+            }
+            WindowRule rule;
+            // Deterministic id keyed off `(field, op, pattern)` — same shape
+            // and same namespace as the legacy `ExclusionListBridge` so a
+            // user upgrading carries the same UUIDs across the migration.
+            rule.id = QUuid::createUuidV5(
+                exclusionMigrationNamespace(),
+                Detail::encodeSegment(QString::number(static_cast<int>(Field::AppId)))
+                    + Detail::encodeSegment(QString::number(static_cast<int>(Operator::AppIdMatches)))
+                    + Detail::encodeSegment(pattern));
+            rule.enabled = true;
+            // priority = 0 leaves the rule at the bottom of the
+            // controller-renormalized list within its band. The user can
+            // drag-reorder it in the Window Rules page if precedence matters.
+            rule.priority = 0;
+            rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, pattern);
+            RuleAction action;
+            action.type = QString(ActionType::Exclude);
+            rule.actions.append(action);
+            rules.append(rule);
+        }
+    };
+    // Both lists feed AppId rules — see the comment block above.
+    appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedApplicationsKey()).toString());
+    appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedWindowClassesKey()).toString());
+}
+
 } // namespace
 
 bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
@@ -1937,10 +2037,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
                         qPrintable(jsonPath));
                     ok = false;
                 } else if (doc.object().contains(kV4DisableStashKey())
-                           || doc.object().contains(kV4AnimationRulesStashKey())) {
+                           || doc.object().contains(kV4AnimationRulesStashKey())
+                           || doc.object().contains(ConfigKeys::Legacy::v4ExclusionStashKey())) {
                     QJsonObject configRoot = doc.object();
                     configRoot.remove(kV4DisableStashKey());
                     configRoot.remove(kV4AnimationRulesStashKey());
+                    configRoot.remove(ConfigKeys::Legacy::v4ExclusionStashKey());
                     if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
                         qWarning("ConfigMigration: failed to strip v4 stash keys from %s during cleanup retry",
                                  qPrintable(jsonPath));
@@ -2031,6 +2133,7 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 
     const QJsonObject stash = configRoot.value(kV4DisableStashKey()).toObject();
     const QJsonArray animationRulesStash = configRoot.value(kV4AnimationRulesStashKey()).toArray();
+    const QJsonObject exclusionStash = configRoot.value(ConfigKeys::Legacy::v4ExclusionStashKey()).toObject();
 
     // ── Read assignments.json ──────────────────────────────────────────────
     // The prevalidate guard above already aborted on a malformed file, so a
@@ -2223,6 +2326,16 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // assignment/disable rules above regardless of priority interleaving.
     appendAnimationRulesFromStash(rules, animationRulesStash);
 
+    // ── Exclusions → WindowRules ───────────────────────────────────────────
+    // Promote the legacy `Exclusions.{Applications,WindowClasses}` lists into
+    // first-class WindowRules so the runtime no longer needs the bridge that
+    // re-built them on every settings change. Each surviving pattern becomes
+    // an Application-subject `AppId AppIdMatches <pattern>` matcher with a
+    // terminal `Exclude` action — the same shape
+    // `ExclusionListBridge::toDaemonRuleSet` produced for the daemon's
+    // navigation gates, so behaviour is preserved for an upgrading user.
+    appendExclusionRulesFromStash(rules, exclusionStash);
+
     // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
     // Quick-layout slots are NOT window rules — they belong in the sibling
     // sidecar LayoutRegistry reads (next to windowrules.json), not in the rule
@@ -2298,9 +2411,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // operator's signal that the serialisation guarantee was downgraded.
     // Predicate gates the rewrite so a clean config (no stash keys) isn't
     // needlessly touched.
-    if (haveConfig && (configRoot.contains(kV4DisableStashKey()) || configRoot.contains(kV4AnimationRulesStashKey()))) {
+    if (haveConfig
+        && (configRoot.contains(kV4DisableStashKey()) || configRoot.contains(kV4AnimationRulesStashKey())
+            || configRoot.contains(ConfigKeys::Legacy::v4ExclusionStashKey()))) {
         configRoot.remove(kV4DisableStashKey());
         configRoot.remove(kV4AnimationRulesStashKey());
+        configRoot.remove(ConfigKeys::Legacy::v4ExclusionStashKey());
         if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
             qWarning("ConfigMigration: failed to rewrite %s after v4 conversion", qPrintable(jsonPath));
             return false;

@@ -314,13 +314,13 @@ void Settings::purgeStaleKeys()
     // would silently destroy those values.
     // Mixed list of (a) root-level GROUP names that must survive Pass 2's
     // blanket-delete loop ("General", "TilingQuickLayoutSlots", "Updates")
-    // and (b) root-level KEYS holding stash data — `_v4DisableStash` is a
-    // JSON OBJECT and survives via the Pass 2 listing below; the
-    // `_v4AnimationRulesStash` is a JSON ARRAY and is actually preserved
-    // by Pass 2 NOT enumerating non-object root values (jsonbackend's
-    // `groupList()` filter), with the listing here as defence-in-depth
-    // against future Pass 2 restructuring. Both stashes feed the v4
-    // chain-stall retry path in
+    // and (b) root-level KEYS holding stash data — `_v4DisableStash` and
+    // `_v4ExclusionStash` are JSON OBJECTS and survive via the Pass 2
+    // listing below; the `_v4AnimationRulesStash` is a JSON ARRAY and is
+    // actually preserved by Pass 2 NOT enumerating non-object root values
+    // (jsonbackend's `groupList()` filter), with the listing here as
+    // defence-in-depth against future Pass 2 restructuring. All three
+    // stashes feed the v4 chain-stall retry path in
     // configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
         ConfigDefaults::generalGroup(),
@@ -328,6 +328,7 @@ void Settings::purgeStaleKeys()
         ConfigDefaults::updatesGroup(),
         ConfigKeys::Legacy::v4DisableStashKey(),
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
+        ConfigKeys::Legacy::v4ExclusionStashKey(),
     };
 
     // Compute the set of paths the Store claims. These must not be

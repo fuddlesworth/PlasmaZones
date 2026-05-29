@@ -27,11 +27,11 @@ Kirigami.Dialog {
     /// the window caption. Drives the title, the row's primary text, and
     /// the value passed to `picked`.
     property string mode: "apps"
-    /// Convenience boolean read by older callers (ExclusionsPage,
-    /// AnimationsGeneralPage) inside their `onPicked` handlers to branch
-    /// between the "application" and "window class" lists. Derived from
-    /// `mode` so the open* helpers don't have to keep two properties in
-    /// sync; new callers should consult `mode` directly.
+    /// Convenience boolean read by AnimationsGeneralPage inside its
+    /// `onPicked` handler to branch between the "application" and "window
+    /// class" lists. Derived from `mode` so the open* helpers don't have to
+    /// keep two properties in sync; new callers should consult `mode`
+    /// directly.
     readonly property bool forApps: mode === "apps"
     property var windowList: []
     // Set by the Connections block below when the controller signals a
@@ -202,7 +202,7 @@ Kirigami.Dialog {
                 // (greyed primary text + "(no desktop file)" subtext) so
                 // the user can still see and search the running windows.
                 if (dialog.mode === "titles")
-                    base = base.filter(function(w) {
+                    base = base.filter(function (w) {
                         return (w.caption || "").length > 0;
                     });
 
@@ -210,7 +210,7 @@ Kirigami.Dialog {
                 if (filter.length === 0)
                     return base;
 
-                return base.filter(function(w) {
+                return base.filter(function (w) {
                     let primary = dialog.primaryFor(w);
                     if (primary.length === 0)
                         primary = w.appName || dialog.deriveAppName(w.windowClass);
@@ -284,15 +284,9 @@ Kirigami.Dialog {
                             elide: Text.ElideRight
                             visible: secondaryText.length > 0
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

@@ -712,6 +712,13 @@ public:
         // silently breaking the protection in the other.
         PZ_CONFIG_KEY(v4DisableStashKey, "_v4DisableStash")
         PZ_CONFIG_KEY(v4AnimationRulesStashKey, "_v4AnimationRulesStash")
+        // Third v4 scratch-root key — set on the root by `migrateV3ToV4` from
+        // the legacy `Exclusions.{Applications,WindowClasses}` lists and
+        // consumed by `finalizeV4Conversion`, which converts each surviving
+        // pattern into an Application-subject `AppId AppIdMatches <pattern>
+        // Exclude` WindowRule. Same purge-protection semantics as the two
+        // sibling stash keys above.
+        PZ_CONFIG_KEY(v4ExclusionStashKey, "_v4ExclusionStash")
 
         // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
         // finalizeV4Conversion. These mirror the live `displayGroup`,
@@ -724,6 +731,16 @@ public:
         PZ_CONFIG_GROUP(v3SnappingBehaviorWindowHandlingGroup, "Snapping.Behavior.WindowHandling")
         PZ_CONFIG_GROUP(v3TilingAlgorithmGroup, "Tiling.Algorithm")
         PZ_CONFIG_KEY(v3DefaultKey, "Default")
+
+        // v3 Exclusions group + comma-joined pattern keys — frozen at their
+        // v3 literal for the same reason the disable-list group/keys above
+        // are: migrateV3ToV4 reads them from a v3 config on disk, and a
+        // future runtime rename of the live `exclusionsGroup` /
+        // `applicationsKey` / `windowClassesKey` accessors must NOT silently
+        // retarget the migration to a path no v3 config ever had on disk.
+        PZ_CONFIG_GROUP(v3ExclusionsGroup, "Exclusions")
+        PZ_CONFIG_KEY(v3ExcludedApplicationsKey, "Applications")
+        PZ_CONFIG_KEY(v3ExcludedWindowClassesKey, "WindowClasses")
 
         // v3 assignments.json field names — frozen literals from the dead
         // v3 assignments.json schema. finalizeV4Conversion is the sole

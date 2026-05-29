@@ -30,7 +30,16 @@ namespace PlasmaZones {
 ///     folds into windowrules.json as OverrideAnimation{Shader,Timing} actions
 ///     on `WindowClass Contains <pattern>` matchers — the legacy
 ///     AnimationAppRule/Bridge types are removed and the runtime reads
-///     animation overrides exclusively from the unified rule store. See
+///     animation overrides exclusively from the unified rule store.
+///     The legacy `Exclusions` group (`Applications` / `WindowClasses`
+///     comma-joined pattern lists) folds into the same windowrules.json: each
+///     surviving pattern becomes an Application-subject `AppId AppIdMatches
+///     <pattern>` matcher with a terminal `Exclude` action, matching the
+///     shape `ExclusionListBridge::toDaemonRuleSet` produced at runtime so an
+///     upgrading user's exclusion behaviour is preserved. The standalone
+///     "Exclusions" settings page disappears; the three global window-filtering
+///     knobs (excludeTransientWindows / minimumWindowWidth /
+///     minimumWindowHeight) move to the General page. See
 ///     docs/window-rule-refactor-design.md §8.
 inline constexpr int ConfigSchemaVersion = 4;
 
@@ -95,9 +104,12 @@ public:
     ///     the temporary `_v4DisableStash` root key.
     ///   - Removes the `Animations.AnimationAppRules` array and stashes it
     ///     under the temporary `_v4AnimationRulesStash` root key.
-    /// Both stashes feed @ref finalizeV4Conversion. Empty inputs produce no
-    /// stash entries (the finalizer treats an absent key as a no-op for that
-    /// input). Stamps `_version = 4`.
+    ///   - Removes the `Exclusions.Applications` and `Exclusions.WindowClasses`
+    ///     comma-joined pattern lists and stashes them under the temporary
+    ///     `_v4ExclusionStash` root key.
+    /// All three stashes feed @ref finalizeV4Conversion. Empty inputs produce
+    /// no stash entries (the finalizer treats an absent key as a no-op for
+    /// that input). Stamps `_version = 4`.
     static void migrateV3ToV4(QJsonObject& root);
 
     /// Post-chain finalizer for the v4 conversion. The cross-file migration

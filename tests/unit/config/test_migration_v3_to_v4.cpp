@@ -1493,6 +1493,14 @@ private Q_SLOTS:
         animStash.append(
             makeShaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
         cfg.insert(QStringLiteral("_v4AnimationRulesStash"), animStash);
+        // The exclusion stash uses the same Object-with-string-fields shape as
+        // the disable stash. Plausible content for cleanup-branch coverage —
+        // the actual conversion of these into Exclude rules is covered by
+        // the dedicated testExclusions_* cases below.
+        QJsonObject exclusionStash;
+        exclusionStash.insert(QStringLiteral("Applications"), QStringLiteral("firefox"));
+        exclusionStash.insert(QStringLiteral("WindowClasses"), QStringLiteral("kitty"));
+        cfg.insert(QStringLiteral("_v4ExclusionStash"), exclusionStash);
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
         // Pre-existing windowrules.json: produced via the production save
@@ -1517,6 +1525,8 @@ private Q_SLOTS:
                  "cleanup-only branch must strip _v4DisableStash");
         QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationRulesStash")),
                  "cleanup-only branch must strip _v4AnimationRulesStash");
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4ExclusionStash")),
+                 "cleanup-only branch must strip _v4ExclusionStash");
 
         // windowrules.json is byte-identical — the cleanup branch must NOT
         // rebuild and overwrite user-edited rules.
@@ -1535,6 +1545,210 @@ private Q_SLOTS:
         QVERIFY2(!QFile::exists(assignmentsPath()), "cleanup-only branch must not recreate assignments.json");
         QVERIFY2(!QFile::exists(assignmentsPath() + QStringLiteral(".migrated")),
                  "cleanup-only branch must not produce an assignments.json.migrated artifact");
+    }
+
+    // ─── Exclusions fold ─────────────────────────────────────────────────
+    // The legacy `Exclusions.{Applications,WindowClasses}` comma-joined
+    // lists fold into Application-subject `AppId AppIdMatches <pattern>`
+    // matchers with a terminal `Exclude` action — the same shape
+    // `ExclusionListBridge::toDaemonRuleSet` produced for the daemon's
+    // navigation gates, so an upgrading user's runtime exclusion
+    // behaviour is preserved.
+
+private:
+    /// A v3 config carrying just an Exclusions group. No disable lists, no
+    /// animation rules — keeps the assertion scope tight to the exclusion
+    /// fold so failures point straight at the offending stash / rule
+    /// builder.
+    QJsonObject makeV3ConfigWithExclusions(const QString& apps, const QString& windowClasses)
+    {
+        QJsonObject root;
+        root.insert(QStringLiteral("_version"), 3);
+        QJsonObject exclusions;
+        if (!apps.isNull()) {
+            exclusions.insert(QStringLiteral("Applications"), apps);
+        }
+        if (!windowClasses.isNull()) {
+            exclusions.insert(QStringLiteral("WindowClasses"), windowClasses);
+        }
+        if (!exclusions.isEmpty()) {
+            root.insert(QStringLiteral("Exclusions"), exclusions);
+        }
+        return root;
+    }
+
+    /// Surface every rule that's an Application-subject Exclude rule (the
+    /// only shape the exclusion fold produces). A v3 fixture with no
+    /// assignments / disable lists / animation rules yields a rule set
+    /// containing exactly the migrated exclusions + the provider-default
+    /// catch-all; the catch-all has no `appId` leaf, so this filter
+    /// targets the exclusion-fold output cleanly.
+    QList<QJsonObject> exclusionRules(const QJsonArray& rules)
+    {
+        QList<QJsonObject> out;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            if (actionTypes(r) != QStringList{QStringLiteral("exclude")}) {
+                continue;
+            }
+            if (matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches")).isEmpty()) {
+                continue;
+            }
+            out.append(r);
+        }
+        return out;
+    }
+
+private Q_SLOTS:
+
+    void testExclusions_applicationsBecomeAppIdMatchesExcludeRules()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithExclusions(QStringLiteral("firefox,konsole"), QString()));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> excl = exclusionRules(rulesFromWindowRules());
+        QCOMPARE(excl.size(), 2);
+        QStringList patterns;
+        for (const QJsonObject& r : excl) {
+            patterns.append(matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches")));
+        }
+        patterns.sort();
+        QCOMPARE(patterns, QStringList{} << QStringLiteral("firefox") << QStringLiteral("konsole"));
+
+        // Schema invariants spelled out so a regression in the builder
+        // (e.g. wrong field, wrong op, multi-action rule) fails here rather
+        // than at runtime in the cascade evaluator.
+        for (const QJsonObject& r : excl) {
+            QVERIFY(r.value(QStringLiteral("enabled")).toBool());
+            QCOMPARE(r.value(QStringLiteral("priority")).toInt(), 0);
+        }
+    }
+
+    void testExclusions_windowClassesBecomeAppIdMatchesExcludeRules()
+    {
+        // The v3 schema split the two lists by intent (one matched against
+        // desktopFileName, one against windowClass) but the daemon's runtime
+        // bridge always folded BOTH against the resolved appId via the
+        // segment-aware AppIdMatches operator. The migration preserves that
+        // bridge-flavoured semantics — so a WindowClasses entry must produce
+        // an AppId AppIdMatches leaf, NOT a WindowClass Contains leaf.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithExclusions(QString(), QStringLiteral("kitty,org.kde.dolphin")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> excl = exclusionRules(rulesFromWindowRules());
+        QCOMPARE(excl.size(), 2);
+        QStringList patterns;
+        for (const QJsonObject& r : excl) {
+            patterns.append(matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches")));
+        }
+        patterns.sort();
+        QCOMPARE(patterns, QStringList{} << QStringLiteral("kitty") << QStringLiteral("org.kde.dolphin"));
+    }
+
+    void testExclusions_emptyAndWhitespacePatternsDropped()
+    {
+        // Empty (",,") and whitespace-only ("  ") entries used to slip into
+        // the legacy bridge as never-matching rules. The migration mirrors
+        // the bridge's trimmed-empty skip so the rule store doesn't grow
+        // inert entries from the conversion.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithExclusions(QStringLiteral(",firefox,  ,,konsole,"), QStringLiteral("   ,,")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> excl = exclusionRules(rulesFromWindowRules());
+        // Only "firefox" and "konsole" survive — the empty / whitespace
+        // entries from BOTH lists are dropped.
+        QCOMPARE(excl.size(), 2);
+    }
+
+    void testExclusions_idempotentRuleIds()
+    {
+        // Mirrors the animation-rule idempotency case: re-running the
+        // migration on the same v3 input produces byte-identical rule ids,
+        // because the id is derived from `(Field::AppId,
+        // Operator::AppIdMatches, pattern)` through a fixed v5-UUID
+        // namespace. A regression in the namespace literal or the
+        // length-prefixed segment encoding would break the dedup guarantee
+        // ExclusionListBridge::toDaemonRuleSet relied on — and would let
+        // a user who had hand-authored the equivalent rule pre-migration
+        // see a duplicate post-migration.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithExclusions(QStringLiteral("firefox"), QString()));
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        const QString firstId = exclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        QVERIFY(!firstId.isEmpty());
+
+        // Golden assertion: re-derive the expected id inline against the
+        // SPEC of the namespace UUID + length-prefixed segment encoding
+        // (mirrors the equivalent guard on the animation rule test). The
+        // migration owns both ends of the v5-UUID derivation, so the
+        // round-trip idempotency check below cannot catch a namespace-UUID
+        // or encoder change — both sides of that compare drift together.
+        // Duplicating the namespace literal AND the segment-encoding
+        // format here means a deliberate change to either forces a
+        // deliberate update to this test.
+        const QUuid kExpectedNamespace(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
+        // Segment encoding: <size>:<bytes> per segment, no separator.
+        //   field = static_cast<int>(Field::AppId) = 0 → "1:0"
+        //   op    = static_cast<int>(Operator::AppIdMatches) = 5 → "1:5"
+        //   pattern = "firefox" → "7:firefox"
+        const QString kExpectedKey = QStringLiteral("1:0") + QStringLiteral("1:5") + QStringLiteral("7:firefox");
+        const QString expectedId = QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString();
+        QCOMPARE(firstId, expectedId);
+
+        // Round-trip: wipe windowrules.json + re-stage same v3 input.
+        QFile::remove(ConfigDefaults::windowRulesFilePath());
+        writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithExclusions(QStringLiteral("firefox"), QString()));
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        const QString secondId = exclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        QCOMPARE(secondId, firstId);
+    }
+
+    void testExclusions_groupAndStashStrippedAfterFinalize()
+    {
+        // The v3 Exclusions group AND the v4 scratch stash key MUST both be
+        // gone from config.json after a successful conversion. A regression
+        // in either site (migrateV3ToV4 forgetting to delete the source
+        // group, or finalizeV4Conversion forgetting to strip the stash)
+        // would leave inert keys on disk that the settings UI would
+        // gladly resurface — re-introducing the exact duplication this
+        // migration is supposed to retire.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithExclusions(QStringLiteral("firefox"), QStringLiteral("kitty")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject cfgAfter = readJson(ConfigDefaults::configFilePath());
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("Exclusions")),
+                 "migrateV3ToV4 must remove the legacy Exclusions group");
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4ExclusionStash")),
+                 "finalizeV4Conversion must strip the _v4ExclusionStash scratch key");
+    }
+
+    void testExclusions_absentSourceProducesNoExclusionRules()
+    {
+        // A clean v3 config with no Exclusions group must not produce any
+        // exclusion stash entry and not contribute any exclusion rule to
+        // the output. The provider-default catch-all rule still appears —
+        // the assertion targets the exclusion-shaped subset exactly.
+        IsolatedConfigGuard guard;
+        // makeV3ConfigWithExclusions with both nulls produces a v3 config
+        // with NO Exclusions group at all.
+        writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithExclusions(QString(), QString()));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QCOMPARE(exclusionRules(rulesFromWindowRules()).size(), 0);
     }
 };
 

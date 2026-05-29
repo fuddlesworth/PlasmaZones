@@ -106,11 +106,16 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("layouts"), QStringLiteral("display"), PzI18n::tr("Layouts"),
                QStringLiteral("LayoutsPage.qml"), QStringLiteral("view-grid"));
 
-    // Rules children
+    // Rules children — exclusions used to live here as a sibling page (excluded
+    // applications + window classes lists). v4 folds those entries into
+    // Window Rules as Application-subject Exclude rules
+    // (ConfigMigration::migrateV3ToV4 → finalizeV4Conversion), and the three
+    // global window-filtering knobs that also lived on that page
+    // (excludeTransientWindows / minimumWindowWidth / minimumWindowHeight)
+    // moved to the General page's "Window filtering" card. No standalone
+    // Exclusions entry remains.
     regPage(m_windowRulesPage, QStringLiteral("rules"), PzI18n::tr("Window Rules"),
             QStringLiteral("WindowRulesPage.qml"), QStringLiteral("view-list-details"));
-    regVirtual(QStringLiteral("exclusions"), QStringLiteral("rules"), PzI18n::tr("Exclusions"),
-               QStringLiteral("ExclusionsPage.qml"), QStringLiteral("dialog-cancel"));
 
     // Snapping children — the *-cat entries mirror the legacy collapsible
     // category headers (Visual / Behavior / Configuration). They have no
@@ -395,7 +400,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // child page is dirty. Mirrors the registry topology in
         // buildApplicationController() above.
         {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
-        {QStringLiteral("rules"), {QStringLiteral("window-rules"), QStringLiteral("exclusions")}},
+        {QStringLiteral("rules"), {QStringLiteral("window-rules")}},
     };
     return groups;
 }
@@ -420,7 +425,6 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("window-rules"),
-        QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
         QStringLiteral("about"),

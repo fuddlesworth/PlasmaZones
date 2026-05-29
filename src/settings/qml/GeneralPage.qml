@@ -64,10 +64,9 @@ SettingsFlickable {
                         Accessible.name: i18n("Rendering backend")
                         model: settingsController.generalPage.renderingBackendDisplayNames
                         currentIndex: Math.max(0, settingsController.generalPage.renderingBackendOptions.indexOf(appSettings.renderingBackend))
-                        onActivated: (index) => {
+                        onActivated: index => {
                             if (index >= 0 && index < settingsController.generalPage.renderingBackendOptions.length)
                                 appSettings.renderingBackend = settingsController.generalPage.renderingBackendOptions[index];
-
                         }
 
                         Connections {
@@ -77,9 +76,7 @@ SettingsFlickable {
 
                             target: appSettings
                         }
-
                     }
-
                 }
 
                 Kirigami.InlineMessage {
@@ -88,9 +85,82 @@ SettingsFlickable {
                     text: settingsController.daemonRunning ? i18n("Stop the daemon to change the rendering backend.") : i18n("Rendering backend changes take effect after restarting the daemon.")
                     visible: settingsController.daemonRunning || appSettings.renderingBackend !== settingsController.generalPage.startupRenderingBackend
                 }
-
             }
+        }
 
+        // =====================================================================
+        // WINDOW FILTERING CARD
+        // =====================================================================
+        // The three global filters previously hosted on the standalone
+        // "Exclusions" page. The per-app and per-class lists that used to
+        // live there have folded into Window Rules (Application-subject
+        // Exclude rules), so the page itself was deleted; these three global
+        // knobs survive here because they apply to ALL windows uniformly
+        // rather than matching specific applications.
+        SettingsCard {
+            headerText: i18n("Window filtering")
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Exclude transient windows")
+                    description: i18n("Skip dialogs, popups, and toolbars for snapping and tiling")
+
+                    SettingsSwitch {
+                        checked: appSettings.excludeTransientWindows
+                        accessibleName: i18n("Exclude transient windows")
+                        onToggled: function (newValue) {
+                            appSettings.excludeTransientWindows = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Minimum window width")
+                    description: appSettings.minimumWindowWidth === 0 ? i18n("Disabled — no width threshold") : i18n("Windows narrower than this are excluded")
+
+                    SettingsSpinBox {
+                        from: 0
+                        to: 1000
+                        stepSize: 10
+                        value: appSettings.minimumWindowWidth
+                        unitText: ""
+                        Accessible.name: i18n("Minimum window width")
+                        onValueModified: value => {
+                            appSettings.minimumWindowWidth = value;
+                        }
+                        textFromValue: function (value) {
+                            return value === 0 ? i18n("Off") : value + " px";
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Minimum window height")
+                    description: appSettings.minimumWindowHeight === 0 ? i18n("Disabled — no height threshold") : i18n("Windows shorter than this are excluded")
+
+                    SettingsSpinBox {
+                        from: 0
+                        to: 1000
+                        stepSize: 10
+                        value: appSettings.minimumWindowHeight
+                        unitText: ""
+                        Accessible.name: i18n("Minimum window height")
+                        onValueModified: value => {
+                            appSettings.minimumWindowHeight = value;
+                        }
+                        textFromValue: function (value) {
+                            return value === 0 ? i18n("Off") : value + " px";
+                        }
+                    }
+                }
+            }
         }
 
         // =====================================================================
@@ -112,11 +182,9 @@ SettingsFlickable {
                         icon.name: "document-export"
                         onClicked: exportConfigDialog.open()
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Restore")
@@ -127,11 +195,9 @@ SettingsFlickable {
                         icon.name: "document-import"
                         onClicked: importConfigDialog.open()
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Reset")
@@ -142,13 +208,9 @@ SettingsFlickable {
                         icon.name: "document-revert"
                         onClicked: defaultsConfirmDialog.open()
                     }
-
                 }
-
             }
-
         }
-
     }
 
     FileDialog {
@@ -169,5 +231,4 @@ SettingsFlickable {
         fileMode: FileDialog.OpenFile
         onAccepted: settingsController.importAllSettings(decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/")))
     }
-
 }

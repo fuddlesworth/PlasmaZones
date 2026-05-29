@@ -215,7 +215,6 @@ qt_add_qml_module(plasmazones-settings
         qml/TilingAppearancePage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml
-        qml/ExclusionsPage.qml
         qml/EditorPage.qml
         qml/LayoutsPage.qml
         qml/SnappingQuickShortcutsPage.qml
