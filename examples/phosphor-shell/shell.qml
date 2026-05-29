@@ -188,12 +188,17 @@ Item {
         // assigned, leaving downstream bindings reading from an
         // undefined value.
         shellState: root.shellState
-        // Time formatted as locale-neutral HH:mm; date via Qt.formatDate
-        // so day/month names follow the user's locale (the hand-rolled
+        // Time as locale-neutral HH:mm; date via Qt.formatDate so
+        // day/month names follow the user's locale (the hand-rolled
         // English arrays this replaced were an i18n regression).
-        // Qt.formatTime + Qt.formatDate share the same locale handling
-        // so HH:mm zero-padding doesn't need a hand-rolled helper.
-        clockText: Qt.formatTime(clock.date, "HH:mm") + " · " + Qt.formatDate(clock.date, "ddd MMM dd")
+        //
+        // Binding on clock.hours/clock.minutes (each Q_PROPERTY with
+        // its own NOTIFY) so this re-evaluates every minute when
+        // timeChanged fires. Qt.formatTime can't be used here because
+        // SystemClock exposes only a QDate (clock.date), not a
+        // QDateTime; passing a QDate to Qt.formatTime returns an empty
+        // string. String.padStart handles the zero-fill cleanly.
+        clockText: String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0") + " · " + Qt.formatDate(clock.date, "ddd MMM dd")
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent
         batteryPercent: battery.displayDevice ? Math.round(battery.displayDevice.percentage).toString() : ""
