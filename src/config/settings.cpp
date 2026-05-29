@@ -329,6 +329,7 @@ void Settings::purgeStaleKeys()
         ConfigKeys::Legacy::v4DisableStashKey(),
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
         ConfigKeys::Legacy::v4ExclusionStashKey(),
+        ConfigKeys::Legacy::v4AnimationExclusionStashKey(),
     };
 
     // Compute the set of paths the Store claims. These must not be
@@ -1674,77 +1675,11 @@ PZ_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, 
 PZ_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
                  animationMinimumWindowHeightChanged)
 
-QStringList Settings::animationExcludedApplications() const
-{
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey()));
-}
-
-void Settings::setAnimationExcludedApplications(const QStringList& apps)
-{
-    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey(), apps,
-                   &Settings::animationExcludedApplicationsChanged);
-}
-
-void Settings::addAnimationExcludedApplication(const QString& app)
-{
-    const QString trimmed = app.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = animationExcludedApplications();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setAnimationExcludedApplications(list);
-}
-
-void Settings::removeAnimationExcludedApplicationAt(int index)
-{
-    QStringList list = animationExcludedApplications();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setAnimationExcludedApplications(list);
-}
-
-QStringList Settings::animationExcludedWindowClasses() const
-{
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey()));
-}
-
-void Settings::setAnimationExcludedWindowClasses(const QStringList& classes)
-{
-    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey(), classes,
-                   &Settings::animationExcludedWindowClassesChanged);
-}
-
-void Settings::addAnimationExcludedWindowClass(const QString& cls)
-{
-    const QString trimmed = cls.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = animationExcludedWindowClasses();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setAnimationExcludedWindowClasses(list);
-}
-
-void Settings::removeAnimationExcludedWindowClassAt(int index)
-{
-    QStringList list = animationExcludedWindowClasses();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setAnimationExcludedWindowClasses(list);
-}
+// animationExcludedApplications / animationExcludedWindowClasses (+ their
+// add*/remove* convenience methods) retired in v4 — the v4 migration drains
+// the Animations.WindowFiltering group's Applications / WindowClasses leaves
+// into `ExcludeAnimations` WindowRules. The settings accessors had no
+// consumers after the KWin effect rewired off the loadSettingAsync fetches.
 
 // ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
 // Three enum-ints exposed via both the typed setter and an Int adapter for

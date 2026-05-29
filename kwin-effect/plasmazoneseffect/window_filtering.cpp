@@ -276,13 +276,6 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     return true;
 }
 
-void PlasmaZonesEffect::rebuildAnimationExclusionRuleSet()
-{
-    const PhosphorWindowRule::WindowRuleSet rebuilt = PhosphorWindowRule::ExclusionRules::toRuleSet(
-        m_animationExcludedApplications, m_animationExcludedWindowClasses);
-    m_animationExclusionRuleSet.setRules(rebuilt.rules());
-}
-
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 {
     if (!w) {

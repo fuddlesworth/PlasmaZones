@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "IdentityKey.h"
 #include "MatchExpression.h"
 #include "MatchTypes.h"
 #include "RuleAction.h"
@@ -13,33 +12,21 @@
 #include <QList>
 #include <QString>
 #include <QStringList>
-#include <QUuid>
 
 /**
  * @file ExclusionRules.h
- * @brief Header-only helpers for the two directions of `Exclude`-action
- *        WindowRule conversion:
- *          - **build** an Exclude-action rule from a string pattern
- *            (legacy `(applications, windowClasses)` settings lists →
- *            `WindowRuleSet`),
- *          - **filter** an existing rule set down to its Exclude-shaped
- *            slice (unified `WindowRuleStore` → snap-engine / effect
- *            drag-gate exclusion evaluators).
+ * @brief Header-only helpers that slice a unified `WindowRuleSet` down to
+ *        the `Exclude`- or `ExcludeAnimations`-action rules that the
+ *        snap-engine, the KWin effect's drag gate, and the effect's
+ *        `shouldAnimateWindow` gate respectively bind to their
+ *        evaluators.
  *
- * Replaces the earlier split into `ExclusionListBridge.h` (lists → rules,
- * used by the animation-page exclusion path and the daemon-side snap
- * navigation gate) and `ExcludeRuleFilter.h` (rules → exclude-only slice,
- * added when the snap-engine and effect moved off the lists onto the
- * unified rule store). Both files boiled down to "build / probe Exclude
- * rules"; folding them into one keeps the discovery surface honest —
- * future readers see ONE place to look, not two with overlapping intent.
- *
- * After the v4 exclusion-list fold (configmigration.cpp), the
- * snapping-page lists are gone from `ISettings`. The list-input helpers
- * here survive only for the animation-page's separate
- * `animationExcludedApplications` / `animationExcludedWindowClasses`
- * lists, which haven't migrated; once those move to unified rules too the
- * list-input helpers retire.
+ * After v4 (configmigration.cpp), exclusion rules live exclusively in
+ * the unified WindowRule store — the legacy
+ * `(animation)excludedApplications` / `(animation)excludedWindowClasses`
+ * QStringList settings retired along with the bridge that derived rules
+ * from them. Consumers ask THIS header "give me the Exclude- or
+ * ExcludeAnimations-shaped slice of the user's unified rule store".
  *
  * Header-only so consumers take only an include-time dependency on
  * phosphor-windowrule — there is no link edge added by using these
@@ -50,134 +37,63 @@ namespace PhosphorWindowRule {
 
 namespace ExclusionRules {
 
-namespace detail {
-
-/// Fixed v5-UUID namespace for derived exclusion-rule identities. Deriving
-/// each rule's id deterministically from its source identity (field +
-/// operator + pattern) makes the conversion idempotent: converting the
-/// same exclusion lists twice yields rule sets that compare equal, so
-/// `WindowRuleStore::setAllRules` keeps its no-op fast path. The constant
-/// is BYTE-IDENTICAL to the one the v4 migration uses in configmigration.cpp
-/// so a rule built by `makeExclusionRule` here and one written by the
-/// migration there collide cleanly on the same pattern.
-inline const QUuid& namespaceUuid()
-{
-    static const QUuid ns(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
-    return ns;
-}
-
-/// Length-prefix a segment so concatenated identity keys are unambiguous.
-/// Re-exported from the shared @ref IdentityKey.h.
-using PhosphorWindowRule::Detail::encodeSegment;
-
-/// Stable per-rule key. @p field and @p op disambiguate the rule families:
-/// the same pattern can produce a `DesktopFile Contains` rule (the
-/// animation-page bridge) or an `AppId AppIdMatches` rule (the daemon-side
-/// migration) — both must carry distinct ids. Segments are length-prefixed
-/// so no two distinct tuples can collide.
-inline QString exclusionIdentityKey(Field field, Operator op, const QString& pattern)
-{
-    return encodeSegment(QString::number(static_cast<int>(field)))
-        + encodeSegment(QString::number(static_cast<int>(op))) + encodeSegment(pattern);
-}
-
-} // namespace detail
-
-/// Build one terminal `Exclude` rule for @p field / @p pattern. The caller
-/// guarantees @p pattern is non-empty. The id is deterministic via UUIDv5
-/// so identical (field, pattern) tuples collapse to the same rule.
-inline WindowRule makeExclusionRule(Field field, const QString& pattern)
-{
-    WindowRule rule;
-    rule.id =
-        QUuid::createUuidV5(detail::namespaceUuid(), detail::exclusionIdentityKey(field, Operator::Contains, pattern));
-    rule.enabled = true;
-    rule.priority = 0;
-    rule.match = MatchExpression::makeLeaf(field, Operator::Contains, pattern);
-
-    RuleAction action;
-    action.type = QString(ActionType::Exclude);
-    rule.actions.append(action);
-    return rule;
-}
-
-/**
- * @brief Convert a pair of exclusion lists into a `WindowRuleSet`.
- *
- * @param excludedApplications  patterns matched against `desktopFile`.
- * @param excludedWindowClasses patterns matched against `windowClass`.
- *
- * Empty / whitespace-only patterns are dropped. Each surviving pattern
- * becomes one terminal `Exclude` rule with a `Contains` leaf — the
- * legacy effect-side semantics (substring, case-insensitive via the
- * MatchExpression contract). An all-empty input yields an empty set so
- * callers keep a `!ruleSet.isEmpty()` fast path.
- *
- * Currently used only by the animation-page exclusion path; the snapping
- * counterpart migrated to unified WindowRules in v4. Retires once
- * animationExcludedApplications / animationExcludedWindowClasses migrate
- * the same way.
- */
-inline WindowRuleSet toRuleSet(const QStringList& excludedApplications, const QStringList& excludedWindowClasses)
-{
-    QList<WindowRule> rules;
-    rules.reserve(excludedApplications.size() + excludedWindowClasses.size());
-
-    // Whitespace-only patterns are dropped (not just exact-empty ones): a
-    // " " pattern would otherwise become a substring rule that matches
-    // almost nothing while still bloating the canonical rule count.
-    for (const QString& raw : excludedApplications) {
-        const QString pattern = raw.trimmed();
-        if (pattern.isEmpty()) {
-            continue;
-        }
-        rules.append(makeExclusionRule(Field::DesktopFile, pattern));
-    }
-    for (const QString& raw : excludedWindowClasses) {
-        const QString pattern = raw.trimmed();
-        if (pattern.isEmpty()) {
-            continue;
-        }
-        rules.append(makeExclusionRule(Field::WindowClass, pattern));
-    }
-
-    WindowRuleSet set;
-    set.setRules(rules);
-    return set;
-}
-
-/// True iff @p rule carries at least one terminal `Exclude` action. Used
-/// internally and exposed for callers that want the same predicate
-/// without rebuilding it inline.
-inline bool ruleIsExclude(const WindowRule& rule)
+/// True iff @p rule carries at least one action whose `type` matches
+/// @p actionType. The two `*RulesFrom` helpers below build on this; it
+/// is exposed so callers that want the same predicate without
+/// re-deriving a slice get the canonical shape.
+inline bool ruleHasAction(const WindowRule& rule, QLatin1StringView actionType)
 {
     for (const RuleAction& action : rule.actions) {
-        if (action.type == QString(ActionType::Exclude)) {
+        if (action.type == QString(actionType)) {
             return true;
         }
     }
     return false;
 }
 
+/// True iff @p rule carries at least one terminal `Exclude` action.
+/// Thin alias over @ref ruleHasAction for the snapping / drag-gate
+/// call sites that don't need to spell the action type explicitly.
+inline bool ruleIsExclude(const WindowRule& rule)
+{
+    return ruleHasAction(rule, ActionType::Exclude);
+}
+
 /// Walk @p source and return a derived `WindowRuleSet` containing only
-/// the rules with at least one `Exclude` action. Rule ids, priorities and
-/// matches are copied verbatim — the derived set gets bound to a
-/// snapping- / effect-side `RuleEvaluator` and exposed as the "is this
-/// window excluded?" probe, so it has to preserve the source rule's
-/// resolution semantics exactly. An all-non-Exclude input yields an empty
-/// set so callers keep a `!set.isEmpty()` fast path.
-inline WindowRuleSet excludeRulesFrom(const WindowRuleSet& source)
+/// the rules whose action list includes @p actionType. Rule ids,
+/// priorities and matches are copied verbatim — the derived set gets
+/// bound to a `RuleEvaluator` downstream and has to preserve the
+/// source rule's resolution semantics exactly. An empty match yields
+/// an empty set so callers keep a `!set.isEmpty()` fast path.
+inline WindowRuleSet rulesWithAction(const WindowRuleSet& source, QLatin1StringView actionType)
 {
     QList<WindowRule> kept;
     kept.reserve(source.count());
     for (const WindowRule& rule : source.rules()) {
-        if (ruleIsExclude(rule)) {
+        if (ruleHasAction(rule, actionType)) {
             kept.append(rule);
         }
     }
     WindowRuleSet derived;
     derived.setRules(kept);
     return derived;
+}
+
+/// Slice @p source down to rules with a terminal `Exclude` action.
+/// Used by SnapEngine and the KWin effect's drag gate.
+inline WindowRuleSet excludeRulesFrom(const WindowRuleSet& source)
+{
+    return rulesWithAction(source, ActionType::Exclude);
+}
+
+/// Slice @p source down to rules with a terminal `ExcludeAnimations`
+/// action — the action the v4 fold introduced for the legacy
+/// animationExcludedApplications / animationExcludedWindowClasses
+/// lists. Used by the KWin effect's `shouldAnimateWindow` gate to
+/// suppress animation overrides on matched windows.
+inline WindowRuleSet excludeAnimationsRulesFrom(const WindowRuleSet& source)
+{
+    return rulesWithAction(source, ActionType::ExcludeAnimations);
 }
 
 /// Return the AppId pattern of every `AppId AppIdMatches <pattern>` leaf

@@ -245,6 +245,15 @@ inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTim
 /// checks the curve slot first.
 inline constexpr QLatin1StringView OverrideAnimationCurve{"overrideAnimationCurve"};
 inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
+/// Disable every animation override on a matched window. The opposite of
+/// the OverrideAnimation* family — the effect's shouldAnimateWindow gate
+/// surfaces this as "no animation for this window, regardless of other
+/// rules". Distinct from the generic `Exclude` action (which marks the
+/// window unmanaged by snap/tile/etc); a user can have `Exclude` without
+/// `ExcludeAnimations` and vice versa. Migrated from the legacy
+/// animationExcludedApplications / animationExcludedWindowClasses
+/// settings lists by the v3→v4 chain.
+inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 
 /// True when @p type is one of the three OverrideAnimation* action wire
 /// strings — shader / timing / curve. The trio shares the same cascade
@@ -265,7 +274,7 @@ inline bool isAnimationOverrideAction(const QString& type)
 /// action type updates the filter list in one place.
 inline bool isEffectRuleAction(const QString& type)
 {
-    return isAnimationOverrideAction(type) || type == SetOpacity;
+    return isAnimationOverrideAction(type) || type == SetOpacity || type == ExcludeAnimations;
 }
 } // namespace ActionType
 
@@ -310,6 +319,12 @@ inline constexpr QLatin1StringView Opacity{"opacity"};
 inline constexpr QLatin1StringView AnimShaderPrefix{"anim-shader:"};
 inline constexpr QLatin1StringView AnimTimingPrefix{"anim-timing:"};
 inline constexpr QLatin1StringView AnimCurvePrefix{"anim-curve:"};
+/// Window-scoped, event-agnostic — the effect's shouldAnimateWindow
+/// surfaces ANY rule whose action fills this slot as "don't animate
+/// this window, regardless of event or other rules". One slot per
+/// window's full animation surface, not per event, so a single rule
+/// suppresses every animation path.
+inline constexpr QLatin1StringView AnimExclude{"anim-exclude"};
 } // namespace ActionSlot
 
 } // namespace PhosphorWindowRule

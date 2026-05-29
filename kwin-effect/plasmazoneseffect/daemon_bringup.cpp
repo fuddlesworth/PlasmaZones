@@ -579,14 +579,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
         m_animationMinWindowHeight = qBound(0, v.toInt(), 2000);
     });
-    loadSettingAsync(QStringLiteral("animationExcludedApplications"), [this](const QVariant& v) {
-        m_animationExcludedApplications = v.toStringList();
-        rebuildAnimationExclusionRuleSet();
-    });
-    loadSettingAsync(QStringLiteral("animationExcludedWindowClasses"), [this](const QVariant& v) {
-        m_animationExcludedWindowClasses = v.toStringList();
-        rebuildAnimationExclusionRuleSet();
-    });
+    // animationExcludedApplications / animationExcludedWindowClasses are
+    // GONE — the v4 migration folded those lists into the unified
+    // WindowRule store as `ExcludeAnimations`-action rules, and
+    // loadWindowRuleAnimationsFromDbus's parse step rebuilds the effect's
+    // m_animationExclusionRuleSet from the same rule-set push that drives
+    // the OverrideAnimation* pipeline. No D-Bus settings fetch needed.
 
     loadShaderProfileFromDbus();
     loadMotionProfileTreeFromDbus();

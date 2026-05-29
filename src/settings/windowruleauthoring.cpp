@@ -171,6 +171,9 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetOpacity) {
         return PzI18n::tr("Set opacity");
     }
+    if (type == ActionType::ExcludeAnimations) {
+        return PzI18n::tr("Exclude from animations");
+    }
     return WindowRuleModel::actionTypeFallbackLabel(type);
 }
 
@@ -353,6 +356,7 @@ QVariantList actionTypes()
         ActionType::OverrideAnimationShader,
         ActionType::OverrideAnimationCurve,
         ActionType::OverrideAnimationTiming,
+        ActionType::ExcludeAnimations,
     };
     const PhosphorWindowRule::ActionRegistry& registry = PhosphorWindowRule::ActionRegistry::instance();
     QList<QString> orderedTypes;

@@ -490,10 +490,10 @@ void SettingsAdaptor::initializeRegistry()
                           setAnimationExcludeNotificationsAndOsd)
     REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
     REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
-    REGISTER_STRINGLIST_SETTING("animationExcludedApplications", animationExcludedApplications,
-                                setAnimationExcludedApplications)
-    REGISTER_STRINGLIST_SETTING("animationExcludedWindowClasses", animationExcludedWindowClasses,
-                                setAnimationExcludedWindowClasses)
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // retired in v4 — folded into ExcludeAnimations WindowRules; the
+    // effect derives its animation exclusion rule set from the unified
+    // store via the WindowRules.rulesChanged subscription instead.
 
     // PhosphorZones::Zone selector settings
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)

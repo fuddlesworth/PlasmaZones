@@ -1501,6 +1501,13 @@ private Q_SLOTS:
         exclusionStash.insert(QStringLiteral("Applications"), QStringLiteral("firefox"));
         exclusionStash.insert(QStringLiteral("WindowClasses"), QStringLiteral("kitty"));
         cfg.insert(QStringLiteral("_v4ExclusionStash"), exclusionStash);
+        // Plausible animation-exclusion stash content too. Same shape as the
+        // snapping exclusion stash (object with Applications / WindowClasses
+        // string fields).
+        QJsonObject animationExclusionStash;
+        animationExclusionStash.insert(QStringLiteral("Applications"), QStringLiteral("vlc"));
+        animationExclusionStash.insert(QStringLiteral("WindowClasses"), QStringLiteral("mpv"));
+        cfg.insert(QStringLiteral("_v4AnimationExclusionStash"), animationExclusionStash);
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
         // Pre-existing windowrules.json: produced via the production save
@@ -1527,6 +1534,8 @@ private Q_SLOTS:
                  "cleanup-only branch must strip _v4AnimationRulesStash");
         QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4ExclusionStash")),
                  "cleanup-only branch must strip _v4ExclusionStash");
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationExclusionStash")),
+                 "cleanup-only branch must strip _v4AnimationExclusionStash");
 
         // windowrules.json is byte-identical — the cleanup branch must NOT
         // rebuild and overwrite user-edited rules.
@@ -1749,6 +1758,146 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QCOMPARE(exclusionRules(rulesFromWindowRules()).size(), 0);
+    }
+
+    // ─── Animation exclusions fold ────────────────────────────────────────
+    // The legacy `Animations.WindowFiltering.{Applications,WindowClasses}`
+    // lists fold into `ExcludeAnimations`-action rules with
+    // `DesktopFile Contains <pattern>` (applications) or
+    // `WindowClass Contains <pattern>` (window classes) leaves — the
+    // same match semantics the legacy effect-side bridge produced for
+    // the animation pipeline, so an upgrading user's "no animations for
+    // firefox" rule keeps the same matching behaviour.
+
+private:
+    QJsonObject makeV3ConfigWithAnimationExclusions(const QString& apps, const QString& windowClasses)
+    {
+        QJsonObject root;
+        root.insert(QStringLiteral("_version"), 3);
+        QJsonObject filtering;
+        if (!apps.isNull()) {
+            filtering.insert(QStringLiteral("Applications"), apps);
+        }
+        if (!windowClasses.isNull()) {
+            filtering.insert(QStringLiteral("WindowClasses"), windowClasses);
+        }
+        if (!filtering.isEmpty()) {
+            QJsonObject animations;
+            animations.insert(QStringLiteral("WindowFiltering"), filtering);
+            root.insert(QStringLiteral("Animations"), animations);
+        }
+        return root;
+    }
+
+    /// Animation-exclude rules are the only ExcludeAnimations-action
+    /// shape the migration produces, so a simple "rules whose actions
+    /// contain excludeAnimations" filter cleanly isolates them.
+    QList<QJsonObject> animationExclusionRules(const QJsonArray& rules)
+    {
+        QList<QJsonObject> out;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            if (actionTypes(r) != QStringList{QStringLiteral("excludeAnimations")}) {
+                continue;
+            }
+            out.append(r);
+        }
+        return out;
+    }
+
+private Q_SLOTS:
+
+    void testAnimationExclusions_applicationsBecomeDesktopFileContainsRules()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QStringLiteral("firefox,konsole"), QString()));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> rules = animationExclusionRules(rulesFromWindowRules());
+        QCOMPARE(rules.size(), 2);
+        QStringList patterns;
+        for (const QJsonObject& r : rules) {
+            QCOMPARE(matchLeafValueByOp(r, QStringLiteral("desktopFile"), QStringLiteral("contains")).isEmpty(), false);
+            patterns.append(matchLeafValueByOp(r, QStringLiteral("desktopFile"), QStringLiteral("contains")));
+        }
+        patterns.sort();
+        QCOMPARE(patterns, QStringList{} << QStringLiteral("firefox") << QStringLiteral("konsole"));
+    }
+
+    void testAnimationExclusions_windowClassesBecomeWindowClassContainsRules()
+    {
+        // Unlike the snapping-side fold (which collapsed both lists into
+        // `AppId AppIdMatches` rules to mirror the daemon-bridge semantics),
+        // the animation-side fold preserves the effect-bridge split:
+        // WindowClasses entries produce `WindowClass Contains` leaves,
+        // NOT `DesktopFile Contains`.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QString(), QStringLiteral("kitty,org.kde.dolphin")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> rules = animationExclusionRules(rulesFromWindowRules());
+        QCOMPARE(rules.size(), 2);
+        QStringList patterns;
+        for (const QJsonObject& r : rules) {
+            patterns.append(matchLeafValueByOp(r, QStringLiteral("windowClass"), QStringLiteral("contains")));
+        }
+        patterns.sort();
+        QCOMPARE(patterns, QStringList{} << QStringLiteral("kitty") << QStringLiteral("org.kde.dolphin"));
+    }
+
+    void testAnimationExclusions_emptyAndWhitespacePatternsDropped()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(
+            ConfigDefaults::configFilePath(),
+            makeV3ConfigWithAnimationExclusions(QStringLiteral(",firefox,  ,,konsole,"), QStringLiteral("   ,,")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QCOMPARE(animationExclusionRules(rulesFromWindowRules()).size(), 2);
+    }
+
+    void testAnimationExclusions_groupAndStashStrippedAfterFinalize()
+    {
+        // Both the v3 `Animations.WindowFiltering.{Applications,WindowClasses}`
+        // leaf keys AND the `_v4AnimationExclusionStash` scratch root key
+        // MUST be gone from config.json after a successful conversion.
+        // The Animations group itself stays (it carries other v4 settings);
+        // only the two leaf keys under WindowFiltering are stripped.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QStringLiteral("firefox"), QStringLiteral("kitty")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject cfgAfter = readJson(ConfigDefaults::configFilePath());
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationExclusionStash")),
+                 "finalizeV4Conversion must strip the _v4AnimationExclusionStash scratch key");
+        // The Animations.WindowFiltering group either disappears entirely
+        // (no other keys lived there in this fixture) or survives without
+        // the two leaf keys. Both are acceptable; the assertion just
+        // requires the leaf keys not survive.
+        const QJsonObject animations = cfgAfter.value(QStringLiteral("Animations")).toObject();
+        const QJsonObject filtering = animations.value(QStringLiteral("WindowFiltering")).toObject();
+        QVERIFY2(!filtering.contains(QStringLiteral("Applications")),
+                 "migrateV3ToV4 must remove Animations.WindowFiltering.Applications");
+        QVERIFY2(!filtering.contains(QStringLiteral("WindowClasses")),
+                 "migrateV3ToV4 must remove Animations.WindowFiltering.WindowClasses");
+    }
+
+    void testAnimationExclusions_absentSourceProducesNoRules()
+    {
+        IsolatedConfigGuard guard;
+        // No Animations.WindowFiltering group at all.
+        writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithAnimationExclusions(QString(), QString()));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QCOMPARE(animationExclusionRules(rulesFromWindowRules()).size(), 0);
     }
 };
 

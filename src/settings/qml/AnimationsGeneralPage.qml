@@ -114,25 +114,10 @@ SettingsFlickable {
         target: page.appSettings
     }
 
-    // Window-filtering picker — relocated here with the Window Filtering
-    // section from the old Animations App Rules page. Each ExclusionListCard
-    // calls openForApps()/openForClasses(), which sets the dialog's own
-    // forApps flag routing the pick to the Excluded Applications list (true)
-    // or the Excluded Window Classes list (false).
-    WindowPickerDialog {
-        id: filterPickerDialog
-
-        controller: settingsController
-        onPicked: function (value) {
-            if (forApps) {
-                settingsController.settings.addAnimationExcludedApplication(value);
-                filterAppsCard.refreshModel();
-            } else {
-                settingsController.settings.addAnimationExcludedWindowClass(value);
-                filterClassesCard.refreshModel();
-            }
-        }
-    }
+    // The standalone window-filtering picker retired alongside the two
+    // ExclusionListCards below — the legacy lists folded into
+    // ExcludeAnimations WindowRules, and Window Rules has its own
+    // running-window picker on the AppId match leaf.
 
     ColumnLayout {
         id: content
@@ -406,50 +391,11 @@ SettingsFlickable {
             }
         }
 
-        ExclusionListCard {
-            id: filterAppsCard
-
-            Layout.fillWidth: true
-            title: i18n("Excluded Applications (Animations)")
-            placeholderText: i18n("Application name (e.g., firefox, konsole)")
-            emptyTitle: i18n("No excluded applications")
-            emptyExplanation: i18n("Add application names above to exclude them from animations")
-            iconSource: "application-x-executable"
-            model: page.appSettings.animationExcludedApplications
-            useMonospaceFont: false
-            showPickButton: true
-            onAddRequested: text => {
-                return page.appSettings.addAnimationExcludedApplication(text);
-            }
-            onRemoveRequested: index => {
-                return page.appSettings.removeAnimationExcludedApplicationAt(index);
-            }
-            onPickRequested: {
-                filterPickerDialog.openForApps();
-            }
-        }
-
-        ExclusionListCard {
-            id: filterClassesCard
-
-            Layout.fillWidth: true
-            title: i18n("Excluded Window Classes (Animations)")
-            placeholderText: i18n("Window class (e.g., org.kde.dolphin)")
-            emptyTitle: i18n("No excluded window classes")
-            emptyExplanation: i18n("Add window classes above to exclude them from animations")
-            iconSource: "window"
-            model: page.appSettings.animationExcludedWindowClasses
-            useMonospaceFont: true
-            showPickButton: true
-            onAddRequested: text => {
-                return page.appSettings.addAnimationExcludedWindowClass(text);
-            }
-            onRemoveRequested: index => {
-                return page.appSettings.removeAnimationExcludedWindowClassAt(index);
-            }
-            onPickRequested: {
-                filterPickerDialog.openForClasses();
-            }
-        }
+        // The "Excluded Applications (Animations)" and "Excluded Window
+        // Classes (Animations)" list cards retired in v4 — those legacy
+        // settings lists folded into ExcludeAnimations WindowRules. To
+        // exclude a window from animation overrides, author an
+        // Application-subject rule with the "Exclude from animations"
+        // action in Window Rules instead.
     }
 }

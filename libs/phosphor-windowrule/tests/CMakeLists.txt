@@ -38,5 +38,10 @@ pwr_add_test(phosphorwindowrule_test_ruleevaluator_cascade test_ruleevaluator_ca
 pwr_add_test(phosphorwindowrule_test_ruleevaluator_benchmark test_ruleevaluator_benchmark.cpp)
 
 # Phase 2 in-memory bridges.
-pwr_add_test(phosphorwindowrule_test_exclusionrules test_exclusionrules.cpp)
+# test_exclusionrules retired alongside ExclusionRules::toRuleSet /
+# makeExclusionRule — the list-input helpers had zero callers after the v4
+# fold moved every consumer onto the unified rule store. The remaining
+# `excludeRulesFrom` / `excludeAnimationsRulesFrom` filter helpers ride
+# along with the v3→v4 migration tests in test_migration_v3_to_v4
+# (Exclusions fold + new ExcludeAnimations fold).
 pwr_add_test(phosphorwindowrule_test_contextrulebridge test_contextrulebridge.cpp)

@@ -719,6 +719,15 @@ public:
         // Exclude` WindowRule. Same purge-protection semantics as the two
         // sibling stash keys above.
         PZ_CONFIG_KEY(v4ExclusionStashKey, "_v4ExclusionStash")
+        // Fourth v4 scratch-root key — set on the root by `migrateV3ToV4`
+        // from the legacy `Animations.WindowFiltering.{Applications,WindowClasses}`
+        // lists and consumed by `finalizeV4Conversion`, which converts each
+        // surviving pattern into a `WindowClass`/`DesktopFile Contains
+        // <pattern> → ExcludeAnimations` WindowRule (same shape the legacy
+        // effect-side `ExclusionRules::toRuleSet` produced for the animation
+        // pipeline). Same purge-protection semantics as the three sibling
+        // stash keys above.
+        PZ_CONFIG_KEY(v4AnimationExclusionStashKey, "_v4AnimationExclusionStash")
 
         // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
         // finalizeV4Conversion. These mirror the live `displayGroup`,
@@ -741,6 +750,15 @@ public:
         PZ_CONFIG_GROUP(v3ExclusionsGroup, "Exclusions")
         PZ_CONFIG_KEY(v3ExcludedApplicationsKey, "Applications")
         PZ_CONFIG_KEY(v3ExcludedWindowClassesKey, "WindowClasses")
+        // The animation exclusion lists live at
+        // `Animations.WindowFiltering.{Applications,WindowClasses}` — same
+        // leaf keys as the snapping Exclusions group above, just under a
+        // different dot-path. The two segments ("Animations" and
+        // "WindowFiltering") aren't wrapped in their own frozen accessors
+        // because migrateV3ToV4 walks the path inline; the segment
+        // literals are spelled out next to v4AnimationsGroup's freeze
+        // comment in the migration body for the same forensic-readability
+        // reason.
 
         // v3 assignments.json field names — frozen literals from the dead
         // v3 assignments.json schema. finalizeV4Conversion is the sole

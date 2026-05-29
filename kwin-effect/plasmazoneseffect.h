@@ -760,19 +760,18 @@ private:
     bool m_animationExcludeNotificationsAndOsd = true;
     int m_animationMinWindowWidth = 0;
     int m_animationMinWindowHeight = 0;
-    QStringList m_animationExcludedApplications;
-    QStringList m_animationExcludedWindowClasses;
 
-    // Window-rule view of the animation exclusion lists — same bridge as the
-    // snapping exclusions, separate rule set because the user can configure
-    // divergent filter lists. Drives shouldAnimateWindow()'s exclusion gate.
-    // Rebuilt by rebuildAnimationExclusionRuleSet() on every animation
-    // exclusion-list D-Bus load. Declaration ORDER MATTERS (see above).
+    // Animation exclusion rule set — the `ExcludeAnimations`-action slice
+    // of the unified WindowRule store the effect mirrors over D-Bus.
+    // Filled by loadWindowRuleAnimationsFromDbus's parse step (which
+    // already deserialises the full rule set for the animation override
+    // path), via
+    // `PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom`.
+    // The bound RuleEvaluator drives shouldAnimateWindow()'s exclusion
+    // gate. Declaration ORDER MATTERS — the rule set must precede (and
+    // outlive) the evaluator that binds a reference to it.
     PhosphorWindowRule::WindowRuleSet m_animationExclusionRuleSet;
     PhosphorWindowRule::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
-
-    /// Rebuild m_animationExclusionRuleSet from the animation exclusion lists.
-    void rebuildAnimationExclusionRuleSet();
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end

@@ -214,10 +214,12 @@ public:
                    NOTIFY animationMinimumWindowWidthChanged)
     Q_PROPERTY(int animationMinimumWindowHeight READ animationMinimumWindowHeight WRITE setAnimationMinimumWindowHeight
                    NOTIFY animationMinimumWindowHeightChanged)
-    Q_PROPERTY(QStringList animationExcludedApplications READ animationExcludedApplications WRITE
-                   setAnimationExcludedApplications NOTIFY animationExcludedApplicationsChanged)
-    Q_PROPERTY(QStringList animationExcludedWindowClasses READ animationExcludedWindowClasses WRITE
-                   setAnimationExcludedWindowClasses NOTIFY animationExcludedWindowClassesChanged)
+    // The animationExcludedApplications / animationExcludedWindowClasses
+    // Q_PROPERTYs retired in v4 — the lists folded into `ExcludeAnimations`
+    // WindowRules and the effect's `shouldAnimateWindow` gate now resolves
+    // against the slice
+    // `PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom`
+    // produces from the unified rule store.
 
     // PhosphorZones::Zone Selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
@@ -649,14 +651,9 @@ public:
     void setAnimationMinimumWindowWidth(int width) override;
     int animationMinimumWindowHeight() const override;
     void setAnimationMinimumWindowHeight(int height) override;
-    QStringList animationExcludedApplications() const override;
-    void setAnimationExcludedApplications(const QStringList& apps) override;
-    Q_INVOKABLE void addAnimationExcludedApplication(const QString& app);
-    Q_INVOKABLE void removeAnimationExcludedApplicationAt(int index);
-    QStringList animationExcludedWindowClasses() const override;
-    void setAnimationExcludedWindowClasses(const QStringList& classes) override;
-    Q_INVOKABLE void addAnimationExcludedWindowClass(const QString& cls);
-    Q_INVOKABLE void removeAnimationExcludedWindowClassAt(int index);
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // (+ their add*/remove* convenience methods) retired in v4 — see the
+    // Q_PROPERTY block above for the migration notes.
 
     // PhosphorZones::Zone Selector — PhosphorConfig::Store-backed.
     bool zoneSelectorEnabled() const override;

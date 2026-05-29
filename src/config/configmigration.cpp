@@ -1603,6 +1603,52 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         root[ConfigKeys::Legacy::v4ExclusionStashKey()] = exclusionStash;
     }
 
+    // Animation exclusion stash: the legacy
+    // `Animations.WindowFiltering.{Applications,WindowClasses}` lists
+    // historically fed the effect's `m_animationExclusionRuleSet` via the
+    // bridge's `Contains`-leaf builder. v4 promotes those into first-class
+    // `ExcludeAnimations` WindowRules so the effect can drop both the
+    // QStringList settings and the per-effect rebuild. Identical structure
+    // to the snapping-side stash above — read raw, surface non-string disk
+    // values, strip the keys, and drop the (dot-path) group if it's now
+    // empty. Note the group lookup walks the dot-path itself rather than
+    // relying on the live accessor: a v3 config wrote
+    // `root["Animations"]["WindowFiltering"]`, so the freeze-policy
+    // segments-by-hand instead of trusting the live group accessor's path.
+    QJsonObject animationsForFiltering = root.value(QStringLiteral("Animations")).toObject();
+    QJsonObject animationFiltering = animationsForFiltering.value(QStringLiteral("WindowFiltering")).toObject();
+    QJsonObject animationExclusionStash;
+    const auto stashAnimationList = [&animationFiltering, &animationExclusionStash](const QString& configKey) {
+        const QJsonValue raw = animationFiltering.value(configKey);
+        if (animationFiltering.contains(configKey) && !raw.isString() && !raw.isNull() && !raw.isUndefined()) {
+            qWarning(
+                "ConfigMigration::migrateV3ToV4: discarding non-string value at "
+                "Animations.WindowFiltering.%s (type=%d) — only comma-joined string "
+                "pattern lists are migrated.",
+                qPrintable(configKey), static_cast<int>(raw.type()));
+        }
+        const QString value = raw.toString();
+        if (!value.isEmpty()) {
+            animationExclusionStash.insert(configKey, value);
+        }
+        animationFiltering.remove(configKey);
+    };
+    stashAnimationList(ConfigKeys::Legacy::v3ExcludedApplicationsKey());
+    stashAnimationList(ConfigKeys::Legacy::v3ExcludedWindowClassesKey());
+    if (animationFiltering.isEmpty()) {
+        animationsForFiltering.remove(QStringLiteral("WindowFiltering"));
+    } else {
+        animationsForFiltering[QStringLiteral("WindowFiltering")] = animationFiltering;
+    }
+    if (animationsForFiltering.isEmpty()) {
+        root.remove(QStringLiteral("Animations"));
+    } else {
+        root[QStringLiteral("Animations")] = animationsForFiltering;
+    }
+    if (!animationExclusionStash.isEmpty()) {
+        root[ConfigKeys::Legacy::v4AnimationExclusionStashKey()] = animationExclusionStash;
+    }
+
     // Stamp literal 4 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
     root[ConfigKeys::versionKey()] = 4;
 }
@@ -1915,12 +1961,15 @@ void appendAnimationRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
     }
 }
 
-/// Fixed v5-UUID namespace for migrated exclusion-rule identities. Held
-/// byte-for-byte the same as `PhosphorWindowRule::ExclusionRules::detail::namespaceUuid()`
-/// so a daemon that bridge-built a rule from the same `(field, op, pattern)`
-/// tuple at runtime produces the same id post-migration. That guarantees
-/// `WindowRuleStore::addRule` (or a downstream dedupe) collapses to a no-op
-/// rather than producing a duplicate — including the case where the user had
+/// Fixed v5-UUID namespace for migrated exclusion-rule identities. Pinned
+/// here as the canonical SSoT since the helper layer's
+/// `ExclusionRules::detail::namespaceUuid` retired alongside the legacy
+/// list-builder. The constant is byte-identical to the one the legacy
+/// helper used so a daemon that bridge-built a rule from the same
+/// `(field, op, pattern)` tuple at runtime (pre-v4) produces the same id
+/// post-migration. That guarantees `WindowRuleStore::addRule` (or a
+/// downstream dedupe) collapses to a no-op rather than producing a
+/// duplicate — including the case where the user had
 /// already hand-authored the equivalent Application-subject Exclude rule.
 inline const QUuid& exclusionMigrationNamespace()
 {
@@ -1971,6 +2020,50 @@ void appendExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
     // Both lists feed AppId rules — see the comment block above.
     appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedApplicationsKey()).toString());
     appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedWindowClassesKey()).toString());
+}
+
+/// Drain the v4 ANIMATION exclusion stash into @p rules. Mirrors
+/// `appendExclusionRulesFromStash` but produces `ExcludeAnimations`-action
+/// rules with `DesktopFile Contains <pattern>` / `WindowClass Contains
+/// <pattern>` leaves — the same match semantics the legacy effect-side
+/// helper produced for the animation pipeline, so the effect's
+/// shouldAnimateWindow gate stays behaviour-preserving for an upgrading
+/// user. The Application/WindowClass split mirrors the legacy lists'
+/// match-field distinction (unlike the snapping-side migration above,
+/// which folded both into AppId rules because the daemon's runtime
+/// bridge already collapsed the distinction).
+void appendAnimationExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules, const QJsonObject& stash)
+{
+    using namespace PhosphorWindowRule;
+    const auto appendOne = [&rules](const QString& rawCsv, Field field) {
+        for (const QString& part : rawCsv.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+            const QString pattern = part.trimmed();
+            if (pattern.isEmpty()) {
+                continue;
+            }
+            WindowRule rule;
+            // Deterministic id keyed off `(field, op, pattern)` — same
+            // namespace + segment encoding as the snapping-side exclusion
+            // migration so identical inputs collapse to identical ids on
+            // re-runs, and the action discriminator naturally separates
+            // ExcludeAnimations rules from generic Exclude rules even
+            // when the field/op/pattern triple matches.
+            rule.id = QUuid::createUuidV5(
+                exclusionMigrationNamespace(),
+                Detail::encodeSegment(QString::number(static_cast<int>(field)))
+                    + Detail::encodeSegment(QString::number(static_cast<int>(Operator::Contains)))
+                    + Detail::encodeSegment(pattern) + Detail::encodeSegment(QString(ActionType::ExcludeAnimations)));
+            rule.enabled = true;
+            rule.priority = 0;
+            rule.match = MatchExpression::makeLeaf(field, Operator::Contains, pattern);
+            RuleAction action;
+            action.type = QString(ActionType::ExcludeAnimations);
+            rule.actions.append(action);
+            rules.append(rule);
+        }
+    };
+    appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedApplicationsKey()).toString(), Field::DesktopFile);
+    appendOne(stash.value(ConfigKeys::Legacy::v3ExcludedWindowClassesKey()).toString(), Field::WindowClass);
 }
 
 } // namespace
@@ -2038,11 +2131,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
                     ok = false;
                 } else if (doc.object().contains(kV4DisableStashKey())
                            || doc.object().contains(kV4AnimationRulesStashKey())
-                           || doc.object().contains(ConfigKeys::Legacy::v4ExclusionStashKey())) {
+                           || doc.object().contains(ConfigKeys::Legacy::v4ExclusionStashKey())
+                           || doc.object().contains(ConfigKeys::Legacy::v4AnimationExclusionStashKey())) {
                     QJsonObject configRoot = doc.object();
                     configRoot.remove(kV4DisableStashKey());
                     configRoot.remove(kV4AnimationRulesStashKey());
                     configRoot.remove(ConfigKeys::Legacy::v4ExclusionStashKey());
+                    configRoot.remove(ConfigKeys::Legacy::v4AnimationExclusionStashKey());
                     if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
                         qWarning("ConfigMigration: failed to strip v4 stash keys from %s during cleanup retry",
                                  qPrintable(jsonPath));
@@ -2134,6 +2229,8 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     const QJsonObject stash = configRoot.value(kV4DisableStashKey()).toObject();
     const QJsonArray animationRulesStash = configRoot.value(kV4AnimationRulesStashKey()).toArray();
     const QJsonObject exclusionStash = configRoot.value(ConfigKeys::Legacy::v4ExclusionStashKey()).toObject();
+    const QJsonObject animationExclusionStash =
+        configRoot.value(ConfigKeys::Legacy::v4AnimationExclusionStashKey()).toObject();
 
     // ── Read assignments.json ──────────────────────────────────────────────
     // The prevalidate guard above already aborted on a malformed file, so a
@@ -2336,6 +2433,16 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // navigation gates, so behaviour is preserved for an upgrading user.
     appendExclusionRulesFromStash(rules, exclusionStash);
 
+    // ── Animation exclusions → WindowRules ────────────────────────────────
+    // Same fold for the animation-page exclusion lists: each surviving
+    // pattern becomes a `DesktopFile`/`WindowClass Contains <pattern>`
+    // matcher with a terminal `ExcludeAnimations` action — the new
+    // action type the effect's shouldAnimateWindow gate resolves against.
+    // Migration preserves the legacy effect-side Contains-leaf semantics
+    // so an upgrading user's "no animations for firefox" rule keeps the
+    // same matching behaviour.
+    appendAnimationExclusionRulesFromStash(rules, animationExclusionStash);
+
     // ── Relocate QuickLayouts to the quicklayouts.json sidecar (FIRST) ─────
     // Quick-layout slots are NOT window rules — they belong in the sibling
     // sidecar LayoutRegistry reads (next to windowrules.json), not in the rule
@@ -2413,10 +2520,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // needlessly touched.
     if (haveConfig
         && (configRoot.contains(kV4DisableStashKey()) || configRoot.contains(kV4AnimationRulesStashKey())
-            || configRoot.contains(ConfigKeys::Legacy::v4ExclusionStashKey()))) {
+            || configRoot.contains(ConfigKeys::Legacy::v4ExclusionStashKey())
+            || configRoot.contains(ConfigKeys::Legacy::v4AnimationExclusionStashKey()))) {
         configRoot.remove(kV4DisableStashKey());
         configRoot.remove(kV4AnimationRulesStashKey());
         configRoot.remove(ConfigKeys::Legacy::v4ExclusionStashKey());
+        configRoot.remove(ConfigKeys::Legacy::v4AnimationExclusionStashKey());
         if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
             qWarning("ConfigMigration: failed to rewrite %s after v4 conversion", qPrintable(jsonPath));
             return false;
