@@ -259,8 +259,16 @@ if(PHOSPHOR_THEME_QML_INSTALL)
     # dpkg-shlibdeps walks the dependency graph during packaging. Its
     # other dependencies (PhosphorTheme, Qt) live in the standard libdir
     # and need no RPATH entry.
+    #
+    # PREFIX "lib" — Qt's QML plugin loader on Linux searches for
+    # `lib<plugin>.so` (see `/usr/lib/qt6/qml/QtCore/libqtqmlcoreplugin.so`
+    # for the canonical Qt-shipped example). CMake's MODULE library
+    # default for QML plugins drops the lib prefix; Qt then can't find
+    # the file and reports `module "..." plugin "..." not found` even
+    # though the .so is present in the module dir.
     set_target_properties(${_phosphor_theme_qml_shared_plugin_target} PROPERTIES
         INSTALL_RPATH "$ORIGIN"
+        PREFIX "lib"
     )
 endif()
 
