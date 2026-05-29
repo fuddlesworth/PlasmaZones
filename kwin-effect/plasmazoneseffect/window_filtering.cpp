@@ -3,11 +3,9 @@
 
 #include "../plasmazoneseffect.h"
 
-#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorWindowRule/ExclusionRules.h>
-#include <PhosphorWindowRule/WindowQuery.h>
 
 #include <effect/effecthandler.h>
 #include <window.h>
@@ -15,6 +13,7 @@
 #include <QLoggingCategory>
 
 #include "../navigationhandler.h"
+#include "window_query.h"
 
 namespace PlasmaZones {
 
@@ -34,68 +33,6 @@ bool rejectedBecause(QString* out, const char* reason)
     }
     return false;
 }
-} // namespace
-
-namespace {
-
-/// Builds a PhosphorWindowRule::WindowQuery from a live KWin window. Confined
-/// to this effect translation unit so the LGPL phosphor-windowrule library
-/// never sees a KWin type. Populates every window-side field declared on
-/// `WindowQuery` so user-authored rules can match on any of them — the
-/// exclusion lists only read `windowClass` / `desktopFile`, but per-window
-/// rules from the unified rule store may match on title / pid / isFullscreen
-/// / etc.
-PhosphorWindowRule::WindowQuery exclusionQueryFor(KWin::EffectWindow* w)
-{
-    PhosphorWindowRule::WindowQuery query;
-    if (!w) {
-        return query;
-    }
-    // `WindowQuery` fields are `std::optional` — leaving a field disengaged
-    // makes a predicate over it inert (returns false). Engaging it with an
-    // empty string instead would silently match `Equals ""` and `Regex "^$"`,
-    // and would also flip `hasWindow()` from "no window context" to "engaged
-    // but empty". Gate each string assignment on a non-empty value to keep
-    // the optional / engaged-empty distinction meaningful.
-    const QString windowClass = w->windowClass();
-    if (!windowClass.isEmpty()) {
-        query.windowClass = windowClass;
-    }
-    const QString title = w->caption();
-    if (!title.isEmpty()) {
-        query.title = title;
-    }
-    KWin::Window* kw = w->window();
-    if (kw) {
-        const QString desktopFile = kw->desktopFileName();
-        if (!desktopFile.isEmpty()) {
-            query.desktopFile = desktopFile;
-        }
-        const QString appId = ::PhosphorIdentity::WindowId::normalizeAppId(desktopFile, windowClass);
-        if (!appId.isEmpty()) {
-            query.appId = appId;
-        }
-        query.pid = static_cast<int>(w->pid());
-    }
-    // Window state flags — read live so a rule like "isFullscreen=true ⇒
-    // Float" matches the moment we evaluate. Bool fields are always engaged
-    // when the window exists; reactive re-evaluation on state-change signals
-    // is a separate concern (callers re-run the query at lifecycle / drag
-    // events, which is when filter-style predicates are consulted).
-    query.isMinimized = w->isMinimized();
-    query.isFullscreen = w->isFullScreen();
-    query.isSticky = w->isOnAllDesktops();
-    // EffectWindow has no direct maximized accessor; the underlying
-    // KWin::Window exposes maximizeMode(). MaximizeFull is what the user
-    // intuits as "maximized" (both axes); horizontal-only / vertical-only
-    // modes are partial states that don't fit a single boolean and would
-    // surprise rules that target "is the window maximized."
-    if (kw) {
-        query.isMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
-    }
-    return query;
-}
-
 } // namespace
 
 void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
@@ -254,7 +191,7 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // `!isEmpty()` fast path keeps a no-exclusions user at two pointer
     // reads — same cost as the prior list-derived check.
     if (!m_snappingExclusionRuleSet.isEmpty()) {
-        if (m_snappingExclusionEvaluator.resolve(exclusionQueryFor(w)).isExcluded()) {
+        if (m_snappingExclusionEvaluator.resolve(windowRuleQueryFor(w)).isExcluded()) {
             return rejectedBecause(rejectReason, "user exclusion rule match");
         }
     }
@@ -309,7 +246,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // match on: a user can pin an OverrideAnimation* rule to AppId,
     // Title, isFullscreen, etc. — not just WindowClass — so the rule's
     // match-expression has to see the full window context here, same
-    // shape the exclusion gates below use. `exclusionQueryFor(w)` also
+    // shape the exclusion gates below use. `windowRuleQueryFor(w)` also
     // gates each string assignment on a non-empty value so the
     // `Contains ""` / `Equals ""` foot-guns stay disengaged.
     //
@@ -319,7 +256,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // an `ExcludeAnimations` rule and the exclusion gate below stays
     // authoritative for that path.
     if (!m_shaderManager.animationRuleSet().isEmpty()) {
-        if (m_shaderManager.animationRuleEvaluator().hasAnyMatch(exclusionQueryFor(w))) {
+        if (m_shaderManager.animationRuleEvaluator().hasAnyMatch(windowRuleQueryFor(w))) {
             return true;
         }
     }
@@ -371,7 +308,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     // (case-insensitive substring `Contains`) even though their lists are
     // independent. The `!isEmpty()` fast path keeps a no-exclusions user free.
     if (!m_animationExclusionRuleSet.isEmpty()) {
-        if (m_animationExclusionEvaluator.resolve(exclusionQueryFor(w)).isExcluded()) {
+        if (m_animationExclusionEvaluator.resolve(windowRuleQueryFor(w)).isExcluded()) {
             return false;
         }
     }

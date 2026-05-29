@@ -4,6 +4,7 @@
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
 #include "shader_resolve.h"
+#include "window_query.h"
 
 #include "../windowanimator.h"
 
@@ -1380,7 +1381,14 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // an engaged-empty effectId on the rule deliberately blocks the
     // tree fallthrough (the user's "no animation for this app on this
     // event" sentinel).
-    const QString windowClass = window->windowClass();
+    //
+    // Build the full per-window query once and reuse it for every
+    // resolver call below — same shape `shouldAnimateWindow` already
+    // uses for the rule-override gate, so a rule that passes the gate
+    // also resolves its slot. Caching across resolver calls is built
+    // into the evaluator's `resolveCached(windowId, …)` path; the query
+    // here is only the match input, not the cache key.
+    const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window);
     const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event base duration. The daemon mirrors its motion
@@ -1451,7 +1459,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // rejects non-positive inputs, so `durationMs` here is a safe
     // positive floor.
     const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
-        m_shaderManager.animationRuleEvaluator(), profileTree, windowId, windowClass, profilePath, baseDurationMs);
+        m_shaderManager.animationRuleEvaluator(), profileTree, windowId, query, profilePath, baseDurationMs);
     const auto& profile = resolved.profile;
     int effectiveDurationMs = resolved.durationMs;
     if (effectiveDurationMs <= 0) {

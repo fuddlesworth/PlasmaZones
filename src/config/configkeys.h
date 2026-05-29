@@ -347,8 +347,10 @@ public:
     PZ_CONFIG_KEY(notificationsAndOsdKey, "NotificationsAndOsd")
     PZ_CONFIG_KEY(minimumWindowWidthKey, "MinimumWindowWidth")
     PZ_CONFIG_KEY(minimumWindowHeightKey, "MinimumWindowHeight")
-    PZ_CONFIG_KEY(applicationsKey, "Applications")
-    PZ_CONFIG_KEY(windowClassesKey, "WindowClasses")
+    // Note: the per-list `Applications` / `WindowClasses` leaf-key accessors
+    // were retired with the v4 fold of exclusion lists into Application-
+    // subject WindowRules — the migration reads from `v3ExcludedApplicationsKey`
+    // / `v3ExcludedWindowClassesKey` below, and no live config path remains.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Performance
@@ -743,9 +745,11 @@ public:
         // v3 Exclusions group + comma-joined pattern keys — frozen at their
         // v3 literal for the same reason the disable-list group/keys above
         // are: migrateV3ToV4 reads them from a v3 config on disk, and a
-        // future runtime rename of the live `exclusionsGroup` /
-        // `applicationsKey` / `windowClassesKey` accessors must NOT silently
-        // retarget the migration to a path no v3 config ever had on disk.
+        // future runtime rename of the live `exclusionsGroup` accessor must
+        // NOT silently retarget the migration to a path no v3 config ever
+        // had on disk. (The per-list `Applications` / `WindowClasses` leaf
+        // accessors were retired with the v4 fold — no live accessor exists
+        // to drift from now, but the v3 literals stay pinned here.)
         PZ_CONFIG_GROUP(v3ExclusionsGroup, "Exclusions")
         PZ_CONFIG_KEY(v3ExcludedApplicationsKey, "Applications")
         PZ_CONFIG_KEY(v3ExcludedWindowClassesKey, "WindowClasses")

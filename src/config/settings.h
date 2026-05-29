@@ -1083,21 +1083,6 @@ private:
     void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                           TriggerListSignalFn specificSignal);
 
-    /// Member-function-pointer alias for a no-arg NOTIFY signal passed into
-    /// @ref writeCommaList — the canonical setter for comma-joined string-
-    /// list config values.
-    using CommaListSignalFn = void (Settings::*)();
-
-    /// Shared setter for QStringList settings that round-trip through the
-    /// store as a comma-joined QString. Performs the same canonicalisation
-    /// + post-write read-back compare the open-coded list setters use, so
-    /// `addX` / `removeXAt` helpers can reuse the dedupe + signal-on-real-
-    /// change semantics without duplicating the body. New list settings
-    /// should call this; the snap-assist trigger setters keep their
-    /// open-coded form to avoid touching established code paths.
-    void writeCommaList(const QString& group, const QString& key, const QStringList& list,
-                        CommaListSignalFn specificSignal);
-
     /// Member-function-pointer alias for the three per-mode disable NOTIFY
     /// signals passed into @ref writeDisableEntries. The signals carry the mode
     /// that flipped so listeners only react to their own axis.

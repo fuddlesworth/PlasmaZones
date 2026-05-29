@@ -44,7 +44,10 @@ namespace ExclusionRules {
 inline bool ruleHasAction(const WindowRule& rule, QLatin1StringView actionType)
 {
     for (const RuleAction& action : rule.actions) {
-        if (action.type == QString(actionType)) {
+        // Compare via Qt6's `QString::operator==(QLatin1StringView)` overload
+        // — wrapping in `QString(actionType)` would heap-allocate per rule
+        // for a comparison the overload performs without allocation.
+        if (action.type == actionType) {
             return true;
         }
     }

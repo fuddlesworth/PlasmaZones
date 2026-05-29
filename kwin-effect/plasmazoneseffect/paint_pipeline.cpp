@@ -3,6 +3,7 @@
 
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
+#include "window_query.h"
 
 #include <effect/effecthandler.h>
 #include <opengl/glshader.h>
@@ -280,7 +281,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
             const auto opacity =
-                resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w));
+                resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w), getWindowId(w));
             m_shaderManager.cacheFrameOpacity(w, opacity);
             if (opacity && *opacity < 1.0) {
                 data.setTranslucent();
@@ -391,7 +392,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (m_shaderManager.frameOpacityCached(w)) {
                 opacity = m_shaderManager.cachedFrameOpacity(w);
             } else {
-                opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w));
+                opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w),
+                                               getWindowId(w));
                 m_shaderManager.cacheFrameOpacity(w, opacity);
             }
             if (opacity) {

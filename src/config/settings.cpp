@@ -1657,7 +1657,7 @@ PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey
 //
 // Mirrors the Exclusions block above but lives in
 // `Animations.WindowFiltering` so animation-time filtering is independent
-// of snapping/tiling exclusions. Five scalar accessors using the same
+// of snapping/tiling exclusions. Four scalar accessors using the same
 // PZ_STORE_GET / PZ_STORE_SET_{BOOL,INT} macros — no QStringList
 // accessors remain after the v4 fold drained the per-app /per-class
 // lists into ExcludeAnimations WindowRules.
@@ -1824,29 +1824,6 @@ void Settings::writeTriggerList(const QString& group, const QString& key, const 
     const QVariantList before = m_store->readVariant(group, key).toList();
     m_store->write(group, key, triggers.mid(0, MaxTriggersPerAction));
     const QVariantList after = m_store->readVariant(group, key).toList();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT(this->*specificSignal)();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::writeCommaList(const QString& group, const QString& key, const QStringList& list,
-                              CommaListSignalFn specificSignal)
-{
-    // Pre-write snapshot + post-write read-back. The schema's
-    // `canonicalCommaList` validator may trim / dedupe the joined
-    // string, so two writes that look different in memory can
-    // canonicalise to the same on-disk value — emitting in that case
-    // would dirty the page on a no-op. Pre-write equality alone would
-    // miss canonicalisation no-ops; post-write equality alone would
-    // miss the case where the list ends up identical because the
-    // validator collapsed it. Compare both sides of the round-trip so
-    // the signal fires only when the persisted value actually
-    // changed.
-    const QString before = m_store->read<QString>(group, key);
-    m_store->write(group, key, list.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(group, key);
     if (before == after) {
         return;
     }

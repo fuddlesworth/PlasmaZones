@@ -36,17 +36,6 @@ namespace {
 // to every consumer in a single edit.
 namespace ActionParam = PhosphorWindowRule::ActionParam;
 
-/// A per-window query carrying only the window class — the animation App
-/// Rules match exclusively on `WindowClass Contains <pattern>`, so no other
-/// attribute needs populating. The context fields stay at their defaults
-/// (they are never referenced by an animation rule's match expression).
-PhosphorWindowRule::WindowQuery animationQuery(const QString& windowClass)
-{
-    PhosphorWindowRule::WindowQuery query;
-    query.windowClass = windowClass;
-    return query;
-}
-
 /// The event-scoped shader slot id for @p eventPath. Concatenation through
 /// the `QLatin1StringView + QString` overload allocates a single QString
 /// directly rather than materialising the prefix into its own QString first.
@@ -73,19 +62,19 @@ QString curveSlotFor(const QString& eventPath)
 
 PhosphorAnimationShaders::ShaderProfile
 resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                              const PhosphorAnimationShaders::ShaderProfileTree& tree, const QString& windowClass,
-                              const QString& eventPath)
+                              const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                              const PhosphorWindowRule::WindowQuery& query, const QString& eventPath)
 {
     // Empty-input short-circuit — mirrors the standalone resolver's header
-    // contract for both an empty windowClass and an empty eventPath. An empty
+    // contract for both a windowless query and an empty eventPath. An empty
     // eventPath also maps to no slot — the v3→v4 migration in
     // configmigration.cpp::animationAppRuleToWindowRule drops rules with empty
     // event paths, and live rules authored via the settings UI must carry one
     // through the OverrideAnimation* action validators — so the lookup below
     // would fall through anyway; the explicit guard keeps the documented
     // short-circuit pinned independent of any upstream invariant drift.
-    if (!windowClass.isEmpty() && !eventPath.isEmpty()) {
-        const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolve(animationQuery(windowClass));
+    if (query.hasWindow() && !eventPath.isEmpty()) {
+        const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolve(query);
         const auto action = resolved.slot(shaderSlotFor(eventPath));
         if (action) {
             // A filled slot — a Shader rule matched. effectId is taken
@@ -104,14 +93,15 @@ resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator
 
 ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                                             const PhosphorAnimationShaders::ShaderProfileTree& tree,
-                                                            const QString& windowId, const QString& windowClass,
+                                                            const QString& windowId,
+                                                            const PhosphorWindowRule::WindowQuery& query,
                                                             const QString& eventPath, int defaultDurationMs)
 {
     // Empty-input short-circuit — preserves the standalone resolvers' header
-    // contract for both an empty windowClass and an empty eventPath, and
+    // contract for both a windowless query and an empty eventPath, and
     // avoids consuming a cache slot for an evaluator walk that cannot match
-    // anything (rules match exclusively on WindowClass).
-    if (windowClass.isEmpty() || eventPath.isEmpty()) {
+    // anything (no window attribute can satisfy any rule predicate).
+    if (!query.hasWindow() || eventPath.isEmpty()) {
         return ResolvedShaderAndDuration{tree.resolve(eventPath), defaultDurationMs};
     }
     // ONE cached evaluator walk feeds both slot lookups. The standalone
@@ -121,7 +111,7 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
     // `resolveCached` keyed by the composite windowId reuses the result
     // across both slot reads AND across subsequent shader events for the
     // same window until the rule set's revision changes.
-    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, animationQuery(windowClass));
+    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
 
     // Shader slot: rule wins verbatim (engaged-empty effectId is the
     // user's "block tree fallthrough for this app/event" sentinel and
@@ -152,11 +142,11 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
 
 PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                                          const PhosphorAnimation::Profile& base,
-                                                         const QString& windowClass, const QString& eventPath,
-                                                         const QString& windowId,
+                                                         const PhosphorWindowRule::WindowQuery& query,
+                                                         const QString& eventPath, const QString& windowId,
                                                          const PhosphorAnimation::CurveRegistry& curveRegistry)
 {
-    if (windowClass.isEmpty() || eventPath.isEmpty()) {
+    if (!query.hasWindow() || eventPath.isEmpty()) {
         return base;
     }
     // Use the cached path so motion + shader + opacity lookups all share a
@@ -164,9 +154,8 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
     // own resolve() against the same query as the sister combined
     // function — wasted work even though motion-profile lookups are
     // per-event, not per-frame.
-    const PhosphorWindowRule::ResolvedActions resolved = windowId.isEmpty()
-        ? evaluator.resolve(animationQuery(windowClass))
-        : evaluator.resolveCached(windowId, animationQuery(windowClass));
+    const PhosphorWindowRule::ResolvedActions resolved =
+        windowId.isEmpty() ? evaluator.resolve(query) : evaluator.resolveCached(windowId, query);
     const auto curveAction = resolved.slot(curveSlotFor(eventPath));
     const auto timingAction = resolved.slot(timingSlotFor(eventPath));
     if (!curveAction && !timingAction) {
@@ -203,18 +192,18 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
 }
 
 std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                                          const QString& windowClass, const QString& windowId)
+                                          const PhosphorWindowRule::WindowQuery& query, const QString& windowId)
 {
-    // Empty inputs short-circuit — windowClass is the predicate axis SetOpacity
-    // rules match on (same WindowClass-only shape as the animation cascade),
-    // and windowId keys the evaluator's per-window cache. Either being empty
-    // means there is nothing to resolve, and avoiding the cached walk here
-    // keeps the paint hot path from churning the cache on every paint of a
-    // window with no class (sub-surfaces, drop shadows, screen-edge proxies).
-    if (windowClass.isEmpty() || windowId.isEmpty()) {
+    // Empty inputs short-circuit — a windowless query can't match any
+    // window-side predicate, and windowId keys the evaluator's per-window
+    // cache. Either being absent means there is nothing to resolve, and
+    // avoiding the cached walk here keeps the paint hot path from churning
+    // the cache on every paint of a window with no rule-side attributes
+    // (sub-surfaces, drop shadows, screen-edge proxies).
+    if (!query.hasWindow() || windowId.isEmpty()) {
         return std::nullopt;
     }
-    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, animationQuery(windowClass));
+    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
     // The opacity-slot id is a constant; hoist its QString materialisation
     // out of the per-paint hot path so each `resolveWindowOpacity` call
     // reuses the same heap allocation. `static const` is thread-safe under

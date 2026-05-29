@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorWindowRule/WindowQuery.h>
 
 #include <QString>
 
@@ -33,22 +34,33 @@ namespace PlasmaZones {
  * matches. The duration clamp, the curve `tryCreate` fallback, the
  * engaged-empty `effectId` sentinel, and the empty-input short-circuits all
  * live in these shims — the evaluator stays generic.
+ *
+ * Every resolver takes a `PhosphorWindowRule::WindowQuery` carrying the FULL
+ * window context (AppId / WindowClass / Title / WindowRole / DesktopFile /
+ * WindowType / Pid / state flags), built once per window by the GPL-side
+ * caller via `windowRuleQueryFor(KWin::EffectWindow*)`. Pre-PR the resolvers
+ * took a bare `windowClass` and the rule layer matched exclusively on
+ * `WindowClass Contains <pattern>`; v4 widened the match shape so a
+ * user-authored rule may pin to `AppId` / `DesktopFile` / `Title` / etc.
+ * Routing the full query through to the resolver keeps the rule-override
+ * gate (which already builds the full query) and the slot resolution in
+ * lockstep — a rule that passes the gate also resolves its slot.
  */
 
 /**
- * @brief Cascade resolver: window-class shader rule → per-event tree.
+ * @brief Cascade resolver: per-window rule → per-event tree.
  *
- * If an enabled animation rule fills the `anim-shader:<eventPath>` slot for
- * @p windowClass, returns a `ShaderProfile` whose `effectId` / `parameters`
- * come verbatim from the rule (an engaged-empty `effectId` is preserved as
- * the "block the per-event default" sentinel). Otherwise — including for an
- * empty @p windowClass or @p eventPath — falls through to
- * `tree.resolve(eventPath)`.
+ * If an enabled animation rule's match expression resolves for @p query and
+ * the rule fills the `anim-shader:<eventPath>` slot, returns a `ShaderProfile`
+ * whose `effectId` / `parameters` come verbatim from the rule (an
+ * engaged-empty `effectId` is preserved as the "block the per-event default"
+ * sentinel). Otherwise — including for a windowless @p query (`hasWindow()`
+ * false) or an empty @p eventPath — falls through to `tree.resolve(eventPath)`.
  */
 PhosphorAnimationShaders::ShaderProfile
 resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                              const PhosphorAnimationShaders::ShaderProfileTree& tree, const QString& windowClass,
-                              const QString& eventPath);
+                              const PhosphorAnimationShaders::ShaderProfileTree& tree,
+                              const PhosphorWindowRule::WindowQuery& query, const QString& eventPath);
 
 /**
  * @brief Combined shader-profile + duration cascade for the per-window-event
@@ -65,9 +77,9 @@ resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator
  * one cached walk and reads both slots from the same `ResolvedActions`.
  *
  * Semantics match the standalone resolvers byte-for-byte:
- *  - Empty @p windowClass / @p eventPath: returns
+ *  - Windowless @p query (`hasWindow()` false) / empty @p eventPath: returns
  *    `{ tree.resolve(eventPath), defaultDurationMs }` without touching the
- *    evaluator (the rule layer matches exclusively on `WindowClass`).
+ *    evaluator (no window attribute could match any rule predicate).
  *  - Shader slot filled: ShaderProfile taken verbatim (engaged-empty effectId
  *    preserved as the "block tree fallthrough" sentinel).
  *  - Timing slot filled with `durationMs > 0`: that value, clamped to
@@ -81,18 +93,20 @@ struct ResolvedShaderAndDuration
 };
 ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                                             const PhosphorAnimationShaders::ShaderProfileTree& tree,
-                                                            const QString& windowId, const QString& windowClass,
+                                                            const QString& windowId,
+                                                            const PhosphorWindowRule::WindowQuery& query,
                                                             const QString& eventPath, int defaultDurationMs);
 
 /**
- * @brief Motion-profile cascade: window-class timing rule → base profile.
+ * @brief Motion-profile cascade: per-window timing rule → base profile.
  *
  * Returns @p base with its `curve` / `duration` replaced when a timing rule
  * fills the `anim-timing:<eventPath>` slot. A non-empty curve is parsed via
  * @p curveRegistry's `tryCreate` (a malformed curve keeps the base curve); a
  * `durationMs > 0` overrides the duration, clamped identically to
- * `resolveAnimationShaderAndDuration`. An empty @p windowClass / @p eventPath
- * or no matching rule returns @p base unchanged.
+ * `resolveAnimationShaderAndDuration`. A windowless @p query
+ * (`hasWindow()` false) or empty @p eventPath, or no matching rule, returns
+ * @p base unchanged.
  *
  * @p windowId routes the lookup through the evaluator's per-window match
  * cache so the curve / timing / shader resolvers share their walks. Pass
@@ -102,8 +116,8 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
  */
 PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                                          const PhosphorAnimation::Profile& base,
-                                                         const QString& windowClass, const QString& eventPath,
-                                                         const QString& windowId,
+                                                         const PhosphorWindowRule::WindowQuery& query,
+                                                         const QString& eventPath, const QString& windowId,
                                                          const PhosphorAnimation::CurveRegistry& curveRegistry);
 
 /**
@@ -111,22 +125,22 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
  *        `SetOpacity` rules.
  *
  * Returns the rule-resolved opacity in `[0.0, 1.0]` when an enabled rule
- * matching @p windowClass fills the `opacity` slot with a valid `value`
- * param, or `std::nullopt` when no rule matches / the param is missing /
- * the value falls outside the documented range. Caller applies the
- * returned value via `KWin::WindowPaintData::setOpacity` (absolute set,
- * not multiplicative — SetOpacity semantics are "make the window THIS
- * opaque," not "scale by this factor").
+ * whose match expression resolves for @p query fills the `opacity` slot
+ * with a valid `value` param, or `std::nullopt` when no rule matches / the
+ * param is missing / the value falls outside the documented range. Caller
+ * applies the returned value via `KWin::WindowPaintData::setOpacity`
+ * (absolute set, not multiplicative — SetOpacity semantics are "make the
+ * window THIS opaque," not "scale by this factor").
  *
- * Empty @p windowClass or @p windowId short-circuit to `nullopt` — same
- * shape as the animation resolvers above; rules match exclusively on
- * `WindowClass` so a missing class can't match anything.
+ * Windowless @p query (`hasWindow()` false) or empty @p windowId
+ * short-circuit to `nullopt` — a windowless query can't match any
+ * window-side predicate, and an empty windowId can't key the cache.
  *
  * Caller is the effect's `paintWindow` hook. The resolver does NOT cache
  * across calls — the evaluator's per-window cache (`resolveCached`) is
  * the right cache scope for this lookup, and the resolver consumes it.
  */
 std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                                          const QString& windowClass, const QString& windowId);
+                                          const PhosphorWindowRule::WindowQuery& query, const QString& windowId);
 
 } // namespace PlasmaZones

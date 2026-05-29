@@ -1409,8 +1409,8 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 // WindowClasses} leaf keys, and both Animations.WindowFiltering.{Applications,
 // WindowClasses} leaf keys. The values are stashed into four temporary
 // root keys (`_v4DisableStash`, `_v4AnimationRulesStash`, `_v4ExclusionStash`,
-// `_v4AnimationExclusionStash`) for finalizeV4Conversion to
-// consume) and stamps `_version = 4`. finalizeV4Conversion (a post-chain step)
+// `_v4AnimationExclusionStash`) for finalizeV4Conversion to consume,
+// and stamps `_version = 4`. finalizeV4Conversion (a post-chain step)
 // reads that stash + assignments.json, writes windowrules.json, then deletes
 // assignments.json as the irreversible commit.
 
@@ -1432,6 +1432,19 @@ inline QString kV4DisableStashKey()
 inline QString kV4AnimationRulesStashKey()
 {
     return ConfigKeys::Legacy::v4AnimationRulesStashKey();
+}
+// Sibling aliases for the v4 exclusion stashes added when the v3 Exclusions /
+// Animations.WindowFiltering lists were folded into Exclude / ExcludeAnimations
+// WindowRules. Same alias-policy as the two above: every stash key reads
+// through a short shim in this TU so the call sites stay symmetric and the
+// purgeStaleKeys preservation list still resolves through ConfigKeys::Legacy.
+inline QString kV4ExclusionStashKey()
+{
+    return ConfigKeys::Legacy::v4ExclusionStashKey();
+}
+inline QString kV4AnimationExclusionStashKey()
+{
+    return ConfigKeys::Legacy::v4AnimationExclusionStashKey();
 }
 
 // Inner field names inside the `_v4DisableStash` object. Shared between the
@@ -1582,7 +1595,7 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // list stash drains — same shape, same diagnostic on non-string disk
     // values, same skip-on-empty. The `sourceLabel` argument is the dotted
     // group path the warning text uses for operator forensics; the rest is
-    // mechanical. Captures `groupSrc`/`stashDst` by reference so the helper
+    // mechanical. Takes `groupSrc`/`stashDst` by reference so the helper
     // works as either a free read-modify-write on the source group OR (in
     // the dot-path animation case) on the nested object the caller already
     // extracted.
@@ -1616,7 +1629,7 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         root[ConfigKeys::Legacy::v3ExclusionsGroup()] = exclusions;
     }
     if (!exclusionStash.isEmpty()) {
-        root[ConfigKeys::Legacy::v4ExclusionStashKey()] = exclusionStash;
+        root[kV4ExclusionStashKey()] = exclusionStash;
     }
 
     // Animation exclusion stash: the legacy
@@ -1627,11 +1640,14 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // QStringList settings and the per-effect rebuild. Same shape as the
     // snapping-side stash above — read raw, surface non-string disk
     // values, strip the keys, and drop the (dot-path) group if it's now
-    // empty. Note the group lookup walks the dot-path itself rather than
-    // relying on the live accessor: a v3 config wrote
-    // `root["Animations"]["WindowFiltering"]`, so the freeze-policy
-    // segments-by-hand instead of trusting the live group accessor's path.
-    QJsonObject animationsForFiltering = root.value(QStringLiteral("Animations")).toObject();
+    // empty. Group access routes through `Legacy::v4AnimationsGroup()`
+    // so this block stays in lockstep with the AnimationAppRules block
+    // above; a future rename of the frozen accessor flows through both.
+    // The "WindowFiltering" subgroup segment stays inline — there is no
+    // dedicated frozen accessor for it, and the live `windowFilteringKey()`
+    // is a leaf accessor that would create drift if reused as a subgroup
+    // name.
+    QJsonObject animationsForFiltering = root.value(ConfigKeys::Legacy::v4AnimationsGroup()).toObject();
     QJsonObject animationFiltering = animationsForFiltering.value(QStringLiteral("WindowFiltering")).toObject();
     QJsonObject animationExclusionStash;
     stashListEntry(animationFiltering, animationExclusionStash, ConfigKeys::Legacy::v3ExcludedApplicationsKey(),
@@ -1644,12 +1660,12 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         animationsForFiltering[QStringLiteral("WindowFiltering")] = animationFiltering;
     }
     if (animationsForFiltering.isEmpty()) {
-        root.remove(QStringLiteral("Animations"));
+        root.remove(ConfigKeys::Legacy::v4AnimationsGroup());
     } else {
-        root[QStringLiteral("Animations")] = animationsForFiltering;
+        root[ConfigKeys::Legacy::v4AnimationsGroup()] = animationsForFiltering;
     }
     if (!animationExclusionStash.isEmpty()) {
-        root[ConfigKeys::Legacy::v4AnimationExclusionStashKey()] = animationExclusionStash;
+        root[kV4AnimationExclusionStashKey()] = animationExclusionStash;
     }
 
     // Stamp literal 4 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
@@ -2126,11 +2142,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         // still-pending, idempotent cleanup steps.
         bool ok = true;
 
-        // Strip the v4 scratch keys (`_v4DisableStash`, `_v4AnimationRulesStash`)
-        // from config.json if any survived a partial earlier run. Log every
-        // failure mode (open / parse / not-object / write) so a leftover-stash
-        // configuration that can't be cleaned surfaces as an actionable
-        // warning rather than silently succeeding.
+        // Strip the four v4 scratch keys (`_v4DisableStash`, `_v4AnimationRulesStash`,
+        // `_v4ExclusionStash`, `_v4AnimationExclusionStash`) from config.json if any
+        // survived a partial earlier run. Log every failure mode (open / parse /
+        // not-object / write) so a leftover-stash configuration that can't be
+        // cleaned surfaces as an actionable warning rather than silently succeeding.
         if (QFile::exists(jsonPath)) {
             QFile cf(jsonPath);
             if (!cf.open(QIODevice::ReadOnly)) {
@@ -2153,13 +2169,13 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
                     ok = false;
                 } else if (doc.object().contains(kV4DisableStashKey())
                            || doc.object().contains(kV4AnimationRulesStashKey())
-                           || doc.object().contains(ConfigKeys::Legacy::v4ExclusionStashKey())
-                           || doc.object().contains(ConfigKeys::Legacy::v4AnimationExclusionStashKey())) {
+                           || doc.object().contains(kV4ExclusionStashKey())
+                           || doc.object().contains(kV4AnimationExclusionStashKey())) {
                     QJsonObject configRoot = doc.object();
                     configRoot.remove(kV4DisableStashKey());
                     configRoot.remove(kV4AnimationRulesStashKey());
-                    configRoot.remove(ConfigKeys::Legacy::v4ExclusionStashKey());
-                    configRoot.remove(ConfigKeys::Legacy::v4AnimationExclusionStashKey());
+                    configRoot.remove(kV4ExclusionStashKey());
+                    configRoot.remove(kV4AnimationExclusionStashKey());
                     if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
                         qWarning("ConfigMigration: failed to strip v4 stash keys from %s during cleanup retry",
                                  qPrintable(jsonPath));
@@ -2250,9 +2266,8 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
 
     const QJsonObject stash = configRoot.value(kV4DisableStashKey()).toObject();
     const QJsonArray animationRulesStash = configRoot.value(kV4AnimationRulesStashKey()).toArray();
-    const QJsonObject exclusionStash = configRoot.value(ConfigKeys::Legacy::v4ExclusionStashKey()).toObject();
-    const QJsonObject animationExclusionStash =
-        configRoot.value(ConfigKeys::Legacy::v4AnimationExclusionStashKey()).toObject();
+    const QJsonObject exclusionStash = configRoot.value(kV4ExclusionStashKey()).toObject();
+    const QJsonObject animationExclusionStash = configRoot.value(kV4AnimationExclusionStashKey()).toObject();
 
     // ── Read assignments.json ──────────────────────────────────────────────
     // The prevalidate guard above already aborted on a malformed file, so a
@@ -2545,12 +2560,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // needlessly touched.
     if (haveConfig
         && (configRoot.contains(kV4DisableStashKey()) || configRoot.contains(kV4AnimationRulesStashKey())
-            || configRoot.contains(ConfigKeys::Legacy::v4ExclusionStashKey())
-            || configRoot.contains(ConfigKeys::Legacy::v4AnimationExclusionStashKey()))) {
+            || configRoot.contains(kV4ExclusionStashKey()) || configRoot.contains(kV4AnimationExclusionStashKey()))) {
         configRoot.remove(kV4DisableStashKey());
         configRoot.remove(kV4AnimationRulesStashKey());
-        configRoot.remove(ConfigKeys::Legacy::v4ExclusionStashKey());
-        configRoot.remove(ConfigKeys::Legacy::v4AnimationExclusionStashKey());
+        configRoot.remove(kV4ExclusionStashKey());
+        configRoot.remove(kV4AnimationExclusionStashKey());
         if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
             qWarning("ConfigMigration: failed to rewrite %s after v4 conversion", qPrintable(jsonPath));
             return false;

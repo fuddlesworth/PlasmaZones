@@ -8,6 +8,7 @@
 #include "../snapassisthandler.h"
 #include "../windowanimator.h"
 #include "shader_resolve.h"
+#include "window_query.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -461,7 +462,12 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         // the resolver call AND the deep `Profile::operator!=` (which
         // walks `curve->equals` virtual + 5 std::optional comparisons)
         // — the cost is paid on every animated snap otherwise.
-        const QString windowClass = window->windowClass();
+        //
+        // Build the full per-window query once and reuse for the shader
+        // resolver call below — matches the shape `shouldAnimateWindow`
+        // uses for its rule-override gate, so a rule that gates the
+        // animation also resolves its curve / timing / shader slots.
+        const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window);
         const auto& baseProfile = m_windowAnimator->profile();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
@@ -469,9 +475,9 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         // resolver call AND the deep `Profile::operator!=`. Resolution routes
         // through the unified RuleEvaluator via the effect-local shim.
         if (!m_shaderManager.animationRuleSet().isEmpty()) {
-            motionProfile = PlasmaZones::resolveAnimationMotionProfile(m_shaderManager.animationRuleEvaluator(),
-                                                                       baseProfile, windowClass, profilePath,
-                                                                       getWindowId(window), m_curveRegistry);
+            motionProfile =
+                PlasmaZones::resolveAnimationMotionProfile(m_shaderManager.animationRuleEvaluator(), baseProfile, query,
+                                                           profilePath, getWindowId(window), m_curveRegistry);
             if (motionProfile != baseProfile)
                 motionOverridePtr = &motionProfile;
         }
@@ -508,8 +514,8 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         if (m_windowAnimator->hasAnimation(window)) {
             // Same cascade as tryBeginShaderForEvent: rule layer wins
             // for matching windows; engaged-empty rule effectId blocks
-            // the tree fallthrough. Reuse the `windowClass` local from
-            // above instead of re-calling `window->windowClass()`.
+            // the tree fallthrough. Reuse the `query` local from the
+            // motion-cascade above instead of rebuilding the WindowQuery.
             // Note: the snap shader path leaves durationMs at zero on
             // purpose (see ShaderTransition docstring in types.h:126-136
             // and paint_pipeline.cpp:155-170) — paintWindow rides the
@@ -518,7 +524,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             // above (driving the animator's duration), so the shader
             // still terminates with the rule-overridden snap motion.
             const auto shaderProfile = PlasmaZones::resolveAnimationShaderProfile(
-                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), windowClass, profilePath);
+                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), query, profilePath);
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
             }

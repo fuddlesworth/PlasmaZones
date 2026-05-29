@@ -41,6 +41,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_identity.cpp
     plasmazoneseffect/mouse_drag.cpp
     plasmazoneseffect/window_filtering.cpp
+    plasmazoneseffect/window_query.cpp
+    plasmazoneseffect/window_query.h
     plasmazoneseffect/screens.cpp
     plasmazoneseffect/window_lifecycle.cpp
     plasmazoneseffect/daemon_bringup.cpp
