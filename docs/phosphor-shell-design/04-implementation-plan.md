@@ -262,6 +262,55 @@ Naming notes:
 
 **Phase 2 gate:** each library has a passing CLI demo; `phosphor-services` umbrella is deleted; `phosphorctl call <ns>.<fn>` works for every service. Tag `phosphor-integrations-0.1`.
 
+### 2.1: `phosphor-service-pipewire` outline *(in flight, feat/phase-2.1-pipewire-service)*
+
+Public API surface lands in implementation PRs; this section is the planning outline so a contributor can pick up the work without re-deriving the shape.
+
+**Milestones**
+
+1. **Skeleton + CMake plumbing (S, ~1 day).** `libs/phosphor-service-pipewire/` directory with the same shape Phase 2.0 established: `CMakeLists.txt`, `PhosphorServicePipeWireConfig.cmake.in`, `include/PhosphorServicePipeWire/`, `src/`, `tests/`. `qt_add_qml_module` (STATIC + SHARED variants per the phosphor-theme pattern so the runtime install lands under `${KDE_INSTALL_QMLDIR}/Phosphor/Service/PipeWire/`). Adopt `QTP0001 NEW`. Wire `phosphor-shell` linkage and `registerQmlTypes()` from `src/shell/main.cpp` last.
+2. **PipeWire core-connect lifecycle (M, ~3 days).** `PipeWireConnection` owns the `pw_main_loop` + `pw_context` + `pw_core`. Off-thread loop on a `QThread` (PipeWire's loop is not Qt-event-loop friendly), with a `QObject` bridge that posts events to the GUI thread via queued signals. Reconnect on `pw_core` error (PipeWire daemon restart). No public surface yet, just the lifecycle and the cross-thread plumbing.
+3. **Object registry: nodes, ports, links, devices (M-L, ~5 days).** `PipeWireRegistryObserver` walks the `pw_registry` and materialises typed Qt objects (`PwNode`, `PwDevice`, `PwLink`, `PwPort`) parented to the connection. Property updates routed through queued signals to the GUI thread. Filter to the node types the mixer cares about (`Audio/Sink`, `Audio/Source`, `Stream/Output/Audio`, `Stream/Input/Audio`).
+4. **Sink/source/stream models (M, ~4 days).** `PwSinkModel`, `PwSourceModel`, `PwStreamModel` (per-app streams) as `QAbstractListModel` over the registry's filtered view. Role list mirrors WirePlumber's metadata: id, nick, description, mediaClass, channelCount, volume[], muted, isDefault, formFactor (where wireplumber surfaces it). Pin the role enum integer values + role-name strings via smoke tests (the Phase 2.0 sni-shell pattern).
+5. **Volume + mute write path (M, ~3 days).** `PwNode::setVolume(qreal)`, `setVolumes(QList<qreal>)`, `setMuted(bool)`. PipeWire writes go through `pw_node_set_param(SPA_PARAM_Props)` with a `SPA_PROP_channelVolumes` array; round-trip through the registry signal echo so the model reflects clamped values. Per-channel volume + Linear vs Cubic mapping decision (see Unknowns).
+6. **Default-sink / default-source switching (S, ~1-2 days).** Through WirePlumber's `default-nodes-api` metadata (the documented Qt-friendly surface) rather than touching `pw_metadata` directly. Optional fallback to `pw_metadata` if the wp module is absent; logged.
+7. **QML registration + singleton facade (S, ~1 day).** `Phosphor.Service.PipeWire 1.0` exposes the four models + the `PipeWireHost` host singleton (`defaultSink`, `defaultSource`, `connected`, `daemonAvailable`). Idempotent registration via `std::call_once` to match siblings.
+8. **CLI demo: `examples/phosphor-service-pipewire-cli/` (M, ~3 days).** Standalone `QCoreApplication`. Subcommands match the row in the 2.1 table: `list sinks`, `list sources`, `list streams`, `set-volume <id> <pct>`, `set-default <id>`, `mute <id>`, `unmute <id>`. Drives the lib directly, no IPC — same pattern as `examples/phosphor-theme-cli/`.
+9. **Tests: smoke + role pinning (S, ~1 day).** No real PipeWire on CI; smoke tests cover construction, model emptiness under no-host, role-name + enum-value pins as wire contract. A `tests/perspecific_fakeloop.h` PipeWire-loop stub if the lifecycle code grows enough invariants to need integration-style coverage.
+10. **README + Status section (S, half a day).** Match the Phase-2.0 sibling convention: SPDX → one-line summary → Responsibility → Key types → Typical use → Design notes → Dependencies → Status. Status leads with `Phase 2.1: shipped.` once the gate passes.
+
+**Total effort:** L (≈ 3-4 wks solo). Most of the wall-clock is in milestones 2-3-5; the rest is mechanical given the Phase-2.0 templates.
+
+**Dependencies**
+
+- `libpipewire-0.3` (PipeWire ≥ 0.3.60 baseline; 1.0+ preferred since the WirePlumber metadata API stabilised there).
+- `libwireplumber-0.5` for the default-nodes metadata path. Optional but strongly preferred over raw `pw_metadata`.
+- `phosphor-dbus` — not used; PipeWire surface is native, not D-Bus. (Brightness fallback for the same shell area lives in 2.4 and DOES use D-Bus.)
+- Qt6 ≥ 6.6 Core / Qml. No QtGui dependency (mixer state is non-visual; QML consumers handle rendering).
+- Build dep on `pkgconf` for `libpipewire-0.3` and `wireplumber-0.5` discovery. Bake into the top-level `CMakeLists.txt` find_package layer.
+
+**Risks**
+
+- **PipeWire loop threading.** `pw_main_loop` is not a Qt event loop; mixing it with Qt's invokeMethod / queued signals has historically been a footgun. Mitigation: own a dedicated `QThread` with the loop, post into Qt via `QMetaObject::invokeMethod(..., Qt::QueuedConnection, ...)`. Keep the cross-thread API surface narrow (the host singleton's slots), do NOT expose raw PipeWire objects to QML.
+- **WirePlumber availability variance.** Some distros (musl-based, embedded) don't ship wireplumber; we'd then be talking raw `pw_metadata`. Add a probe at connect time, log the missing API, fall back gracefully on the default-nodes path (read-only).
+- **Volume cubic-vs-linear.** PipeWire's `SPA_PROP_channelVolumes` is linear amplitude; user-facing percentages typically want cubic (matches pavucontrol / GNOME Sound). Decide on the storage shape (we expose linear internally) and provide a `Phosphor.Service.PipeWire.Mixer` QML helper to convert.
+- **Daemon restart correctness.** PipeWire daemon restarts during user sessions (driver hotplug, kernel module reload). The host must drop and re-acquire the registry without leaking the model rows or zombie streams. Mirror Phase-2.0 SNI's `watcher promoted` pattern: announce the rebuild via a signal, model resets, no zombie items.
+- **CI without real PipeWire.** Smoke tests must construct the host with `daemonAvailable=false` and not crash. Same as the SNI `modelWithoutHostIsEmpty` shape.
+- **API churn between PipeWire 0.3 / 1.0 / WirePlumber 0.4 / 0.5.** Pin minimum versions in CMake and document the upgrade path (see Unknowns).
+
+**Unknowns to resolve before / during implementation**
+
+| # | Question | Drives |
+|---|----------|--------|
+| U1 | Minimum supported PipeWire version: 0.3.60 (Debian stable baseline) or 1.0 (modern distros, cleaner WP metadata API)? | CMake `find_package` floor; whether the `wp_default_nodes_api` calls need a fallback path. |
+| U2 | Linear vs cubic vs perceptual (M3 power-curve) volume on the public QML surface. | Mixer UI behaviour and whether per-app streams expose the same curve. |
+| U3 | One process or two: keep PipeWire owned by the same `QGuiApplication` as the shell, or run a tiny `phosphor-pipewire-daemon` and talk via `phosphor-ipc`? | If two-process, milestone 2 grows the IPC plumbing; if single-process, the QThread lifecycle is the only complexity. Current lean: single-process, the SNI/Mpris template already proves Qt can host an in-process service. |
+| U4 | Scope of stream metadata: do we surface PipeWire's per-stream tags (`application.name`, `application.icon-name`, `media.role`) or stop at the WirePlumber-curated set? | Affects role list + cli demo `list streams` output shape. |
+| U5 | Privacy-indicator hook: should `phosphor-service-pipewire` surface a `recordingActiveStreams` signal in Phase 2.1, or defer to a separate `Phosphor.PrivacyIndicator` consumer in Phase 3+? | Decides whether milestone 3 walks `Audio/Source` stream nodes only or also `Audio/Source/Capture` plus their associated client names. |
+| U6 | CLI demo argv format: positional (`list sinks`) or subcommand-with-flags (`list --kind sink`)? Tradeoffs in the row: positional matches Phase-2.0's idiomatic feel; flags compose better with future filters. | One file in the example; cheap to flip; pick before milestone 8 lands. |
+
+**Out of scope for 2.1** — the mixer **UI** (slider strip, per-app expand, OSDs) is Phase 3 / 4 territory and lives in `examples/phosphor-shell/` or a dedicated `phosphor-mixer` demo. The shell's hotkey-driven volume actions wire through `phosphorctl call mixer.setVolume ...` once a Phase-3 `IpcTarget` lands on top of this lib.
+
 ---
 
 ## Phase 3: UI primitives + first visible examples
