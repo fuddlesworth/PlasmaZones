@@ -165,6 +165,37 @@ private Q_SLOTS:
         QVERIFY(r->iconForName(QStringLiteral("test-app"), 16, 0).isNull());
         QVERIFY(r->iconForName(QStringLiteral("test-app"), 16, -1).isNull());
     }
+
+    // setThemeName rejects path-traversal patterns at the API boundary.
+    // The accepted name is concatenated into filesystem paths
+    // (root + "/" + themeName + "/index.theme") so a value like
+    // "../etc" would let the resolver probe arbitrary files.
+    void setThemeNameRejectsUnsafeNames()
+    {
+        auto* r = IconThemeResolver::instance();
+        // First, establish a known-good theme as the baseline.
+        r->setThemeName(QStringLiteral("testtheme"));
+        const QString before = r->themeName();
+        QCOMPARE(before, QStringLiteral("testtheme"));
+
+        // Each of these should be rejected and leave themeName()
+        // unchanged. Empty is allowed (the "fall back to detected
+        // theme" path), so it's not part of the unsafe set.
+        r->setThemeName(QStringLiteral("foo/bar"));
+        QCOMPARE(r->themeName(), before);
+
+        r->setThemeName(QStringLiteral("../etc"));
+        QCOMPARE(r->themeName(), before);
+
+        r->setThemeName(QStringLiteral("hicolor\\..\\evil"));
+        QCOMPARE(r->themeName(), before);
+
+        QString withNul = QStringLiteral("name");
+        withNul.append(QChar(QChar::Null));
+        withNul.append(QStringLiteral("evil"));
+        r->setThemeName(withNul);
+        QCOMPARE(r->themeName(), before);
+    }
 };
 
 QTEST_MAIN(TestIconThemeResolver)

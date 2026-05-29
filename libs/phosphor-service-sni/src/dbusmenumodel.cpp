@@ -172,6 +172,12 @@ bool DBusMenuModel::Private::flushPendingRebuild()
 void DBusMenuModel::Private::buildProxy()
 {
     proxy.reset();
+    // Reset the revision watermark: each menu source maintains its own
+    // independent revision sequence, and carrying the prior source's
+    // value would let `onLayoutUpdated`'s `rev <= revision` guard
+    // silently drop fresh LayoutUpdated signals for the new source
+    // until the first GetLayout reply re-establishes a baseline.
+    revision = 0;
     // Drop any opened-id tracking from the prior menu. We're losing
     // the proxy that those ids referenced, so there's no longer a way
     // to fire closed for them; clearing here keeps aboutToHide from

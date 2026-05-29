@@ -18,6 +18,7 @@
 #include <QDebug>
 #include <QHash>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QStringList>
 
 Q_LOGGING_CATEGORY(lcSniHost, "phosphor.service.sni.host")
@@ -104,6 +105,29 @@ void StatusNotifierHost::Private::connectToWatcher()
                     QStringLiteral("StatusNotifierItemRegistered"), q, SLOT(_q_remoteItemRegistered(QString)));
         bus.connect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
                     QStringLiteral("StatusNotifierItemUnregistered"), q, SLOT(_q_remoteItemUnregistered(QString)));
+        // If our passive watcher is later promoted to canonical owner
+        // (the prior owner exited and `tryClaimOwnership` succeeded),
+        // tear down the bus subscriptions and switch to local-signal
+        // wiring. Without this, every registration would dispatch via
+        // both the bus loopback AND the local signal; the contains()
+        // guard makes the duplicate idempotent but each item still
+        // pays an extra DBus round-trip and a duplicate log line.
+        QObject::connect(watcher, &StatusNotifierWatcher::promotedToOwner, q, [this]() {
+            auto bus = QDBusConnection::sessionBus();
+            bus.disconnect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
+                           QStringLiteral("StatusNotifierItemRegistered"), q, SLOT(_q_remoteItemRegistered(QString)));
+            bus.disconnect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
+                           QStringLiteral("StatusNotifierItemUnregistered"), q,
+                           SLOT(_q_remoteItemUnregistered(QString)));
+            QObject::connect(watcher, &StatusNotifierWatcher::StatusNotifierItemRegistered, q,
+                             [this](const QString& c) {
+                                 onItemRegistered(c);
+                             });
+            QObject::connect(watcher, &StatusNotifierWatcher::StatusNotifierItemUnregistered, q,
+                             [this](const QString& c) {
+                                 onItemUnregistered(c);
+                             });
+        });
     }
 }
 
@@ -166,6 +190,20 @@ void StatusNotifierHost::Private::seedExistingItems()
         }
         const auto list = reply.value().toStringList();
         qCInfo(lcSniHost) << "seedExistingItems found" << list.size() << "pre-existing tray item(s):" << list;
+        // Reconcile: reap zombies whose owners died while the prior
+        // watcher was down. The new watcher's authoritative set is the
+        // canonicals it just published; anything we still hold that's
+        // not in that set has lost its NameOwnerChanged signal source.
+        const QSet<QString> incoming(list.cbegin(), list.cend());
+        QStringList zombies;
+        for (auto it = itemsByCanonical.cbegin(); it != itemsByCanonical.cend(); ++it) {
+            if (!incoming.contains(it.key()))
+                zombies.append(it.key());
+        }
+        for (const auto& canonical : zombies) {
+            qCInfo(lcSniHost) << "reaping zombie item after watcher respawn:" << canonical;
+            onItemUnregistered(canonical);
+        }
         for (const auto& canonical : list) {
             onItemRegistered(canonical);
         }

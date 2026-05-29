@@ -155,21 +155,33 @@ QStringList xdgIconSearchPath()
 // menu provider) probe arbitrary files via QFile::exists and
 // potentially decode any image-shaped file inside the calling
 // process. The same applies to `extraThemeDir` when present.
-bool isUnsafeIconName(const QString& name)
+// Path-traversal rejection shared by `isUnsafeIconName` (icon name
+// concatenated into `<root>/<theme>/<dir>/<name><ext>`) and
+// `isUnsafeThemeName` (theme name concatenated into
+// `<root>/<theme>/index.theme`). Reject path separators, parent-dir
+// tokens, and NUL so any future hardening lands in one place.
+bool containsPathTraversalChars(const QString& s)
 {
-    if (name.contains(QLatin1Char('/')))
+    if (s.contains(QLatin1Char('/')))
         return true;
-    if (name.contains(QLatin1Char('\\')))
+    if (s.contains(QLatin1Char('\\')))
         return true;
-    if (name.contains(QLatin1String("..")))
+    if (s.contains(QLatin1String("..")))
         return true;
-    if (name.contains(QChar(QChar::Null)))
+    if (s.contains(QChar(QChar::Null)))
         return true;
     return false;
 }
 
+bool isUnsafeIconName(const QString& name)
+{
+    return containsPathTraversalChars(name);
+}
+
 bool isUnsafeIconDir(const QString& dir)
 {
+    // IconThemePath values are full filesystem paths so they legitimately
+    // contain `/`; only reject parent-dir traversal patterns and NUL.
     if (dir.contains(QLatin1String("/../")) || dir.startsWith(QLatin1String("../"))
         || dir.endsWith(QLatin1String("/..")))
         return true;
@@ -178,21 +190,9 @@ bool isUnsafeIconDir(const QString& dir)
     return false;
 }
 
-// Theme names are concatenated into filesystem paths (root + "/" +
-// themeName + "/index.theme") and themed directory walks, so the same
-// path-traversal hardening applied to icon names and IconThemePath
-// applies. Reject path separators, parent-dir tokens, and NUL.
 bool isUnsafeThemeName(const QString& name)
 {
-    if (name.contains(QLatin1Char('/')))
-        return true;
-    if (name.contains(QLatin1Char('\\')))
-        return true;
-    if (name.contains(QLatin1String("..")))
-        return true;
-    if (name.contains(QChar(QChar::Null)))
-        return true;
-    return false;
+    return containsPathTraversalChars(name);
 }
 
 } // namespace

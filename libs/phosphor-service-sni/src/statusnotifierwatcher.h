@@ -61,6 +61,11 @@ Q_SIGNALS:
     // Local-only: Watcher → Host wiring; the Adaptor ignores these.
     void registeredItemsChanged();
     void hostRegisteredChanged();
+    /// Fired when this watcher transitions from passive to canonical
+    /// owner via onOwnershipReleased. StatusNotifierHost listens to
+    /// switch its item-registration wiring from bus-subscription to
+    /// local-signal so registrations stop double-dispatching.
+    void promotedToOwner();
 
 private Q_SLOTS:
     void onServiceUnregistered(const QString& service);

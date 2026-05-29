@@ -7,6 +7,7 @@
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
+#include <QDBusObjectPath>
 #include <QLoggingCategory>
 
 #include <algorithm>
@@ -120,6 +121,10 @@ void StatusNotifierWatcher::onOwnershipReleased(const QString& service)
     m_busWatcher->setWatchMode(QDBusServiceWatcher::WatchForUnregistration);
     connect(m_busWatcher, &QDBusServiceWatcher::serviceUnregistered, this,
             &StatusNotifierWatcher::onServiceUnregistered, Qt::UniqueConnection);
+    // Let StatusNotifierHost switch its registration wiring from the
+    // bus-subscription path (set up in passive mode) to local-signal
+    // delivery so item registrations stop double-dispatching.
+    Q_EMIT promotedToOwner();
 }
 
 StatusNotifierWatcher::~StatusNotifierWatcher()
@@ -202,9 +207,12 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
         return;
     }
     if (service.startsWith(QLatin1Char('/'))) {
-        // Object-path form: minimal sanity check: `/` followed by
-        // at least one valid path character (non-empty).
-        if (service.size() < 2) {
+        // Object-path form: validate via QDBusObjectPath which enforces
+        // the spec's `[/A-Za-z0-9_]+` grammar. A misbehaving client could
+        // otherwise register `/<spaces>` or other forbidden characters,
+        // producing a canonical that proxies later fail to dial and
+        // pollutes m_items / m_sorted with garbage.
+        if (QDBusObjectPath(service).path().isEmpty()) {
             return;
         }
     }

@@ -197,6 +197,29 @@ private Q_SLOTS:
         const QImage out = IconThemeResolver::decodePixmaps(pixmaps, 16);
         QVERIFY(out.isNull());
     }
+
+    // setImage rejects ids containing '?'; the lookup side strips at the
+    // first '?' for the cache-bust query string, so a published id with
+    // '?' would be silently unreachable. Verify the rejection is
+    // targeted and a plain id still works.
+    void setImageRejectsIdsWithQuestionMark()
+    {
+        QImage src(4, 4, QImage::Format_ARGB32);
+        src.fill(Qt::green);
+        const QString badId = QStringLiteral("a?b");
+        IconImageProvider::setImage(badId, src);
+
+        QSize sz;
+        const QImage lookup = provider.requestImage(badId, &sz, QSize());
+        QVERIFY2(lookup.isNull(), "lookup must miss a rejected id");
+
+        // Verify a plain id still publishes and resolves.
+        const QString goodId = QStringLiteral("plain-id-after-reject");
+        IconImageProvider::setImage(goodId, src);
+        const QImage hit = provider.requestImage(goodId, &sz, QSize());
+        QCOMPARE(hit.size(), src.size());
+        IconImageProvider::clearImage(goodId);
+    }
 };
 
 QTEST_MAIN(TestImageProvider)

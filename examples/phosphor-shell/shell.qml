@@ -134,6 +134,7 @@ Item {
         onContentChanged: {
             let total = 0;
             let available = 0;
+            let foundAvailable = false;
             for (const line of content.split('\n')) {
                 // Trim leading whitespace first: a containerised or
                 // future-kernel /proc/meminfo line with a leading space
@@ -146,10 +147,15 @@ Item {
                     total = parseInt(trimmed.split(/\s+/)[1], 10);
                 } else if (trimmed.startsWith('MemAvailable:')) {
                     available = parseInt(trimmed.split(/\s+/)[1], 10);
+                    foundAvailable = true;
                     break;
                 }
             }
-            if (Number.isFinite(total) && Number.isFinite(available) && total > 0)
+            // Require `foundAvailable`: on a kernel without MemAvailable
+            // (kernel < 3.14, exotic embedded build) or a malformed
+            // /proc/meminfo, available would stay at 0 and the guard
+            // below would yield a bogus 100% reading.
+            if (foundAvailable && Number.isFinite(total) && Number.isFinite(available) && total > 0)
                 percent = Math.round((1 - available / total) * 100).toString();
         }
     }
