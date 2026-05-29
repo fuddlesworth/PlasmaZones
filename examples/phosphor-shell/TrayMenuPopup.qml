@@ -266,13 +266,17 @@ PopupWindow {
                             // means width 0 and no spacing reservation
                             // in the label binding above. Cap the
                             // intrinsic width so a pathological shortcut
-                            // string can't crowd out the label slot.
+                            // string can't crowd out the label slot;
+                            // elide so the cap actually clips the
+                            // painted glyphs instead of overflowing
+                            // the slot.
                             text: menuRow.shortcut
                             color: "#7f849c"
                             font.pixelSize: 11
                             anchors.verticalCenter: parent.verticalCenter
                             visible: text.length > 0
                             width: Math.min(80, implicitWidth)
+                            elide: Text.ElideRight
                         }
 
                         // Submenu chevron — only renders when the item

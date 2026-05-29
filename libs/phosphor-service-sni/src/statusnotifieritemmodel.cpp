@@ -142,6 +142,23 @@ public:
         }
         iconUrls.erase(it);
     }
+
+    // Drop every published key. Used by the host-destroyed lambda and
+    // by ~StatusNotifierItemModel; the model destructor must clear
+    // because IconImageProvider's static registry would otherwise
+    // accumulate zombie entries if the model is destroyed while its
+    // host is still alive (uncommon outside tests, but the cleanup
+    // is cheap and the pre-existing leak was a real one).
+    void clearAllPublished()
+    {
+        for (auto it = iconUrls.constBegin(); it != iconUrls.constEnd(); ++it) {
+            for (int v = 0; v < 3; ++v) {
+                if (!it->publishedKey[v].isEmpty())
+                    PhosphorServiceIconTheme::IconImageProvider::clearImage(it->publishedKey[v]);
+            }
+        }
+        iconUrls.clear();
+    }
 };
 
 StatusNotifierItemModel::StatusNotifierItemModel(QObject* parent)
@@ -150,7 +167,15 @@ StatusNotifierItemModel::StatusNotifierItemModel(QObject* parent)
 {
 }
 
-StatusNotifierItemModel::~StatusNotifierItemModel() = default;
+StatusNotifierItemModel::~StatusNotifierItemModel()
+{
+    // Release every key still held in IconImageProvider's static
+    // registry. The host-destroyed lambda and setHost(nullptr) paths
+    // also call clearAllPublished, but a model destroyed while its
+    // host is still alive (test fixtures, embedded scenarios) would
+    // otherwise leak entries.
+    d->clearAllPublished();
+}
 
 StatusNotifierHost* StatusNotifierItemModel::host() const
 {
@@ -197,13 +222,7 @@ void StatusNotifierItemModel::setHost(StatusNotifierHost* host)
             const int prev = d->items.size();
             beginResetModel();
             d->items.clear();
-            for (auto it = d->iconUrls.constBegin(); it != d->iconUrls.constEnd(); ++it) {
-                for (int v = 0; v < 3; ++v) {
-                    if (!it->publishedKey[v].isEmpty())
-                        PhosphorServiceIconTheme::IconImageProvider::clearImage(it->publishedKey[v]);
-                }
-            }
-            d->iconUrls.clear();
+            d->clearAllPublished();
             endResetModel();
             Q_EMIT hostChanged();
             if (prev != 0)
