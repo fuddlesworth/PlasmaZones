@@ -38,6 +38,8 @@ Item {
     readonly property int controlRadius: 8
     readonly property int seekRadius: 2
     readonly property int artSourcePixels: 320
+    readonly property int popupScaleAnimMs: 300
+    readonly property int popupOpacityAnimMs: 200
 
     function fmt(secs) {
         return playerState.fmt(secs);
@@ -291,7 +293,7 @@ Item {
 
     Behavior on scale {
         NumberAnimation {
-            duration: 300
+            duration: root.popupScaleAnimMs
             easing.type: Easing.OutBack
             easing.overshoot: 1.2
         }
@@ -299,7 +301,7 @@ Item {
 
     Behavior on opacity {
         NumberAnimation {
-            duration: 200
+            duration: root.popupOpacityAnimMs
         }
     }
 }

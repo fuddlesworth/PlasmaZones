@@ -140,7 +140,7 @@ UPowerHost::UPowerHost(QObject* parent)
                                 << " removed=" << removedOk;
     }
 
-    // All three startup queries run asynchronously — a blocking call
+    // All three startup queries run asynchronously: a blocking call
     // here would freeze the GUI thread while UPower (and, through the
     // per-device GetAll, every battery) responds. Watchers are parented
     // to `this` so they cancel cleanly if the host is destroyed early.

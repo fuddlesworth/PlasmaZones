@@ -28,6 +28,16 @@ namespace PhosphorServiceSni {
 
 namespace {
 
+// dbusmenu spec timestamps are unix-epoch milliseconds, truncated to
+// 32 bits. Centralised so the four Event() call sites can't drift
+// (an earlier rev divided by 1000 and produced "stale" rejections on
+// apps with focus-stealing prevention because the timestamps didn't
+// match the platform's input-event clock).
+uint dbusmenuTimestamp()
+{
+    return uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
+}
+
 /// Visit each level-1 child variant under a layout struct and unpack
 /// it into a DBusMenuLayoutItem. The dbus marshalling already gave
 /// us flat (id, props, children-variants) — we just need to recurse
@@ -244,8 +254,11 @@ public:
     // dismissal we must fire closed for EVERY level that was opened,
     // not just the one that happens to be the current rootId. Without
     // this, the root-level "opened" never gets a matching "closed"
-    // and apps leak state.
-    QSet<int> openedIds;
+    // and apps leak state. Stored in stack order (push on open) so
+    // aboutToHide can close in LIFO order; the spec doesn't require
+    // a specific order but apps that maintain a depth counter
+    // implicitly expect inverse-of-open. Each id appears at most once.
+    QList<int> openedIds;
 
     /// Flat child list at rootId. Built from the most recent
     /// GetLayout call.
@@ -457,7 +470,31 @@ void DBusMenuModel::Private::refresh()
             }
         }
         if (sameShape) {
-            rows = nextRows; // new rows replace caches; icon URLs re-cache lazily
+            // Carry the icon cache across the refresh when the icon-
+            // defining properties (`icon-name`, `icon-data`) haven't
+            // changed. Without this every LayoutUpdated for a property-
+            // only change (enabled toggle, dynamic label) re-decodes
+            // and re-base64-encodes every icon in the level on the
+            // next data() read, defeating the per-row cache.
+            // onPropertiesUpdated already invalidates the cache on
+            // icon-prop changes; this just preserves the cache for
+            // rows that didn't move.
+            static const QSet<QString> kIconProps{QStringLiteral("icon-name"), QStringLiteral("icon-data")};
+            for (int i = 0; i < nextRows.size(); ++i) {
+                bool iconUnchanged = true;
+                for (const auto& key : kIconProps) {
+                    if (rows[i].properties.value(key) != nextRows[i].properties.value(key)) {
+                        iconUnchanged = false;
+                        break;
+                    }
+                }
+                if (iconUnchanged && rows[i].iconCacheValid) {
+                    nextRows[i].cachedIconUrl = rows[i].cachedIconUrl;
+                    nextRows[i].cachedIconImage = rows[i].cachedIconImage;
+                    nextRows[i].iconCacheValid = true;
+                }
+            }
+            rows = nextRows;
             if (!rows.isEmpty()) {
                 Q_EMIT q->dataChanged(q->index(0), q->index(rows.size() - 1));
             }
@@ -697,12 +734,7 @@ void DBusMenuModel::triggerItem(int row)
     // triggerItem(n) call) could still get here; check defensively.
     if (!r.properties.value(QStringLiteral("enabled"), true).toBool())
         return;
-    // dbusmenu spec timestamps are milliseconds. Earlier rev divided
-    // by 1000 (seconds), and some apps with focus-stealing prevention
-    // reject the Event as "stale" because the timestamp didn't match
-    // the platform's input-event clock.
-    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
-    d->proxy->Event(r.id, QStringLiteral("clicked"), QDBusVariant(0), ts);
+    d->proxy->Event(r.id, QStringLiteral("clicked"), QDBusVariant(0), dbusmenuTimestamp());
 }
 
 int DBusMenuModel::aboutToShowSubmenu(int row)
@@ -730,9 +762,9 @@ int DBusMenuModel::aboutToShowSubmenu(int row)
     // open shows an empty/stale submenu until a later LayoutUpdated
     // arrives. Track the id so aboutToHide can close every level we
     // opened on the way in.
-    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
-    d->proxy->Event(r.id, QStringLiteral("opened"), QDBusVariant(0), ts);
-    d->openedIds.insert(r.id);
+    d->proxy->Event(r.id, QStringLiteral("opened"), QDBusVariant(0), dbusmenuTimestamp());
+    if (!d->openedIds.contains(r.id))
+        d->openedIds.append(r.id);
     return r.id;
 }
 
@@ -761,9 +793,9 @@ void DBusMenuModel::aboutToShow()
     // submenu items on the opened tick and tear them down on closed.
     // Track the id so aboutToHide can close every level we opened on
     // the way in.
-    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
-    d->proxy->Event(d->rootId, QStringLiteral("opened"), QDBusVariant(0), ts);
-    d->openedIds.insert(d->rootId);
+    d->proxy->Event(d->rootId, QStringLiteral("opened"), QDBusVariant(0), dbusmenuTimestamp());
+    if (!d->openedIds.contains(d->rootId))
+        d->openedIds.append(d->rootId);
 }
 
 void DBusMenuModel::refresh()
@@ -780,17 +812,17 @@ void DBusMenuModel::aboutToHide()
         d->openedIds.clear();
         return;
     }
-    // ms not seconds; see triggerItem rationale.
-    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
-    // Fire closed for every level we opened on the way in (root +
-    // every submenu the user traversed via aboutToShowSubmenu), not
-    // just the current rootId. Always include rootId so apps that
-    // skipped opened still pair the close. The set takes care of
-    // dedup if rootId was already opened.
-    QSet<int> toClose = d->openedIds;
-    toClose.insert(d->rootId);
-    for (int id : toClose)
-        d->proxy->Event(id, QStringLiteral("closed"), QDBusVariant(0), ts);
+    // Fire closed for every level we opened on the way in, in inverse
+    // open order so apps tracking a depth counter unwind LIFO. Append
+    // the current rootId if it wasn't already in the list so a
+    // programmatic setRootId caller (which doesn't update openedIds)
+    // still gets a paired close.
+    QList<int> toClose = d->openedIds;
+    if (!toClose.contains(d->rootId))
+        toClose.append(d->rootId);
+    const uint ts = dbusmenuTimestamp();
+    for (auto it = toClose.crbegin(); it != toClose.crend(); ++it)
+        d->proxy->Event(*it, QStringLiteral("closed"), QDBusVariant(0), ts);
     d->openedIds.clear();
 }
 

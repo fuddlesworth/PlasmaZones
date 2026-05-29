@@ -14,9 +14,13 @@ QtObject {
 
     // Player to observe; null when none is selected.
     property MprisPlayer player: null
-    // When false, `progress` freezes at 0 — set from the consuming
-    // view's visibility so the 1 Hz position binding doesn't wake the
-    // JS engine for an off-screen widget.
+    // When false, `progress` evaluates to 0 unconditionally (the
+    // early-return short-circuits before reading `player.position`,
+    // so the QML binding tracker drops it as a dependency and the
+    // expression stays dormant until sampling flips back to true).
+    // The upstream C++ position timer keeps ticking; this only mutes
+    // the QML side. Set from the consuming view's visibility to avoid
+    // waking the JS engine for an off-screen widget.
     property bool sampling: true
     readonly property bool hasPlayer: player !== null
     readonly property bool isPlaying: hasPlayer && player.isPlaying

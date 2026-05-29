@@ -448,10 +448,12 @@ PanelWindow {
             Row {
                 spacing: root.statRowSpacing
                 anchors.verticalCenter: parent.verticalCenter
-                // Both gates: the file must exist AND the read must have
-                // produced a value. FileView.exists can flicker true during
-                // cold-start before the read completes; without the length
-                // check the row would briefly render a bare "%" sign.
+                // Both gates: UPower must have published a displayDevice
+                // (`batteryVisible`) AND the rounded percentage must be
+                // non-empty. `battery.displayDevice` can flip non-null
+                // before the initial GetAll percentage read lands;
+                // without the length check the row would briefly render
+                // a bare "%" sign.
                 visible: root.batteryVisible && root.batteryPercent.length > 0
 
                 Text {

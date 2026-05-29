@@ -43,6 +43,10 @@ Item {
     readonly property int scrollPauseHeadMs: 2000
     readonly property int scrollPauseTailMs: 1500
     readonly property int scrollReturnMs: 400
+    // Multiplier on titleText.implicitWidth driving the scroll-pass
+    // duration; smaller = faster scroll. 25 ms/px yields a comfortable
+    // reading pace for typical Catppuccin font sizes.
+    readonly property int scrollSpeedMsPerPixel: 25
 
     signal popupRequested
 
@@ -97,8 +101,11 @@ Item {
 
     // Shared MPRIS derived-state + flicker-free art URL (see
     // MprisPlayerState.qml). `sampling` is gated on visibility so the
-    // 1 Hz position binding sleeps entirely when the widget is hidden —
-    // the Canvas only culls its own repaints, not the upstream binding.
+    // QML `progress` binding goes dormant when the widget is hidden
+    // (the sampling=false short-circuit drops `player.position` as a
+    // tracked dependency). The C++ position timer keeps firing
+    // regardless; this just saves the per-tick Math.min/Math.max + the
+    // requestPaint scheduling cost on the Canvas below.
     MprisPlayerState {
         id: playerState
 
@@ -247,10 +254,16 @@ Item {
                 // ring stuck on the old `Theme.outline` / `Theme.primary`
                 // colors until the next progress tick. Listen on the
                 // palette directly and force a repaint when it changes.
+                // Gated on root.visible to match the sister handlers
+                // above: a wallpaper-driven palette swap shouldn't burn
+                // a paint while the widget is hidden, and the
+                // `onVisibleChanged: if (visible) requestPaint()` hook
+                // already covers the hidden -> visible transition.
                 Connections {
                     target: Theme.paletteStore
                     function onPaletteChanged() {
-                        progressRing.requestPaint();
+                        if (root.visible)
+                            progressRing.requestPaint();
                     }
                 }
                 onPaint: {
@@ -349,7 +362,7 @@ Item {
                     NumberAnimation {
                         from: 0
                         to: -(titleText.implicitWidth - (root.titleWidth - root.titleScrollMargin))
-                        duration: titleText.implicitWidth * 25
+                        duration: titleText.implicitWidth * root.scrollSpeedMsPerPixel
                         easing.type: Easing.Linear
                     }
 

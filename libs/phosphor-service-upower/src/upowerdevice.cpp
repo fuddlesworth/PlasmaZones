@@ -44,23 +44,25 @@ public:
     bool powerSupply = false;
     bool isPresent = false;
 
-    // Returns true when the value actually changed (and the NOTIFY was emitted).
+    // Assigns `val` to `field` and emits `signal` on the owner if and
+    // only if the value actually moved. The qreal path uses
+    // qFuzzyCompare with a +1.0 offset (the canonical Qt idiom for
+    // fuzzy-compare-near-zero).
     template<typename T, typename Signal>
-    static bool setField(T& field, T val, Signal signal, UPowerDevice* o)
+    static void setField(T& field, T val, Signal signal, UPowerDevice* o)
     {
         if constexpr (std::is_same_v<T, qreal>) {
             if (qFuzzyCompare(field + 1.0, val + 1.0))
-                return false;
+                return;
         } else {
             if (field == val)
-                return false;
+                return;
         }
         field = val;
         Q_EMIT(o->*signal)();
-        return true;
     }
 
-    // Async GetAll on the Properties interface — one round trip for the
+    // Async GetAll on the Properties interface: one round trip for the
     // whole device, never blocking the calling thread. The watcher is
     // parented to `owner` so an in-flight reply cancels cleanly if the
     // device is removed.
@@ -82,7 +84,7 @@ public:
     }
 
     // Applies a device-interface property map. Works for both a full
-    // GetAll reply and a partial PropertiesChanged `changed` map — every
+    // GetAll reply and a partial PropertiesChanged `changed` map; every
     // field is gated on isValid().
     void applyProps(const QVariantMap& props)
     {
@@ -116,13 +118,15 @@ public:
         if ((v = val("IsPresent")).isValid())
             setField(isPresent, v.toBool(), &UPowerDevice::isPresentChanged, owner);
 
-        // Type goes BEFORE PowerSupply so the derived isLaptopBattery
-        // value (`type == Battery && powerSupply`) sees both fresh
-        // inputs in the same applyProps pass. When a single
-        // PropertiesChanged batch carries both, the
-        // isLaptopBatteryChanged-driven dataChanged below re-evaluates
-        // exactly once, and neither intermediate field assignment
-        // produces a wrong-value transient.
+        // Type goes BEFORE PowerSupply as a defensive ordering choice.
+        // The actual no-transient guarantee comes from
+        // `UPowerDeviceModel::connectDevice` hooking IsLaptopBatteryRole
+        // onto the device's own `isLaptopBatteryChanged` signal (which
+        // fires from the end-of-batch snapshot/post-compare below)
+        // rather than from the raw typeChanged / powerSupplyChanged
+        // pair. With that wiring the role re-dispatches exactly once
+        // per real derived transition, regardless of assignment order
+        // within the batch.
         if ((v = val("Type")).isValid()) {
             const uint raw = v.toUInt();
             // UPower DeviceType range is 0..28 today. Anything outside
@@ -149,13 +153,11 @@ public:
             setField(timeToFull, v.toLongLong(), &UPowerDevice::timeToFullChanged, owner);
 
         // Derived-state transitions are emitted only on an actual
-        // change, catching the case where only one input (e.g.
-        // powerSupply) moved without the other. We compare the
-        // pre-batch snapshot against the post-batch derived value,
-        // not against the per-field setField return, because
-        // isLaptopBattery and healthPercentage each depend on TWO
-        // fields that may be in the same batch and the per-field
-        // returns can't tell us whether the COMBINATION moved.
+        // change. The end-of-batch snapshot/post-compare catches
+        // cross-field transitions that no single per-field assignment
+        // can detect on its own: isLaptopBattery depends on both type
+        // AND powerSupply, healthPercentage on energyFull AND
+        // energyFullDesign.
         if (oldIsLaptop != (type == Battery && powerSupply))
             Q_EMIT owner->isLaptopBatteryChanged();
         const qreal newHealth = owner->healthPercentage();
@@ -268,7 +270,7 @@ void UPowerDevice::_q_onPropertiesChanged(const QString& iface, const QVariantMa
     if (iface != QLatin1String(kDeviceIface))
         return;
     d->applyProps(changed);
-    // Invalidated properties carry no value — re-fetch the whole
+    // Invalidated properties carry no value; re-fetch the whole
     // interface asynchronously to pick them up.
     if (!invalidated.isEmpty())
         d->requestAll();

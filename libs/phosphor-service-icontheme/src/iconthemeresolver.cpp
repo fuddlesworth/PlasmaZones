@@ -313,8 +313,11 @@ const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& the
             // would let themeIconPath construct
             // `<root>/<themeName>/../../../etc/<iconName>.png` and
             // probe arbitrary files. Reject any DirectoryEntry whose
-            // path contains traversal vectors.
-            if (group.contains(QLatin1String("..")) || group.contains(QLatin1Char('\\'))
+            // path contains traversal vectors. Empty group names are
+            // also rejected: they would let themeIconPath probe the
+            // bare theme root, bypassing the spec's `NN/context`
+            // directory layout.
+            if (group.isEmpty() || group.contains(QLatin1String("..")) || group.contains(QLatin1Char('\\'))
                 || group.contains(QChar(QChar::Null)) || group.startsWith(QLatin1Char('/'))) {
                 qCWarning(lcIconTheme) << "rejected suspicious directory in" << indexPath << ":" << group;
                 continue;

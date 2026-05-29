@@ -195,11 +195,16 @@ public:
 
     void applyRoot(const QVariantMap& props)
     {
+        // Cap Identity / DesktopEntry the same way Metadata strings
+        // are capped (see applyMetadata). A hostile MPRIS-emulating
+        // peer publishing a multi-MB Identity would otherwise propagate
+        // straight into QML text layout and hang the GUI thread.
+        constexpr int kMaxRootStringChars = 4096;
         if (props.contains(QStringLiteral("Identity")))
-            setStrField(identity, props.value(QStringLiteral("Identity")).toString(), &MprisPlayer::identityChanged,
-                        owner);
+            setStrField(identity, props.value(QStringLiteral("Identity")).toString().left(kMaxRootStringChars),
+                        &MprisPlayer::identityChanged, owner);
         if (props.contains(QStringLiteral("DesktopEntry")))
-            setStrField(desktopEntry, props.value(QStringLiteral("DesktopEntry")).toString(),
+            setStrField(desktopEntry, props.value(QStringLiteral("DesktopEntry")).toString().left(kMaxRootStringChars),
                         &MprisPlayer::desktopEntryChanged, owner);
     }
 
@@ -407,6 +412,13 @@ public:
                     artistStr = inner.toStringList().join(QStringLiteral(", "));
                 else if (inner.typeId() == QMetaType::QVariantList)
                     artistStr = joinList(inner.toList());
+                else if (inner.canConvert<QDBusArgument>())
+                    // Mirror demarshallMetadata's double-wrapped case:
+                    // a QDBusVariant whose inner is itself a
+                    // QDBusArgument (rare but observed on some
+                    // proxies). qdbus_cast<QStringList> handles the
+                    // `as` signature.
+                    artistStr = qdbus_cast<QStringList>(inner.value<QDBusArgument>()).join(QStringLiteral(", "));
                 else
                     artistStr = inner.toString();
             } else if (artistVar.typeId() == QMetaType::QStringList) {

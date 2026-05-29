@@ -8,8 +8,8 @@
  * @brief Umbrella header for the PhosphorServiceUPower library.
  *
  * PhosphorServiceUPower exposes `org.freedesktop.UPower` (system bus)
- * as Qt/QML-friendly types — `UPowerHost`, `UPowerDevice`,
- * `UPowerDeviceModel` — for Phosphor-based desktop shells. The library
+ * as Qt/QML-friendly types (`UPowerHost`, `UPowerDevice`,
+ * `UPowerDeviceModel`) for Phosphor-based desktop shells. The library
  * has no UI of its own; shells consume the host's `onBattery` /
  * `displayDevice` properties and the model's per-device rows and
  * render however they like.
