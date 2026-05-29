@@ -55,6 +55,13 @@ class PHOSPHORSERVICEPIPEWIRE_EXPORT PipeWireConnection : public QObject
     /// permission denial). QML uses `daemonAvailable` to drive the
     /// "PipeWire is installed but unreachable" diagnostic.
     Q_PROPERTY(bool daemonAvailable READ isDaemonAvailable NOTIFY daemonAvailableChanged)
+    /// Canonical PipeWire `node.name` of the WirePlumber default audio
+    /// sink. Empty when no default metadata has been reported yet (no
+    /// daemon, no WirePlumber, or pre-handshake). Tracks the
+    /// `default.audio.sink` key on the WirePlumber `default` metadata.
+    Q_PROPERTY(QString defaultSinkName READ defaultSinkName NOTIFY defaultSinkNameChanged)
+    /// As above for the default audio source.
+    Q_PROPERTY(QString defaultSourceName READ defaultSourceName NOTIFY defaultSourceNameChanged)
 
 public:
     explicit PipeWireConnection(QObject* parent = nullptr);
@@ -73,6 +80,8 @@ public:
 
     [[nodiscard]] bool isConnected() const;
     [[nodiscard]] bool isDaemonAvailable() const;
+    [[nodiscard]] QString defaultSinkName() const;
+    [[nodiscard]] QString defaultSourceName() const;
     /// Snapshot of every node the registry has reported so far. Live
     /// pointers — they're owned by this connection (QObject parent
     /// chain) and survive until the corresponding `nodeRemoved` signal
@@ -90,10 +99,20 @@ public Q_SLOTS:
     /// thread stays alive so a subsequent `connect()` is cheap. Safe to
     /// call from the GUI thread at any time.
     void disconnect();
+    /// Write the WirePlumber `default.configured.audio.sink` metadata
+    /// key. PipeWire treats "configured" as the persistent default;
+    /// the runtime `default.audio.sink` follows it. Pass the canonical
+    /// node.name (visible via `PwNode::name` / the model's `name`
+    /// role). No-op if no default metadata has been bound yet.
+    void setDefaultSink(const QString& nodeName);
+    /// As above for the audio source.
+    void setDefaultSource(const QString& nodeName);
 
 Q_SIGNALS:
     void connectedChanged();
     void daemonAvailableChanged();
+    void defaultSinkNameChanged();
+    void defaultSourceNameChanged();
     /// Fired from the GUI thread when PipeWire reports a core-level
     /// error. The message is the human-readable string PipeWire
     /// returned (or a hand-written diagnostic when the failure is

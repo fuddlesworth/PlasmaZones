@@ -6,6 +6,8 @@
 #include <PhosphorServicePipeWire/PwNode.h>
 
 #include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
 #include <QSemaphore>
 #include <QThread>
@@ -131,8 +133,15 @@ public:
     pw_context* context = nullptr;
     pw_core* core = nullptr;
     pw_registry* registry = nullptr;
+    /// WirePlumber's `default` metadata proxy. Bound lazily when the
+    /// registry surfaces a Metadata global whose `metadata.name`
+    /// property equals `"default"`. Null when no session manager is
+    /// present (rare — only a bare PipeWire daemon without
+    /// WirePlumber) or pre-handshake.
+    pw_proxy* defaultMetadata = nullptr;
     spa_hook coreListener{};
     spa_hook registryListener{};
+    spa_hook defaultMetadataListener{};
     int pendingSyncSeq = 0;
 
     /// Per-node loop-thread state. We hold the pw_proxy for the node
@@ -170,6 +179,12 @@ public:
     std::atomic<bool> connected{false};
     std::atomic<bool> daemonAvailable{false};
 
+    // String state touched only on the GUI thread (read via the
+    // accessors, written by the GUI-thread setter slots posted from
+    // loop callbacks). No mutex needed.
+    QString defaultSinkName;
+    QString defaultSourceName;
+
     // Core listener callbacks. Each runs on the loop thread; bounce
     // state back to the GUI thread via QMetaObject::invokeMethod with
     // QueuedConnection (which targets the GUI thread, NOT the loop
@@ -190,6 +205,11 @@ public:
     static void onNodeParam(void* data, int seq, uint32_t id, uint32_t index, uint32_t next,
                             const struct spa_pod* param);
     static const pw_node_events kNodeEvents;
+
+    // WirePlumber default-metadata listener (loop thread).
+    static int onDefaultMetadataProperty(void* data, uint32_t subject, const char* key, const char* type,
+                                         const char* value);
+    static const pw_metadata_events kDefaultMetadataEvents;
 
     /// Called on the loop thread. Creates `pw_context` + `pw_core` and
     /// kicks off the handshake. Idempotent: re-entry while already
@@ -227,11 +247,26 @@ public:
                                   void* user_data);
     void doParamWrite(const ParamWriteRequest& req);
 
+    /// Loop-thread default-metadata write. Distinct from the param
+    /// write path because the WirePlumber metadata interface uses
+    /// pw_metadata_set_property rather than pw_node_set_param.
+    struct DefaultWriteRequest
+    {
+        Private* owner = nullptr;
+        QString key;
+        QString nodeName;
+    };
+    static int dispatchDefaultWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data, size_t size,
+                                    void* user_data);
+    void doDefaultWrite(const DefaultWriteRequest& req);
+
     // GUI-thread setters. Always invoked via queued cross-thread
     // signals so the NOTIFY emits and atomic writes both happen on
     // the GUI thread.
     void setConnected(bool value);
     void setDaemonAvailable(bool value);
+    void setDefaultSinkName(QString name);
+    void setDefaultSourceName(QString name);
 
     // GUI-thread handlers, posted from the loop callbacks via
     // QueuedConnection. These mutate `guiNodes` and emit nodeAdded /
@@ -266,6 +301,11 @@ const pw_node_events PipeWireConnection::Private::kNodeEvents = {
     .version = PW_VERSION_NODE_EVENTS,
     .info = &PipeWireConnection::Private::onNodeInfo,
     .param = &PipeWireConnection::Private::onNodeParam,
+};
+
+const pw_metadata_events PipeWireConnection::Private::kDefaultMetadataEvents = {
+    .version = PW_VERSION_METADATA_EVENTS,
+    .property = &PipeWireConnection::Private::onDefaultMetadataProperty,
 };
 
 void PipeWireConnection::Private::onCoreInfo(void* data, const struct pw_core_info* info)
@@ -322,7 +362,31 @@ void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint
     Q_UNUSED(permissions);
     Q_UNUSED(version);
     auto* d = static_cast<Private*>(data);
-    if (!type || std::string_view(type) != PW_TYPE_INTERFACE_Node)
+    if (!type)
+        return;
+    const std::string_view typeView(type);
+    // Two interfaces are relevant: Node (audio sinks / sources /
+    // streams) and Metadata (WirePlumber's `default` for the runtime
+    // default audio sink + source).
+    if (typeView == PW_TYPE_INTERFACE_Metadata) {
+        const auto metaProps = propsFromDict(props);
+        if (metaProps.value(QStringLiteral("metadata.name")) != QLatin1String("default"))
+            return;
+        if (d->defaultMetadata) {
+            qCDebug(lcPipeWire) << "duplicate default-metadata global; ignoring id" << id;
+            return;
+        }
+        d->defaultMetadata = static_cast<pw_proxy*>(pw_registry_bind(d->registry, id, type, PW_VERSION_METADATA, 0));
+        if (!d->defaultMetadata) {
+            qCWarning(lcPipeWire) << "pw_registry_bind failed for default metadata global" << id;
+            return;
+        }
+        pw_metadata_add_listener(reinterpret_cast<pw_metadata*>(d->defaultMetadata), &d->defaultMetadataListener,
+                                 &kDefaultMetadataEvents, d);
+        qCDebug(lcPipeWire) << "bound default metadata id" << id;
+        return;
+    }
+    if (typeView != PW_TYPE_INTERFACE_Node)
         return;
     const auto p = propsFromDict(props);
     const QString mediaClass = p.value(QStringLiteral("media.class"));
@@ -365,6 +429,24 @@ void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint
 void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id)
 {
     auto* d = static_cast<Private*>(data);
+    // Same id space covers nodes AND the metadata global, so check
+    // the metadata first.
+    if (d->defaultMetadata) {
+        const uint32_t metaId = pw_proxy_get_bound_id(d->defaultMetadata);
+        if (metaId == id) {
+            spa_hook_remove(&d->defaultMetadataListener);
+            pw_proxy_destroy(d->defaultMetadata);
+            d->defaultMetadata = nullptr;
+            QMetaObject::invokeMethod(
+                d->q,
+                [d]() {
+                    d->setDefaultSinkName(QString());
+                    d->setDefaultSourceName(QString());
+                },
+                Qt::QueuedConnection);
+            return;
+        }
+    }
     auto it = d->loopNodes.find(id);
     if (it == d->loopNodes.end())
         return;
@@ -380,6 +462,45 @@ void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id
             d->guiNodeRemoved(id);
         },
         Qt::QueuedConnection);
+}
+
+int PipeWireConnection::Private::onDefaultMetadataProperty(void* data, uint32_t subject, const char* key,
+                                                           const char* type, const char* value)
+{
+    Q_UNUSED(subject);
+    Q_UNUSED(type);
+    if (!key)
+        return 0;
+    auto* d = static_cast<Private*>(data);
+    const QString keyStr = QString::fromUtf8(key);
+    // We care about the runtime default keys. The "configured"
+    // variants are persistent storage; we read the runtime ones so the
+    // value tracks the currently-effective default (which may differ
+    // from the persistent setting if a higher-priority sink appears).
+    const bool isSink = keyStr == QLatin1String("default.audio.sink");
+    const bool isSource = keyStr == QLatin1String("default.audio.source");
+    if (!isSink && !isSource)
+        return 0;
+    QString nodeName;
+    if (value) {
+        // WirePlumber stores the value as a Spa:String:JSON object
+        // shaped `{"name": "<node.name>"}`. Parse defensively — a
+        // future schema bump could add fields and we should still pick
+        // up the name.
+        const QJsonDocument doc = QJsonDocument::fromJson(QByteArray(value));
+        if (doc.isObject())
+            nodeName = doc.object().value(QStringLiteral("name")).toString();
+    }
+    QMetaObject::invokeMethod(
+        d->q,
+        [d, isSink, nodeName]() {
+            if (isSink)
+                d->setDefaultSinkName(nodeName);
+            else
+                d->setDefaultSourceName(nodeName);
+        },
+        Qt::QueuedConnection);
+    return 0;
 }
 
 void PipeWireConnection::Private::onNodeInfo(void* data, const struct pw_node_info* info)
@@ -529,6 +650,12 @@ void PipeWireConnection::Private::doDisconnect()
     }
     loopNodes.clear();
 
+    if (defaultMetadata) {
+        spa_hook_remove(&defaultMetadataListener);
+        pw_proxy_destroy(defaultMetadata);
+        defaultMetadata = nullptr;
+    }
+
     if (registry) {
         spa_hook_remove(&registryListener);
         pw_proxy_destroy(reinterpret_cast<pw_proxy*>(registry));
@@ -549,6 +676,8 @@ void PipeWireConnection::Private::doDisconnect()
         [this]() {
             setConnected(false);
             setDaemonAvailable(false);
+            setDefaultSinkName(QString());
+            setDefaultSourceName(QString());
             guiNodesReset();
         },
         Qt::QueuedConnection);
@@ -582,6 +711,37 @@ int PipeWireConnection::Private::dispatchParamWrite(struct spa_loop* loop, bool 
     if (req && req->owner)
         req->owner->doParamWrite(*req);
     return 0;
+}
+
+int PipeWireConnection::Private::dispatchDefaultWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data,
+                                                      size_t size, void* user_data)
+{
+    Q_UNUSED(loop);
+    Q_UNUSED(async);
+    Q_UNUSED(seq);
+    Q_UNUSED(data);
+    Q_UNUSED(size);
+    std::unique_ptr<DefaultWriteRequest> req(static_cast<DefaultWriteRequest*>(user_data));
+    if (req && req->owner)
+        req->owner->doDefaultWrite(*req);
+    return 0;
+}
+
+void PipeWireConnection::Private::doDefaultWrite(const DefaultWriteRequest& req)
+{
+    if (!defaultMetadata) {
+        qCDebug(lcPipeWire) << "default-write before metadata bind; dropping" << req.key;
+        return;
+    }
+    // WirePlumber stores defaults as Spa:String:JSON values shaped
+    // `{"name": "<node.name>"}`. Build the JSON via QJsonDocument so
+    // the encoding (quoting, escaping) is consistent with the
+    // metadata reader path.
+    QJsonObject obj;
+    obj.insert(QStringLiteral("name"), req.nodeName);
+    const QByteArray payload = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+    pw_metadata_set_property(reinterpret_cast<pw_metadata*>(defaultMetadata), 0, req.key.toUtf8().constData(),
+                             "Spa:String:JSON", payload.constData());
 }
 
 void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
@@ -654,6 +814,22 @@ void PipeWireConnection::Private::setDaemonAvailable(bool value)
     if (daemonAvailable.exchange(value) == value)
         return;
     Q_EMIT q->daemonAvailableChanged();
+}
+
+void PipeWireConnection::Private::setDefaultSinkName(QString name)
+{
+    if (defaultSinkName == name)
+        return;
+    defaultSinkName = std::move(name);
+    Q_EMIT q->defaultSinkNameChanged();
+}
+
+void PipeWireConnection::Private::setDefaultSourceName(QString name)
+{
+    if (defaultSourceName == name)
+        return;
+    defaultSourceName = std::move(name);
+    Q_EMIT q->defaultSourceNameChanged();
 }
 
 void PipeWireConnection::Private::guiNodeAdded(quint32 id, QString mediaClass, QHash<QString, QString> props)
@@ -754,6 +930,16 @@ QList<PwNode*> PipeWireConnection::nodes() const
     return d->guiNodes.values();
 }
 
+QString PipeWireConnection::defaultSinkName() const
+{
+    return d->defaultSinkName;
+}
+
+QString PipeWireConnection::defaultSourceName() const
+{
+    return d->defaultSourceName;
+}
+
 void PipeWireConnection::connect()
 {
     if (!d->thread.isRunning() || !d->loop)
@@ -790,6 +976,31 @@ void PipeWireConnection::writeMuted(quint32 nodeId, bool muted)
     req->writeMute = true;
     req->muted = muted;
     pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false, req);
+}
+
+void PipeWireConnection::setDefaultSink(const QString& nodeName)
+{
+    if (!d->thread.isRunning() || !d->loop)
+        return;
+    auto* req = new Private::DefaultWriteRequest;
+    req->owner = d.get();
+    // Write the "configured" key so the choice persists across
+    // restarts; WirePlumber promotes it into the runtime
+    // default.audio.sink on the next reconcile.
+    req->key = QStringLiteral("default.configured.audio.sink");
+    req->nodeName = nodeName;
+    pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false, req);
+}
+
+void PipeWireConnection::setDefaultSource(const QString& nodeName)
+{
+    if (!d->thread.isRunning() || !d->loop)
+        return;
+    auto* req = new Private::DefaultWriteRequest;
+    req->owner = d.get();
+    req->key = QStringLiteral("default.configured.audio.source");
+    req->nodeName = nodeName;
+    pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDefaultWrite, 0, nullptr, 0, false, req);
 }
 
 } // namespace PhosphorServicePipeWire
