@@ -95,7 +95,7 @@ libs/                                      # C++ libraries, every concern is its
   # EXTRACTED from the existing phosphor-services umbrella (Phase 2.0 of plan).
   # After all four are extracted the umbrella is deleted, no compat shim.
   phosphor-service-sni/                    # StatusNotifierItem host + watcher + dbusmenu (pending)
-  phosphor-service-mpris/                  # MPRIS controller (pending)
+  phosphor-service-mpris/                  # ✓ MPRIS2 controller (shipped)
   phosphor-service-upower/                 # ✓ battery + power-supply readouts (shipped)
   phosphor-service-icontheme/              # icon-theme resolver + Qt image provider (pending)
                                            #   (or folded into phosphor-rendering, decide at extraction time)

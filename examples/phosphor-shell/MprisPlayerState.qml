@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import Phosphor.Services 1.0
+import Phosphor.Service.Mpris 1.0
 import QtQuick
 
 // Non-visual helper bundling the derived MPRIS state shared by the panel
@@ -47,5 +47,4 @@ QtObject {
 
         return m + ":" + ms;
     }
-
 }

@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/MprisPlayerModel.h>
-#include <PhosphorServices/MprisHost.h>
-#include <PhosphorServices/MprisPlayer.h>
+#include <PhosphorServiceMpris/MprisPlayerModel.h>
+#include <PhosphorServiceMpris/MprisHost.h>
+#include <PhosphorServiceMpris/MprisPlayer.h>
 
-namespace PhosphorServices {
+namespace PhosphorServiceMpris {
 
 MprisPlayerModel::MprisPlayerModel(QObject* parent)
     : QAbstractListModel(parent)
@@ -136,4 +136,4 @@ void MprisPlayerModel::connectPlayer(MprisPlayer* player)
     connect(player, &MprisPlayer::metadataChanged, this, refresh);
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceMpris

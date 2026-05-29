@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/MprisPlayer.h>
+#include <PhosphorServiceMpris/MprisPlayer.h>
 
 #include <QDBusArgument>
 #include <QDBusConnection>
@@ -16,7 +16,7 @@
 
 #include <cmath>
 
-Q_LOGGING_CATEGORY(lcMpris, "phosphorservices.mpris")
+Q_LOGGING_CATEGORY(lcMpris, "phosphor.service.mpris")
 
 namespace {
 constexpr auto kMprisPath = "/org/mpris/MediaPlayer2";
@@ -29,7 +29,7 @@ constexpr int kPositionPollMs = 1000;
 constexpr int kPositionResyncTicks = 30;
 } // namespace
 
-namespace PhosphorServices {
+namespace PhosphorServiceMpris {
 
 // ─── Change-guarded field setters ────────────────────────────────────────
 // Free helpers so applyRoot()/applyPlayer() stay flat. Each emits its
@@ -632,4 +632,4 @@ void MprisPlayer::_q_onSeeked(qlonglong position)
     d->onSeeked(position);
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceMpris

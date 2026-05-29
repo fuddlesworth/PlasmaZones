@@ -8,10 +8,6 @@
 #include <PhosphorServices/StatusNotifierHost.h>
 #include <PhosphorServices/StatusNotifierItem.h>
 #include <PhosphorServices/StatusNotifierItemModel.h>
-#include <PhosphorServices/MprisHost.h>
-#include <PhosphorServices/MprisPlayer.h>
-#include <PhosphorServices/MprisPlayerModel.h>
-
 #include "iconimageprovider.h"
 
 #include <QQmlEngine>
@@ -42,14 +38,10 @@ void registerQmlTypes()
         kModule, kModuleVersionMajor, kModuleVersionMinor, "StatusNotifierItem",
         QStringLiteral("StatusNotifierItem is owned by StatusNotifierHost — bind via the model"));
 
-    // MPRIS media player host + model
-    qmlRegisterType<MprisHost>(kModule, kModuleVersionMajor, kModuleVersionMinor, "MprisHost");
-    qmlRegisterType<MprisPlayerModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "MprisPlayerModel");
-    qmlRegisterUncreatableType<MprisPlayer>(kModule, kModuleVersionMajor, kModuleVersionMinor, "MprisPlayer",
-                                            QStringLiteral("MprisPlayer is owned by MprisHost — bind via the model"));
-
-    // UPower now lives in phosphor-service-upower; consumers import
-    // `Phosphor.Service.UPower 1.0` separately. Don't re-register here.
+    // MPRIS now lives in phosphor-service-mpris; consumers import
+    // `Phosphor.Service.Mpris 1.0` separately. UPower lives in
+    // phosphor-service-upower (`Phosphor.Service.UPower 1.0`).
+    // Don't re-register either here.
 
     // Singleton resolver — exposes themeName + iconForName() to QML
     // shells that want to resolve their own theme icons (e.g. for an

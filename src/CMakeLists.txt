@@ -490,6 +490,7 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorShell::PhosphorShell
             PhosphorServices::PhosphorServices
             PhosphorServiceUPower::PhosphorServiceUPower
+            PhosphorServiceMpris::PhosphorServiceMpris
             PhosphorLayer::PhosphorLayer
             PhosphorWayland::PhosphorWayland
             PhosphorRendering::PhosphorRendering

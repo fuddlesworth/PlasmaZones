@@ -3,16 +3,16 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceMpris/phosphorservicempris_export.h>
 
-#include <PhosphorServices/MprisPlayer.h>
+#include <PhosphorServiceMpris/MprisPlayer.h>
 
 #include <QList>
 #include <QObject>
 
-namespace PhosphorServices {
+namespace PhosphorServiceMpris {
 
-class PHOSPHORSERVICES_EXPORT MprisHost : public QObject
+class PHOSPHORSERVICEMPRIS_EXPORT MprisHost : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(int playerCount READ playerCount NOTIFY playerCountChanged)
@@ -23,11 +23,11 @@ public:
 
     [[nodiscard]] int playerCount() const;
     [[nodiscard]] QList<MprisPlayer*> players() const;
-    [[nodiscard]] Q_INVOKABLE PhosphorServices::MprisPlayer* playerAt(int index) const;
+    [[nodiscard]] Q_INVOKABLE PhosphorServiceMpris::MprisPlayer* playerAt(int index) const;
 
 Q_SIGNALS:
-    void playerAdded(PhosphorServices::MprisPlayer* player);
-    void playerRemoved(PhosphorServices::MprisPlayer* player);
+    void playerAdded(PhosphorServiceMpris::MprisPlayer* player);
+    void playerRemoved(PhosphorServiceMpris::MprisPlayer* player);
     void playerCountChanged();
 
 private Q_SLOTS:
@@ -42,4 +42,4 @@ private:
     std::unique_ptr<Private> d;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceMpris

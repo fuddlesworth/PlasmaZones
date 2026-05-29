@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import Phosphor.Services 1.0
+import Phosphor.Service.Mpris 1.0
 import QtQuick
 
 // MPRIS content — body of the media panel popup. Wrapped by
@@ -78,7 +78,6 @@ Item {
                 font.pixelSize: 42
                 visible: !popupArt.visible
             }
-
         }
 
         Column {
@@ -115,7 +114,6 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
             }
-
         }
 
         Item {
@@ -156,24 +154,22 @@ Item {
                     radius: 2
                     color: "#1e1e2e"
                 }
-
             }
 
             MouseArea {
                 anchors.fill: parent
                 enabled: root.hasPlayer && root.currentPlayer.canSeek
-                onClicked: (mouse) => {
+                onClicked: mouse => {
                     // Defensive: don't depend on the enclosing Item's
                     // `visible` (length > 0) clause to keep this safe.
                     if (!root.hasPlayer || root.currentPlayer.length <= 0)
-                        return ;
+                        return;
 
                     let ratio = mouse.x / width;
                     let target = ratio * root.currentPlayer.length;
                     root.currentPlayer.setPosition(target);
                 }
             }
-
         }
 
         Row {
@@ -206,7 +202,6 @@ Item {
                     Accessible.name: "Previous track"
                     onClicked: root.currentPlayer.previous()
                 }
-
             }
 
             Rectangle {
@@ -234,10 +229,8 @@ Item {
                     onClicked: {
                         if (root.hasPlayer)
                             root.currentPlayer.togglePlaying();
-
                     }
                 }
-
             }
 
             Rectangle {
@@ -264,11 +257,8 @@ Item {
                     Accessible.name: "Next track"
                     onClicked: root.currentPlayer.next()
                 }
-
             }
-
         }
-
     }
 
     Behavior on scale {
@@ -277,14 +267,11 @@ Item {
             easing.type: Easing.OutBack
             easing.overshoot: 1.2
         }
-
     }
 
     Behavior on opacity {
         NumberAnimation {
             duration: 200
         }
-
     }
-
 }

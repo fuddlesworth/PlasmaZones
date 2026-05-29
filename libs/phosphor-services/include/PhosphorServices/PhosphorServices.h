@@ -14,10 +14,11 @@
  *
  * First tenant: StatusNotifierItem (system tray) host + watcher with
  * full XDG icon-theme spec lookup and com.canonical.dbusmenu support.
- * MPRIS and the icon-theme resolver are co-tenants. Other desktop
- * services are extracted per-domain into `phosphor-service-*` sibling
- * libraries (see docs/phosphor-shell-design/04-implementation-plan.md);
- * UPower is the first such extraction (`PhosphorServiceUPower::`).
+ * The icon-theme resolver is a co-tenant pending its own extraction.
+ * Other desktop services have already moved into per-domain
+ * `phosphor-service-*` siblings: UPower
+ * (`PhosphorServiceUPower::`) and MPRIS (`PhosphorServiceMpris::`).
+ * See `docs/phosphor-shell-design/04-implementation-plan.md`.
  */
 
 #include <PhosphorServices/StatusNotifierItem.h>

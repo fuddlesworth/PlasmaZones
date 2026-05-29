@@ -56,9 +56,10 @@ qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
     dbusmenu_interface
 )
 
-# MPRIS uses hand-rolled QDBusInterface/QDBusMessage calls (matching
-# the pattern in phosphor-screens, the daemon, etc.) rather than
-# qt6_add_dbus_interface code generation.
+# Other tenants (MPRIS, UPower) used to live here too; they've been
+# extracted to sibling `phosphor-service-*` libraries per the Phase
+# 2.0 plan. The umbrella's remaining surface is SNI + icontheme,
+# pending their own extractions.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Public Headers
@@ -72,9 +73,6 @@ set(phosphorservices_public_HDRS
     include/PhosphorServices/StatusNotifierHost.h
     include/PhosphorServices/DBusMenuModel.h
     include/PhosphorServices/IconThemeResolver.h
-    include/PhosphorServices/MprisPlayer.h
-    include/PhosphorServices/MprisHost.h
-    include/PhosphorServices/MprisPlayerModel.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -91,9 +89,6 @@ set(phosphorservices_SRCS
     src/statusnotifier/statusnotifieritemmodel.cpp
     src/statusnotifier/dbusmenumodel.cpp
     src/icontheme/iconthemeresolver.cpp
-    src/mpris/mprishost.cpp
-    src/mpris/mprisplayer.cpp
-    src/mpris/mprisplayermodel.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -3,19 +3,19 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceMpris/phosphorservicempris_export.h>
 
-#include <PhosphorServices/MprisHost.h>
-#include <PhosphorServices/MprisPlayer.h>
+#include <PhosphorServiceMpris/MprisHost.h>
+#include <PhosphorServiceMpris/MprisPlayer.h>
 
 #include <QAbstractListModel>
 
-namespace PhosphorServices {
+namespace PhosphorServiceMpris {
 
-class PHOSPHORSERVICES_EXPORT MprisPlayerModel : public QAbstractListModel
+class PHOSPHORSERVICEMPRIS_EXPORT MprisPlayerModel : public QAbstractListModel
 {
     Q_OBJECT
-    Q_PROPERTY(PhosphorServices::MprisHost* host READ host WRITE setHost NOTIFY hostChanged)
+    Q_PROPERTY(PhosphorServiceMpris::MprisHost* host READ host WRITE setHost NOTIFY hostChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
@@ -44,9 +44,9 @@ Q_SIGNALS:
     void countChanged();
 
 private Q_SLOTS:
-    void onPlayerAdded(PhosphorServices::MprisPlayer* player);
-    void onPlayerRemoved(PhosphorServices::MprisPlayer* player);
-    void onPlayerDataChanged(PhosphorServices::MprisPlayer* player);
+    void onPlayerAdded(PhosphorServiceMpris::MprisPlayer* player);
+    void onPlayerRemoved(PhosphorServiceMpris::MprisPlayer* player);
+    void onPlayerDataChanged(PhosphorServiceMpris::MprisPlayer* player);
 
 private:
     void connectPlayer(MprisPlayer* player);
@@ -59,4 +59,4 @@ private:
     QList<MprisPlayer*> m_rows;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceMpris

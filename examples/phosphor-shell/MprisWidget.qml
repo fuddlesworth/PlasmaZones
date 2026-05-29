@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import Phosphor.Services 1.0
+import Phosphor.Service.Mpris 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 import QtQuick.Effects
@@ -23,7 +23,7 @@ Item {
     // Exposed so shell.qml can anchor the popup to us.
     property alias popupAnchor: artContainer
 
-    signal popupRequested()
+    signal popupRequested
 
     // ─── Player selection ────────────────────────────────────────────
     function selectPlayer() {
@@ -40,17 +40,15 @@ Item {
             }
             if (p.playbackState === MprisPlayer.Paused && !paused)
                 paused = p;
-
         }
         let next = playing || paused || (mprisHost.playerCount > 0 ? mprisHost.playerAt(0) : null);
         if (root.currentPlayer !== next)
             root.currentPlayer = next;
-
     }
 
     function cyclePlayer() {
         if (mprisHost.playerCount <= 1)
-            return ;
+            return;
 
         let idx = 0;
         for (let i = 0; i < mprisHost.playerCount; i++) {
@@ -162,7 +160,6 @@ Item {
                     radius: width / 2
                     color: "white"
                 }
-
             }
 
             // Album art masked to the circle via MultiEffect.maskSource
@@ -188,7 +185,6 @@ Item {
                     maskThresholdMin: 0.5
                     maskSpreadAtMin: 1
                 }
-
             }
 
             // Progress ring drawn ON TOP of the art so the outer ring
@@ -209,7 +205,6 @@ Item {
                 onProgChanged: {
                     if (root.visible)
                         requestPaint();
-
                 }
                 onPaint: {
                     let ctx = getContext("2d");
@@ -239,14 +234,13 @@ Item {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 Accessible.role: Accessible.Button
                 Accessible.name: "Media player controls"
-                onClicked: (mouse) => {
+                onClicked: mouse => {
                     if (mouse.button === Qt.RightButton)
                         root.cyclePlayer();
                     else
                         root.popupRequested();
                 }
             }
-
         }
 
         // Scrolling title — left-click opens popup
@@ -315,11 +309,8 @@ Item {
                         duration: 400
                         easing.type: Easing.OutQuad
                     }
-
                 }
-
             }
-
         }
 
         // Controls
@@ -351,7 +342,6 @@ Item {
                     Accessible.name: "Previous track"
                     onClicked: root.currentPlayer.previous()
                 }
-
             }
 
             Rectangle {
@@ -378,10 +368,8 @@ Item {
                     onClicked: {
                         if (root.hasPlayer)
                             root.currentPlayer.togglePlaying();
-
                     }
                 }
-
             }
 
             Rectangle {
@@ -408,11 +396,8 @@ Item {
                     Accessible.name: "Next track"
                     onClicked: root.currentPlayer.next()
                 }
-
             }
-
         }
-
     }
 
     // This MouseArea is anchors.fill: capsule and is declared AFTER
@@ -436,15 +421,13 @@ Item {
         onClicked: {
             if (root.hasPlayer)
                 root.currentPlayer.togglePlaying();
-
         }
-        onWheel: (wheel) => {
+        onWheel: wheel => {
             if (!root.hasPlayer)
-                return ;
+                return;
 
             let delta = wheel.angleDelta.y > 0 ? 0.05 : -0.05;
             root.currentPlayer.volume = Math.max(0, Math.min(1, root.currentPlayer.volume + delta));
         }
     }
-
 }

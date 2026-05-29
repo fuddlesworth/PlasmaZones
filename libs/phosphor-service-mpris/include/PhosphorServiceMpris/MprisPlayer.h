@@ -3,16 +3,16 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceMpris/phosphorservicempris_export.h>
 
 #include <QObject>
 #include <QString>
 
 #include <memory>
 
-namespace PhosphorServices {
+namespace PhosphorServiceMpris {
 
-class PHOSPHORSERVICES_EXPORT MprisPlayer : public QObject
+class PHOSPHORSERVICEMPRIS_EXPORT MprisPlayer : public QObject
 {
     Q_OBJECT
 
@@ -118,4 +118,4 @@ private:
     std::unique_ptr<Private> d;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceMpris

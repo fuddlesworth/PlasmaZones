@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/MprisHost.h>
-#include <PhosphorServices/MprisPlayer.h>
+#include <PhosphorServiceMpris/MprisHost.h>
+#include <PhosphorServiceMpris/MprisPlayer.h>
 
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -11,11 +11,11 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 
-Q_LOGGING_CATEGORY(lcMprisHost, "phosphorservices.mpris.host")
+Q_LOGGING_CATEGORY(lcMprisHost, "phosphor.service.mpris.host")
 
 static const QLatin1String kMprisPrefix("org.mpris.MediaPlayer2.");
 
-namespace PhosphorServices {
+namespace PhosphorServiceMpris {
 
 class MprisHost::Private
 {
@@ -144,4 +144,4 @@ MprisPlayer* MprisHost::playerAt(int index) const
     return d->players.at(index);
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceMpris
