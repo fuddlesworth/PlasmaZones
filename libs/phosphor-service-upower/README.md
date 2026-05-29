@@ -7,7 +7,7 @@ UPower (`org.freedesktop.UPower`) battery and power-supply readouts for Phosphor
 
 ## Responsibility
 
-Exposes the system bus `org.freedesktop.UPower` surface — the aggregate display device, the per-device list, the `OnBattery` flag — as Qt + QML types. No UI; the shell decides how a battery percentage, charging icon, or low-power warning is rendered.
+Exposes the system bus `org.freedesktop.UPower` surface (the aggregate display device, the per-device list, the `OnBattery` flag) as Qt + QML types. No UI; the shell decides how a battery percentage, charging icon, or low-power warning is rendered.
 
 The library is a pure D-Bus client. It does not write to UPower (UPower has no writable surface for the kinds of facts it reports), it only observes.
 

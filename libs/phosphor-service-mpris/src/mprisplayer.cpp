@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <cmath>
 
-Q_LOGGING_CATEGORY(lcMpris, "phosphor.service.mpris")
+Q_LOGGING_CATEGORY(lcMprisPlayer, "phosphor.service.mpris.player")
 
 namespace {
 constexpr auto kMprisPath = "/org/mpris/MediaPlayer2";
@@ -137,16 +137,16 @@ public:
                                                           QLatin1String(kPropsIface), QStringLiteral("GetAll"));
         msg << QLatin1String(iface);
         auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), owner);
-        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner,
-                         [this, handler](QDBusPendingCallWatcher* call) {
-                             call->deleteLater();
-                             const QDBusPendingReply<QVariantMap> reply = *call;
-                             if (reply.isError()) {
-                                 qCDebug(lcMpris) << "GetAll failed for" << service << ":" << reply.error().message();
-                                 return;
-                             }
-                             (this->*handler)(reply.value());
-                         });
+        QObject::connect(
+            watcher, &QDBusPendingCallWatcher::finished, owner, [this, handler](QDBusPendingCallWatcher* call) {
+                call->deleteLater();
+                const QDBusPendingReply<QVariantMap> reply = *call;
+                if (reply.isError()) {
+                    qCDebug(lcMprisPlayer) << "GetAll failed for" << service << ":" << reply.error().message();
+                    return;
+                }
+                (this->*handler)(reply.value());
+            });
     }
 
     // Lightweight async resync of just the Position property — used by
@@ -648,7 +648,7 @@ void MprisPlayer::setPosition(qreal absoluteSeconds)
     // drop so the UI side (which has no signal for it) can be
     // debugged from the bus log.
     if (d->trackId.isEmpty()) {
-        qCDebug(lcMpris) << "setPosition dropped: no trackId yet for" << d->service;
+        qCDebug(lcMprisPlayer) << "setPosition dropped: no trackId yet for" << d->service;
         return;
     }
     msg << QVariant::fromValue(QDBusObjectPath(d->trackId)) << static_cast<qint64>(absoluteSeconds * 1e6);

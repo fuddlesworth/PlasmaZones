@@ -37,7 +37,7 @@ PopupWindow {
     /// expose `dbusService` and `menuPath` (the tray Repeater
     /// delegates do). The popup mounts ONLY after the menu model
     /// reaches `valid` state — see the Connections block below.
-    function openFor(delegate) {
+    function openFor(delegate: Item) {
         // Force-unmap before each open so every click gets visible
         // feedback. Two scenarios this handles:
         //   1. Same icon right-clicked twice with the popup still

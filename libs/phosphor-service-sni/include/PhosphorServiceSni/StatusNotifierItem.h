@@ -35,6 +35,7 @@ class PHOSPHORSERVICESNI_EXPORT StatusNotifierItem : public QObject
     Q_PROPERTY(QString dbusService READ dbusService CONSTANT)
     Q_PROPERTY(QString dbusPath READ dbusPath CONSTANT)
     Q_PROPERTY(bool isValid READ isValid NOTIFY validChanged)
+    Q_PROPERTY(int preferredIconSize READ preferredIconSize WRITE setPreferredIconSize NOTIFY iconChanged)
 
 public:
     enum class Status {

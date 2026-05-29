@@ -193,12 +193,14 @@ void StatusNotifierHost::Private::onItemUnregistered(const QString& canonical)
     auto* item = itemsByCanonical.take(canonical);
     if (!item)
         return;
-    // EMIT BEFORE removing from itemsList. The model's onItemRemoved
-    // resolves the row via host.items().indexOf(item); if we removed
-    // first, that lookup would return -1 and beginRemoveRows() would
-    // never be called — leaving the QML Repeater holding a delegate
-    // bound to a deleteLater()'d item. Order: signal first (model
-    // reads the still-valid index), then remove from the storage
+    // EMIT BEFORE removing from itemsList. The current
+    // StatusNotifierItemModel maintains its own mirror and looks up
+    // the row from its private state, so it does not depend on this
+    // ordering, but external listeners (custom dashboards, test
+    // harnesses) that walk `host->items()` from within an
+    // `itemRemoved` slot expect the item to still appear in the list
+    // for the duration of the slot. Order: signal first (observers
+    // read the still-listed item), then remove from the storage
     // containers, then defer the QObject delete.
     Q_EMIT q->itemRemoved(item);
     itemsList.removeOne(item);

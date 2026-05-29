@@ -191,10 +191,18 @@ void StatusNotifierWatcher::RegisterStatusNotifierHost(const QString& service)
     if (!m_serviceOwner) {
         return;
     }
+    // Mirror the item-registration guard: a direct in-process call
+    // (test fixture, accidental consumer that links this class) has
+    // no DBus sender. We track hosts by unique bus name in m_byOwner
+    // semantics; recording an empty sender would let one stray
+    // in-process call permanently claim a host slot keyed by "".
+    if (!calledFromDBus() || message().service().isEmpty()) {
+        return;
+    }
     // Spec format: `org.kde.StatusNotifierHost-<pid>`. Reject any
-    // string that doesn't match the prefix — accepting arbitrary
-    // names from random clients would let a misbehaving process spam
-    // the host list. Empty also dropped.
+    // string that doesn't match the prefix; accepting arbitrary names
+    // from random clients would let a misbehaving process spam the
+    // host list. Empty also dropped.
     if (service.isEmpty() || !service.startsWith(QStringLiteral("org.kde.StatusNotifierHost-"))) {
         return;
     }

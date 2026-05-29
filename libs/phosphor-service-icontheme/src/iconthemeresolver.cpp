@@ -446,7 +446,7 @@ QString IconThemeResolver::themeName() const
 
 QImage IconThemeResolver::iconForName(const QString& name, int size, int scale, const QString& extraThemeDir) const
 {
-    if (name.isEmpty() || size <= 0)
+    if (name.isEmpty() || size <= 0 || scale <= 0)
         return {};
 
     QMutexLocker locker(&d->mutex);
@@ -492,9 +492,11 @@ QImage IconThemeResolver::iconForName(const QString& name, int size, int scale, 
     // first bucket reported by QHash::begin), which is deterministic
     // for a given seed and good enough since the tray rarely has
     // > 32 items × < 4 sizes; we hit the cap only during pathological
-    // churn (icon-theme switches mid-flight). Skip eviction when the
-    // upcoming insert would just overwrite an existing slot, otherwise
-    // we evict an unrelated entry on every cache-hit update.
+    // churn (icon-theme switches mid-flight). Cache hits return at
+    // the top of iconForName(), so when we reach this point the key
+    // is guaranteed not to be in the cache; the contains() check is
+    // a belt-and-braces guard against a future code path that
+    // reaches the insert without going through the early return.
     if (!d->resolvedCache.contains(cacheKey) && d->resolvedCache.size() >= Private::kCacheLimit) {
         d->resolvedCache.erase(d->resolvedCache.begin());
     }

@@ -59,11 +59,16 @@ private Q_SLOTS:
         model.setHost(&host);
         QCOMPARE(model.host(), &host);
         QCOMPARE(hostSpy.count(), 1);
-        QCOMPARE(countSpy.count(), 1);
+        // CI runs with no MPRIS players on the bus, so both old and new
+        // row sets are empty. countChanged should NOT fire on a 0 -> 0
+        // attach per the "only emit on change" contract.
+        QCOMPARE(countSpy.count(), 0);
 
         model.setHost(nullptr);
         QCOMPARE(model.host(), nullptr);
         QCOMPARE(hostSpy.count(), 2);
+        // Same reasoning for detach (0 -> 0).
+        QCOMPARE(countSpy.count(), 0);
     }
 
     void mprisEnumValuesArePublicContract()

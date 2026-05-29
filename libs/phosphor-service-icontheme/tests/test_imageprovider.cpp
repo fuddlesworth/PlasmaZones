@@ -151,7 +151,7 @@ private Q_SLOTS:
     }
 
     // decodePixmaps rejects pixmaps whose declared dimensions exceed
-    // the security cap (kMaxIconDim = 8192 in the impl). Without the
+    // the security cap (kMaxIconDim = 4096 in the impl). Without the
     // guard a hostile app could cause an enormous allocation.
     void decodePixmapsRejectsOversizedDeclaredSize()
     {

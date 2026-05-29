@@ -15,6 +15,7 @@ namespace PhosphorServiceUPower {
 class PHOSPHORSERVICEUPOWER_EXPORT UPowerDevice : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(UPowerDevice)
 
     Q_PROPERTY(qreal percentage READ percentage NOTIFY percentageChanged)
     Q_PROPERTY(DeviceState state READ state NOTIFY stateChanged)

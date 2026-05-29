@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import Phosphor.Service.Mpris 1.0
-import Phosphor.Shell 1.0
 import QtQuick
 import QtQuick.Effects
 
@@ -87,14 +86,10 @@ Item {
     }
 
     Connections {
-        function onPlayerAdded() {
-            root.selectPlayer();
-        }
-
-        function onPlayerRemoved() {
-            root.selectPlayer();
-        }
-
+        // playerCountChanged fires once per add and once per remove, so
+        // a single handler covers both directions; the previous three-
+        // handler form (onPlayerAdded / onPlayerRemoved /
+        // onPlayerCountChanged) re-ran selectPlayer twice per change.
         function onPlayerCountChanged() {
             root.selectPlayer();
         }

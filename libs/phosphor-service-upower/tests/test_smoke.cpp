@@ -63,15 +63,15 @@ private Q_SLOTS:
         model.setHost(&host);
         QCOMPARE(model.host(), &host);
         QCOMPARE(hostSpy.count(), 1);
-        // countChanged fires unconditionally on host change because the
-        // row set is rebuilt from the host's snapshot; the test does
-        // not depend on UPower being present, just on the contract.
-        QCOMPARE(countSpy.count(), 1);
+        // CI runners have no UPower daemon, so both old and new row
+        // sets are empty. countChanged should NOT fire on a 0 -> 0
+        // transition per the "only emit on change" contract.
+        QCOMPARE(countSpy.count(), 0);
 
         model.setHost(nullptr);
         QCOMPARE(model.host(), nullptr);
         QCOMPARE(hostSpy.count(), 2);
-        QCOMPARE(countSpy.count(), 2);
+        QCOMPARE(countSpy.count(), 0);
     }
 
     void modelSurvivesHostDestruction()
@@ -92,10 +92,11 @@ private Q_SLOTS:
         }
         QCOMPARE(model.host(), nullptr);
         QCOMPARE(model.rowCount(), 0);
-        // setHost (attach) emitted once; destroyed-lambda emits again
-        // on detach.
+        // setHost (attach) emitted hostChanged once; destroyed-lambda
+        // emits hostChanged again on auto-detach. Both transitions
+        // are 0 -> 0 row count so countChanged stays silent.
         QCOMPARE(hostSpy.count(), 2);
-        QCOMPARE(countSpy.count(), 2);
+        QCOMPARE(countSpy.count(), 0);
     }
 
     void uPowerDeviceEnumValuesArePublicContract()

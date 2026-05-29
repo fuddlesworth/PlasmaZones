@@ -15,6 +15,7 @@ namespace PhosphorServiceUPower {
 class PHOSPHORSERVICEUPOWER_EXPORT UPowerDeviceModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(UPowerDeviceModel)
     Q_PROPERTY(PhosphorServiceUPower::UPowerHost* host READ host WRITE setHost NOTIFY hostChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 

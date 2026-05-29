@@ -11,7 +11,7 @@ namespace PhosphorServiceSni {
 /// `Phosphor.Service.Sni` module at version 1.0. Intended to be called
 /// once per process at startup; `qmlRegisterType` is not a true no-op
 /// on repeat calls (the second registration overwrites and Qt logs a
-/// debug-level duplicate-registration warning).
+/// warning-level duplicate-registration message).
 ///
 /// Called from the consuming binary (typically `src/shell/main.cpp`)
 /// before any `QQmlEngine` loads a `.qml` file. The host application

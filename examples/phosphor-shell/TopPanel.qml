@@ -13,8 +13,6 @@ import QtQuick
 // pattern when "absolutely centered clock" matters more than overlap
 // avoidance.
 PanelWindow {
-    // contentArea
-
     id: root
 
     // Anchors exposed for popup positioning.
@@ -243,6 +241,7 @@ PanelWindow {
                         required property string itemId
                         required property string title
                         required property string iconUrl
+                        required property var status
                         required property string toolTipTitle
                         required property string toolTipBody
                         required property string menuPath
@@ -281,35 +280,36 @@ PanelWindow {
                         }
 
                         Image {
-                            id: trayIcon
-
                             anchors.centerIn: parent
                             visible: trayDelegate.iconUrl.length > 0
                             width: 18
                             height: 18
-                            // Image.source is a QUrl property — feed
+                            // Image.source is a QUrl property; feed it
                             // the model's URL-form role, which encodes
                             // a cacheKey so the URL changes whenever
                             // the underlying QImage data updates. The
-                            // engine routes the URL back through
+                            // engine routes the URL back through the
                             // image://phosphor-service-icontheme/
-                            // provider.
-                            // sourceSize keeps the on-screen size stable
-                            // regardless of the icon's intrinsic res.
+                            // provider. sourceSize keeps the on-screen
+                            // size stable regardless of the icon's
+                            // intrinsic resolution.
                             source: trayDelegate.iconUrl
                             sourceSize.width: 36
                             sourceSize.height: 36
                             smooth: true
-                            // Some apps emit `Passive` items they never
-                            // upgrade — keep them visible but slightly
-                            // dimmed so they don't dominate the panel.
-                            opacity: 1
+                            // Dim Passive tray items so a chatty app
+                            // that never upgrades to Active doesn't
+                            // dominate the panel; Active stays at 1.
+                            // status is the model's StatusRole value,
+                            // which is the StatusNotifierItem::Status
+                            // enum integer.
+                            opacity: trayDelegate.status === StatusNotifierItem.Passive ? 0.55 : 1
                         }
 
                         MouseArea {
-                            // SNI button-mapping, same as KDE Plasma:
-
                             id: trayMouse
+
+                            // SNI button mapping, mirrors KDE Plasma.
 
                             anchors.fill: parent
                             hoverEnabled: true

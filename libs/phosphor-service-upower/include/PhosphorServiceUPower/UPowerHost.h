@@ -16,6 +16,7 @@ namespace PhosphorServiceUPower {
 class PHOSPHORSERVICEUPOWER_EXPORT UPowerHost : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(UPowerHost)
     Q_PROPERTY(bool onBattery READ onBattery NOTIFY onBatteryChanged)
     Q_PROPERTY(PhosphorServiceUPower::UPowerDevice* displayDevice READ displayDevice NOTIFY displayDeviceChanged)
     Q_PROPERTY(int deviceCount READ deviceCount NOTIFY deviceCountChanged)

@@ -5,11 +5,12 @@
 
 #include <PhosphorServiceIconTheme/phosphorserviceicontheme_export.h>
 
-#include <QHash>
 #include <QImage>
+#include <QList>
 #include <QObject>
+#include <QPair>
+#include <QSize>
 #include <QString>
-#include <QStringList>
 
 #include <memory>
 
@@ -43,7 +44,8 @@ public:
     /// search path so an app's custom theme wins over the system
     /// one. `size` is the desired logical-pixel size; `scale` is
     /// the device pixel ratio (1 for traditional, 2 for HiDPI).
-    /// Returns an empty QImage when no match exists.
+    /// Returns an empty QImage when no match exists, when `name` is
+    /// empty, or when either `size` or `scale` is non-positive.
     [[nodiscard]] QImage iconForName(const QString& name, int size, int scale = 1,
                                      const QString& extraThemeDir = {}) const;
 

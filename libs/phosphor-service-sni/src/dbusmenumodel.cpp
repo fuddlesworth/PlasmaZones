@@ -291,15 +291,30 @@ void DBusMenuModel::Private::refresh()
         return;
     }
 
+    // Cancel any in-flight GetLayout from a prior refresh() before
+    // launching a fresh one. Without this, rapid LayoutUpdated
+    // signals (or manual refresh() chained off a setService that
+    // matched the previous value) leave two watchers alive; if the
+    // older reply lands after the newer one, the stale snapshot
+    // wins and the model reverts. The disconnect call removes our
+    // finished handler so the about-to-be-deleted watcher's reply
+    // is dropped on the floor.
+    if (pendingLayoutWatcher) {
+        pendingLayoutWatcher->disconnect();
+        pendingLayoutWatcher->deleteLater();
+        pendingLayoutWatcher.clear();
+    }
+
     // GetLayout(rootId, recursionDepth=1, props=[])
     //   depth=1 returns the requested node + its direct children (id +
     //   metadata, no deeper). That's what we want for a flat list-model
     //   level; deeper submenus get their own DBusMenuModel instance.
     auto pending = proxy->GetLayout(rootId, 1, QStringList());
     auto* watcher = new QDBusPendingCallWatcher(pending, q);
-    // Track in-flight watcher so buildProxy() can cancel it if the
-    // source changes mid-call. Auto-clears via QPointer when the
-    // watcher self-destructs on finished.
+    // Track in-flight watcher so buildProxy() (and a subsequent
+    // refresh()) can cancel it if the source changes mid-call.
+    // Auto-clears via QPointer when the watcher self-destructs on
+    // finished.
     pendingLayoutWatcher = watcher;
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, q, [this, watcher] {
         watcher->deleteLater();

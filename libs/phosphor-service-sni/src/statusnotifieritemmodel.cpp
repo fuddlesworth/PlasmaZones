@@ -194,6 +194,7 @@ void StatusNotifierItemModel::setHost(StatusNotifierHost* host)
         // children. Reset both to leave QML observers with a clean
         // empty model rather than a crash on next data().
         connect(d->host, &QObject::destroyed, this, [this]() {
+            const int prev = d->items.size();
             beginResetModel();
             d->items.clear();
             for (auto it = d->iconUrls.constBegin(); it != d->iconUrls.constEnd(); ++it) {
@@ -205,7 +206,8 @@ void StatusNotifierItemModel::setHost(StatusNotifierHost* host)
             d->iconUrls.clear();
             endResetModel();
             Q_EMIT hostChanged();
-            Q_EMIT countChanged();
+            if (prev != 0)
+                Q_EMIT countChanged();
         });
     }
 

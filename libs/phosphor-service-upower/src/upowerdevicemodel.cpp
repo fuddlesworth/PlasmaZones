@@ -23,6 +23,7 @@ void UPowerDeviceModel::setHost(UPowerHost* host)
 {
     if (m_host == host)
         return;
+    const int previousCount = m_rows.size();
     beginResetModel();
     if (m_host) {
         disconnect(m_host, nullptr, this, nullptr);
@@ -42,17 +43,23 @@ void UPowerDeviceModel::setHost(UPowerHost* host)
         // The host owns the devices; if it is destroyed while still set,
         // m_host and every m_rows entry would dangle. Drop them all.
         connect(m_host, &QObject::destroyed, this, [this]() {
+            const int prev = m_rows.size();
             beginResetModel();
             m_rows.clear();
             m_host = nullptr;
             endResetModel();
             Q_EMIT hostChanged();
-            Q_EMIT countChanged();
+            if (prev != 0)
+                Q_EMIT countChanged();
         });
     }
     endResetModel();
     Q_EMIT hostChanged();
-    Q_EMIT countChanged();
+    // Only emit countChanged when the row count actually moved. A 0
+    // -> 0 attach (CI has no UPower daemon) or detach should stay
+    // silent per CLAUDE.md "only emit on change".
+    if (previousCount != m_rows.size())
+        Q_EMIT countChanged();
 }
 
 int UPowerDeviceModel::rowCount(const QModelIndex& parent) const
