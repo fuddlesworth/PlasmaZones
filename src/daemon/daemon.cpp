@@ -1098,6 +1098,16 @@ bool Daemon::init()
     auto refilterExcludeRules = [this, snapEngine] {
         m_excludeRuleSet = PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet());
         snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
+        // Prune any pending-restore queues for apps now covered by an
+        // Exclude rule. Snap-engine's resolveWindowRestore already refuses
+        // them at runtime, but stale queue entries spam logs and bloat the
+        // saved state. The autotile-side queues don't exist yet at init
+        // — daemon/signals.cpp's finalizeStartup re-runs the prune once
+        // AutotileEngine::loadState has populated them.
+        if (m_windowTrackingAdaptor) {
+            m_windowTrackingAdaptor->pruneExcludedPendingRestores(
+                PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+        }
     };
     refilterExcludeRules();
     connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,

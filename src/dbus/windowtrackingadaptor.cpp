@@ -187,19 +187,16 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // Load persisted window tracking state from previous session
     loadState();
 
-    // Prune any pending-restore queues for appIds that are now on the user's
-    // exclusion list. Snap-engine's resolveWindowRestore already refuses to
-    // honor them at runtime, but they live on disk until pruned and spam one
-    // "pending snap:" log line per entry at every startup. One-shot at boot
-    // catches entries authored before the user added the class to exclusions.
-    // The signal hookups cover live additions for the running session. The
-    // autotile-side prune happens again from the daemon's finalizeStartup
-    // after AutotileEngine::loadState populates m_pendingAutotileRestores.
-    pruneExcludedPendingRestoresFromSettings();
-    connect(m_settings, &ISettings::excludedApplicationsChanged, this,
-            &WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings);
-    connect(m_settings, &ISettings::excludedWindowClassesChanged, this,
-            &WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings);
+    // Prune any pending-restore queues for appIds excluded by the unified
+    // WindowRule store. Snap-engine's resolveWindowRestore already refuses
+    // to honor them at runtime, but they live on disk until pruned and
+    // spam one "pending snap:" log line per entry at every startup. The
+    // pattern derivation + live wiring now live on the daemon (it owns
+    // the rule store and the rulesChanged subscription); the one-shot
+    // catch-up here happens on the rulesChanged kick after init from
+    // Daemon::init, NOT here. The autotile-side prune happens again from
+    // the daemon's finalizeStartup after AutotileEngine::loadState
+    // populates m_pendingAutotileRestores.
 
     // If we have pending restores but missed activeLayoutChanged (layout was set before we
     // connected), set the flag so tryEmitPendingRestoresAvailable will emit when panel
@@ -259,13 +256,8 @@ void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJson
     m_deserializePendingRestoresFn = std::move(deserializeFn);
 }
 
-void WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings()
+void WindowTrackingAdaptor::pruneExcludedPendingRestores(const QStringList& patterns)
 {
-    if (!m_settings) {
-        return;
-    }
-    QStringList patterns = m_settings->excludedApplications();
-    patterns += m_settings->excludedWindowClasses();
     if (patterns.isEmpty()) {
         return;
     }

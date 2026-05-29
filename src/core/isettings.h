@@ -395,8 +395,10 @@ Q_SIGNALS:
     void snapAssistTriggersChanged();
     void defaultLayoutIdChanged();
     void filterLayoutsByAspectRatioChanged();
-    void excludedApplicationsChanged();
-    void excludedWindowClassesChanged();
+    // excludedApplications / excludedWindowClasses signals retired in v4
+    // — see settings_interfaces.h for the rationale (lists folded into
+    // unified Exclude WindowRules; consumers subscribe to the rule store
+    // through PhosphorWindowRule::WindowRuleStore::rulesChanged instead).
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();

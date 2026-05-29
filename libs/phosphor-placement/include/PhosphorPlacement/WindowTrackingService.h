@@ -510,13 +510,15 @@ public:
      * DirtyPendingRestores so the next debounced save persists the pruned
      * set.
      *
-     * Called from the daemon adaptor at startup right after loadState.
-     * Also called on every excludedApplicationsChanged or
-     * excludedWindowClassesChanged signal so freshly excluded apps don't
-     * strand their old queues.
+     * Called from the daemon at startup (kicked once after the unified
+     * rule store's rules-changed subscription wires up) and from the
+     * daemon's finalizeStartup once AutotileEngine::loadState has
+     * populated the autotile queue. Live edits to the rule store
+     * re-trigger via the same subscription.
      *
-     * @param exclusionPatterns combined list of excludedApplications and
-     *                          excludedWindowClasses entries. Empty
+     * @param exclusionPatterns AppId patterns extracted from the
+     *                          unified rule store's Exclude rules via
+     *                          PhosphorWindowRule::ExclusionRules. Empty
      *                          patterns and an empty list are no-ops.
      * @return number of appId entries fully removed. The queue may have
      *         contained multiple PendingRestores for one appId. One

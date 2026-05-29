@@ -1635,98 +1635,15 @@ PZ_STORE_GET(bool, filterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, fil
 PZ_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey,
                   filterLayoutsByAspectRatioChanged)
 
-// ── Exclusions (PhosphorConfig::Store-backed) ───────────────────────────────
-
-QStringList Settings::excludedApplications() const
-{
-    return parseCommaList(m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey()));
-}
-
-void Settings::setExcludedApplications(const QStringList& apps)
-{
-    // Post-write compare — see writeDisableEntries for the canonicalisation
-    // rationale. Callers like addExcludedApplication rely on this setter not
-    // firing the changed signal when the de-duplicated / trimmed form
-    // already matches storage.
-    const QString before = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey());
-    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey(), apps.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT excludedApplicationsChanged();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::addExcludedApplication(const QString& app)
-{
-    const QString trimmed = app.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = excludedApplications();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setExcludedApplications(list);
-}
-
-void Settings::removeExcludedApplicationAt(int index)
-{
-    QStringList list = excludedApplications();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setExcludedApplications(list);
-}
-
-QStringList Settings::excludedWindowClasses() const
-{
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey()));
-}
-
-void Settings::setExcludedWindowClasses(const QStringList& classes)
-{
-    // Post-write compare — see writeDisableEntries for the canonicalisation
-    // rationale.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey());
-    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey(),
-                   classes.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT excludedWindowClassesChanged();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::addExcludedWindowClass(const QString& cls)
-{
-    const QString trimmed = cls.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = excludedWindowClasses();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setExcludedWindowClasses(list);
-}
-
-void Settings::removeExcludedWindowClassAt(int index)
-{
-    QStringList list = excludedWindowClasses();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setExcludedWindowClasses(list);
-}
+// ── Window filtering (PhosphorConfig::Store-backed) ────────────────────────
+//
+// The legacy per-app / per-class exclusion lists
+// (excludedApplications / excludedWindowClasses) folded into the unified
+// WindowRule store in v4 — the migration in src/config/configmigration.cpp
+// drains the Exclusions group on first start, and the runtime evaluators
+// in SnapEngine, the KWin effect, and the WTA pending-restore prune all
+// route through PhosphorWindowRule::ExclusionRules over the store. Only
+// the three GLOBAL knobs below survive here.
 
 PZ_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
 PZ_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)

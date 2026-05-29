@@ -271,10 +271,12 @@ class PLASMAZONES_EXPORT IWindowExclusionSettings
 public:
     virtual ~IWindowExclusionSettings() = default;
 
-    virtual QStringList excludedApplications() const = 0;
-    virtual void setExcludedApplications(const QStringList& apps) = 0;
-    virtual QStringList excludedWindowClasses() const = 0;
-    virtual void setExcludedWindowClasses(const QStringList& classes) = 0;
+    // The per-application / per-class exclusion lists (excludedApplications,
+    // excludedWindowClasses) retired in v4 — the legacy QStringList settings
+    // folded into Application-subject Exclude WindowRules, and all consumers
+    // (snap-engine, KWin effect, WTA pending-restore prune) now route through
+    // PhosphorWindowRule::ExclusionRules over the unified rule store.
+
     virtual bool excludeTransientWindows() const = 0;
     virtual void setExcludeTransientWindows(bool exclude) = 0;
     virtual int minimumWindowWidth() const = 0;

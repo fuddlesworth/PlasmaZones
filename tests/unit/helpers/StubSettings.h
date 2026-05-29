@@ -20,10 +20,11 @@ namespace PlasmaZones {
  *
  * Also inherits PhosphorEngine::ISnapSettings so SnapEngine's
  * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
- * via setEngineSettings(). The ISnapSettings methods (excludedApplications,
- * stickyWindowHandling, moveNewWindowsToLastZone, restoreWindowsToZonesOnLogin,
- * autoAssignAllLayouts) are already implemented for ISettings — the multiple
- * inheritance just registers the second base so the cast resolves.
+ * via setEngineSettings(). The remaining ISnapSettings methods
+ * (stickyWindowHandling, moveNewWindowsToLastZone,
+ * restoreWindowsToZonesOnLogin, autoAssignAllLayouts) are already
+ * implemented for ISettings — the multiple inheritance just registers
+ * the second base so the cast resolves.
  *
  * NOTE: This stub does NOT inherit PhosphorEngine::IAutotileSettings —
  * the AutotileEngine fetches its config via a separate code path and
@@ -415,21 +416,8 @@ public:
     {
     }
 
-    // IWindowExclusionSettings
-    QStringList excludedApplications() const override
-    {
-        return {};
-    }
-    void setExcludedApplications(const QStringList&) override
-    {
-    }
-    QStringList excludedWindowClasses() const override
-    {
-        return {};
-    }
-    void setExcludedWindowClasses(const QStringList&) override
-    {
-    }
+    // IWindowExclusionSettings — the per-app / per-class exclusion list
+    // accessors retired in v4 (folded into unified WindowRule store).
     bool excludeTransientWindows() const override
     {
         return false;

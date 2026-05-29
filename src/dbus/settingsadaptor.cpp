@@ -474,9 +474,9 @@ void SettingsAdaptor::initializeRegistry()
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
 
-    // Exclusions
-    REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)
-    REGISTER_STRINGLIST_SETTING("excludedWindowClasses", excludedWindowClasses, setExcludedWindowClasses)
+    // Window filtering — the per-app / per-class exclusion lists
+    // (excludedApplications, excludedWindowClasses) retired in v4 along
+    // with their settings page; only the three global knobs below remain.
     REGISTER_BOOL_SETTING("excludeTransientWindows", excludeTransientWindows, setExcludeTransientWindows)
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)

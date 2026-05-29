@@ -575,25 +575,24 @@ public Q_SLOTS:
     /**
      * @brief Drop snap and autotile pending-restore queues for excluded appIds.
      *
-     * Reads the current snap-side exclusion lists from m_settings, combines
-     * them, and asks both engines to walk their pending-restore queues and
-     * remove any appId matching a pattern. Marks DirtyPendingRestores or
-     * DirtyAutotilePending as appropriate so the next debounced save persists
-     * the pruned state.
+     * Walks the snap and autotile pending-restore queues and asks both
+     * engines to remove any appId matching one of @p patterns. Marks
+     * DirtyPendingRestores or DirtyAutotilePending as appropriate so the
+     * next debounced save persists the pruned state.
      *
-     * Called from three sites.
-     *   1. WTA's own constructor, right after loadState. The snap queues are
-     *      populated by then but the autotile queue is not.
-     *   2. The excludedApplicationsChanged and excludedWindowClassesChanged signal
-     *      handlers wired in the constructor.
-     *   3. The daemon's finalizeStartup, after AutotileEngine::loadState runs. By
-     *      then the autotile queue has also been deserialized into the engine,
-     *      so it gets pruned too.
+     * Called from two sites.
+     *   1. WTA's own constructor, right after loadState. The snap queues
+     *      are populated by then but the autotile queue is not. The daemon
+     *      derives @p patterns from the unified WindowRule store and
+     *      passes them in.
+     *   2. The daemon's WindowRuleStore::rulesChanged subscription, so a
+     *      user-authored Exclude rule prunes queued restores live; and the
+     *      daemon's finalizeStartup, after AutotileEngine::loadState runs.
      *
      * Calling this before either engine is wired is safe. Engines that are
-     * missing contribute zero removals.
+     * missing contribute zero removals. An empty @p patterns short-circuits.
      */
-    void pruneExcludedPendingRestoresFromSettings();
+    void pruneExcludedPendingRestores(const QStringList& patterns);
 
     /**
      * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles)
