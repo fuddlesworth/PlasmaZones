@@ -3,6 +3,8 @@
 
 #include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
+#include <climits>
+
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>

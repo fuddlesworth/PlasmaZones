@@ -5,9 +5,7 @@
 
 #include <QDir>
 #include <QFile>
-#include <QGuiApplication>
 #include <QImage>
-#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 
@@ -154,6 +152,18 @@ private Q_SLOTS:
     {
         auto* r = IconThemeResolver::instance();
         QVERIFY(r->iconForName(QStringLiteral("test-app"), 0).isNull());
+    }
+
+    void nonPositiveScaleReturnsEmpty()
+    {
+        // Pins the `scale <= 0` guard added in the Phase-2.0 PR. Both
+        // zero and negative scale should short-circuit to an empty
+        // QImage so the cache key isn't polluted with sentinel scales
+        // and the distance math at the search layer doesn't underflow.
+        auto* r = IconThemeResolver::instance();
+        r->setThemeName(QStringLiteral("testtheme"));
+        QVERIFY(r->iconForName(QStringLiteral("test-app"), 16, 0).isNull());
+        QVERIFY(r->iconForName(QStringLiteral("test-app"), 16, -1).isNull());
     }
 };
 

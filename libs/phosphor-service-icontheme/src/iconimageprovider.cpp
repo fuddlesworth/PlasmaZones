@@ -41,28 +41,38 @@ QImage IconImageProvider::requestImage(const QString& id, QSize* size, const QSi
     lookupId = QUrl::fromPercentEncoding(lookupId.toUtf8());
 
     // Copy the QImage out under the lock, then release before any
-    // expensive transformation. Earlier rev held the mutex across
-    // `img.scaled(SmoothTransformation)` which could block publishers
-    // (setImage / clearImage) for several milliseconds per request.
-    // QImage is implicitly shared (copy-on-write), so the copy is
-    // O(1) and doesn't actually duplicate pixel data.
+    // expensive transformation OR logging. Earlier rev held the mutex
+    // across `img.scaled(SmoothTransformation)` which could block
+    // publishers (setImage / clearImage) for several milliseconds per
+    // request. QImage is implicitly shared (copy-on-write), so the
+    // copy is O(1) and doesn't actually duplicate pixel data. Logging
+    // ran under the lock too; a slow custom Qt log handler (network
+    // forwarder, file logger) would have serialised every publisher
+    // behind the consumer's log sink. Capture both the lookup result
+    // and the registry size, release the lock, then log.
     QImage img;
+    bool hit = false;
+    qsizetype registrySize = 0;
     {
         QMutexLocker lock(&s_mutex);
-        qCDebug(lcImageProvider) << "requestImage id=" << id << " lookup=" << lookupId
-                                 << " requestedSize=" << requestedSize << " registry size=" << s_registry.size();
+        registrySize = s_registry.size();
         auto it = s_registry.constFind(lookupId);
-        if (it == s_registry.constEnd()) {
-            // Surface the miss to logs so a future regression (wrong key
-            // format, missed publish callsite) is debuggable without a
-            // gdb session.
-            qCWarning(lcImageProvider) << "no registered image for id" << id << "(stripped+decoded:" << lookupId << ")";
-            if (size) {
-                *size = QSize(0, 0);
-            }
-            return {};
+        if (it != s_registry.constEnd()) {
+            img = *it;
+            hit = true;
         }
-        img = *it;
+    }
+    qCDebug(lcImageProvider) << "requestImage id=" << id << " lookup=" << lookupId << " requestedSize=" << requestedSize
+                             << " registry size=" << registrySize;
+    if (!hit) {
+        // Surface the miss to logs so a future regression (wrong key
+        // format, missed publish callsite) is debuggable without a
+        // gdb session.
+        qCWarning(lcImageProvider) << "no registered image for id" << id << "(stripped+decoded:" << lookupId << ")";
+        if (size) {
+            *size = QSize(0, 0);
+        }
+        return {};
     }
     if (size) {
         *size = img.size();

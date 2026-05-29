@@ -88,6 +88,30 @@ private Q_SLOTS:
         IconImageProvider::clearImage(id);
     }
 
+    // Direct clearImage round-trip. Distinct from the setImage(null)
+    // path because publishers can also invoke clearImage explicitly
+    // (e.g. on item removal); pin both code paths separately so a
+    // future refactor that diverges them is caught.
+    void explicitClearImageRemovesEntry()
+    {
+        QImage src(2, 2, QImage::Format_ARGB32);
+        src.fill(Qt::cyan);
+        const QString id = QStringLiteral("explicit-clear");
+        IconImageProvider::setImage(id, src);
+
+        QSize sz;
+        QVERIFY(!provider.requestImage(id, &sz, QSize()).isNull());
+
+        IconImageProvider::clearImage(id);
+        QSize after;
+        QVERIFY(provider.requestImage(id, &after, QSize()).isNull());
+        QCOMPARE(after, QSize(0, 0));
+
+        // Clearing an already-cleared id is a no-op (idempotent).
+        IconImageProvider::clearImage(id);
+        QVERIFY(provider.requestImage(id, &after, QSize()).isNull());
+    }
+
     // Passing a null QImage to setImage is documented to clear the
     // entry (equivalent to clearImage). Pin that contract so the SNI
     // publisher's "no-icon" branch stays correct.
