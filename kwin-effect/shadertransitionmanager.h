@@ -196,16 +196,16 @@ public:
     // Per-window State
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Access the in-flight shader transition map (for paintWindow).
-    ///
-    /// @note The raw map exposure is a transitional shim. Prefer the
-    /// focused accessors below (`hasTransition`, `findTransition`,
-    /// `eraseTransition`) for new call sites — they preserve the
-    /// option of adding generation gating, instrumentation, or
-    /// invariant assertions in the manager without touching every
-    /// caller. Existing direct uses live in `shader_transitions.cpp`
-    /// (via `friend class PlasmaZonesEffect`) and migrate as those
-    /// sites are touched.
+    /// Access the in-flight shader transition map. Raw map access is
+    /// retained for the few hot-path iteration call sites
+    /// (`paint_pipeline.cpp`'s prePaint/postPaint sweeps,
+    /// `shader_transitions.cpp`'s `endShaderTransition` cleanup loop)
+    /// that walk every entry. Single-entry call sites should use
+    /// `hasTransition` / `findTransition` / `insertTransition` /
+    /// `eraseTransition` / `empty()` below, which document intent and
+    /// preserve the option of adding generation gating, instrumentation,
+    /// or invariant assertions in the manager without touching every
+    /// caller.
     std::unordered_map<KWin::EffectWindow*, ShaderTransition>& shaderTransitions()
     {
         return m_shaderTransitions;
@@ -215,10 +215,15 @@ public:
         return m_shaderTransitions;
     }
 
+    /// True when no transitions are in flight. Hot-path single-test
+    /// idiom used by every prePaint/postPaint check.
+    bool empty() const
+    {
+        return m_shaderTransitions.empty();
+    }
     /// Focused accessors. Each is a thin wrapper over the underlying
     /// `std::unordered_map` so call sites that don't need raw iterator
-    /// access can express their intent at the manager API level. New
-    /// code should prefer these.
+    /// access can express their intent at the manager API level.
     bool hasTransition(KWin::EffectWindow* window) const
     {
         return m_shaderTransitions.find(window) != m_shaderTransitions.end();
@@ -237,6 +242,17 @@ public:
     {
         auto it = m_shaderTransitions.find(window);
         return it != m_shaderTransitions.end() ? &it->second : nullptr;
+    }
+    /// Insert a transition for @p window, taking ownership of the moved
+    /// payload. Returns the pointer to the inserted entry (always
+    /// non-null on success). Asserts that no prior entry existed —
+    /// callers that may supersede an existing transition must
+    /// `eraseTransition` first.
+    ShaderTransition* insertTransition(KWin::EffectWindow* window, ShaderTransition&& transition)
+    {
+        auto result = m_shaderTransitions.emplace(window, std::move(transition));
+        Q_ASSERT(result.second);
+        return &result.first->second;
     }
     /// Returns true when an entry was actually erased.
     bool eraseTransition(KWin::EffectWindow* window)

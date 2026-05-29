@@ -760,7 +760,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (!snappingGaps.isEmpty())
         snapping[QLatin1String("Gaps")] = snappingGaps;
     if (!snapping.isEmpty())
-        root[QLatin1String("Snapping")] = snapping;
+        root[ConfigKeys::Legacy::v2SnappingGroup()] = snapping;
 
     // ── Performance ─────────────────────────────────────────────────────────
     QJsonObject performance;
@@ -768,7 +768,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     moveKey(v1Zones, QLatin1String("MinimumZoneSizePx"), performance, QLatin1String("MinimumZoneSizePx"));
     moveKey(v1Zones, QLatin1String("MinimumZoneDisplaySizePx"), performance, QLatin1String("MinimumZoneDisplaySizePx"));
     if (!performance.isEmpty())
-        root[QLatin1String("Performance")] = performance;
+        root[ConfigKeys::Legacy::v2PerformanceGroup()] = performance;
 
     // ── Tiling ──────────────────────────────────────────────────────────────
     QJsonObject tilingTop;
@@ -835,7 +835,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (!tilingGaps.isEmpty())
         tiling[QLatin1String("Gaps")] = tilingGaps;
     if (!tiling.isEmpty())
-        root[QLatin1String("Tiling")] = tiling;
+        root[ConfigKeys::Legacy::v2TilingGroup()] = tiling;
 
     // ── Exclusions (key renames) ────────────────────────────────────────────
     QJsonObject exclusions;
@@ -845,13 +845,13 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     moveKey(v1Exclusions, QLatin1String("Applications"), exclusions, QLatin1String("Applications"));
     moveKey(v1Exclusions, QLatin1String("WindowClasses"), exclusions, QLatin1String("WindowClasses"));
     if (!exclusions.isEmpty())
-        root[QLatin1String("Exclusions")] = exclusions;
+        root[ConfigKeys::Legacy::v2ExclusionsGroup()] = exclusions;
 
     // ── Rendering (key rename) ──────────────────────────────────────────────
     QJsonObject rendering;
     moveKey(v1Rendering, ConfigKeys::Legacy::v1RenderingBackendKey(), rendering, QLatin1String("Backend"));
     if (!rendering.isEmpty())
-        root[QLatin1String("Rendering")] = rendering;
+        root[ConfigKeys::Legacy::v2RenderingGroup()] = rendering;
 
     // ── Shaders (key renames) ───────────────────────────────────────────────
     QJsonObject shaders;
@@ -860,7 +860,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     moveKey(v1Shaders, QLatin1String("EnableAudioVisualizer"), shaders, QLatin1String("AudioVisualizer"));
     moveKey(v1Shaders, QLatin1String("AudioSpectrumBarCount"), shaders, QLatin1String("AudioSpectrumBarCount"));
     if (!shaders.isEmpty())
-        root[QLatin1String("Shaders")] = shaders;
+        root[ConfigKeys::Legacy::v2ShadersGroup()] = shaders;
 
     // ── Animations (key renames + Phase-4 Profile-blob packing) ────────────
     // v1 stored five per-field animation keys + a standalone `AnimationsEnabled`
@@ -981,8 +981,8 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
             QLatin1String("PreviousLayout"));
     moveKey(v1GlobalShortcuts, QLatin1String("NextLayoutShortcut"), globalShortcuts, QLatin1String("NextLayout"));
     for (int i = 1; i <= 9; ++i) {
-        moveKey(v1GlobalShortcuts, QStringLiteral("QuickLayout%1Shortcut").arg(i), globalShortcuts,
-                QStringLiteral("QuickLayout%1").arg(i));
+        moveKey(v1GlobalShortcuts, ConfigKeys::Legacy::v1QuickLayoutShortcutKey(i), globalShortcuts,
+                ConfigKeys::Legacy::v2QuickLayoutKey(i));
     }
     // Navigation keys — same names in v1 and v2
     for (const auto& key :
@@ -993,7 +993,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         moveKey(v1GlobalShortcuts, QLatin1String(key), globalShortcuts, QLatin1String(key));
     }
     for (int i = 1; i <= 9; ++i) {
-        const QString key = QStringLiteral("SnapToZone%1").arg(i);
+        const QString key = ConfigKeys::Legacy::v2SnapToZoneKey(i);
         moveKey(v1GlobalShortcuts, key, globalShortcuts, key);
     }
     moveKey(v1GlobalShortcuts, QLatin1String("ResnapToNewLayoutShortcut"), globalShortcuts,
@@ -1025,7 +1025,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (!tilingShortcuts.isEmpty())
         shortcuts[QLatin1String("Tiling")] = tilingShortcuts;
     if (!shortcuts.isEmpty())
-        root[QLatin1String("Shortcuts")] = shortcuts;
+        root[ConfigKeys::Legacy::v2ShortcutsGroup()] = shortcuts;
 
     // ── Editor (split into sub-groups) ──────────────────────────────────────
     QJsonObject editorShortcuts;
@@ -1063,11 +1063,11 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (!editorFillOnDrop.isEmpty())
         editor[QLatin1String("FillOnDrop")] = editorFillOnDrop;
     if (!editor.isEmpty())
-        root[QLatin1String("Editor")] = editor;
+        root[ConfigKeys::Legacy::v2EditorGroup()] = editor;
 
     // ── Ordering (keys unchanged) ───────────────────────────────────────────
     if (!v1Ordering.isEmpty())
-        root[QLatin1String("Ordering")] = v1Ordering;
+        root[ConfigKeys::Legacy::v2OrderingGroup()] = v1Ordering;
 
     // ── Extract WindowTracking (ephemeral session state) to session.json ──
     // In v2, session state lives in its own file to avoid write contention

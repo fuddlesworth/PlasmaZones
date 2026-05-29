@@ -605,6 +605,52 @@ public:
         PZ_CONFIG_KEY(v2DisabledDesktopsKey, "DisabledDesktops")
         PZ_CONFIG_KEY(v2DisabledActivitiesKey, "DisabledActivities")
 
+        // v2 destination group names — used as both v1→v2 destinations
+        // (in `migrateV1ToV2`) and v2 source coordinates. The frozen
+        // accessors mirror the v3→v4 step's `v3DisplayGroup` pattern
+        // and ensure a future rename of the matching live
+        // `snappingGroup()` / `tilingGroup()` / etc. accessor does not
+        // silently retarget the migration to a path no v2 config ever
+        // had on disk.
+        PZ_CONFIG_GROUP(v2SnappingGroup, "Snapping")
+        PZ_CONFIG_GROUP(v2TilingGroup, "Tiling")
+        PZ_CONFIG_GROUP(v2PerformanceGroup, "Performance")
+        PZ_CONFIG_GROUP(v2ExclusionsGroup, "Exclusions")
+        PZ_CONFIG_GROUP(v2RenderingGroup, "Rendering")
+        PZ_CONFIG_GROUP(v2ShadersGroup, "Shaders")
+        PZ_CONFIG_GROUP(v2ShortcutsGroup, "Shortcuts")
+        PZ_CONFIG_GROUP(v2EditorGroup, "Editor")
+        PZ_CONFIG_GROUP(v2OrderingGroup, "Ordering")
+        // Parameterised v2 destinations: v1→v2 renames v1's
+        // `QuickLayout%1Shortcut` to v2's `QuickLayout%1` and preserves
+        // v1's `SnapToZone%1` verbatim. Frozen accessors pin the v2
+        // wire-format names so a future rename of the matching live
+        // pattern accessors stays isolated from migration.
+        PZ_CONFIG_KEY(v1QuickLayoutShortcutKeyPattern, "QuickLayout%1Shortcut")
+        PZ_CONFIG_KEY(v2QuickLayoutKeyPattern, "QuickLayout%1")
+        PZ_CONFIG_KEY(v2SnapToZoneKeyPattern, "SnapToZone%1")
+        static QString v1QuickLayoutShortcutKey(int n)
+        {
+            if (n < 1 || n > 9) {
+                qFatal("Legacy::v1QuickLayoutShortcutKey: n out of range: %d", n);
+            }
+            return v1QuickLayoutShortcutKeyPattern().arg(n);
+        }
+        static QString v2QuickLayoutKey(int n)
+        {
+            if (n < 1 || n > 9) {
+                qFatal("Legacy::v2QuickLayoutKey: n out of range: %d", n);
+            }
+            return v2QuickLayoutKeyPattern().arg(n);
+        }
+        static QString v2SnapToZoneKey(int n)
+        {
+            if (n < 1 || n > 9) {
+                qFatal("Legacy::v2SnapToZoneKey: n out of range: %d", n);
+            }
+            return v2SnapToZoneKeyPattern().arg(n);
+        }
+
         // v3 legacy keys/groups — used ONLY by migration code.
         //
         // Per-mode disable keys (`v3*DisabledMonitorsKey` etc.) lived in the v3

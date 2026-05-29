@@ -123,8 +123,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // the original animator running its geometry tween, and that
         // animator's eventual completion would prematurely kill the
         // successor (whose own QTimer hasn't fired yet).
-        auto it = m_shaderManager.m_shaderTransitions.find(w);
-        if (it == m_shaderManager.m_shaderTransitions.end() || it->second.durationMs > 0) {
+        const auto* st = m_shaderManager.findTransition(w);
+        if (!st || st->durationMs > 0) {
             return;
         }
         endShaderTransition(w);
@@ -136,7 +136,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     windows.push_back(w);
                 for (auto* w : windows)
                     endShaderTransition(w);
-                Q_ASSERT(m_shaderManager.m_shaderTransitions.empty());
+                Q_ASSERT(m_shaderManager.empty());
                 m_shaderManager.m_shaderCache.clear();
                 // Drop the texture cache too — a hot-reload that swaps a
                 // texture file behind the same metadata.json path needs

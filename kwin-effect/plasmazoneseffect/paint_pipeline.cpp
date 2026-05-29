@@ -64,7 +64,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
 
-    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.m_shaderTransitions.empty()) {
+    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()) {
         // Windows have translation transforms that move them outside their
         // frame geometry bounds — force full compositing mode. Shader
         // transitions also need this: without
@@ -90,7 +90,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // times across outputs); reading KWin::effects->cursorPos() at every
     // call multiplies up. Caching here also guarantees every transition
     // this frame reads an identical iMouse, eliminating sub-frame jitter.
-    if (KWin::effects && !m_shaderManager.m_shaderTransitions.empty()) {
+    if (KWin::effects && !m_shaderManager.empty()) {
         m_shaderManager.m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
@@ -125,7 +125,7 @@ void PlasmaZonesEffect::postPaintScreen()
     // window so the next vsync runs our paint chain. Animator-driven
     // transitions (durationMs == 0) are kept alive by
     // m_windowAnimator->scheduleRepaints above.
-    if (!m_shaderManager.m_shaderTransitions.empty()) {
+    if (!m_shaderManager.empty()) {
         const qint64 now = shaderClockNowMs();
         for (const auto& [w, transition] : m_shaderManager.m_shaderTransitions) {
             if (!w || w->isDeleted()) {
@@ -221,10 +221,7 @@ void PlasmaZonesEffect::postPaintScreen()
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                                        std::chrono::milliseconds presentTime)
 {
-    if (w
-        && (m_windowAnimator->hasAnimation(w)
-            || m_shaderManager.m_shaderTransitions.find(w) != m_shaderManager.m_shaderTransitions.end()
-            || m_restoreSuppress.contains(w))) {
+    if (w && (m_windowAnimator->hasAnimation(w) || m_shaderManager.hasTransition(w) || m_restoreSuppress.contains(w))) {
         // Mark as transformed so paintWindow applies our translate+scale, and
         // so the OffscreenEffect redirect drives full-window repaints for the
         // shader leg's iTime advance even when the underlying window content
@@ -298,11 +295,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // visible. Reset `lastPaintTimeMs = -1` for the same reason —
         // the first visible paint computes iTimeDelta = 0 ("first frame"
         // semantics), avoiding a 250ms-stale spike.
-        if (auto sit = m_shaderManager.m_shaderTransitions.find(w); sit != m_shaderManager.m_shaderTransitions.end()) {
-            if (sit->second.durationMs > 0) {
-                sit->second.startTimeMs = frameNowMs;
+        if (auto* st = m_shaderManager.findTransition(w)) {
+            if (st->durationMs > 0) {
+                st->startTimeMs = frameNowMs;
             }
-            sit->second.lastPaintTimeMs = -1;
+            st->lastPaintTimeMs = -1;
         }
         if (frameNowMs < supIt->deadlineMs) {
             return;
@@ -356,13 +353,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 
     m_windowAnimator->applyTransform(w, data);
 
-    auto sit = m_shaderManager.m_shaderTransitions.find(w);
-    if (sit != m_shaderManager.m_shaderTransitions.end() && sit->second.cached && sit->second.cached->shader) {
+    auto* st = m_shaderManager.findTransition(w);
+    if (st && st->cached && st->cached->shader) {
         // Non-const reference because the per-frame book-keeping (`frameCount`,
         // `lastPaintTimeMs`) advances on every paintWindow tick that feeds
         // the transition. Without the mutation, `iFrame` would stay at 0 and
         // `iTimeDelta` would always read 0.
-        auto& transition = sit->second;
+        auto& transition = *st;
         // Two progress sources, picked by the transition's mode (see
         // ShaderTransition's docstring). Lifecycle events (window.*)
         // started via tryBeginShaderForEvent set durationMs > 0 and drive
@@ -822,11 +819,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // `endShaderTransition` on the successor and kill it before
             // it ever paints. Mirrors the timer-driven teardown pattern
             // in `tryBeginShaderForEvent`'s post-install QTimer::singleShot.
-            // Iterator `sit` was obtained earlier in this function and no
-            // intervening code mutates m_shaderManager.m_shaderTransitions, so the read is
-            // safe. The assertion documents that contract for future edits.
-            Q_ASSERT(sit != m_shaderManager.m_shaderTransitions.end());
-            const quint64 expiringGeneration = sit->second.generation;
+            // Pointer `st` was obtained earlier in this function and no
+            // intervening code mutates `m_shaderManager`'s transition map,
+            // so the read is safe. The assertion documents that contract
+            // for future edits.
+            Q_ASSERT(st != nullptr);
+            const quint64 expiringGeneration = st->generation;
             QMetaObject::invokeMethod(
                 this,
                 [this, safeWindow, rawWindow, expiringGeneration]() {
@@ -841,9 +839,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // ended via a different path (synchronous teardown,
                     // windowDeleted, generation-mismatch successor).
                     m_shaderManager.m_pendingShaderExpiryEnd.remove(rawWindow);
-                    auto liveIt = m_shaderManager.m_shaderTransitions.find(safeWindow.data());
-                    if (liveIt != m_shaderManager.m_shaderTransitions.end()
-                        && liveIt->second.generation == expiringGeneration) {
+                    if (const auto* live = m_shaderManager.findTransition(safeWindow.data());
+                        live && live->generation == expiringGeneration) {
                         endShaderTransition(safeWindow.data());
                     }
                     // else: a successor replaced us (last-event-wins) and
@@ -871,8 +868,8 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // Only surface-extent transitions deform the quad list. Anchor-extent
     // transitions and plain redirected windows are drawn 1:1 over their
     // own geometry — leave their quads untouched.
-    auto it = m_shaderManager.m_shaderTransitions.find(window);
-    if (it == m_shaderManager.m_shaderTransitions.end() || !it->second.surfaceExtent || quads.isEmpty()) {
+    const auto* st = m_shaderManager.findTransition(window);
+    if (!st || !st->surfaceExtent || quads.isEmpty()) {
         return;
     }
     const auto* output = window->screen();
