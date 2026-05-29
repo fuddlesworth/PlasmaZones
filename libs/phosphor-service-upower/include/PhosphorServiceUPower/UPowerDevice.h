@@ -46,6 +46,13 @@ public:
     };
     Q_ENUM(DeviceState)
 
+    // Mirrors the full UPower 1.0 device-type range (see upower-glib
+    // up-types.h). Modern UPower exposes peripherals up through
+    // BluetoothGeneric=28; truncating the enum to MediaPlayer=9
+    // (the original phosphor-services subset) silently demotes any
+    // higher-numbered device to a bare integer that QML's
+    // `Phosphor.Service.UPower.UPowerDevice.Type.X` lookup can't
+    // resolve.
     enum DeviceType {
         UnknownType = 0,
         LinePower = 1,
@@ -57,6 +64,25 @@ public:
         Pda = 7,
         Phone = 8,
         MediaPlayer = 9,
+        Tablet = 10,
+        Computer = 11,
+        GamingInput = 12,
+        Pen = 13,
+        Touchpad = 14,
+        Modem = 15,
+        Network = 16,
+        Headset = 17,
+        Speakers = 18,
+        Headphones = 19,
+        Video = 20,
+        OtherAudio = 21,
+        RemoteControl = 22,
+        Printer = 23,
+        Scanner = 24,
+        Camera = 25,
+        Wearable = 26,
+        Toy = 27,
+        BluetoothGeneric = 28,
     };
     Q_ENUM(DeviceType)
 

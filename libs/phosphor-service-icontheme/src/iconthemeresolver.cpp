@@ -10,12 +10,16 @@
 #include <QFile>
 #include <QIcon>
 #include <QImageReader>
+#include <QLoggingCategory>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QQueue>
 #include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QtEndian>
+
+Q_LOGGING_CATEGORY(lcIconTheme, "phosphor.service.icontheme")
 
 namespace PhosphorServiceIconTheme {
 
@@ -127,6 +131,37 @@ QStringList xdgIconSearchPath()
     return unique;
 }
 
+// Per XDG Icon Theme Spec, an icon name is a simple identifier
+// (typically `[A-Za-z0-9_-]`). The resolver appends `name + ext` to
+// filesystem paths derived from theme roots, so a name containing
+// path separators, parent-directory tokens, or NUL bytes would let
+// an attacker who controls the icon name (a hostile SNI item or
+// menu provider) probe arbitrary files via QFile::exists and
+// potentially decode any image-shaped file inside the calling
+// process. The same applies to `extraThemeDir` when present.
+bool isUnsafeIconName(const QString& name)
+{
+    if (name.contains(QLatin1Char('/')))
+        return true;
+    if (name.contains(QLatin1Char('\\')))
+        return true;
+    if (name.contains(QLatin1String("..")))
+        return true;
+    if (name.contains(QChar(QChar::Null)))
+        return true;
+    return false;
+}
+
+bool isUnsafeIconDir(const QString& dir)
+{
+    if (dir.contains(QLatin1String("/../")) || dir.startsWith(QLatin1String("../"))
+        || dir.endsWith(QLatin1String("/..")))
+        return true;
+    if (dir.contains(QChar(QChar::Null)))
+        return true;
+    return false;
+}
+
 } // namespace
 
 class IconThemeResolver::Private
@@ -137,21 +172,32 @@ public:
     mutable QMutex mutex;
     QString configuredTheme; ///< empty => autodetect
     QStringList searchPath; ///< from xdgIconSearchPath()
-    QHash<QString, ThemeIndex> themeCache; ///< parsed index.theme per theme name
-
+    // `themeCache` and `resolvedCache` are both memoisation state.
+    // The public API surface in IconThemeResolver.h declares
+    // `iconForName(...) const` (theme resolution does not mutate
+    // user-visible state). To honour that contract without lying
+    // about the cache being internal-only, both maps are `mutable`.
+    // Access is always serialised through `mutex` above.
+    mutable QHash<QString, ThemeIndex> themeCache; ///< parsed index.theme per theme name
     mutable QHash<QString, QImage> resolvedCache;
+    // FIFO eviction order for `resolvedCache`. We push on insert,
+    // pop oldest on overflow. Pure FIFO (not LRU on hit) is enough
+    // for the tray workload — tray icons either stay hot or churn
+    // entirely on theme switch, and we already clear both caches
+    // wholesale in `setThemeName`. Anti-LRU (`erase(begin())`)
+    // would re-evict whatever bucket QHash::begin happens to
+    // point at, which is unrelated to access order and produces
+    // pathological thrash under bucket-collision.
+    mutable QQueue<QString> resolvedOrder;
     static constexpr int kCacheLimit = 256;
 
     [[nodiscard]] QString detectThemeName() const;
-    // Non-const because parseThemeIndex memoises into themeCache;
-    // marking it const would force `mutable QHash` (ugly because the
-    // mutex above already guards the same data).
-    [[nodiscard]] const ThemeIndex& parseThemeIndex(const QString& themeName);
-    [[nodiscard]] QString findIconHelper(const QString& iconName, int size, int scale, const QString& themeName);
+    [[nodiscard]] const ThemeIndex& parseThemeIndex(const QString& themeName) const;
+    [[nodiscard]] QString findIconHelper(const QString& iconName, int size, int scale, const QString& themeName) const;
     [[nodiscard]] QString lookupIcon(const QString& iconName, int size, int scale, const QString& themeName,
-                                     QSet<QString>* visited = nullptr);
+                                     QSet<QString>* visited = nullptr) const;
     [[nodiscard]] QString lookupFallbackIcon(const QString& iconName) const;
-    [[nodiscard]] QString themeIconPath(const QString& iconName, int size, int scale, const QString& themeName);
+    [[nodiscard]] QString themeIconPath(const QString& iconName, int size, int scale, const QString& themeName) const;
 };
 
 QString IconThemeResolver::Private::detectThemeName() const
@@ -214,7 +260,7 @@ QMap<QString, QMap<QString, QString>> parseIniFile(const QString& path)
 
 } // namespace
 
-const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& themeName)
+const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& themeName) const
 {
     if (auto it = themeCache.constFind(themeName); it != themeCache.constEnd()) {
         return *it;
@@ -272,7 +318,7 @@ const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& the
 }
 
 QString IconThemeResolver::Private::themeIconPath(const QString& iconName, int size, int scale,
-                                                  const QString& themeName)
+                                                  const QString& themeName) const
 {
     const auto& idx = parseThemeIndex(themeName);
 
@@ -328,11 +374,11 @@ QString IconThemeResolver::Private::themeIconPath(const QString& iconName, int s
 }
 
 QString IconThemeResolver::Private::lookupIcon(const QString& iconName, int size, int scale, const QString& themeName,
-                                               QSet<QString>* visited)
+                                               QSet<QString>* visited) const
 {
     // Walk this theme first, then each parent. Each parent gets a
     // fresh recursion so the inheritance chain is followed depth-first
-    // — matches the spec's algorithm. Cycle detection via `visited`:
+    // per the XDG spec algorithm. Cycle detection via `visited`:
     // a malformed theme (A Inherits=B; B Inherits=A) used to recurse
     // until stack overflow.
     QSet<QString> visitedLocal;
@@ -346,8 +392,16 @@ QString IconThemeResolver::Private::lookupIcon(const QString& iconName, int size
     if (!path.isEmpty())
         return path;
 
-    const auto& idx = parseThemeIndex(themeName);
-    for (const auto& parent : idx.inherits) {
+    // Copy the inherits list before recursing. `parseThemeIndex` may
+    // insert into `themeCache` during the recursive `lookupIcon` call
+    // for each parent (via the inner `themeIconPath` -> `parseThemeIndex`
+    // chain). A QHash insertion can rehash and invalidate every
+    // reference and iterator into the table — including any reference
+    // we hold to the value associated with `themeName`. Copying the
+    // small QStringList up front decouples our iteration from any
+    // subsequent rehashes.
+    const QStringList inherits = parseThemeIndex(themeName).inherits;
+    for (const auto& parent : inherits) {
         path = lookupIcon(iconName, size, scale, parent, v);
         if (!path.isEmpty())
             return path;
@@ -372,7 +426,7 @@ QString IconThemeResolver::Private::lookupFallbackIcon(const QString& iconName) 
 }
 
 QString IconThemeResolver::Private::findIconHelper(const QString& iconName, int size, int scale,
-                                                   const QString& themeName)
+                                                   const QString& themeName) const
 {
     const auto themed = lookupIcon(iconName, size, scale, themeName);
     if (!themed.isEmpty())
@@ -417,6 +471,7 @@ void IconThemeResolver::setThemeName(const QString& themeName)
     d->configuredTheme = themeName;
     d->themeCache.clear();
     d->resolvedCache.clear();
+    d->resolvedOrder.clear();
     // Refresh the XDG search path on every theme switch. The
     // singleton's constructor reads env vars once and caches; if a
     // test or runtime caller mutates `XDG_DATA_HOME` / `XDG_DATA_DIRS`
@@ -439,57 +494,94 @@ QImage IconThemeResolver::iconForName(const QString& name, int size, int scale, 
     if (name.isEmpty() || size <= 0 || scale <= 0)
         return {};
 
-    QMutexLocker locker(&d->mutex);
-
-    const QString theme = d->configuredTheme.isEmpty() ? d->detectThemeName() : d->configuredTheme;
-    const QString cacheKey = theme + QLatin1Char('|') + name + QLatin1Char('|') + extraThemeDir + QLatin1Char('|')
-        + QString::number(size) + QLatin1Char(':') + QString::number(scale);
-    if (d->resolvedCache.contains(cacheKey)) {
-        return d->resolvedCache.value(cacheKey);
+    // Validate untrusted inputs at the boundary. `name` originates
+    // from D-Bus peers (SNI items, dbusmenu providers); `extraThemeDir`
+    // from the same peers via SNI's IconThemePath. Both are appended
+    // verbatim to filesystem paths below.
+    if (isUnsafeIconName(name) || isUnsafeIconDir(extraThemeDir)) {
+        qCWarning(lcIconTheme) << "rejected unsafe icon lookup name=" << name << " extraThemeDir=" << extraThemeDir;
+        return {};
     }
 
+    // Phase 1: lookup the cache and resolve the on-disk path under
+    // the lock. Path resolution mutates `themeCache` (via
+    // `parseThemeIndex`) so it has to be serialised. We deliberately
+    // drop the lock for phase 2 (`QImageReader::read`) below: image
+    // decode can take milliseconds for a complex SVG and we don't
+    // want `themeName()` / `setThemeName()` / concurrent
+    // `iconForName()` calls to block on it. The cost is that two
+    // threads racing on the same uncached key may both decode; one's
+    // insert wins, the other's QImage is dropped. Wasteful, not
+    // incorrect.
+    QString cacheKey;
     QString path;
-    if (!extraThemeDir.isEmpty()) {
-        // Try the item's IconThemePath first, as a flat directory
-        // (most apps with custom dirs dump icons straight in there,
-        // not in a themed subtree). Then fall back to the normal
-        // themed lookup below.
-        static const QStringList exts = {QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")};
-        for (const auto& ext : exts) {
-            const auto candidate = extraThemeDir + QLatin1Char('/') + name + ext;
-            if (QFile::exists(candidate)) {
-                path = candidate;
-                break;
+    int targetScale = 0;
+    {
+        QMutexLocker locker(&d->mutex);
+
+        const QString theme = d->configuredTheme.isEmpty() ? d->detectThemeName() : d->configuredTheme;
+        cacheKey = theme + QLatin1Char('|') + name + QLatin1Char('|') + extraThemeDir + QLatin1Char('|')
+            + QString::number(size) + QLatin1Char(':') + QString::number(scale);
+        if (auto it = d->resolvedCache.constFind(cacheKey); it != d->resolvedCache.constEnd()) {
+            return *it;
+        }
+
+        if (!extraThemeDir.isEmpty()) {
+            // Try the item's IconThemePath first, as a flat directory
+            // (most apps with custom dirs dump icons straight in there,
+            // not in a themed subtree). Then fall back to the normal
+            // themed lookup below.
+            static const QStringList exts = {QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")};
+            for (const auto& ext : exts) {
+                const auto candidate = extraThemeDir + QLatin1Char('/') + name + ext;
+                if (QFile::exists(candidate)) {
+                    path = candidate;
+                    break;
+                }
             }
         }
-    }
-    if (path.isEmpty()) {
-        path = d->findIconHelper(name, size, scale, theme);
+        if (path.isEmpty()) {
+            path = d->findIconHelper(name, size, scale, theme);
+        }
+        targetScale = size * scale;
     }
 
+    // Phase 2: decode without holding the lock.
     QImage img;
     if (!path.isEmpty()) {
         QImageReader reader(path);
         if (path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)) {
-            // SVGs render at any size — request the exact preferred
+            // SVGs render at any size: request the exact preferred
             // size so we don't get a tiny default rasterisation.
-            reader.setScaledSize(QSize(size * scale, size * scale));
+            reader.setScaledSize(QSize(targetScale, targetScale));
         }
         img = reader.read();
+        if (img.isNull()) {
+            // A rotten install (corrupt PNG, unsupported SVG feature,
+            // SVG renderer missing) silently produced "no image" in
+            // prior revs. Surface the underlying error so a future
+            // regression is debuggable without a gdb session. Stays
+            // at qCDebug because per-icon decode failures are not
+            // user-actionable on their own; aggregated they signal a
+            // theme breakage.
+            qCDebug(lcIconTheme) << "QImageReader failed for" << path << ":" << reader.errorString();
+        }
     }
 
-    // Cap the cache. Eviction policy drops an arbitrary entry (the
-    // first bucket reported by QHash::begin), which is deterministic
-    // for a given seed and good enough since the tray rarely has
-    // > 32 items × < 4 sizes; we hit the cap only during pathological
-    // churn (icon-theme switches mid-flight). Cache hits return at
-    // the top of iconForName(), so when we reach this point the key
-    // is guaranteed not to be in the cache; the eviction can be
-    // unconditional.
-    if (d->resolvedCache.size() >= Private::kCacheLimit) {
-        d->resolvedCache.erase(d->resolvedCache.begin());
+    // Phase 3: insert into the resolved cache. Re-check for a racing
+    // insert from another thread before our own put so we don't
+    // double-count toward the FIFO order.
+    {
+        QMutexLocker locker(&d->mutex);
+        if (auto it = d->resolvedCache.constFind(cacheKey); it != d->resolvedCache.constEnd()) {
+            return *it;
+        }
+        while (d->resolvedCache.size() >= Private::kCacheLimit && !d->resolvedOrder.isEmpty()) {
+            d->resolvedCache.remove(d->resolvedOrder.dequeue());
+        }
+        d->resolvedCache.insert(cacheKey, img);
+        d->resolvedOrder.enqueue(cacheKey);
     }
-    d->resolvedCache.insert(cacheKey, img);
     return img;
 }
 

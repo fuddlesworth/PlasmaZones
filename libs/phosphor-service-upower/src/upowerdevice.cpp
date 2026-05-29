@@ -119,10 +119,23 @@ public:
         if ((v = val("IsPresent")).isValid())
             changed |= setField(isPresent, v.toBool(), &UPowerDevice::isPresentChanged, owner);
 
-        if ((v = val("State")).isValid())
-            changed |= setField(state, static_cast<DeviceState>(v.toUInt()), &UPowerDevice::stateChanged, owner);
-        if ((v = val("Type")).isValid())
-            changed |= setField(type, static_cast<DeviceType>(v.toUInt()), &UPowerDevice::typeChanged, owner);
+        if ((v = val("State")).isValid()) {
+            const uint raw = v.toUInt();
+            // UPower DeviceState range is 0..6 today. Anything outside
+            // that range coming over D-Bus is either a future-protocol
+            // value or a misbehaving daemon. Fall back to UnknownState
+            // rather than casting to an enumerator we don't declare.
+            const DeviceState ns =
+                (raw <= static_cast<uint>(PendingDischarge)) ? static_cast<DeviceState>(raw) : UnknownState;
+            changed |= setField(state, ns, &UPowerDevice::stateChanged, owner);
+        }
+        if ((v = val("Type")).isValid()) {
+            const uint raw = v.toUInt();
+            // Mirror the DeviceState clamp. Same rationale.
+            const DeviceType nt =
+                (raw <= static_cast<uint>(BluetoothGeneric)) ? static_cast<DeviceType>(raw) : UnknownType;
+            changed |= setField(type, nt, &UPowerDevice::typeChanged, owner);
+        }
         if ((v = val("TimeToEmpty")).isValid())
             changed |= setField(timeToEmpty, v.toLongLong(), &UPowerDevice::timeToEmptyChanged, owner);
         if ((v = val("TimeToFull")).isValid())
@@ -151,8 +164,19 @@ UPowerDevice::UPowerDevice(const QString& dbusPath, QObject* parent)
     d->owner = this;
     d->path = dbusPath;
 
-    d->bus.connect(QLatin1String(kService), dbusPath, QLatin1String(kPropsIface), QStringLiteral("PropertiesChanged"),
-                   this, SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
+    if (!d->bus.isConnected()) {
+        // Parallels the UPowerHost guard. A device constructed against
+        // a disconnected bus stays a permanent-zero stub; log so the
+        // symptom (battery widget always at 0%) is debuggable from a
+        // single journal line.
+        qCWarning(lcUPowerDevice) << "system bus unavailable; device inert:" << dbusPath;
+        return;
+    }
+    const bool ok = d->bus.connect(QLatin1String(kService), dbusPath, QLatin1String(kPropsIface),
+                                   QStringLiteral("PropertiesChanged"), this,
+                                   SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
+    if (!ok)
+        qCWarning(lcUPowerDevice) << "PropertiesChanged subscription failed for" << dbusPath;
 
     d->requestAll();
 }

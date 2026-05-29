@@ -126,17 +126,41 @@ void UPowerDeviceModel::onDeviceRemoved(UPowerDevice* device)
     Q_EMIT countChanged();
 }
 
-void UPowerDeviceModel::onDeviceDataChanged(UPowerDevice* device)
+void UPowerDeviceModel::onDeviceDataChanged(UPowerDevice* device, const QList<int>& roles)
 {
     const int row = m_rows.indexOf(device);
-    if (row >= 0)
-        Q_EMIT dataChanged(index(row), index(row));
+    if (row >= 0) {
+        const auto idx = index(row);
+        // Passing the role hint lets QML delegates skip re-binding for
+        // unrelated roles. Without the hint a 1Hz energyRate tick (a
+        // change the model does NOT expose) would still force every
+        // bound delegate to refresh PercentageRole / StateRole / etc.
+        Q_EMIT dataChanged(idx, idx, roles);
+    }
 }
 
 void UPowerDeviceModel::connectDevice(UPowerDevice* device)
 {
-    connect(device, &UPowerDevice::propertiesRefreshed, this, [this, device]() {
-        onDeviceDataChanged(device);
+    // Wire each device signal to the specific roles it affects. Per-
+    // signal routing keeps energyRate / energyCapacity / nativePath
+    // changes (none of which the model exposes) from triggering view-
+    // wide refreshes. propertiesRefreshed is kept as a coarse fallback
+    // for the cross-property derived hooks (isLaptopBattery flips on
+    // type-or-powerSupply changes; we emit it inside applyProps).
+    connect(device, &UPowerDevice::percentageChanged, this, [this, device]() {
+        onDeviceDataChanged(device, {PercentageRole});
+    });
+    connect(device, &UPowerDevice::stateChanged, this, [this, device]() {
+        onDeviceDataChanged(device, {StateRole});
+    });
+    connect(device, &UPowerDevice::typeChanged, this, [this, device]() {
+        onDeviceDataChanged(device, {TypeRole, IsLaptopBatteryRole});
+    });
+    connect(device, &UPowerDevice::iconNameChanged, this, [this, device]() {
+        onDeviceDataChanged(device, {IconNameRole});
+    });
+    connect(device, &UPowerDevice::powerSupplyChanged, this, [this, device]() {
+        onDeviceDataChanged(device, {IsLaptopBatteryRole});
     });
 }
 

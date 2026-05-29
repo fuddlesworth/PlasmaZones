@@ -17,6 +17,7 @@
 #include <QDebug>
 #include <QHash>
 #include <QImage>
+#include <QImageReader>
 #include <QLoggingCategory>
 #include <QSet>
 #include <QVariant>
@@ -178,8 +179,25 @@ QImage iconFromProps(const QVariantMap& props, int size, const QStringList& them
     }
     const auto iconData = props.value(QStringLiteral("icon-data")).toByteArray();
     if (!iconData.isEmpty()) {
+        // Decode through QImageReader with a hard alloc cap. Qt's
+        // default QImageReader::allocationLimit is 128 MiB, which a
+        // hostile menu provider could exploit per-row across a long
+        // menu (128 MiB * N rows). Tray-menu icons are 16-32 px, so a
+        // 4 MiB cap is generous and bounds the damage. Dimension cap
+        // mirrors the SNI item path (kMaxIconDim = 4096) for the same
+        // reason.
+        QBuffer buf;
+        buf.setData(iconData);
+        buf.open(QIODevice::ReadOnly);
+        QImageReader reader(&buf);
+        reader.setAllocationLimit(4); // MiB
+        constexpr int kMaxIconDim = 4096;
+        const QSize wireSize = reader.size();
+        if (wireSize.isValid() && (wireSize.width() > kMaxIconDim || wireSize.height() > kMaxIconDim))
+            return {};
         QImage img;
-        img.loadFromData(iconData); // PNG, PNG-with-alpha, etc.
+        if (!reader.read(&img))
+            return {};
         return img;
     }
     return {};
@@ -206,10 +224,18 @@ public:
     uint revision = 0;
 
     // Outstanding GetLayout watcher. Tracking it lets buildProxy()
-    // cancel an in-flight call when the menu source changes — without
+    // cancel an in-flight call when the menu source changes; without
     // this guard the stale reply lands after the new proxy is set
     // and overwrites the fresh menu's rows with the old menu's data.
     QPointer<QDBusPendingCallWatcher> pendingLayoutWatcher;
+
+    // Coalesce buildProxy + refresh across rapid setService / setPath
+    // pairs. A typical QML init binds both properties at once: without
+    // coalescing each setter independently runs buildProxy + refresh,
+    // producing one stale GetLayout that the second call cancels and
+    // a duplicate model-reset. The pending flag is consumed at the
+    // next event-loop tick by `runScheduledRebuild`.
+    bool rebuildScheduled = false;
 
     /// Flat child list at rootId. Built from the most recent
     /// GetLayout call.
@@ -233,11 +259,34 @@ public:
 
     void buildProxy();
     void refresh();
+    void scheduleProxyRebuild();
+    void runScheduledRebuild();
     void onLayoutUpdated(uint rev, int parent);
     void onPropertiesUpdated(const DBusMenuItemPropertiesList& updated, const DBusMenuItemKeysList& removed);
     QString rowType(const Row& r) const;
     QString toggleType(const Row& r) const;
 };
+
+void DBusMenuModel::Private::scheduleProxyRebuild()
+{
+    // Already queued: just let the prior tick handle the latest state.
+    if (rebuildScheduled)
+        return;
+    rebuildScheduled = true;
+    QMetaObject::invokeMethod(
+        q,
+        [this]() {
+            runScheduledRebuild();
+        },
+        Qt::QueuedConnection);
+}
+
+void DBusMenuModel::Private::runScheduledRebuild()
+{
+    rebuildScheduled = false;
+    buildProxy();
+    refresh();
+}
 
 void DBusMenuModel::Private::buildProxy()
 {
@@ -496,8 +545,7 @@ void DBusMenuModel::setService(const QString& service)
     if (d->service == service)
         return;
     d->service = service;
-    d->buildProxy();
-    d->refresh();
+    d->scheduleProxyRebuild();
     Q_EMIT sourceChanged();
 }
 
@@ -506,8 +554,7 @@ void DBusMenuModel::setPath(const QString& path)
     if (d->path == path)
         return;
     d->path = path;
-    d->buildProxy();
-    d->refresh();
+    d->scheduleProxyRebuild();
     Q_EMIT sourceChanged();
 }
 
@@ -627,7 +674,29 @@ int DBusMenuModel::aboutToShowSubmenu(int row)
     const auto& r = d->rows.at(row);
     if (!r.hasChildren)
         return -1;
-    d->proxy->AboutToShow(r.id); // async — submenu model refresh fires on LayoutUpdated
+    // dbusmenu spec: AboutToShow returns bool needUpdate. If true, the
+    // app populated this submenu lazily and we must call GetLayout to
+    // see the new contents; otherwise our cached rows are still
+    // authoritative. Some apps don't fire LayoutUpdated for the
+    // lazy-populate case, so relying on that signal alone would leave
+    // dynamic submenus stale on first open.
+    auto* watcher = new QDBusPendingCallWatcher(d->proxy->AboutToShow(r.id), this);
+    const int submenuId = r.id;
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, submenuId]() {
+        watcher->deleteLater();
+        const QDBusPendingReply<bool> reply = *watcher;
+        if (reply.isError())
+            return;
+        if (reply.value() && submenuId == d->rootId)
+            d->refresh();
+    });
+    // Pair with the closed Event the QML side will fire on hide. Per
+    // the dbusmenu spec, opened/closed pair up — some apps gate
+    // dynamic-menu population on the opened event, so without it the
+    // first open shows an empty/stale submenu until a later
+    // LayoutUpdated arrives.
+    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
+    d->proxy->Event(r.id, QStringLiteral("opened"), QDBusVariant(0), ts);
     return r.id;
 }
 
@@ -635,7 +704,24 @@ void DBusMenuModel::aboutToShow()
 {
     if (!d->proxy)
         return;
-    d->proxy->AboutToShow(d->rootId);
+    // See aboutToShowSubmenu for the needUpdate rationale. We refresh
+    // the root level on the truthy reply rather than waiting for
+    // LayoutUpdated, which some apps skip when AboutToShow already
+    // returned needUpdate=true.
+    auto* watcher = new QDBusPendingCallWatcher(d->proxy->AboutToShow(d->rootId), this);
+    const int rootIdSnapshot = d->rootId;
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, rootIdSnapshot]() {
+        watcher->deleteLater();
+        const QDBusPendingReply<bool> reply = *watcher;
+        if (reply.isError())
+            return;
+        if (reply.value() && rootIdSnapshot == d->rootId)
+            d->refresh();
+    });
+    // Mirror aboutToHide's closed event. Some apps only build their
+    // submenu items on the opened tick and tear them down on closed.
+    const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
+    d->proxy->Event(d->rootId, QStringLiteral("opened"), QDBusVariant(0), ts);
 }
 
 void DBusMenuModel::refresh()

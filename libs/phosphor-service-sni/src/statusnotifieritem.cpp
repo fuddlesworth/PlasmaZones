@@ -294,7 +294,7 @@ void StatusNotifierItem::Private::refreshIcons()
     const auto newIconThemePath = proxy->iconThemePath();
     const auto newIconPixmap = proxy->iconPixmap();
     const auto newOverlayIconPixmap = proxy->overlayIconPixmap();
-    // See applyAll for the byte-level comparison rationale.
+    // See refreshAll for the byte-level comparison rationale.
     const bool changed = newIconName != iconName || newOverlayIconName != overlayIconName
         || newIconThemePath != iconThemePath || newIconPixmap != iconPixmap
         || newOverlayIconPixmap != overlayIconPixmap;

@@ -142,7 +142,7 @@ Generalize `ILayoutSourceFactory` into five UI-seam registries.
 A bare `Instantiator { model: PhosphorShell.screens }` would technically
 satisfy "one delegate per monitor", but `ScreenModel` ships hot-plug
 via `beginResetModel`/`endResetModel` rather than row-incremental
-signals — so the naive binding tears down every delegate on every
+signals, so the naive binding tears down every delegate on every
 monitor change, even for screens that didn't move. `PerScreen` exists
 to do the work `Instantiator` cannot:
 
@@ -156,7 +156,7 @@ to do the work `Instantiator` cannot:
 2. **Per-monitor placement plumbing.** Inject `phosphorScreen`
    (`QScreen*`), `name`, `index`, `isPrimary` into the delegate via
    required properties; consumers position their delegate via the
-   screen's `geometry` rect — e.g.
+   screen's `geometry` rect, e.g.
    `x: phosphorScreen.geometry.x + 40` for virtual-desktop
    coordinates. (The QML-side `Window.screen` property is
    read-only `QQuickScreenInfo*`, NOT `QScreen*`, so there's no
@@ -172,22 +172,22 @@ consumer would otherwise duplicate.
 
 | Deliverable                                       | Notes                                                                            |
 |---------------------------------------------------|----------------------------------------------------------------------------------|
-| `libs/phosphor-shell/qml/Phosphor/Shell/`         | First QML module shipped by `phosphor-shell` — URI `Phosphor.Shell`. Wired via `qt_add_qml_module(PhosphorShellQml ...)` alongside the existing core library target, mirroring the `phosphor-theme` / `phosphor-popout` split. No new top-level lib; `PerScreen` lives next to `ScreenModel`, which it depends on. |
-| `libs/phosphor-shell/qml/Phosphor/Shell/PerScreen.qml` | Reset-aware Instantiator wrapper as described above. Accepts a `model` (the `ScreenModel`-shaped QAbstractItemModel; the helper does NOT default it, so the file is usable from tests and non-shell processes) and a `delegate` Component. Self-coordinates pre-shutdown delegate teardown via `Qt.application.onAboutToQuit` — hosts do not need to wire anything for clean exit. |
+| `libs/phosphor-shell/qml/Phosphor/Shell/`         | First QML module shipped by `phosphor-shell`. URI `Phosphor.Shell`. Wired via `qt_add_qml_module(PhosphorShellQml ...)` alongside the existing core library target, mirroring the `phosphor-theme` / `phosphor-popout` split. No new top-level lib; `PerScreen` lives next to `ScreenModel`, which it depends on. |
+| `libs/phosphor-shell/qml/Phosphor/Shell/PerScreen.qml` | Reset-aware Instantiator wrapper as described above. Accepts a `model` (the `ScreenModel`-shaped QAbstractItemModel; the helper does NOT default it, so the file is usable from tests and non-shell processes) and a `delegate` Component. Self-coordinates pre-shutdown delegate teardown via `Qt.application.onAboutToQuit`; hosts do not need to wire anything for clean exit. |
 | `libs/phosphor-shell/tests/`                      | Test cases against a fake `QAbstractListModel` that exercises the reset semantics (add, remove, swap, reorder) and verifies delegate identity is preserved across resets for surviving rows. |
-| `examples/phosphor-perscreen-demo/`               | Opens a small floating window per monitor showing the monitor's name + index + primary flag. Hot-plug a monitor → window appears. Plug it out → window goes away. Live primary swap → only the primary-pill on the affected windows updates (no full teardown — pins the reuse path). |
+| `examples/phosphor-perscreen-demo/`               | Opens a small floating window per monitor showing the monitor's name + index + primary flag. Hot-plug a monitor → window appears. Plug it out → window goes away. Live primary swap → only the primary-pill on the affected windows updates (no full teardown, which pins the reuse path). |
 
 **Acceptance:**
 - [x] Monitor hot-plug add/remove correctly mirrors in the instantiated delegates.
-- [x] Delegates for surviving screens are NOT recreated on hot-plug — the same QObject identity persists (asserted in the test).
+- [x] Delegates for surviving screens are NOT recreated on hot-plug. The same QObject identity persists (asserted in the test).
 - [x] Primary-screen swap updates the `isPrimary` property without recreating any delegate.
 - [x] Delegates receive `phosphorScreen` (`QScreen*`), `name`, `index`, `isPrimary` as required properties so consumers can position their Window via `phosphorScreen.geometry` without manual lookup.
 
-**Effort:** M (~1 week — the reset-aware diff plus the test harness for hot-plug semantics is the main lift)
+**Effort:** M (~1 week. The reset-aware diff plus the test harness for hot-plug semantics is the main lift.)
 
 **Phase 1 gate:** All five demos run. Tag `phosphor-foundations-0.1`.
 
-**Phase 1 progress (as of 2026-05-28):** 5 of 5 libs shipped — Phase 1 gate met.
+**Phase 1 progress (as of 2026-05-28):** 5 of 5 libs shipped. Phase 1 gate met.
 
 | Lib                   | Status                                                  |
 |-----------------------|---------------------------------------------------------|
@@ -197,7 +197,7 @@ consumer would otherwise duplicate.
 | `phosphor-ipc`        | ✓ shipped (PR #539)                                     |
 | `PerScreen` helper    | ✓ shipped (PR #540)                                     |
 
-All five demos run. The `phosphor-foundations-0.1` tag is now unblocked — next action.
+All five demos run. The `phosphor-foundations-0.1` tag is now unblocked. Next action.
 
 ---
 
@@ -205,17 +205,19 @@ All five demos run. The `phosphor-foundations-0.1` tag is now unblocked — next
 
 **Goal:** in-process C++ services for every desktop integration, each with a CLI demo that proves the contract. **No shell UI yet**, just data, exposed via QML facades + `phosphorctl`.
 
-### Naming, layout, and the existing umbrella
+### Naming, layout, and the dissolved umbrella
 
-The existing `phosphor-services` library is an umbrella whose CMakeLists explicitly anticipates `Notifications`, `MPRIS`, `UPower`, `NetworkManager`, and `logind` as "future siblings" *inside* it. **This plan deviates from that** — the umbrella gets dissolved into one lib per tenant. The new per-domain libs (both the 2.0 extractions and the 2.1-2.10 additions) all carry a `phosphor-service-*` prefix. The prefix is a group-tag: anything `phosphor-service-*` is a shell-domain integration that surfaces OS state via D-Bus / sysfs / native APIs and lets the shell drive system actions — distinct from foundation libs like `phosphor-dbus`, `phosphor-layer`, or `phosphor-rendering` that are infrastructure consumed across tiers. The split makes `ls libs/` self-documenting: foundation libs in one visual group, service libs in another.
+(Phase 2.0 has shipped: the umbrella is gone. The history below records the design rationale for future reference.)
+
+The original `phosphor-services` library was an umbrella whose CMakeLists explicitly anticipated `Notifications`, `MPRIS`, `UPower`, `NetworkManager`, and `logind` as "future siblings" *inside* it. **This plan deviated from that**: the umbrella was dissolved into one lib per tenant. The per-domain libs (both the 2.0 extractions and the 2.1-2.10 additions) all carry a `phosphor-service-*` prefix. The prefix is a group-tag: anything `phosphor-service-*` is a shell-domain integration that surfaces OS state via D-Bus, sysfs, or native APIs and lets the shell drive system actions, distinct from foundation libs like `phosphor-dbus`, `phosphor-layer`, or `phosphor-rendering` that are infrastructure consumed across tiers. The split makes `ls libs/` self-documenting: foundation libs in one visual group, service libs in another.
 
 The shared "-common" already exists: **`phosphor-dbus`** is the service-agnostic DBus plumbing (`client.cpp`, error/cancel handling, custom-type marshalling). Every new service lib in this phase consumes `phosphor-dbus` instead of duplicating boilerplate.
 
 Each service follows the same shape:
 - `libs/phosphor-service-<domain>/` (C++), focused, one concern, depends on `phosphor-dbus` if it talks DBus
-- QML singleton `<Domain>.qml` (e.g. `Network`, `Bluetooth`) — the user-facing surface keeps the short name
+- QML singleton `<Domain>.qml` (e.g. `Network`, `Bluetooth`); the user-facing surface keeps the short name
 - `examples/phosphor-service-<domain>-cli/`, small binary that reads + controls the service
-- `phosphorctl` namespace (e.g. `phosphorctl call network.scan`) — same short name; the prefix is for the lib directory only
+- `phosphorctl` namespace (e.g. `phosphorctl call network.scan`); same short name. The prefix is for the lib directory only.
 
 ### 2.0: Extract existing `phosphor-services` tenants
 
@@ -231,14 +233,14 @@ The umbrella already houses four tenants. Before adding new ones, extract these 
 
 **Effort:** S-M total. Mechanical except for any cross-tenant helper code that needs to move into `phosphor-dbus` or a new tiny `phosphor-service-icontheme`. Per CLAUDE.md, every call site updates in the same PR.
 
-**Approach taken:** one commit per tenant, in order of independence (upower → mpris → icontheme → sni). The umbrella deletion folded into the SNI commit because the umbrella has no remaining source files at that point — keeping it as an empty CMake target would have been a backwards-compat shim, which the project forbids.
+**Approach taken:** one commit per tenant, in order of independence (upower → mpris → icontheme → sni). The umbrella deletion folded into the SNI commit because the umbrella has no remaining source files at that point; keeping it as an empty CMake target would have been a backwards-compat shim, which the project forbids.
 
 **Result:** Phase 2.0 complete. `ls libs/` now shows four `phosphor-service-*` siblings (icontheme / mpris / sni / upower) and the umbrella is gone.
 
 ### 2.1-2.10, New service libraries
 
 Naming notes:
-- The full PipeWire mixer goes into `phosphor-service-pipewire` (`phosphor-audio` is unrelated — that's the cava-spectrum lib for audio-reactive shaders; the prefix makes the distinction self-evident in `libs/`).
+- The full PipeWire mixer goes into `phosphor-service-pipewire`. (`phosphor-audio` is unrelated; that's the cava-spectrum lib for audio-reactive shaders; the prefix makes the distinction self-evident in `libs/`.)
 - `phosphor-shortcuts` already exists with a `kglobalaccel/portal/dbus` backend pattern, use the same pattern for any service with multiple possible backends. (It pre-dates the `phosphor-service-*` group and isn't renamed for backwards-compat reasons; new service libs adopt the prefix.)
 
 | #    | Library                              | Backend                                                                              | CLI demo capabilities                                          | Effort |

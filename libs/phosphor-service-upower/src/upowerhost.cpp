@@ -42,10 +42,13 @@ public:
 
     // Replace the cached display device if the path actually changed.
     // UPower normally exposes a stable aggregate path
-    // (/org/freedesktop/UPower/devices/DisplayDevice), but a daemon
-    // restart or a hot-swap of all batteries can produce a different
-    // path on the next GetDisplayDevice reply. The previous one-shot
-    // behaviour silently retained the old, now-dangling QObject.
+    // (/org/freedesktop/UPower/devices/DisplayDevice), so the path
+    // tracking is mostly bootstrap logic: empty path on the way in,
+    // populated path on the GetDisplayDevice reply. If a UPower daemon
+    // respawn produces a different aggregate path on a re-issued query,
+    // we swap the cached QObject rather than leaking it. Today no code
+    // path re-issues GetDisplayDevice after startup; the tracking lets
+    // a future daemon-respawn watcher plug in without rewriting this.
     void setDisplayDevice(const QString& path)
     {
         if (path == displayDevicePath)
@@ -60,11 +63,26 @@ public:
         Q_EMIT owner->displayDeviceChanged();
     }
 
+    // UPower has been observed to send DeviceAdded for the bare "/"
+    // sentinel or a path that isn't under devices/ on old daemons and
+    // suspend/resume races. Filter at the boundary so we don't spin up
+    // a UPowerDevice subscribed to a nonsense object path.
+    bool isValidDevicePath(const QString& path) const
+    {
+        return path.startsWith(QStringLiteral("/org/freedesktop/UPower/devices/"));
+    }
+
     void addDevice(const QString& path)
     {
+        if (!isValidDevicePath(path)) {
+            qCDebug(lcUPowerHost) << "Ignoring add for non-device path:" << path;
+            return;
+        }
         for (auto* dev : std::as_const(devices)) {
-            if (dev->dbusPath() == path)
+            if (dev->dbusPath() == path) {
+                qCDebug(lcUPowerHost) << "Device already known, ignoring duplicate add:" << path;
                 return;
+            }
         }
         auto* device = new UPowerDevice(path, owner);
         devices.append(device);
@@ -100,18 +118,27 @@ UPowerHost::UPowerHost(QObject* parent)
 
     auto bus = QDBusConnection::systemBus();
     if (!bus.isConnected()) {
-        qCInfo(lcUPowerHost) << "System bus unavailable — UPower not accessible";
+        // Escalated from qCInfo: shells binding `host.onBattery` get a
+        // permanent `false` with zero diagnostic when the system bus
+        // is unreachable. A warning surfaces in journals at the
+        // default threshold so the user-visible "battery widget never
+        // updates" symptom has a single line of breadcrumb.
+        qCWarning(lcUPowerHost) << "system bus unavailable: UPower not accessible";
         return;
     }
 
-    bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kPropsIface),
-                QStringLiteral("PropertiesChanged"), this,
-                SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
-
-    bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface), QStringLiteral("DeviceAdded"),
-                this, SLOT(_q_onDeviceAdded(QDBusObjectPath)));
-    bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface), QStringLiteral("DeviceRemoved"),
-                this, SLOT(_q_onDeviceRemoved(QDBusObjectPath)));
+    const bool propsOk = bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kPropsIface),
+                                     QStringLiteral("PropertiesChanged"), this,
+                                     SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
+    const bool addedOk = bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface),
+                                     QStringLiteral("DeviceAdded"), this, SLOT(_q_onDeviceAdded(QDBusObjectPath)));
+    const bool removedOk =
+        bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface),
+                    QStringLiteral("DeviceRemoved"), this, SLOT(_q_onDeviceRemoved(QDBusObjectPath)));
+    if (!propsOk || !addedOk || !removedOk) {
+        qCWarning(lcUPowerHost) << "subscription failed: props=" << propsOk << " added=" << addedOk
+                                << " removed=" << removedOk;
+    }
 
     // All three startup queries run asynchronously — a blocking call
     // here would freeze the GUI thread while UPower (and, through the
@@ -133,11 +160,9 @@ UPowerHost::UPowerHost(QObject* parent)
         });
     }
 
-    // Get display device. setDisplayDevice's path-tracking makes this
-    // safe to call repeatedly: the first reply mounts the aggregate,
-    // a subsequent reply (e.g., after a upower respawn) with a
-    // different path replaces the QObject instead of leaving the old
-    // pointer dangling.
+    // Get display device. The setDisplayDevice path-tracking exists
+    // so a future daemon-respawn watcher can re-issue this query and
+    // swap the cached aggregate rather than leak the prior QObject.
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
                                                           QLatin1String(kIface), QStringLiteral("GetDisplayDevice"));

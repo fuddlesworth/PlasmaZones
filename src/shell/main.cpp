@@ -16,7 +16,7 @@
 #include <QGuiApplication>
 #include <QLoggingCategory>
 
-Q_LOGGING_CATEGORY(lcShell, "phosphorshell")
+Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
 
 int main(int argc, char* argv[])
 {
@@ -60,12 +60,21 @@ int main(int argc, char* argv[])
     const QUrl shellUrl = loader.resolve();
     if (shellUrl.isEmpty()) {
         const QString configDir = loader.shellConfigDir();
-        qCCritical(lcShell).noquote() << "No shell.qml found.\n"
-                                      << "  Searched:    " << configDir << "\n"
-                                      << "               and ${XDG_DATA_DIRS}/phosphor-shell/\n\n"
-                                      << "  To get started, copy the bundled example:\n"
-                                      << "    mkdir -p " << configDir << "\n"
-                                      << "    cp -r /usr/share/phosphor-shell/* " << configDir;
+        // Build the full diagnostic in one QString. Chaining many
+        // `<<` operands through QDebug.noquote() inserts a space
+        // separator between each operand even with .noquote(), which
+        // produced "  Searched:     /home/..." (double space) and a
+        // trailing space at every line break. Cosmetic on stderr but
+        // visible in log-scraping tools that key on the layout.
+        const QString message = QStringLiteral(
+                                    "No shell.qml found.\n"
+                                    "  Searched:    %1\n"
+                                    "               and ${XDG_DATA_DIRS}/phosphor-shell/\n\n"
+                                    "  To get started, copy the bundled example:\n"
+                                    "    mkdir -p %1\n"
+                                    "    cp -r /usr/share/phosphor-shell/* %1")
+                                    .arg(configDir);
+        qCCritical(lcShell).noquote() << message;
         return 1;
     }
 

@@ -7,8 +7,8 @@ XDG Icon Theme Specification 0.13 lookup + the Qt image provider that lets QML c
 
 ## Responsibility
 
-- **`IconThemeResolver`**: spec-compliant theme walk. Detects the active theme from Qt + GTK env hints, parses each theme's `index.theme`, follows `Inherits=` chains, and falls back to Hicolor / direct filesystem search for absolute paths. `iconForName(name, size, scale, extraThemeDir)` returns the best-match `QImage` by the spec's distance algorithm.
-- **`IconImageProvider`**: Qt image provider mounted at `image://phosphor-service-icontheme/`. The publisher (e.g. a tray-item model holding `QImage` payloads from DBus) calls `IconImageProvider::setImage(id, image)`; the consumer binds `Image.source` to a URL of the form `image://phosphor-service-icontheme/<id>?v=<cacheKey>`; Qt routes that back through `requestImage()` which reads the QImage out of the thread-safe static registry. The `?v=` suffix exists only to force QML's `Image` element to re-fetch when the underlying QImage data changes (QML's `Image` only reloads when the URL string differs).
+- **`IconThemeResolver`**: spec-compliant theme walk. Detects the active theme via `QIcon::themeName()` (which the Qt platform plugin sources from Plasma, GTK, or xsettings as available), parses each theme's `index.theme`, follows `Inherits=` chains, and falls back to Hicolor or direct filesystem search for absolute paths. `iconForName(name, size, scale, extraThemeDir)` returns the best-match `QImage` by the spec's distance algorithm.
+- **`IconImageProvider`**: Qt image provider mounted at `image://phosphor-service-icontheme/`. The publisher (e.g. a tray-item model holding `QImage` payloads from D-Bus) calls `IconImageProvider::setImage(id, image)`; the consumer binds `Image.source` to a URL of the form `image://phosphor-service-icontheme/<id>?v=<cacheKey>`; Qt routes that back through `requestImage()` which reads the QImage out of the thread-safe static registry. The `?v=` suffix exists only to force QML's `Image` element to re-fetch when the underlying QImage data changes (QML's `Image` only reloads when the URL string differs).
 
 ## Key types
 

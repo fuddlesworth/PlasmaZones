@@ -28,7 +28,7 @@ void registerQmlTypes()
     // a model role or a host.players() entry.
     qmlRegisterUncreatableType<MprisPlayer>(
         kModule, kModuleVersionMajor, kModuleVersionMinor, "MprisPlayer",
-        QStringLiteral("MprisPlayer is owned by MprisHost — bind via the host or model"));
+        QStringLiteral("MprisPlayer is owned by MprisHost; bind via the host or model"));
 }
 
 } // namespace PhosphorServiceMpris

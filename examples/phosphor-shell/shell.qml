@@ -13,26 +13,55 @@ Item {
     // System data sources — owned at the top level so multiple
     // panels/windows can share a single Process / FileView each.
 
-    Component.onCompleted: shellState.togglePopup = panelPopupHost.toggle
+    Component.onCompleted: shellRouter.togglePopup = panelPopupHost.toggle
 
-    // Global UI state. Survives hot-reload via PersistentProperties.
+    // Persistent UI state that survives hot-reload. The persistence
+    // path serialises typed POD properties only (PersistentProperties
+    // silently drops anything that isn't bool/int/string/list/map/date,
+    // see PersistentProperties.cpp), so a `property var togglePopup`
+    // alongside the bools would be a foot-gun: it would look like part
+    // of the persistent set but never get saved across hot-reloads.
+    // The router below holds non-persistent fields (the togglePopup
+    // function ref) and proxies the rest through to `shellState`. From
+    // a consumer's perspective both shell-wide state and the router
+    // surface the same name (`shellState`), via the alias declared
+    // below.
     PersistentProperties {
-        id: shellState
+        id: shellStatePersistent
 
         property bool menuOpen: false
         property bool settingsOpen: false
         property bool calendarOpen: false
         property bool mediaOpen: false
         property int activeWorkspace: 0
-        // Function reference assigned in Component.onCompleted.
-        // TopPanel and widget MouseAreas call this to toggle panel
-        // popups; the host swaps the active popup in-place inside a
-        // single shared xdg_popup so popup-to-popup transitions
-        // can't race the Wayland grab handoff.
-        property var togglePopup
 
         reloadId: "main"
     }
+
+    QtObject {
+        id: shellRouter
+
+        // Property aliases pass reads AND writes straight through to
+        // the underlying PersistentProperties storage. No binding-
+        // break-on-write hazard (which a `property bool x: persistent.x`
+        // initial binding would carry).
+        property alias menuOpen: shellStatePersistent.menuOpen
+        property alias settingsOpen: shellStatePersistent.settingsOpen
+        property alias calendarOpen: shellStatePersistent.calendarOpen
+        property alias mediaOpen: shellStatePersistent.mediaOpen
+        property alias activeWorkspace: shellStatePersistent.activeWorkspace
+        // Function reference assigned in Component.onCompleted. TopPanel
+        // and widget MouseAreas call this to toggle panel popups; the
+        // host swaps the active popup in-place inside a single shared
+        // xdg_popup so popup-to-popup transitions can't race the Wayland
+        // grab handoff. Function refs are NOT persisted (Persistent-
+        // Properties drops non-POD types on save), which is why
+        // togglePopup lives on the router rather than alongside the
+        // bool/int state.
+        property var togglePopup
+    }
+
+    property alias shellState: shellRouter
 
     SystemClock {
         id: clock

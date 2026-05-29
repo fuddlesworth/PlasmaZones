@@ -7,9 +7,11 @@
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
-#include <QDebug>
+#include <QLoggingCategory>
 
 #include <algorithm>
+
+Q_LOGGING_CATEGORY(lcSniWatcher, "phosphor.service.sni.watcher")
 
 namespace PhosphorServiceSni {
 
@@ -35,7 +37,7 @@ StatusNotifierWatcher::StatusNotifierWatcher(QObject* parent)
 {
     auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {
-        qWarning() << "StatusNotifierWatcher: session bus not connected";
+        qCWarning(lcSniWatcher) << "session bus not connected";
         return;
     }
 
@@ -44,10 +46,10 @@ StatusNotifierWatcher::StatusNotifierWatcher(QObject* parent)
     // the adaptor be a child of the object it adapts.
     new StatusNotifierWatcherAdaptor(this);
 
-    // Try to register the object path first — if this fails we have
+    // Try to register the object path first. If this fails we have
     // nothing to expose, regardless of name ownership.
     if (!bus.registerObject(kWatcherObjectPath(), this)) {
-        qWarning() << "StatusNotifierWatcher: registerObject failed";
+        qCWarning(lcSniWatcher) << "registerObject failed";
         return;
     }
 

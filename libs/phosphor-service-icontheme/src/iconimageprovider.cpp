@@ -62,13 +62,16 @@ QImage IconImageProvider::requestImage(const QString& id, QSize* size, const QSi
             hit = true;
         }
     }
-    qCDebug(lcImageProvider) << "requestImage id=" << id << " lookup=" << lookupId << " requestedSize=" << requestedSize
-                             << " registry size=" << registrySize;
     if (!hit) {
         // Surface the miss to logs so a future regression (wrong key
         // format, missed publish callsite) is debuggable without a
-        // gdb session.
-        qCWarning(lcImageProvider) << "no registered image for id" << id << "(stripped+decoded:" << lookupId << ")";
+        // gdb session. We log only on the miss path: hits run every
+        // frame for every visible Image and during shell startup with
+        // many tray icons even a qCDebug stream is enough to overwhelm
+        // a slow log handler. Capture registry size in the miss line
+        // for context.
+        qCWarning(lcImageProvider) << "no registered image for id" << id << "(stripped+decoded:" << lookupId
+                                   << ", registry size=" << registrySize << ", requestedSize=" << requestedSize << ")";
         if (size) {
             *size = QSize(0, 0);
         }

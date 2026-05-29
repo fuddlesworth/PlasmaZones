@@ -19,20 +19,20 @@ constexpr const char* kModule = "Phosphor.Service.UPower";
 
 void registerQmlTypes()
 {
-    // Instantiable types. UPowerHost is the main entry point — QML
+    // Instantiable types. UPowerHost is the main entry point: QML
     // constructs one, hands its pointer to a model, and binds the
     // model to a Repeater (or reads `displayDevice` for a single
     // aggregate battery indicator).
     qmlRegisterType<UPowerHost>(kModule, kModuleVersionMajor, kModuleVersionMinor, "UPowerHost");
     qmlRegisterType<UPowerDeviceModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "UPowerDeviceModel");
 
-    // Pointer-receivable types — exposed as Q_PROPERTY values from the
-    // host / model, never directly constructed in QML, but their
-    // metatype needs to be known so QML can read percentage / state /
-    // iconName off them.
+    // Pointer-receivable types. Exposed as Q_PROPERTY values from the
+    // host or model, never directly constructed in QML; their metatype
+    // needs to be known so QML can read percentage / state / iconName
+    // off them.
     qmlRegisterUncreatableType<UPowerDevice>(
         kModule, kModuleVersionMajor, kModuleVersionMinor, "UPowerDevice",
-        QStringLiteral("UPowerDevice is owned by UPowerHost — bind via the host or model"));
+        QStringLiteral("UPowerDevice is owned by UPowerHost; bind via the host or model"));
 }
 
 } // namespace PhosphorServiceUPower

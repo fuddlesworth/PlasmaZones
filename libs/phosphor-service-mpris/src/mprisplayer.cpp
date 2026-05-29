@@ -12,6 +12,7 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QTimer>
+#include <QUrl>
 #include <QVariantMap>
 
 #include <algorithm>
@@ -59,20 +60,39 @@ static void setBoolField(bool& field, bool value, void (MprisPlayer::*sig)(), Mp
     Q_EMIT(o->*sig)();
 }
 
-static void dbusSetProperty(QDBusConnection& bus, const QString& service, const char* iface, const char* prop,
-                            const QVariant& value)
+// Watch and log the async D-Bus call's outcome. Failures (CanControl=false,
+// peer not present, malformed request) used to be silently swallowed; a
+// user clicking Next on a player that rejects the call would see nothing
+// at all. The watcher is parented to `receiver` so it dies if the player
+// vanishes. `tag` is the human-readable identity ("Volume Set",
+// "Player.Next") used in the log line.
+static void watchPendingCall(const QDBusPendingCall& call, QObject* receiver, const QString& service, const char* tag)
+{
+    auto* watcher = new QDBusPendingCallWatcher(call, receiver);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, receiver, [service, tag](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            qCDebug(lcMprisPlayer) << tag << "failed for" << service << ":" << reply.error().message();
+        }
+    });
+}
+
+static void dbusSetProperty(QDBusConnection& bus, QObject* receiver, const QString& service, const char* iface,
+                            const char* prop, const QVariant& value)
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath), QLatin1String(kPropsIface),
                                                       QStringLiteral("Set"));
     msg << QLatin1String(iface) << QLatin1String(prop) << QVariant::fromValue(QDBusVariant(value));
-    bus.asyncCall(msg);
+    watchPendingCall(bus.asyncCall(msg), receiver, service, prop);
 }
 
-static void dbusCall(QDBusConnection& bus, const QString& service, const char* iface, const char* method)
+static void dbusCall(QDBusConnection& bus, QObject* receiver, const QString& service, const char* iface,
+                     const char* method)
 {
     QDBusMessage msg =
         QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath), QLatin1String(iface), QLatin1String(method));
-    bus.asyncCall(msg);
+    watchPendingCall(bus.asyncCall(msg), receiver, service, method);
 }
 
 static QVariantMap demarshallMetadata(const QVariant& var)
@@ -211,10 +231,22 @@ public:
         }
         if (props.contains(QStringLiteral("Metadata")))
             applyMetadata(demarshallMetadata(props.value(QStringLiteral("Metadata"))));
-        if (props.contains(QStringLiteral("Volume")))
-            setRealField(volume, props.value(QStringLiteral("Volume")).toDouble(), &MprisPlayer::volumeChanged, owner);
-        if (props.contains(QStringLiteral("Rate")))
-            setRealField(rate, props.value(QStringLiteral("Rate")).toDouble(), &MprisPlayer::rateChanged, owner);
+        if (props.contains(QStringLiteral("Volume"))) {
+            // A malicious or buggy player can publish NaN/inf, which would
+            // propagate through setRealField into QML bindings and slider
+            // values. Clamp to the MPRIS [0.0, 1.0] range at the boundary.
+            const qreal v = props.value(QStringLiteral("Volume")).toDouble();
+            if (std::isfinite(v))
+                setRealField(volume, std::clamp(v, 0.0, 1.0), &MprisPlayer::volumeChanged, owner);
+        }
+        if (props.contains(QStringLiteral("Rate"))) {
+            // Same boundary check as Volume; Rate is also reported as `d`.
+            // The position-tick math multiplies by `rate`, so a NaN here
+            // would corrupt positionUs on the very next tick.
+            const qreal r = props.value(QStringLiteral("Rate")).toDouble();
+            if (std::isfinite(r))
+                setRealField(rate, r, &MprisPlayer::rateChanged, owner);
+        }
         if (props.contains(QStringLiteral("Shuffle")))
             setBoolField(shuffle, props.value(QStringLiteral("Shuffle")).toBool(), &MprisPlayer::shuffleChanged, owner);
         if (props.contains(QStringLiteral("LoopStatus"))) {
@@ -287,10 +319,15 @@ public:
         // PropertiesChanged delivers PARTIAL metadata — missing keys
         // mean "unchanged", not "cleared". Without this guard, a
         // partial update (e.g. just mpris:length) wipes trackArtUrl.
+        // Cap metadata string length at the boundary. A malicious or
+        // broken player publishing a multi-MB title would inflate
+        // memory and (more importantly) hang the GUI thread when QML
+        // text layout chews through the run.
+        constexpr int kMaxMetaStringChars = 4096;
         auto setIfPresent = [&changed, &metaString](const QVariantMap& m, const QString& key, QString& field) {
             if (!m.contains(key))
                 return;
-            QString s = metaString(m.value(key));
+            QString s = metaString(m.value(key)).left(kMaxMetaStringChars);
             if (field == s)
                 return;
             field = s;
@@ -302,29 +339,57 @@ public:
         // Detect track change FIRST. Some players (Spotify in particular)
         // publish a full-resolution mpris:artUrl on the initial track
         // change, then re-publish a few hundred ms later with a smaller
-        // cached/cropped URL — both for the same trackid. Pin trackArtUrl
-        // for the lifetime of a trackid: take the first non-empty URL we
+        // cached/cropped URL for the same trackid. Pin trackArtUrl for
+        // the lifetime of a trackid: take the first non-empty URL we
         // see and ignore subsequent changes until the trackid changes
         // (i.e. a real track switch). Without this, the popup's Image
         // re-decodes at the smaller URL and the user sees high-quality
         // art "refresh with lower quality" shortly after a track change.
+        // Title/artist/album are also cleared on trackid change so a
+        // partial metadata update that only carries the new trackid +
+        // artUrl doesn't leave the prior track's title visible.
         if (meta.contains(QStringLiteral("mpris:trackid"))) {
             QString id = metaObjectPath(meta.value(QStringLiteral("mpris:trackid")));
             if (trackId != id) {
                 trackId = id;
-                // A new track invalidates the pinned art URL. Clearing a
-                // URL we actually held is an observable change even when
-                // this metadata map carries no replacement artUrl yet.
                 if (!trackArtUrl.isEmpty()) {
                     trackArtUrl.clear();
+                    changed = true;
+                }
+                if (!trackTitle.isEmpty()) {
+                    trackTitle.clear();
+                    changed = true;
+                }
+                if (!trackArtist.isEmpty()) {
+                    trackArtist.clear();
+                    changed = true;
+                }
+                if (!trackAlbum.isEmpty()) {
+                    trackAlbum.clear();
                     changed = true;
                 }
             }
         }
         if (meta.contains(QStringLiteral("mpris:artUrl"))) {
-            QString s = metaString(meta.value(QStringLiteral("mpris:artUrl")));
+            QString s = metaString(meta.value(QStringLiteral("mpris:artUrl"))).left(kMaxMetaStringChars);
             // First non-empty URL wins for this trackid (see above).
-            if (trackArtUrl.isEmpty() && !s.isEmpty()) {
+            // Reject javascript:/data:/file:/// schemes that could
+            // surface in QML's Image cache as a security side channel.
+            // QUrl::isValid catches gross malformation; the explicit
+            // allowlist filters dangerous schemes while keeping the
+            // legitimate file://, http://, https:// paths that real
+            // players use.
+            auto isSchemeAllowed = [](const QString& url) {
+                const QUrl u(url);
+                if (!u.isValid())
+                    return false;
+                const QString scheme = u.scheme().toLower();
+                if (scheme == QLatin1String("javascript") || scheme == QLatin1String("data")
+                    || scheme == QLatin1String("about"))
+                    return false;
+                return true;
+            };
+            if (trackArtUrl.isEmpty() && !s.isEmpty() && isSchemeAllowed(s)) {
                 trackArtUrl = s;
                 changed = true;
             }
@@ -333,19 +398,33 @@ public:
         if (meta.contains(QStringLiteral("xesam:artist"))) {
             const QVariant artistVar = meta.value(QStringLiteral("xesam:artist"));
             QString artistStr;
+            auto joinList = [](const QVariantList& items) {
+                QStringList parts;
+                parts.reserve(items.size());
+                for (const QVariant& v : items)
+                    parts.append(v.toString());
+                return parts.join(QStringLiteral(", "));
+            };
             if (artistVar.canConvert<QDBusVariant>()) {
                 QVariant inner = artistVar.value<QDBusVariant>().variant();
                 if (inner.typeId() == QMetaType::QStringList)
                     artistStr = inner.toStringList().join(QStringLiteral(", "));
+                else if (inner.typeId() == QMetaType::QVariantList)
+                    artistStr = joinList(inner.toList());
                 else
                     artistStr = inner.toString();
             } else if (artistVar.typeId() == QMetaType::QStringList) {
                 artistStr = artistVar.toStringList().join(QStringLiteral(", "));
+            } else if (artistVar.typeId() == QMetaType::QVariantList) {
+                // Some web-bridge players publish artist as a{sa} which
+                // demarshals to QVariantList rather than QStringList.
+                artistStr = joinList(artistVar.toList());
             } else if (artistVar.canConvert<QDBusArgument>()) {
                 artistStr = qdbus_cast<QStringList>(artistVar.value<QDBusArgument>()).join(QStringLiteral(", "));
             } else {
                 artistStr = artistVar.toString();
             }
+            artistStr.truncate(kMaxMetaStringChars);
             if (trackArtist != artistStr) {
                 trackArtist = artistStr;
                 changed = true;
@@ -431,12 +510,22 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
         d->tickPosition();
     });
 
-    QDBusConnection::sessionBus().connect(serviceName, QLatin1String(kMprisPath), QLatin1String(kPropsIface),
-                                          QStringLiteral("PropertiesChanged"), this,
-                                          SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
+    // bus.connect returns false on failure (broken bus, permission
+    // denied). Without these subscriptions the player is a permanently
+    // empty stub: PropertiesChanged never reaches us, so volume / track
+    // / status stay at construction defaults. Log so the symptom isn't
+    // "the media widget never updates" with zero diagnostic.
+    const bool propsOk = QDBusConnection::sessionBus().connect(
+        serviceName, QLatin1String(kMprisPath), QLatin1String(kPropsIface), QStringLiteral("PropertiesChanged"), this,
+        SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
+    if (!propsOk)
+        qCWarning(lcMprisPlayer) << "PropertiesChanged subscription failed for" << serviceName;
 
-    QDBusConnection::sessionBus().connect(serviceName, QLatin1String(kMprisPath), QLatin1String(kPlayerIface),
-                                          QStringLiteral("Seeked"), this, SLOT(_q_onSeeked(qlonglong)));
+    const bool seekedOk =
+        QDBusConnection::sessionBus().connect(serviceName, QLatin1String(kMprisPath), QLatin1String(kPlayerIface),
+                                              QStringLiteral("Seeked"), this, SLOT(_q_onSeeked(qlonglong)));
+    if (!seekedOk)
+        qCWarning(lcMprisPlayer) << "Seeked subscription failed for" << serviceName;
 
     // Async initial fetch — properties populate as the replies land; the
     // GUI thread is never blocked waiting on a slow player.
@@ -562,20 +651,21 @@ void MprisPlayer::setVolume(qreal v)
     // Reject non-finite input at the boundary; a NaN/inf would be
     // marshalled straight onto the bus to the player. Clamp to the
     // MPRIS-spec range [0.0, 1.0]: a scroll-wheel widget that
-    // accumulates past 1.0 otherwise either gets silently rejected by
-    // the player (slider binding stops mirroring state) or accepted
-    // at unsafe gain. Echoing the clamped value back into d->volume
-    // via setRealField keeps a QML slider in sync without waiting on
-    // the PropertiesChanged round-trip.
+    // accumulates past 1.0 otherwise gets silently rejected by the
+    // player or accepted at unsafe gain. Local state is NOT updated
+    // pre-emptively. Doing so would make the QML slider show a phantom
+    // value if the player rejects the change (CanControl=false or a
+    // soft clamp on the player side) until the next PropertiesChanged.
+    // We stay consistent with setShuffle/setLoopState by waiting for
+    // the bus echo.
     if (!std::isfinite(v))
         return;
     v = std::clamp(v, 0.0, 1.0);
-    setRealField(d->volume, v, &MprisPlayer::volumeChanged, this);
-    dbusSetProperty(d->bus, d->service, kPlayerIface, "Volume", v);
+    dbusSetProperty(d->bus, this, d->service, kPlayerIface, "Volume", v);
 }
 void MprisPlayer::setShuffle(bool s)
 {
-    dbusSetProperty(d->bus, d->service, kPlayerIface, "Shuffle", s);
+    dbusSetProperty(d->bus, this, d->service, kPlayerIface, "Shuffle", s);
 }
 
 void MprisPlayer::setLoopState(LoopState state)
@@ -585,32 +675,32 @@ void MprisPlayer::setLoopState(LoopState state)
         str = QStringLiteral("Track");
     else if (state == LoopPlaylist)
         str = QStringLiteral("Playlist");
-    dbusSetProperty(d->bus, d->service, kPlayerIface, "LoopStatus", str);
+    dbusSetProperty(d->bus, this, d->service, kPlayerIface, "LoopStatus", str);
 }
 
 void MprisPlayer::play()
 {
-    dbusCall(d->bus, d->service, kPlayerIface, "Play");
+    dbusCall(d->bus, this, d->service, kPlayerIface, "Play");
 }
 void MprisPlayer::pause()
 {
-    dbusCall(d->bus, d->service, kPlayerIface, "Pause");
+    dbusCall(d->bus, this, d->service, kPlayerIface, "Pause");
 }
 void MprisPlayer::stop()
 {
-    dbusCall(d->bus, d->service, kPlayerIface, "Stop");
+    dbusCall(d->bus, this, d->service, kPlayerIface, "Stop");
 }
 void MprisPlayer::togglePlaying()
 {
-    dbusCall(d->bus, d->service, kPlayerIface, "PlayPause");
+    dbusCall(d->bus, this, d->service, kPlayerIface, "PlayPause");
 }
 void MprisPlayer::next()
 {
-    dbusCall(d->bus, d->service, kPlayerIface, "Next");
+    dbusCall(d->bus, this, d->service, kPlayerIface, "Next");
 }
 void MprisPlayer::previous()
 {
-    dbusCall(d->bus, d->service, kPlayerIface, "Previous");
+    dbusCall(d->bus, this, d->service, kPlayerIface, "Previous");
 }
 
 void MprisPlayer::seek(qreal offsetSeconds)
@@ -629,7 +719,7 @@ void MprisPlayer::seek(qreal offsetSeconds)
     QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
                                                       QLatin1String(kPlayerIface), QStringLiteral("Seek"));
     msg << static_cast<qint64>(offsetSeconds * 1e6);
-    d->bus.asyncCall(msg);
+    watchPendingCall(d->bus.asyncCall(msg), this, d->service, "Seek");
 }
 
 void MprisPlayer::setPosition(qreal absoluteSeconds)
@@ -652,16 +742,16 @@ void MprisPlayer::setPosition(qreal absoluteSeconds)
         return;
     }
     msg << QVariant::fromValue(QDBusObjectPath(d->trackId)) << static_cast<qint64>(absoluteSeconds * 1e6);
-    d->bus.asyncCall(msg);
+    watchPendingCall(d->bus.asyncCall(msg), this, d->service, "SetPosition");
 }
 
 void MprisPlayer::raise()
 {
-    dbusCall(d->bus, d->service, kRootIface, "Raise");
+    dbusCall(d->bus, this, d->service, kRootIface, "Raise");
 }
 void MprisPlayer::quit()
 {
-    dbusCall(d->bus, d->service, kRootIface, "Quit");
+    dbusCall(d->bus, this, d->service, kRootIface, "Quit");
 }
 
 void MprisPlayer::_q_onPropertiesChanged(const QString& iface, const QVariantMap& changed,

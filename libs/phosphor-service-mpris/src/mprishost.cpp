@@ -27,14 +27,21 @@ public:
     {
         if (!service.startsWith(kMprisPrefix))
             return;
+        // Reject the bare prefix (literal "org.mpris.MediaPlayer2."
+        // with empty suffix) and any other malformed name. The MPRIS
+        // spec guarantees the suffix is a non-empty bus-name segment;
+        // accepting an empty one would build a MprisPlayer with an
+        // unusable service name.
+        if (service.size() <= kMprisPrefix.size())
+            return;
         for (auto* p : std::as_const(players)) {
             if (p->serviceName() == service)
                 return;
         }
         auto* player = new MprisPlayer(service, owner);
         players.append(player);
-        // identity() is still empty here — it populates from an async
-        // GetAll — so it is deliberately not logged.
+        // identity() is still empty here; it populates from an async
+        // GetAll, so it is deliberately not logged.
         qCDebug(lcMprisHost) << "Player added:" << service;
         Q_EMIT owner->playerAdded(player);
         Q_EMIT owner->playerCountChanged();
@@ -96,9 +103,16 @@ MprisHost::MprisHost(QObject* parent)
     // typical session is low (handfuls per second at peak), so the
     // global subscription cost is negligible and is the canonical fix
     // used by playerctld, plasma-mpris, and friends.
-    bus.connect(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
-                QStringLiteral("org.freedesktop.DBus"), QStringLiteral("NameOwnerChanged"), this,
-                SLOT(_q_nameOwnerChanged(QString, QString, QString)));
+    const bool subscribed = bus.connect(QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+                                        QStringLiteral("org.freedesktop.DBus"), QStringLiteral("NameOwnerChanged"),
+                                        this, SLOT(_q_nameOwnerChanged(QString, QString, QString)));
+    if (!subscribed) {
+        // Symptom of a silently-failed subscription: the host catches
+        // already-running players via the ListNames scan below, but
+        // anything launched afterwards is invisible to us. Loud so the
+        // bug shows up in journals when it happens.
+        qCWarning(lcMprisHost) << "NameOwnerChanged subscription failed; new players will not be detected";
+    }
 
     // Startup scan for already-running players via an async ListNames —
     // a blocking call here would freeze the GUI thread on a slow session

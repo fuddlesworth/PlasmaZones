@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import Phosphor.Service.Mpris 1.0
+import Phosphor.Theme
 import QtQuick
 import QtQuick.Effects
 
@@ -21,6 +22,23 @@ Item {
     readonly property alias stableArtUrl: playerState.stableArtUrl
     // Exposed so shell.qml can anchor the popup to us.
     property alias popupAnchor: artContainer
+
+    // Named metrics keep magic-number sizing centralised. Mirrors the
+    // pattern used by Theme tokens for colors: every consumer references
+    // the named constant, so a future spacing-scale refactor can update
+    // one site instead of grepping a dozen literals.
+    readonly property int artDiameter: 26
+    readonly property int playDiameter: 22
+    readonly property int controlDiameter: 20
+    readonly property int titleWidth: 120
+    readonly property int titleScrollMargin: 10
+    readonly property int capsuleSpacing: 6
+    readonly property int controlSpacing: 2
+    readonly property int controlGlyphSize: 9
+    readonly property int fallbackGlyphSize: 10
+    readonly property int titleFontSize: 11
+    readonly property int progressStrokeWidth: 2
+    readonly property int artSourcePixels: 80
 
     signal popupRequested
 
@@ -61,7 +79,16 @@ Item {
 
     visible: hasPlayer
     implicitWidth: visible ? capsule.implicitWidth : 0
-    implicitHeight: parent ? parent.height : 30
+    // Pin the widget's implicit height to its own content rather than
+    // querying parent.height. The parent here is a Row, which sizes its
+    // height from its child contents, so `parent.height` produced a
+    // binding loop in the layout pass (parent height depends on this
+    // widget's height depends on parent height) that QML resolved by
+    // initialising at a 30 px sentinel and re-evaluating once layout
+    // settled. Using capsule.implicitHeight breaks the loop cleanly:
+    // the capsule sizes itself from its art-circle child, and the
+    // widget inherits that.
+    implicitHeight: capsule.implicitHeight
     Component.onCompleted: selectPlayer()
 
     // Shared MPRIS derived-state + flicker-free art URL (see
@@ -111,29 +138,29 @@ Item {
         id: capsule
 
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 6
+        spacing: root.capsuleSpacing
 
         // Album art with progress ring
         Item {
             id: artContainer
 
-            width: 26
-            height: 26
+            width: root.artDiameter
+            height: root.artDiameter
             anchors.verticalCenter: parent.verticalCenter
 
             // Background fill (visible while art loads / when no art).
             Rectangle {
                 anchors.fill: parent
                 radius: width / 2
-                color: "#313244"
+                color: Theme.surface_container
             }
 
             // Fallback glyph (sits underneath the masked art).
             Text {
                 anchors.centerIn: parent
                 text: "♪"
-                color: "#a6adc8"
-                font.pixelSize: 10
+                color: Theme.on_surface_variant
+                font.pixelSize: root.fallbackGlyphSize
                 visible: !artImage.visible
             }
 
@@ -167,7 +194,7 @@ Item {
                 anchors.fill: parent
                 source: root.stableArtUrl
                 fillMode: Image.PreserveAspectCrop
-                sourceSize: Qt.size(80, 80)
+                sourceSize: Qt.size(root.artSourcePixels, root.artSourcePixels)
                 asynchronous: true
                 cache: true
                 visible: status === Image.Ready || (source !== "" && status === Image.Loading)
@@ -201,6 +228,14 @@ Item {
                     if (root.visible)
                         requestPaint();
                 }
+                // Force a clean repaint on the hide -> show transition.
+                // The onProgChanged guard above suppresses repaints while
+                // the widget is hidden, which left the ring showing the
+                // last non-zero progress after a screen-lock cycle.
+                onVisibleChanged: {
+                    if (visible)
+                        requestPaint();
+                }
                 onPaint: {
                     let ctx = getContext("2d");
                     let cx = width / 2, cy = height / 2;
@@ -208,14 +243,14 @@ Item {
                     ctx.reset();
                     ctx.beginPath();
                     ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-                    ctx.lineWidth = 2;
-                    ctx.strokeStyle = "#40585b70";
+                    ctx.lineWidth = root.progressStrokeWidth;
+                    ctx.strokeStyle = Qt.rgba(Theme.outline.r, Theme.outline.g, Theme.outline.b, 0.25);
                     ctx.stroke();
                     if (prog > 0) {
                         ctx.beginPath();
                         ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + prog * 2 * Math.PI);
-                        ctx.lineWidth = 2;
-                        ctx.strokeStyle = "#89b4fa";
+                        ctx.lineWidth = root.progressStrokeWidth;
+                        ctx.strokeStyle = Theme.primary;
                         ctx.lineCap = "round";
                         ctx.stroke();
                     }
@@ -228,7 +263,7 @@ Item {
                 cursorShape: Qt.PointingHandCursor
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 Accessible.role: Accessible.Button
-                Accessible.name: "Media player controls"
+                Accessible.name: qsTr("Media player controls")
                 onClicked: mouse => {
                     if (mouse.button === Qt.RightButton)
                         root.cyclePlayer();
@@ -238,9 +273,9 @@ Item {
             }
         }
 
-        // Scrolling title — left-click opens popup
+        // Scrolling title; left-click opens popup
         Item {
-            width: 120
+            width: root.titleWidth
             height: parent.height
             anchors.verticalCenter: parent.verticalCenter
             clip: true
@@ -248,7 +283,7 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 // hoverEnabled is required for cursorShape to take
-                // effect — without it Qt only sets the cursor on
+                // effect: without it Qt only sets the cursor on
                 // press, not on hover. The pointer-hand cue is the
                 // primary affordance signaling that the title strip
                 // opens the media popup.
@@ -260,7 +295,7 @@ Item {
             Text {
                 id: titleText
 
-                property bool needsScroll: implicitWidth > 120
+                property bool needsScroll: implicitWidth > root.titleWidth
 
                 y: (parent.height - height) / 2
                 text: {
@@ -276,8 +311,15 @@ Item {
 
                     return parts.join(" · ") || root.currentPlayer.identity || "";
                 }
-                color: "#1e1e2e"
-                font.pixelSize: 11
+                color: Theme.on_surface
+                font.pixelSize: root.titleFontSize
+                // Reset the scroll position whenever the text changes.
+                // Without this, switching tracks mid-animation left the
+                // previous track's NumberAnimation owning `x` until the
+                // next animation cycle: the new track would scroll using
+                // the old track's `to:` value for a cycle, producing a
+                // visible offscreen jump on multi-track playback.
+                onTextChanged: x = 0
 
                 SequentialAnimation on x {
                     running: titleText.needsScroll && root.visible
@@ -289,7 +331,7 @@ Item {
 
                     NumberAnimation {
                         from: 0
-                        to: -(titleText.implicitWidth - 110)
+                        to: -(titleText.implicitWidth - (root.titleWidth - root.titleScrollMargin))
                         duration: titleText.implicitWidth * 25
                         easing.type: Easing.Linear
                     }
@@ -299,7 +341,7 @@ Item {
                     }
 
                     NumberAnimation {
-                        from: -(titleText.implicitWidth - 110)
+                        from: -(titleText.implicitWidth - (root.titleWidth - root.titleScrollMargin))
                         to: 0
                         duration: 400
                         easing.type: Easing.OutQuad
@@ -310,21 +352,21 @@ Item {
 
         // Controls
         Row {
-            spacing: 2
+            spacing: root.controlSpacing
             anchors.verticalCenter: parent.verticalCenter
 
             Rectangle {
-                width: 20
-                height: 20
+                width: root.controlDiameter
+                height: root.controlDiameter
                 radius: 4
-                color: prevArea.containsMouse ? "#45475a" : "transparent"
+                color: prevArea.containsMouse ? Theme.surface_container_high : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoPrevious
 
                 Text {
                     anchors.centerIn: parent
                     text: "⏮"
-                    font.pixelSize: 9
-                    color: "#1e1e2e"
+                    font.pixelSize: root.controlGlyphSize
+                    color: Theme.on_surface
                 }
 
                 MouseArea {
@@ -334,7 +376,7 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     Accessible.role: Accessible.Button
-                    Accessible.name: "Previous track"
+                    Accessible.name: qsTr("Previous track")
                     onClicked: {
                         if (root.hasPlayer)
                             root.currentPlayer.previous();
@@ -343,16 +385,16 @@ Item {
             }
 
             Rectangle {
-                width: 22
-                height: 22
-                radius: 11
-                color: playArea.containsMouse ? "#45475a" : "#313244"
+                width: root.playDiameter
+                height: root.playDiameter
+                radius: width / 2
+                color: playArea.containsMouse ? Theme.surface_container_high : Theme.surface_container
 
                 Text {
                     anchors.centerIn: parent
                     text: root.isPlaying ? "⏸" : "▶"
-                    font.pixelSize: 9
-                    color: "#cdd6f4"
+                    font.pixelSize: root.controlGlyphSize
+                    color: Theme.on_surface
                 }
 
                 MouseArea {
@@ -362,7 +404,7 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     Accessible.role: Accessible.Button
-                    Accessible.name: root.isPlaying ? "Pause" : "Play"
+                    Accessible.name: root.isPlaying ? qsTr("Pause") : qsTr("Play")
                     onClicked: {
                         if (root.hasPlayer)
                             root.currentPlayer.togglePlaying();
@@ -371,17 +413,17 @@ Item {
             }
 
             Rectangle {
-                width: 20
-                height: 20
+                width: root.controlDiameter
+                height: root.controlDiameter
                 radius: 4
-                color: nextArea.containsMouse ? "#45475a" : "transparent"
+                color: nextArea.containsMouse ? Theme.surface_container_high : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoNext
 
                 Text {
                     anchors.centerIn: parent
                     text: "⏭"
-                    font.pixelSize: 9
-                    color: "#1e1e2e"
+                    font.pixelSize: root.controlGlyphSize
+                    color: Theme.on_surface
                 }
 
                 MouseArea {
@@ -391,7 +433,7 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     Accessible.role: Accessible.Button
-                    Accessible.name: "Next track"
+                    Accessible.name: qsTr("Next track")
                     onClicked: {
                         if (root.hasPlayer)
                             root.currentPlayer.next();

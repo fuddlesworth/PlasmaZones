@@ -47,7 +47,7 @@ Q_SIGNALS:
 private Q_SLOTS:
     void onPlayerAdded(PhosphorServiceMpris::MprisPlayer* player);
     void onPlayerRemoved(PhosphorServiceMpris::MprisPlayer* player);
-    void onPlayerDataChanged(PhosphorServiceMpris::MprisPlayer* player);
+    void onPlayerDataChanged(PhosphorServiceMpris::MprisPlayer* player, const QList<int>& roles);
 
 private:
     void connectPlayer(MprisPlayer* player);

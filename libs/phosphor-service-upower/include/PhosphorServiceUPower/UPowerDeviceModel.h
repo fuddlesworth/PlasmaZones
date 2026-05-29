@@ -47,15 +47,17 @@ Q_SIGNALS:
 private Q_SLOTS:
     void onDeviceAdded(PhosphorServiceUPower::UPowerDevice* device);
     void onDeviceRemoved(PhosphorServiceUPower::UPowerDevice* device);
-    void onDeviceDataChanged(PhosphorServiceUPower::UPowerDevice* device);
+    void onDeviceDataChanged(PhosphorServiceUPower::UPowerDevice* device, const QList<int>& roles);
 
 private:
     void connectDevice(UPowerDevice* device);
 
     UPowerHost* m_host = nullptr;
-    // Row mirror owned by the model — see MprisPlayerModel for rationale:
-    // keeps the begin/end transaction boundaries correct independent of
-    // the host's list-mutation timing.
+    // Row mirror owned by the model. rowCount and data index into this
+    // list, never the host's. Keeping a local mirror means the
+    // begin/end-insert/remove transaction boundaries always straddle
+    // the actual mutation regardless of when the host emits
+    // deviceAdded/deviceRemoved relative to its own list.
     QList<UPowerDevice*> m_rows;
 };
 

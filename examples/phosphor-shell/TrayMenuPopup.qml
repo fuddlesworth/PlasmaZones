@@ -12,6 +12,7 @@
 
 import Phosphor.Service.Sni 1.0
 import Phosphor.Shell 1.0
+import Phosphor.Theme
 import QtQuick
 
 // `openFor` snapshots the delegate's dbus service + menu path, calls
@@ -32,6 +33,29 @@ PopupWindow {
     /// Root id within the dbusmenu tree. 0 = the top of the tree;
     /// cascaded children pass the parent row's id here.
     property int rootId: 0
+    // Named metrics. See MprisWidget.qml for the centralisation rationale.
+    readonly property int popupWidthPx: 240
+    readonly property int popupHeightMax: 420
+    readonly property int popupHeightMin: 40
+    readonly property int popupContentPad: 16
+    readonly property int popupGap: 4
+    readonly property int listMargin: 8
+    readonly property int separatorRowHeight: 6
+    readonly property int regularRowHeight: 28
+    readonly property int separatorSideMargin: 6
+    readonly property int rowPadX: 8
+    readonly property int iconSlotSize: 16
+    readonly property int rowSpacing: 8
+    readonly property int submenuChevronSize: 10
+    readonly property int labelFontSize: 12
+    readonly property int shortcutFontSize: 11
+    readonly property int checkmarkSize: 13
+    readonly property int radioDotSize: 8
+    readonly property int radioDotRadius: 4
+    readonly property int rowRadius: 6
+    readonly property int popupRadius: 10
+    readonly property int shortcutMaxWidth: 80
+    readonly property int iconSourceSize: 32
 
     /// Open the popup anchored to a tray delegate. `delegate` must
     /// expose `dbusService` and `menuPath` (the tray Repeater
@@ -75,9 +99,9 @@ PopupWindow {
     }
 
     popupEdge: PopupWindow.Below
-    popupWidth: 240
-    popupHeight: Math.min(420, Math.max(40, menuList.contentHeight + 16))
-    gap: 4
+    popupWidth: root.popupWidthPx
+    popupHeight: Math.min(root.popupHeightMax, Math.max(root.popupHeightMin, menuList.contentHeight + root.popupContentPad))
+    gap: root.popupGap
     popupVisible: false
     // Compositor dismisses the popup on outside-click via the Wayland
     // popup-grab protocol — that flips popupVisible to false from
@@ -126,16 +150,16 @@ PopupWindow {
 
     Rectangle {
         anchors.fill: parent
-        color: "#ee1e1e2e"
-        radius: 10
-        border.color: "#80a6adc8"
+        color: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 0.933)
+        radius: root.popupRadius
+        border.color: Qt.rgba(Theme.outline_variant.r, Theme.outline_variant.g, Theme.outline_variant.b, 0.5)
         border.width: 1
 
         ListView {
             id: menuList
 
             anchors.fill: parent
-            anchors.margins: 8
+            anchors.margins: root.listMargin
             model: menuModel
             clip: true
             interactive: contentHeight > height
@@ -146,7 +170,7 @@ PopupWindow {
 
                 // Role names are renamed in the model side to avoid
                 // collision with QQuickItem's FINAL `visible` and its
-                // `enabled` Q_PROPERTY — binding role values onto an
+                // `enabled` Q_PROPERTY: binding role values onto an
                 // Item with the same property name would either shadow
                 // (enabled) or fail at load (visible is FINAL).
                 required property int index
@@ -163,7 +187,7 @@ PopupWindow {
 
                 width: ListView.view.width
                 // Separators are thin, regular rows pop to a usable height.
-                height: itemType === "separator" ? 6 : (itemVisible ? 28 : 0)
+                height: itemType === "separator" ? root.separatorRowHeight : (itemVisible ? root.regularRowHeight : 0)
                 visible: itemVisible
 
                 // Separator: a hairline rule across the row.
@@ -172,10 +196,10 @@ PopupWindow {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    anchors.leftMargin: 6
-                    anchors.rightMargin: 6
+                    anchors.leftMargin: root.separatorSideMargin
+                    anchors.rightMargin: root.separatorSideMargin
                     height: 1
-                    color: "#3a3a4a"
+                    color: Theme.outline_variant
                 }
 
                 // Standard row: icon + label + (submenu arrow OR toggle indicator).
@@ -184,55 +208,55 @@ PopupWindow {
 
                     visible: menuRow.itemType !== "separator"
                     anchors.fill: parent
-                    radius: 6
-                    color: rowMouse.containsMouse && menuRow.itemEnabled ? "#3a3a4a" : "transparent"
+                    radius: root.rowRadius
+                    color: rowMouse.containsMouse && menuRow.itemEnabled ? Theme.surface_container_high : "transparent"
                     opacity: menuRow.itemEnabled ? 1 : 0.4
 
                     Row {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        spacing: 8
+                        anchors.leftMargin: root.rowPadX
+                        anchors.rightMargin: root.rowPadX
+                        spacing: root.rowSpacing
 
                         // Toggle indicator. Sits in the icon slot when
                         // there is no icon, otherwise overlaps with it.
                         // dbusmenu apps occasionally set BOTH which
-                        // looks weird either way — the toggle wins.
+                        // looks weird either way: the toggle wins.
                         Item {
-                            width: 16
-                            height: 16
+                            width: root.iconSlotSize
+                            height: root.iconSlotSize
                             anchors.verticalCenter: parent.verticalCenter
 
                             Text {
                                 anchors.centerIn: parent
                                 visible: menuRow.toggleType === "checkmark" && menuRow.toggleState === 1
                                 text: "✓"
-                                color: "#cdd6f4"
-                                font.pixelSize: 13
+                                color: Theme.on_surface
+                                font.pixelSize: root.checkmarkSize
                                 font.weight: Font.Bold
                             }
 
                             Rectangle {
                                 anchors.centerIn: parent
                                 visible: menuRow.toggleType === "radio"
-                                width: 8
-                                height: 8
-                                radius: 4
-                                color: menuRow.toggleState === 1 ? "#cba6f7" : "transparent"
-                                border.color: "#a6adc8"
+                                width: root.radioDotSize
+                                height: root.radioDotSize
+                                radius: root.radioDotRadius
+                                color: menuRow.toggleState === 1 ? Theme.primary : "transparent"
+                                border.color: Theme.on_surface_variant
                                 border.width: 1
                             }
 
                             Image {
                                 anchors.centerIn: parent
                                 visible: menuRow.toggleType.length === 0 && menuRow.iconUrl.length > 0
-                                width: 16
-                                height: 16
+                                width: root.iconSlotSize
+                                height: root.iconSlotSize
                                 source: menuRow.iconUrl
-                                sourceSize.width: 32
-                                sourceSize.height: 32
+                                sourceSize.width: root.iconSourceSize
+                                sourceSize.height: root.iconSourceSize
                                 smooth: true
                             }
                         }
@@ -241,20 +265,21 @@ PopupWindow {
                             id: labelText
 
                             text: menuRow.label
-                            color: "#cdd6f4"
-                            font.pixelSize: 12
+                            color: Theme.on_surface
+                            font.pixelSize: root.labelFontSize
                             anchors.verticalCenter: parent.verticalCenter
-                            // Eat remaining width so the submenu arrow
-                            // (or shortcut text) hugs the right edge.
-                            // Reserved: 16 icon + 8 + 8 label-side
-                            // padding + 16 right slot (chevron or
-                            // shortcut) + the shortcut's intrinsic
-                            // width when present. Clamp to >=0 so an
-                            // absurdly long shortcut string can't make
-                            // the label width go negative (Qt would
-                            // clamp to 0 and elide silently, leaving
-                            // an unlabelled row).
-                            width: Math.max(0, row.width - 16 - 8 - 8 - 16 - 8 - shortcutText.width - (shortcutText.text.length > 0 ? 8 : 0))
+                            // Width budget for the label slot. The Row
+                            // reserves icon + chevron slot widths, the
+                            // two side paddings, the shortcut's
+                            // intrinsic width when present, and the
+                            // spacer between shortcut and chevron when
+                            // the shortcut is non-empty. Clamp to >= 0
+                            // so a pathological shortcut string can't
+                            // drive the label width negative (Qt would
+                            // clamp to 0 and elide silently, leaving an
+                            // unlabelled row).
+                            readonly property int reserved: 2 * root.rowPadX + 2 * root.iconSlotSize + root.rowSpacing + shortcutText.width + (shortcutText.text.length > 0 ? root.rowSpacing : 0)
+                            width: Math.max(0, row.width - reserved)
                             elide: Text.ElideRight
                         }
 
@@ -271,21 +296,21 @@ PopupWindow {
                             // painted glyphs instead of overflowing
                             // the slot.
                             text: menuRow.shortcut
-                            color: "#7f849c"
-                            font.pixelSize: 11
+                            color: Theme.on_surface_variant
+                            font.pixelSize: root.shortcutFontSize
                             anchors.verticalCenter: parent.verticalCenter
                             visible: text.length > 0
-                            width: Math.min(80, implicitWidth)
+                            width: Math.min(root.shortcutMaxWidth, implicitWidth)
                             elide: Text.ElideRight
                         }
 
-                        // Submenu chevron — only renders when the item
+                        // Submenu chevron, only renders when the item
                         // has children.
                         Text {
                             visible: menuRow.childrenDisplay === "submenu"
                             text: "▸"
-                            color: "#a6adc8"
-                            font.pixelSize: 10
+                            color: Theme.on_surface_variant
+                            font.pixelSize: root.submenuChevronSize
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }

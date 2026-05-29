@@ -126,21 +126,29 @@ void MprisPlayerModel::onPlayerRemoved(MprisPlayer* player)
     Q_EMIT countChanged();
 }
 
-void MprisPlayerModel::onPlayerDataChanged(MprisPlayer* player)
+void MprisPlayerModel::onPlayerDataChanged(MprisPlayer* player, const QList<int>& roles)
 {
     const int row = m_rows.indexOf(player);
-    if (row >= 0)
-        Q_EMIT dataChanged(index(row), index(row));
+    if (row >= 0) {
+        const auto idx = index(row);
+        // Passing the role hint lets QML delegates skip rebinding for
+        // roles that did not change. An empty list (the prior default)
+        // forces every delegate to refresh every role on every signal.
+        Q_EMIT dataChanged(idx, idx, roles);
+    }
 }
 
 void MprisPlayerModel::connectPlayer(MprisPlayer* player)
 {
-    auto refresh = [this, player]() {
-        onPlayerDataChanged(player);
-    };
-    connect(player, &MprisPlayer::identityChanged, this, refresh);
-    connect(player, &MprisPlayer::playbackStateChanged, this, refresh);
-    connect(player, &MprisPlayer::metadataChanged, this, refresh);
+    connect(player, &MprisPlayer::identityChanged, this, [this, player]() {
+        onPlayerDataChanged(player, {IdentityRole});
+    });
+    connect(player, &MprisPlayer::playbackStateChanged, this, [this, player]() {
+        onPlayerDataChanged(player, {PlaybackStateRole});
+    });
+    connect(player, &MprisPlayer::metadataChanged, this, [this, player]() {
+        onPlayerDataChanged(player, {TrackTitleRole, TrackArtistRole, ArtUrlRole});
+    });
 }
 
 } // namespace PhosphorServiceMpris
