@@ -788,8 +788,21 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         bool enabled = true;
     };
     QHash<CombinedAssignmentKey, OldEntrySnapshot> oldEntries;
+    // Validity gate up front: a malformed key (zero desktop or empty
+    // activity) would otherwise route through findExactContextRule with
+    // a degenerate (screen, 0, "") triple — the Monitor-axis canonical
+    // shape — and could snapshot an unrelated Monitor rule's entry into
+    // oldEntries[malformedKey]. The rebuild loop below rejects the same
+    // malformed key, so the dead snapshot is harmless today, but the
+    // mislabeled work is a footgun for a future refactor.
+    const auto isValidCombinedKey = [](const CombinedAssignmentKey& key) {
+        return !key.screenId.isEmpty() && key.virtualDesktop > 0 && !key.activity.isEmpty();
+    };
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const CombinedAssignmentKey& key = it.key();
+        if (!isValidCombinedKey(key)) {
+            continue;
+        }
         if (const PWR::WindowRule* existing = findExactContextRule(key.screenId, key.virtualDesktop, key.activity)) {
             oldEntries.insert(key, {entryFromRuleMatchActions(*existing), existing->enabled});
         }
@@ -804,13 +817,15 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     }
 
     int count = 0;
-    // (screen, desktop) tuples that ended up with at least one stored rule;
-    // each gets one layoutAssigned emit at end so observers refresh.
+    // Per-(screen, desktop, activity) rule emit — multiple Combined rules
+    // at the same (screen, desktop) but different activities each fire
+    // their own layoutAssigned so observers can refresh against the
+    // exact rule that landed.
     QSet<CombinedAssignmentKey> emittedKeys;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const CombinedAssignmentKey& key = it.key();
         const QString& layoutId = it.value();
-        if (key.screenId.isEmpty() || key.virtualDesktop <= 0 || key.activity.isEmpty()) {
+        if (!isValidCombinedKey(key)) {
             qCWarning(lcZonesLib) << "Skipping invalid combined assignment:" << key.screenId << key.virtualDesktop
                                   << key.activity;
             continue;
