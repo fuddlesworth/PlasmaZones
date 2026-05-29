@@ -129,6 +129,12 @@ public:
     QString identity;
     QString desktopEntry;
     PlaybackState playbackState = Stopped;
+    // Per-interface "GetAll already in flight" flag. Coalesces a burst
+    // of PropertiesChanged signals carrying `invalidated` into one
+    // outstanding refresh per interface so a misbehaving player can't
+    // spawn an unbounded queue of QDBusPendingCallWatcher objects.
+    bool refreshPendingRoot = false;
+    bool refreshPendingPlayer = false;
     QString trackTitle;
     QString trackArtist;
     QString trackAlbum;
@@ -153,22 +159,25 @@ public:
     // free while the (potentially slow, Spotify can take 500+ ms)
     // reply is in flight. The watcher is parented to `owner`, so a
     // player destroyed mid-flight cancels delivery cleanly.
-    void getAll(const char* iface, void (Private::*handler)(const QVariantMap&))
+    void getAll(const char* iface, void (Private::*handler)(const QVariantMap&), bool* pendingFlag = nullptr)
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(service, QLatin1String(kMprisPath),
                                                           QLatin1String(kPropsIface), QStringLiteral("GetAll"));
         msg << QLatin1String(iface);
         auto* watcher = new QDBusPendingCallWatcher(bus.asyncCall(msg), owner);
-        QObject::connect(
-            watcher, &QDBusPendingCallWatcher::finished, owner, [this, handler](QDBusPendingCallWatcher* call) {
-                call->deleteLater();
-                const QDBusPendingReply<QVariantMap> reply = *call;
-                if (reply.isError()) {
-                    qCDebug(lcMprisPlayer) << "GetAll failed for" << service << ":" << reply.error().message();
-                    return;
-                }
-                (this->*handler)(reply.value());
-            });
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner,
+                         [this, handler, pendingFlag](QDBusPendingCallWatcher* call) {
+                             call->deleteLater();
+                             if (pendingFlag)
+                                 *pendingFlag = false;
+                             const QDBusPendingReply<QVariantMap> reply = *call;
+                             if (reply.isError()) {
+                                 qCDebug(lcMprisPlayer)
+                                     << "GetAll failed for" << service << ":" << reply.error().message();
+                                 return;
+                             }
+                             (this->*handler)(reply.value());
+                         });
     }
 
     // Lightweight async resync of just the Position property, used by
@@ -470,13 +479,19 @@ public:
         if (iface == QLatin1String(kRootIface)) {
             applyRoot(changed);
             // Invalidated properties carry no value, re-fetch the whole
-            // interface asynchronously to pick them up.
-            if (!invalidated.isEmpty())
-                getAll(kRootIface, &Private::applyRoot);
+            // interface asynchronously to pick them up. Coalesce bursts:
+            // skip dispatch if a refresh for this interface is already
+            // in flight.
+            if (!invalidated.isEmpty() && !refreshPendingRoot) {
+                refreshPendingRoot = true;
+                getAll(kRootIface, &Private::applyRoot, &refreshPendingRoot);
+            }
         } else if (iface == QLatin1String(kPlayerIface)) {
             applyPlayer(changed);
-            if (!invalidated.isEmpty())
-                getAll(kPlayerIface, &Private::applyPlayerFromGetAll);
+            if (!invalidated.isEmpty() && !refreshPendingPlayer) {
+                refreshPendingPlayer = true;
+                getAll(kPlayerIface, &Private::applyPlayerFromGetAll, &refreshPendingPlayer);
+            }
         }
     }
 
