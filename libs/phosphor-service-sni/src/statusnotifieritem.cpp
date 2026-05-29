@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/StatusNotifierItem.h>
+#include <PhosphorServiceSni/StatusNotifierItem.h>
 
 #include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
@@ -15,7 +15,7 @@
 #include <QImage>
 #include <QtEndian>
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 namespace {
 
@@ -472,4 +472,4 @@ void StatusNotifierItem::scroll(int delta, const QString& orientation)
         d->proxy->Scroll(delta, orientation);
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni

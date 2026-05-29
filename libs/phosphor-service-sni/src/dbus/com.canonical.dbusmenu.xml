@@ -26,7 +26,7 @@ Event() with a stringly-typed event ID ("clicked", "hovered", etc.).
              gives the root menu; depth=-1 means "entire subtree". -->
         <method name="GetLayout">
             <annotation name="org.qtproject.QtDBus.QtTypeName.Out1"
-                        value="PhosphorServices::DBusMenuLayoutItem"/>
+                        value="PhosphorServiceSni::DBusMenuLayoutItem"/>
             <arg type="i" name="parentId" direction="in"/>
             <arg type="i" name="recursionDepth" direction="in"/>
             <arg type="as" name="propertyNames" direction="in"/>
@@ -38,7 +38,7 @@ Event() with a stringly-typed event ID ("clicked", "hovered", etc.).
             <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
                         value="QList&lt;int&gt;"/>
             <annotation name="org.qtproject.QtDBus.QtTypeName.Out0"
-                        value="PhosphorServices::DBusMenuItemPropertiesList"/>
+                        value="PhosphorServiceSni::DBusMenuItemPropertiesList"/>
             <arg type="ai" name="ids" direction="in"/>
             <arg type="as" name="propertyNames" direction="in"/>
             <arg type="a(ia{sv})" name="properties" direction="out"/>
@@ -61,7 +61,7 @@ Event() with a stringly-typed event ID ("clicked", "hovered", etc.).
 
         <method name="EventGroup">
             <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
-                        value="PhosphorServices::DBusMenuEventList"/>
+                        value="PhosphorServiceSni::DBusMenuEventList"/>
             <annotation name="org.qtproject.QtDBus.QtTypeName.Out0"
                         value="QList&lt;int&gt;"/>
             <arg type="a(isvu)" name="events" direction="in"/>
@@ -89,9 +89,9 @@ Event() with a stringly-typed event ID ("clicked", "hovered", etc.).
 
         <signal name="ItemsPropertiesUpdated">
             <annotation name="org.qtproject.QtDBus.QtTypeName.Out0"
-                        value="PhosphorServices::DBusMenuItemPropertiesList"/>
+                        value="PhosphorServiceSni::DBusMenuItemPropertiesList"/>
             <annotation name="org.qtproject.QtDBus.QtTypeName.Out1"
-                        value="PhosphorServices::DBusMenuItemKeysList"/>
+                        value="PhosphorServiceSni::DBusMenuItemKeysList"/>
             <arg type="a(ia{sv})" name="updatedProps"/>
             <arg type="a(ias)" name="removedProps"/>
         </signal>

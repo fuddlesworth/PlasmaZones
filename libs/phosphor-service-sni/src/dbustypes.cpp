@@ -7,7 +7,7 @@
 
 #include <mutex>
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 void registerDBusTypes()
 {
@@ -26,11 +26,11 @@ void registerDBusTypes()
     });
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni
 
 // ─── (iiay) ─── DBusImage ──────────────────────────────────────────────────
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusImage& image)
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusImage& image)
 {
     argument.beginStructure();
     argument << image.width << image.height << image.data;
@@ -38,7 +38,7 @@ QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusI
     return argument;
 }
 
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusImage& image)
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusImage& image)
 {
     argument.beginStructure();
     argument >> image.width >> image.height >> image.data;
@@ -48,7 +48,7 @@ const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices:
 
 // ─── (sa(iiay)ss) ─── DBusToolTip ──────────────────────────────────────────
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusToolTip& tip)
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusToolTip& tip)
 {
     argument.beginStructure();
     argument << tip.iconName << tip.iconPixmaps << tip.title << tip.body;
@@ -56,7 +56,7 @@ QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusT
     return argument;
 }
 
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusToolTip& tip)
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusToolTip& tip)
 {
     argument.beginStructure();
     argument >> tip.iconName >> tip.iconPixmaps >> tip.title >> tip.body;
@@ -66,7 +66,7 @@ const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices:
 
 // ─── (ia{sv}av) ─── DBusMenuLayoutItem ─────────────────────────────────────
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusMenuLayoutItem& item)
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusMenuLayoutItem& item)
 {
     argument.beginStructure();
     argument << item.id << item.properties;
@@ -79,7 +79,7 @@ QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusM
     return argument;
 }
 
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusMenuLayoutItem& item)
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusMenuLayoutItem& item)
 {
     argument.beginStructure();
     argument >> item.id >> item.properties;
@@ -97,7 +97,7 @@ const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices:
 
 // ─── (ia{sv}) ─── DBusMenuItemProperties ──────────────────────────────────
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusMenuItemProperties& props)
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusMenuItemProperties& props)
 {
     argument.beginStructure();
     argument << props.id << props.properties;
@@ -105,7 +105,7 @@ QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusM
     return argument;
 }
 
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusMenuItemProperties& props)
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusMenuItemProperties& props)
 {
     argument.beginStructure();
     argument >> props.id >> props.properties;
@@ -115,7 +115,7 @@ const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices:
 
 // ─── (ias) ─── DBusMenuItemKeys ───────────────────────────────────────────
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusMenuItemKeys& keys)
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusMenuItemKeys& keys)
 {
     argument.beginStructure();
     argument << keys.id << keys.keys;
@@ -123,7 +123,7 @@ QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusM
     return argument;
 }
 
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusMenuItemKeys& keys)
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusMenuItemKeys& keys)
 {
     argument.beginStructure();
     argument >> keys.id >> keys.keys;
@@ -133,7 +133,7 @@ const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices:
 
 // ─── (isvu) ─── DBusMenuEvent ─────────────────────────────────────────────
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusMenuEvent& event)
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusMenuEvent& event)
 {
     argument.beginStructure();
     argument << event.id << event.eventId << QDBusVariant(event.data) << event.timestamp;
@@ -141,7 +141,7 @@ QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusM
     return argument;
 }
 
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusMenuEvent& event)
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusMenuEvent& event)
 {
     argument.beginStructure();
     QDBusVariant variant;

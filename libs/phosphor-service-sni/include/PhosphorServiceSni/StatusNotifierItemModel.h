@@ -3,31 +3,31 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceSni/phosphorservicesni_export.h>
 
 // Qt's MOC needs fully-defined pointer types for Q_PROPERTY, signal
 // parameters, and Q_INVOKABLE returns (qmetatype.h's
 // `checkTypeIsSuitableForMetaType` static-asserts `is_complete<T>`).
 // Forward decls compile in older Qt but fail with Qt ≥ 6.10.
-#include <PhosphorServices/StatusNotifierHost.h>
-#include <PhosphorServices/StatusNotifierItem.h>
+#include <PhosphorServiceSni/StatusNotifierHost.h>
+#include <PhosphorServiceSni/StatusNotifierItem.h>
 
 #include <QAbstractListModel>
 #include <QPointer>
 #include <QQmlEngine>
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 /// QAbstractListModel adapter over StatusNotifierHost::items(). Hand
 /// this to a QML Repeater / ListView. The roles cover everything a
 /// typical tray delegate needs without exposing the raw item QObject
 /// (kept available via `ItemObjectRole` for invoking action methods).
-class PHOSPHORSERVICES_EXPORT StatusNotifierItemModel : public QAbstractListModel
+class PHOSPHORSERVICESNI_EXPORT StatusNotifierItemModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(StatusNotifierItemModel)
     QML_ELEMENT
-    Q_PROPERTY(PhosphorServices::StatusNotifierHost* host READ host WRITE setHost NOTIFY hostChanged)
+    Q_PROPERTY(PhosphorServiceSni::StatusNotifierHost* host READ host WRITE setHost NOTIFY hostChanged)
     // `count` mirrors rowCount() and emits countChanged on every
     // insert/remove. QAbstractListModel does NOT expose this by
     // default — QML's `model.count` binding silently evaluates to
@@ -85,7 +85,7 @@ public:
     Q_INVOKABLE void secondaryActivate(int row, int x, int y);
     Q_INVOKABLE void contextMenu(int row, int x, int y);
     Q_INVOKABLE void scroll(int row, int delta, const QString& orientation);
-    Q_INVOKABLE PhosphorServices::StatusNotifierItem* itemAt(int row) const;
+    Q_INVOKABLE PhosphorServiceSni::StatusNotifierItem* itemAt(int row) const;
 
 Q_SIGNALS:
     void hostChanged();
@@ -101,4 +101,4 @@ private:
     int rowFor(StatusNotifierItem* item) const;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni

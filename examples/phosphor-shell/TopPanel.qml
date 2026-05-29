@@ -3,7 +3,7 @@
 // Single continuous top panel: one layer-shell surface spans the full
 // screen edge, three child zones anchor to left / center / right.
 
-import Phosphor.Services 1.0
+import Phosphor.Service.Sni 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 

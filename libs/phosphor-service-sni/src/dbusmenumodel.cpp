@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/DBusMenuModel.h>
+#include <PhosphorServiceSni/DBusMenuModel.h>
 
 #include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
@@ -20,9 +20,9 @@
 #include <QLoggingCategory>
 #include <QVariant>
 
-Q_LOGGING_CATEGORY(lcSniMenu, "phosphorservices.sni.menu")
+Q_LOGGING_CATEGORY(lcSniMenu, "phosphor.service.sni.menu")
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 namespace {
 
@@ -624,4 +624,4 @@ void DBusMenuModel::aboutToHide()
     d->proxy->Event(d->rootId, QStringLiteral("closed"), QDBusVariant(0), ts);
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni

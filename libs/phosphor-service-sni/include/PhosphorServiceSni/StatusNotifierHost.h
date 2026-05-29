@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceSni/phosphorservicesni_export.h>
 
 // Qt's MOC needs fully-defined pointer types for Q_PROPERTY, signal
 // parameters, and Q_INVOKABLE returns (qmetatype.h's
 // `checkTypeIsSuitableForMetaType` static-asserts `is_complete<T>`).
 // Forward decls compile in older Qt but fail with Qt ≥ 6.10.
-#include <PhosphorServices/StatusNotifierItem.h>
+#include <PhosphorServiceSni/StatusNotifierItem.h>
 
 #include <QList>
 #include <QObject>
@@ -17,7 +17,7 @@
 
 #include <memory>
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 /// The shell-side counterpart to StatusNotifierWatcher. One instance
 /// per process. Claims `org.kde.StatusNotifierHost-<pid>`, registers
@@ -28,7 +28,7 @@ namespace PhosphorServices {
 /// Lifetime is the shell's — typically constructed by the shell
 /// engine and parented to it. Items emitted via itemAdded() are
 /// owned by the host and will be deleted on itemRemoved().
-class PHOSPHORSERVICES_EXPORT StatusNotifierHost : public QObject
+class PHOSPHORSERVICESNI_EXPORT StatusNotifierHost : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(StatusNotifierHost)
@@ -63,4 +63,4 @@ private:
     std::unique_ptr<Private> d;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni

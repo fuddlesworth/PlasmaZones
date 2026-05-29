@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/DBusMenuModel.h>
+#include <PhosphorServiceSni/DBusMenuModel.h>
 
 #include <QtTest/QtTest>
 
-using PhosphorServices::DBusMenuModel;
+using PhosphorServiceSni::DBusMenuModel;
 
 class TestDBusMenuModel : public QObject
 {

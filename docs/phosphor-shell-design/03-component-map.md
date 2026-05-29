@@ -92,9 +92,9 @@ libs/                                      # C++ libraries, every concern is its
   phosphor-service-lock/                   # PAM + ext-session-lock-v1 coordination
   phosphor-service-session/                # logind (DBus org.freedesktop.login1)
 
-  # EXTRACTED from the existing phosphor-services umbrella (Phase 2.0 of plan).
-  # After all four are extracted the umbrella is deleted, no compat shim.
-  phosphor-service-sni/                    # StatusNotifierItem host + watcher + dbusmenu (pending)
+  # EXTRACTED from the original phosphor-services umbrella (Phase 2.0 of plan).
+  # Phase 2.0 complete: umbrella deleted, no compat shim.
+  phosphor-service-sni/                    # ✓ StatusNotifierItem host + watcher + dbusmenu (shipped)
   phosphor-service-mpris/                  # ✓ MPRIS2 controller (shipped)
   phosphor-service-upower/                 # ✓ battery + power-supply readouts (shipped)
   phosphor-service-icontheme/              # ✓ icon-theme resolver + Qt image provider (shipped, kept standalone)

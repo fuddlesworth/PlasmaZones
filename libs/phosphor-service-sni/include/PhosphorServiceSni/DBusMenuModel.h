@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceSni/phosphorservicesni_export.h>
 
 #include <QAbstractListModel>
 #include <QPointer>
@@ -12,7 +12,7 @@
 
 #include <memory>
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 /// Flat model exposing ONE level of a com.canonical.dbusmenu tree at
 /// a time. Tree mode (QAbstractItemModel) is awkward to drive from
@@ -24,7 +24,7 @@ namespace PhosphorServices {
 /// path from `StatusNotifierItem::menuPath()`. The model then drives
 /// itself: GetLayout on construction, LayoutUpdated/ItemsPropertiesUpdated
 /// signals to refresh.
-class PHOSPHORSERVICES_EXPORT DBusMenuModel : public QAbstractListModel
+class PHOSPHORSERVICESNI_EXPORT DBusMenuModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(DBusMenuModel)
@@ -112,4 +112,4 @@ private:
     std::unique_ptr<Private> d;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni

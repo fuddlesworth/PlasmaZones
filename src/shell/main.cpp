@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <PhosphorServices/QmlRegistration.h>
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
 #include <PhosphorServiceMpris/QmlRegistration.h>
+#include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorShell/ShellEngine.h>
 #include <PhosphorShell/ShellLoader.h>
@@ -27,21 +27,18 @@ int main(int argc, char* argv[])
     app.setApplicationVersion(QStringLiteral("0.1.0"));
     app.setQuitOnLastWindowClosed(false);
 
-    // Register PhosphorServices QML types BEFORE the engine loads
-    // shell.qml. The shell's tray Repeater binds StatusNotifierHost +
-    // StatusNotifierItemModel which both live under Phosphor.Services
-    // 1.0 — without this they'd surface as "not a type" errors at
-    // QML load time. Idempotent under repeated calls.
-    PhosphorServices::registerQmlTypes();
-    // UPower + MPRIS + IconTheme live in their own libraries (post
-    // Phase 2.0 splits); the bar's battery widget imports
-    // Phosphor.Service.UPower 1.0, the media widget imports
-    // Phosphor.Service.Mpris 1.0, and the IconTheme singleton is
-    // mounted under Phosphor.Service.IconTheme 1.0. Each needs its
-    // types registered the same way.
+    // Register every Phosphor.Service.* QML type BEFORE the engine
+    // loads shell.qml. Post Phase 2.0 the umbrella is gone; each
+    // service lib owns its own module URI:
+    //   SNI       → Phosphor.Service.Sni 1.0       (StatusNotifierHost, models, items)
+    //   IconTheme → Phosphor.Service.IconTheme 1.0 (IconThemeResolver singleton)
+    //   UPower    → Phosphor.Service.UPower 1.0    (UPowerHost, devices, model)
+    //   Mpris     → Phosphor.Service.Mpris 1.0     (MprisHost, players, model)
+    // Idempotent under repeated calls.
+    PhosphorServiceSni::registerQmlTypes();
+    PhosphorServiceIconTheme::registerQmlTypes();
     PhosphorServiceUPower::registerQmlTypes();
     PhosphorServiceMpris::registerQmlTypes();
-    PhosphorServiceIconTheme::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();

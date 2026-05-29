@@ -10,7 +10,7 @@
 //   ...
 //   trayMenu.openFor(trayDelegate)
 
-import Phosphor.Services 1.0
+import Phosphor.Service.Sni 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 
@@ -88,7 +88,6 @@ PopupWindow {
     onPopupVisibleChanged: {
         if (!popupVisible)
             menuModel.aboutToHide();
-
     }
 
     DBusMenuModel {
@@ -120,7 +119,6 @@ PopupWindow {
         function onValidChanged() {
             if (!menuModel.valid)
                 root.popupVisible = false;
-
         }
 
         target: menuModel
@@ -237,7 +235,6 @@ PopupWindow {
                                 sourceSize.height: 32
                                 smooth: true
                             }
-
                         }
 
                         Text {
@@ -280,7 +277,6 @@ PopupWindow {
                             font.pixelSize: 10
                             anchors.verticalCenter: parent.verticalCenter
                         }
-
                     }
 
                     MouseArea {
@@ -306,13 +302,8 @@ PopupWindow {
                             }
                         }
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

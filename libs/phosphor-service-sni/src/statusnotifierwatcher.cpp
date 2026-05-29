@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 namespace {
 // Spec-defined DBus identifiers. Declared as inline functions
@@ -245,4 +245,4 @@ void StatusNotifierWatcher::onServiceUnregistered(const QString& service)
     }
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import Phosphor.Service.UPower 1.0
-import Phosphor.Services 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 

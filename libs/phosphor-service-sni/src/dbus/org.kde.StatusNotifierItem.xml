@@ -30,24 +30,24 @@ statusnotifieritem.cpp before any proxy is constructed.
         <property name="IconName" type="s" access="read"/>
         <property name="IconPixmap" type="a(iiay)" access="read">
             <annotation name="org.qtproject.QtDBus.QtTypeName"
-                        value="PhosphorServices::DBusImageList"/>
+                        value="PhosphorServiceSni::DBusImageList"/>
         </property>
         <property name="OverlayIconName" type="s" access="read"/>
         <property name="OverlayIconPixmap" type="a(iiay)" access="read">
             <annotation name="org.qtproject.QtDBus.QtTypeName"
-                        value="PhosphorServices::DBusImageList"/>
+                        value="PhosphorServiceSni::DBusImageList"/>
         </property>
         <property name="AttentionIconName" type="s" access="read"/>
         <property name="AttentionIconPixmap" type="a(iiay)" access="read">
             <annotation name="org.qtproject.QtDBus.QtTypeName"
-                        value="PhosphorServices::DBusImageList"/>
+                        value="PhosphorServiceSni::DBusImageList"/>
         </property>
         <property name="AttentionMovieName" type="s" access="read"/>
 
         <!-- ToolTip: (iconName, iconPixmaps, title, body) -->
         <property name="ToolTip" type="(sa(iiay)ss)" access="read">
             <annotation name="org.qtproject.QtDBus.QtTypeName"
-                        value="PhosphorServices::DBusToolTip"/>
+                        value="PhosphorServiceSni::DBusToolTip"/>
         </property>
 
         <!-- DBusmenu path. Empty string => no menu (use ContextMenu method). -->

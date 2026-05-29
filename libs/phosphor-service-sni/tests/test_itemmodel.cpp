@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/StatusNotifierHost.h>
-#include <PhosphorServices/StatusNotifierItem.h>
-#include <PhosphorServices/StatusNotifierItemModel.h>
+#include <PhosphorServiceSni/StatusNotifierHost.h>
+#include <PhosphorServiceSni/StatusNotifierItem.h>
+#include <PhosphorServiceSni/StatusNotifierItemModel.h>
 
 #include <QSignalSpy>
 #include <QtTest/QtTest>
 
-using namespace PhosphorServices;
+using namespace PhosphorServiceSni;
 
 class TestItemModel : public QObject
 {

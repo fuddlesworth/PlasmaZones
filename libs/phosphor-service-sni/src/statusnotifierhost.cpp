@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/StatusNotifierHost.h>
+#include <PhosphorServiceSni/StatusNotifierHost.h>
 
-#include <PhosphorServices/StatusNotifierItem.h>
+#include <PhosphorServiceSni/StatusNotifierItem.h>
 
 #include "dbustypes.h"
 #include "statusnotifierwatcher.h"
@@ -20,9 +20,9 @@
 #include <QLoggingCategory>
 #include <QStringList>
 
-Q_LOGGING_CATEGORY(lcSniHost, "phosphorservices.sni")
+Q_LOGGING_CATEGORY(lcSniHost, "phosphor.service.sni")
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 namespace {
 // Inline helpers — each call returns a QStringLiteral-backed QString.
@@ -234,4 +234,4 @@ void StatusNotifierHost::_q_remoteItemUnregistered(const QString& canonical)
     d->onItemUnregistered(canonical);
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni

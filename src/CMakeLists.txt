@@ -476,11 +476,12 @@ configure_file(
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phosphor Shell (opt-in via -DBUILD_PHOSPHOR_SHELL=ON at the top level)
 # ═══════════════════════════════════════════════════════════════════════════════
-# Gated alongside libs/phosphor-shell, libs/phosphor-services, and
-# libs/phosphor-service-upower in the root CMakeLists.txt — without
-# the flag those library targets don't exist, so the binary wouldn't
-# link anyway. Wrapping the whole block also keeps `install(TARGETS
-# phosphor-shell …)` from running when the target is absent.
+# Gated alongside libs/phosphor-shell and the phosphor-service-*
+# group (sni, icontheme, upower, mpris) in the root CMakeLists.txt —
+# without the flag those library targets don't exist, so the binary
+# wouldn't link anyway. Wrapping the whole block also keeps
+# `install(TARGETS phosphor-shell …)` from running when the target
+# is absent.
 
 if(BUILD_PHOSPHOR_SHELL)
     add_executable(phosphor-shell shell/main.cpp)
@@ -488,7 +489,7 @@ if(BUILD_PHOSPHOR_SHELL)
     target_link_libraries(phosphor-shell
         PRIVATE
             PhosphorShell::PhosphorShell
-            PhosphorServices::PhosphorServices
+            PhosphorServiceSni::PhosphorServiceSni
             PhosphorServiceIconTheme::PhosphorServiceIconTheme
             PhosphorServiceUPower::PhosphorServiceUPower
             PhosphorServiceMpris::PhosphorServiceMpris

@@ -9,7 +9,7 @@
 #include <QList>
 #include <QString>
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 // ─── StatusNotifierItem types ──────────────────────────────────────────────
 
@@ -82,33 +82,33 @@ using DBusMenuEventList = QList<DBusMenuEvent>;
 /// adaptor is instantiated; idempotent under repeated calls.
 void registerDBusTypes();
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni
 
-Q_DECLARE_METATYPE(PhosphorServices::DBusImage)
-Q_DECLARE_METATYPE(PhosphorServices::DBusImageList)
-Q_DECLARE_METATYPE(PhosphorServices::DBusToolTip)
-Q_DECLARE_METATYPE(PhosphorServices::DBusMenuLayoutItem)
-Q_DECLARE_METATYPE(PhosphorServices::DBusMenuItemProperties)
-Q_DECLARE_METATYPE(PhosphorServices::DBusMenuItemPropertiesList)
-Q_DECLARE_METATYPE(PhosphorServices::DBusMenuItemKeys)
-Q_DECLARE_METATYPE(PhosphorServices::DBusMenuItemKeysList)
-Q_DECLARE_METATYPE(PhosphorServices::DBusMenuEvent)
-Q_DECLARE_METATYPE(PhosphorServices::DBusMenuEventList)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusImage)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusImageList)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusToolTip)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusMenuLayoutItem)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusMenuItemProperties)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusMenuItemPropertiesList)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusMenuItemKeys)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusMenuItemKeysList)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusMenuEvent)
+Q_DECLARE_METATYPE(PhosphorServiceSni::DBusMenuEventList)
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusImage& image);
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusImage& image);
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusImage& image);
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusImage& image);
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusToolTip& tip);
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusToolTip& tip);
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusToolTip& tip);
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusToolTip& tip);
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusMenuLayoutItem& item);
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusMenuLayoutItem& item);
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusMenuLayoutItem& item);
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusMenuLayoutItem& item);
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusMenuItemProperties& props);
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusMenuItemProperties& props);
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusMenuItemProperties& props);
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusMenuItemProperties& props);
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusMenuItemKeys& keys);
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusMenuItemKeys& keys);
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusMenuItemKeys& keys);
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusMenuItemKeys& keys);
 
-QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServices::DBusMenuEvent& event);
-const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServices::DBusMenuEvent& event);
+QDBusArgument& operator<<(QDBusArgument& argument, const PhosphorServiceSni::DBusMenuEvent& event);
+const QDBusArgument& operator>>(const QDBusArgument& argument, PhosphorServiceSni::DBusMenuEvent& event);

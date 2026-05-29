@@ -223,15 +223,17 @@ The umbrella already houses four tenants. Before adding new ones, extract these 
 
 | Source                                             | New home                                 | Status | Notes                                                                          |
 |----------------------------------------------------|------------------------------------------|--------|--------------------------------------------------------------------------------|
-| `phosphor-services/src/statusnotifier/`            | `phosphor-service-sni/`                  | pending | StatusNotifierItem host + watcher + dbusmenu. First-tenant historical context. |
+| `phosphor-services/src/statusnotifier/`            | `phosphor-service-sni/`                  | ✓ shipped | StatusNotifierItem host + watcher + dbusmenu. Namespace `PhosphorServiceSni::`, QML module `Phosphor.Service.Sni 1.0`. Consumes `phosphor-service-icontheme` for icon resolution + image-provider plumbing. The forced-include of `dbustypes.h` + `UNITY_BUILD OFF` invariants carried over per the original CMakeLists rationale. |
 | `phosphor-services/src/mpris/`                     | `phosphor-service-mpris/`                | ✓ shipped | MPRIS2 client + player aggregation. Namespace `PhosphorServiceMpris::`, QML module `Phosphor.Service.Mpris 1.0`. Used by `examples/phosphor-shell/Mpris{Widget,Content,PlayerState}.qml`; consumers updated in the same PR. |
 | `phosphor-services/src/upower/`                    | `phosphor-service-upower/`               | ✓ shipped | Battery/power-supply readouts. Namespace `PhosphorServiceUPower::`, QML module `Phosphor.Service.UPower 1.0`. Used by `examples/phosphor-shell/`; consumers updated in the same PR. |
 | `phosphor-services/src/icontheme/` + `iconimageprovider.*` | `phosphor-service-icontheme/`    | ✓ shipped | Icon-theme resolution + Qt image provider. Namespace `PhosphorServiceIconTheme::`, QML module `Phosphor.Service.IconTheme 1.0`. Image-provider URL host renamed `phosphor-services` → `phosphor-service-icontheme`; SNI publisher routes through `imageProviderUrlHost()` to keep the rename a link-failure rather than a silent miss. Folded with rendering deferred to a later judgement; kept standalone for now to match the per-domain pattern. |
-| `libs/phosphor-services/` umbrella                 | **deleted**                              | blocked | Blocked on sni / mpris / icontheme above. No backwards-compat shim, per `feedback_no_legacy_shims`. |
+| `libs/phosphor-services/` umbrella                 | **deleted**                              | ✓ shipped | Removed in the same commit as the SNI extraction. No backwards-compat shim, per `feedback_no_legacy_shims`. |
 
 **Effort:** S-M total. Mechanical except for any cross-tenant helper code that needs to move into `phosphor-dbus` or a new tiny `phosphor-service-icontheme`. Per CLAUDE.md, every call site updates in the same PR.
 
-**Approach:** one PR per tenant, in order of simplest-to-most-coupled (upower → mpris → sni → icontheme → delete umbrella). Keeps each diff reviewable and the integration branch green between merges.
+**Approach taken:** one commit per tenant, in order of independence (upower → mpris → icontheme → sni). The umbrella deletion folded into the SNI commit because the umbrella has no remaining source files at that point — keeping it as an empty CMake target would have been a backwards-compat shim, which the project forbids.
+
+**Result:** Phase 2.0 complete. `ls libs/` now shows four `phosphor-service-*` siblings (icontheme / mpris / sni / upower) and the umbrella is gone.
 
 ### 2.1-2.10, New service libraries
 

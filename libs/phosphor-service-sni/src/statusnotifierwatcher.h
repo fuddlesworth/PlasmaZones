@@ -9,7 +9,7 @@
 #include <QObject>
 #include <QStringList>
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 /// The org.kde.StatusNotifierWatcher session-bus service. Items
 /// register themselves via RegisterStatusNotifierItem; hosts (shells)
@@ -84,4 +84,4 @@ private:
     QHash<QString, QString> m_hosts; ///< canonical "host-pid" → unique name
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni

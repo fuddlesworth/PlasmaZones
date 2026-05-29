@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceSni/phosphorservicesni_export.h>
 
 #include <QImage>
 #include <QObject>
@@ -11,13 +11,13 @@
 
 #include <memory>
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 /// One system-tray item. Owned by StatusNotifierHost. Wraps the DBus
 /// proxy + property cache + icon resolution. The host populates these
 /// from `RegisteredStatusNotifierItems` and refreshes them in response
 /// to per-item NewXxx signals.
-class PHOSPHORSERVICES_EXPORT StatusNotifierItem : public QObject
+class PHOSPHORSERVICESNI_EXPORT StatusNotifierItem : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(StatusNotifierItem)
@@ -93,4 +93,4 @@ private:
     std::unique_ptr<Private> d;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni

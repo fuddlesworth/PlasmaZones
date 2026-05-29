@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/StatusNotifierItemModel.h>
+#include <PhosphorServiceSni/StatusNotifierItemModel.h>
 
-#include <PhosphorServices/StatusNotifierHost.h>
-#include <PhosphorServices/StatusNotifierItem.h>
+#include <PhosphorServiceSni/StatusNotifierHost.h>
+#include <PhosphorServiceSni/StatusNotifierItem.h>
 
 #include <PhosphorServiceIconTheme/IconImageProvider.h>
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
@@ -13,9 +13,9 @@
 #include <QUrl>
 #include <QVariant>
 
-Q_LOGGING_CATEGORY(lcSniModel, "phosphorservices.sni.model")
+Q_LOGGING_CATEGORY(lcSniModel, "phosphor.service.sni.model")
 
-namespace PhosphorServices {
+namespace PhosphorServiceSni {
 
 namespace {
 
@@ -294,4 +294,4 @@ StatusNotifierItem* StatusNotifierItemModel::itemAt(int row) const
     return m_host->itemAt(row);
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceSni
