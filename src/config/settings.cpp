@@ -312,18 +312,20 @@ void Settings::purgeStaleKeys()
     // that persists a root-level key (current or future: KCM metadata,
     // first-run markers, etc.) lands there. Wiping it on every save
     // would silently destroy those values.
+    // Mixed list of (a) root-level GROUP names that must survive Pass 2's
+    // blanket-delete loop ("General", "TilingQuickLayoutSlots", "Updates")
+    // and (b) root-level KEYS holding stash data — `_v4DisableStash` is a
+    // JSON OBJECT and survives via the Pass 2 listing below; the
+    // `_v4AnimationRulesStash` is a JSON ARRAY and is actually preserved
+    // by Pass 2 NOT enumerating non-object root values (jsonbackend's
+    // `groupList()` filter), with the listing here as defence-in-depth
+    // against future Pass 2 restructuring. Both stashes feed the v4
+    // chain-stall retry path in
+    // configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
         ConfigDefaults::generalGroup(),
         ConfigDefaults::tilingQuickLayoutSlotsGroup(),
         ConfigDefaults::updatesGroup(),
-        // v4-migration scratch roots. If the v1→v2→v3→v4 chain stalls,
-        // these survive on disk so the next run can retry porting the
-        // stashed content into windowrules.json (see
-        // configmigration.cpp::finalizeV4Conversion's stalled-chain
-        // gate). Without these, the first user-triggered save() between
-        // a stalled migration and the next successful one would purge
-        // the stash — silently losing the user's disable lists and
-        // animation app rules.
         ConfigKeys::Legacy::v4DisableStashKey(),
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
     };
@@ -1373,7 +1375,14 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
             break;
         }
         case DisableAxis::Activity: {
-            const int slash = canonicalEntry.indexOf(QLatin1Char('/'));
+            // Use lastIndexOf so a disambiguated screen ID
+            // (`Manuf:Model:Serial/CONNECTOR`, see
+            // libs/phosphor-screens/include/PhosphorScreens/ScreenIdentity.h)
+            // splits at the activity boundary, not at the connector
+            // boundary inside the screen ID. Activity UUIDs are
+            // canonical and never contain `/`, so the trailing segment
+            // is unambiguous. Mirrors the Desktop axis above.
+            const int slash = canonicalEntry.lastIndexOf(QLatin1Char('/'));
             if (slash <= 0 || slash == canonicalEntry.size() - 1) {
                 qCWarning(lcConfig) << "Skipping malformed activity disable entry:" << canonicalEntry;
                 continue;

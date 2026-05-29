@@ -268,7 +268,10 @@ private Q_SLOTS:
         QVERIFY(store.addRule(makeRule(QStringLiteral("DP-1"))));
 
         const QList<PWR::WindowRule> fresh{makeRule(QStringLiteral("HDMI-1")), makeRule(QStringLiteral("HDMI-2"))};
-        store.setAllRules(fresh);
+        // Wrap in QVERIFY so a setAllRules persistence regression surfaces
+        // here instead of only later when the on-disk file diverges from
+        // the in-memory state. Mirrors the sibling mutation tests.
+        QVERIFY(store.setAllRules(fresh));
         QCOMPARE(store.count(), 2);
         QVERIFY(store.contains(fresh.at(0).id));
         QVERIFY(store.contains(fresh.at(1).id));
@@ -300,6 +303,28 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
 
         QVERIFY(store.removeRule(firstId));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.takeFirst().at(0).toBool(), true);
+
+        // Cover the remaining persistence-changing entry points so a
+        // regression that dropped rulesChanged from any of them doesn't
+        // sneak past the spy. updateRule + setRulePriority + setAllRules
+        // each emit a single rulesChanged(true) on success.
+        QVERIFY(store.addRule(makeRule(QStringLiteral("DP-3"))));
+        QCOMPARE(spy.takeFirst().at(0).toBool(), true);
+
+        PWR::WindowRule updated = store.ruleSet().rules().first();
+        updated.name = QStringLiteral("renamed");
+        QVERIFY(store.updateRule(updated));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.takeFirst().at(0).toBool(), true);
+
+        QVERIFY(store.setRulePriority(updated.id, updated.priority + 1));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.takeFirst().at(0).toBool(), true);
+
+        const QList<PWR::WindowRule> replacement{makeRule(QStringLiteral("DP-9"))};
+        QVERIFY(store.setAllRules(replacement));
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.takeFirst().at(0).toBool(), true);
     }

@@ -407,7 +407,11 @@ void ActionRegistry::registerBuiltins()
         .validate =
             [](const QJsonObject& p) {
                 const QJsonValue v = p.value(ActionParam::Value);
-                return v.isDouble() && v.toDouble() >= 0.0 && v.toDouble() <= 1.0;
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                return d >= 0.0 && d <= 1.0;
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
