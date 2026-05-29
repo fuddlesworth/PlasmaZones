@@ -559,8 +559,8 @@ void Daemon::connectShortcutSignals()
     // Escape no longer exists), so we register the global Escape
     // accelerator on every snap-assist show — cancelSnap() routes
     // Escape to hideSnapAssist() via the existing
-    // isSnapAssistVisible() branch (windowdragadaptor.cpp:265). The
-    // matching unregister fires on snapAssistDismissed via
+    // isSnapAssistVisible() branch in WindowDragAdaptor::cancelSnap.
+    // The matching unregister fires on snapAssistDismissed via
     // WindowDragAdaptor::onSnapAssistDismissed.
     connect(m_overlayService.get(), &IOverlayService::snapAssistShown, this,
             [this](const QString&, const PhosphorProtocol::EmptyZoneList&,

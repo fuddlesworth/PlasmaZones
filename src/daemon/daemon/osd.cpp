@@ -48,15 +48,17 @@ void showKdeTextOsd(const QString& icon, const QString& text)
 
 void Daemon::showOverlay()
 {
-    // Don't show overlay when all screens are in autotile mode
-    // (the overlay is for manual zone selection during drag)
+    // The overlay shows manual snap-zone selection during a drag. Don't
+    // show it when no screen is in snap mode — that covers both
+    // "every screen is autotile" and "every screen is in scrolling
+    // (passthrough) mode" (a regression on the prior shape, which only
+    // guarded the autotile-only case and let an all-scrolling setup
+    // surface an empty overlay).
     if (m_screenModeRouter && m_screenManager) {
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
         const auto parts = m_screenModeRouter->partitionByMode(effectiveIds);
-        if (!parts.autotile.isEmpty()) {
-            if (parts.snap.isEmpty()) {
-                return;
-            }
+        if (parts.snap.isEmpty()) {
+            return;
         }
     }
     // Per-screen autotile exclusion is handled by OverlayService::initializeOverlay()

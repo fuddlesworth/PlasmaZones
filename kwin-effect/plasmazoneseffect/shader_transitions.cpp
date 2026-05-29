@@ -302,8 +302,15 @@ inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
     } else if (doc.isArray() && arraySink) {
         arraySink(doc.array());
     } else {
-        qCWarning(lcEffect) << "Failed to parse" << name << "from D-Bus — payload is not a JSON"
-                            << (objectSink ? "object" : "array");
+        // Name the expected shape explicitly from which sink the caller
+        // wired — covers all four combinations (object-only, array-only,
+        // both, neither). Picking from the truthy ternary would lie when
+        // both sinks are bound, or when neither is.
+        const char* expected = (objectSink && arraySink) ? "object or array"
+            : objectSink                                 ? "object"
+            : arraySink                                  ? "array"
+                                                         : "(no shape — caller wired neither sink)";
+        qCWarning(lcEffect) << "Failed to parse" << name << "from D-Bus — payload is not a JSON" << expected;
     }
 }
 

@@ -865,10 +865,6 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
 
     writeProfileObject(*m_store, merged);
 
-    // Aggregate first — consumers that want to observe the Profile
-    // atomically (the daemon's fan-out hook) get one signal per call.
-    Q_EMIT animationProfileChanged();
-
     // Per-field: only emit when the post-write OBSERVABLE differs from
     // the pre-write observable. Compare against `animationProfile()`
     // re-read post-write — NOT against `profile.effective*()` (the
@@ -879,6 +875,11 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // signals even though the on-disk value is unchanged. Cache the
     // post-write Profile in one read instead of paying a JSON parse +
     // CurveRegistry resolve per field.
+    //
+    // Per-field signals are emitted BEFORE the aggregate, matching
+    // `patchProfileField`'s ordering so QML consumers binding to both
+    // a per-field setter and the aggregate observe a consistent
+    // emission order regardless of which code path mutated the Profile.
     const auto next = animationProfile();
     if (qRound(next.effectiveDuration()) != prevDuration) {
         Q_EMIT animationDurationChanged();
@@ -902,6 +903,10 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
         Q_EMIT animationStaggerIntervalChanged();
     }
 
+    // Aggregate last — consumers that want to observe the Profile
+    // atomically (the daemon's fan-out hook) get one signal per call,
+    // after every per-field signal has fired.
+    Q_EMIT animationProfileChanged();
     Q_EMIT settingsChanged();
 }
 

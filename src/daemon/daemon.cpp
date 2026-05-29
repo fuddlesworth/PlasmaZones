@@ -619,11 +619,11 @@ bool Daemon::init()
     // pool is single-threaded (QShaderBaker / glslang isn't thread-
     // safe), so animation and zone bakes serialise without interfering.
     //
-    // Include-path resolution mirrors surfaceanimator.cpp:1358-1361:
-    // every animation search-path's `/shared` subdir is added so an
-    // effect's vert / frag can `#include <animation_uniforms.glsl>`
-    // and the bake worker resolves it identically to the render-
-    // thread load path. The vertex-path fallback (default
+    // Include-path resolution mirrors `SurfaceAnimator::runLeg`
+    // (surfaceanimator.cpp): every animation search-path's `/shared`
+    // subdir is added so an effect's vert / frag can
+    // `#include <animation_uniforms.glsl>` and the bake worker resolves
+    // it identically to the render-thread load path. The vertex-path fallback (default
     // `shared/animation.vert` when an effect doesn't ship its own)
     // also mirrors the runtime, otherwise the warm-baked entry's
     // cache key would differ from what runtime queries.
@@ -1696,9 +1696,11 @@ void Daemon::stop()
     // here and ~Daemon (or a shortcut-manager signal still alive on the
     // main thread) would deref an adapter whose backing service had
     // already been freed by the existing engine-pointer teardown below.
-    if (m_snapAdaptor) {
-        m_snapAdaptor->setContextResolver(nullptr);
-    }
+    //
+    // SnapAdaptor's resolver was already nulled by clearEngine() above
+    // (snapadaptor.cpp); WindowDragAdaptor and WindowTrackingAdaptor
+    // need their own clears here because they don't go through a
+    // clearEngine path.
     if (m_windowDragAdaptor) {
         m_windowDragAdaptor->setContextResolver(nullptr);
     }

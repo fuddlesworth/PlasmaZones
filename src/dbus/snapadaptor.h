@@ -322,9 +322,10 @@ private:
      *        clear floating state, and track the zone assignment.
      *
      * Returns false (and leaves the out-params at 0 / false) when the snap is
-     * refused — missing dependencies, or the target context is disabled. A
-     * false return means no commit happened; callers must skip any post-snap
-     * work (e.g. consumePendingAssignment, success logging).
+     * refused: missing dependencies, the global `snappingEnabled()` kill-switch
+     * is off, or the target context is disabled by the cascade. A false return
+     * means no commit happened; callers must skip any post-snap work (e.g.
+     * consumePendingAssignment, success logging).
      */
     bool applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
                          int& snapHeight, bool& shouldSnap);

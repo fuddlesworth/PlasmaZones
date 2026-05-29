@@ -41,10 +41,6 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     , m_virtualDesktopManager(virtualDesktopManager)
     , m_sessionBackend(createSessionBackend())
 {
-    Q_ASSERT(layoutManager);
-    Q_ASSERT(zoneDetector);
-    Q_ASSERT(settings);
-
     // Null dependencies are a daemon-wiring bug, not a recoverable runtime
     // condition: the earlier "refuse to wire" early-return left m_service,
     // m_persistenceWorker, m_saveTimer, and m_sessionBackend null while
@@ -52,9 +48,11 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // windowActivated, pruneStaleWindows, getEmptyZones, getLastUsedZoneId,
     // findEmptyZone, zoneGeometryRect) plus the saveStateOnShutdown path
     // dereference m_service unguarded — so the early-return just deferred
-    // the crash to the first D-Bus call. Escalate to qFatal so a missing
-    // dependency is loud and immediate, not concealed in an "it works
-    // until first slot fires" failure mode.
+    // the crash to the first D-Bus call. qFatal aborts unambiguously in both
+    // debug and release builds, supersedes Q_ASSERT (debug-only) entirely,
+    // and prints which dependency was null so a wiring regression is loud
+    // and immediate, not concealed in an "it works until first slot fires"
+    // failure mode.
     if (!layoutManager || !zoneDetector || !settings) {
         qFatal(
             "WindowTrackingAdaptor: null dependency at construction "

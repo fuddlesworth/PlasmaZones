@@ -215,7 +215,12 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
     //     other actions intact; drop the rule only if nothing meaningful
     //     remains after the removal.
     QList<PWR::WindowRule> kept;
-    QList<QPair<QString, int>> affected;
+    // De-duplicate (screenId, virtualDesktop) — two distinct rules pinned
+    // to the same screen/desktop with different activities would otherwise
+    // produce duplicate layoutAssigned emissions at the post-update loop
+    // below, causing 2-3× redundant refresh work in observers (overlays,
+    // settings tiles, autotile state).
+    QSet<QPair<QString, int>> affected;
     bool changed = false;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
         const bool referencesDeleted =
@@ -238,7 +243,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
             // layoutAssigned emit — every observer keyed on this rule's
             // context needs to refresh, whether the rule was dropped or just
             // rebuilt.
-            affected.append(qMakePair(dims.screenId, dims.virtualDesktop));
+            affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
             if (entry.mode == AssignmentEntry::Snapping && entry.tilingAlgorithm.isEmpty()) {
                 // Nothing meaningful remains — a bare Snapping engine-mode is
                 // the default. Drop the whole rule.
@@ -538,7 +543,9 @@ void LayoutRegistry::clearAutotileAssignments()
     // Flip every Autotile assignment rule to Snapping (preserving both layout
     // fields) and drop autotile quick-layout slots.
     QList<PWR::WindowRule> updated = m_ruleStore->ruleSet().rules();
-    QList<QPair<QString, int>> affected; // (screenId, virtualDesktop) for signals
+    // Dedup (screenId, virtualDesktop) — see purgeSnappingLayoutFromAssignments
+    // above for the duplicate-emit hazard this guards against.
+    QSet<QPair<QString, int>> affected;
     bool changed = false;
 
     for (PWR::WindowRule& rule : updated) {
@@ -560,7 +567,7 @@ void LayoutRegistry::clearAutotileAssignments()
 
         // Recover (screen, desktop) for the layoutAssigned signal.
         const ContextDims dims = decodeDims(rule.match);
-        affected.append(qMakePair(dims.screenId, dims.virtualDesktop));
+        affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
     }
 
     // Drop autotile quick-layout slots.

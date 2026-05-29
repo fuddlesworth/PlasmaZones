@@ -52,10 +52,11 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
 // info" early return and the context population so individual handlers
 // stay short and all shortcut dispatches use the same resolution logic.
 static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
+                                                              PhosphorScreens::ScreenManager* screenManager,
                                                               PhosphorEngine::NavigationContext& outCtx,
                                                               const char* shortcutName)
 {
-    outCtx.screenId = resolveShortcutScreenId(wta && wta->service() ? wta->service()->screenManager() : nullptr, wta);
+    outCtx.screenId = resolveShortcutScreenId(screenManager, wta);
     if (outCtx.screenId.isEmpty()) {
         qCDebug(lcDaemon) << shortcutName << "shortcut: no screen info";
         return nullptr;
@@ -107,7 +108,8 @@ void Daemon::handleRotate(bool clockwise)
     m_rotateDebounce.restart();
 
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Rotate")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Rotate")) {
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
@@ -122,7 +124,8 @@ void Daemon::handleFloat()
     // from the WTA shadow, so the engine call is fully resolved without
     // reaching back into WTA state.
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Float")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Float")) {
         // Honor the per-context disable lists, same as handleSnap. Un-floating
         // a window re-runs commitSnap; without this gate that re-snaps the
         // window on a monitor / desktop / activity the user disabled
@@ -137,7 +140,8 @@ void Daemon::handleFloat()
 void Daemon::handleMove(NavigationDirection direction)
 {
     NavigationContext ctx;
-    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Move");
+    auto* nav =
+        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Move");
     if (!nav) {
         return;
     }
@@ -155,7 +159,8 @@ void Daemon::handleMove(NavigationDirection direction)
 void Daemon::handleFocus(NavigationDirection direction)
 {
     NavigationContext ctx;
-    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Focus");
+    auto* nav =
+        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Focus");
     if (!nav) {
         return;
     }
@@ -170,7 +175,8 @@ void Daemon::handleFocus(NavigationDirection direction)
 void Daemon::handlePush()
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "PushToEmptyZone")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "PushToEmptyZone")) {
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
@@ -184,7 +190,8 @@ void Daemon::handlePush()
 void Daemon::handleRestore()
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Restore")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Restore")) {
         // Autotile: toggle float (restore out of layout).
         // Snap: restore to captured pre-snap geometry.
         if (isFocusedContextGated(ctx.screenId)) {
@@ -197,7 +204,8 @@ void Daemon::handleRestore()
 void Daemon::handleSwap(NavigationDirection direction)
 {
     NavigationContext ctx;
-    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Swap");
+    auto* nav =
+        navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx, "Swap");
     if (!nav) {
         return;
     }
@@ -215,7 +223,8 @@ void Daemon::handleSwap(NavigationDirection direction)
 void Daemon::handleSnap(int zoneNumber)
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapToZone")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "SnapToZone")) {
         // Honor the per-context disable lists. engineFor() routes purely on
         // mode and never consults them, so a keyboard snap-to-zone would
         // otherwise place a window on a monitor / desktop / activity the user
@@ -230,7 +239,8 @@ void Daemon::handleSnap(int zoneNumber)
 void Daemon::handleCycle(bool forward)
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Cycle")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Cycle")) {
         nav->cycleFocus(forward, ctx);
     }
 }
@@ -238,7 +248,8 @@ void Daemon::handleCycle(bool forward)
 void Daemon::handleResnap()
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Resnap")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "Resnap")) {
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }
@@ -249,7 +260,8 @@ void Daemon::handleResnap()
 void Daemon::handleSnapAll()
 {
     NavigationContext ctx;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapAllWindows")) {
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "SnapAllWindows")) {
         if (isFocusedContextGated(ctx.screenId)) {
             return;
         }

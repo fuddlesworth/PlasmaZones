@@ -193,12 +193,14 @@ inline QString modeToWireString(AssignmentEntry::Mode mode)
     }
     // Switch is exhaustive over `Mode`. A `static_cast<Mode>(99)` reaching
     // this line means either (a) a future Mode enum value was added without
-    // a case here — Qt's -Wswitch diagnostic fires at the missing-case
-    // site, or (b) callers fabricated an out-of-range value via cast.
-    // `Q_UNREACHABLE_RETURN` aborts in debug AND keeps a reliable
-    // sentinel return in release (plain `Q_UNREACHABLE` + a trailing
-    // `return` may be discarded by the optimizer since the function is
-    // documented as unreachable from that point).
+    // a case here — the real guard against that is Qt's -Wswitch diagnostic
+    // at the missing-case site (NOTE: this project's CMake does NOT
+    // promote it to -Werror, so it's a warning at build time, not an
+    // error), or (b) callers fabricated an out-of-range value via cast.
+    // `Q_UNREACHABLE_RETURN` expands to `[[unreachable]] + return`
+    // on modern compilers, so the sentinel below carries through release
+    // builds even when the optimizer assumes the function never reaches
+    // here.
     //
     // The sentinel `"invalid"` is rejected by the `DisableEngine`
     // descriptor's closed-vocabulary validator

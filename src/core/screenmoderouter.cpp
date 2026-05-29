@@ -5,6 +5,8 @@
 
 #include <PhosphorZones/LayoutRegistry.h>
 
+#include <QtGlobal>
+
 namespace PlasmaZones {
 
 ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager,
@@ -14,9 +16,17 @@ ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager,
     , m_snapEngine(snapEngine)
     , m_autotileEngine(autotileEngine)
 {
-    Q_ASSERT(layoutManager);
-    Q_ASSERT(snapEngine);
-    Q_ASSERT(autotileEngine);
+    // qFatal aborts unambiguously in both debug and release builds.
+    // modeFor() / partitionByMode() unconditionally deref each pointer,
+    // so a null dependency is a wiring bug that crashes on the first
+    // call — escalate at construction so the failure is loud and
+    // attributable to the construction site, not the first user.
+    if (!layoutManager || !snapEngine || !autotileEngine) {
+        qFatal(
+            "ScreenModeRouter: null dependency at construction "
+            "(layoutManager=%p, snapEngine=%p, autotileEngine=%p) — daemon-wiring bug",
+            static_cast<void*>(layoutManager), static_cast<void*>(snapEngine), static_cast<void*>(autotileEngine));
+    }
 }
 
 PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const

@@ -224,10 +224,10 @@ public:
         return m_shaderTransitions.find(window) != m_shaderTransitions.end();
     }
     /// Returns nullptr when the window has no in-flight transition.
-    /// The pointer is stable until the next `eraseTransition` /
-    /// `insertTransition` call for THAT window — the underlying
-    /// `unordered_map` does not invalidate other entries' pointers
-    /// on insertion or erasure.
+    /// The pointer is stable until that window's entry is erased or
+    /// replaced — `std::unordered_map` guarantees that insertion and
+    /// erasure do not invalidate references to OTHER entries (only the
+    /// erased entry's references become dangling).
     ShaderTransition* findTransition(KWin::EffectWindow* window)
     {
         auto it = m_shaderTransitions.find(window);

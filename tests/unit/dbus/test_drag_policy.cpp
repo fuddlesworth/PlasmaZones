@@ -65,8 +65,9 @@ public:
 };
 
 /// Minimal `IContextResolver` for the test — the only resolver methods
-/// `computeDragPolicy` reads are `handleForMode` + `disabledReason`, so
-/// every other method returns a trivial default. `m_disabled` is the
+/// `computeDragPolicy` reads are `handleFor` + `isDisabled` (where
+/// `isDisabled` is the non-virtual sugar over `disabledReason`), so every
+/// other method returns a trivial default. `m_disabled` is the
 /// test-controlled flag that drives the ContextDisabled branch. Replaces
 /// the previous `PolicyStubSettings::m_monitorDisabled` trigger now that
 /// `computeDragPolicy` consults the resolver, not ISettings, for the

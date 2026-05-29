@@ -430,9 +430,12 @@ inline bool isContextEqualsLeaf(const MatchExpression& expr, Field field)
  *
  * @p screenId / @p virtualDesktop / @p activity are reset, then filled from
  * whichever `ScreenId` / `VirtualDesktop` / `Activity` equality leaves the
- * match carries. An empty catch-all leaves all three at their defaults.
- * Window-property leaves (AppId etc.) are ignored — only context fields are
- * read, so a mixed *flat* rule still yields its context projection.
+ * match carries. An empty catch-all leaves all three at their defaults
+ * and returns true. Window-property leaves (AppId etc.) are ignored — only
+ * context fields are read, so a mixed *flat* rule still yields its context
+ * projection. When no context-equality leaf was found (e.g. an `All{}` of
+ * only window-property leaves), the function returns false; the empty
+ * catch-all remains the only success case with all-default outputs.
  *
  * **Contract** — this is strictly the inverse of @ref makeContextMatch, so it
  * only understands the shapes that helper produces: an empty catch-all, a

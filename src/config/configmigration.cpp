@@ -230,10 +230,14 @@ bool ConfigMigration::ensureJsonConfig()
         qWarning("ConfigMigration: could not acquire migration lock within 5s — proceeding without lock");
     }
 
-    // Re-check the migrated flag after acquiring the lock. Another process
-    // may have just released it after stamping the current schema version;
-    // re-reading the file lets us short-circuit without paying the parse
-    // cost again.
+    // Re-read the on-disk file under the lock. `ensureJsonConfigImpl`
+    // short-circuits when the file is already at the current schema
+    // version (its "Already at OR above current version" branch),
+    // sparing the parse + migration work we'd otherwise duplicate
+    // against a peer who completed its own migration while we were
+    // waiting on the lock. The s_migrated flag at the top of this
+    // function only catches the same-process case; cross-process
+    // peers reach the version-check inside Impl.
     const bool ok = ensureJsonConfigImpl();
     if (ok) {
         s_migrated.store(true, std::memory_order_release);
@@ -1126,7 +1130,11 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
             keysToRemove.append(modeTrackingKey);
         }
 
-        bool assignmentsWritten = true;
+        // "Commit-ok": true when the assignments file was successfully
+        // written, OR when there was nothing to write in the first place.
+        // Drives the keysToRemove drain below — only strip from root once
+        // the external destination is durable (or vacuously durable).
+        bool assignmentsCommitOk = true;
         if (!assignRoot.isEmpty()) {
             const QString assignPath = legacyAssignmentsFilePath();
             if (!PhosphorConfig::JsonBackend::writeJsonAtomically(assignPath, assignRoot)) {
@@ -1134,14 +1142,14 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
                     "ConfigMigration: failed to write assignments to %s — "
                     "aborting migration so the next run can retry",
                     qPrintable(assignPath));
-                assignmentsWritten = false;
+                assignmentsCommitOk = false;
                 allSideEffectsSucceeded = false;
             }
         }
         // Only strip from root if the external file is committed (or there
         // was nothing to extract). ModeTracking is safe to drop unconditionally
         // — it's ephemeral and consumed in-memory only.
-        if (assignmentsWritten) {
+        if (assignmentsCommitOk) {
             for (const QString& key : keysToRemove) {
                 root.remove(key);
             }
@@ -2025,7 +2033,16 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
             QString screenId;
             int desktop = 0;
             QString activity;
-            CRB::contextDimsOf(rule.match, screenId, desktop, activity);
+            // contextDimsOf returns false on a malformed match (no
+            // context-equality leaf found). The freshly-built disable
+            // rules above are well-formed, so the false branch is
+            // unreachable today — but treat a future regression in the
+            // producer as "drop the malformed rule" rather than letting
+            // every malformed rule collapse to a single (empty, 0, empty)
+            // identity bucket and silently dropping all but one.
+            if (!CRB::contextDimsOf(rule.match, screenId, desktop, activity)) {
+                continue;
+            }
             const std::optional<QString> modeToken = CRB::disableRuleMode(rule);
             const QString identity = (modeToken ? *modeToken : QStringLiteral("?")) + QLatin1Char('|') + screenId
                 + QLatin1Char('|') + QString::number(desktop) + QLatin1Char('|') + activity;
