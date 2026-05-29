@@ -26,26 +26,28 @@ private Q_SLOTS:
     {
         StatusNotifierItemModel m;
         const auto roles = m.roleNames();
-        // The QML side relies on these specific role names; bind
-        // names are a public contract (renaming them silently breaks
-        // the shell's Repeater delegates).
-        QVERIFY(roles.values().contains("itemId"));
-        QVERIFY(roles.values().contains("title"));
-        QVERIFY(roles.values().contains("category"));
-        QVERIFY(roles.values().contains("status"));
-        QVERIFY(roles.values().contains("iconUrl"));
-        QVERIFY(roles.values().contains("overlayIconUrl"));
-        QVERIFY(roles.values().contains("attentionIconUrl"));
-        QVERIFY(roles.values().contains("iconImage"));
-        QVERIFY(roles.values().contains("overlayIconImage"));
-        QVERIFY(roles.values().contains("attentionIconImage"));
-        QVERIFY(roles.values().contains("toolTipTitle"));
-        QVERIFY(roles.values().contains("toolTipBody"));
-        QVERIFY(roles.values().contains("menuPath"));
-        QVERIFY(roles.values().contains("itemIsMenu"));
-        QVERIFY(roles.values().contains("dbusService"));
-        QVERIFY(roles.values().contains("dbusPath"));
-        QVERIFY(roles.values().contains("item"));
+        // The QML side relies on these specific role names; bind names
+        // are a public contract (renaming them silently breaks the
+        // shell's Repeater delegates). Compare per-enum so a swap of
+        // names between two roles fails the test instead of passing
+        // (which `values().contains` would allow).
+        QCOMPARE(roles[StatusNotifierItemModel::IdRole], QByteArrayLiteral("itemId"));
+        QCOMPARE(roles[StatusNotifierItemModel::TitleRole], QByteArrayLiteral("title"));
+        QCOMPARE(roles[StatusNotifierItemModel::CategoryRole], QByteArrayLiteral("category"));
+        QCOMPARE(roles[StatusNotifierItemModel::StatusRole], QByteArrayLiteral("status"));
+        QCOMPARE(roles[StatusNotifierItemModel::IconUrlRole], QByteArrayLiteral("iconUrl"));
+        QCOMPARE(roles[StatusNotifierItemModel::OverlayIconUrlRole], QByteArrayLiteral("overlayIconUrl"));
+        QCOMPARE(roles[StatusNotifierItemModel::AttentionIconUrlRole], QByteArrayLiteral("attentionIconUrl"));
+        QCOMPARE(roles[StatusNotifierItemModel::IconImageRole], QByteArrayLiteral("iconImage"));
+        QCOMPARE(roles[StatusNotifierItemModel::OverlayIconImageRole], QByteArrayLiteral("overlayIconImage"));
+        QCOMPARE(roles[StatusNotifierItemModel::AttentionIconImageRole], QByteArrayLiteral("attentionIconImage"));
+        QCOMPARE(roles[StatusNotifierItemModel::ToolTipTitleRole], QByteArrayLiteral("toolTipTitle"));
+        QCOMPARE(roles[StatusNotifierItemModel::ToolTipBodyRole], QByteArrayLiteral("toolTipBody"));
+        QCOMPARE(roles[StatusNotifierItemModel::MenuPathRole], QByteArrayLiteral("menuPath"));
+        QCOMPARE(roles[StatusNotifierItemModel::ItemIsMenuRole], QByteArrayLiteral("itemIsMenu"));
+        QCOMPARE(roles[StatusNotifierItemModel::DBusServiceRole], QByteArrayLiteral("dbusService"));
+        QCOMPARE(roles[StatusNotifierItemModel::DBusPathRole], QByteArrayLiteral("dbusPath"));
+        QCOMPARE(roles[StatusNotifierItemModel::ItemObjectRole], QByteArrayLiteral("item"));
     }
 
     void hostChangeFiresSignal()

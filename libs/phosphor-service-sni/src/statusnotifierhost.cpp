@@ -119,7 +119,7 @@ void StatusNotifierHost::Private::registerHost()
         hostServiceName = QStringLiteral("org.kde.StatusNotifierHost-%1").arg(QCoreApplication::applicationPid());
         const auto reply =
             bus.interface()->registerService(hostServiceName, QDBusConnectionInterface::DontQueueService);
-        if (!reply.isValid() || reply.value() == QDBusConnectionInterface::ServiceNotRegistered) {
+        if (!reply.isValid() || reply.value() != QDBusConnectionInterface::ServiceRegistered) {
             qCWarning(lcSniHost) << "failed to register host service" << hostServiceName << ":"
                                  << (reply.isValid() ? QStringLiteral("not registered") : reply.error().message());
             hostServiceName.clear();
@@ -139,6 +139,12 @@ void StatusNotifierHost::Private::registerHost()
     if (watcherIface.isValid()) {
         watcherIface.asyncCall(QStringLiteral("RegisterStatusNotifierHost"), hostServiceName);
         seedExistingItems();
+    } else if (!isFirstRegistration) {
+        // Deferred-retry path: the watcher disappeared between our
+        // initial registration and this re-registration call. The
+        // NameOwnerChanged wire will fire registerHost() again when
+        // the watcher reappears; log so the gap is observable.
+        qCInfo(lcSniHost) << "watcher iface not available, deferring registration for" << hostServiceName;
     }
 }
 

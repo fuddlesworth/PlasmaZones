@@ -78,7 +78,7 @@ Item {
             height: root.artSize
             anchors.horizontalCenter: parent.horizontalCenter
             radius: root.artRadius
-            color: Qt.rgba(0, 0, 0, 0.125)
+            color: Theme.surface_container
             clip: true
 
             Image {
@@ -170,7 +170,7 @@ Item {
                 anchors.bottom: parent.bottom
                 height: root.seekTrackHeight
                 radius: root.seekRadius
-                color: Qt.rgba(0, 0, 0, 0.1875)
+                color: Theme.surface_container_high
 
                 Rectangle {
                     width: parent.width * root.progress
@@ -204,7 +204,7 @@ Item {
                 width: root.prevNextSize
                 height: root.prevNextSize
                 radius: root.controlRadius
-                color: pp.containsMouse ? Qt.rgba(0, 0, 0, 0.1875) : "transparent"
+                color: pp.containsMouse ? Theme.surface_container_high : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoPrevious && root.currentPlayer.canControl
 
                 Text {
@@ -235,7 +235,7 @@ Item {
                 width: root.playSize
                 height: root.playSize
                 radius: width / 2
-                color: ppla.containsMouse ? Qt.rgba(0, 0, 0, 0.1875) : Qt.rgba(0, 0, 0, 0.125)
+                color: ppla.containsMouse ? Theme.surface_container_high : Theme.surface_container
                 visible: root.hasPlayer && root.currentPlayer.canControl
 
                 Text {
@@ -264,7 +264,7 @@ Item {
                 width: root.prevNextSize
                 height: root.prevNextSize
                 radius: root.controlRadius
-                color: pn.containsMouse ? Qt.rgba(0, 0, 0, 0.1875) : "transparent"
+                color: pn.containsMouse ? Theme.surface_container_high : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoNext && root.currentPlayer.canControl
 
                 Text {

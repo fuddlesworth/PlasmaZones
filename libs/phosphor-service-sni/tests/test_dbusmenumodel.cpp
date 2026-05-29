@@ -30,17 +30,41 @@ private Q_SLOTS:
         // `itemType` / `itemEnabled` / `itemVisible` rather than the
         // plain forms so the QML delegate Item doesn't shadow
         // QQuickItem's FINAL `visible` and Q_PROPERTY `enabled`.
-        QVERIFY(roles.values().contains("menuId"));
-        QVERIFY(roles.values().contains("itemType"));
-        QVERIFY(roles.values().contains("label"));
-        QVERIFY(roles.values().contains("itemEnabled"));
-        QVERIFY(roles.values().contains("itemVisible"));
-        QVERIFY(roles.values().contains("iconUrl"));
-        QVERIFY(roles.values().contains("iconImage"));
-        QVERIFY(roles.values().contains("toggleType"));
-        QVERIFY(roles.values().contains("toggleState"));
-        QVERIFY(roles.values().contains("childrenDisplay"));
-        QVERIFY(roles.values().contains("shortcut"));
+        // Compare per-enum so a swap of names between two roles fails
+        // the test instead of passing (which `values().contains` would
+        // allow).
+        QCOMPARE(roles[DBusMenuModel::IdRole], QByteArrayLiteral("menuId"));
+        QCOMPARE(roles[DBusMenuModel::TypeRole], QByteArrayLiteral("itemType"));
+        QCOMPARE(roles[DBusMenuModel::LabelRole], QByteArrayLiteral("label"));
+        QCOMPARE(roles[DBusMenuModel::EnabledRole], QByteArrayLiteral("itemEnabled"));
+        QCOMPARE(roles[DBusMenuModel::VisibleRole], QByteArrayLiteral("itemVisible"));
+        QCOMPARE(roles[DBusMenuModel::IconUrlRole], QByteArrayLiteral("iconUrl"));
+        QCOMPARE(roles[DBusMenuModel::IconImageRole], QByteArrayLiteral("iconImage"));
+        QCOMPARE(roles[DBusMenuModel::ToggleTypeRole], QByteArrayLiteral("toggleType"));
+        QCOMPARE(roles[DBusMenuModel::ToggleStateRole], QByteArrayLiteral("toggleState"));
+        QCOMPARE(roles[DBusMenuModel::ChildrenDisplayRole], QByteArrayLiteral("childrenDisplay"));
+        QCOMPARE(roles[DBusMenuModel::ShortcutRole], QByteArrayLiteral("shortcut"));
+    }
+
+    void roleEnumIntegersArePinned()
+    {
+        // Role enum starts at Qt::UserRole + 1 and is contiguous; QML
+        // callers that read role ids out of a Repeater (or any
+        // cross-module consumer using qmlRegisterUncreatable metatypes)
+        // hard-codes these integers. Reordering the enum would
+        // silently shift the mapping; this test makes that a build
+        // break.
+        QCOMPARE(static_cast<int>(DBusMenuModel::IdRole), int(Qt::UserRole) + 1);
+        QCOMPARE(static_cast<int>(DBusMenuModel::TypeRole), int(Qt::UserRole) + 2);
+        QCOMPARE(static_cast<int>(DBusMenuModel::LabelRole), int(Qt::UserRole) + 3);
+        QCOMPARE(static_cast<int>(DBusMenuModel::EnabledRole), int(Qt::UserRole) + 4);
+        QCOMPARE(static_cast<int>(DBusMenuModel::VisibleRole), int(Qt::UserRole) + 5);
+        QCOMPARE(static_cast<int>(DBusMenuModel::IconUrlRole), int(Qt::UserRole) + 6);
+        QCOMPARE(static_cast<int>(DBusMenuModel::IconImageRole), int(Qt::UserRole) + 7);
+        QCOMPARE(static_cast<int>(DBusMenuModel::ToggleTypeRole), int(Qt::UserRole) + 8);
+        QCOMPARE(static_cast<int>(DBusMenuModel::ToggleStateRole), int(Qt::UserRole) + 9);
+        QCOMPARE(static_cast<int>(DBusMenuModel::ChildrenDisplayRole), int(Qt::UserRole) + 10);
+        QCOMPARE(static_cast<int>(DBusMenuModel::ShortcutRole), int(Qt::UserRole) + 11);
     }
 
     void emptySetterIsIdempotent()

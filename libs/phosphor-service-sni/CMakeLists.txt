@@ -137,9 +137,21 @@ target_compile_features(PhosphorServiceSni PUBLIC cxx_std_20)
 # in their signatures (via XML annotations), but the generated .h
 # files have no #include for dbustypes.h. AUTOMOC processes them in
 # isolation; without the forced include, the moc output fails.
-target_compile_options(PhosphorServiceSni PRIVATE
-    -include ${CMAKE_CURRENT_SOURCE_DIR}/src/dbustypes.h
-)
+#
+# The `-include` flag is GCC/Clang-only (MSVC uses `/FI`). The project
+# targets Linux/Qt6 so MSVC support is out of scope; guard the option
+# explicitly so a future cross-build attempt with MSVC fails at
+# configure time with a clear message rather than at compile time with
+# "unknown option".
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(PhosphorServiceSni PRIVATE
+        -include ${CMAKE_CURRENT_SOURCE_DIR}/src/dbustypes.h
+    )
+else()
+    message(FATAL_ERROR
+        "PhosphorServiceSni requires GCC or Clang for the dbustypes.h forced-include. "
+        "MSVC support is out of scope; see CMakeLists.txt for the rationale.")
+endif()
 
 target_link_libraries(PhosphorServiceSni
     PUBLIC

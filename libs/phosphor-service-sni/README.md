@@ -19,7 +19,7 @@ No UI; the shell decides how the tray slot is rendered (capsule, dock, panel wid
 |-----------------------------|----------------------------------------------------------------------------------------------------------|
 | `StatusNotifierHost`        | Per-shell host. Registers the watcher service if absent, declares itself as a host, owns the live items. |
 | `StatusNotifierWatcher`     | Implements `org.kde.StatusNotifierWatcher` so apps and other hosts can discover the host.                |
-| `StatusNotifierItem`        | Live proxy for one tray item. Surfaces icon (`QImage` + URL forms), tooltip, status, menu path.          |
+| `StatusNotifierItem`        | Live proxy for one tray item. Surfaces icon (`QImage`), tooltip, status, menu path. URL forms live on `StatusNotifierItemModel` as role data. |
 | `StatusNotifierItemModel`   | `QAbstractListModel` over the host's items. Roles include id/title/status/iconUrl/menuPath etc.          |
 | `DBusMenuModel`             | `QAbstractListModel` exposing one level of a `com.canonical.dbusmenu` tree. Cascaded popups bind a fresh model per level (the QML side prefers this over a hierarchical model). |
 
@@ -86,4 +86,4 @@ Repeater {
 
 ## Status
 
-Phase 2.0 extraction from the original `phosphor-services` umbrella, and the last of the four. With this extraction the umbrella is deleted; no backwards-compat shim. Namespace `PhosphorServices::StatusNotifier*` becomes `PhosphorServiceSni::StatusNotifier*`, QML module `Phosphor.Services` becomes `Phosphor.Service.Sni`.
+Phase 2.0 extraction from the original `phosphor-services` umbrella, and the last of the umbrella tenants. With this extraction the umbrella is deleted; no backwards-compat shim. Namespace `PhosphorServices::StatusNotifier*` becomes `PhosphorServiceSni::StatusNotifier*`, QML module `Phosphor.Services` becomes `Phosphor.Service.Sni`.

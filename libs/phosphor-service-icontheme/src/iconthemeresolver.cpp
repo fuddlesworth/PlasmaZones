@@ -11,6 +11,7 @@
 #include <QIcon>
 #include <QImageReader>
 #include <QLoggingCategory>
+#include <QMap>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QQueue>
@@ -48,6 +49,21 @@ struct ThemeIndex
 };
 
 namespace {
+
+// File extensions we accept for icon files, in priority order. PNG
+// wins over SVG when both exist at the same theme directory (themed
+// rasters are usually hand-tuned), SVG over XPM. Keep this single list
+// — the themed walk, the fallback scan, and the IconThemePath flat
+// probe all share it.
+const QStringList& iconFileExtensions()
+{
+    static const QStringList kExts = {
+        QStringLiteral(".png"),
+        QStringLiteral(".svg"),
+        QStringLiteral(".xpm"),
+    };
+    return kExts;
+}
 
 // XDG Icon Theme Spec, section "Icon Lookup":
 //
@@ -351,7 +367,7 @@ QString IconThemeResolver::Private::themeIconPath(const QString& iconName, int s
 
     // Try every directory in the theme. First pass: directories whose
     // size matches. Second pass: closest by size distance.
-    static const QStringList exts = {QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")};
+    const QStringList& exts = iconFileExtensions();
 
     // Per-item overrides (`extraThemeDir`) are handled as a flat probe
     // at the top of `iconForName`, not threaded through the themed
@@ -441,7 +457,7 @@ QString IconThemeResolver::Private::lookupFallbackIcon(const QString& iconName) 
     // Last resort: scan the search path for `<root>/<iconName>.{png,svg,xpm}`
     // directly. This is the "unthemed icons" path, /usr/share/pixmaps
     // historically dumps a flat tree of app icons there.
-    static const QStringList exts = {QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")};
+    const QStringList& exts = iconFileExtensions();
     for (const auto& root : searchPath) {
         for (const auto& ext : exts) {
             const QString candidate = root + QLatin1Char('/') + iconName + ext;
@@ -560,7 +576,7 @@ QImage IconThemeResolver::iconForName(const QString& name, int size, int scale, 
             // (most apps with custom dirs dump icons straight in there,
             // not in a themed subtree). Then fall back to the normal
             // themed lookup below.
-            static const QStringList exts = {QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")};
+            const QStringList& exts = iconFileExtensions();
             for (const auto& ext : exts) {
                 const auto candidate = extraThemeDir + QLatin1Char('/') + name + ext;
                 if (QFile::exists(candidate)) {
@@ -638,8 +654,8 @@ QImage IconThemeResolver::decodePixmaps(const QList<QPair<QSize, QByteArray>>& p
 
     const auto& [pxSize, bytes] = pixmaps.at(bestIdx);
     // Validate against adversarial input from another process:
-    //   1. Width / height must be sane (cap matches argbBytesToImage
-    //      in statusnotifieritem.cpp).
+    //   1. Width / height must be sane (4096 hard cap bounds allocation
+    //      for adversarial pixmap blobs; a real icon is at most 512).
     //   2. Size check uses 64-bit arithmetic; signed `int * int * 4`
     //      with adversarial dims (e.g. 65536 × 65536) wraps to a small
     //      positive value, bypasses the bounds check, and the copy
