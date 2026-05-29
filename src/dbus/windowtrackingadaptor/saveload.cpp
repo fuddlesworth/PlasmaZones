@@ -459,9 +459,6 @@ void WindowTrackingAdaptor::loadState()
     auto readVal = [&](const QString& key, const QString& def = QString()) -> QString {
         return tracking->readString(key, def);
     };
-    auto readIntVal = [&](const QString& key, int def = 0) -> int {
-        return tracking->readInt(key, def);
-    };
 
     // Build pending restore queues from:
     // 1. Active zone assignments — windows still open at daemon shutdown
