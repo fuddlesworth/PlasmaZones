@@ -359,7 +359,7 @@ void PlasmaZonesEffect::evictLruTextureIfOverBound()
     // only removes NON-in-flight entries; the set of in-flight
     // pointers is invariant across the loop, so we hoist the build.
     std::unordered_set<const CachedTexture*> inFlight;
-    for (const auto& [_, transition] : m_shaderManager.m_shaderTransitions) {
+    for (const auto& [_, transition] : m_shaderManager.shaderTransitions()) {
         for (CachedTexture* tex : transition.userTextures) {
             if (tex) {
                 inFlight.insert(tex);

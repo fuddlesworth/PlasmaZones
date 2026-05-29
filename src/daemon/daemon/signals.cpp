@@ -192,6 +192,12 @@ void Daemon::initializeAutotile()
             // direct feedback to an explicit user action, not a passive layout-switch OSD.
             const auto currentMode =
                 m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+            // Legacy direct settings check — kept inline because the OSD
+            // surface needs the rich PlasmaZones::DisabledReason enum
+            // (which carries axis info for the user-facing message);
+            // PhosphorContext::DisabledReason in the LGPL lib is a
+            // narrower projection. Migrating this site requires a richer
+            // resolver API and is tracked as a follow-up.
             const DisabledReason why =
                 contextDisabledReason(m_settings.get(), currentMode, screenId, desktop, activity);
             if (why != DisabledReason::NotDisabled) {
@@ -427,8 +433,9 @@ void Daemon::initializeUnifiedController()
     m_unifiedLayoutController->setAutotileLayoutSource(m_autotileLayoutSource);
 
     // Set initial desktop/activity context for visibility-filtered cycling
-    m_layoutManager->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
-    m_unifiedLayoutController->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
+    const int desktopNow = currentDesktop();
+    m_layoutManager->setCurrentVirtualDesktop(desktopNow);
+    m_unifiedLayoutController->setCurrentVirtualDesktop(desktopNow);
     if (m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()) {
         m_layoutManager->setCurrentActivity(m_activityManager->currentActivity());
         m_unifiedLayoutController->setCurrentActivity(m_activityManager->currentActivity());

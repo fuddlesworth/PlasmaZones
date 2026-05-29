@@ -249,8 +249,8 @@ void Settings::load()
     // predicate, a cross-process write (daemon shortcut, KCM D-Bus
     // call) that updates only a disable list would emit the per-mode
     // signals but NOT the aggregate — inconsistent with the direct
-    // setter path (`writeDisableEntries` unconditionally emits
-    // `settingsChanged()`).
+    // setter path (`writeDisableEntries` emits `settingsChanged()`
+    // whenever persistence succeeds).
     if (anyChanged || anyDisableChanged)
         Q_EMIT settingsChanged();
 }
@@ -324,8 +324,8 @@ void Settings::purgeStaleKeys()
         // a stalled migration and the next successful one would purge
         // the stash — silently losing the user's disable lists and
         // animation app rules.
-        QStringLiteral("_v4DisableStash"),
-        QStringLiteral("_v4AnimationRulesStash"),
+        ConfigKeys::Legacy::v4DisableStashKey(),
+        ConfigKeys::Legacy::v4AnimationRulesStashKey(),
     };
 
     // Compute the set of paths the Store claims. These must not be
@@ -2579,19 +2579,26 @@ void Settings::reset()
                 kept.append(rule); // not a DisableEngine rule — preserve
             }
         }
+        bool rulesPersistOk = true;
         if (kept.size() != m_windowRuleStore->count()) {
             if (!m_windowRuleStore->setAllRules(kept)) {
                 // Persistence failed — the in-memory store advanced but the
-                // on-disk file is stale, so on next launch the cleared
-                // disable rules re-appear. Mirror writeDisableEntries'
-                // failure path: surface a warning and skip the aggregate
-                // signal so dirty-state trackers don't believe the reset
-                // landed on disk.
+                // on-disk file is stale. Roll back the in-memory state by
+                // reloading from disk so the per-mode re-emit loop below
+                // doesn't fire `disabled*Changed` for changes that didn't
+                // land. The owned-store path falls through to load()
+                // (which reloads its own copy); the borrowed-store path
+                // (daemon) skips reloading the rules in load() and would
+                // otherwise leave the in-memory store advanced — explicitly
+                // reload via the store's own load() to roll back.
                 qCWarning(lcConfig)
-                    << "reset: failed to persist window-rule store — disable rules will reappear on next "
-                       "launch";
+                    << "reset: failed to persist window-rule store — rolling back in-memory state; disable "
+                       "rules will reappear on next launch";
+                m_windowRuleStore->load();
+                rulesPersistOk = false;
             }
         }
+        (void)rulesPersistOk; // load() below already covers signal correctness
     }
 
     load();

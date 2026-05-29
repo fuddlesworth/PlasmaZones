@@ -312,6 +312,7 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_snapCancelled = false;
         m_wasSnapped = false;
         m_currentDragPolicy = {};
+        m_dragReorderActive = false;
     }
 
     // Drop pending snap-drag state if this window was the pending target

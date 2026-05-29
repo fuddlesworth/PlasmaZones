@@ -210,8 +210,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // via `handleFor`, then ask the layout manager to resolve the mode
         // against THOSE frozen axes — using `currentVirtualDesktop()` /
         // `currentActivity()` on the resolver re-reads workspace state on
-        // every call (per IContextResolver.h:139-141 "NOT cached snapshots
-        // of an earlier handleFor() result"), so a virtual-desktop switch
+        // every call (per IContextResolver.h's "NOT cached snapshots of an
+        // earlier handleFor() result" note on the raw workspace
+        // accessors), so a virtual-desktop switch
         // between the mode lookup and the gate read would silently decouple
         // them. The handle's existing fields are authoritative — overwriting
         // `mode` in place keeps the gate consistent.

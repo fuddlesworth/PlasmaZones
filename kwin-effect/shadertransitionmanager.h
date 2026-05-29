@@ -216,14 +216,21 @@ public:
         return it != m_shaderTransitions.end() ? &it->second : nullptr;
     }
     /// Insert a transition for @p window, taking ownership of the moved
-    /// payload. Returns the pointer to the inserted entry (always
-    /// non-null on success). Asserts that no prior entry existed —
-    /// callers that may supersede an existing transition must
-    /// `eraseTransition` first.
+    /// payload. Returns the pointer to the inserted entry on success,
+    /// or `nullptr` if an entry for @p window already existed (the
+    /// moved-in payload is discarded in that case, and the caller MUST
+    /// either `eraseTransition` first or handle the rollback explicitly
+    /// — silently writing through the returned pointer would corrupt the
+    /// pre-existing transition's grab state). Q_ASSERT covers debug;
+    /// the runtime guard covers release, so the contract violation is
+    /// loud in both build modes.
     ShaderTransition* insertTransition(KWin::EffectWindow* window, ShaderTransition&& transition)
     {
         auto result = m_shaderTransitions.emplace(window, std::move(transition));
         Q_ASSERT(result.second);
+        if (!result.second) {
+            return nullptr;
+        }
         return &result.first->second;
     }
     /// Returns true when an entry was actually erased.

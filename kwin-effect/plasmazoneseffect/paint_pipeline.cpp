@@ -127,7 +127,7 @@ void PlasmaZonesEffect::postPaintScreen()
     // m_windowAnimator->scheduleRepaints above.
     if (!m_shaderManager.empty()) {
         const qint64 now = shaderClockNowMs();
-        for (const auto& [w, transition] : m_shaderManager.m_shaderTransitions) {
+        for (const auto& [w, transition] : m_shaderManager.shaderTransitions()) {
             if (!w || w->isDeleted()) {
                 continue;
             }

@@ -1348,14 +1348,22 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
 namespace {
 // The temporary root keys migrateV3ToV4 writes and finalizeV4Conversion
 // consumes + strips. Not real schema keys — they never survive a completed
-// conversion.
-constexpr QLatin1StringView kV4DisableStashKey{"_v4DisableStash"};
+// conversion. Aliased to the frozen accessors in `ConfigKeys::Legacy` so
+// settings.cpp::purgeStaleKeys (which preserves them across save() cycles
+// when the chain stalls) reads from the same SSoT.
+inline QString kV4DisableStashKey()
+{
+    return ConfigKeys::Legacy::v4DisableStashKey();
+}
 // Carries the v4 `Animations.AnimationAppRules` array forward to
 // finalizeV4Conversion, which converts each legacy entry into a WindowRule and
 // appends it to windowrules.json. The source key is removed from the
 // Animations group in migrateV3ToV4 so the unified rule store becomes the sole
 // home for per-window animation overrides.
-constexpr QLatin1StringView kV4AnimationRulesStashKey{"_v4AnimationRulesStash"};
+inline QString kV4AnimationRulesStashKey()
+{
+    return ConfigKeys::Legacy::v4AnimationRulesStashKey();
+}
 
 // Inner field names inside the `_v4DisableStash` object. Shared between the
 // writer (migrateV3ToV4) and the reader (finalizeV4Conversion) so a typo or
@@ -1428,7 +1436,7 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // values, so an empty `stash` here means the v3 config had no disable
     // lists at all.
     if (!stash.isEmpty()) {
-        root[kV4DisableStashKey] = stash;
+        root[kV4DisableStashKey()] = stash;
     }
 
     // Animation App Rule stash: v4 folds per-window animation overrides into
@@ -1440,7 +1448,7 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     QJsonObject animations = root.value(ConfigKeys::Legacy::v4AnimationsGroup()).toObject();
     const QJsonArray animationRules = animations.value(ConfigKeys::Legacy::v4AnimationAppRulesKey()).toArray();
     if (!animationRules.isEmpty()) {
-        root[kV4AnimationRulesStashKey] = animationRules;
+        root[kV4AnimationRulesStashKey()] = animationRules;
     }
     animations.remove(ConfigKeys::Legacy::v4AnimationAppRulesKey());
     if (animations.isEmpty()) {
@@ -1812,11 +1820,11 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
                         "stash keys",
                         qPrintable(jsonPath));
                     ok = false;
-                } else if (doc.object().contains(kV4DisableStashKey)
-                           || doc.object().contains(kV4AnimationRulesStashKey)) {
+                } else if (doc.object().contains(kV4DisableStashKey())
+                           || doc.object().contains(kV4AnimationRulesStashKey())) {
                     QJsonObject configRoot = doc.object();
-                    configRoot.remove(kV4DisableStashKey);
-                    configRoot.remove(kV4AnimationRulesStashKey);
+                    configRoot.remove(kV4DisableStashKey());
+                    configRoot.remove(kV4AnimationRulesStashKey());
                     if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
                         qWarning("ConfigMigration: failed to strip v4 stash keys from %s during cleanup retry",
                                  qPrintable(jsonPath));
@@ -1893,8 +1901,8 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     }
 
-    const QJsonObject stash = configRoot.value(kV4DisableStashKey).toObject();
-    const QJsonArray animationRulesStash = configRoot.value(kV4AnimationRulesStashKey).toArray();
+    const QJsonObject stash = configRoot.value(kV4DisableStashKey()).toObject();
+    const QJsonArray animationRulesStash = configRoot.value(kV4AnimationRulesStashKey()).toArray();
 
     // ── Read assignments.json ──────────────────────────────────────────────
     // The prevalidate guard above already aborted on a malformed file, so a
@@ -2150,9 +2158,9 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // operator's signal that the serialisation guarantee was downgraded.
     // Predicate gates the rewrite so a clean config (no stash keys) isn't
     // needlessly touched.
-    if (haveConfig && (configRoot.contains(kV4DisableStashKey) || configRoot.contains(kV4AnimationRulesStashKey))) {
-        configRoot.remove(kV4DisableStashKey);
-        configRoot.remove(kV4AnimationRulesStashKey);
+    if (haveConfig && (configRoot.contains(kV4DisableStashKey()) || configRoot.contains(kV4AnimationRulesStashKey()))) {
+        configRoot.remove(kV4DisableStashKey());
+        configRoot.remove(kV4AnimationRulesStashKey());
         if (!PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, configRoot)) {
             qWarning("ConfigMigration: failed to rewrite %s after v4 conversion", qPrintable(jsonPath));
             return false;

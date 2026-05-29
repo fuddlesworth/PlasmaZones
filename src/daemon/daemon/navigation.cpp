@@ -409,8 +409,11 @@ void Daemon::resnapIfManualMode()
         // (autotile.cpp, signals.cpp, osd.cpp, start.cpp).
         m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, {}, currentDesktop());
     }
-    m_suppressResnapOsd = 1;
+    // Co-locate the suppress pre-arm with the resnap call so a null
+    // m_snapAdaptor doesn't leave the counter armed for the next
+    // unrelated navigationFeedback. Mirrors the daemon.cpp:1249 site.
     if (m_snapAdaptor) {
+        m_suppressResnapOsd = 1;
         m_snapAdaptor->resnapToNewLayout();
     }
 }

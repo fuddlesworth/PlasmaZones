@@ -280,8 +280,10 @@ private Q_SLOTS:
 
     void testContextDimsOf_refusesDuplicateActivityLeaf()
     {
-        // Same refusal for a duplicate Activity leaf — covers all three
-        // context dimensions so the guard is symmetrical, not just ScreenId.
+        // Same refusal for a duplicate Activity leaf — covers a second of
+        // the three context dimensions (Screen handled above; VirtualDesktop
+        // covered by testContextDimsOf_refusesDuplicateVirtualDesktopLeaf
+        // below).
         const MatchExpression dup = MatchExpression::makeAll({
             MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("act-a")),
             MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("act-b")),
@@ -291,6 +293,22 @@ private Q_SLOTS:
         QString act;
         QVERIFY(!CRB::contextDimsOf(dup, sid, desk, act));
         QVERIFY(act.isEmpty());
+    }
+
+    void testContextDimsOf_refusesDuplicateVirtualDesktopLeaf()
+    {
+        // Symmetric to the Screen / Activity duplicate-leaf refusals —
+        // covers the third of the three context dimensions so the guard
+        // is exhaustive against the field axis.
+        const MatchExpression dup = MatchExpression::makeAll({
+            MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 1),
+            MatchExpression::makeLeaf(Field::VirtualDesktop, Operator::Equals, 2),
+        });
+        QString sid;
+        int desk = 0;
+        QString act;
+        QVERIFY(!CRB::contextDimsOf(dup, sid, desk, act));
+        QCOMPARE(desk, 0);
     }
 
     void testContextDimsOf_returnTrueOnSuccess()

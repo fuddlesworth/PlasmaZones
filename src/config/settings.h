@@ -1108,7 +1108,7 @@ private:
                         CommaListSignalFn specificSignal);
 
     /// Member-function-pointer alias for the three per-mode disable NOTIFY
-    /// signals passed into @ref writeDisableList. The signals carry the mode
+    /// signals passed into @ref writeDisableEntries. The signals carry the mode
     /// that flipped so listeners only react to their own axis.
     using DisableModeSignalFn = void (Settings::*)(PhosphorZones::AssignmentEntry::Mode);
 

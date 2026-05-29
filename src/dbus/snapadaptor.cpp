@@ -27,6 +27,10 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
             "SnapAdaptor: null dependency at construction "
             "(engine=%p, adaptor=%p, settings=%p) — daemon-wiring bug",
             static_cast<void*>(m_engine), static_cast<void*>(m_adaptor), static_cast<void*>(m_settings));
+        return; // qFatal aborts at runtime, but `QMessageLogger::fatal` is not [[noreturn]] in Qt 6 —
+                // encode the dead-store contract at the source level so a future change that turns
+                // any of these into a recoverable optional doesn't silently fall through into the
+                // signal-wiring block below with null pointers.
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

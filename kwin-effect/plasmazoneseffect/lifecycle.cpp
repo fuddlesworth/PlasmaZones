@@ -132,7 +132,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(&m_shaderManager.m_animationShaderRegistry,
             &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this, [this]() {
                 QVarLengthArray<KWin::EffectWindow*, 8> windows;
-                for (auto& [w, _] : m_shaderManager.m_shaderTransitions)
+                for (auto& [w, _] : m_shaderManager.shaderTransitions())
                     windows.push_back(w);
                 for (auto* w : windows)
                     endShaderTransition(w);
@@ -784,7 +784,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // the offscreen state when KWin::effects is gone.
     if (KWin::effects) {
         QVarLengthArray<KWin::EffectWindow*, 8> activeWindows;
-        for (auto& [w, _] : m_shaderManager.m_shaderTransitions) {
+        for (auto& [w, _] : m_shaderManager.shaderTransitions()) {
             activeWindows.push_back(w);
         }
         for (auto* w : activeWindows) {

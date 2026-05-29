@@ -615,12 +615,15 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
  * function bails to nullopt. An empty token is treated as a malformed
  * payload and also returns nullopt.
  *
- * Open-vocabulary by design: the bridge does NOT recognise a closed set of
- * mode tokens. Vocabulary validation is the consumer's responsibility via
- * `PhosphorZones::modeFromWireString`. Returning any non-empty token
- * verbatim keeps PhosphorWindowRule free of any PhosphorZones dependency
- * and lets a future mode (e.g. "scrolling") round-trip through the bridge
- * without a coordinated edit.
+ * Open-vocabulary within the bridge itself. At persistence boundaries the
+ * DisableEngine action descriptor's load-time validator already enforces
+ * the closed `engineModeOptions()` set (see ruleaction.cpp), so a rule
+ * that survived load has a vocabulary-valid token. The bridge keeps the
+ * verbatim contract so an in-memory caller building a rule programmatically
+ * — or a test pinning the bridge's unrecognised-token behaviour — can
+ * carry any non-empty token without coupling PhosphorWindowRule to
+ * PhosphorZones, and so a future mode addition round-trips through the
+ * bridge without a coordinated edit.
  */
 inline std::optional<QString> disableRuleMode(const WindowRule& rule)
 {

@@ -17,9 +17,12 @@ ContextResolver::ContextResolver(IWorkspaceState* workspaceState, IModeProvider*
     // no useful semantics — the resolver has nothing to dispatch to.
     // Assert in debug + qFatal in release so a wiring bug crashes loudly at
     // construction rather than silently returning zeroes from every query.
-    Q_ASSERT_X(m_workspaceState != nullptr, "PhosphorContext::ContextResolver", "IWorkspaceState* must not be null");
-    Q_ASSERT_X(m_modeProvider != nullptr, "PhosphorContext::ContextResolver", "IModeProvider* must not be null");
-    Q_ASSERT_X(m_gateSource != nullptr, "PhosphorContext::ContextResolver", "IContextGateSource* must not be null");
+    // Combined assertion so debug builds report the same level of
+    // diagnostic the release-build qFatal below emits — three separate
+    // Q_ASSERT_X calls would abort at the first one and hide whether the
+    // others were also null.
+    Q_ASSERT_X(m_workspaceState != nullptr && m_modeProvider != nullptr && m_gateSource != nullptr,
+               "PhosphorContext::ContextResolver", "workspaceState / modeProvider / gateSource must all be non-null");
     if (!m_workspaceState || !m_modeProvider || !m_gateSource) {
         qFatal(
             "PhosphorContext::ContextResolver: null adapter pointer "

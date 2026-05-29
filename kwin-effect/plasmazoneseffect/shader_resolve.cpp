@@ -240,8 +240,18 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluato
     if (raw.isNull() || raw.isUndefined()) {
         return std::nullopt;
     }
+    // QVariant::toDouble on a bool returns 1.0/0.0 with ok=true — surfacing
+    // a programmatically-built `"value": true` rule as a fully-visible /
+    // completely-invisible window. The action descriptor's load-time
+    // validator already rejects bools (it requires `isDouble`); reject
+    // them at the consumer too so a runtime-constructed payload that
+    // bypasses the parser can't silently change opacity behaviour.
+    const QVariant v = raw.toVariant();
+    if (v.typeId() == QMetaType::Bool) {
+        return std::nullopt;
+    }
     bool ok = false;
-    const double value = raw.toVariant().toDouble(&ok);
+    const double value = v.toDouble(&ok);
     if (!ok) {
         return std::nullopt;
     }

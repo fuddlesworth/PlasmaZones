@@ -358,12 +358,17 @@ private:
     void seedAutotileOrderForScreen(const QString& screenId);
 
     /**
-     * @brief Handle autotile feature being disabled (clear assignments, restore manual mode)
+     * @brief Flip every autotile assignment to Snapping; restore each screen's
+     *        saved snap layout; reset autotile-floating state. Caller is
+     *        responsible for the post-conditioning calls
+     *        (updateAutotileScreens, updateLayoutFilter, snap resnap).
      */
     void handleAutotileDisabled();
 
     /**
-     * @brief Handle snapping toggle activating autotile mode on all screens
+     * @brief Activate autotile on every screen NOT already on an autotile
+     *        assignment. Idempotent for mixed-mode setups: screens already
+     *        running autotile keep their per-screen algorithm customisation.
      */
     void handleSnappingToAutotile();
 

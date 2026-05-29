@@ -262,7 +262,15 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return PzI18n::tr("Float");
     }
     if (action.type == ActionType::SetOpacity) {
-        const double v = action.params.value(PhosphorWindowRule::ActionParam::Value).toDouble();
+        // Mirror the resolver's null/undefined gate (shader_resolve.cpp).
+        // Without this, a rule whose Value key was hand-stripped or
+        // legacy-migrated away would surface as "Opacity 0%" — misleading
+        // and exactly the visible/invisible confusion the resolver avoids.
+        const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
+        if (raw.isNull() || raw.isUndefined()) {
+            return PzI18n::tr("Opacity");
+        }
+        const double v = raw.toVariant().toDouble();
         return PzI18n::tr("Opacity %1%").arg(static_cast<int>(v * 100.0 + 0.5));
     }
     if (action.type == ActionType::OverrideAnimationShader) {

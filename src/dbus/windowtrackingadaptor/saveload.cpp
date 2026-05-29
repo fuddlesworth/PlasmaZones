@@ -243,16 +243,15 @@ void WindowTrackingAdaptor::saveState()
     // Save last used zone info (from service)
     if (dirty & D::DirtyLastUsedZone) {
         tracking->writeString(ConfigKeys::lastUsedZoneIdKey(), m_service->lastUsedZoneId());
-        // lastUsedZoneClass IS exposed on PhosphorPlacement::WindowTrackingService
-        // but is intentionally NOT persisted here: the class is a transient
-        // hint used during the current session's snap-restore lookup and
-        // is recomputed from the live zone topology on the next snap event.
-        // Persisting it would lock-in a stale class across config changes
-        // (zone added / removed / renamed). The matching loadState read at
-        // line ~769 therefore intentionally leaves the cache empty.
-        // lastUsedScreenName + lastUsedDesktop have no accessors yet — same
-        // ephemeral rationale; add accessors + writes here only if a real
-        // cross-session use case appears.
+        // lastUsedZoneClass, lastUsedScreenName, and lastUsedDesktop are
+        // exposed on PhosphorPlacement::WindowTrackingService but are
+        // intentionally NOT persisted here: each is a transient hint used
+        // during the current session's snap-restore lookup and is
+        // recomputed from the live zone topology on the next snap event.
+        // Persisting them would lock-in stale state across config changes
+        // (zone added / removed / renamed). The matching loadState read
+        // (saveload.cpp around 780) only restores the id and threads the
+        // live companions through unchanged to avoid blanking them.
     }
 
     // Float state is ephemeral (session-only) — do NOT persist across restarts.

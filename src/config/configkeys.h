@@ -703,6 +703,16 @@ public:
         PZ_CONFIG_GROUP(v4AnimationsGroup, "Animations")
         PZ_CONFIG_KEY(v4AnimationAppRulesKey, "AnimationAppRules")
 
+        // v4 migration scratch-root keys — set on the root by `migrateV3ToV4`
+        // and consumed by `finalizeV4Conversion`. SettingsLayer's
+        // `purgeStaleKeys` ALSO references these to preserve them across
+        // save() cycles when the chain stalls (see the stalled-chain gate
+        // in `finalizeV4Conversion`); routing both call sites through
+        // the same frozen accessor stops a future rename in one file
+        // from silently breaking the protection in the other.
+        PZ_CONFIG_KEY(v4DisableStashKey, "_v4DisableStash")
+        PZ_CONFIG_KEY(v4AnimationRulesStashKey, "_v4AnimationRulesStash")
+
         // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
         // finalizeV4Conversion. These mirror the live `displayGroup`,
         // `defaultLayoutIdKey`, `snappingBehaviorWindowHandlingGroup`,
