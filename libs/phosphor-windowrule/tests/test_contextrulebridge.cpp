@@ -32,7 +32,7 @@ private:
     {
         for (const RuleAction& a : actions) {
             if (a.type == QString(ActionType::SetEngineMode)) {
-                return a.params.value(QLatin1String("mode")).toString();
+                return a.params.value(ActionParam::Mode).toString();
             }
         }
         return QString();
@@ -346,7 +346,7 @@ private Q_SLOTS:
             CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
         RuleAction extra;
         extra.type = QString(ActionType::DisableEngine);
-        extra.params.insert(QLatin1String("mode"), QLatin1String("autotile"));
+        extra.params.insert(ActionParam::Mode, QLatin1String("autotile"));
         rule.actions.append(extra);
         QVERIFY(!CRB::disableRuleMode(rule).has_value());
     }
@@ -360,7 +360,7 @@ private Q_SLOTS:
         // the bridge's failure — the consumer drops the rule on its end.
         WindowRule rule =
             CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
-        rule.actions.first().params.insert(QLatin1String("mode"), QLatin1String("bogus"));
+        rule.actions.first().params.insert(ActionParam::Mode, QLatin1String("bogus"));
         const auto token = CRB::disableRuleMode(rule);
         QVERIFY(token.has_value());
         QCOMPARE(*token, QStringLiteral("bogus"));
@@ -373,7 +373,7 @@ private Q_SLOTS:
         // string-vs-no-string distinction themselves.
         WindowRule rule =
             CRB::makeDisableRule(QStringLiteral("d"), QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
-        rule.actions.first().params.insert(QLatin1String("mode"), QString());
+        rule.actions.first().params.insert(ActionParam::Mode, QString());
         QVERIFY(!CRB::disableRuleMode(rule).has_value());
     }
 

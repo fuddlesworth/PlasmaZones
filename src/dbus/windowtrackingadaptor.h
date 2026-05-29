@@ -840,11 +840,15 @@ private:
      * @brief Test whether the given (screen, virtualDesktop, activity) tuple is currently disabled.
      *
      * Used by the save/load filters to drop entries persisted before the user
-     * disabled a monitor / virtual desktop / activity. Selects the mode via the
-     * ScreenModeRouter when wired; falls back to Snapping mode otherwise
-     * (consistent with the snap-side write gate, and the helper's only
-     * load-time caller chain is snap-side anyway). Empty screenId is treated
-     * as "context unknown" and the entry is kept.
+     * disabled a monitor / virtual desktop / activity. Routes through
+     * `PhosphorContext::IContextResolver::handleForPersisted`, which queries
+     * the screen's current mode internally via its bound `IModeProvider`.
+     * Returns `false` when the resolver has not yet been wired (e.g. during
+     * the adaptor's own construction, before `Daemon` calls
+     * `setContextResolver`) — keeping the entry is safe at that point because
+     * no save/load can race the ctor on the same thread. Empty screenId
+     * carries through to the resolver, which treats it as a sentinel
+     * (matches no per-screen disable entry).
      *
      * The activity parameter is optional and defaults to empty — snap-mode
      * storage carries no per-window activity tag (SnapState does not track it)

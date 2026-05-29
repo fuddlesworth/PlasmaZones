@@ -965,12 +965,13 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     }
     if (!profile.isEmpty()) {
         // v1→v2 writes a stringified JSON blob even though the live schema
-        // now stores AnimationProfile as a nested QVariantMap. Stringifying
-        // here keeps the migrated value as a single scalar leaf so the
-        // schema/migration cross-check
+        // now stores the animation profile as a nested QVariantMap.
+        // Stringifying here keeps the migrated value as a single scalar
+        // leaf so the schema/migration cross-check
         // (`testSchemaCoversEveryMigrationDestinationKey`) sees one
-        // declared key (`Animations/AnimationProfile`) instead of treating
-        // the nested object as a sub-group of synthetic per-field keys.
+        // declared key (`Animations/Profile` — `animationProfileKey()`
+        // returns "Profile") instead of treating the nested object as a
+        // sub-group of synthetic per-field keys.
         // The Settings layer's `Store::read<QVariantMap>` legacy-string
         // fallback parses this on first load and the next save normalises
         // it to a nested object.
@@ -1836,6 +1837,33 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
                 configRoot = doc.object();
                 haveConfig = true;
             }
+        }
+    }
+
+    // Refuse to commit a v4 marker (the eventual windowrules.json write
+    // below) when config.json has not actually reached v4. If a prior
+    // run's migration chain stalled (e.g. migrateV1ToV2's side-effect
+    // writes failed, leaving the disk-side _version at 1),
+    // `MigrationRunner::runOnFile` returns `true` for a no-op chain —
+    // ensureJsonConfigImpl then proceeds here with a still-v1
+    // configRoot. Writing an empty/stub windowrules.json now would set
+    // `windowRulesAlreadyConverted=true` on the next run; the cleanup-
+    // only branch above would then strip `_v4DisableStash` /
+    // `_v4AnimationRulesStash` (populated by a later successful chain
+    // run) without porting them into rules — permanently losing the
+    // user's disable lists and animation app rules. Bail out and let
+    // the next run retry the chain.
+    if (haveConfig) {
+        const int configVersion = configRoot.value(ConfigKeys::versionKey()).toInt(0);
+        if (configVersion < ConfigSchemaVersion) {
+            qWarning(
+                "ConfigMigration::finalizeV4Conversion: refusing to commit windowrules.json — "
+                "config.json is still at v%d (target v%d). The migration chain did not advance; "
+                "a stub windowrules.json now would mask the stalled chain on the next run and "
+                "silently drop the user's disable lists / animation app rules when the chain "
+                "eventually succeeds.",
+                configVersion, ConfigSchemaVersion);
+            return false;
         }
     }
 

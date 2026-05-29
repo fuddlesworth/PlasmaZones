@@ -9,6 +9,8 @@
 #include <PhosphorWindowRule/MatchTypes.h>
 #include <PhosphorWindowRule/RuleAction.h>
 
+#include <PhosphorZones/AssignmentEntry.h>
+
 #include <QJsonArray>
 #include <QStringList>
 
@@ -179,25 +181,28 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
                                     resolveOne(predicate.value.toString()));
 }
 
-/// Localise a single engine-mode wire token (`snapping` / `autotile` /
-/// `scrolling` — see `engineModeOptions()` in
-/// libs/phosphor-windowrule/src/ruleaction.cpp). Returns an empty
-/// QString for an empty input so callers can branch on it; unknown
-/// tokens (a future picker option, a hand-edited rule) round-trip
-/// verbatim. Shared between SetEngineMode and DisableEngine so a
-/// future enum extension lands in one place.
-static QString engineModeDisplayLabel(const QString& wire)
+/// Localise a single engine-mode wire token. Returns an empty QString
+/// for an empty input so callers can branch on it; unknown tokens
+/// (a future picker option, a hand-edited rule) round-trip verbatim.
+/// Routes through `PhosphorZones::modeFromWireString` so the wire-token
+/// enumeration stays in one place — a future Mode enum extension lands
+/// at the AssignmentEntry switch + the engineModeOptions() picker, not
+/// here.
+QString engineModeDisplayLabel(const QString& wire)
 {
     if (wire.isEmpty()) {
         return {};
     }
-    if (wire == QLatin1String("snapping")) {
+    const auto mode = PhosphorZones::modeFromWireString(wire);
+    if (!mode) {
+        return wire;
+    }
+    switch (*mode) {
+    case PhosphorZones::AssignmentEntry::Snapping:
         return PzI18n::tr("Snapping");
-    }
-    if (wire == QLatin1String("autotile")) {
+    case PhosphorZones::AssignmentEntry::Autotile:
         return PzI18n::tr("Autotile");
-    }
-    if (wire == QLatin1String("scrolling")) {
+    case PhosphorZones::AssignmentEntry::Scrolling:
         return PzI18n::tr("Scrolling");
     }
     return wire;
@@ -657,7 +662,12 @@ void WindowRuleModel::setActivityLabelLookup(LabelLookup fn)
 void WindowRuleModel::setLayoutLabelLookup(LabelLookup fn)
 {
     // Back-compat shim: wire the same lookup into both split lookups so
-    // callers that haven't migrated to the typed pair keep working.
+    // callers that haven't migrated to the typed pair keep working. Like
+    // its siblings (setSnappingLayoutLabelLookup, setTilingAlgorithmLabelLookup,
+    // setActivityLabelLookup, setScreenLabelLookup) this setter emits no
+    // signal — the lookups are install-once at controller-construction
+    // time, and any later UI refresh routes through refreshLabels()
+    // emitting `dataChanged` for the affected roles.
     m_snappingLayoutLookup = fn;
     m_tilingAlgorithmLookup = std::move(fn);
 }

@@ -905,9 +905,9 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // maps the output.
     double qLeft = quads.first().left();
     double qTop = quads.first().top();
-    for (const KWin::WindowQuad& q : quads) {
-        qLeft = qMin(qLeft, q.left());
-        qTop = qMin(qTop, q.top());
+    for (qsizetype i = 1; i < quads.size(); ++i) {
+        qLeft = qMin(qLeft, quads[i].left());
+        qTop = qMin(qTop, quads[i].top());
     }
     const double ox = qLeft + (outputGeo.x() - textureGeo.x());
     const double oy = qTop + (outputGeo.y() - textureGeo.y());

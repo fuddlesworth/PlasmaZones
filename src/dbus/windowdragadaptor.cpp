@@ -275,6 +275,15 @@ void WindowDragAdaptor::cancelSnap()
     if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
         m_overlayService->hideSnapAssist();
     }
+    // Clear any pending snap-assist payload scheduled by a prior endDrag.
+    // QTimer::singleShot(0) for computeAndEmitSnapAssist fires on the next
+    // event-loop tick; if Escape lands between scheduling and that tick,
+    // computeAndEmitSnapAssist would still emit snapAssistReady for a snap
+    // the user just cancelled. Clearing the pending IDs makes the deferred
+    // call early-return on its empty-id guard. clearForCompositorReconnect
+    // does the same two-line clear for the same reason.
+    m_snapAssistPendingWindowId.clear();
+    m_snapAssistPendingScreenId.clear();
 }
 
 void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
@@ -676,9 +685,8 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // computeAndEmitSnapAssist consumes-and-clears the IDs after reading.
 }
 
-void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, bool wasSnapped, const QRect& originalGeometry)
+void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry)
 {
-    Q_UNUSED(wasSnapped)
     // Store pre-tile geometry for restore on unsnap/float (first-only: overwrite=false).
     // PlacementEngineBase is the single store for unmanaged geometry.
     if (m_windowTracking && m_windowTracking->snapEngine() && originalGeometry.isValid()) {

@@ -63,7 +63,8 @@ namespace PhosphorWindowRule {
 namespace ContextRuleBridge {
 
 /// The base priority of any pinned context rule. A rule that pins at least
-/// the screen sits at @c kBasePriority + the per-dimension weights below.
+/// one dimension (screen, desktop, or activity) sits at @c kBasePriority +
+/// the per-dimension weights below.
 inline constexpr int kBasePriority = 300;
 inline constexpr int kActivityWeight = 200;
 inline constexpr int kDesktopWeight = 100;

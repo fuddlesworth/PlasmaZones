@@ -33,11 +33,14 @@ namespace PhosphorContext {
  *      shrinks the typical 6-line `(modeFor → currentDesktop → currentActivity
  *      → isContextDisabled → isContextLocked)` chain to two lines.
  *
- * The struct is a POD — copy-able, no QObject, no signals — and is safe to
- * pass through Qt::QueuedConnection if a future caller wants to ferry a
- * snapshot across threads. Construction is reserved for IContextResolver
- * implementations; callers should not hand-build a handle (the resolver's
- * `mode` field has to come from the bound `IModeProvider`, not a guess).
+ * The struct is a value type — copy-able, no QObject, no signals — safe
+ * to pass through Qt::QueuedConnection if a future caller wants to ferry
+ * a snapshot across threads. (The two QString fields are implicitly
+ * shared and copy-thread-safe; the struct itself is not a C POD because
+ * QString has a non-trivial copy ctor.) Construction is reserved for
+ * IContextResolver implementations; callers should not hand-build a
+ * handle (the resolver's `mode` field has to come from the bound
+ * `IModeProvider`, not a guess).
  */
 struct ContextHandle
 {

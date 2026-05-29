@@ -344,19 +344,22 @@ inline void dispatchJsonSetting(QLatin1String name, const QVariant& v,
 // ─────────────────────────────────────────────────────────────────────────────
 void PlasmaZonesEffect::evictLruTextureIfOverBound()
 {
-    while (m_shaderManager.m_textureCache.size() > ShaderTransitionManager::kTextureCacheSoftBound) {
-        // Build the set of cache pointers currently referenced by any
-        // active transition's userTextures slots. Eviction must skip
-        // every one of these — the transition holds a raw non-owning
-        // pointer that would dangle if we erased the entry.
-        std::unordered_set<const CachedTexture*> inFlight;
-        for (const auto& [_, transition] : m_shaderManager.m_shaderTransitions) {
-            for (CachedTexture* tex : transition.userTextures) {
-                if (tex) {
-                    inFlight.insert(tex);
-                }
+    // Build the set of cache pointers currently referenced by any
+    // active transition's userTextures slots ONCE. Eviction skips
+    // every one of these — the transition holds a raw non-owning
+    // pointer that would dangle if we erased the entry. The set
+    // doesn't change between iterations because the eviction below
+    // only removes NON-in-flight entries; the set of in-flight
+    // pointers is invariant across the loop, so we hoist the build.
+    std::unordered_set<const CachedTexture*> inFlight;
+    for (const auto& [_, transition] : m_shaderManager.m_shaderTransitions) {
+        for (CachedTexture* tex : transition.userTextures) {
+            if (tex) {
+                inFlight.insert(tex);
             }
         }
+    }
+    while (m_shaderManager.m_textureCache.size() > ShaderTransitionManager::kTextureCacheSoftBound) {
         // Find the cache entry with the smallest lastAccessTick that is
         // NOT in-flight. If every entry is in flight (pathological;
         // would require >ShaderTransitionManager::kTextureCacheSoftBound concurrent transitions

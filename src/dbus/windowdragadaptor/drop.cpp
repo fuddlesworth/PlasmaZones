@@ -247,7 +247,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 shouldApplyGeometry = true;
                 usedZoneSelector = true;
 
-                tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
+                tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
 
                 int selectedZoneIndex = m_overlayService->selectedZoneIndex();
                 if (m_windowTracking && m_layoutManager) {
@@ -349,7 +349,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             // branch above. capturedZoneId is the primary zone of the
             // multi-zone snap as resolved by dragMoved.
             resolvedZoneIdOut = capturedZoneId;
-            tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
+            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
             if (m_windowTracking) {
                 // Pass ALL zone IDs for multi-zone snap (not just primary)
                 QStringList allZoneIds;
@@ -372,7 +372,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             snapHeight = capturedZoneGeometry.height();
             shouldApplyGeometry = true;
             resolvedZoneIdOut = capturedZoneId;
-            tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
+            tryStorePreSnapGeometry(windowId, capturedOriginalGeometry);
             if (m_windowTracking) {
                 auto* snapSingle = m_windowTracking->snapEngine();
                 if (snapSingle)

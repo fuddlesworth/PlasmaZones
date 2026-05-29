@@ -92,9 +92,12 @@ const auto reason = resolver->disabledReason(autotileCtx);
 - **Empty-screen contract.** `globalHandle()` returns a handle whose
   `screenId` is empty; the mode is delegated to
   `IModeProvider::modeFor("")` per the documented adapter contract.
-  Adaptors short-circuit gate lookups on empty `screenId` / empty
-  `activity` / `desktop == 0` so a handle with sentinel axes never
-  matches a per-axis disable entry.
+  Empty `desktop` (`<= 0`) and empty `activity` short-circuit inside
+  the daemon's `IContextGateSource` adapter so a sentinel-axis handle
+  never matches a per-axis disable entry. Empty `screenId` is handled
+  upstream of the adapter by `ScreenIdentity::variantsFor`, which
+  returns an empty list for the empty input — `Settings::isMonitorDisabled`
+  then finds no candidate to match against.
 - **Adapters are non-owning.** Every interface implementation is wired
   with a raw pointer the resolver does not own; lifetime is the
   composition root's job. The concrete `ContextResolver` `qFatal`s on a

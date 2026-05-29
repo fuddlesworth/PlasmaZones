@@ -61,27 +61,22 @@ bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, 
     // snap entries pre-multi-monitor, sticky windows, etc.). Loading and
     // keeping them is the historical default — the alternative drops snap
     // state on every windowless desktop session.
-    //
-    // m_screenModeRouter is wired post-construction by the daemon; the very
-    // first call site is loadState() (invoked from this adaptor's own ctor
-    // before the daemon calls setScreenModeRouter), where it is still null.
-    // Snap-side consumers (WindowZoneAssignmentsFull, PendingRestoreQueues,
-    // PreFloat* maps) and snap's ShouldTrackPredicate route through here and
-    // get the Snapping fallback. Autotile's ShouldPersistRestorePredicate also
-    // routes through here and supplies its own activity tag — `modeFor` picks
-    // up the screen's current Autotile mode whenever the router is wired.
     if (screenId.isEmpty()) {
         return false;
     }
     if (!m_contextResolver) {
-        // Pre-`setContextResolver` path — first call comes from this
-        // adaptor's ctor before Daemon hands the resolver over. Falls
-        // back to "nothing is disabled" so the historical "load
-        // everything when no settings/router are wired" behaviour is
-        // preserved (the legacy code did the same thing via a null
-        // m_settings).
+        // Pre-`setContextResolver` path — the first call lands from
+        // this adaptor's ctor (loadState()) before Daemon hands the
+        // resolver over. Returns "nothing is disabled" so the
+        // historical "load everything when no settings backend is
+        // wired" behaviour is preserved.
         return false;
     }
+    // Routes through `handleForPersisted` which resolves the screen's
+    // mode via the bound IModeProvider — every consumer (snap-side
+    // ShouldTrackPredicate, autotile-side ShouldPersistRestorePredicate,
+    // and the save/load filters) ends up applying the cascade keyed on
+    // the mode the screen is actually running.
     return m_contextResolver->isDisabled(m_contextResolver->handleForPersisted(screenId, virtualDesktop, activity));
 }
 
@@ -380,22 +375,23 @@ void WindowTrackingAdaptor::saveState()
     } else {
         // Fallback synchronous path.
         //
-        // This branch is only reachable when m_sessionBackend is not a
-        // PhosphorConfig::JsonBackend — i.e. tests that wire a memory-only backend.
-        // The production daemon always uses PhosphorConfig::JsonBackend, so the
-        // async/retry path above is the only one exercised outside of
-        // the test harness.
+        // Reachable in two cases:
+        //   1. m_sessionBackend is not a PhosphorConfig::JsonBackend —
+        //      tests that wire a memory-only backend.
+        //   2. The production shutdown path: `saveStateOnShutdown` resets
+        //      `m_persistenceWorker` before calling `saveState()`, so the
+        //      async branch is unavailable on the very last save.
         //
         // sync() returns void, so we have no way to detect a failed
         // write and re-mark the committed bits for retry. The mask has
         // already been taken (above), which means a silent failure here
         // silently loses the committed bits — same behavior as
-        // pre-Phase-3 code, and acceptable only because this path is
-        // test-only. Log a one-time warning on first hit so any future
-        // production regression is obvious in logs.
+        // pre-Phase-3 code. Log a one-time warning on first hit so any
+        // unexpected production regression (steady-state saves landing
+        // here instead of the shutdown one-shot) is obvious in logs.
         if (!m_syncFallbackWarned) {
             qCWarning(lcDbusWindow) << "saveState: using synchronous fallback backend; failed writes cannot be retried "
-                                       "(expected only in unit tests)";
+                                       "(expected for the one shutdown save and for unit tests with a memory backend)";
             m_syncFallbackWarned = true;
         }
         m_sessionBackend->sync();
