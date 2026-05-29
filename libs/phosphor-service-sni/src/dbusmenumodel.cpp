@@ -116,10 +116,19 @@ void DBusMenuModel::Private::scheduleProxyRebuild()
     if (rebuildScheduled)
         return;
     rebuildScheduled = true;
+    // The queued lambda gates its body on `rebuildScheduled`. If a
+    // synchronous `flushPendingRebuild` consumed the pending rebuild
+    // before the event-loop tick fires, the lambda becomes a no-op;
+    // otherwise it runs the rebuild as originally scheduled. Without
+    // this guard, a flushed rebuild followed by the queued tick would
+    // re-run `buildProxy` a second time (clearing openedIds, resetting
+    // rows, emitting validChanged false) and re-issue a GetLayout for
+    // the same rootId that just succeeded.
     QMetaObject::invokeMethod(
         q,
         [this]() {
-            runScheduledRebuild();
+            if (rebuildScheduled)
+                runScheduledRebuild();
         },
         Qt::QueuedConnection);
 }
@@ -140,10 +149,12 @@ bool DBusMenuModel::Private::flushPendingRebuild()
     // next event-loop tick, but aboutToShow runs in the same tick as
     // the setters; if we don't flush, aboutToShow sees either the OLD
     // app's proxy (first popup with prior content) or null (first
-    // popup of a fresh model), neither of which is correct. The queued
-    // tick is still a no-op when it later fires (rebuildScheduled
-    // returns to false here). Returns true when a flush actually ran
-    // so callers (setRootId, public refresh) can skip a follow-up
+    // popup of a fresh model), neither of which is correct.
+    //
+    // runScheduledRebuild clears `rebuildScheduled` first, so the
+    // later queued tick checks the flag in its lambda body and
+    // short-circuits. Returns true when a flush actually ran so
+    // callers (setRootId, public refresh) can skip a follow-up
     // refresh that would otherwise duplicate the GetLayout the flushed
     // rebuild already issued.
     if (rebuildScheduled) {
