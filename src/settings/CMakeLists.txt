@@ -230,6 +230,7 @@ qt_add_qml_module(plasmazones-settings
         qml/MonitorOverview.qml
         qml/MonitorOverviewTile.qml
         qml/WindowRuleRow.qml
+        qml/WindowRuleSectionList.qml
         qml/RuleEditorSheet.qml
         qml/RuleEditorBody.qml
         qml/RuleEditorStatusBar.qml
