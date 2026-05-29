@@ -101,6 +101,14 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     ShaderTools
     Svg
 )
+
+# Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
+# module resource prefix. Set at the top level so every qt_add_qml_module
+# call across libs/ examples/ src/ inherits it; without this, each
+# qt_add_qml_module emits a QTP0001 dev warning on every configure.
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
 # GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay.
 # Some distros (Fedora) create these targets inside Qt6GuiConfig.cmake rather than providing
 # standalone config files, so only call find_package if the target doesn't already exist.

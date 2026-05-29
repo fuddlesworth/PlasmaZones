@@ -8,6 +8,10 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
 
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
 # Bundle the demo QML into its own static module so qmlcachegen
 # compiles it and the resources land under
 # qrc:/qt/qml/Phosphor/PerScreenDemo/.
