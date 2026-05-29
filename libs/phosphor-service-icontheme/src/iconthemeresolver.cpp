@@ -308,18 +308,39 @@ const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& the
             continue;
 
         const auto sections = parseIniFile(indexPath);
+        const auto& iconThemeSection = sections.value(QStringLiteral("Icon Theme"));
 
         if (!foundHeader) {
             foundHeader = true;
-            const auto inheritsRaw = sections.value(QStringLiteral("Icon Theme")).value(QStringLiteral("Inherits"));
+            const auto inheritsRaw = iconThemeSection.value(QStringLiteral("Inherits"));
             for (const auto& parent : inheritsRaw.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
                 idx.inherits.append(parent.trimmed());
             }
         }
 
+        // XDG Icon Theme Spec mandates that only sections listed in
+        // Directories= (or ScaledDirectories= for HiDPI variants) of
+        // the [Icon Theme] header are candidate icon directories. Vendor
+        // extensions like [KDE Icon Theme] and arbitrary metadata groups
+        // are accepted as comments by the spec, not as lookup roots.
+        // Restricting the section walk avoids wasted QFile::exists
+        // syscalls on every name lookup against non-spec groups.
+        QSet<QString> directoriesAllowed;
+        const auto collectDirs = [&](const QString& key) {
+            const auto raw = iconThemeSection.value(key);
+            for (const auto& d : raw.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+                directoriesAllowed.insert(d.trimmed());
+            }
+        };
+        collectDirs(QStringLiteral("Directories"));
+        collectDirs(QStringLiteral("ScaledDirectories"));
+
         for (auto sectionIt = sections.constBegin(); sectionIt != sections.constEnd(); ++sectionIt) {
             const auto& group = sectionIt.key();
             if (group == QLatin1String("Icon Theme")) {
+                continue;
+            }
+            if (!directoriesAllowed.contains(group)) {
                 continue;
             }
             // index.theme contents are technically attacker-controlled
@@ -615,7 +636,14 @@ QImage IconThemeResolver::iconForName(const QString& name, int size, int scale, 
 
     // Phase 3: insert into the resolved cache. Re-check for a racing
     // insert from another thread before our own put so we don't
-    // double-count toward the FIFO order.
+    // double-count toward the FIFO order. Skip caching null QImages
+    // (lookup miss or decode failure) so a later filesystem update
+    // (theme install, icon copied in, package upgrade) is visible on
+    // the next lookup instead of waiting for setThemeName() to flush
+    // the whole cache.
+    if (img.isNull()) {
+        return img;
+    }
     {
         QMutexLocker locker(&d->mutex);
         if (auto it = d->resolvedCache.constFind(cacheKey); it != d->resolvedCache.constEnd()) {

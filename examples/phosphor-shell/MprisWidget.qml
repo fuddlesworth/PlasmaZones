@@ -318,8 +318,14 @@ Item {
 
         // Scrolling title; left-click opens popup
         Item {
+            // Pin to artContainer.height rather than parent.height: the
+            // capsule Row's height is content-derived, so referencing
+            // parent.height converges only because artContainer fixes
+            // the minimum at 26 px. A future change that drops the
+            // fixed-size art child would reintroduce the binding-loop
+            // hazard documented at the widget root.
             width: root.titleWidth
-            height: parent.height
+            height: artContainer.height
             anchors.verticalCenter: parent.verticalCenter
             clip: true
 

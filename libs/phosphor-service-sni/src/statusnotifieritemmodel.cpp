@@ -190,26 +190,40 @@ void StatusNotifierItemModel::setHost(StatusNotifierHost* host)
     const int previousCount = d->items.size();
 
     if (d->host) {
-        beginResetModel();
+        // Only bracket the disconnect/clear with begin/endResetModel
+        // when there's actually a row to remove. Empty-to-empty
+        // transitions otherwise fire a spurious modelReset that every
+        // attached ListView treats as a hard refresh.
+        const bool hadRows = !d->items.isEmpty();
+        if (hadRows)
+            beginResetModel();
         disconnect(d->host, nullptr, this, nullptr);
         for (auto* item : std::as_const(d->items)) {
             disconnect(item, nullptr, this, nullptr);
             d->clearItem(item);
         }
         d->items.clear();
-        endResetModel();
+        if (hadRows)
+            endResetModel();
     }
 
     d->host = host;
 
     if (d->host) {
-        beginResetModel();
-        d->items = d->host->items();
-        for (auto* item : std::as_const(d->items)) {
-            connectItem(item);
-            d->publishAll(item);
+        // Snapshot the host items first; only fire begin/endResetModel
+        // when there's a real row insertion to announce. Empty hosts
+        // skip the reset entirely so QML views attached to an empty
+        // model don't see a no-op refresh.
+        auto incoming = d->host->items();
+        if (!incoming.isEmpty()) {
+            beginResetModel();
+            d->items = std::move(incoming);
+            for (auto* item : std::as_const(d->items)) {
+                connectItem(item);
+                d->publishAll(item);
+            }
+            endResetModel();
         }
-        endResetModel();
 
         connect(d->host, &StatusNotifierHost::itemAdded, this, &StatusNotifierItemModel::onItemAdded);
         connect(d->host, &StatusNotifierHost::itemRemoved, this, &StatusNotifierItemModel::onItemRemoved);

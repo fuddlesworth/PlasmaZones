@@ -99,13 +99,18 @@ QStringList StatusNotifierWatcher::registeredItems() const
     // in a deterministic order. The QHash iteration order is bucket-
     // dependent and changes across registrations; an observer
     // diffing successive lists would see spurious "different" rows.
-    QStringList list;
-    list.reserve(m_items.size());
-    for (const auto& entry : m_items) {
-        list.append(entry.canonical);
+    // The sorted list is cached and invalidated on item register /
+    // unregister so polling consumers don't pay O(N log N) per read.
+    if (m_sortedDirty) {
+        m_sorted.clear();
+        m_sorted.reserve(m_items.size());
+        for (const auto& entry : m_items) {
+            m_sorted.append(entry.canonical);
+        }
+        std::sort(m_sorted.begin(), m_sorted.end());
+        m_sortedDirty = false;
     }
-    std::sort(list.begin(), list.end());
-    return list;
+    return m_sorted;
 }
 
 bool StatusNotifierWatcher::isHostRegistered() const
@@ -195,6 +200,7 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
     if (!senderAlreadyWatched) {
         m_busWatcher->addWatchedService(sender);
     }
+    m_sortedDirty = true;
 
     Q_EMIT StatusNotifierItemRegistered(canonical);
     Q_EMIT registeredItemsChanged();
@@ -282,6 +288,7 @@ void StatusNotifierWatcher::onServiceUnregistered(const QString& service)
     }
 
     if (itemsChanged) {
+        m_sortedDirty = true;
         Q_EMIT registeredItemsChanged();
     }
     if (hostsRemoved > 0) {

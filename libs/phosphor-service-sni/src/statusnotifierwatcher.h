@@ -83,6 +83,15 @@ private:
     QHash<QString, QStringList> m_byOwner; ///< unique name → canonicals it owns
 
     QHash<QString, QString> m_hosts; ///< canonical "host-pid" → unique name
+
+    /// Sorted snapshot of m_items keys, rebuilt lazily on read after a
+    /// register / unregister mutation. Without this, every DBus
+    /// PropertiesChanged subscriber that reads the
+    /// RegisteredStatusNotifierItems property would re-sort the full
+    /// list O(N log N) on each access. m_sortedDirty signals whether
+    /// m_sorted is stale.
+    mutable QStringList m_sorted;
+    mutable bool m_sortedDirty = true;
 };
 
 } // namespace PhosphorServiceSni
