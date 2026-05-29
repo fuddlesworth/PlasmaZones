@@ -66,10 +66,15 @@ public:
     // UPower has been observed to send DeviceAdded for the bare "/"
     // sentinel or a path that isn't under devices/ on old daemons and
     // suspend/resume races. Filter at the boundary so we don't spin up
-    // a UPowerDevice subscribed to a nonsense object path.
+    // a UPowerDevice subscribed to a nonsense object path. Require at
+    // least one character after the `/devices/` prefix so the trailing-
+    // slash-only string doesn't slip through; bus.connect would fail
+    // downstream anyway, but rejecting at the boundary keeps the
+    // duplicate-add guard and the qCDebug log honest about scope.
     bool isValidDevicePath(const QString& path) const
     {
-        return path.startsWith(QStringLiteral("/org/freedesktop/UPower/devices/"));
+        static const QString kPrefix = QStringLiteral("/org/freedesktop/UPower/devices/");
+        return path.size() > kPrefix.size() && path.startsWith(kPrefix);
     }
 
     void addDevice(const QString& path)

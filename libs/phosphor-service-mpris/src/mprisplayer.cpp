@@ -144,6 +144,7 @@ public:
     qint64 lengthUs = 0;
     qreal volume = 0.0;
     qreal rate = 1.0;
+    bool trackArtUrlResolved = false; ///< true once art URL settled (set or scheme-rejected) for current trackid
     LoopState loopState = LoopNone;
     bool shuffle = false;
     bool canPlay = false;
@@ -379,10 +380,18 @@ public:
             QString id = metaObjectPath(meta.value(QStringLiteral("mpris:trackid")));
             if (trackId != id) {
                 trackId = id;
+                trackArtUrlResolved = false;
                 clearIfNonEmpty(trackArtUrl);
                 clearIfNonEmpty(trackTitle);
                 clearIfNonEmpty(trackArtist);
                 clearIfNonEmpty(trackAlbum);
+                // Reset length too: a partial-Metadata update following
+                // the new trackid that omits `mpris:length` would
+                // otherwise leave the previous track's length displayed.
+                if (lengthUs != 0) {
+                    lengthUs = 0;
+                    changed = true;
+                }
             }
         }
 
@@ -410,7 +419,14 @@ public:
             };
             if (trackArtUrl.isEmpty() && !s.isEmpty() && isSchemeAllowed(s)) {
                 trackArtUrl = s;
+                trackArtUrlResolved = true;
                 changed = true;
+            } else if (!s.isEmpty() && !isSchemeAllowed(s)) {
+                // Scheme-rejected URL is a settled answer for this
+                // trackid; mark resolved so the post-construction retry
+                // loop short-circuits instead of re-fetching for the
+                // full 3s window.
+                trackArtUrlResolved = true;
             }
         }
 
@@ -514,7 +530,10 @@ public:
             // Async resync, emits positionChanged itself if the value moved.
             requestPosition();
         } else {
-            positionUs += static_cast<qint64>(rate * kPositionPollMs * 1000);
+            // Negative rate (reverse playback) can drive positionUs
+            // below zero between resyncs; floor at 0 so QML sliders
+            // bound to position() never observe a negative value.
+            positionUs = std::max<qint64>(0, positionUs + static_cast<qint64>(rate * kPositionPollMs * 1000));
             Q_EMIT owner->positionChanged();
         }
     }
@@ -585,8 +604,13 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     // is populated. Capped at 3 s after construction.
     for (int delayMs : {500, 1500, 3000}) {
         QTimer::singleShot(delayMs, this, [this]() {
-            if (d->trackArtUrl.isEmpty() && d->playbackState != Stopped)
-                d->getAll(kPlayerIface, &Private::applyPlayerFromGetAll);
+            // Skip if the URL is set OR scheme-rejected: a player whose
+            // art URL fails the allowlist will never produce an
+            // acceptable URL, so re-fetching for the full window is
+            // pointless wire traffic.
+            if (d->trackArtUrlResolved || !d->trackArtUrl.isEmpty() || d->playbackState == Stopped)
+                return;
+            d->getAll(kPlayerIface, &Private::applyPlayerFromGetAll);
         });
     }
 }

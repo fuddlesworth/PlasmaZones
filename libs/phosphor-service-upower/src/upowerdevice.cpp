@@ -35,6 +35,9 @@ public:
     qint64 timeToEmpty = 0;
     qint64 timeToFull = 0;
     qreal energy = 0.0;
+    // Mirrors UPower's `EnergyFull` D-Bus property. Publicly exposed as
+    // `energyCapacity()` / `energyCapacityChanged` (the QML-facing name
+    // matches the UPower KCM and battery-meter conventions).
     qreal energyFull = 0.0;
     qreal energyFullDesign = 0.0;
     qreal energyRate = 0.0;

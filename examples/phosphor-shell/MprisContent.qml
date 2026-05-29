@@ -10,7 +10,6 @@ import QtQuick
 Item {
     id: root
 
-    required property var shellState
     required property MprisPlayer currentPlayer
     property bool active: false
     readonly property bool hasPlayer: playerState.hasPlayer

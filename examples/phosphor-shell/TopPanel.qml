@@ -506,7 +506,5 @@ PanelWindow {
     // any Row (which would re-parent it on layout changes).
     TrayMenuPopup {
         id: trayMenu
-
-        shellState: root.shellState
     }
 }

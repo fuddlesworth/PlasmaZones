@@ -31,7 +31,6 @@ PopupWindow {
 
     id: root
 
-    required property var shellState
     /// Root id within the dbusmenu tree. 0 = the top of the tree;
     /// cascaded children pass the parent row's id here.
     property int rootId: 0
