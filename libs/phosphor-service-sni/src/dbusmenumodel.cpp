@@ -237,6 +237,16 @@ public:
     // next event-loop tick by `runScheduledRebuild`.
     bool rebuildScheduled = false;
 
+    // dbusmenu apps gate dynamic-menu population on `opened` and tear
+    // down on `closed`. The shell may navigate a multi-level cascade
+    // (root -> submenu -> submenu) before dismissal, firing opened
+    // events for each level via aboutToShow / aboutToShowSubmenu. On
+    // dismissal we must fire closed for EVERY level that was opened,
+    // not just the one that happens to be the current rootId. Without
+    // this, the root-level "opened" never gets a matching "closed"
+    // and apps leak state.
+    QSet<int> openedIds;
+
     /// Flat child list at rootId. Built from the most recent
     /// GetLayout call.
     struct Row
@@ -261,6 +271,7 @@ public:
     void refresh();
     void scheduleProxyRebuild();
     void runScheduledRebuild();
+    void flushPendingRebuild();
     void onLayoutUpdated(uint rev, int parent);
     void onPropertiesUpdated(const DBusMenuItemPropertiesList& updated, const DBusMenuItemKeysList& removed);
     QString rowType(const Row& r) const;
@@ -288,11 +299,32 @@ void DBusMenuModel::Private::runScheduledRebuild()
     refresh();
 }
 
+void DBusMenuModel::Private::flushPendingRebuild()
+{
+    // Synchronously execute any queued rebuild before a method that
+    // depends on `proxy` runs. Required because the public open/close
+    // contract is "QML sets service+path then immediately calls
+    // aboutToShow()". The queued rebuild would normally fire on the
+    // next event-loop tick, but aboutToShow runs in the same tick as
+    // the setters; if we don't flush, aboutToShow sees either the OLD
+    // app's proxy (first popup with prior content) or null (first
+    // popup of a fresh model), neither of which is correct. The queued
+    // tick is still a no-op when it later fires (rebuildScheduled
+    // returns to false here).
+    if (rebuildScheduled)
+        runScheduledRebuild();
+}
+
 void DBusMenuModel::Private::buildProxy()
 {
     proxy.reset();
-    // Clear out the previous menu's rows + validity immediately —
-    // before the new GetLayout completes — so the popup doesn't
+    // Drop any opened-id tracking from the prior menu. We're losing
+    // the proxy that those ids referenced, so there's no longer a way
+    // to fire closed for them; clearing here keeps aboutToHide from
+    // sending them to the NEW app's proxy (which would be wrong).
+    openedIds.clear();
+    // Clear out the previous menu's rows + validity immediately
+    // (before the new GetLayout completes) so the popup doesn't
     // briefly display the OLD app's menu under the NEW app's icon.
     // Without this, the QML side observes leftover rows while the
     // async GetLayout for the new path is in flight, and a popup
@@ -563,6 +595,11 @@ void DBusMenuModel::setRootId(int id)
     if (d->rootId == id)
         return;
     d->rootId = id;
+    // setRootId reaches d->refresh() which dereferences d->proxy via
+    // d->proxy->GetLayout(...). Flush any pending rebuild first so the
+    // refresh runs against the new proxy rather than the prior app's
+    // (or a stale null after the queued tick races behind us).
+    d->flushPendingRebuild();
     d->refresh();
     Q_EMIT rootIdChanged();
 }
@@ -649,6 +686,7 @@ QHash<int, QByteArray> DBusMenuModel::roleNames() const
 
 void DBusMenuModel::triggerItem(int row)
 {
+    d->flushPendingRebuild();
     if (!d->proxy || row < 0 || row >= d->rows.size())
         return;
     const auto& r = d->rows.at(row);
@@ -669,45 +707,46 @@ void DBusMenuModel::triggerItem(int row)
 
 int DBusMenuModel::aboutToShowSubmenu(int row)
 {
+    d->flushPendingRebuild();
     if (!d->proxy || row < 0 || row >= d->rows.size())
         return -1;
     const auto& r = d->rows.at(row);
     if (!r.hasChildren)
         return -1;
     // dbusmenu spec: AboutToShow returns bool needUpdate. If true, the
-    // app populated this submenu lazily and we must call GetLayout to
-    // see the new contents; otherwise our cached rows are still
-    // authoritative. Some apps don't fire LayoutUpdated for the
-    // lazy-populate case, so relying on that signal alone would leave
-    // dynamic submenus stale on first open.
+    // app populated this submenu lazily and a GetLayout is required to
+    // pick up the new contents. We do NOT refresh here on the reply,
+    // because the QML side reassigns `rootId = aboutToShowSubmenu(...)`
+    // after this call returns; setRootId already triggers GetLayout
+    // synchronously. Refreshing in the watcher would issue a duplicate
+    // round-trip.
     auto* watcher = new QDBusPendingCallWatcher(d->proxy->AboutToShow(r.id), this);
-    const int submenuId = r.id;
-    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, submenuId]() {
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [watcher]() {
         watcher->deleteLater();
-        const QDBusPendingReply<bool> reply = *watcher;
-        if (reply.isError())
-            return;
-        if (reply.value() && submenuId == d->rootId)
-            d->refresh();
     });
-    // Pair with the closed Event the QML side will fire on hide. Per
-    // the dbusmenu spec, opened/closed pair up — some apps gate
-    // dynamic-menu population on the opened event, so without it the
-    // first open shows an empty/stale submenu until a later
-    // LayoutUpdated arrives.
+    // Pair with the closed Event aboutToHide will fire. Per the
+    // dbusmenu spec, opened/closed pair up; some apps gate dynamic-
+    // menu population on the opened event, so without it the first
+    // open shows an empty/stale submenu until a later LayoutUpdated
+    // arrives. Track the id so aboutToHide can close every level we
+    // opened on the way in.
     const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
     d->proxy->Event(r.id, QStringLiteral("opened"), QDBusVariant(0), ts);
+    d->openedIds.insert(r.id);
     return r.id;
 }
 
 void DBusMenuModel::aboutToShow()
 {
+    d->flushPendingRebuild();
     if (!d->proxy)
         return;
-    // See aboutToShowSubmenu for the needUpdate rationale. We refresh
-    // the root level on the truthy reply rather than waiting for
-    // LayoutUpdated, which some apps skip when AboutToShow already
-    // returned needUpdate=true.
+    // AboutToShow's needUpdate reply triggers a refresh only when the
+    // root id we asked about is still the active root by the time the
+    // reply lands (the user can re-navigate during the round-trip).
+    // Some apps skip LayoutUpdated when AboutToShow already returned
+    // needUpdate=true, so this reply path is load-bearing for the
+    // initial-open case where the app populates lazily.
     auto* watcher = new QDBusPendingCallWatcher(d->proxy->AboutToShow(d->rootId), this);
     const int rootIdSnapshot = d->rootId;
     QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, rootIdSnapshot]() {
@@ -720,23 +759,39 @@ void DBusMenuModel::aboutToShow()
     });
     // Mirror aboutToHide's closed event. Some apps only build their
     // submenu items on the opened tick and tear them down on closed.
+    // Track the id so aboutToHide can close every level we opened on
+    // the way in.
     const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
     d->proxy->Event(d->rootId, QStringLiteral("opened"), QDBusVariant(0), ts);
+    d->openedIds.insert(d->rootId);
 }
 
 void DBusMenuModel::refresh()
 {
+    d->flushPendingRebuild();
     qCDebug(lcSniMenu) << "refresh() invoked for" << d->service << d->path << "proxy=" << (d->proxy ? "live" : "null");
     d->refresh();
 }
 
 void DBusMenuModel::aboutToHide()
 {
-    if (!d->proxy)
+    d->flushPendingRebuild();
+    if (!d->proxy) {
+        d->openedIds.clear();
         return;
-    // ms not seconds — see triggerItem rationale.
+    }
+    // ms not seconds; see triggerItem rationale.
     const uint ts = uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
-    d->proxy->Event(d->rootId, QStringLiteral("closed"), QDBusVariant(0), ts);
+    // Fire closed for every level we opened on the way in (root +
+    // every submenu the user traversed via aboutToShowSubmenu), not
+    // just the current rootId. Always include rootId so apps that
+    // skipped opened still pair the close. The set takes care of
+    // dedup if rootId was already opened.
+    QSet<int> toClose = d->openedIds;
+    toClose.insert(d->rootId);
+    for (int id : toClose)
+        d->proxy->Event(id, QStringLiteral("closed"), QDBusVariant(0), ts);
+    d->openedIds.clear();
 }
 
 } // namespace PhosphorServiceSni

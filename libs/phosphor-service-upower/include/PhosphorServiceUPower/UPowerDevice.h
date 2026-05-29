@@ -124,7 +124,6 @@ Q_SIGNALS:
     void isPresentChanged();
     void isLaptopBatteryChanged();
     void healthPercentageChanged();
-    void propertiesRefreshed();
 
 private Q_SLOTS:
     void _q_onPropertiesChanged(const QString& iface, const QVariantMap& changed, const QStringList& invalidated);

@@ -124,6 +124,25 @@ private Q_SLOTS:
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Pda), 7);
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Phone), 8);
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::MediaPlayer), 9);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Tablet), 10);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Computer), 11);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::GamingInput), 12);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Pen), 13);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Touchpad), 14);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Modem), 15);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Network), 16);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Headset), 17);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Speakers), 18);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Headphones), 19);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Video), 20);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::OtherAudio), 21);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::RemoteControl), 22);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Printer), 23);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Scanner), 24);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Camera), 25);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Wearable), 26);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Toy), 27);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::BluetoothGeneric), 28);
     }
 };
 

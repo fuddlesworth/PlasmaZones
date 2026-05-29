@@ -141,12 +141,19 @@ void UPowerDeviceModel::onDeviceDataChanged(UPowerDevice* device, const QList<in
 
 void UPowerDeviceModel::connectDevice(UPowerDevice* device)
 {
-    // Wire each device signal to the specific roles it affects. Per-
-    // signal routing keeps energyRate / energyCapacity / nativePath
-    // changes (none of which the model exposes) from triggering view-
-    // wide refreshes. propertiesRefreshed is kept as a coarse fallback
-    // for the cross-property derived hooks (isLaptopBattery flips on
-    // type-or-powerSupply changes; we emit it inside applyProps).
+    // Wire each model role to exactly the device signal that drives
+    // it. Per-signal routing keeps energyRate / energyCapacity /
+    // nativePath / model changes (none of which the model exposes
+    // as a role) from triggering view-wide refreshes.
+    //
+    // isLaptopBatteryChanged comes from the device's own cross-property
+    // guard (only fires when `type == Battery && powerSupply` actually
+    // transitions). Hooking the role here rather than dispatching it
+    // from typeChanged / powerSupplyChanged avoids both the
+    // intermediate-state transient (when a single PropertiesChanged
+    // carries both Type=Battery and PowerSupply=true) and the
+    // duplicate role-emit (typeChanged + powerSupplyChanged would
+    // each have triggered IsLaptopBatteryRole otherwise).
     connect(device, &UPowerDevice::percentageChanged, this, [this, device]() {
         onDeviceDataChanged(device, {PercentageRole});
     });
@@ -154,12 +161,12 @@ void UPowerDeviceModel::connectDevice(UPowerDevice* device)
         onDeviceDataChanged(device, {StateRole});
     });
     connect(device, &UPowerDevice::typeChanged, this, [this, device]() {
-        onDeviceDataChanged(device, {TypeRole, IsLaptopBatteryRole});
+        onDeviceDataChanged(device, {TypeRole});
     });
     connect(device, &UPowerDevice::iconNameChanged, this, [this, device]() {
         onDeviceDataChanged(device, {IconNameRole});
     });
-    connect(device, &UPowerDevice::powerSupplyChanged, this, [this, device]() {
+    connect(device, &UPowerDevice::isLaptopBatteryChanged, this, [this, device]() {
         onDeviceDataChanged(device, {IsLaptopBatteryRole});
     });
 }

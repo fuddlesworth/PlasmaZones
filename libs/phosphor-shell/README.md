@@ -41,7 +41,7 @@ configs port with minimal rework.
 | `PersistentProperties`   | QML-friendly persistence of property values across launches and hot reloads. |
 | `Process`                | Sandboxed subprocess runner exposed to QML. |
 | `FileView`               | Watched-file reader for QML config-driven panels (`/proc`, `/sys`, config files). |
-| `SystemClock`            | Timer-driven clock — hours/minutes/seconds/date — with configurable tick precision. |
+| `SystemClock`            | Timer-driven clock (hours/minutes/seconds/date) with configurable tick precision. |
 | `WallpaperService`       | Decodes the desktop wallpaper off the GUI thread; reached from QML via `ShellGlobal.wallpaper`. |
 | `Environment`            | Cross-platform env-var, locale, and runtime-dir helpers. |
 | `ShellGlobal`            | QML context object (`PhosphorShell`) with shell-wide config and runtime state. |
@@ -54,10 +54,10 @@ configs port with minimal rework.
 above it re-exports a few from sibling libraries, so shell QML needs a
 single import:
 
-- `ShaderBackground` — animated shader surface (from `phosphor-rendering`).
-- `IdleInhibitor`, `IdleNotifier` — idle inhibition and idle detection
+- `ShaderBackground`: animated shader surface (from `phosphor-rendering`).
+- `IdleInhibitor`, `IdleNotifier`: idle inhibition and idle detection
   (from `phosphor-wayland`).
-- `ForeignToplevel` — one entry of the `Toplevels` window list
+- `ForeignToplevel`: one entry of the `Toplevels` window list
   (uncreatable; vended by `Toplevels`).
 
 ## Dependencies

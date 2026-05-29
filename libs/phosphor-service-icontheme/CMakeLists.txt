@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorServiceIconTheme — XDG icon-theme spec 0.13 resolver +
+# PhosphorServiceIconTheme: XDG icon-theme spec 0.13 resolver and
 # Qt image provider for Phosphor-based desktop shells. Extracted
 # from the original `phosphor-services` umbrella as part of the
 # Phase 2.0 tenant splits documented in
@@ -22,9 +22,9 @@ endif()
 include(GenerateExportHeader)
 
 # Gui: QImage / QIcon. Qml + Quick: QQuickImageProvider + the
-# QQmlEngine plumbing inside installImageProvider. No DBus — the
+# QQmlEngine plumbing inside installImageProvider. No D-Bus: the
 # resolver walks the local filesystem only; tray icons that arrive
-# over DBus are decoded with the in-class decodePixmaps helper, no
+# over D-Bus are decoded with the in-class decodePixmaps helper, no
 # bus call.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
 

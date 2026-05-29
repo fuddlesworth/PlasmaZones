@@ -52,6 +52,7 @@ PanelWindow {
     readonly property int settingsGlyphSize: 13
     readonly property int fallbackGlyphSize: 10
     readonly property real passiveTrayOpacity: 0.55
+    readonly property int workspaceWidthAnimMs: 150
     // Shadow strip as fraction of total surface height (also DPR-
     // independent). The shader uses 1 - shadowFraction as the
     // panel/shadow split position in surface-local UV. The Math.max
@@ -187,7 +188,7 @@ PanelWindow {
 
                         Behavior on width {
                             NumberAnimation {
-                                duration: 150
+                                duration: root.workspaceWidthAnimMs
                             }
                         }
                     }

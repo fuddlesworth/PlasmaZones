@@ -18,7 +18,7 @@ function(_phosphorserviceupower_test target source)
     )
 endfunction()
 
-# Smoke test — model role names + lifecycle on an idle host (no UPower
+# Smoke test: model role names + lifecycle on an idle host (no UPower
 # on the bus, no devices to enumerate). The CI runners have no UPower,
 # so this is what we can verify deterministically; live D-Bus coverage
 # requires a fake org.freedesktop.UPower fixture and is its own

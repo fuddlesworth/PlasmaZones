@@ -224,14 +224,25 @@ namespace {
 /// `key=value`, `key[locale]=value` (we ignore locale variants).
 QMap<QString, QMap<QString, QString>> parseIniFile(const QString& path)
 {
+    // Real-world index.theme files are typically under 10 KB; Adwaita's
+    // is ~50 KB at the heaviest. A 1 MiB total cap and a 64 KiB per-line
+    // cap rule out the pathological "hostile theme on a shared XDG_DATA
+    // dir publishes a multi-GB index.theme" case without rejecting any
+    // legitimate file.
+    constexpr qint64 kMaxFileBytes = 1 << 20;
+    constexpr qint64 kMaxLineBytes = 1 << 16;
     QMap<QString, QMap<QString, QString>> result;
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return result;
     }
+    if (f.size() > kMaxFileBytes) {
+        qCWarning(lcIconTheme) << "index.theme exceeds size cap, skipping:" << path << "size=" << f.size();
+        return result;
+    }
     QString currentGroup;
     while (!f.atEnd()) {
-        auto line = QString::fromUtf8(f.readLine()).trimmed();
+        auto line = QString::fromUtf8(f.readLine(kMaxLineBytes)).trimmed();
         if (line.isEmpty() || line.startsWith(QLatin1Char('#')) || line.startsWith(QLatin1Char(';'))) {
             continue;
         }
@@ -293,6 +304,19 @@ const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& the
         for (auto sectionIt = sections.constBegin(); sectionIt != sections.constEnd(); ++sectionIt) {
             const auto& group = sectionIt.key();
             if (group == QLatin1String("Icon Theme")) {
+                continue;
+            }
+            // index.theme contents are technically attacker-controlled
+            // when any directory on the XDG_DATA_DIRS path is writable
+            // by an untrusted user (rare but possible on shared boxes
+            // or sandbox escapes). A `[../../../etc]` directory group
+            // would let themeIconPath construct
+            // `<root>/<themeName>/../../../etc/<iconName>.png` and
+            // probe arbitrary files. Reject any DirectoryEntry whose
+            // path contains traversal vectors.
+            if (group.contains(QLatin1String("..")) || group.contains(QLatin1Char('\\'))
+                || group.contains(QChar(QChar::Null)) || group.startsWith(QLatin1Char('/'))) {
+                qCWarning(lcIconTheme) << "rejected suspicious directory in" << indexPath << ":" << group;
                 continue;
             }
             const auto& kv = sectionIt.value();
@@ -510,9 +534,11 @@ QImage IconThemeResolver::iconForName(const QString& name, int size, int scale, 
     // decode can take milliseconds for a complex SVG and we don't
     // want `themeName()` / `setThemeName()` / concurrent
     // `iconForName()` calls to block on it. The cost is that two
-    // threads racing on the same uncached key may both decode; one's
-    // insert wins, the other's QImage is dropped. Wasteful, not
-    // incorrect.
+    // threads racing on the same uncached key may both decode; only
+    // the first to reach phase 3 inserts into the cache, and the
+    // later thread returns the winner's image rather than its own
+    // freshly-decoded one. Wasteful but correct; the returned value
+    // is what subsequent readers will get on the next cache hit.
     QString cacheKey;
     QString path;
     int targetScale = 0;

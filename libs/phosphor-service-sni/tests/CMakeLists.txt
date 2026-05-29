@@ -18,14 +18,14 @@ function(_phosphorservicesni_test target source)
     )
 endfunction()
 
-# Smoke test — role plumbing on StatusNotifierItemModel.
+# Smoke test: role plumbing on StatusNotifierItemModel.
 _phosphorservicesni_test(test_phosphorservicesni_smoke test_smoke.cpp)
 
 # StatusNotifierItemModel lifecycle (host attach/detach, role names
 # as public contract, invalid-row no-ops).
 _phosphorservicesni_test(test_phosphorservicesni_itemmodel test_itemmodel.cpp)
 
-# DBusMenuModel without a real DBus source — just contract + no-op
+# DBusMenuModel without a real DBus source: just contract + no-op
 # invariants. Live-source coverage requires a fake session bus + a
 # fixture menu app, which is its own follow-up.
 _phosphorservicesni_test(test_phosphorservicesni_dbusmenumodel test_dbusmenumodel.cpp)

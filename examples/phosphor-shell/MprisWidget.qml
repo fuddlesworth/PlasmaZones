@@ -39,6 +39,10 @@ Item {
     readonly property int titleFontSize: 11
     readonly property int progressStrokeWidth: 2
     readonly property int artSourcePixels: 80
+    readonly property int controlRadius: 4
+    readonly property int scrollPauseHeadMs: 2000
+    readonly property int scrollPauseTailMs: 1500
+    readonly property int scrollReturnMs: 400
 
     signal popupRequested
 
@@ -236,6 +240,19 @@ Item {
                     if (visible)
                         requestPaint();
                 }
+
+                // QML's auto-binding tracker doesn't see Theme.X reads
+                // inside Canvas.onPaint (paint callbacks aren't a
+                // bindable scope), so a runtime palette swap leaves the
+                // ring stuck on the old `Theme.outline` / `Theme.primary`
+                // colors until the next progress tick. Listen on the
+                // palette directly and force a repaint when it changes.
+                Connections {
+                    target: Theme.paletteStore
+                    function onPaletteChanged() {
+                        progressRing.requestPaint();
+                    }
+                }
                 onPaint: {
                     let ctx = getContext("2d");
                     let cx = width / 2, cy = height / 2;
@@ -326,7 +343,7 @@ Item {
                     loops: Animation.Infinite
 
                     PauseAnimation {
-                        duration: 2000
+                        duration: root.scrollPauseHeadMs
                     }
 
                     NumberAnimation {
@@ -337,13 +354,13 @@ Item {
                     }
 
                     PauseAnimation {
-                        duration: 1500
+                        duration: root.scrollPauseTailMs
                     }
 
                     NumberAnimation {
                         from: -(titleText.implicitWidth - (root.titleWidth - root.titleScrollMargin))
                         to: 0
-                        duration: 400
+                        duration: root.scrollReturnMs
                         easing.type: Easing.OutQuad
                     }
                 }
@@ -358,7 +375,7 @@ Item {
             Rectangle {
                 width: root.controlDiameter
                 height: root.controlDiameter
-                radius: 4
+                radius: root.controlRadius
                 color: prevArea.containsMouse ? Theme.surface_container_high : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoPrevious
 
@@ -415,7 +432,7 @@ Item {
             Rectangle {
                 width: root.controlDiameter
                 height: root.controlDiameter
-                radius: 4
+                radius: root.controlRadius
                 color: nextArea.containsMouse ? Theme.surface_container_high : "transparent"
                 visible: root.hasPlayer && root.currentPlayer.canGoNext
 

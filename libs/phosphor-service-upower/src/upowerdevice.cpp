@@ -91,7 +91,6 @@ public:
         // `type` and `powerSupply`; healthPercentage on the energy pair).
         const bool oldIsLaptop = (type == Battery && powerSupply);
         const qreal oldHealth = owner->healthPercentage();
-        bool changed = false;
 
         auto val = [&props](const char* name) -> QVariant {
             return props.value(QLatin1String(name));
@@ -99,61 +98,69 @@ public:
         QVariant v;
 
         if ((v = val("Percentage")).isValid())
-            changed |= setField(percentage, v.toDouble(), &UPowerDevice::percentageChanged, owner);
+            setField(percentage, v.toDouble(), &UPowerDevice::percentageChanged, owner);
         if ((v = val("Energy")).isValid())
-            changed |= setField(energy, v.toDouble(), &UPowerDevice::energyChanged, owner);
+            setField(energy, v.toDouble(), &UPowerDevice::energyChanged, owner);
         if ((v = val("EnergyFull")).isValid())
-            changed |= setField(energyFull, v.toDouble(), &UPowerDevice::energyCapacityChanged, owner);
+            setField(energyFull, v.toDouble(), &UPowerDevice::energyCapacityChanged, owner);
         if ((v = val("EnergyFullDesign")).isValid())
-            changed |= setField(energyFullDesign, v.toDouble(), &UPowerDevice::energyFullDesignChanged, owner);
+            setField(energyFullDesign, v.toDouble(), &UPowerDevice::energyFullDesignChanged, owner);
         if ((v = val("EnergyRate")).isValid())
-            changed |= setField(energyRate, v.toDouble(), &UPowerDevice::energyRateChanged, owner);
+            setField(energyRate, v.toDouble(), &UPowerDevice::energyRateChanged, owner);
         if ((v = val("NativePath")).isValid())
-            changed |= setField(nativePath, v.toString(), &UPowerDevice::nativePathChanged, owner);
+            setField(nativePath, v.toString(), &UPowerDevice::nativePathChanged, owner);
         if ((v = val("Model")).isValid())
-            changed |= setField(model, v.toString(), &UPowerDevice::modelChanged, owner);
+            setField(model, v.toString(), &UPowerDevice::modelChanged, owner);
         if ((v = val("IconName")).isValid())
-            changed |= setField(iconName, v.toString(), &UPowerDevice::iconNameChanged, owner);
-        if ((v = val("PowerSupply")).isValid())
-            changed |= setField(powerSupply, v.toBool(), &UPowerDevice::powerSupplyChanged, owner);
+            setField(iconName, v.toString(), &UPowerDevice::iconNameChanged, owner);
         if ((v = val("IsPresent")).isValid())
-            changed |= setField(isPresent, v.toBool(), &UPowerDevice::isPresentChanged, owner);
+            setField(isPresent, v.toBool(), &UPowerDevice::isPresentChanged, owner);
+
+        // Type goes BEFORE PowerSupply so the derived isLaptopBattery
+        // value (`type == Battery && powerSupply`) sees both fresh
+        // inputs in the same applyProps pass. When a single
+        // PropertiesChanged batch carries both, the
+        // isLaptopBatteryChanged-driven dataChanged below re-evaluates
+        // exactly once, and neither intermediate field assignment
+        // produces a wrong-value transient.
+        if ((v = val("Type")).isValid()) {
+            const uint raw = v.toUInt();
+            // UPower DeviceType range is 0..28 today. Anything outside
+            // that range is either a future-protocol value or a
+            // misbehaving daemon; fall back to UnknownType rather than
+            // casting to an enumerator we don't declare.
+            const DeviceType nt =
+                (raw <= static_cast<uint>(BluetoothGeneric)) ? static_cast<DeviceType>(raw) : UnknownType;
+            setField(type, nt, &UPowerDevice::typeChanged, owner);
+        }
+        if ((v = val("PowerSupply")).isValid())
+            setField(powerSupply, v.toBool(), &UPowerDevice::powerSupplyChanged, owner);
 
         if ((v = val("State")).isValid()) {
             const uint raw = v.toUInt();
-            // UPower DeviceState range is 0..6 today. Anything outside
-            // that range coming over D-Bus is either a future-protocol
-            // value or a misbehaving daemon. Fall back to UnknownState
-            // rather than casting to an enumerator we don't declare.
+            // Mirror the Type clamp.
             const DeviceState ns =
                 (raw <= static_cast<uint>(PendingDischarge)) ? static_cast<DeviceState>(raw) : UnknownState;
-            changed |= setField(state, ns, &UPowerDevice::stateChanged, owner);
-        }
-        if ((v = val("Type")).isValid()) {
-            const uint raw = v.toUInt();
-            // Mirror the DeviceState clamp. Same rationale.
-            const DeviceType nt =
-                (raw <= static_cast<uint>(BluetoothGeneric)) ? static_cast<DeviceType>(raw) : UnknownType;
-            changed |= setField(type, nt, &UPowerDevice::typeChanged, owner);
+            setField(state, ns, &UPowerDevice::stateChanged, owner);
         }
         if ((v = val("TimeToEmpty")).isValid())
-            changed |= setField(timeToEmpty, v.toLongLong(), &UPowerDevice::timeToEmptyChanged, owner);
+            setField(timeToEmpty, v.toLongLong(), &UPowerDevice::timeToEmptyChanged, owner);
         if ((v = val("TimeToFull")).isValid())
-            changed |= setField(timeToFull, v.toLongLong(), &UPowerDevice::timeToFullChanged, owner);
+            setField(timeToFull, v.toLongLong(), &UPowerDevice::timeToFullChanged, owner);
 
-        // Derived-state transitions — emitted only on an actual change,
-        // catching the case where only one input (e.g. powerSupply)
-        // moved without the other.
+        // Derived-state transitions are emitted only on an actual
+        // change, catching the case where only one input (e.g.
+        // powerSupply) moved without the other. We compare the
+        // pre-batch snapshot against the post-batch derived value,
+        // not against the per-field setField return, because
+        // isLaptopBattery and healthPercentage each depend on TWO
+        // fields that may be in the same batch and the per-field
+        // returns can't tell us whether the COMBINATION moved.
         if (oldIsLaptop != (type == Battery && powerSupply))
             Q_EMIT owner->isLaptopBatteryChanged();
         const qreal newHealth = owner->healthPercentage();
         if (!qFuzzyCompare(oldHealth + 1.0, newHealth + 1.0))
             Q_EMIT owner->healthPercentageChanged();
-
-        // propertiesRefreshed is the model's data-changed hook — fire it
-        // only when something the model exposes could have moved.
-        if (changed)
-            Q_EMIT owner->propertiesRefreshed();
     }
 };
 

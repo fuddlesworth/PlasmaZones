@@ -35,7 +35,8 @@ public:
     static IconThemeResolver* instance();
 
     /// Force a theme override. Empty string => fall back to detection
-    /// from Qt's icon theme name + GTK env hints.
+    /// via `QIcon::themeName()`, which the Qt platform plugin sources
+    /// from Plasma, GTK, or xsettings as available.
     void setThemeName(const QString& themeName);
     [[nodiscard]] QString themeName() const;
 

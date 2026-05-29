@@ -64,8 +64,10 @@ static void setBoolField(bool& field, bool value, void (MprisPlayer::*sig)(), Mp
 // peer not present, malformed request) used to be silently swallowed; a
 // user clicking Next on a player that rejects the call would see nothing
 // at all. The watcher is parented to `receiver` so it dies if the player
-// vanishes. `tag` is the human-readable identity ("Volume Set",
-// "Player.Next") used in the log line.
+// vanishes. `tag` is the property or method name actually issued (e.g.
+// "Volume", "Next", "Seek") used in the log line. Every call site passes
+// a string literal, so the captured `const char*` lives for the program's
+// lifetime; do not pass a stack-allocated buffer here.
 static void watchPendingCall(const QDBusPendingCall& call, QObject* receiver, const QString& service, const char* tag)
 {
     auto* watcher = new QDBusPendingCallWatcher(call, receiver);
@@ -333,61 +335,55 @@ public:
             field = s;
             changed = true;
         };
-        setIfPresent(meta, QStringLiteral("xesam:title"), trackTitle);
-        setIfPresent(meta, QStringLiteral("xesam:album"), trackAlbum);
+        auto clearIfNonEmpty = [&changed](QString& field) {
+            if (!field.isEmpty()) {
+                field.clear();
+                changed = true;
+            }
+        };
 
-        // Detect track change FIRST. Some players (Spotify in particular)
-        // publish a full-resolution mpris:artUrl on the initial track
-        // change, then re-publish a few hundred ms later with a smaller
-        // cached/cropped URL for the same trackid. Pin trackArtUrl for
-        // the lifetime of a trackid: take the first non-empty URL we
-        // see and ignore subsequent changes until the trackid changes
-        // (i.e. a real track switch). Without this, the popup's Image
-        // re-decodes at the smaller URL and the user sees high-quality
-        // art "refresh with lower quality" shortly after a track change.
-        // Title/artist/album are also cleared on trackid change so a
-        // partial metadata update that only carries the new trackid +
-        // artUrl doesn't leave the prior track's title visible.
+        // Detect track change FIRST so the per-trackid stale-field clear
+        // runs BEFORE we apply the new map's title/artist/album/artUrl.
+        // Real players (Spotify, Firefox, VLC, mpv) send the FULL
+        // metadata along with the new mpris:trackid in a single
+        // PropertiesChanged signal: if we cleared after the
+        // setIfPresent calls, the just-applied new values would be
+        // wiped before metadataChanged fires. trackArtUrl gets the
+        // additional "pin first non-empty URL for this trackid"
+        // treatment to avoid Spotify's flicker (full-res URL then a
+        // smaller cached URL ~hundreds-of-ms later for the same track).
         if (meta.contains(QStringLiteral("mpris:trackid"))) {
             QString id = metaObjectPath(meta.value(QStringLiteral("mpris:trackid")));
             if (trackId != id) {
                 trackId = id;
-                if (!trackArtUrl.isEmpty()) {
-                    trackArtUrl.clear();
-                    changed = true;
-                }
-                if (!trackTitle.isEmpty()) {
-                    trackTitle.clear();
-                    changed = true;
-                }
-                if (!trackArtist.isEmpty()) {
-                    trackArtist.clear();
-                    changed = true;
-                }
-                if (!trackAlbum.isEmpty()) {
-                    trackAlbum.clear();
-                    changed = true;
-                }
+                clearIfNonEmpty(trackArtUrl);
+                clearIfNonEmpty(trackTitle);
+                clearIfNonEmpty(trackArtist);
+                clearIfNonEmpty(trackAlbum);
             }
         }
+
+        setIfPresent(meta, QStringLiteral("xesam:title"), trackTitle);
+        setIfPresent(meta, QStringLiteral("xesam:album"), trackAlbum);
+
         if (meta.contains(QStringLiteral("mpris:artUrl"))) {
             QString s = metaString(meta.value(QStringLiteral("mpris:artUrl"))).left(kMaxMetaStringChars);
             // First non-empty URL wins for this trackid (see above).
-            // Reject javascript:/data:/file:/// schemes that could
-            // surface in QML's Image cache as a security side channel.
-            // QUrl::isValid catches gross malformation; the explicit
-            // allowlist filters dangerous schemes while keeping the
-            // legitimate file://, http://, https:// paths that real
-            // players use.
+            // True allowlist of safe schemes. Empty-scheme / relative
+            // URLs are rejected. javascript:/data:/about: would let a
+            // hostile player surface markup in QML's Image cache;
+            // qrc:/, ssh://, ftp://, etc. have no use case for media
+            // art and an unfamiliar scheme reaching QML is a red flag.
+            // file:// stays in the allowlist because Firefox's MPRIS
+            // bridge writes track artwork under
+            // ~/.local/share/firefox-mpris/.
             auto isSchemeAllowed = [](const QString& url) {
                 const QUrl u(url);
                 if (!u.isValid())
                     return false;
                 const QString scheme = u.scheme().toLower();
-                if (scheme == QLatin1String("javascript") || scheme == QLatin1String("data")
-                    || scheme == QLatin1String("about"))
-                    return false;
-                return true;
+                return scheme == QLatin1String("file") || scheme == QLatin1String("http")
+                    || scheme == QLatin1String("https");
             };
             if (trackArtUrl.isEmpty() && !s.isEmpty() && isSchemeAllowed(s)) {
                 trackArtUrl = s;
@@ -652,15 +648,23 @@ void MprisPlayer::setVolume(qreal v)
     // marshalled straight onto the bus to the player. Clamp to the
     // MPRIS-spec range [0.0, 1.0]: a scroll-wheel widget that
     // accumulates past 1.0 otherwise gets silently rejected by the
-    // player or accepted at unsafe gain. Local state is NOT updated
-    // pre-emptively. Doing so would make the QML slider show a phantom
-    // value if the player rejects the change (CanControl=false or a
-    // soft clamp on the player side) until the next PropertiesChanged.
-    // We stay consistent with setShuffle/setLoopState by waiting for
-    // the bus echo.
+    // player or accepted at unsafe gain.
+    //
+    // Volume IS updated optimistically (unlike setShuffle/setLoopState).
+    // A scroll-wheel volume handler typically reads `player.volume`,
+    // adds a delta, and writes back per scroll tick. Without the
+    // optimistic local emit, multiple wheel events arriving within a
+    // single bus round-trip (~10-50 ms on a busy bus) all read the
+    // same stale value, so the user appears unable to scroll past one
+    // tick until the player's PropertiesChanged echo arrives. The
+    // PropertiesChanged Volume branch in applyPlayer uses qFuzzyCompare
+    // before emitting, so a player rejecting or soft-clamping the
+    // change still self-corrects on the bus echo. Shuffle/loop are
+    // discrete toggles with no pile-up risk, so they stay echo-driven.
     if (!std::isfinite(v))
         return;
     v = std::clamp(v, 0.0, 1.0);
+    setRealField(d->volume, v, &MprisPlayer::volumeChanged, this);
     dbusSetProperty(d->bus, this, d->service, kPlayerIface, "Volume", v);
 }
 void MprisPlayer::setShuffle(bool s)

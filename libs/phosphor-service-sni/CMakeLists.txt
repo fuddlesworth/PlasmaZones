@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorServiceSni — StatusNotifierItem (system tray) host + watcher
+# PhosphorServiceSni: StatusNotifierItem (system tray) host + watcher
 # + com.canonical.dbusmenu context-menu model. Extracted from the
 # original `phosphor-services` umbrella as the last of the Phase 2.0
 # tenant splits (documented in
@@ -51,8 +51,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # DBus adaptors / interfaces (XML → generated headers)
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# The Watcher we EXPOSE (qt6_add_dbus_adaptor) — apps + other hosts call us
-# through this. The Item + dbusmenu we CONSUME (qt6_add_dbus_interface) —
+# The Watcher we EXPOSE (qt6_add_dbus_adaptor). Apps + other hosts call us
+# through this. The Item + dbusmenu we CONSUME (qt6_add_dbus_interface):
 # each registered tray item lives in another process and we call it.
 
 set(phosphorservicesni_DBUS_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/src/dbus)
@@ -129,7 +129,7 @@ target_include_directories(PhosphorServiceSni
 
 target_compile_features(PhosphorServiceSni PUBLIC cxx_std_20)
 
-# Force-include dbustypes.h in every TU — including AUTOMOC's
+# Force-include dbustypes.h in every TU, including AUTOMOC's
 # mocs_compilation.cpp. The generated D-Bus interface headers
 # (statusnotifieritem_interface.h, dbusmenu_interface.h) reference
 # PhosphorServiceSni::DBusImageList / DBusToolTip / DBusMenuLayoutItem
