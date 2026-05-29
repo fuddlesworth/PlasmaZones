@@ -3,14 +3,24 @@
 
 #include <PhosphorServicePipeWire/PipeWireConnection.h>
 
+#include <PhosphorServicePipeWire/PwNode.h>
+
+#include <QHash>
 #include <QLoggingCategory>
 #include <QSemaphore>
 #include <QThread>
 
+#include <pipewire/extensions/metadata.h>
 #include <pipewire/pipewire.h>
+#include <spa/param/audio/raw.h>
+#include <spa/param/props.h>
+#include <spa/pod/iter.h>
+#include <spa/pod/parser.h>
+#include <spa/utils/result.h>
 
 #include <atomic>
 #include <mutex>
+#include <unordered_map>
 
 Q_LOGGING_CATEGORY(lcPipeWire, "phosphor.service.pipewire.connection")
 
@@ -30,6 +40,27 @@ void ensurePipeWireInit()
     });
 }
 
+bool isAudioNodeClass(const QString& mediaClass)
+{
+    return mediaClass == QLatin1String("Audio/Sink") || mediaClass == QLatin1String("Audio/Source")
+        || mediaClass == QLatin1String("Stream/Output/Audio") || mediaClass == QLatin1String("Stream/Input/Audio");
+}
+
+QHash<QString, QString> propsFromDict(const struct spa_dict* dict)
+{
+    QHash<QString, QString> out;
+    if (!dict)
+        return out;
+    const struct spa_dict_item* item = nullptr;
+    spa_dict_for_each(item, dict)
+    {
+        if (!item || !item->key)
+            continue;
+        out.insert(QString::fromUtf8(item->key), item->value ? QString::fromUtf8(item->value) : QString());
+    }
+    return out;
+}
+
 } // namespace
 
 class PipeWireConnection::Private
@@ -42,13 +73,13 @@ public:
 
     PipeWireConnection* q = nullptr;
 
-    /// Worker thread that runs `pw_main_loop_run`. NB: Qt's QThread
-    /// default `run()` starts a Qt event loop via `exec()`. We can't
-    /// use that — `pw_main_loop_run` blocks for the lifetime of the
-    /// connection and Qt's event loop would never get scheduling
-    /// time. Subclass `QThread` and override `run()` to call
-    /// `pw_main_loop_run` directly; the Qt event loop on this thread
-    /// is intentionally never started.
+    /// Worker thread that runs `pw_main_loop_run`. Qt's QThread default
+    /// `run()` starts a Qt event loop via `exec()`. We can't use it:
+    /// `pw_main_loop_run` blocks for the lifetime of the connection
+    /// and Qt's event loop would never get scheduling time. Subclass
+    /// `QThread` and override `run()` to call `pw_main_loop_run`
+    /// directly; the Qt event loop on this thread is intentionally
+    /// never started.
     class LoopThread : public QThread
     {
     public:
@@ -98,8 +129,38 @@ public:
     pw_main_loop* loop = nullptr;
     pw_context* context = nullptr;
     pw_core* core = nullptr;
+    pw_registry* registry = nullptr;
     spa_hook coreListener{};
+    spa_hook registryListener{};
     int pendingSyncSeq = 0;
+
+    /// Per-node loop-thread state. We hold the pw_proxy for the node
+    /// (for SPA_PARAM_Props enumeration) and the spa_hook for its
+    /// listener wire. Keyed by PipeWire global id. Only touched on
+    /// the loop thread. `owner` is the back-pointer the node-listener
+    /// callbacks use to post results onto the GUI thread; each
+    /// LoopNode is passed as the listener `data` so the callbacks can
+    /// recover both the node id and the Private* in one indirection.
+    struct LoopNode
+    {
+        Private* owner = nullptr;
+        quint32 id = 0;
+        QString mediaClass;
+        pw_proxy* proxy = nullptr;
+        spa_hook nodeListener{};
+    };
+    /// std::unordered_map (not QHash) because QHash requires its value
+    /// type to be copyable for rehashing and std::unique_ptr is move-
+    /// only. The owning-pointer pattern is essential: each LoopNode's
+    /// address is baked into the spa_hook listener wires, so the
+    /// pointer must stay stable for the listener's lifetime.
+    std::unordered_map<quint32, std::unique_ptr<LoopNode>> loopNodes;
+
+    /// GUI-thread state. Authoritative map of typed PwNode QObjects;
+    /// keyed by PipeWire global id. The QObject parent is `q` so the
+    /// nodes are torn down automatically when the connection dies.
+    /// Touched only on the GUI thread.
+    QHash<quint32, PwNode*> guiNodes;
 
     // Snapshot of state for GUI-thread getters. Updated by the GUI
     // thread itself via queued cross-thread signals; the atomics let
@@ -116,6 +177,18 @@ public:
     static void onCoreDone(void* data, uint32_t id, int seq);
     static void onCoreError(void* data, uint32_t id, int seq, int res, const char* message);
     static const pw_core_events kCoreEvents;
+
+    // Registry callbacks.
+    static void onRegistryGlobal(void* data, uint32_t id, uint32_t permissions, const char* type, uint32_t version,
+                                 const struct spa_dict* props);
+    static void onRegistryGlobalRemove(void* data, uint32_t id);
+    static const pw_registry_events kRegistryEvents;
+
+    // Per-node listener callbacks (loop thread).
+    static void onNodeInfo(void* data, const struct pw_node_info* info);
+    static void onNodeParam(void* data, int seq, uint32_t id, uint32_t index, uint32_t next,
+                            const struct spa_pod* param);
+    static const pw_node_events kNodeEvents;
 
     /// Called on the loop thread. Creates `pw_context` + `pw_core` and
     /// kicks off the handshake. Idempotent: re-entry while already
@@ -141,6 +214,15 @@ public:
     // the GUI thread.
     void setConnected(bool value);
     void setDaemonAvailable(bool value);
+
+    // GUI-thread handlers, posted from the loop callbacks via
+    // QueuedConnection. These mutate `guiNodes` and emit nodeAdded /
+    // nodeRemoved on q.
+    void guiNodeAdded(quint32 id, QString mediaClass, QHash<QString, QString> props);
+    void guiNodeInfo(quint32 id, QHash<QString, QString> props);
+    void guiNodeProps(quint32 id, int channelCount, QList<qreal> volumes, bool muted);
+    void guiNodeRemoved(quint32 id);
+    void guiNodesReset();
 };
 
 const pw_core_events PipeWireConnection::Private::kCoreEvents = {
@@ -154,6 +236,18 @@ const pw_core_events PipeWireConnection::Private::kCoreEvents = {
     .add_mem = nullptr,
     .remove_mem = nullptr,
     .bound_props = nullptr,
+};
+
+const pw_registry_events PipeWireConnection::Private::kRegistryEvents = {
+    .version = PW_VERSION_REGISTRY_EVENTS,
+    .global = &PipeWireConnection::Private::onRegistryGlobal,
+    .global_remove = &PipeWireConnection::Private::onRegistryGlobalRemove,
+};
+
+const pw_node_events PipeWireConnection::Private::kNodeEvents = {
+    .version = PW_VERSION_NODE_EVENTS,
+    .info = &PipeWireConnection::Private::onNodeInfo,
+    .param = &PipeWireConnection::Private::onNodeParam,
 };
 
 void PipeWireConnection::Private::onCoreInfo(void* data, const struct pw_core_info* info)
@@ -204,6 +298,158 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
         Qt::QueuedConnection);
 }
 
+void PipeWireConnection::Private::onRegistryGlobal(void* data, uint32_t id, uint32_t permissions, const char* type,
+                                                   uint32_t version, const struct spa_dict* props)
+{
+    Q_UNUSED(permissions);
+    Q_UNUSED(version);
+    auto* d = static_cast<Private*>(data);
+    if (!type || std::string_view(type) != PW_TYPE_INTERFACE_Node)
+        return;
+    const auto p = propsFromDict(props);
+    const QString mediaClass = p.value(QStringLiteral("media.class"));
+    if (!isAudioNodeClass(mediaClass)) {
+        qCDebug(lcPipeWire) << "skipping non-audio node" << id << "mediaClass" << mediaClass;
+        return;
+    }
+    qCDebug(lcPipeWire) << "audio node added: id" << id << "mediaClass" << mediaClass << "name"
+                        << p.value(QStringLiteral("node.name"));
+
+    // Bind the proxy on the loop thread so we can subscribe to its
+    // info + param events. Track it in loopNodes for cleanup on
+    // global_remove.
+    auto* proxy = static_cast<pw_proxy*>(pw_registry_bind(d->registry, id, type, PW_VERSION_NODE, 0));
+    if (!proxy) {
+        qCWarning(lcPipeWire) << "pw_registry_bind failed for node" << id;
+        return;
+    }
+    auto entry = std::make_unique<LoopNode>();
+    entry->owner = d;
+    entry->id = id;
+    entry->mediaClass = mediaClass;
+    entry->proxy = proxy;
+    LoopNode* entryPtr = entry.get();
+    pw_node_add_listener(reinterpret_cast<pw_node*>(proxy), &entryPtr->nodeListener, &kNodeEvents, entryPtr);
+    // Pre-arm SPA_PARAM_Props subscription so the next param event
+    // delivers the current volume + mute. The Props pod streams in
+    // via onNodeParam.
+    pw_node_enum_params(reinterpret_cast<pw_node*>(proxy), 0, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
+    d->loopNodes.emplace(id, std::move(entry));
+
+    QMetaObject::invokeMethod(
+        d->q,
+        [d, id, mediaClass, p]() {
+            d->guiNodeAdded(id, mediaClass, p);
+        },
+        Qt::QueuedConnection);
+}
+
+void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id)
+{
+    auto* d = static_cast<Private*>(data);
+    auto it = d->loopNodes.find(id);
+    if (it == d->loopNodes.end())
+        return;
+    auto entry = std::move(it->second);
+    d->loopNodes.erase(it);
+    if (entry->proxy) {
+        spa_hook_remove(&entry->nodeListener);
+        pw_proxy_destroy(entry->proxy);
+    }
+    QMetaObject::invokeMethod(
+        d->q,
+        [d, id]() {
+            d->guiNodeRemoved(id);
+        },
+        Qt::QueuedConnection);
+}
+
+void PipeWireConnection::Private::onNodeInfo(void* data, const struct pw_node_info* info)
+{
+    if (!info)
+        return;
+    auto* entry = static_cast<LoopNode*>(data);
+    if (!entry || !entry->owner)
+        return;
+    auto* d = entry->owner;
+    const quint32 id = entry->id;
+    const auto props = propsFromDict(info->props);
+    QMetaObject::invokeMethod(
+        d->q,
+        [d, id, props]() {
+            d->guiNodeInfo(id, props);
+        },
+        Qt::QueuedConnection);
+}
+
+void PipeWireConnection::Private::onNodeParam(void* data, int seq, uint32_t paramId, uint32_t index, uint32_t next,
+                                              const struct spa_pod* param)
+{
+    Q_UNUSED(seq);
+    Q_UNUSED(index);
+    Q_UNUSED(next);
+    if (!param || paramId != SPA_PARAM_Props)
+        return;
+    auto* entry = static_cast<LoopNode*>(data);
+    if (!entry || !entry->owner)
+        return;
+    auto* d = entry->owner;
+    const quint32 nodeId = entry->id;
+
+    // Parse the Props pod for SPA_PROP_channelVolumes + SPA_PROP_mute.
+    // PipeWire builds the pod incrementally over the node's lifetime;
+    // a given pod may carry one, both, or neither of the fields we
+    // care about. Track which we observed so we can keep the previous
+    // value for missing fields rather than clobbering with defaults.
+    int channelCount = 0;
+    QList<qreal> volumes;
+    bool muted = false;
+    bool haveVolumes = false;
+    bool haveMute = false;
+    struct spa_pod_prop* prop = nullptr;
+    SPA_POD_OBJECT_FOREACH(reinterpret_cast<const struct spa_pod_object*>(param), prop)
+    {
+        if (prop->key == SPA_PROP_channelVolumes) {
+            float values[SPA_AUDIO_MAX_CHANNELS] = {};
+            const uint32_t n = spa_pod_copy_array(&prop->value, SPA_TYPE_Float, values, SPA_AUDIO_MAX_CHANNELS);
+            channelCount = static_cast<int>(n);
+            volumes.reserve(channelCount);
+            for (uint32_t i = 0; i < n; ++i) {
+                volumes.append(static_cast<qreal>(values[i]));
+            }
+            haveVolumes = true;
+        } else if (prop->key == SPA_PROP_mute) {
+            bool m = false;
+            if (spa_pod_get_bool(&prop->value, &m) == 0) {
+                muted = m;
+                haveMute = true;
+            }
+        }
+    }
+
+    if (!haveVolumes && !haveMute) {
+        // Pod carried neither field — nothing observable changed for
+        // our purposes. Skip the GUI hop entirely.
+        return;
+    }
+
+    QMetaObject::invokeMethod(
+        d->q,
+        [d, nodeId, channelCount, volumes, muted, haveVolumes, haveMute]() {
+            auto it = d->guiNodes.find(nodeId);
+            if (it == d->guiNodes.end())
+                return;
+            // Preserve the previous value for any field the pod didn't
+            // carry. applyProps emits propsChanged only on actual
+            // observable movement.
+            const int finalCount = haveVolumes ? channelCount : it.value()->channelCount();
+            const QList<qreal> finalVolumes = haveVolumes ? volumes : it.value()->volumes();
+            const bool finalMuted = haveMute ? muted : it.value()->muted();
+            it.value()->applyProps(finalCount, finalVolumes, finalMuted);
+        },
+        Qt::QueuedConnection);
+}
+
 void PipeWireConnection::Private::doConnect()
 {
     if (core)
@@ -237,6 +483,14 @@ void PipeWireConnection::Private::doConnect()
         return;
     }
     pw_core_add_listener(core, &coreListener, &kCoreEvents, this);
+
+    registry = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
+    if (registry) {
+        pw_registry_add_listener(registry, &registryListener, &kRegistryEvents, this);
+    } else {
+        qCWarning(lcPipeWire) << "pw_core_get_registry returned null; registry walking disabled";
+    }
+
     // Sync request: the matching `done` event signals "PipeWire has
     // processed every prior request". We use it as our handshake
     // completion marker.
@@ -245,6 +499,23 @@ void PipeWireConnection::Private::doConnect()
 
 void PipeWireConnection::Private::doDisconnect()
 {
+    // Tear down per-node state before the registry / core so the
+    // listener removals run while the proxy + core still exist.
+    for (auto& kv : loopNodes) {
+        auto& entry = kv.second;
+        if (entry && entry->proxy) {
+            spa_hook_remove(&entry->nodeListener);
+            pw_proxy_destroy(entry->proxy);
+            entry->proxy = nullptr;
+        }
+    }
+    loopNodes.clear();
+
+    if (registry) {
+        spa_hook_remove(&registryListener);
+        pw_proxy_destroy(reinterpret_cast<pw_proxy*>(registry));
+        registry = nullptr;
+    }
     if (core) {
         spa_hook_remove(&coreListener);
         pw_core_disconnect(core);
@@ -260,6 +531,7 @@ void PipeWireConnection::Private::doDisconnect()
         [this]() {
             setConnected(false);
             setDaemonAvailable(false);
+            guiNodesReset();
         },
         Qt::QueuedConnection);
 }
@@ -302,10 +574,63 @@ void PipeWireConnection::Private::setDaemonAvailable(bool value)
     Q_EMIT q->daemonAvailableChanged();
 }
 
+void PipeWireConnection::Private::guiNodeAdded(quint32 id, QString mediaClass, QHash<QString, QString> props)
+{
+    if (guiNodes.contains(id))
+        return;
+    auto* node = new PwNode(id, mediaClass, q);
+    node->applyInfo(props);
+    guiNodes.insert(id, node);
+    Q_EMIT q->nodeAdded(node);
+}
+
+void PipeWireConnection::Private::guiNodeInfo(quint32 id, QHash<QString, QString> props)
+{
+    auto it = guiNodes.find(id);
+    if (it == guiNodes.end())
+        return;
+    it.value()->applyInfo(std::move(props));
+}
+
+void PipeWireConnection::Private::guiNodeProps(quint32 id, int channelCount, QList<qreal> volumes, bool muted)
+{
+    auto it = guiNodes.find(id);
+    if (it == guiNodes.end())
+        return;
+    it.value()->applyProps(channelCount, std::move(volumes), muted);
+}
+
+void PipeWireConnection::Private::guiNodeRemoved(quint32 id)
+{
+    auto it = guiNodes.find(id);
+    if (it == guiNodes.end())
+        return;
+    auto* node = it.value();
+    guiNodes.erase(it);
+    Q_EMIT q->nodeRemoved(node);
+    node->deleteLater();
+}
+
+void PipeWireConnection::Private::guiNodesReset()
+{
+    if (guiNodes.isEmpty())
+        return;
+    const auto snapshot = guiNodes;
+    guiNodes.clear();
+    for (auto it = snapshot.cbegin(); it != snapshot.cend(); ++it) {
+        Q_EMIT q->nodeRemoved(it.value());
+        it.value()->deleteLater();
+    }
+}
+
 PipeWireConnection::PipeWireConnection(QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Private>(this))
 {
+    // QSignalSpy / QML queued connections need PwNode* known to Qt's
+    // metatype system. The registration is idempotent so paying for it
+    // in every constructor is fine.
+    qRegisterMetaType<PwNode*>("PhosphorServicePipeWire::PwNode*");
     ensurePipeWireInit();
     d->thread.start();
     // Block until the worker has either created the loop or given up.
@@ -340,6 +665,11 @@ bool PipeWireConnection::isConnected() const
 bool PipeWireConnection::isDaemonAvailable() const
 {
     return d->daemonAvailable.load();
+}
+
+QList<PwNode*> PipeWireConnection::nodes() const
+{
+    return d->guiNodes.values();
 }
 
 void PipeWireConnection::connect()

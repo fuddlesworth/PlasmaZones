@@ -5,12 +5,15 @@
 
 #include <PhosphorServicePipeWire/phosphorservicepipewire_export.h>
 
+#include <QList>
 #include <QObject>
 #include <QString>
 
 #include <memory>
 
 namespace PhosphorServicePipeWire {
+
+class PwNode;
 
 /// Owns the PipeWire main loop on a dedicated `QThread` and exposes
 /// connection state to the GUI thread via Q_PROPERTY-backed signals.
@@ -59,6 +62,13 @@ public:
 
     [[nodiscard]] bool isConnected() const;
     [[nodiscard]] bool isDaemonAvailable() const;
+    /// Snapshot of every node the registry has reported so far. Live
+    /// pointers — they're owned by this connection (QObject parent
+    /// chain) and survive until the corresponding `nodeRemoved` signal
+    /// fires. Returned by value so QML / C++ callers can iterate
+    /// without locking; the list itself is mutated only on the GUI
+    /// thread.
+    [[nodiscard]] QList<PwNode*> nodes() const;
 
 public Q_SLOTS:
     /// Asynchronously establish a `pw_context` + `pw_core` and complete
@@ -79,6 +89,14 @@ Q_SIGNALS:
     /// pre-handshake, e.g. `pw_context_connect` returning null). The
     /// connection flips back to disconnected before this signal fires.
     void error(const QString& message);
+    /// Fired from the GUI thread when the registry reports a new audio
+    /// node (Sink, Source, or Stream). The model classes filter by
+    /// `node->mediaClass()`.
+    void nodeAdded(PhosphorServicePipeWire::PwNode* node);
+    /// Fired from the GUI thread BEFORE the PwNode is destroyed so
+    /// observers (models) can detach. The pointer is still valid
+    /// during this signal.
+    void nodeRemoved(PhosphorServicePipeWire::PwNode* node);
 
 private:
     class Private;

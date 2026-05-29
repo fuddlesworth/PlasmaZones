@@ -52,11 +52,13 @@ set(phosphorservicepipewire_public_HDRS
     include/PhosphorServicePipeWire/PhosphorServicePipeWire.h
     include/PhosphorServicePipeWire/QmlRegistration.h
     include/PhosphorServicePipeWire/PipeWireConnection.h
+    include/PhosphorServicePipeWire/PwNode.h
 )
 
 set(phosphorservicepipewire_SRCS
     src/qmlregistration.cpp
     src/pipewireconnection.cpp
+    src/pwnode.cpp
 )
 
 add_library(PhosphorServicePipeWire SHARED
