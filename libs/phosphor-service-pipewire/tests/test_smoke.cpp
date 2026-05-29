@@ -3,6 +3,7 @@
 
 #include <PhosphorServicePipeWire/PipeWireConnection.h>
 #include <PhosphorServicePipeWire/PwNode.h>
+#include <PhosphorServicePipeWire/PwNodeModel.h>
 
 #include <QSignalSpy>
 #include <QtTest/QtTest>
@@ -124,6 +125,88 @@ private Q_SLOTS:
             QCOMPARE(conn.nodes().size(), 0);
         }
         Q_UNUSED(connectedSpy);
+    }
+
+    /// Pin the role-name → integer mapping. QML consumers key on the
+    /// string names, but breaking the int values would silently break
+    /// any C++ caller doing `data(idx, PwNodeModel::VolumesRole)`. The
+    /// only way to evolve these is intentionally, with a coordinated
+    /// QML migration.
+    void roleNamesArePinned()
+    {
+        using PhosphorServicePipeWire::PwNodeModel;
+        PwNodeModel model;
+        const auto names = model.roleNames();
+        QCOMPARE(names.value(PwNodeModel::NodeRole), QByteArrayLiteral("node"));
+        QCOMPARE(names.value(PwNodeModel::IdRole), QByteArrayLiteral("id"));
+        QCOMPARE(names.value(PwNodeModel::NameRole), QByteArrayLiteral("name"));
+        QCOMPARE(names.value(PwNodeModel::NickRole), QByteArrayLiteral("nick"));
+        QCOMPARE(names.value(PwNodeModel::DescriptionRole), QByteArrayLiteral("description"));
+        QCOMPARE(names.value(PwNodeModel::MediaClassRole), QByteArrayLiteral("mediaClass"));
+        QCOMPARE(names.value(PwNodeModel::ChannelCountRole), QByteArrayLiteral("channelCount"));
+        QCOMPARE(names.value(PwNodeModel::VolumesRole), QByteArrayLiteral("volumes"));
+        QCOMPARE(names.value(PwNodeModel::MutedRole), QByteArrayLiteral("muted"));
+        QCOMPARE(names.value(Qt::DisplayRole), QByteArrayLiteral("display"));
+
+        QCOMPARE(int(PwNodeModel::NodeRole), int(Qt::UserRole) + 1);
+        QCOMPARE(int(PwNodeModel::IdRole), int(Qt::UserRole) + 2);
+        QCOMPARE(int(PwNodeModel::NameRole), int(Qt::UserRole) + 3);
+        QCOMPARE(int(PwNodeModel::NickRole), int(Qt::UserRole) + 4);
+        QCOMPARE(int(PwNodeModel::DescriptionRole), int(Qt::UserRole) + 5);
+        QCOMPARE(int(PwNodeModel::MediaClassRole), int(Qt::UserRole) + 6);
+        QCOMPARE(int(PwNodeModel::ChannelCountRole), int(Qt::UserRole) + 7);
+        QCOMPARE(int(PwNodeModel::VolumesRole), int(Qt::UserRole) + 8);
+        QCOMPARE(int(PwNodeModel::MutedRole), int(Qt::UserRole) + 9);
+    }
+
+    /// PwSinkModel / PwSourceModel / PwStreamModel pre-set their
+    /// filters; verify the contract so a stray edit in the convenience
+    /// constructors trips the test before it reaches a consumer.
+    void convenienceSubclassesPinTheirFilters()
+    {
+        PhosphorServicePipeWire::PwSinkModel sinks;
+        PhosphorServicePipeWire::PwSourceModel sources;
+        PhosphorServicePipeWire::PwStreamModel streams;
+        QCOMPARE(sinks.mediaClasses(), QStringList{QStringLiteral("Audio/Sink")});
+        QCOMPARE(sources.mediaClasses(), QStringList{QStringLiteral("Audio/Source")});
+        QCOMPARE(streams.mediaClasses(),
+                 (QStringList{QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")}));
+    }
+
+    /// Models hooked to a live connection should populate based on the
+    /// daemon's actual audio nodes — sinks-only model sees only sinks,
+    /// streams model sees only streams, etc. On a no-daemon host the
+    /// models stay empty.
+    void modelsFilterLiveRegistry()
+    {
+        using PhosphorServicePipeWire::PwNodeModel;
+        PhosphorServicePipeWire::PipeWireConnection conn;
+        PhosphorServicePipeWire::PwSinkModel sinks;
+        PhosphorServicePipeWire::PwSourceModel sources;
+        PhosphorServicePipeWire::PwStreamModel streams;
+        sinks.setConnection(&conn);
+        sources.setConnection(&conn);
+        streams.setConnection(&conn);
+
+        conn.connect();
+        QTest::qWait(300);
+
+        if (!conn.isConnected())
+            return; // No daemon — nothing more to assert.
+
+        // Every row of each model must match the model's filter.
+        for (int i = 0; i < sinks.rowCount(); ++i) {
+            QCOMPARE(sinks.data(sinks.index(i), PwNodeModel::MediaClassRole).toString(), QStringLiteral("Audio/Sink"));
+        }
+        for (int i = 0; i < sources.rowCount(); ++i) {
+            QCOMPARE(sources.data(sources.index(i), PwNodeModel::MediaClassRole).toString(),
+                     QStringLiteral("Audio/Source"));
+        }
+        for (int i = 0; i < streams.rowCount(); ++i) {
+            const QString mc = streams.data(streams.index(i), PwNodeModel::MediaClassRole).toString();
+            QVERIFY2(mc == QLatin1String("Stream/Output/Audio") || mc == QLatin1String("Stream/Input/Audio"),
+                     qPrintable(mc));
+        }
     }
 };
 
