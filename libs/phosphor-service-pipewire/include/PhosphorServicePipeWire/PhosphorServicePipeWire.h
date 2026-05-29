@@ -22,6 +22,7 @@
  */
 
 #include <PhosphorServicePipeWire/PipeWireConnection.h>
+#include <PhosphorServicePipeWire/PipeWireHost.h>
 #include <PhosphorServicePipeWire/PwNode.h>
 #include <PhosphorServicePipeWire/PwNodeModel.h>
 #include <PhosphorServicePipeWire/QmlRegistration.h>

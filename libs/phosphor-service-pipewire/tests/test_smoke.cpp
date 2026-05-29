@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorServicePipeWire/PipeWireConnection.h>
+#include <PhosphorServicePipeWire/PipeWireHost.h>
 #include <PhosphorServicePipeWire/PwNode.h>
 #include <PhosphorServicePipeWire/PwNodeModel.h>
 
@@ -195,6 +196,31 @@ private Q_SLOTS:
         conn.writeVolumes(99999, {0.5});
         conn.writeMuted(99999, false);
         QTest::qWait(50);
+        QVERIFY(true);
+    }
+
+    /// PipeWireHost auto-connects on construction and forwards every
+    /// PipeWireConnection signal. Verify the forwarding wires + the
+    /// connection accessor.
+    void hostAutoConnectsAndForwardsSignals()
+    {
+        PhosphorServicePipeWire::PipeWireHost host;
+        QVERIFY(host.connection() != nullptr);
+        // Signals must be wired so observers binding to the host see
+        // changes without reaching for `.connection.connected`.
+        QSignalSpy connSpy(&host, &PhosphorServicePipeWire::PipeWireHost::connectedChanged);
+        QSignalSpy availSpy(&host, &PhosphorServicePipeWire::PipeWireHost::daemonAvailableChanged);
+        // Host construction kicked off connect() — give it a moment.
+        QTest::qWait(250);
+        if (host.isConnected()) {
+            QVERIFY(connSpy.count() >= 1);
+            QVERIFY(availSpy.count() >= 1);
+            // Property forwarding matches the connection's truth.
+            QCOMPARE(host.defaultSinkName(), host.connection()->defaultSinkName());
+        }
+        // reconnect() exercises the disconnect → connect cycle.
+        host.reconnect();
+        QTest::qWait(150);
         QVERIFY(true);
     }
 

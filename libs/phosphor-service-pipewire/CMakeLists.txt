@@ -52,6 +52,7 @@ set(phosphorservicepipewire_public_HDRS
     include/PhosphorServicePipeWire/PhosphorServicePipeWire.h
     include/PhosphorServicePipeWire/QmlRegistration.h
     include/PhosphorServicePipeWire/PipeWireConnection.h
+    include/PhosphorServicePipeWire/PipeWireHost.h
     include/PhosphorServicePipeWire/PwNode.h
     include/PhosphorServicePipeWire/PwNodeModel.h
 )
@@ -59,6 +60,7 @@ set(phosphorservicepipewire_public_HDRS
 set(phosphorservicepipewire_SRCS
     src/qmlregistration.cpp
     src/pipewireconnection.cpp
+    src/pipewirehost.cpp
     src/pwnode.cpp
     src/pwnodemodel.cpp
 )
