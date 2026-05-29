@@ -614,12 +614,22 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
                                            FamilyFn familyMatches, int emitDesktop, const QString& emitActivity,
                                            const char* label)
 {
-    // Step 1 — snapshot existing exact-context entries for every incoming key.
-    QHash<KeyT, AssignmentEntry> oldEntries;
+    // Step 1 — snapshot existing exact-context entries AND their `enabled`
+    // flag for every incoming key. The flag survives the batch rebuild
+    // below — mirrors the precedent set by `upsertAssignmentRule` (line
+    // 178: `rule.enabled = existing->enabled`). Without this capture,
+    // disabled assignment rules silently flip back to enabled on any KCM
+    // "apply all" call that runs a batch setter.
+    struct OldEntrySnapshot
+    {
+        AssignmentEntry entry;
+        bool enabled = true;
+    };
+    QHash<KeyT, OldEntrySnapshot> oldEntries;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const BatchContext ctx = decode(it.key());
         if (const PWR::WindowRule* existing = findExactContextRule(ctx.screenId, ctx.virtualDesktop, ctx.activity)) {
-            oldEntries.insert(it.key(), entryFromRuleMatchActions(*existing));
+            oldEntries.insert(it.key(), {entryFromRuleMatchActions(*existing), existing->enabled});
         }
     }
 
@@ -650,10 +660,17 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         if (shouldSkipLayoutAssignment(layoutId, logContext)) {
             continue;
         }
-        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldEntries.value(it.key()));
-        kept.append(PWR::ContextRuleBridge::makeAssignmentRule(QString(), ctx.screenId, ctx.virtualDesktop,
-                                                               ctx.activity, modeToWireString(entry.mode),
-                                                               entry.snappingLayout, entry.tilingAlgorithm));
+        const OldEntrySnapshot oldSnapshot = oldEntries.value(it.key());
+        const AssignmentEntry entry = AssignmentEntry::fromLayoutId(layoutId, oldSnapshot.entry);
+        PWR::WindowRule rebuilt = PWR::ContextRuleBridge::makeAssignmentRule(
+            QString(), ctx.screenId, ctx.virtualDesktop, ctx.activity, modeToWireString(entry.mode),
+            entry.snappingLayout, entry.tilingAlgorithm);
+        // Preserve the prior `enabled` flag — `makeAssignmentRule` always
+        // stamps `enabled = true`. Mirrors the upsertAssignmentRule
+        // precedent. If there's no prior snapshot (new assignment), the
+        // default `enabled = true` from the OldEntrySnapshot ctor wins.
+        rebuilt.enabled = oldSnapshot.enabled;
+        kept.append(rebuilt);
         storedScreens.insert(ctx.screenId);
         ++count;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;

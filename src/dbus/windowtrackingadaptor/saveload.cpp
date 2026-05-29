@@ -262,13 +262,18 @@ void WindowTrackingAdaptor::saveState()
     // 0 and the monitor-disabled list is the load-bearing check anyway.
     // Build the set of dropped appIds from the screen map so the zone map
     // can drop its paired entries without re-doing the screen lookup.
+    // Gated on the PreFloat dirty bits — saves where only unrelated bits
+    // are dirty (e.g. DirtyActiveLayoutId, DirtyZoneAssignments alone)
+    // shouldn't pay for this walk.
     QSet<QString> droppedPreFloatAppIds;
-    for (auto it = m_service->preFloatScreenAssignments().constBegin();
-         it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
-        if (isPersistedContextDisabled(it.value(), 0)) {
-            const QString key = m_service->currentAppIdFor(it.key());
-            if (!key.isEmpty()) {
-                droppedPreFloatAppIds.insert(key);
+    if (dirty & (D::DirtyPreFloatScreens | D::DirtyPreFloatZones)) {
+        for (auto it = m_service->preFloatScreenAssignments().constBegin();
+             it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
+            if (isPersistedContextDisabled(it.value(), 0)) {
+                const QString key = m_service->currentAppIdFor(it.key());
+                if (!key.isEmpty()) {
+                    droppedPreFloatAppIds.insert(key);
+                }
             }
         }
     }

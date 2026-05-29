@@ -502,7 +502,12 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
     QObject::connect(registry, &PhosphorEngine::WindowRegistry::metadataChanged, this,
                      [this](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
                             const PhosphorEngine::WindowMetadata& newMeta) {
-                         if (oldMeta.appId == newMeta.appId || !m_service) {
+                         // QPointer auto-nulls m_windowRegistry if the registered
+                         // object outlives this adaptor — guard against that
+                         // alongside the m_service belt-and-braces guard so the
+                         // `m_windowRegistry->instancesWithAppId(...)` deref
+                         // below can't fault.
+                         if (oldMeta.appId == newMeta.appId || !m_service || !m_windowRegistry) {
                              return;
                          }
                          // If the last-used-zone tracking is stamped with the old class and
