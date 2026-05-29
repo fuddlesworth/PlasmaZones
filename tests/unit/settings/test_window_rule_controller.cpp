@@ -38,6 +38,7 @@ private Q_SLOTS:
     void dirtyTrackingAndRevert();
     void monitorOverviewSummarises();
     void monitorOverviewClassifiesScrollingWithoutLayoutName();
+    void monitorOverviewDisableEngineMatchesEffectiveMode();
     void engineModePickerExposesAllVocabularyTokens();
     void moveRuleReorders();
     void authoringMetadata();
@@ -217,6 +218,79 @@ void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutNa
     // the pre-fix classifier would have surfaced.
     QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
              qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
+}
+
+void TestWindowRuleController::monitorOverviewDisableEngineMatchesEffectiveMode()
+{
+    // Pin that `tilingEnabled` on the overview tile resolves the
+    // DisableEngine action against the screen's EFFECTIVE engine mode,
+    // not "any DisableEngine action present". A DisableEngine{snapping}
+    // rule on an Autotile-effective screen must NOT flip tilingEnabled
+    // off — the cascade resolution in the daemon would never treat that
+    // rule as disabling autotile. The matching positive case
+    // (DisableEngine{mode} == effective mode) must flip it off.
+    WindowRuleController controller;
+    // DP-A: SetEngineMode=autotile + DisableEngine=autotile → engine off.
+    {
+        QVariantMap modeRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = modeRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-A");
+        modeRule[QStringLiteral("match")] = match;
+        modeRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(modeRule).isEmpty());
+
+        QVariantMap disableRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap dmatch = disableRule.value(QStringLiteral("match")).toMap();
+        dmatch[QStringLiteral("value")] = QStringLiteral("DP-A");
+        disableRule[QStringLiteral("match")] = dmatch;
+        disableRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(disableRule).isEmpty());
+    }
+    // DP-B: SetEngineMode=autotile + DisableEngine=snapping → engine ON
+    // (cross-mode disable must not flip the tile).
+    {
+        QVariantMap modeRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = modeRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-B");
+        modeRule[QStringLiteral("match")] = match;
+        modeRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(modeRule).isEmpty());
+
+        QVariantMap disableRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap dmatch = disableRule.value(QStringLiteral("match")).toMap();
+        dmatch[QStringLiteral("value")] = QStringLiteral("DP-B");
+        disableRule[QStringLiteral("match")] = dmatch;
+        disableRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                     {QStringLiteral("mode"), QStringLiteral("snapping")}}};
+        QVERIFY(!controller.addRuleFromJson(disableRule).isEmpty());
+    }
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-A")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-B")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+    bool sawA = false;
+    bool sawB = false;
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        const QString id = tile.value(QStringLiteral("screenId")).toString();
+        if (id == QLatin1String("DP-A")) {
+            sawA = true;
+            QCOMPARE(tile.value(QStringLiteral("tilingEnabled")).toBool(), false);
+        } else if (id == QLatin1String("DP-B")) {
+            sawB = true;
+            QCOMPARE(tile.value(QStringLiteral("tilingEnabled")).toBool(), true);
+        }
+    }
+    QVERIFY(sawA);
+    QVERIFY(sawB);
 }
 
 void TestWindowRuleController::engineModePickerExposesAllVocabularyTokens()

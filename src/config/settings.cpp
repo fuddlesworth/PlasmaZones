@@ -2551,17 +2551,28 @@ void Settings::reset()
     // above. load()'s internal snapshot saw the already-cleared store, so it
     // could not detect that reset() removed disable rules — this loop covers
     // the gap. All six lists are empty post-clear, so any non-empty pre-clear
-    // list fires exactly once.
+    // list fires exactly once. Track aggregate change so the same
+    // `settingsChanged()` invariant load() enforces (any disable change → fire
+    // aggregate) also holds for the reset path; otherwise a reset that only
+    // cleared disable rules would fire the per-mode signals but not the
+    // aggregate.
+    bool anyDisableChanged = false;
     for (const Mode mode : PhosphorZones::allModes()) {
         if (disabledMonitors(mode) != resetMonitorsBefore.value(mode)) {
             Q_EMIT disabledMonitorsChanged(mode);
+            anyDisableChanged = true;
         }
         if (disabledDesktops(mode) != resetDesktopsBefore.value(mode)) {
             Q_EMIT disabledDesktopsChanged(mode);
+            anyDisableChanged = true;
         }
         if (disabledActivities(mode) != resetActivitiesBefore.value(mode)) {
             Q_EMIT disabledActivitiesChanged(mode);
+            anyDisableChanged = true;
         }
+    }
+    if (anyDisableChanged) {
+        Q_EMIT settingsChanged();
     }
 
     qCInfo(lcConfig) << "Settings reset to defaults";

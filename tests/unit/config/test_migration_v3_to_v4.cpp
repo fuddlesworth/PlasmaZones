@@ -1209,10 +1209,11 @@ private Q_SLOTS:
             makeShaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
         // Inline literals — independent-witness pin matching the
         // `makeV3ConfigWithAnimationRules` fixture pattern. The sibling
-        // helper at line 901-911 documents the rationale: a future
-        // freeze-policy violation that renames `Legacy::v4AnimationAppRulesKey`
-        // away from "AnimationAppRules" must surface as test breakage,
-        // not silently update through the same accessor production uses.
+        // fixture's docstring (line 887-894) documents the rationale:
+        // a future freeze-policy violation that renames
+        // `Legacy::v4AnimationAppRulesKey` away from "AnimationAppRules"
+        // must surface as test breakage, not silently update through
+        // the same accessor production uses.
         QJsonObject animations;
         animations.insert(QStringLiteral("AnimationAppRules"), animRules);
         cfg.insert(QStringLiteral("Animations"), animations);

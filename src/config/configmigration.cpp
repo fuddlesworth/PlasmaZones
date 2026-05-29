@@ -396,10 +396,12 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
     // JSON to disk; `ensureJsonConfigImpl` would then rename the
     // original INI to `.bak` and finalizeV4Conversion would proceed
     // against the half-migrated root — silently losing both the
-    // original INI and most of the v1 groups. Mirrors the
-    // `MigrationRunner::runOnFile` semantic at runMigrationChain
-    // above, which detects an unbumped version and skips the disk
-    // write.
+    // original INI and most of the v1 groups. Stricter than
+    // `MigrationRunner::runOnFile` above: `runOnFile` persists any
+    // advance (it only short-circuits when `newVersion == oldVersion`),
+    // but the INI→JSON path refuses any partial advance below
+    // `ConfigSchemaVersion` because the INI source is about to be
+    // renamed to `.bak` and a half-migrated root would be unrecoverable.
     const int finalVersion = root.value(ConfigKeys::versionKey()).toInt(0);
     if (finalVersion < ConfigSchemaVersion) {
         qWarning(

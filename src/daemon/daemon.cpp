@@ -1734,9 +1734,11 @@ void Daemon::stop()
     // explicit teardown for the same "queued D-Bus call lands during
     // destruction window" defense-in-depth. WindowRuleAdaptor borrows
     // m_windowRuleStore (a unique_ptr) and m_settings; without detach
-    // its slot bodies could deref freed memory during the destruction
-    // window between m_windowRuleStore's destructor running and ~Daemon
-    // completing.
+    // its slot bodies could deref freed memory during the window after
+    // ~Daemon's body returns — that is when the unique_ptr members
+    // (including m_windowRuleStore) run their destructors, and the
+    // raw-Qt-parented WindowRuleAdaptor only runs its own destructor
+    // *after* that, as part of QObject child cleanup.
     //
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,

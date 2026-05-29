@@ -156,12 +156,19 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
             Summary& s = byScreen[screenId];
             ++s.ruleCount;
             for (const RuleAction& a : rule.actions) {
-                if (a.type == ActionType::DisableEngine) {
-                    // Record which engine this rule disables — we don't
-                    // know yet which engine the screen will resolve to.
-                    // Output-time resolution against the active mode
-                    // prevents a Snapping-disable rule from labelling an
-                    // Autotile-mode screen as "Engine off".
+                if (a.type == ActionType::DisableEngine && s.disabledEngineModes.isEmpty()) {
+                    // First-non-empty wins, mirroring the daemon's per-slot
+                    // cascade resolution: `RuleEvaluator::highestPriorityMatch`
+                    // selects ONE winner per slot, and the `engine-enable`
+                    // slot's winning rule is the only one consulted for
+                    // DisableEngine. Indices here are pre-sorted priority-DESC,
+                    // so the first DisableEngine action seen IS the cascade
+                    // winner; accumulating from every matching rule (as the
+                    // earlier QSet insert did) over-reports when two
+                    // overlapping rules target different engines on the same
+                    // screen. Output-time resolution against the active mode
+                    // still prevents a Snapping-disable rule from labelling
+                    // an Autotile-mode screen as "Engine off".
                     s.disabledEngineModes.insert(a.params.value(PhosphorWindowRule::ActionParam::Mode).toString());
                 } else if (a.type == ActionType::SetEngineMode && s.engineMode.isEmpty()) {
                     s.engineMode = a.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
@@ -260,8 +267,9 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
         // backwards-compatibility with the existing tile component);
         // the field's semantics are now "the engine running on this
         // screen is NOT disabled".
-        const QString effectiveModeWire =
-            summary.engineMode.isEmpty() ? QStringLiteral("snapping") : summary.engineMode;
+        const QString effectiveModeWire = summary.engineMode.isEmpty()
+            ? PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping)
+            : summary.engineMode;
         const bool engineDisabled = summary.disabledEngineModes.contains(effectiveModeWire);
         tile[QStringLiteral("tilingEnabled")] = !engineDisabled;
         tile[QStringLiteral("ruleCount")] = summary.ruleCount;
@@ -325,8 +333,11 @@ QVariantList WindowRuleController::validationIssuesForJson(const QVariantMap& ru
     // editor. The previous shape `continue`'d past invalid entries,
     // which made the validator's `issue.actionIndex` point at the wrong
     // QML editor row (every malformed entry above an issue shifted
-    // subsequent indices down by one). The placeholder is structurally
-    // invalid (empty type), so `validationIssues()` skips it cleanly.
+    // subsequent indices down by one). The placeholder's empty type
+    // maps to the default `Window` domain via `ActionRegistry::domainFor`'s
+    // unregistered-type fallback, so the validator's only check
+    // (`domain == Context && !matchIsContextOnly`) never trips on it —
+    // no spurious issue is recorded against the placeholder slot.
     const QJsonValue actionsValue = obj.value(QLatin1String("actions"));
     if (actionsValue.isArray()) {
         for (const QJsonValue& v : actionsValue.toArray()) {

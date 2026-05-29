@@ -221,7 +221,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
         const bool referencesDeleted =
             std::any_of(rule.actions.cbegin(), rule.actions.cend(), [&layoutId](const PWR::RuleAction& action) {
                 return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
-                    && action.params.value(QLatin1String("layoutId")).toString() == layoutId;
+                    && action.params.value(PWR::ActionParam::LayoutId).toString() == layoutId;
             });
         if (!referencesDeleted) {
             kept.append(rule);
@@ -262,7 +262,7 @@ bool LayoutRegistry::purgeSnappingLayoutFromAssignments(const QString& layoutId)
         trimmed.actions.erase(std::remove_if(trimmed.actions.begin(), trimmed.actions.end(),
                                              [&layoutId](const PWR::RuleAction& action) {
                                                  return action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
-                                                     && action.params.value(QLatin1String("layoutId")).toString()
+                                                     && action.params.value(PWR::ActionParam::LayoutId).toString()
                                                      == layoutId;
                                              }),
                               trimmed.actions.end());

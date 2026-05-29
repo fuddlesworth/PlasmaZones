@@ -104,14 +104,14 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
             // its prior value, which is the Snapping default initialized
             // above — matching the bridge's open-vocabulary contract
             // documented in ContextRuleBridge.h's makeAssignmentActions.
-            const QString modeToken = action.params.value(QLatin1String("mode")).toString();
+            const QString modeToken = action.params.value(PWR::ActionParam::Mode).toString();
             if (const auto mode = modeFromWireString(modeToken)) {
                 entry.mode = *mode;
             }
         } else if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
-            entry.snappingLayout = action.params.value(QLatin1String("layoutId")).toString();
+            entry.snappingLayout = action.params.value(PWR::ActionParam::LayoutId).toString();
         } else if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
-            entry.tilingAlgorithm = action.params.value(QLatin1String("algorithm")).toString();
+            entry.tilingAlgorithm = action.params.value(PWR::ActionParam::Algorithm).toString();
         }
     }
     return entry;

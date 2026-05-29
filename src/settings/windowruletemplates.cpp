@@ -20,6 +20,7 @@ namespace PlasmaZones::WindowRuleTemplates {
 namespace {
 
 namespace ActionType = PhosphorWindowRule::ActionType;
+namespace ActionParam = PhosphorWindowRule::ActionParam;
 using PhosphorWindowRule::Field;
 using PhosphorWindowRule::MatchExpression;
 using PhosphorWindowRule::Operator;
@@ -115,12 +116,12 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         // template's whole point is the snap layout.
         RuleAction engineMode;
         engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
-        engineMode.params.insert(QStringLiteral("mode"),
+        engineMode.params.insert(ActionParam::Mode,
                                  PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Snapping));
         rule.actions.append(engineMode);
         RuleAction layoutAction;
         layoutAction.type = QString::fromLatin1(ActionType::SetSnappingLayout);
-        layoutAction.params.insert(QStringLiteral("layoutId"), QString());
+        layoutAction.params.insert(ActionParam::LayoutId, QString());
         rule.actions.append(layoutAction);
     } else if (templateId == QLatin1String("algorithmOnMonitor")) {
         rule.name = PzI18n::tr("Tiling algorithm on monitor");
@@ -130,12 +131,12 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         // algorithm picker. Same rationale: this is the assignment flow.
         RuleAction engineMode;
         engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
-        engineMode.params.insert(QStringLiteral("mode"),
+        engineMode.params.insert(ActionParam::Mode,
                                  PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Autotile));
         rule.actions.append(engineMode);
         RuleAction algoAction;
         algoAction.type = QString::fromLatin1(ActionType::SetTilingAlgorithm);
-        algoAction.params.insert(QStringLiteral("algorithm"), QString());
+        algoAction.params.insert(ActionParam::Algorithm, QString());
         rule.actions.append(algoAction);
     } else if (templateId == QLatin1String("excludeApp")) {
         rule.name = PzI18n::tr("Exclude an app from tiling");
