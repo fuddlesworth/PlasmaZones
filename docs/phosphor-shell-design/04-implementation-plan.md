@@ -300,11 +300,11 @@ Public API surface lands in implementation PRs; this section is the planning out
 
 **Unknowns to resolve before / during implementation**
 
-| # | Question | Drives |
-|---|----------|--------|
-| U1 | Minimum supported PipeWire version: 0.3.60 (Debian stable baseline) or 1.0 (modern distros, cleaner WP metadata API)? | CMake `find_package` floor; whether the `wp_default_nodes_api` calls need a fallback path. |
-| U2 | Linear vs cubic vs perceptual (M3 power-curve) volume on the public QML surface. | Mixer UI behaviour and whether per-app streams expose the same curve. |
-| U3 | One process or two: keep PipeWire owned by the same `QGuiApplication` as the shell, or run a tiny `phosphor-pipewire-daemon` and talk via `phosphor-ipc`? | If two-process, milestone 2 grows the IPC plumbing; if single-process, the QThread lifecycle is the only complexity. Current lean: single-process, the SNI/Mpris template already proves Qt can host an in-process service. |
+| # | Question | Resolution |
+|---|----------|------------|
+| U1 | Minimum supported PipeWire version: 0.3.60 (Debian stable baseline) or 1.0 (modern distros, cleaner WP metadata API)? | **Resolved: 1.0+ minimum.** Tracks Arch / Fedora 38+ / Ubuntu 24.04. One code path; WirePlumber 0.5 metadata API is the only supported surface for default-node switching. |
+| U2 | Linear vs cubic vs perceptual (M3 power-curve) volume on the public QML surface. | **Resolved: linear amplitude on the public surface.** Matches PipeWire's `SPA_PROP_channelVolumes` storage. A `Phosphor.Service.PipeWire.Mixer.Curve` QML helper converts cubic / perceptual at the UI layer; round-trips through the lib stay lossless. |
+| U3 | One process or two: keep PipeWire owned by the same `QGuiApplication` as the shell, or run a tiny `phosphor-pipewire-daemon` and talk via `phosphor-ipc`? | **Resolved: single-process.** PipeWire owned by the same `QGuiApplication` that runs the shell, matching the Phase-2.0 sni / mpris / upower pattern. The cross-thread plumbing is one `QThread` for `pw_main_loop` with queued-signal events to the GUI thread; no IPC contract to maintain. |
 | U4 | Scope of stream metadata: do we surface PipeWire's per-stream tags (`application.name`, `application.icon-name`, `media.role`) or stop at the WirePlumber-curated set? | Affects role list + cli demo `list streams` output shape. |
 | U5 | Privacy-indicator hook: should `phosphor-service-pipewire` surface a `recordingActiveStreams` signal in Phase 2.1, or defer to a separate `Phosphor.PrivacyIndicator` consumer in Phase 3+? | Decides whether milestone 3 walks `Audio/Source` stream nodes only or also `Audio/Source/Capture` plus their associated client names. |
 | U6 | CLI demo argv format: positional (`list sinks`) or subcommand-with-flags (`list --kind sink`)? Tradeoffs in the row: positional matches Phase-2.0's idiomatic feel; flags compose better with future filters. | One file in the example; cheap to flip; pick before milestone 8 lands. |

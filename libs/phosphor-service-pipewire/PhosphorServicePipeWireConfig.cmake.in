@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Mirror the PUBLIC link set in CMakeLists.txt. PipeWire is PRIVATE so
+# it's not listed here; consumers don't need libpipewire transitively
+# (the pimpl keeps libpipewire types out of the public headers).
+find_dependency(Qt6 6.6 COMPONENTS Core Qml)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorServicePipeWireTargets.cmake")
+
+check_required_components(PhosphorServicePipeWire)
