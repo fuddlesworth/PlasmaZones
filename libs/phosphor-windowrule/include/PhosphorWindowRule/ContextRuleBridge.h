@@ -586,6 +586,29 @@ inline bool matchIsExactContextActivity(const MatchExpression& match)
     return axis == ContextAxis::Activity || axis == ContextAxis::Combined;
 }
 
+/// True if @p match is the STRICT per-activity shape — screen+activity ONLY,
+/// no desktop pin. Use for the Activity batch reader/writer family classifier:
+/// the public Activity batch API ((screen, activity) → layout) cannot
+/// distinguish desktop-pinned Combined rules from pure Activity rules, so a
+/// `activityAssignments()` → `setAllActivityAssignments()` round-trip with
+/// the broader `matchIsExactContextActivity` would silently drop the desktop
+/// pin on every Combined rule. The strict predicate keeps Combined rules
+/// invisible to the Activity API — they survive intact and are only
+/// reachable through the rule editor / lower-level set rules API.
+inline bool matchIsExactlyActivity(const MatchExpression& match)
+{
+    return contextAxisFor(match) == ContextAxis::Activity;
+}
+
+/// True if @p match is the STRICT Combined shape — screen + desktop +
+/// activity all pinned. Used by the Combined batch API's family classifier
+/// so the round-trip touches ONLY Combined rules and leaves the other
+/// axes (Monitor, Desktop, Activity) untouched.
+inline bool matchIsExactlyCombined(const MatchExpression& match)
+{
+    return contextAxisFor(match) == ContextAxis::Combined;
+}
+
 /// True if @p match is the exact-shape context for @p screenId / @p
 /// virtualDesktop / @p activity — i.e. the match @ref makeContextMatch would
 /// emit for that tuple. A match pinning different dimensions or carrying any

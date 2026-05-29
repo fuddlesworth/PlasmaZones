@@ -20,6 +20,34 @@
 namespace PhosphorZones {
 
 /**
+ * @brief Triple-axis key for the Combined-context batch API.
+ *
+ * Combined rules pin all three dimensions (screen + desktop + activity)
+ * — the QPair-based keys used by the Activity / Desktop batch APIs can't
+ * represent them. This struct + qHash overload below let
+ * `combinedAssignments()` / `setAllCombinedAssignments()` round-trip
+ * Combined rules without dropping any dimension. Pure-Activity, pure-
+ * Desktop, and Monitor-only rules continue to use their dedicated
+ * batches and stay invisible to this API.
+ */
+struct CombinedAssignmentKey
+{
+    QString screenId;
+    int virtualDesktop = 0;
+    QString activity;
+
+    bool operator==(const CombinedAssignmentKey& other) const
+    {
+        return screenId == other.screenId && virtualDesktop == other.virtualDesktop && activity == other.activity;
+    }
+};
+
+inline size_t qHash(const CombinedAssignmentKey& key, size_t seed = 0) noexcept
+{
+    return qHashMulti(seed, key.screenId, key.virtualDesktop, key.activity);
+}
+
+/**
  * @brief Manual zone-layout registry + per-context assignment store.
  *
  * Concrete counterpart to @ref IZoneLayoutRegistry - mirrors the
@@ -339,9 +367,21 @@ public:
     void setAllScreenAssignments(const QHash<QString, QString>& assignments);
     void setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments);
     void setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments);
+    /// Combined-context (screen + desktop + activity) batch setter — the
+    /// triple-axis sibling of the Activity / Desktop batches. Combined
+    /// rules cannot round-trip through `setAllActivityAssignments` (the
+    /// (screen, activity) key drops the desktop dimension); this API
+    /// keeps them as first-class. Pure-Activity, pure-Desktop, and
+    /// Monitor-only rules are NOT touched — they remain in their own
+    /// batches.
+    void setAllCombinedAssignments(const QHash<CombinedAssignmentKey, QString>& assignments);
 
     QHash<QPair<QString, int>, QString> desktopAssignments() const;
     QHash<QPair<QString, QString>, QString> activityAssignments() const;
+    /// Strict Combined-context reader. See @ref setAllCombinedAssignments
+    /// for the round-trip contract. Returns ONLY rules with all three
+    /// dimensions pinned (screen + desktop + activity).
+    QHash<CombinedAssignmentKey, QString> combinedAssignments() const;
 
     // ─── Quick-layout slots (1..9) ────────────────────────────────────────
 

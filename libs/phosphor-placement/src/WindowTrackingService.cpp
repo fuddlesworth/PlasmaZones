@@ -127,6 +127,21 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     const bool desktopChanged = (previousDesktop != virtualDesktop);
 
     m_snapState->assignWindowToZones(windowId, validZoneIds, screenId, virtualDesktop);
+    // Mirror SnapState::assignWindowToZones's own floating-set removal at the
+    // WTS layer (SnapState.cpp:171). The two sets are independent — assigning
+    // a window to zones implicitly un-floats it in SnapState, but the WTS
+    // m_floatingWindows entry would survive without this clear, leaving
+    // isWindowFloating() returning true via the appId fallback even though
+    // the window is now snapped. Current callers (snap-engine/src/commit.cpp
+    // clearFloatingForSnap before assignWindowToZones) shadow this, but the
+    // shadowing is fragile and the explicit sync here makes the cross-layer
+    // contract robust.
+    if (m_floatingWindows.remove(windowId) > 0) {
+        const QString appId = currentAppIdFor(windowId);
+        if (appId != windowId) {
+            m_floatingWindows.remove(appId);
+        }
+    }
 
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
@@ -366,7 +381,14 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         m_snapState->setFloating(windowId, floating);
     }
 
-    scheduleSaveState();
+    // Floating state is ephemeral and NOT persisted (saveload.cpp:257-259
+    // explicitly skips writing it — `obsoleteFloatingWindowsKey` exists
+    // only to delete any pre-ephemeral remnant on disk). Calling
+    // scheduleSaveState() here used to OR DirtyAll into the dirty mask
+    // and trigger a debounced full state rewrite of every OTHER persisted
+    // field for nothing — every Meta+F toggle / drag-to-float would
+    // unnecessarily re-serialise pre-float assignments, autotile orders,
+    // pending restores, etc. Skip the schedule entirely.
 }
 
 QStringList WindowTrackingService::floatingWindows() const
