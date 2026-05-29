@@ -101,6 +101,14 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     ShaderTools
     Svg
 )
+
+# Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
+# module resource prefix. Set at the top level so every qt_add_qml_module
+# call across libs/ examples/ src/ inherits it; without this, each
+# qt_add_qml_module emits a QTP0001 dev warning on every configure.
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
 # GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay.
 # Some distros (Fedora) create these targets inside Qt6GuiConfig.cmake rather than providing
 # standalone config files, so only call find_package if the target doesn't already exist.
@@ -135,11 +143,13 @@ add_compile_definitions(PLASMAZONES_SHADERS_ENABLED)
 option(USE_KDE_FRAMEWORKS "Build with KDE Frameworks integration" ON)
 
 # Opt-in build for the in-progress phosphor-shell desktop shell and its
-# supporting libraries (libs/phosphor-shell, libs/phosphor-services) +
-# the bundled `phosphor-shell` example binary + the example QML/shader
-# tree under examples/phosphor-shell. Default OFF so packaging /
-# downstream installs of PlasmaZones don't pick up shell artefacts
-# before the shell ships. Enable explicitly for shell development:
+# supporting libraries (libs/phosphor-shell + the gated phosphor-service-*
+# group; see the add_subdirectory block farther down in this file for
+# the authoritative list) + the bundled `phosphor-shell` example binary
+# + the example QML/shader tree under examples/phosphor-shell. Default
+# OFF so packaging / downstream installs of PlasmaZones don't pick up
+# shell artefacts before the shell ships. Enable explicitly for shell
+# development:
 #   cmake -DBUILD_PHOSPHOR_SHELL=ON
 option(BUILD_PHOSPHOR_SHELL "Build the phosphor-shell desktop shell (work in progress)" OFF)
 
@@ -464,7 +474,15 @@ endforeach()
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
 if(BUILD_PHOSPHOR_SHELL)
-    add_subdirectory(libs/phosphor-services) # DBus + platform-integration primitives (SNI tray, dbusmenu, future: notifications/MPRIS/UPower)
+    # Order: icontheme is consumed by sni (SNI publisher uses the
+    # image provider + theme resolver), so configure it first. The
+    # other Phase 2.0 siblings are independent. Phase 2.0 is complete:
+    # the phosphor-services umbrella has been dissolved into these
+    # four per-domain libraries.
+    add_subdirectory(libs/phosphor-service-icontheme) # XDG icon-theme resolver + Qt image provider
+    add_subdirectory(libs/phosphor-service-sni)       # StatusNotifierItem host + watcher + dbusmenu
+    add_subdirectory(libs/phosphor-service-upower)    # UPower battery / power-supply readouts
+    add_subdirectory(libs/phosphor-service-mpris)     # MPRIS2 media-player discovery + control
 endif()
 
 # Source directories

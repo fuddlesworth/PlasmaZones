@@ -196,12 +196,93 @@ set_target_properties(PhosphorThemeQml PROPERTIES
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# QML Module — SHARED (install-only runtime plugin)
+# ═══════════════════════════════════════════════════════════════════════════════
+# The STATIC variant above is what in-tree consumers link against (bakes
+# the QML module's resources into the consuming binary's qrc). The SHARED
+# variant exists purely so `cmake --install build` lands a runtime-
+# discoverable Phosphor.Theme module under ${KDE_INSTALL_QMLDIR}/Phosphor/
+# Theme/. Without it, an installed phosphor-shell binary loads shell.qml
+# from XDG paths and fails to import Phosphor.Theme because the engine
+# searches `${KDE_INSTALL_QMLDIR}` first and finds nothing. Mirrors the
+# pattern in phosphor-animation.
+
+option(PHOSPHOR_THEME_QML_INSTALL
+    "Also build a SHARED variant of Phosphor.Theme and install it"
+    ON)
+
+if(PHOSPHOR_THEME_QML_INSTALL)
+    qt_add_qml_module(PhosphorThemeQmlShared
+        URI Phosphor.Theme
+        VERSION 1.0
+        SHARED
+        SOURCES ${_phosphor_theme_qml_sources}
+        QML_FILES ${_phosphor_theme_qml_singletons}
+        OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml_install/Phosphor/Theme
+    )
+
+    target_include_directories(PhosphorThemeQmlShared
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+            $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+    )
+
+    # Visibility-define parity with the STATIC build so
+    # PHOSPHORTHEME_EXPORT resolves to visibility("default") here too.
+    target_compile_definitions(PhosphorThemeQmlShared PRIVATE
+        PhosphorTheme_EXPORTS
+    )
+
+    target_compile_features(PhosphorThemeQmlShared PUBLIC cxx_std_20)
+
+    target_link_libraries(PhosphorThemeQmlShared
+        PUBLIC
+            PhosphorTheme::PhosphorTheme
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Qml
+            Qt6::Quick
+    )
+
+    set_target_properties(PhosphorThemeQmlShared PROPERTIES
+        VERSION ${PHOSPHORTHEME_VERSION}
+        SOVERSION 0
+    )
+
+    set(_phosphor_theme_qml_shared_plugin_target PhosphorThemeQmlSharedplugin)
+
+    # The QML plugin and its backing PhosphorThemeQmlShared library install
+    # side by side in the QML module directory, which is not on the
+    # linker's default search path. Give the plugin an $ORIGIN install
+    # RPATH so it resolves the sibling library both at runtime and when
+    # dpkg-shlibdeps walks the dependency graph during packaging. Its
+    # other dependencies (PhosphorTheme, Qt) live in the standard libdir
+    # and need no RPATH entry.
+    #
+    # PREFIX "lib" — Qt's QML plugin loader on Linux searches for
+    # `lib<plugin>.so` (see `/usr/lib/qt6/qml/QtCore/libqtqmlcoreplugin.so`
+    # for the canonical Qt-shipped example). CMake's MODULE library
+    # default for QML plugins drops the lib prefix; Qt then can't find
+    # the file and reports `module "..." plugin "..." not found` even
+    # though the .so is present in the module dir.
+    set_target_properties(${_phosphor_theme_qml_shared_plugin_target} PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+        PREFIX "lib"
+    )
+endif()
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if(NOT DEFINED KDE_INSTALL_BINDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+if(NOT DEFINED KDE_INSTALL_QMLDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_QMLDIR ${CMAKE_INSTALL_LIBDIR}/qt6/qml)
 endif()
 
 install(TARGETS PhosphorTheme
@@ -240,6 +321,40 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorThemeConfigVersion.cmake"
     DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorTheme
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# QML module install (SHARED variant)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if(PHOSPHOR_THEME_QML_INSTALL)
+    set(_phosphor_theme_qml_install_dir "${KDE_INSTALL_QMLDIR}/Phosphor/Theme")
+
+    install(TARGETS PhosphorThemeQmlShared ${_phosphor_theme_qml_shared_plugin_target}
+        EXPORT PhosphorThemeQmlTargets
+        RUNTIME DESTINATION ${_phosphor_theme_qml_install_dir}
+        LIBRARY DESTINATION ${_phosphor_theme_qml_install_dir}
+        ARCHIVE DESTINATION ${_phosphor_theme_qml_install_dir}
+    )
+
+    install(FILES
+            ${CMAKE_BINARY_DIR}/qml_install/Phosphor/Theme/qmldir
+            ${CMAKE_BINARY_DIR}/qml_install/Phosphor/Theme/PhosphorThemeQmlShared.qmltypes
+        DESTINATION ${_phosphor_theme_qml_install_dir}
+    )
+
+    # The QML singletons are listed in qmldir but must also be present
+    # as files in the module dir for the QML engine to load them. Qt's
+    # qt_add_qml_module stages copies into the OUTPUT_DIRECTORY; install
+    # those rather than the source-tree copies so any future codegen step
+    # that transforms them still ships.
+    foreach(_qml_singleton IN LISTS _phosphor_theme_qml_singletons)
+        get_filename_component(_qml_basename ${_qml_singleton} NAME)
+        install(FILES
+                ${CMAKE_BINARY_DIR}/qml_install/Phosphor/Theme/${_qml_basename}
+            DESTINATION ${_phosphor_theme_qml_install_dir}
+        )
+    endforeach()
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Tests

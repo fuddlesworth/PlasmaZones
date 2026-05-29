@@ -10,6 +10,10 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
 # AUTOMOC is required so the QML module's metatype generation picks up
 # any Q_OBJECT we add here.
 set(CMAKE_AUTOMOC ON)

@@ -47,6 +47,13 @@ include(GenerateExportHeader)
 # build-side dependency set doesn't drift from the install-side one.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml Network)
 
+# Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
+# module resource prefix. Without this, qt_add_qml_module emits
+# QTP0001 dev warnings on every configure.
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ═══════════════════════════════════════════════════════════════════════════════

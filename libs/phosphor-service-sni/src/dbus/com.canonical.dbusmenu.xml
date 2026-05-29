@@ -1,0 +1,109 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-Bus Object Introspection 1.0//EN"
+"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+SPDX-FileCopyrightText: 2026 fuddlesworth
+SPDX-License-Identifier: LGPL-2.1-or-later
+
+com.canonical.dbusmenu: Ubuntu-originated protocol that GTK app
+indicators and KDE tray items both publish menus through. The shell
+consumes this. Spec:
+https://github.com/AyatanaIndicators/libdbusmenu/blob/master/libdbusmenu-glib/dbus-menu.xml
+
+The tree is fetched as a single (id, properties, children-variants)
+recursive struct via GetLayout(); items announce changes via
+ItemsPropertiesUpdated / LayoutUpdated. Activation goes through
+Event() with a stringly-typed event ID ("clicked", "hovered", etc.).
+-->
+<node>
+    <interface name="com.canonical.dbusmenu">
+        <property name="Version" type="u" access="read"/>
+        <property name="TextDirection" type="s" access="read"/>
+        <property name="Status" type="s" access="read"/>
+        <property name="IconThemePath" type="as" access="read"/>
+
+        <!-- GetLayout: returns (revision, (id, props, children-as-variants)).
+             Each child variant is the same recursive struct. parentId=0
+             gives the root menu; depth=-1 means "entire subtree". -->
+        <method name="GetLayout">
+            <annotation name="org.qtproject.QtDBus.QtTypeName.Out1"
+                        value="PhosphorServiceSni::DBusMenuLayoutItem"/>
+            <arg type="i" name="parentId" direction="in"/>
+            <arg type="i" name="recursionDepth" direction="in"/>
+            <arg type="as" name="propertyNames" direction="in"/>
+            <arg type="u" name="revision" direction="out"/>
+            <arg type="(ia{sv}av)" name="layout" direction="out"/>
+        </method>
+
+        <method name="GetGroupProperties">
+            <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
+                        value="QList&lt;int&gt;"/>
+            <annotation name="org.qtproject.QtDBus.QtTypeName.Out0"
+                        value="PhosphorServiceSni::DBusMenuItemPropertiesList"/>
+            <arg type="ai" name="ids" direction="in"/>
+            <arg type="as" name="propertyNames" direction="in"/>
+            <arg type="a(ia{sv})" name="properties" direction="out"/>
+        </method>
+
+        <method name="GetProperty">
+            <arg type="i" name="id" direction="in"/>
+            <arg type="s" name="name" direction="in"/>
+            <arg type="v" name="value" direction="out"/>
+        </method>
+
+        <!-- Event: tell the item something happened. eventId is one of
+             "clicked", "hovered", "opened", "closed". -->
+        <method name="Event">
+            <arg type="i" name="id" direction="in"/>
+            <arg type="s" name="eventId" direction="in"/>
+            <arg type="v" name="data" direction="in"/>
+            <arg type="u" name="timestamp" direction="in"/>
+        </method>
+
+        <method name="EventGroup">
+            <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
+                        value="PhosphorServiceSni::DBusMenuEventList"/>
+            <annotation name="org.qtproject.QtDBus.QtTypeName.Out0"
+                        value="QList&lt;int&gt;"/>
+            <arg type="a(isvu)" name="events" direction="in"/>
+            <arg type="ai" name="idErrors" direction="out"/>
+        </method>
+
+        <!-- AboutToShow: ask the item to refresh a submenu before we
+             render it. Returns true if the menu needs an update. -->
+        <method name="AboutToShow">
+            <arg type="i" name="id" direction="in"/>
+            <arg type="b" name="needUpdate" direction="out"/>
+        </method>
+
+        <method name="AboutToShowGroup">
+            <annotation name="org.qtproject.QtDBus.QtTypeName.In0"
+                        value="QList&lt;int&gt;"/>
+            <annotation name="org.qtproject.QtDBus.QtTypeName.Out0"
+                        value="QList&lt;int&gt;"/>
+            <annotation name="org.qtproject.QtDBus.QtTypeName.Out1"
+                        value="QList&lt;int&gt;"/>
+            <arg type="ai" name="ids" direction="in"/>
+            <arg type="ai" name="updatesNeeded" direction="out"/>
+            <arg type="ai" name="idErrors" direction="out"/>
+        </method>
+
+        <signal name="ItemsPropertiesUpdated">
+            <annotation name="org.qtproject.QtDBus.QtTypeName.Out0"
+                        value="PhosphorServiceSni::DBusMenuItemPropertiesList"/>
+            <annotation name="org.qtproject.QtDBus.QtTypeName.Out1"
+                        value="PhosphorServiceSni::DBusMenuItemKeysList"/>
+            <arg type="a(ia{sv})" name="updatedProps"/>
+            <arg type="a(ias)" name="removedProps"/>
+        </signal>
+
+        <signal name="LayoutUpdated">
+            <arg type="u" name="revision"/>
+            <arg type="i" name="parent"/>
+        </signal>
+
+        <signal name="ItemActivationRequested">
+            <arg type="i" name="id"/>
+            <arg type="u" name="timestamp"/>
+        </signal>
+    </interface>
+</node>

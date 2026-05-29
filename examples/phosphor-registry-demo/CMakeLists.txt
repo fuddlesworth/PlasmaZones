@@ -10,6 +10,10 @@
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
 # Bundle the demo QML + C++ glue into a static QML module so
 # qmlcachegen runs on the .qml files and resources are reachable via
 # qrc:/qt/qml/Phosphor/RegistryDemo/.

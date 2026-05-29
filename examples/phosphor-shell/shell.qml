@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import Phosphor.Services 1.0
+import Phosphor.Service.UPower 1.0
 import Phosphor.Shell 1.0
 import QtQuick
 
@@ -10,29 +10,60 @@ import QtQuick
 // sibling .qml files. Sibling components are auto-discovered by Qt
 // from this file's directory.
 Item {
-    // System data sources — owned at the top level so multiple
+    id: root
+
+    // System data sources: owned at the top level so multiple
     // panels/windows can share a single Process / FileView each.
 
-    Component.onCompleted: shellState.togglePopup = panelPopupHost.toggle
+    Component.onCompleted: shellRouter.togglePopup = panelPopupHost.toggle
 
-    // Global UI state. Survives hot-reload via PersistentProperties.
+    // Persistent UI state that survives hot-reload. The persistence
+    // path serialises typed POD properties only (PersistentProperties
+    // silently drops anything that isn't bool/int/string/list/map/date,
+    // see PersistentProperties.cpp), so a `property var togglePopup`
+    // alongside the bools would be a foot-gun: it would look like part
+    // of the persistent set but never get saved across hot-reloads.
+    // The router below holds non-persistent fields (the togglePopup
+    // function ref) and proxies the rest through to `shellState`. From
+    // a consumer's perspective both shell-wide state and the router
+    // surface the same name (`shellState`), via the alias declared
+    // below.
     PersistentProperties {
-        id: shellState
+        id: shellStatePersistent
 
         property bool menuOpen: false
         property bool settingsOpen: false
         property bool calendarOpen: false
         property bool mediaOpen: false
         property int activeWorkspace: 0
-        // Function reference assigned in Component.onCompleted.
-        // TopPanel and widget MouseAreas call this to toggle panel
-        // popups; the host swaps the active popup in-place inside a
-        // single shared xdg_popup so popup-to-popup transitions
-        // can't race the Wayland grab handoff.
-        property var togglePopup
 
         reloadId: "main"
     }
+
+    QtObject {
+        id: shellRouter
+
+        // Property aliases pass reads AND writes straight through to
+        // the underlying PersistentProperties storage. No binding-
+        // break-on-write hazard (which a `property bool x: persistent.x`
+        // initial binding would carry).
+        property alias menuOpen: shellStatePersistent.menuOpen
+        property alias settingsOpen: shellStatePersistent.settingsOpen
+        property alias calendarOpen: shellStatePersistent.calendarOpen
+        property alias mediaOpen: shellStatePersistent.mediaOpen
+        property alias activeWorkspace: shellStatePersistent.activeWorkspace
+        // Function reference assigned in Component.onCompleted. TopPanel
+        // and widget MouseAreas call this to toggle panel popups; the
+        // host swaps the active popup in-place inside a single shared
+        // xdg_popup so popup-to-popup transitions can't race the Wayland
+        // grab handoff. Function refs are NOT persisted (Persistent-
+        // Properties drops non-POD types on save), which is why
+        // togglePopup lives on the router rather than alongside the
+        // bool/int state.
+        property var togglePopup
+    }
+
+    property alias shellState: shellRouter
 
     SystemClock {
         id: clock
@@ -40,7 +71,7 @@ Item {
         precision: SystemClock.Minutes
     }
 
-    // CPU + memory readouts via /proc — avoids a `sh -c` subprocess
+    // CPU + memory readouts via /proc: avoids a `sh -c` subprocess
     // every 2-5s (which over a session is hundreds of fork/exec
     // pairs). A FileView re-reads the kernel-exported file in-process
     // at the interval; onContentChanged parses and deltas the values.
@@ -48,7 +79,7 @@ Item {
         id: cpuStat
 
         // Cumulative jiffies from the last snapshot (idle + total) for
-        // delta computation between intervals. `real` (double) — `int`
+        // delta computation between intervals. `real` (double): `int`
         // is 32-bit signed in QML, and on a multi-core box at 100Hz the
         // total jiffies cross INT32_MAX in days, after which assignment
         // truncates and the next delta is bogus.
@@ -63,16 +94,16 @@ Item {
             // First line: "cpu  user nice system idle iowait irq softirq steal guest guest_nice"
             const line = content.split('\n')[0];
             if (!line.startsWith('cpu '))
-                return ;
+                return;
 
-            const fields = line.trim().split(/\s+/).slice(1).map((s) => {
+            const fields = line.trim().split(/\s+/).slice(1).map(s => {
                 return parseInt(s, 10);
             });
             // Defensive: a kernel that doesn't expose the expected layout
             // (exotic arch, namespaced /proc) leaves NaN in `fields[3]`,
             // which propagates and parks `prevTotal` at NaN forever.
             if (fields.length < 4 || !Number.isFinite(fields[3]))
-                return ;
+                return;
 
             // idle = idle + iowait (matches the original awk formula).
             const idle = fields[3] + (fields[4] || 0);
@@ -80,17 +111,15 @@ Item {
             for (const f of fields) {
                 if (Number.isFinite(f))
                     total += f;
-
             }
             if (!Number.isFinite(idle) || !Number.isFinite(total))
-                return ;
+                return;
 
             if (prevTotal > 0) {
                 const dTotal = total - prevTotal;
                 const dIdle = idle - prevIdle;
                 if (dTotal > 0)
                     percent = Math.round((1 - dIdle / dTotal) * 100).toString();
-
             }
             prevIdle = idle;
             prevTotal = total;
@@ -107,21 +136,33 @@ Item {
         onContentChanged: {
             let total = 0;
             let available = 0;
+            let foundAvailable = false;
             for (const line of content.split('\n')) {
-                if (line.startsWith('MemTotal:')) {
-                    total = parseInt(line.split(/\s+/)[1], 10);
-                } else if (line.startsWith('MemAvailable:')) {
-                    available = parseInt(line.split(/\s+/)[1], 10);
+                // Trim leading whitespace first: a containerised or
+                // future-kernel /proc/meminfo line with a leading space
+                // would make split(/\s+/)[0] empty and [1] the label
+                // ("MemTotal:"), which parseInt would silently turn
+                // into NaN and the Number.isFinite guard below would
+                // skip the update with no visible cause.
+                const trimmed = line.trim();
+                if (trimmed.startsWith('MemTotal:')) {
+                    total = parseInt(trimmed.split(/\s+/)[1], 10);
+                } else if (trimmed.startsWith('MemAvailable:')) {
+                    available = parseInt(trimmed.split(/\s+/)[1], 10);
+                    foundAvailable = true;
                     break;
                 }
             }
-            if (Number.isFinite(total) && Number.isFinite(available) && total > 0)
+            // Require `foundAvailable`: on a kernel without MemAvailable
+            // (kernel < 3.14, exotic embedded build) or a malformed
+            // /proc/meminfo, available would stay at 0 and the guard
+            // below would yield a bogus 100% reading.
+            if (foundAvailable && Number.isFinite(total) && Number.isFinite(available) && total > 0)
                 percent = Math.round((1 - available / total) * 100).toString();
-
         }
     }
 
-    // Battery via UPower D-Bus — replaces the raw sysfs FileView.
+    // Battery via UPower D-Bus: replaces the raw sysfs FileView.
     // UPowerHost connects to org.freedesktop.UPower on the system bus;
     // displayDevice is the aggregate battery (percentage, state, icon).
     UPowerHost {
@@ -140,12 +181,18 @@ Item {
     TopPanel {
         id: topPanel
 
-        shellState: shellState
+        // Qualified with `root.` so QML's binding scope resolution
+        // doesn't shadow the alias with TopPanel's own (initially
+        // undefined) `shellState` required property. Unqualified
+        // `shellState: shellState` resolves to the property being
+        // assigned, leaving downstream bindings reading from an
+        // undefined value.
+        shellState: root.shellState
         // Time as locale-neutral HH:mm; the date portion via Qt.formatDate
         // so day/month names follow the user's locale (the hand-rolled
         // English arrays this replaced were an i18n regression).
         clockText: {
-            const pad = (n) => {
+            const pad = n => {
                 return n < 10 ? "0" + n : "" + n;
             };
             return pad(clock.hours) + ":" + pad(clock.minutes) + " · " + Qt.formatDate(clock.date, "ddd MMM dd");
@@ -156,8 +203,7 @@ Item {
         batteryVisible: battery.displayDevice !== null
     }
 
-    Taskbar {
-    }
+    Taskbar {}
 
     // ─── Popups ──────────────────────────────────────────────────────────
     // Single shared xdg_popup that hosts the calendar / media / menu
@@ -165,14 +211,13 @@ Item {
     PanelPopupHost {
         id: panelPopupHost
 
-        shellState: shellState
+        shellState: root.shellState
         topPanel: topPanel
     }
 
     // ─── Floating windows ────────────────────────────────────────────────
     SettingsWindow {
-        shellState: shellState
+        shellState: root.shellState
         hostname: hostnameFile.content.trim()
     }
-
 }
