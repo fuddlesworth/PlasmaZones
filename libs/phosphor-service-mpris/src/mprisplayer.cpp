@@ -421,11 +421,12 @@ public:
                 trackArtUrl = s;
                 trackArtUrlResolved = true;
                 changed = true;
-            } else if (!s.isEmpty() && !isSchemeAllowed(s)) {
-                // Scheme-rejected URL is a settled answer for this
-                // trackid; mark resolved so the post-construction retry
-                // loop short-circuits instead of re-fetching for the
-                // full 3s window.
+            } else if (!isSchemeAllowed(s)) {
+                // Scheme-rejected URL (including the explicit empty
+                // string MPRIS-compliant "no art for this track" form)
+                // is a settled answer for this trackid; mark resolved so
+                // the post-construction retry loop short-circuits
+                // instead of re-fetching for the full 3 s window.
                 trackArtUrlResolved = true;
             }
         }
@@ -533,8 +534,13 @@ public:
             // Negative rate (reverse playback) can drive positionUs
             // below zero between resyncs; floor at 0 so QML sliders
             // bound to position() never observe a negative value.
+            // Only emit positionChanged if the value actually moved
+            // (rate=0 or floor-pinned reverse playback both produce
+            // no-change ticks that would otherwise churn bindings).
+            const qint64 prev = positionUs;
             positionUs = std::max<qint64>(0, positionUs + static_cast<qint64>(rate * kPositionPollMs * 1000));
-            Q_EMIT owner->positionChanged();
+            if (positionUs != prev)
+                Q_EMIT owner->positionChanged();
         }
     }
 
@@ -607,10 +613,14 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
             // Skip if the URL is set OR scheme-rejected: a player whose
             // art URL fails the allowlist will never produce an
             // acceptable URL, so re-fetching for the full window is
-            // pointless wire traffic.
-            if (d->trackArtUrlResolved || !d->trackArtUrl.isEmpty() || d->playbackState == Stopped)
+            // pointless wire traffic. Also skip if a PropertiesChanged-
+            // invalidated refresh is already in flight (the same
+            // coalescing gate the invalidation path uses).
+            if (d->trackArtUrlResolved || !d->trackArtUrl.isEmpty() || d->playbackState == Stopped
+                || d->refreshPendingPlayer)
                 return;
-            d->getAll(kPlayerIface, &Private::applyPlayerFromGetAll);
+            d->refreshPendingPlayer = true;
+            d->getAll(kPlayerIface, &Private::applyPlayerFromGetAll, &d->refreshPendingPlayer);
         });
     }
 }

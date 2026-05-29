@@ -64,11 +64,21 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void onServiceUnregistered(const QString& service);
+    void onOwnershipReleased(const QString& service);
 
 private:
     [[nodiscard]] QString canonicalItemService(const QString& serviceOrPath, const QString& senderUniqueName) const;
+    /// Attempt to claim org.kde.StatusNotifierWatcher. Sets m_serviceOwner
+    /// + registers the adaptor object on success. Called from the ctor
+    /// and from onOwnershipReleased when the prior owner exits.
+    bool tryClaimOwnership();
 
     QDBusServiceWatcher* m_busWatcher;
+    /// Separate watcher for the org.kde.StatusNotifierWatcher well-known
+    /// name. When we boot as a passive watcher (Plasma owned the name)
+    /// and the prior owner later exits, this fires so we can promote
+    /// ourselves rather than leaving the tray broken.
+    QDBusServiceWatcher* m_ownershipWatcher = nullptr;
     bool m_serviceOwner = false;
 
     // Map: canonical "uniqueName/path" → owning bus unique name. The

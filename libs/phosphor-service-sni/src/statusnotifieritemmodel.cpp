@@ -234,10 +234,16 @@ void StatusNotifierItemModel::setHost(StatusNotifierHost* host)
         // empty model rather than a crash on next data().
         connect(d->host, &QObject::destroyed, this, [this]() {
             const int prev = d->items.size();
-            beginResetModel();
-            d->items.clear();
-            d->clearAllPublished();
-            endResetModel();
+            // Mirror the begin/endResetModel gating used in setHost: an
+            // empty-to-empty transition (host attached but never
+            // populated) does not need a modelReset, which would
+            // otherwise fire a no-op refresh on every attached ListView.
+            if (prev != 0) {
+                beginResetModel();
+                d->items.clear();
+                d->clearAllPublished();
+                endResetModel();
+            }
             Q_EMIT hostChanged();
             if (prev != 0)
                 Q_EMIT countChanged();

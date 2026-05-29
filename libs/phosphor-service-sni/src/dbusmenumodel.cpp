@@ -50,6 +50,11 @@ public:
 
     std::unique_ptr<ComCanonicalDbusmenuInterface> proxy;
     QStringList themePaths; ///< from Version/IconThemePath property
+    /// Revision number returned by the most recent successful GetLayout.
+    /// LayoutUpdated signals carrying a revision <= this value are stale
+    /// (a slow GetLayout reply that landed after the LayoutUpdated that
+    /// invalidated it) and would needlessly bump the in-flight queue;
+    /// drop them at the slot.
     uint revision = 0;
 
     // Outstanding GetLayout watcher. Tracking it lets buildProxy()
@@ -354,15 +359,24 @@ void DBusMenuModel::Private::refresh()
     });
 }
 
-void DBusMenuModel::Private::onLayoutUpdated(uint /*rev*/, int parent)
+void DBusMenuModel::Private::onLayoutUpdated(uint rev, int parent)
 {
     // We only care about updates that affect OUR root level.
     // dbusmenu apps re-emit Layout signals for the entire tree when
     // any submenu changes, so filtering is mandatory to avoid
     // thrashing.
-    if (parent == rootId || parent == 0) {
-        refresh();
+    if (parent != rootId && parent != 0) {
+        return;
     }
+    // Drop signals that pre-date the revision our last GetLayout
+    // reply observed: a slow GetLayout in flight can land BEFORE a
+    // LayoutUpdated that invalidates the layout the reply describes,
+    // and the redundant refresh just thrashes the wire without
+    // changing the displayed state.
+    if (rev != 0 && rev <= revision) {
+        return;
+    }
+    refresh();
 }
 
 void DBusMenuModel::Private::onPropertiesUpdated(const DBusMenuItemPropertiesList& updated,
@@ -600,10 +614,14 @@ int DBusMenuModel::aboutToShowSubmenu(int row)
     // menu population on the opened event, so without it the first
     // open shows an empty/stale submenu until a later LayoutUpdated
     // arrives. Track the id so aboutToHide can close every level we
-    // opened on the way in.
-    d->proxy->Event(r.id, QStringLiteral("opened"), QDBusVariant(0), dbusmenuTimestamp());
-    if (!d->openedIds.contains(r.id))
+    // opened on the way in. Guard both the wire fire AND the bookkeeping
+    // by the same predicate so a re-hover into an already-open submenu
+    // does not produce an unbalanced "opened" the app would have to
+    // depth-count against.
+    if (!d->openedIds.contains(r.id)) {
+        d->proxy->Event(r.id, QStringLiteral("opened"), QDBusVariant(0), dbusmenuTimestamp());
         d->openedIds.append(r.id);
+    }
     return r.id;
 }
 
@@ -631,10 +649,14 @@ void DBusMenuModel::aboutToShow()
     // Mirror aboutToHide's closed event. Some apps only build their
     // submenu items on the opened tick and tear them down on closed.
     // Track the id so aboutToHide can close every level we opened on
-    // the way in.
-    d->proxy->Event(d->rootId, QStringLiteral("opened"), QDBusVariant(0), dbusmenuTimestamp());
-    if (!d->openedIds.contains(d->rootId))
+    // the way in. Guard the wire fire AND the bookkeeping by the same
+    // predicate so a duplicate aboutToShow (animation race, re-show
+    // without an intervening dismiss) does not produce an unbalanced
+    // "opened" the app would have to depth-count against.
+    if (!d->openedIds.contains(d->rootId)) {
+        d->proxy->Event(d->rootId, QStringLiteral("opened"), QDBusVariant(0), dbusmenuTimestamp());
         d->openedIds.append(d->rootId);
+    }
 }
 
 void DBusMenuModel::refresh()

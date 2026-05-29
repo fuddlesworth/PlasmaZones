@@ -46,11 +46,44 @@ StatusNotifierWatcher::StatusNotifierWatcher(QObject* parent)
     // the adaptor be a child of the object it adapts.
     new StatusNotifierWatcherAdaptor(this);
 
+    // Watch for the canonical watcher name being released. If we boot
+    // as a passive watcher (Plasma owned it) and Plasma later exits,
+    // this fires so we can promote ourselves rather than leaving the
+    // tray broken with no canonical watcher on the bus.
+    m_ownershipWatcher =
+        new QDBusServiceWatcher(kWatcherServiceName(), bus, QDBusServiceWatcher::WatchForUnregistration, this);
+    connect(m_ownershipWatcher, &QDBusServiceWatcher::serviceUnregistered, this,
+            &StatusNotifierWatcher::onOwnershipReleased);
+
+    tryClaimOwnership();
+
+    if (!m_serviceOwner) {
+        // Don't keep an object registered we don't own; passive mode
+        // just waits for the prior owner to release via
+        // onOwnershipReleased.
+        return;
+    }
+
+    // Watch the bus for name-owner changes so we can clean up items
+    // whose processes have died.
+    m_busWatcher->setConnection(bus);
+    m_busWatcher->setWatchMode(QDBusServiceWatcher::WatchForUnregistration);
+    connect(m_busWatcher, &QDBusServiceWatcher::serviceUnregistered, this,
+            &StatusNotifierWatcher::onServiceUnregistered);
+}
+
+bool StatusNotifierWatcher::tryClaimOwnership()
+{
+    auto bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        return false;
+    }
+
     // Try to register the object path first. If this fails we have
     // nothing to expose, regardless of name ownership.
     if (!bus.registerObject(kWatcherObjectPath(), this)) {
         qCWarning(lcSniWatcher) << "registerObject failed";
-        return;
+        return false;
     }
 
     // Try to claim the well-known name. If someone else already owns
@@ -63,19 +96,30 @@ StatusNotifierWatcher::StatusNotifierWatcher(QObject* parent)
     m_serviceOwner = reply.isValid() && reply.value() == QDBusConnectionInterface::ServiceRegistered;
 
     if (!m_serviceOwner) {
-        // Don't keep the object registered if we aren't the canonical
-        // watcher: it would advertise an empty item list and confuse
-        // any apps that introspect our process by accident.
+        // Drop the object registration so a future introspection
+        // against our process bus name doesn't see a stub watcher.
         bus.unregisterObject(kWatcherObjectPath());
+    }
+    return m_serviceOwner;
+}
+
+void StatusNotifierWatcher::onOwnershipReleased(const QString& service)
+{
+    if (service != kWatcherServiceName() || m_serviceOwner) {
         return;
     }
+    if (!tryClaimOwnership()) {
+        return;
+    }
+    qCInfo(lcSniWatcher) << "promoted to canonical watcher after prior owner exited";
 
-    // Watch the bus for name-owner changes so we can clean up items
-    // whose processes have died.
+    // We won; wire up the unregistration-tracking watcher we skipped
+    // in the passive ctor path.
+    auto bus = QDBusConnection::sessionBus();
     m_busWatcher->setConnection(bus);
     m_busWatcher->setWatchMode(QDBusServiceWatcher::WatchForUnregistration);
     connect(m_busWatcher, &QDBusServiceWatcher::serviceUnregistered, this,
-            &StatusNotifierWatcher::onServiceUnregistered);
+            &StatusNotifierWatcher::onServiceUnregistered, Qt::UniqueConnection);
 }
 
 StatusNotifierWatcher::~StatusNotifierWatcher()
