@@ -577,6 +577,57 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
     qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "activity assignments";
 }
 
+QVariantMap LayoutAdaptor::getAllCombinedAssignments()
+{
+    QVariantMap result;
+    const auto assignments = m_layoutManager->combinedAssignments();
+    for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
+        // Key format mirrors the setter: "screen|desktop|activity". '|' is
+        // safe because screen ids may carry ':' (manufacturer:model:serial)
+        // and activity ids are UUIDs.
+        const QString key =
+            QStringLiteral("%1|%2|%3").arg(it.key().screenId).arg(it.key().virtualDesktop).arg(it.key().activity);
+        result[key] = it.value();
+    }
+    return result;
+}
+
+void LayoutAdaptor::setAllCombinedAssignments(const QVariantMap& assignments)
+{
+    QHash<PhosphorZones::CombinedAssignmentKey, QString> parsed;
+    for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
+        const QString& rawKey = it.key();
+        // Split on '|' boundaries — exactly three segments
+        // (screen, desktop, activity). Anything else is malformed.
+        const int firstSep = rawKey.indexOf(QLatin1Char('|'));
+        const int secondSep = (firstSep >= 0) ? rawKey.indexOf(QLatin1Char('|'), firstSep + 1) : -1;
+        if (firstSep < 1 || secondSep <= firstSep + 1 || secondSep == rawKey.size() - 1) {
+            qCWarning(lcDbusLayout) << "Invalid combined assignment key format:" << rawKey;
+            continue;
+        }
+        const QString screenIdOrName = rawKey.left(firstSep);
+        bool ok = false;
+        const int virtualDesktop = rawKey.mid(firstSep + 1, secondSep - firstSep - 1).toInt(&ok);
+        const QString activityId = rawKey.mid(secondSep + 1);
+        if (!ok || virtualDesktop <= 0 || activityId.isEmpty()) {
+            qCWarning(lcDbusLayout) << "Invalid combined assignment key fields:" << rawKey;
+            continue;
+        }
+        const QString layoutId = it.value().toString();
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch combined assignment"));
+            if (!uuidOpt) {
+                continue;
+            }
+        }
+        const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenIdOrName);
+        parsed.insert(PhosphorZones::CombinedAssignmentKey{resolvedId, virtualDesktop, activityId}, layoutId);
+        m_changedScreenIds.insert(resolvedId);
+    }
+    m_layoutManager->setAllCombinedAssignments(parsed);
+    qCInfo(lcDbusLayout) << "Batch set" << parsed.size() << "combined assignments";
+}
+
 // Full Assignments (Screen + Desktop + Activity)
 QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                          const QString& activityId)

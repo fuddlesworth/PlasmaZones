@@ -19,12 +19,15 @@
  *   - the field / operator / action authoring metadata is well-formed.
  */
 
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUuid>
 
 #include "settings/windowrulecontroller.h"
 #include "settings/windowrulemodel.h"
+
+#include <PhosphorWindowRule/RuleAction.h>
 
 using namespace PlasmaZones;
 
@@ -40,6 +43,7 @@ private Q_SLOTS:
     void monitorOverviewClassifiesScrollingWithoutLayoutName();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
     void engineModePickerExposesAllVocabularyTokens();
+    void userAuthorableFilterHidesInternalActions();
     void moveRuleReorders();
     void authoringMetadata();
     void templatesProduceSeededRules();
@@ -337,6 +341,90 @@ void TestWindowRuleController::engineModePickerExposesAllVocabularyTokens()
         QVERIFY2(wireValues.contains(QStringLiteral("autotile")), qPrintable(wireValues.join(QLatin1Char(','))));
         QVERIFY2(wireValues.contains(QStringLiteral("scrolling")), qPrintable(wireValues.join(QLatin1Char(','))));
     }
+}
+
+void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
+{
+    // Pin that the controller's actionTypes() picker honours the
+    // `userAuthorable=false` flag on ActionDescriptor. Without this test the
+    // filter is dead code — every shipped descriptor currently defaults to
+    // userAuthorable=true, so a regression that bypasses the filter (e.g.
+    // re-introducing a hand-maintained allow-list) would slip through CI.
+    //
+    // Register a sentinel descriptor flagged as non-authorable, walk the
+    // picker, then restore the descriptor to its prior state so the rest
+    // of the test suite isn't disturbed.
+    using PhosphorWindowRule::ActionDescriptor;
+    using PhosphorWindowRule::ActionDomain;
+    using PhosphorWindowRule::ActionRegistry;
+
+    static const QString kSentinelType = QStringLiteral("test-sentinel-internal-action");
+    auto& registry = ActionRegistry::instance();
+    const bool prevExists = registry.isRegistered(kSentinelType);
+    const std::optional<ActionDescriptor> prev = registry.descriptor(kSentinelType);
+
+    // RAII cleanup: restore the prior descriptor (or unregister the sentinel
+    // entirely) even if an assertion throws / fails mid-test. Without this,
+    // a QVERIFY2 failure between the two registerAction calls would skip
+    // the trailing cleanup and leak the sentinel into the registry for the
+    // remainder of the test binary's lifetime.
+    struct RegistryGuard
+    {
+        ActionRegistry& registry;
+        QString type;
+        bool prevExists;
+        std::optional<ActionDescriptor> prev;
+        ~RegistryGuard()
+        {
+            if (prevExists && prev.has_value()) {
+                registry.registerAction(*prev);
+            } else {
+                registry.unregisterAction(type);
+            }
+        }
+    };
+    RegistryGuard guard{registry, kSentinelType, prevExists, prev};
+
+    ActionDescriptor sentinel;
+    sentinel.type = kSentinelType;
+    sentinel.slotFor = [](const QJsonObject&) {
+        return QStringLiteral("test-sentinel-slot");
+    };
+    sentinel.validate = [](const QJsonObject&) {
+        return true;
+    };
+    sentinel.terminal = false;
+    sentinel.domain = ActionDomain::Window;
+    sentinel.userAuthorable = false;
+    registry.registerAction(sentinel);
+
+    WindowRuleController controller;
+    const QVariantList types = controller.actionTypes();
+    bool found = false;
+    for (const QVariant& t : types) {
+        const QVariantMap tm = t.toMap();
+        if (tm.value(QStringLiteral("value")).toString() == kSentinelType) {
+            found = true;
+            break;
+        }
+    }
+    QVERIFY2(!found, "actionTypes() must exclude descriptors with userAuthorable=false");
+
+    // Now flip the descriptor to userAuthorable=true and confirm the same
+    // sentinel surfaces — the filter is the only thing keeping it hidden.
+    sentinel.userAuthorable = true;
+    registry.registerAction(sentinel);
+    const QVariantList typesAuthorable = controller.actionTypes();
+    bool foundAuthorable = false;
+    for (const QVariant& t : typesAuthorable) {
+        const QVariantMap tm = t.toMap();
+        if (tm.value(QStringLiteral("value")).toString() == kSentinelType) {
+            foundAuthorable = true;
+            break;
+        }
+    }
+    QVERIFY2(foundAuthorable, "actionTypes() must include descriptors with userAuthorable=true");
+    // RegistryGuard's dtor handles cleanup.
 }
 
 void TestWindowRuleController::moveRuleReorders()

@@ -454,6 +454,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         snapAssistRequestedOut = true;
         m_snapAssistPendingWindowId = windowId;
         m_snapAssistPendingScreenId = releaseScreenId;
+        // Snapshot the desktop the drop landed on. computeAndEmitSnapAssist
+        // runs after the endDrag reply returns; if the user changes virtual
+        // desktops between here and the timer firing, a live currentDesktop()
+        // read would describe the new desktop's occupancy instead of the
+        // desktop the user actually dropped on.
+        m_snapAssistPendingDesktop = m_layoutManager->currentVirtualDesktop();
     }
 
     // Reset drag state for next operation.
@@ -469,8 +475,10 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // follow-up drag never sees stale IDs.
     const QString windowId = m_snapAssistPendingWindowId;
     const QString screenId = m_snapAssistPendingScreenId;
+    const int desktopAtDrop = m_snapAssistPendingDesktop;
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
+    m_snapAssistPendingDesktop = 0; // mirror snapshot clear; see header
 
     if (windowId.isEmpty() || screenId.isEmpty() || !m_layoutManager || !m_windowTracking) {
         return;
@@ -494,7 +502,15 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // #323) — even though SnapAssistHandler::buildCandidates() already excludes
     // other-desktop windows from the candidate list. Matches the filtering done
     // by PhosphorPlacement::WindowTrackingService::getEmptyZones()/calculateSnapAllWindows().
-    const int desktopFilter = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
+    //
+    // Use the drop-time snapshot, not a live read: a user who changed
+    // virtual desktops between endDrag and this deferred fire would
+    // otherwise see snap-assist describing the NEW desktop's occupancy.
+    // Falls back to a live read only when the snapshot is missing (0,
+    // pre-snapshot codepath or invalid pending state).
+    // m_layoutManager non-null is guaranteed by the early-return above; the
+    // earlier ternary was dead-defensive.
+    const int desktopFilter = desktopAtDrop > 0 ? desktopAtDrop : m_layoutManager->currentVirtualDesktop();
     QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId, desktopFilter);
     PhosphorProtocol::EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(
         m_screenManager, layout, screenId, releaseScreen, m_settings, [&occupied](const PhosphorZones::Zone* z) {

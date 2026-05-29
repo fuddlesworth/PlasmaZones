@@ -122,6 +122,11 @@ void ActionRegistry::registerAction(const ActionDescriptor& descriptor)
     m_descriptors.insert(descriptor.type, descriptor);
 }
 
+bool ActionRegistry::unregisterAction(const QString& type)
+{
+    return m_descriptors.remove(type) > 0;
+}
+
 bool ActionRegistry::isRegistered(const QString& type) const
 {
     return m_descriptors.contains(type);

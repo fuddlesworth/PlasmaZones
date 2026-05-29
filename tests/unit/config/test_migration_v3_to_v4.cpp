@@ -741,6 +741,58 @@ private Q_SLOTS:
                  "the cleanup-only branch must retire the leftover assignments.json");
     }
 
+    // ─── Data-loss regression: malformed windowrules.json aborts ─────────
+    //
+    // Sibling of testMalformedAssignmentsJsonAborts for the rebuild path's
+    // windowrules.json prevalidate. When windowrules.json exists but doesn't
+    // parse, the "already converted" probe (loadFromFile().has_value()) drops
+    // into the rebuild path, which would otherwise overwrite the corrupt-but-
+    // recoverable original with a stub provider-default rule set — destroying
+    // every user-authored rule. The new prevalidateWindowRulesFile fires
+    // FIRST: quarantines to .corrupt.bak, refuses to commit, returns false.
+    void testMalformedWindowRulesJsonAborts()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3Config());
+        // No legacy assignments file — this isolates the windowrules-only
+        // corruption path. A fresh install with a corrupt windowrules.json
+        // is the cleanest reproduction.
+        const QString corruptPath = ConfigDefaults::windowRulesFilePath();
+        QDir().mkpath(QFileInfo(corruptPath).absolutePath());
+        const QByteArray corruptBytes = QByteArrayLiteral("{ \"_version\": 4, \"rules\": [");
+        {
+            QFile f(corruptPath);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(corruptBytes);
+        }
+
+        QVERIFY2(!ConfigMigration::ensureJsonConfig(),
+                 "ensureJsonConfig must return false on a malformed windowrules.json");
+
+        // The corrupt file was quarantined to .corrupt.bak with bytes preserved.
+        const QString corruptBak = corruptPath + QStringLiteral(".corrupt.bak");
+        QVERIFY2(QFile::exists(corruptBak), "the malformed windowrules.json must be quarantined to .corrupt.bak");
+        {
+            QFile f(corruptBak);
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            QCOMPARE(f.readAll(), corruptBytes);
+        }
+
+        // Original is gone (renamed). A new stub windowrules.json must NOT
+        // have been written — that's the data-loss class the guard exists for.
+        QVERIFY(!QFile::exists(corruptPath));
+
+        // config.json's chain step (migrateV3ToV4) DID run before finalize —
+        // it stamps `_version=4` and stashes any disable-list / animation-rule
+        // data. The chain step's idempotency guard then short-circuits the
+        // next attempt; the rebuild branch at finalize takes over (windowrules.json
+        // doesn't exist after quarantine, so the "already converted" probe
+        // returns false and rebuild retries from the stash). Both paths
+        // surface as a follow-up run after the user repairs the quarantine.
+        const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
+        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
+    }
+
     // ─── Data-loss regression (B5): malformed assignments.json aborts ─────
     //
     // A corrupt assignments.json (truncation, power-loss, hand-edit error)
@@ -805,19 +857,8 @@ private Q_SLOTS:
         QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 3);
     }
 
-    // ─── Data-loss regression (B4): QuickLayouts write failure is recoverable ─
+    // ─── Data-loss regression: stalled chain refuses to commit ──────────
     //
-    // The v3→v4 conversion writes two files: quicklayouts.json (sidecar) and
-    // windowrules.json (the irreversible commit marker). Writing the sidecar
-    // FIRST means a sidecar failure aborts BEFORE committing windowrules.json
-    // — the user's slots stay recoverable from assignments.json on the next
-    // attempt. Writing windowrules.json first would gate the rebuild path off
-    // forever on the next run (the cleanup-only branch never re-attempts the
-    // QuickLayouts relocation), losing the slots to the .migrated quarantine.
-    //
-    // We simulate the sidecar write failure by pre-creating a DIRECTORY at
-    // the quicklayouts.json path: QSaveFile cannot replace a directory with a
-    // file, so the write fails deterministically.
     // Stalled-chain gate: when config.json is stamped at a pre-v4 version
     // (chain stalled — e.g. migrateV1ToV2's side-effect writes failed and
     // MigrationRunner::runOnFile returned true for a no-op chain),
@@ -837,7 +878,14 @@ private Q_SLOTS:
         QJsonObject cfg;
         cfg.insert(ConfigKeys::versionKey(), 3);
         QJsonObject disableStash;
-        disableStash.insert(QStringLiteral("DisabledMonitors"), QJsonArray{QStringLiteral("DP-1")});
+        // Use the real v4 stash wire shape: production moveDisableKey calls
+        // `display.value(configKey).toString()` and stashes that string verbatim
+        // (CSV), not an array. A downstream test that asserts "stash content
+        // was consumed into rules" would silently get a false positive if we
+        // used an array here — toString() returns "" for a JSON array, and
+        // appendMonitorRules's empty-input early-return would no-op.
+        disableStash.insert(QStringLiteral("snappingMonitors"), QStringLiteral("DP-1"));
+        disableStash.insert(QStringLiteral("autotileMonitors"), QStringLiteral("DP-1"));
         cfg.insert(QStringLiteral("_v4DisableStash"), disableStash);
         QJsonArray animStash;
         QJsonObject animEntry;
@@ -849,43 +897,39 @@ private Q_SLOTS:
         cfg.insert(QStringLiteral("_v4AnimationRulesStash"), animStash);
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
-        // Drive finalizeV4Conversion via ensureJsonConfig's "already at OR
-        // above current version" branch. The branch decides which path to
-        // take based on the on-disk _version — we wedge it as v3, which would
-        // normally route through the chain. Bypass the chain by stamping a
-        // synthetic `windowrules.json`-equivalent precondition: a v3-with-stash
-        // config that finalize sees directly when the chain stalls.
-        //
-        // The test exercises the gate by calling ensureJsonConfig() and
-        // confirming (1) it returns false, (2) no windowrules.json was
-        // written, (3) the stash keys survive on disk.
-        const bool ok = ConfigMigration::ensureJsonConfig();
-        // Either the chain advances cleanly to v4 and finalize commits
-        // (in which case the gate didn't fire — but the stashes would be
-        // legitimately converted, not silently dropped) — OR the gate fires
-        // and we get the refusal. Distinguish by reading the on-disk shape.
+        // Call finalizeV4Conversion DIRECTLY so the chain doesn't get a
+        // chance to advance _version to 4 before finalize runs. This is
+        // the only way to exercise the chain-stalled gate at
+        // configmigration.cpp's `if (configVersion < ConfigSchemaVersion)`
+        // branch — ensureJsonConfig() runs the chain first, which on a
+        // clean fixture lands at v4 and routes finalize through the
+        // already-converted path.
+        const bool ok = ConfigMigration::finalizeV4Conversion(ConfigDefaults::configFilePath());
+        QVERIFY2(!ok, "finalizeV4Conversion must return false when _version < ConfigSchemaVersion");
+        QVERIFY2(!QFile::exists(ConfigDefaults::windowRulesFilePath()),
+                 "windowrules.json must NOT be committed when config.json is still below v4");
         const QJsonObject onDisk = readJson(ConfigDefaults::configFilePath());
-        const int finalVersion = onDisk.value(ConfigKeys::versionKey()).toInt(0);
-        if (finalVersion < 4) {
-            // Stalled-chain path: gate must have fired.
-            QVERIFY2(!ok, "ensureJsonConfig must return false when the chain stalls below v4");
-            QVERIFY2(!QFile::exists(ConfigDefaults::windowRulesFilePath()),
-                     "windowrules.json must NOT be committed when config.json is still below v4");
-            QVERIFY2(onDisk.contains(QStringLiteral("_v4DisableStash")),
-                     "stash keys must survive on disk so the next run can retry");
-            QVERIFY2(onDisk.contains(QStringLiteral("_v4AnimationRulesStash")),
-                     "animation stash must survive on disk so the next run can retry");
-        } else {
-            // Chain advanced — finalize legitimately ran. Verify the stash
-            // contents survived as rules rather than being dropped silently.
-            QVERIFY2(QFile::exists(ConfigDefaults::windowRulesFilePath()),
-                     "windowrules.json must exist if the chain reached v4");
-            const auto rules = PhosphorWindowRule::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
-            QVERIFY(rules.has_value());
-            QVERIFY2(rules->count() > 1, "rules must include the stash conversions, not just the provider default");
-        }
+        QVERIFY2(onDisk.value(ConfigKeys::versionKey()).toInt(0) == 3,
+                 "the v3 stamp must survive — finalize is not allowed to advance the version");
+        QVERIFY2(onDisk.contains(QStringLiteral("_v4DisableStash")),
+                 "stash keys must survive on disk so the next run can retry");
+        QVERIFY2(onDisk.contains(QStringLiteral("_v4AnimationRulesStash")),
+                 "animation stash must survive on disk so the next run can retry");
     }
 
+    // ─── Data-loss regression (B4): QuickLayouts write failure is recoverable ─
+    //
+    // The v3→v4 conversion writes two files: quicklayouts.json (sidecar) and
+    // windowrules.json (the irreversible commit marker). Writing the sidecar
+    // FIRST means a sidecar failure aborts BEFORE committing windowrules.json
+    // — the user's slots stay recoverable from assignments.json on the next
+    // attempt. Writing windowrules.json first would gate the rebuild path off
+    // forever on the next run (the cleanup-only branch never re-attempts the
+    // QuickLayouts relocation), losing the slots to the .migrated quarantine.
+    //
+    // We simulate the sidecar write failure by pre-creating a DIRECTORY at
+    // the quicklayouts.json path: QSaveFile cannot replace a directory with a
+    // file, so the write fails deterministically.
     void testQuickLayoutsWriteFailureRecoverable()
     {
         IsolatedConfigGuard guard;
@@ -955,7 +999,8 @@ private:
     /// The v4 group / key names are pinned as inline `QStringLiteral`
     /// literals — the test's role is to be an INDEPENDENT WITNESS of the
     /// frozen v4 on-disk wire format. If a future maintainer violates the
-    /// freeze policy (forbidden by configkeys.h:637-651) and renames
+    /// freeze policy (forbidden by the `Legacy` struct's freeze-policy
+    /// comment block in configkeys.h) and renames
     /// `Legacy::v4AnimationAppRulesKey` from "AnimationAppRules", the
     /// accessor-based form would silently update in lockstep with
     /// production; inline-literal pins catch the drift. Mirrors the
@@ -1277,8 +1322,8 @@ private Q_SLOTS:
             makeShaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
         // Inline literals — independent-witness pin matching the
         // `makeV3ConfigWithAnimationRules` fixture pattern. The sibling
-        // fixture's docstring (line 887-894) documents the rationale:
-        // a future freeze-policy violation that renames
+        // `makeV3ConfigWithAnimationRules` fixture's docstring documents
+        // the rationale: a future freeze-policy violation that renames
         // `Legacy::v4AnimationAppRulesKey` away from "AnimationAppRules"
         // must surface as test breakage, not silently update through
         // the same accessor production uses.

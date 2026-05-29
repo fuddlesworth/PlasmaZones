@@ -100,8 +100,16 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     if (!validateWindowId(windowId, QStringLiteral("set float state"))) {
         return;
     }
-    // Delegate to service
+    // Gate the signal emissions on a real state change. WTS::setWindowFloating
+    // is itself a no-op on unchanged input, but the two signal emits below
+    // would otherwise fire on every redundant call — violating the project's
+    // "only emit signals when value actually changes" rule and waking up
+    // every D-Bus subscriber for no reason.
+    const bool wasFloating = m_service->isWindowFloating(windowId);
     m_service->setWindowFloating(windowId, floating);
+    if (floating == wasFloating) {
+        return;
+    }
     qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
     // Notify effect so it can update its local cache (use full windowId for per-instance tracking).
     // Use the window's tracked screen if available, otherwise fall back to last active screen.

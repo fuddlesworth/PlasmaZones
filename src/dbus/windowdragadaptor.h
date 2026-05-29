@@ -227,13 +227,6 @@ public Q_SLOTS:
     void cancelSnap();
 
     /**
-     * Called when a window is closed during or after a drag operation
-     * @param windowId Window ID that was closed
-     * @note Cleans up any drag state associated with this window
-     */
-    void handleWindowClosed(const QString& windowId);
-
-    /**
      * Clear any drag state the daemon is still holding. Called when the
      * compositor bridge re-registers (e.g. KWin reloaded the effect, the
      * effect process restarted, or the daemon is being re-adopted by a fresh
@@ -243,6 +236,26 @@ public Q_SLOTS:
      * Also hides any leftover overlay so stale visuals don't linger.
      */
     void clearForCompositorReconnect();
+
+public:
+    /**
+     * Called when a window is closed during or after a drag operation.
+     * Connected to WindowTrackingAdaptor::windowClosedNotification — the
+     * canonical close path also tears down drag state when the closing
+     * window was in flight.
+     *
+     * Declared as a public plain member function (NOT under Q_SLOTS):
+     * QDBusAbstractAdaptor's runtime introspection exposes every PUBLIC
+     * scriptable slot on the bus regardless of what the hand-maintained
+     * XML lists. Keeping this in `public Q_SLOTS` would re-expose
+     * `WindowDrag.handleWindowClosed` on the wire even after removing
+     * it from `org.plasmazones.WindowDrag.xml`. Plain member-function
+     * placement keeps the in-process function-pointer-`connect()`
+     * target reachable while the bus surface truly matches the XML.
+     *
+     * @param windowId Window ID that was closed
+     */
+    void handleWindowClosed(const QString& windowId);
 
 Q_SIGNALS:
     /**
@@ -315,7 +328,7 @@ private:
     // to rewrite it into the new protocol wrappers. The D-Bus surface no
     // longer exposes them — external clients go through the new protocol.
     // ═══════════════════════════════════════════════════════════════════════
-    void dragStarted(const QString& windowId, double x, double y, double width, double height, int mouseButtons);
+    void dragStarted(const QString& windowId, double x, double y, double width, double height);
     void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
     void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
                      int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
@@ -414,6 +427,14 @@ private:
     // reply.
     QString m_snapAssistPendingWindowId;
     QString m_snapAssistPendingScreenId;
+    // Desktop snapshotted at drop time so the deferred snap-assist compute
+    // describes "what zones were empty on the desktop the user dropped on"
+    // rather than re-reading the live desktop at timer-fire time. If the
+    // user changed virtual desktop between endDrag and the timer firing,
+    // the live read would otherwise filter against the new desktop.
+    // Cleared alongside the windowId/screenId pair in cancelSnap and the
+    // pending-clear sites.
+    int m_snapAssistPendingDesktop = 0;
 
     // Current drag state
     QString m_draggedWindowId;
@@ -446,7 +467,6 @@ private:
     // laziness now lives on the daemon side.
     QString m_pendingSnapDragWindowId;
     QRect m_pendingSnapDragGeometry;
-    int m_pendingSnapDragMouseButtons = 0;
     bool m_pendingSnapDragWasSnapped = false;
     QString m_currentZoneId;
     QRect m_currentZoneGeometry;

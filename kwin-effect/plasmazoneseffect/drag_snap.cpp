@@ -469,8 +469,9 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         // resolver call AND the deep `Profile::operator!=`. Resolution routes
         // through the unified RuleEvaluator via the effect-local shim.
         if (!m_shaderManager.animationRuleSet().isEmpty()) {
-            motionProfile = PlasmaZones::resolveAnimationMotionProfile(
-                m_shaderManager.animationRuleEvaluator(), baseProfile, windowClass, profilePath, m_curveRegistry);
+            motionProfile = PlasmaZones::resolveAnimationMotionProfile(m_shaderManager.animationRuleEvaluator(),
+                                                                       baseProfile, windowClass, profilePath,
+                                                                       getWindowId(window), m_curveRegistry);
             if (motionProfile != baseProfile)
                 motionOverridePtr = &motionProfile;
         }

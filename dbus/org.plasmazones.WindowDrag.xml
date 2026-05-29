@@ -73,13 +73,6 @@
             <annotation name="org.gtk.GDBus.DocString" value="Cancel the current snap operation (e.g. user pressed Escape)."/>
         </method>
 
-        <method name="handleWindowClosed">
-            <annotation name="org.gtk.GDBus.DocString" value="Called when a window is closed during or after a drag operation. Cleans up any drag state associated with this window."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window ID that was closed."/>
-            </arg>
-        </method>
-
         <signal name="zoneGeometryDuringDragChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the zone geometry under the cursor changes during drag. KWin effect applies the geometry immediately for snap-on-hover behavior."/>
             <arg name="windowId" type="s">

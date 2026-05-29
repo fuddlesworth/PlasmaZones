@@ -295,6 +295,17 @@ private:
     bool isAutotileScreen(const QString& screenId) const;
 
     /**
+     * @brief Resolve the current mode for @p screenId via the router with
+     * the same "null router → Snapping" fallback DaemonScreenModeAdapter
+     * applies. Single point of truth for daemon-internal mode lookups
+     * that don't have the ContextResolver handle in hand (signal
+     * handlers, OSD paths). Eliminates the open-coded
+     * `m_screenModeRouter ? m_screenModeRouter->modeFor(...) : Snapping`
+     * rebuild that used to sit inline.
+     */
+    PhosphorZones::AssignmentEntry::Mode currentModeFor(const QString& screenId) const;
+
+    /**
      * @brief Per-context disable cascade gate for navigation shortcuts.
      *
      * Returns true when the handler should silently no-op — either the
@@ -306,6 +317,19 @@ private:
      * effect) intentionally do NOT use this gate.
      */
     bool isFocusedContextGated(const QString& screenId) const;
+
+    /**
+     * @brief Mode-explicit sibling of isFocusedContextGated for autotile-only
+     * shortcuts.
+     *
+     * Same fail-closed null-resolver semantics, but queries the resolver
+     * with an explicit mode (skipping the router-driven mode lookup).
+     * Used by handleRetile / handleIncreaseMasterRatio /
+     * handleDecreaseMasterRatio / HANDLE_AUTOTILE_ONLY — paths that
+     * must gate against the Autotile disable list specifically rather
+     * than the live mode for the screen.
+     */
+    bool isFocusedContextGatedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     void handleRotate(bool clockwise);
     void handleFloat();

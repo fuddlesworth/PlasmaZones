@@ -608,6 +608,18 @@ Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
     /**
+     * @brief Internal Qt signal emitted after the windowClosed() D-Bus method
+     * processes a close. Used to drive sibling-adaptor cleanup (e.g.
+     * WindowDragAdaptor's drag-state teardown when a window closes mid-drag)
+     * without re-introducing a D-Bus-visible WindowDrag.handleWindowClosed
+     * surface that no one outside the daemon was wiring up.
+     *
+     * Distinct name from the D-Bus method so MOC/QtDBus don't conflate the
+     * two; the method runs first, then we emit this for in-process listeners.
+     */
+    void windowClosedNotification(const QString& windowId);
+
+    /**
      * @brief Emitted when a window's floating state changes
      *
      * The KWin effect should listen to this to keep its local floating cache in sync.

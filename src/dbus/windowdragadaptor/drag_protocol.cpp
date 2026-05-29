@@ -115,6 +115,12 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     // release and re-press to toggle.
     m_autotileDragInsertToggled = false;
     m_prevAutotileDragInsertHeld = true;
+    // Reset the modifier-conflict warning latch on every beginDrag,
+    // not just the snap-path dragStarted further down. Bypass-path drags
+    // never call dragStarted, so without this reset a previously latched
+    // value would persist across bypass drags and suppress the warning
+    // for a later drag that does reach the conflict check.
+    m_modifierConflictWarned = false;
 
     // Cache autotile drag-insert triggers unconditionally. The snap path may
     // defer dragStarted (where the cache was historically populated) until
@@ -201,8 +207,9 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
 
     m_pendingSnapDragWindowId = windowId;
     m_pendingSnapDragGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
-    m_pendingSnapDragMouseButtons = mouseButtons;
     m_pendingSnapDragWasSnapped = m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty();
+    Q_UNUSED(
+        mouseButtons); // pre-2026-05 cached the mouseButtons here; dragStarted Q_UNUSEDd them so the cache was dead
 
     // Stash the full policy so updateDragCursor's comparator has a
     // previous-policy reference to compare cross-VS candidates against.
@@ -253,17 +260,21 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
 
     const QString pendingId = m_pendingSnapDragWindowId;
     const QRect pendingGeo = m_pendingSnapDragGeometry;
-    const int pendingButtons = m_pendingSnapDragMouseButtons;
     m_pendingSnapDragWindowId.clear();
     m_pendingSnapDragGeometry = QRect();
-    m_pendingSnapDragMouseButtons = 0;
-    // Keep m_pendingSnapDragWasSnapped — dragStarted re-derives m_wasSnapped
-    // from live tracking state.
 
     qCInfo(lcDbusWindow) << "activateSnapDragIfNeeded: promoting" << pendingId << "to active drag"
                          << "via=" << (edgeActivation ? "edge-hover" : "modifier");
     dragStarted(pendingId, static_cast<double>(pendingGeo.x()), static_cast<double>(pendingGeo.y()),
-                static_cast<double>(pendingGeo.width()), static_cast<double>(pendingGeo.height()), pendingButtons);
+                static_cast<double>(pendingGeo.width()), static_cast<double>(pendingGeo.height()));
+    // Drop the wasSnapped latch after dragStarted has re-derived live
+    // m_wasSnapped from the tracking state — its single consumer (the
+    // endDrag pending-never-activated branch) is now unreachable for
+    // this drag. Leaving the latch set would bleed across the NEXT
+    // bypass beginDrag (which doesn't overwrite the field) and a
+    // later endDrag's pending-branch could read a stale-true value
+    // for a window that wasn't actually snapped at start.
+    m_pendingSnapDragWasSnapped = false;
     return !m_draggedWindowId.isEmpty();
 }
 
@@ -271,7 +282,6 @@ void WindowDragAdaptor::clearPendingSnapDragState()
 {
     m_pendingSnapDragWindowId.clear();
     m_pendingSnapDragGeometry = QRect();
-    m_pendingSnapDragMouseButtons = 0;
     m_pendingSnapDragWasSnapped = false;
     m_dragReorderActive = false;
     // Any drag-insert preview left over from an incomplete previous drag
@@ -338,6 +348,13 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
     if (m_draggedWindowId != windowId) {
         qCWarning(lcDbusWindow) << "endDrag: windowId mismatch — stashed=" << m_draggedWindowId
                                 << "received=" << windowId;
+        // Reset transient drag-policy state even on the mismatch path so a
+        // stale m_currentDragPolicy doesn't leak into the comparator in the
+        // next valid drag (drag_protocol.cpp::updateDragCursor's
+        // candidate != m_currentDragPolicy diff). The matching path below
+        // already resets — mirror that here.
+        m_currentDragPolicy = {};
+        m_dragReorderActive = false;
         return outcome;
     }
 

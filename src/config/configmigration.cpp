@@ -158,6 +158,68 @@ bool prevalidateLegacyAssignmentsFile(const QString& assignmentsPath)
     return false;
 }
 
+/// Mirror of prevalidateLegacyAssignmentsFile for windowrules.json.
+///
+/// finalizeV4Conversion's "already converted" gate probes via
+/// `WindowRuleSet::loadFromFile(...).has_value()`. If the file exists but
+/// is corrupt (truncation, hand-edit error, power-loss), that probe returns
+/// nullopt — the gate falls through to the rebuild path, which mints a
+/// provider-default-only rule set and writes it on top of the corrupt-but-
+/// recoverable original. Every user-authored rule is destroyed without
+/// warning and without a backup.
+///
+/// On detected corruption: quarantine to `windowrules.json.corrupt.bak`,
+/// log at critical, and return false so the caller aborts before any
+/// stub-rule write happens. Mirrors the assignments.json contract.
+///
+/// Returns true if the file is absent, empty, parses as a v4 rule set, or
+/// parses as a JSON object the rule loader will inspect downstream. The
+/// only false case is "parses but is NOT JSON" — that's the data-loss
+/// trigger we exist to prevent.
+bool prevalidateWindowRulesFile(const QString& windowRulesPath)
+{
+    if (!QFile::exists(windowRulesPath)) {
+        return true;
+    }
+    QFile wf(windowRulesPath);
+    if (!wf.open(QIODevice::ReadOnly)) {
+        // Mirrors the assignments prevalidate — we can't read to decide, so
+        // surface a warning and let the downstream path's open-failure
+        // handling take its course.
+        qWarning("ConfigMigration: could not open %s for prevalidation: %s", qPrintable(windowRulesPath),
+                 qPrintable(wf.errorString()));
+        return true;
+    }
+    const QByteArray bytes = wf.readAll();
+    wf.close();
+    if (bytes.trimmed().isEmpty()) {
+        return true;
+    }
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
+    if (err.error == QJsonParseError::NoError && doc.isObject()) {
+        return true;
+    }
+
+    const QString corruptBak = windowRulesPath + QStringLiteral(".corrupt.bak");
+    QFile::remove(corruptBak);
+    if (QFile::rename(windowRulesPath, corruptBak)) {
+        qCritical(
+            "ConfigMigration: %s is malformed (%s) — quarantined to %s. "
+            "Aborting v4 conversion to prevent destroying user-authored "
+            "rules. Inspect/repair the file and rename it back to "
+            "windowrules.json, then re-run.",
+            qPrintable(windowRulesPath), qPrintable(err.errorString()), qPrintable(corruptBak));
+    } else {
+        qCritical(
+            "ConfigMigration: %s is malformed (%s) — also failed to "
+            "quarantine to %s. Aborting v4 conversion. Move or repair "
+            "the file by hand.",
+            qPrintable(windowRulesPath), qPrintable(err.errorString()), qPrintable(corruptBak));
+    }
+    return false;
+}
+
 /// Retire the superseded assignments.json once windowrules.json holds every
 /// datum it carried. Prefer a rename to `assignments.json.migrated` over an
 /// outright delete: a rename is the same directory-entry operation as a remove
@@ -1368,12 +1430,18 @@ inline QString kV4AnimationRulesStashKey()
 // Inner field names inside the `_v4DisableStash` object. Shared between the
 // writer (migrateV3ToV4) and the reader (finalizeV4Conversion) so a typo or
 // rename can't silently drop a disable list on conversion.
-constexpr QLatin1StringView kV3SnappingMonitorsStash{"snappingMonitors"};
-constexpr QLatin1StringView kV3AutotileMonitorsStash{"autotileMonitors"};
-constexpr QLatin1StringView kV3SnappingDesktopsStash{"snappingDesktops"};
-constexpr QLatin1StringView kV3AutotileDesktopsStash{"autotileDesktops"};
-constexpr QLatin1StringView kV3SnappingActivitiesStash{"snappingActivities"};
-constexpr QLatin1StringView kV3AutotileActivitiesStash{"autotileActivities"};
+//
+// Naming note: these are field names inside the v4 stash object, not v4 wire
+// keys themselves — the "v3"-shaped data they describe (snapping vs.
+// autotile, monitors vs. desktops vs. activities) is what gives the
+// constants their names. The stash itself is a v4 artifact that bridges the
+// chain step to the finalizer.
+constexpr QLatin1StringView kStashSnappingMonitorsField{"snappingMonitors"};
+constexpr QLatin1StringView kStashAutotileMonitorsField{"autotileMonitors"};
+constexpr QLatin1StringView kStashSnappingDesktopsField{"snappingDesktops"};
+constexpr QLatin1StringView kStashAutotileDesktopsField{"autotileDesktops"};
+constexpr QLatin1StringView kStashSnappingActivitiesField{"snappingActivities"};
+constexpr QLatin1StringView kStashAutotileActivitiesField{"autotileActivities"};
 } // namespace
 
 void ConfigMigration::migrateV3ToV4(QJsonObject& root)
@@ -1403,18 +1471,31 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         // Only stash a value when the v3 key actually carried one — an absent
         // or empty disable list contributes no rules, so a stash entry for it
         // would just be inert noise finalizeV4Conversion has to skip.
-        const QString value = display.value(configKey).toString();
+        //
+        // Surface non-string disk values (hand-edit / disk-corruption /
+        // doubly-migrated remnants) before we discard them. `toString()`
+        // silently returns "" for numbers / nulls / arrays / bools so the
+        // stash-then-remove path would otherwise drop the data without a
+        // trace. Mirrors the qWarning in migrateV2ToV3::takeKey.
+        const QJsonValue raw = display.value(configKey);
+        if (display.contains(configKey) && !raw.isString() && !raw.isNull() && !raw.isUndefined()) {
+            qWarning(
+                "ConfigMigration::migrateV3ToV4: discarding non-string value at Display.%s "
+                "(type=%d) — only string disable-lists are migrated.",
+                qPrintable(configKey), static_cast<int>(raw.type()));
+        }
+        const QString value = raw.toString();
         if (!value.isEmpty()) {
             stash.insert(stashKey, value);
         }
         display.remove(configKey);
     };
-    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledMonitorsKey(), kV3SnappingMonitorsStash);
-    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledMonitorsKey(), kV3AutotileMonitorsStash);
-    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledDesktopsKey(), kV3SnappingDesktopsStash);
-    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledDesktopsKey(), kV3AutotileDesktopsStash);
-    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledActivitiesKey(), kV3SnappingActivitiesStash);
-    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledActivitiesKey(), kV3AutotileActivitiesStash);
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledMonitorsKey(), kStashSnappingMonitorsField);
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledMonitorsKey(), kStashAutotileMonitorsField);
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledDesktopsKey(), kStashSnappingDesktopsField);
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledDesktopsKey(), kStashAutotileDesktopsField);
+    moveDisableKey(ConfigKeys::Legacy::v3snappingDisabledActivitiesKey(), kStashSnappingActivitiesField);
+    moveDisableKey(ConfigKeys::Legacy::v3autotileDisabledActivitiesKey(), kStashAutotileActivitiesField);
 
     // Write the stripped Display group back; drop it entirely if now empty so
     // no husk object lingers.
@@ -1435,6 +1516,17 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // Disable-list stash: each `moveDisableKey` above already skipped empty
     // values, so an empty `stash` here means the v3 config had no disable
     // lists at all.
+    //
+    // Re-entry note: the v3-version-gate at the top of this function
+    // (`if (root[versionKey].toInt(0) >= 4) return;`) means a fully-stamped
+    // v4 config never re-enters here, so the `stash` we build is for THIS
+    // run only. A user who hand-edits their v3 config to re-add a
+    // Display.*Disabled* key after a partial earlier run would land back
+    // here, and the `root[kV4DisableStashKey()] = stash;` overwrite is
+    // intentional: the prior stash represented the prior on-disk state,
+    // and the user's hand-edit is the new authoritative input. Merging
+    // would carry forward values the user just removed from disk. Spelt
+    // out so a future maintainer doesn't "fix" this by accident.
     if (!stash.isEmpty()) {
         root[kV4DisableStashKey()] = stash;
     }
@@ -1446,7 +1538,19 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // stashed JSON and appends the resulting WindowRules to the same rule
     // set assignments/disable lists feed.
     QJsonObject animations = root.value(ConfigKeys::Legacy::v4AnimationsGroup()).toObject();
-    const QJsonArray animationRules = animations.value(ConfigKeys::Legacy::v4AnimationAppRulesKey()).toArray();
+    const QJsonValue rawAnimationRules = animations.value(ConfigKeys::Legacy::v4AnimationAppRulesKey());
+    // Surface a non-array AnimationAppRules value before discarding it,
+    // matching the moveDisableKey diagnostic above. Without this log, a
+    // hand-edited or disk-corrupted value silently vanishes during
+    // migration (toArray() returns empty for non-array QJsonValues).
+    if (animations.contains(ConfigKeys::Legacy::v4AnimationAppRulesKey()) && !rawAnimationRules.isArray()
+        && !rawAnimationRules.isNull() && !rawAnimationRules.isUndefined()) {
+        qWarning(
+            "ConfigMigration::migrateV3ToV4: discarding non-array value at Animations.%s "
+            "(type=%d) — only arrays of animation app rules are migrated.",
+            qPrintable(ConfigKeys::Legacy::v4AnimationAppRulesKey()), static_cast<int>(rawAnimationRules.type()));
+    }
+    const QJsonArray animationRules = rawAnimationRules.toArray();
     if (!animationRules.isEmpty()) {
         root[kV4AnimationRulesStashKey()] = animationRules;
     }
@@ -1564,18 +1668,27 @@ bool parseAssignmentGroup(const QString& groupName, const QString& prefix, QStri
     }
     desktop = 0;
     activity.clear();
-    const int actIdx = remainder.indexOf(QLatin1String(":Activity:"));
+    // Anchor at the LAST occurrence of each suffix so a disambiguated
+    // screen id like `Manuf:Model:Serial/CONNECTOR` that happens to
+    // contain `:Activity:` or `:Desktop:` as a literal substring doesn't
+    // truncate to a stub. Matches the screen-id parsing convention used by
+    // disableRuleForDesktop / disableRuleForActivity above (both use
+    // lastIndexOf). Production v3 screen ids don't carry those substrings
+    // — this is defence against future screen-id formats.
+    static const QLatin1String kActivityTag(":Activity:");
+    static const QLatin1String kDesktopTag(":Desktop:");
+    const int actIdx = remainder.lastIndexOf(kActivityTag);
     if (actIdx >= 0) {
-        const QString a = remainder.mid(actIdx + 10);
+        const QString a = remainder.mid(actIdx + kActivityTag.size());
         if (!a.isEmpty()) {
             activity = a;
         }
         remainder = remainder.left(actIdx);
     }
-    const int deskIdx = remainder.indexOf(QLatin1String(":Desktop:"));
+    const int deskIdx = remainder.lastIndexOf(kDesktopTag);
     if (deskIdx >= 0) {
         bool ok = false;
-        const int d = remainder.mid(deskIdx + 9).toInt(&ok);
+        const int d = remainder.mid(deskIdx + kDesktopTag.size()).toInt(&ok);
         if (ok && d > 0) {
             desktop = d;
         }
@@ -1850,6 +1963,18 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // set — a genuine first run, or a crash before windowrules.json was
     // written. Only this path rebuilds and writes the rule store.
 
+    // Pre-flight windowrules.json itself: the "already converted" probe
+    // above gates on a `WindowRuleSet::loadFromFile(...).has_value()` parse
+    // check. If the file EXISTS but the loader returned nullopt (malformed
+    // JSON, truncated write, hand-edit error), we'd otherwise fall through
+    // to a rebuild that overwrites the corrupt-but-recoverable original
+    // with a stub provider-default rule set — destroying every user-authored
+    // rule. Quarantine to `.corrupt.bak` and abort instead, mirroring the
+    // assignments-prevalidate contract below.
+    if (!prevalidateWindowRulesFile(windowRulesPath)) {
+        return false;
+    }
+
     // Pre-flight the legacy assignments.json: a malformed sidecar must abort
     // BEFORE we write windowrules.json (otherwise we'd commit a
     // provider-default-only rule set that silently drops every assignment AND
@@ -1927,6 +2052,18 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
                           qPrintable(assignmentsPath), qPrintable(err.errorString()));
                 return false;
             }
+        } else {
+            // Prevalidate just passed for this path (top of finalizeV4Conversion),
+            // so an open-failure here is a TOCTOU (permissions / lock flipped
+            // between the prevalidate and this read). Treat it as
+            // "no assignments to migrate" so the disable-only rule set still
+            // gets written — but surface a warning so the user has a paper
+            // trail when the migration silently produces an empty assignments
+            // section.
+            qWarning(
+                "ConfigMigration: %s opened during prevalidation but failed to reopen here (%s) — "
+                "continuing with an empty assignments set.",
+                qPrintable(assignmentsPath), qPrintable(af.errorString()));
         }
     }
 
@@ -2041,12 +2178,12 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         }
     };
     using PhosphorZones::AssignmentEntry;
-    appendMonitorRules(stash.value(kV3SnappingMonitorsStash).toString(), AssignmentEntry::Snapping);
-    appendMonitorRules(stash.value(kV3AutotileMonitorsStash).toString(), AssignmentEntry::Autotile);
-    appendDesktopRules(stash.value(kV3SnappingDesktopsStash).toString(), AssignmentEntry::Snapping);
-    appendDesktopRules(stash.value(kV3AutotileDesktopsStash).toString(), AssignmentEntry::Autotile);
-    appendActivityRules(stash.value(kV3SnappingActivitiesStash).toString(), AssignmentEntry::Snapping);
-    appendActivityRules(stash.value(kV3AutotileActivitiesStash).toString(), AssignmentEntry::Autotile);
+    appendMonitorRules(stash.value(kStashSnappingMonitorsField).toString(), AssignmentEntry::Snapping);
+    appendMonitorRules(stash.value(kStashAutotileMonitorsField).toString(), AssignmentEntry::Autotile);
+    appendDesktopRules(stash.value(kStashSnappingDesktopsField).toString(), AssignmentEntry::Snapping);
+    appendDesktopRules(stash.value(kStashAutotileDesktopsField).toString(), AssignmentEntry::Autotile);
+    appendActivityRules(stash.value(kStashSnappingActivitiesField).toString(), AssignmentEntry::Snapping);
+    appendActivityRules(stash.value(kStashAutotileActivitiesField).toString(), AssignmentEntry::Autotile);
 
     // Collapse exact-duplicate disable rules: dedup on the semantic identity
     // (mode-token, screenId, desktop, activity) so the migrated store is no

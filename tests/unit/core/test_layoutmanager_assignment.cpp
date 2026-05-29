@@ -63,6 +63,108 @@ private Q_SLOTS:
         m_guards.clear();
     }
 
+    // ─── Combined batch API ──────────────────────────────────────────────
+    //
+    // setAllCombinedAssignments / combinedAssignments are the triple-axis
+    // sibling of the Desktop / Activity batches. Pin the round-trip: a
+    // Combined rule survives, gets its enabled flag preserved, and its
+    // edit isolation from pure-Activity / pure-Desktop / Monitor rules.
+    void testCombinedBatchRoundTrip()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
+        mgr->addLayout(layoutA);
+        auto* layoutB = createTestLayout(QStringLiteral("LayoutB"));
+        mgr->addLayout(layoutB);
+
+        // Seed: one Combined, one pure-Activity, one pure-Desktop. The
+        // batch must touch ONLY the Combined.
+        mgr->assignLayout(QStringLiteral("DP-1"), 3, QStringLiteral("work"), layoutA);
+        mgr->assignLayout(QStringLiteral("DP-1"), 0, QStringLiteral("work"), layoutB);
+        mgr->assignLayout(QStringLiteral("DP-1"), 5, QString(), layoutB);
+
+        // Reader returns only the Combined rule.
+        const auto combined = mgr->combinedAssignments();
+        QCOMPARE(combined.size(), 1);
+        PhosphorZones::CombinedAssignmentKey key{QStringLiteral("DP-1"), 3, QStringLiteral("work")};
+        QVERIFY(combined.contains(key));
+        QCOMPARE(combined.value(key), layoutA->id().toString());
+
+        // Round-trip: re-assign the same hash → state must be byte-identical.
+        mgr->setAllCombinedAssignments(combined);
+        const auto roundTripped = mgr->combinedAssignments();
+        QCOMPARE(roundTripped, combined);
+
+        // Cascade-resolution check: the rebuilt Combined rule must resolve
+        // through the live cascade at its (screen, desktop, activity) tuple.
+        // A regression that mis-builds the rule with a transposed-arg
+        // signature would still produce a hash-equal projection (because
+        // the reader re-reads from the same wrong tuple); this assertion
+        // catches that class of bug.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 3, QStringLiteral("work"))->name(),
+                 QStringLiteral("LayoutA"));
+
+        // The pure-Activity rule survives untouched.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1, QStringLiteral("work"))->name(),
+                 QStringLiteral("LayoutB"));
+        // The pure-Desktop rule survives untouched.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 5, QString())->name(), QStringLiteral("LayoutB"));
+    }
+
+    // NOTE on enabled-flag preservation: setAllCombinedAssignments mirrors
+    // applyBatchAssignments's OldEntrySnapshot capture (Pass 1 P2 audit
+    // finding), so disabled→enabled regression is structurally shared with
+    // the Activity / Desktop / Screen batches. A dedicated test would need
+    // a public WindowRuleStore accessor on LayoutRegistry to flip the
+    // rule's enabled flag — none exists today, and adding one solely for
+    // test scaffolding would be an SRP violation. The shared
+    // applyBatchAssignments + OldEntrySnapshot path covers the four
+    // sibling APIs uniformly.
+
+    // ─── Combined-rule preservation regression ───────────────────────────
+    //
+    // setAllActivityAssignments / activityAssignments operate on a
+    // (screen, activity) hash key with no desktop dimension. Combined
+    // rules (screen+desktop+activity) used to be matched by both the
+    // batch reader and the family classifier — which meant a Combined
+    // rule was read into the (screen, activity) hash (silently
+    // overwriting any pure-Activity entry on the same pair), then on
+    // round-trip rebuilt at desktop=0, permanently losing its desktop
+    // pin. The fix narrows both reader and family classifier to STRICT
+    // per-Activity (Activity-only, no Combined), so Combined rules
+    // survive untouched in the rule store across an Activity-batch
+    // round-trip.
+    void testCombinedRulesSurviveActivityBatchRoundTrip()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* activityLayout = createTestLayout(QStringLiteral("ActivityLayout"));
+        mgr->addLayout(activityLayout);
+        auto* combinedLayout = createTestLayout(QStringLiteral("CombinedLayout"));
+        mgr->addLayout(combinedLayout);
+
+        const QString screen = QStringLiteral("DP-1");
+        const QString activity = QStringLiteral("activity-work");
+
+        // Pure-Activity rule and a Combined rule (same screen+activity but
+        // pinned to desktop 3). Pre-fix: the Activity batch reader would
+        // see both, key them under the same (screen, activity) pair, and
+        // the QHash insert order would silently drop one.
+        mgr->assignLayout(screen, 0, activity, activityLayout);
+        mgr->assignLayout(screen, 3, activity, combinedLayout);
+
+        // Reader sees ONLY the pure-Activity rule.
+        const auto projection = mgr->activityAssignments();
+        QCOMPARE(projection.size(), 1);
+        QVERIFY(projection.contains(qMakePair(screen, activity)));
+
+        // Round-trip the projection back through setAllActivityAssignments.
+        // The Combined rule must still be reachable on desktop 3, untouched
+        // by the Activity batch family classifier.
+        mgr->setAllActivityAssignments(projection);
+        QCOMPARE(mgr->layoutForScreen(screen, 3, activity)->name(), QStringLiteral("CombinedLayout"));
+        QCOMPARE(mgr->layoutForScreen(screen, 1, activity)->name(), QStringLiteral("ActivityLayout"));
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // P1: layoutForScreen fallback cascade
     // ═══════════════════════════════════════════════════════════════════════════

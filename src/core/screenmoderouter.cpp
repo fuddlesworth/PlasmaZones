@@ -47,6 +47,22 @@ PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& sc
     // and downgrade to Snapping. (A second isActiveOnScreen check here
     // would be dead code given the early return above.)
     //
+    // Asymmetry note (intentional): we downgrade engine-inactive +
+    // cascade-Autotile to Snapping, but we do NOT downgrade the reverse
+    // direction (engine-active overrides whatever the cascade says by
+    // virtue of the early-return above). The only window where the
+    // cascade could be Autotile-ahead of the engine is during the
+    // synchronous transition inside `updateAutotileScreens`
+    // (daemon/autotile.cpp), which calls `setActiveScreens` BEFORE the
+    // user can fire a navigation shortcut on the new screen — the daemon
+    // signal pump is single-threaded and processes assign-then-input
+    // events in order. Cross-VS D-Bus queries from the kwin-effect ride
+    // the bus's monotonic delivery order, so they see the post-
+    // setActiveScreens snapshot too. Adding a symmetric "engine inactive
+    // but cascade pending → trust cascade" branch would have to
+    // distinguish "stale assignment" from "fresh assignment not yet
+    // applied" — which the router has no signal for.
+    //
     // Scrolling reports pass through unchanged: there is no engine to
     // cross-check (engineFor returns nullptr for Scrolling), so the
     // cascade is authoritative for the no-engine modes. Only Autotile
@@ -76,7 +92,11 @@ PhosphorEngine::IPlacementEngine* ScreenModeRouter::engineFor(const QString& scr
     // Switch above is exhaustive over PhosphorZones::AssignmentEntry::Mode. Deliberately
     // no `default:` case so that adding a new enum value triggers -Wswitch
     // at compile time instead of silently falling through to nullptr at
-    // runtime. Q_UNREACHABLE + nullptr is the safe fallback if that happens.
+    // runtime. The trailing Q_UNREACHABLE + return silences -Wreturn-type;
+    // a path that reaches here means the enum gained a value the switch
+    // didn't handle, which is a build-time omission, not a runtime
+    // condition. Don't read this as a defensive guarantee — the path is
+    // genuinely unreachable as long as the switch stays exhaustive.
     Q_UNREACHABLE();
     return nullptr;
 }

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include "RuleTestHelpers.h"
+
 #include <PhosphorWindowRule/RuleAction.h>
 
 #include <QJsonObject>
@@ -9,15 +11,14 @@
 using namespace PhosphorWindowRule;
 
 namespace {
-
-RuleAction engineModeAction(const QString& mode)
+// Local alias for the shared `TestHelpers::engineMode(QString)` helper —
+// the test body reads cleaner with a one-word name and a local namespace
+// alias keeps the call sites unchanged. Replaces the prior duplicate
+// helper that bypassed the canonical `ActionParam::Mode` constant.
+inline RuleAction engineModeAction(const QString& mode)
 {
-    RuleAction a;
-    a.type = QString(ActionType::SetEngineMode);
-    a.params.insert(QStringLiteral("mode"), mode);
-    return a;
+    return PhosphorWindowRule::TestHelpers::engineMode(mode);
 }
-
 } // namespace
 
 class TestRuleAction : public QObject

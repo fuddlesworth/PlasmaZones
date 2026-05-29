@@ -20,13 +20,14 @@ RuleAction makeAction(QLatin1StringView type, const QJsonObject& params = {})
 
 } // namespace
 
-// Singleton-pollution hazard: `ActionRegistry` is a process-global singleton
-// and exposes no `unregisterAction`. `testRegisterCustomAction` permanently
-// adds a custom type for the lifetime of this test process. Consequently no
-// test here may assert an *absolute* `registeredTypes().size()` — that count
-// is not stable across the suite. Builtins are asserted individually instead.
-// `testBuiltinsRegistered` must stay declared FIRST so it observes the
-// registry before any test mutates it.
+// `ActionRegistry` is a process-global singleton. It now exposes
+// `unregisterAction` (added in the audit pass), so symmetric cleanup is
+// possible — but this test suite predates that API and `testRegisterCustomAction`
+// does not yet RAII-clean up its sentinel. To keep cross-test independence
+// without rewriting every test, no test here asserts an *absolute*
+// `registeredTypes().size()` — that count is not stable across the suite.
+// Builtins are asserted individually instead. `testBuiltinsRegistered` must
+// stay declared FIRST so it observes the registry before any test mutates it.
 class TestActionRegistry : public QObject
 {
     Q_OBJECT
@@ -144,8 +145,10 @@ private Q_SLOTS:
         // `_zz_` prefix so the type-id sorts to the end if anyone iterates
         // `registeredTypes()` in lexicographic order, and the underscore-led
         // name visually separates it from the production wire identifiers.
-        // The singleton has no unregisterAction — see the file-level comment
-        // for the pollution rationale.
+        // This test predates the `unregisterAction` API; the sentinel
+        // remains registered for the rest of the test binary's lifetime —
+        // see the file-level comment for the cross-test independence
+        // pattern.
         const QString customType = QStringLiteral("_zz_pwrTestCustomAction");
         QVERIFY(!reg.isRegistered(customType));
 

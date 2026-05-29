@@ -14,20 +14,22 @@ ContextResolver::ContextResolver(IWorkspaceState* workspaceState, IModeProvider*
     , m_gateSource(gateSource)
 {
     // All three adapters are documented preconditions; passing nullptr has
-    // no useful semantics — the resolver has nothing to dispatch to.
-    // Assert in debug + qFatal in release so a wiring bug crashes loudly at
-    // construction rather than silently returning zeroes from every query.
-    // Combined assertion so debug builds report the same level of
-    // diagnostic the release-build qFatal below emits — three separate
-    // Q_ASSERT_X calls would abort at the first one and hide whether the
-    // others were also null.
-    Q_ASSERT_X(m_workspaceState != nullptr && m_modeProvider != nullptr && m_gateSource != nullptr,
-               "PhosphorContext::ContextResolver", "workspaceState / modeProvider / gateSource must all be non-null");
+    // no useful semantics — the resolver has nothing to dispatch to. qFatal
+    // fires in BOTH debug and release builds (no Q_ASSERT layered on top —
+    // a combined Q_ASSERT_X here would print a generic message that
+    // doesn't identify WHICH pointer was null, defeating the diagnostic
+    // intent). The detailed qFatal printf below names every axis so a
+    // wiring bug is immediately attributable.
     if (!m_workspaceState || !m_modeProvider || !m_gateSource) {
         qFatal(
             "PhosphorContext::ContextResolver: null adapter pointer "
             "(workspaceState=%p modeProvider=%p gateSource=%p)",
             static_cast<void*>(m_workspaceState), static_cast<void*>(m_modeProvider), static_cast<void*>(m_gateSource));
+        // qFatal lacks [[noreturn]] on MSVC's QMessageLogger::fatal —
+        // mirror snapadaptor.cpp's defensive `return` so a future
+        // maintainer adding statements after this block can't have them
+        // silently execute on MSVC after a null-pointer wiring bug.
+        return;
     }
 }
 

@@ -833,6 +833,14 @@ private:
     QRectF m_pendingDragGeometry;
     QString m_snapDragStartScreenId; // Virtual screen at snap-mode drag start (for VS crossing on drop)
 
+    /// Monotonic per-drag generation. Bumped on every drag start. The async
+    /// beginDrag reply lambda captures the generation at dispatch time and
+    /// checks against the live value at reply time — if the drag has ended
+    /// (or a new one started) before the reply arrives, the captured policy
+    /// would otherwise be written into m_currentDragPolicy and bleed into
+    /// the next drag's state. Generation-mismatched replies are discarded.
+    quint64 m_dragGeneration = 0;
+
     // Windows floated by drag on autotile screens. The daemon emits
     // applyGeometryRequested to restore pre-autotile geometry on float,
     // but drag-to-float should keep the window where the user dropped it.

@@ -88,13 +88,14 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
  */
 struct AssignmentEntry
 {
-    /// Per-context engine selection. The integer values are persisted to
-    /// the rule store via `ContextRuleBridge::makeDisableRule` / read back
-    /// via `disableRuleMode`, and they appear in the v4 windowrules.json
-    /// schema as the `DisableEngine` action's `mode` wire token (see
-    /// `modeToWireString` / `modeFromWireString` below). NEVER renumber
-    /// existing values — older rule stores would silently swap engines.
-    /// Append new modes at the end.
+    /// Per-context engine selection. The v4 rule store persists the WIRE
+    /// STRINGS produced by `modeToWireString` ("snapping", "autotile",
+    /// "scrolling") — `ContextRuleBridge::makeDisableRule` writes them
+    /// and `disableRuleMode` reads them back. The legacy v3→v4 config
+    /// migration (configmigration.cpp) does still read the int side via
+    /// `Display.<screen>:Mode`, so NEVER renumber existing values — a
+    /// renumber would silently swap engines for v3 disable lists that
+    /// haven't been migrated yet. Append new modes at the end.
     enum Mode {
         Snapping = 0,
         Autotile = 1,

@@ -194,6 +194,10 @@ public Q_SLOTS:
     QString getAllScreenAssignments();
     QVariantMap getAllDesktopAssignments(); // Get all per-desktop assignments as key -> layoutId
     QVariantMap getAllActivityAssignments(); // Get all per-activity assignments as key -> layoutId
+    // Combined-context (screen + desktop + activity); key format
+    // "screen|desktop|activity"; pure-Activity / pure-Desktop / Monitor
+    // rules are not included.
+    QVariantMap getAllCombinedAssignments();
 
     // Quick layout slots (1-9)
     QString getQuickLayoutSlot(int slotNumber);
@@ -249,6 +253,12 @@ public Q_SLOTS:
     bool hasExplicitAssignmentForScreenActivity(const QString& screenId, const QString& activityId);
     void
     setAllActivityAssignments(const QVariantMap& assignments); // Batch set - key: "screen:activity", value: layoutId
+
+    // Combined-context (screen + desktop + activity) batch setter —
+    // triple-axis sibling of the Activity / Desktop batches. Pure-Activity /
+    // Desktop / Monitor rules are untouched. Reader is declared with the
+    // other readers above.
+    void setAllCombinedAssignments(const QVariantMap& assignments);
 
     // Full assignment (screen + desktop + activity)
     QString getLayoutForScreenDesktopActivity(const QString& screenId, int virtualDesktop, const QString& activityId);

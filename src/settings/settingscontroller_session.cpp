@@ -31,6 +31,7 @@
 #include "virtualscreenutils.h"
 
 #include <PhosphorLayoutApi/LayoutId.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QDBusConnection>
@@ -268,7 +269,11 @@ void SettingsController::onVirtualDesktopsChanged()
     bool prunedAny = false;
     {
         ExternalEditScope scope(*this, QStringLiteral("overview"));
-        for (const auto mode : {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+        // Iterate every mode the (Mode, Family) table knows about so a
+        // future mode (e.g. Scrolling) is automatically pruned when the
+        // user removes a virtual desktop it referenced. The hand-maintained
+        // {Snapping, Autotile} list here used to silently skip Scrolling.
+        for (const auto mode : PhosphorZones::allModes()) {
             QStringList disabled = m_settings.disabledDesktops(mode);
             if (pruneDisabledDesktopEntries(disabled, m_virtualDesktopCount)) {
                 m_settings.setDisabledDesktops(mode, disabled);
@@ -305,8 +310,11 @@ void SettingsController::onActivitiesChanged()
                     validIds.insert(id);
                 }
             }
-            for (const auto mode :
-                 {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+            // Iterate every mode the (Mode, Family) table knows about so a
+            // future mode (e.g. Scrolling) is automatically pruned when the
+            // user removes a KDE activity it referenced. Symmetric with the
+            // desktop-prune loop in onVirtualDesktopsChanged above.
+            for (const auto mode : PhosphorZones::allModes()) {
                 QStringList disabledActs = m_settings.disabledActivities(mode);
                 if (pruneDisabledActivityEntries(disabledActs, validIds)) {
                     m_settings.setDisabledActivities(mode, disabledActs);

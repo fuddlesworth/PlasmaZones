@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 #include "plasmazoneseffect/types.h"
@@ -250,6 +251,48 @@ public:
         return m_shaderTransitions.erase(window) > 0;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Per-frame SetOpacity cache
+    //
+    // prePaintWindow needs to know "is this window dimmed by a SetOpacity
+    // rule?" to clear the opaque region; paintWindow then has to apply the
+    // same opacity to the WindowPaintData. Without caching, both calls
+    // walk the rule cascade (resolveWindowOpacity → highestPriorityMatch
+    // → ResolvedActions assembly) per visible window per frame —
+    // paying 2× the cost the cascade was designed for.
+    //
+    // Cache layout:
+    //   `m_frameOpacityComputed.contains(w)` → "lookup already done this
+    //                                           frame"; value is the
+    //                                           resolved std::optional<qreal>
+    //                                           (nullopt = no SetOpacity
+    //                                           rule matched).
+    //
+    // Lifetime: populated by prePaintWindow's resolve, consumed by
+    // paintWindow's resolve, cleared at postPaintScreen so the next frame
+    // re-resolves against any rule-set / metadata changes that landed
+    // between frames. Per-frame, not per-revision: a metadata change
+    // (windowClassChanged) invalidates the per-window cascade-cache via
+    // RuleEvaluator::clearCache(), and the next frame's prePaintWindow
+    // re-populates this map naturally.
+    // ═══════════════════════════════════════════════════════════════════════════
+    bool frameOpacityCached(KWin::EffectWindow* window) const
+    {
+        return m_frameOpacityCache.contains(window);
+    }
+    std::optional<qreal> cachedFrameOpacity(KWin::EffectWindow* window) const
+    {
+        return m_frameOpacityCache.value(window);
+    }
+    void cacheFrameOpacity(KWin::EffectWindow* window, std::optional<qreal> opacity)
+    {
+        m_frameOpacityCache.insert(window, opacity);
+    }
+    void clearFrameOpacityCache()
+    {
+        m_frameOpacityCache.clear();
+    }
+
 private:
     friend class PlasmaZonesEffect;
 
@@ -313,6 +356,11 @@ private:
     QVector4D m_cachedIDate{};
     QPointF m_cachedCursorGlobal;
     qint64 m_currentFrameClockMs = -1;
+
+    // Per-frame resolved SetOpacity values; cleared at postPaintScreen.
+    // Hash presence = "computed this frame"; value = nullopt when no rule
+    // matched. See the accessor block above for the per-frame contract.
+    QHash<KWin::EffectWindow*, std::optional<qreal>> m_frameOpacityCache;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Generation + Edge-detection

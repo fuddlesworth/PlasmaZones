@@ -235,6 +235,24 @@ struct ShaderTransition
     /// unconditionally — clearing the role on a window with no
     /// pending built-in open animation is a no-op.
     bool addedGrabHeld = false;
+    /// Cached texcoord handedness derived from the first quad of the source
+    /// list at the first `apply()` call. The handedness depends on KWin's
+    /// WindowQuad texcoord convention which doesn't change between frames,
+    /// so recomputing the (top/bottom/left/right) vertex search per frame
+    /// per surface-extent transition is wasted hot-path work — bounce,
+    /// fly-in, broken-glass, morph all hit this path on every frame for
+    /// the transition's lifetime.
+    ///
+    /// `handednessCached == false` means "not yet computed"; the first
+    /// `apply()` populates the four `*At*` slots and flips the bool.
+    /// Cleared on every fresh `beginShaderTransition` install for the same
+    /// window (transitions are torn down + reinstalled when the underlying
+    /// shader changes), so a follow-up install starts with a fresh probe.
+    bool handednessCached = false;
+    double uAtLeft = 0.0;
+    double uAtRight = 1.0;
+    double vAtTop = 0.0;
+    double vAtBottom = 1.0;
 };
 
 /// Pre-computed snap restore target for a pending app

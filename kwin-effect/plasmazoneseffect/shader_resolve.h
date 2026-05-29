@@ -93,10 +93,17 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
  * `durationMs > 0` overrides the duration, clamped identically to
  * `resolveAnimationShaderAndDuration`. An empty @p windowClass / @p eventPath
  * or no matching rule returns @p base unchanged.
+ *
+ * @p windowId routes the lookup through the evaluator's per-window match
+ * cache so the curve / timing / shader resolvers share their walks. Pass
+ * the same frozen composite the sister resolvers use; on a default-state
+ * tree (no rules, no profile overrides) the result is the unchanged
+ * base profile and the cache reads are O(1).
  */
 PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                                          const PhosphorAnimation::Profile& base,
                                                          const QString& windowClass, const QString& eventPath,
+                                                         const QString& windowId,
                                                          const PhosphorAnimation::CurveRegistry& curveRegistry);
 
 /**

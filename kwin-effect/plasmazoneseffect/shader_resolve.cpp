@@ -153,12 +153,20 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
 PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                                          const PhosphorAnimation::Profile& base,
                                                          const QString& windowClass, const QString& eventPath,
+                                                         const QString& windowId,
                                                          const PhosphorAnimation::CurveRegistry& curveRegistry)
 {
     if (windowClass.isEmpty() || eventPath.isEmpty()) {
         return base;
     }
-    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolve(animationQuery(windowClass));
+    // Use the cached path so motion + shader + opacity lookups all share a
+    // single per-window cascade walk. The previous uncached call did its
+    // own resolve() against the same query as the sister combined
+    // function — wasted work even though motion-profile lookups are
+    // per-event, not per-frame.
+    const PhosphorWindowRule::ResolvedActions resolved = windowId.isEmpty()
+        ? evaluator.resolve(animationQuery(windowClass))
+        : evaluator.resolveCached(windowId, animationQuery(windowClass));
     const auto curveAction = resolved.slot(curveSlotFor(eventPath));
     const auto timingAction = resolved.slot(timingSlotFor(eventPath));
     if (!curveAction && !timingAction) {
