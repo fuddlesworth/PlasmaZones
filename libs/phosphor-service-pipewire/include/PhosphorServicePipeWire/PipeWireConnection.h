@@ -60,6 +60,17 @@ public:
     explicit PipeWireConnection(QObject* parent = nullptr);
     ~PipeWireConnection() override;
 
+    /// Asynchronously write a per-channel volume array to the node
+    /// with the given PipeWire global id. The write is dispatched onto
+    /// the loop thread; consumers observe completion via the node's
+    /// `propsChanged` signal once PipeWire echoes the updated Props
+    /// pod. Called by `PwNode::setVolumes` / `setVolume`; rarely
+    /// useful directly.
+    void writeVolumes(quint32 nodeId, const QList<qreal>& volumes);
+    /// Asynchronously write a mute state. Same dispatch + echo model
+    /// as `writeVolumes`.
+    void writeMuted(quint32 nodeId, bool muted);
+
     [[nodiscard]] bool isConnected() const;
     [[nodiscard]] bool isDaemonAvailable() const;
     /// Snapshot of every node the registry has reported so far. Live

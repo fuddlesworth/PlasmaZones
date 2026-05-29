@@ -14,6 +14,7 @@
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/raw.h>
 #include <spa/param/props.h>
+#include <spa/pod/builder.h>
 #include <spa/pod/iter.h>
 #include <spa/pod/parser.h>
 #include <spa/utils/result.h>
@@ -208,6 +209,23 @@ public:
                                void* user_data);
     static int dispatchDisconnect(struct spa_loop* loop, bool async, uint32_t seq, const void* data, size_t size,
                                   void* user_data);
+
+    /// Loop-thread request carrying a volume + mute write to a single
+    /// node. The non-POD members (QList) are why we heap-allocate the
+    /// struct and pass the pointer through pw_loop_invoke's user_data
+    /// rather than the data payload, which is memcpy'd internally.
+    struct ParamWriteRequest
+    {
+        Private* owner = nullptr;
+        quint32 nodeId = 0;
+        bool writeVolumes = false;
+        bool writeMute = false;
+        QList<qreal> volumes;
+        bool muted = false;
+    };
+    static int dispatchParamWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data, size_t size,
+                                  void* user_data);
+    void doParamWrite(const ParamWriteRequest& req);
 
     // GUI-thread setters. Always invoked via queued cross-thread
     // signals so the NOTIFY emits and atomic writes both happen on
@@ -548,6 +566,70 @@ int PipeWireConnection::Private::dispatchConnect(struct spa_loop* loop, bool asy
     return 0;
 }
 
+int PipeWireConnection::Private::dispatchParamWrite(struct spa_loop* loop, bool async, uint32_t seq, const void* data,
+                                                    size_t size, void* user_data)
+{
+    Q_UNUSED(loop);
+    Q_UNUSED(async);
+    Q_UNUSED(seq);
+    Q_UNUSED(data);
+    Q_UNUSED(size);
+    // The request was heap-allocated by writeVolumes/writeMuted; take
+    // ownership via unique_ptr so it's released after the handler
+    // returns (even if doParamWrite throws — unlikely in C-bound
+    // code, but the guarantee is cheap).
+    std::unique_ptr<ParamWriteRequest> req(static_cast<ParamWriteRequest*>(user_data));
+    if (req && req->owner)
+        req->owner->doParamWrite(*req);
+    return 0;
+}
+
+void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
+{
+    auto it = loopNodes.find(req.nodeId);
+    if (it == loopNodes.end() || !it->second || !it->second->proxy) {
+        qCDebug(lcPipeWire) << "param write for unknown / detached node" << req.nodeId;
+        return;
+    }
+    auto* node = reinterpret_cast<pw_node*>(it->second->proxy);
+
+    // Build a Props pod containing only the field(s) we're updating.
+    // The buffer size budget: 1KiB is enough for a single Props
+    // object with up to ~64 channel-volume floats plus the SPA
+    // bookkeeping overhead — SPA_AUDIO_MAX_CHANNELS is 64 today, so
+    // the worst case is well under 512 bytes.
+    uint8_t buffer[1024];
+    spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
+    spa_pod_frame frame;
+    spa_pod_builder_push_object(&b, &frame, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+    if (req.writeVolumes) {
+        const int n = std::min<int>(req.volumes.size(), SPA_AUDIO_MAX_CHANNELS);
+        if (n > 0) {
+            float values[SPA_AUDIO_MAX_CHANNELS] = {};
+            for (int i = 0; i < n; ++i) {
+                // Clamp to PipeWire's documented [0.0, 1.0] linear
+                // amplitude domain. Values > 1.0 are valid (boosts)
+                // but uncommon; we leave that to the caller and only
+                // refuse negatives so a stray -0 doesn't poison the
+                // pod.
+                values[i] = static_cast<float>(std::max<qreal>(0.0, req.volumes[i]));
+            }
+            spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+            spa_pod_builder_array(&b, sizeof(float), SPA_TYPE_Float, static_cast<uint32_t>(n), values);
+        }
+    }
+    if (req.writeMute) {
+        spa_pod_builder_prop(&b, SPA_PROP_mute, 0);
+        spa_pod_builder_bool(&b, req.muted);
+    }
+    auto* pod = static_cast<spa_pod*>(spa_pod_builder_pop(&b, &frame));
+    if (!pod) {
+        qCWarning(lcPipeWire) << "spa_pod_builder_pop returned null for node" << req.nodeId;
+        return;
+    }
+    pw_node_set_param(node, SPA_PARAM_Props, 0, pod);
+}
+
 int PipeWireConnection::Private::dispatchDisconnect(struct spa_loop* loop, bool async, uint32_t seq, const void* data,
                                                     size_t size, void* user_data)
 {
@@ -684,6 +766,30 @@ void PipeWireConnection::disconnect()
     if (!d->thread.isRunning() || !d->loop)
         return;
     pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchDisconnect, 0, nullptr, 0, false, d.get());
+}
+
+void PipeWireConnection::writeVolumes(quint32 nodeId, const QList<qreal>& volumes)
+{
+    if (!d->thread.isRunning() || !d->loop)
+        return;
+    auto* req = new Private::ParamWriteRequest;
+    req->owner = d.get();
+    req->nodeId = nodeId;
+    req->writeVolumes = true;
+    req->volumes = volumes;
+    pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false, req);
+}
+
+void PipeWireConnection::writeMuted(quint32 nodeId, bool muted)
+{
+    if (!d->thread.isRunning() || !d->loop)
+        return;
+    auto* req = new Private::ParamWriteRequest;
+    req->owner = d.get();
+    req->nodeId = nodeId;
+    req->writeMute = true;
+    req->muted = muted;
+    pw_loop_invoke(pw_main_loop_get_loop(d->loop), &Private::dispatchParamWrite, 0, nullptr, 0, false, req);
 }
 
 } // namespace PhosphorServicePipeWire

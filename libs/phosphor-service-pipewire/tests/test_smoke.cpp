@@ -173,6 +173,31 @@ private Q_SLOTS:
                  (QStringList{QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")}));
     }
 
+    /// Write APIs must survive being called for a non-existent node id
+    /// and before connect(). The dispatch goes via pw_loop_invoke, so
+    /// a buggy implementation would either crash on the unique_ptr
+    /// guard or leak the request struct.
+    void writeAPIsAreSafeForUnknownTargets()
+    {
+        PhosphorServicePipeWire::PipeWireConnection conn;
+        // Pre-connect writes must early-out cleanly (loop running but
+        // no core/registry yet, so the node id lookup will fail).
+        conn.writeVolumes(99999, {0.5, 0.5});
+        conn.writeMuted(99999, true);
+        QTest::qWait(50);
+        QVERIFY(true);
+
+        // Post-connect writes for a non-existent id should still be
+        // safe — the loop-thread handler logs and returns without
+        // touching a proxy.
+        conn.connect();
+        QTest::qWait(150);
+        conn.writeVolumes(99999, {0.5});
+        conn.writeMuted(99999, false);
+        QTest::qWait(50);
+        QVERIFY(true);
+    }
+
     /// Models hooked to a live connection should populate based on the
     /// daemon's actual audio nodes — sinks-only model sees only sinks,
     /// streams model sees only streams, etc. On a no-daemon host the

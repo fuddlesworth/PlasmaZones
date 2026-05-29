@@ -3,6 +3,8 @@
 
 #include <PhosphorServicePipeWire/PwNode.h>
 
+#include <PhosphorServicePipeWire/PipeWireConnection.h>
+
 namespace PhosphorServicePipeWire {
 
 class PwNode::Private
@@ -20,7 +22,7 @@ public:
 };
 
 PwNode::PwNode(quint32 id, QString mediaClass, PipeWireConnection* parent)
-    : QObject(reinterpret_cast<QObject*>(parent))
+    : QObject(parent)
     , d(std::make_unique<Private>())
 {
     d->id = id;
@@ -28,6 +30,11 @@ PwNode::PwNode(quint32 id, QString mediaClass, PipeWireConnection* parent)
 }
 
 PwNode::~PwNode() = default;
+
+PipeWireConnection* PwNode::connection() const
+{
+    return qobject_cast<PipeWireConnection*>(parent());
+}
 
 quint32 PwNode::id() const
 {
@@ -104,6 +111,40 @@ void PwNode::applyInfo(QHash<QString, QString> props)
     }
     if (moved)
         Q_EMIT infoChanged();
+}
+
+void PwNode::setVolume(qreal value)
+{
+    auto* conn = connection();
+    if (!conn)
+        return;
+    // Promote the scalar to a per-channel array using the current
+    // channel count if known; if the node hasn't published a Props pod
+    // yet, fall back to a single-channel write so the request still
+    // has effect.
+    const int count = d->channelCount > 0 ? d->channelCount : 1;
+    QList<qreal> values;
+    values.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        values.append(value);
+    }
+    conn->writeVolumes(d->id, values);
+}
+
+void PwNode::setVolumes(const QList<qreal>& values)
+{
+    auto* conn = connection();
+    if (!conn)
+        return;
+    conn->writeVolumes(d->id, values);
+}
+
+void PwNode::setMuted(bool muted)
+{
+    auto* conn = connection();
+    if (!conn)
+        return;
+    conn->writeMuted(d->id, muted);
 }
 
 void PwNode::applyProps(int channelCount, QList<qreal> volumes, bool muted)

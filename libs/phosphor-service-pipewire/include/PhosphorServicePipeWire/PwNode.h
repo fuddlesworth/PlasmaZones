@@ -71,6 +71,25 @@ public:
     /// bindings.
     [[nodiscard]] QHash<QString, QString> properties() const;
 
+    /// Typed accessor for the owning connection. PwNode's write slots
+    /// (`setVolume`, `setMuted`) route through it so the loop-thread
+    /// dispatch is encapsulated.
+    [[nodiscard]] PipeWireConnection* connection() const;
+
+public Q_SLOTS:
+    /// Set every channel's linear amplitude to `value`. Convenience
+    /// for QML sliders that drive a single bar across the whole node.
+    /// The write is asynchronous: `propsChanged` fires after the
+    /// daemon echoes the new SPA_PARAM_Props pod, not immediately.
+    void setVolume(qreal value);
+    /// Per-channel write. The array length should equal
+    /// `channelCount`; PipeWire silently clamps or drops mismatched
+    /// arrays so callers are responsible for sizing.
+    void setVolumes(const QList<qreal>& values);
+    /// Asynchronous mute write. `propsChanged` fires once the daemon
+    /// confirms.
+    void setMuted(bool muted);
+
 Q_SIGNALS:
     void infoChanged();
     void propsChanged();
