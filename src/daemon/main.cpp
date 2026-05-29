@@ -66,7 +66,13 @@ int main(int argc, char* argv[])
     // case too (Qt's default "wayland-0"), which previously bypassed this guard
     // and let Qt abort. See queryPlasmaWorkspaceState() in daemon.cpp for the
     // full phantom-session analysis.
-    {
+    //
+    // Skip the probe entirely when WAYLAND_SOCKET is set: libwayland (and thus
+    // Qt's wayland QPA) connects via that inherited fd and ignores
+    // WAYLAND_DISPLAY, so there is a live connection even though no socket path
+    // resolves. Probing a path in that case would make us exit on a perfectly
+    // usable session.
+    if (qEnvironmentVariableIsEmpty("WAYLAND_SOCKET")) {
         const QByteArray waylandDisplay = qgetenv("WAYLAND_DISPLAY");
         const QByteArray runtimeDir = qgetenv("XDG_RUNTIME_DIR");
         const QString socketPath = resolveWaylandSocketPath(waylandDisplay, runtimeDir);
