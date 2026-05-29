@@ -550,28 +550,33 @@ const QHash<QString, int>& WindowTrackingService::desktopAssignments() const
     return m_snapState->desktopAssignments();
 }
 
+// The lastUsed* accessors are read during the WTA constructor's loadState()
+// call — which runs BEFORE Daemon::init wires SnapState via setSnapState().
+// Returning a sentinel (empty string / 0) when SnapState isn't yet
+// attached lets early-init readers (the setLastUsedZone restore at
+// saveload.cpp~792) pass through harmlessly instead of asserting and
+// crashing the daemon on startup. The snap-engine's own lastUsedZone
+// state is loaded later from KConfig through its persistence delegate
+// once SnapState is wired, so the early-init read here can only ever
+// produce a "no last zone yet" result anyway.
 QString WindowTrackingService::lastUsedZoneId() const
 {
-    Q_ASSERT(m_snapState);
-    return m_snapState->lastUsedZoneId();
+    return m_snapState ? m_snapState->lastUsedZoneId() : QString();
 }
 
 QString WindowTrackingService::lastUsedZoneClass() const
 {
-    Q_ASSERT(m_snapState);
-    return m_snapState->lastUsedZoneClass();
+    return m_snapState ? m_snapState->lastUsedZoneClass() : QString();
 }
 
 QString WindowTrackingService::lastUsedScreenName() const
 {
-    Q_ASSERT(m_snapState);
-    return m_snapState->lastUsedScreenId();
+    return m_snapState ? m_snapState->lastUsedScreenId() : QString();
 }
 
 int WindowTrackingService::lastUsedDesktop() const
 {
-    Q_ASSERT(m_snapState);
-    return m_snapState->lastUsedDesktop();
+    return m_snapState ? m_snapState->lastUsedDesktop() : 0;
 }
 
 void WindowTrackingService::retagLastUsedZoneClass(const QString& newClass)
