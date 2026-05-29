@@ -1528,15 +1528,18 @@ std::optional<PhosphorWindowRule::WindowRule> disableRuleForDesktop(const QStrin
 /// Build a context rule from a v3 activity disable-list entry
 /// (`screenId/activityUuid`). Returns nullopt on a malformed entry.
 ///
-/// Screen ids MUST NOT contain '/': the screen id is the first '/'-segment
-/// (split on `indexOf('/')`) and the activity uuid is the remainder, so a
-/// screen id with embedded slashes would be truncated. This matches the
-/// `screenId/activity` composite-key convention used by
-/// Settings::writeDisableEntries.
+/// Use `lastIndexOf('/')` so a disambiguated screen ID
+/// (`Manuf:Model:Serial/CONNECTOR` per `PhosphorScreens::ScreenIdentity`)
+/// splits at the activity boundary, not at the connector boundary inside
+/// the screen ID. Activity UUIDs are canonical and never contain `/`, so
+/// the trailing segment is unambiguously the activity uuid; everything
+/// to the left is the screen ID (which may carry an embedded `/CONNECTOR`
+/// suffix). Matches the live `Settings::writeDisableEntries` decoder in
+/// src/config/settings.cpp.
 std::optional<PhosphorWindowRule::WindowRule> disableRuleForActivity(const QString& entry,
                                                                      PhosphorZones::AssignmentEntry::Mode mode)
 {
-    const int slash = entry.indexOf(QLatin1Char('/'));
+    const int slash = entry.lastIndexOf(QLatin1Char('/'));
     if (slash <= 0 || slash == entry.size() - 1) {
         return std::nullopt;
     }

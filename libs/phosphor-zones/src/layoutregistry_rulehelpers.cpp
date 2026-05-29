@@ -58,6 +58,31 @@ bool hasEngineModeAction(const PWR::WindowRule& rule)
     return false;
 }
 
+bool isPureAssignmentRule(const PWR::WindowRule& rule)
+{
+    // True when every action belongs to the three assignment slots
+    // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). Used by
+    // the shape-based scan in findExactContextRule to refuse to claim a
+    // user-authored rule that carries non-assignment actions
+    // (SetOpacity, OverrideAnimation*, Float, Exclude, ...) — admitting
+    // such a rule would silently strip those actions through the
+    // assignment-rebuild path (upsertAssignmentRule, assignLayout,
+    // applyBatchAssignments) since makeAssignmentActions emits only the
+    // three slot actions. False on an empty action list as well — a
+    // context match with no actions is not an assignment rule.
+    if (rule.actions.isEmpty()) {
+        return false;
+    }
+    for (const PWR::RuleAction& action : rule.actions) {
+        if (action.type != QLatin1String(PWR::ActionType::SetEngineMode)
+            && action.type != QLatin1String(PWR::ActionType::SetSnappingLayout)
+            && action.type != QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool matchIsExactContextBase(const PWR::MatchExpression& match)
 {
     return CRB::matchIsExactContextBase(match);
