@@ -6,7 +6,8 @@
 #include <PhosphorServices/StatusNotifierHost.h>
 #include <PhosphorServices/StatusNotifierItem.h>
 
-#include "../iconimageprovider.h"
+#include <PhosphorServiceIconTheme/IconImageProvider.h>
+#include <PhosphorServiceIconTheme/QmlRegistration.h>
 
 #include <QLoggingCategory>
 #include <QUrl>
@@ -63,8 +64,14 @@ QString publishAndUrl(StatusNotifierItem* item, const QString& variant)
         return {};
     }
     qCDebug(lcSniModel) << "publishing icon for" << key << "size" << img.size() << "cacheKey" << img.cacheKey();
-    IconImageProvider::setImage(key, img);
-    return QStringLiteral("image://phosphor-services/") + key + QStringLiteral("?v=") + QString::number(img.cacheKey());
+    PhosphorServiceIconTheme::IconImageProvider::setImage(key, img);
+    // Resolve the URL host through phosphor-service-icontheme's
+    // accessor rather than hard-coding the string — a rename of the
+    // provider mount point on that side then forces a link/compile
+    // failure here instead of a silent runtime "image provider not
+    // found".
+    return QStringLiteral("image://") + QString::fromLatin1(PhosphorServiceIconTheme::imageProviderUrlHost())
+        + QLatin1Char('/') + key + QStringLiteral("?v=") + QString::number(img.cacheKey());
 }
 
 } // namespace

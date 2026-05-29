@@ -97,8 +97,7 @@ libs/                                      # C++ libraries, every concern is its
   phosphor-service-sni/                    # StatusNotifierItem host + watcher + dbusmenu (pending)
   phosphor-service-mpris/                  # ✓ MPRIS2 controller (shipped)
   phosphor-service-upower/                 # ✓ battery + power-supply readouts (shipped)
-  phosphor-service-icontheme/              # icon-theme resolver + Qt image provider (pending)
-                                           #   (or folded into phosphor-rendering, decide at extraction time)
+  phosphor-service-icontheme/              # ✓ icon-theme resolver + Qt image provider (shipped, kept standalone)
 
   # Existing libs, touched only where the surface work requires.
   # Already follow the one-concern-per-lib pattern; this plan extends it consistently.

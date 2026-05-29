@@ -12,14 +12,16 @@
 The spec-driven D-Bus services a desktop shell needs, each under the
 `PhosphorServices::` namespace and the `Phosphor.Services` QML import so
 a shell can pull in only what it uses. One service family ships here
-today; UPower and MPRIS have been extracted into sibling libraries (see
-[Phase 2.0 extraction note](#phase-20-extraction)).
+today; UPower, MPRIS, and the icon-theme resolver / image provider
+have been extracted into sibling libraries (see [Phase 2.0 extraction
+note](#phase-20-extraction)).
 
 - **System tray** — `org.kde.StatusNotifierItem` host + watcher with
-  full XDG icon-theme lookup and `com.canonical.dbusmenu` context
-  menus. A shell registers a `StatusNotifierHost`, binds its QML tray
-  view to `StatusNotifierItemModel`, and the library handles watcher
-  registration, item discovery, icon resolution, and menu activation.
+  `com.canonical.dbusmenu` context menus. A shell registers a
+  `StatusNotifierHost`, binds its QML tray view to
+  `StatusNotifierItemModel`, and the library handles watcher
+  registration, item discovery, icon URL publishing via
+  `phosphor-service-icontheme`, and menu activation.
 
 Hand-rolled `QDBusMessage` async-call clients (no generated proxies):
 property fetches batch through `GetAll` and never block the GUI
@@ -36,7 +38,6 @@ thread.
 | `StatusNotifierItem`       | Live proxy for one tray item; surfaces icon, tooltip, status, and menu. |
 | `StatusNotifierItemModel`  | `QAbstractListModel` over the host's items for QML binding. |
 | `DBusMenuModel`            | `QAbstractItemModel` over `com.canonical.dbusmenu` for context-menu rendering. |
-| `IconThemeResolver`        | XDG icon-theme lookup with size and theme fallbacks (QML singleton). |
 
 ### Media (MPRIS2)
 
@@ -54,12 +55,18 @@ before loading QML. `StatusNotifierItem` is registered uncreatable —
 it is vended by `StatusNotifierHost` / `StatusNotifierItemModel` and
 never constructed from QML.
 
+The icon image provider that used to live here has moved to
+`phosphor-service-icontheme`; consumers call
+`PhosphorServiceIconTheme::installImageProvider(engine)` directly. SNI
+publishes URLs through `image://phosphor-service-icontheme/<id>?v=<cacheKey>`
+and uses `IconThemeResolver` from the same library for theme walks.
+
 ## Phase 2.0 extraction
 
 The umbrella is being dissolved per Phase 2.0 of
-`docs/phosphor-shell-design/04-implementation-plan.md`. UPower and
-MPRIS have already moved out; StatusNotifierItem and the icon-theme
-resolver follow.
+`docs/phosphor-shell-design/04-implementation-plan.md`. UPower, MPRIS,
+and the icon-theme resolver / image provider have already moved out;
+StatusNotifierItem is the last tenant.
 
 ## Dependencies
 

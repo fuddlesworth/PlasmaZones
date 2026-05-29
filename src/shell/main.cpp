@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <PhosphorServices/QmlRegistration.h>
+#include <PhosphorServiceIconTheme/QmlRegistration.h>
 #include <PhosphorServiceMpris/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorShell/ShellEngine.h>
@@ -32,13 +33,15 @@ int main(int argc, char* argv[])
     // 1.0 — without this they'd surface as "not a type" errors at
     // QML load time. Idempotent under repeated calls.
     PhosphorServices::registerQmlTypes();
-    // UPower + MPRIS live in their own libraries (post Phase 2.0
-    // splits); the bar's battery widget imports
-    // Phosphor.Service.UPower 1.0 and the media widget imports
-    // Phosphor.Service.Mpris 1.0. Both need their types registered
-    // the same way.
+    // UPower + MPRIS + IconTheme live in their own libraries (post
+    // Phase 2.0 splits); the bar's battery widget imports
+    // Phosphor.Service.UPower 1.0, the media widget imports
+    // Phosphor.Service.Mpris 1.0, and the IconTheme singleton is
+    // mounted under Phosphor.Service.IconTheme 1.0. Each needs its
+    // types registered the same way.
     PhosphorServiceUPower::registerQmlTypes();
     PhosphorServiceMpris::registerQmlTypes();
+    PhosphorServiceIconTheme::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();
@@ -74,13 +77,15 @@ int main(int argc, char* argv[])
         },
         &app);
 
-    // Mount the PhosphorServices image provider on every QQmlEngine
-    // the shell constructs — startup + every hot-reload. Without
-    // this the tray `Image.source` URLs fall through to "image
-    // provider not found" and panel icons render as broken-image
-    // placeholders.
+    // Mount the icon image provider on every QQmlEngine the shell
+    // constructs — startup + every hot-reload. Without this the
+    // tray `Image.source` URLs published by StatusNotifierItemModel
+    // fall through to "image provider not found" and panel icons
+    // render as broken-image placeholders. The provider lives in
+    // phosphor-service-icontheme post Phase 2.0; SNI in
+    // phosphor-services calls into its static registry.
     engine.addEngineHook([](QQmlEngine* qmlEngine) {
-        PhosphorServices::installImageProvider(qmlEngine);
+        PhosphorServiceIconTheme::installImageProvider(qmlEngine);
     });
 
     if (!engine.load(shellUrl)) {

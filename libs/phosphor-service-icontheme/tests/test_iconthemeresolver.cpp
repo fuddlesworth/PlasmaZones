@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/IconThemeResolver.h>
+#include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
 #include <QDir>
 #include <QFile>
@@ -11,7 +11,7 @@
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 
-using PhosphorServices::IconThemeResolver;
+using PhosphorServiceIconTheme::IconThemeResolver;
 
 class TestIconThemeResolver : public QObject
 {

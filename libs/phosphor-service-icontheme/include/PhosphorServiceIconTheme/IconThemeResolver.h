@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorServices/phosphorservices_export.h>
+#include <PhosphorServiceIconTheme/phosphorserviceicontheme_export.h>
 
 #include <QHash>
 #include <QImage>
@@ -13,7 +13,7 @@
 
 #include <memory>
 
-namespace PhosphorServices {
+namespace PhosphorServiceIconTheme {
 
 /// XDG Icon Theme Specification 0.13 resolver.
 /// https://specifications.freedesktop.org/icon-theme-spec/latest/
@@ -25,7 +25,7 @@ namespace PhosphorServices {
 /// active theme + inherited parents + Hicolor fallback, using the
 /// spec's distance algorithm to pick a size when no exact match
 /// exists.
-class PHOSPHORSERVICES_EXPORT IconThemeResolver : public QObject
+class PHOSPHORSERVICEICONTHEME_EXPORT IconThemeResolver : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(IconThemeResolver)
@@ -63,4 +63,4 @@ private:
     std::unique_ptr<Private> d;
 };
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceIconTheme

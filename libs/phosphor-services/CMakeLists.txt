@@ -56,10 +56,10 @@ qt6_add_dbus_interface(phosphorservices_DBUS_GENERATED
     dbusmenu_interface
 )
 
-# Other tenants (MPRIS, UPower) used to live here too; they've been
-# extracted to sibling `phosphor-service-*` libraries per the Phase
-# 2.0 plan. The umbrella's remaining surface is SNI + icontheme,
-# pending their own extractions.
+# Other tenants (MPRIS, UPower, icon-theme + image provider) used to
+# live here too; they've been extracted to sibling
+# `phosphor-service-*` libraries per the Phase 2.0 plan. SNI is the
+# last remaining tenant, pending its own extraction.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Public Headers
@@ -72,7 +72,6 @@ set(phosphorservices_public_HDRS
     include/PhosphorServices/StatusNotifierItemModel.h
     include/PhosphorServices/StatusNotifierHost.h
     include/PhosphorServices/DBusMenuModel.h
-    include/PhosphorServices/IconThemeResolver.h
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -80,7 +79,6 @@ set(phosphorservices_public_HDRS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(phosphorservices_SRCS
-    src/iconimageprovider.cpp
     src/qmlregistration.cpp
     src/statusnotifier/dbustypes.cpp
     src/statusnotifier/statusnotifierwatcher.cpp
@@ -88,7 +86,6 @@ set(phosphorservices_SRCS
     src/statusnotifier/statusnotifieritem.cpp
     src/statusnotifier/statusnotifieritemmodel.cpp
     src/statusnotifier/dbusmenumodel.cpp
-    src/icontheme/iconthemeresolver.cpp
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -144,6 +141,14 @@ target_link_libraries(PhosphorServices
         Qt6::Qml
         Qt6::Quick
         Qt6::DBus
+        # SNI consumes IconThemeResolver (for theme-name lookup against
+        # IconThemePath / themed-name fallback) and IconImageProvider
+        # (the static registry that backs the tray icon URLs the model
+        # publishes). Both live in phosphor-service-icontheme post Phase
+        # 2.0; pull it in PUBLIC because the StatusNotifierItem and
+        # DBusMenuModel public headers reference the types implicitly
+        # through implementation choices that consumers can re-link.
+        PhosphorServiceIconTheme::PhosphorServiceIconTheme
 )
 
 set_target_properties(PhosphorServices PROPERTIES

@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/IconThemeResolver.h>
 #include <PhosphorServices/StatusNotifierItemModel.h>
 
 #include <QGuiApplication>
@@ -11,16 +10,6 @@ class TestSmoke : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
-    void iconResolverHasSingleton()
-    {
-        auto* r1 = PhosphorServices::IconThemeResolver::instance();
-        auto* r2 = PhosphorServices::IconThemeResolver::instance();
-        QVERIFY(r1);
-        QCOMPARE(r1, r2);
-        // Theme name is non-empty (falls back to hicolor at worst).
-        QVERIFY(!r1->themeName().isEmpty());
-    }
-
     void modelWithoutHostIsEmpty()
     {
         PhosphorServices::StatusNotifierItemModel model;

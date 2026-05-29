@@ -43,8 +43,12 @@ public:
         StatusRole,
         // Icon URL forms — bind to QML's Image.source (a QUrl). The
         // underlying QImage is published to the
-        // `image://phosphor-services/` provider as a side-effect of
-        // model attachment / item icon changes.
+        // `image://phosphor-service-icontheme/` provider as a
+        // side-effect of model attachment / item icon changes. The
+        // URL host is resolved through
+        // PhosphorServiceIconTheme::imageProviderUrlHost() at publish
+        // time so any rename there propagates here without a hidden
+        // string-match.
         IconUrlRole,
         OverlayIconUrlRole,
         AttentionIconUrlRole,

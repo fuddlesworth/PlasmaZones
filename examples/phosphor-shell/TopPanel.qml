@@ -128,7 +128,6 @@ PanelWindow {
                     Accessible.name: root.shellState.menuOpen ? "Close menu" : "Open menu"
                     onClicked: root.shellState.togglePopup("menu")
                 }
-
             }
 
             Row {
@@ -162,15 +161,10 @@ PanelWindow {
                             NumberAnimation {
                                 duration: 150
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // ─── Center zone: clock + calendar trigger ───────────────────────
@@ -200,7 +194,6 @@ PanelWindow {
                 Accessible.name: root.shellState.calendarOpen ? "Close calendar" : "Open calendar"
                 onClicked: root.shellState.togglePopup("calendar")
             }
-
         }
 
         // ─── System-tray (StatusNotifierItem) plumbing ────────────────────
@@ -285,7 +278,6 @@ PanelWindow {
                                 font.pixelSize: 10
                                 font.weight: Font.Bold
                             }
-
                         }
 
                         Image {
@@ -300,7 +292,8 @@ PanelWindow {
                             // a cacheKey so the URL changes whenever
                             // the underlying QImage data updates. The
                             // engine routes the URL back through
-                            // image://phosphor-services/ provider.
+                            // image://phosphor-service-icontheme/
+                            // provider.
                             // sourceSize keeps the on-screen size stable
                             // regardless of the icon's intrinsic res.
                             source: trayDelegate.iconUrl
@@ -324,7 +317,7 @@ PanelWindow {
                             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                             Accessible.role: Accessible.Button
                             Accessible.name: trayDelegate.toolTipTitle.length > 0 ? trayDelegate.toolTipTitle : trayDelegate.title
-                            onClicked: function(mouse) {
+                            onClicked: function (mouse) {
                                 // Translate the delegate-local click
                                 // coords to screen coords so the item's
                                 // process can position any popup it
@@ -367,20 +360,16 @@ PanelWindow {
                             // opening their menu. Y-axis maps to
                             // "vertical" orientation per spec; X is
                             // rarer but spec-defined for completeness.
-                            onWheel: function(wheel) {
+                            onWheel: function (wheel) {
                                 if (wheel.angleDelta.y !== 0)
                                     trayModel.scroll(trayDelegate.index, wheel.angleDelta.y, "vertical");
 
                                 if (wheel.angleDelta.x !== 0)
                                     trayModel.scroll(trayDelegate.index, wheel.angleDelta.x, "horizontal");
-
                             }
                         }
-
                     }
-
                 }
-
             }
 
             MprisWidget {
@@ -406,7 +395,6 @@ PanelWindow {
                     color: "#1e1e2e"
                     font.pixelSize: 11
                 }
-
             }
 
             Row {
@@ -425,7 +413,6 @@ PanelWindow {
                     color: "#1e1e2e"
                     font.pixelSize: 11
                 }
-
             }
 
             Row {
@@ -449,7 +436,6 @@ PanelWindow {
                     color: "#1e1e2e"
                     font.pixelSize: 11
                 }
-
             }
 
             Rectangle {
@@ -476,11 +462,8 @@ PanelWindow {
                     Accessible.name: root.shellState.settingsOpen ? "Close settings" : "Open settings"
                     onClicked: root.shellState.settingsOpen = !root.shellState.settingsOpen
                 }
-
             }
-
         }
-
     }
 
     // dbusmenu cascade for tray right-clicks. Re-anchored per click
@@ -492,5 +475,4 @@ PanelWindow {
 
         shellState: root.shellState
     }
-
 }

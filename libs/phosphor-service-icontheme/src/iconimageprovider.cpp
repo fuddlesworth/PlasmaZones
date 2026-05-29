@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "iconimageprovider.h"
+#include <PhosphorServiceIconTheme/IconImageProvider.h>
 
 #include <QLoggingCategory>
 #include <QMutexLocker>
 #include <QUrl>
 
-Q_LOGGING_CATEGORY(lcImageProvider, "phosphorservices.imageprovider")
+Q_LOGGING_CATEGORY(lcImageProvider, "phosphor.service.icontheme.imageprovider")
 
-namespace PhosphorServices {
+namespace PhosphorServiceIconTheme {
 
 QMutex IconImageProvider::s_mutex;
 QHash<QString, QImage> IconImageProvider::s_registry;
@@ -93,4 +93,4 @@ void IconImageProvider::clearImage(const QString& id)
     s_registry.remove(id);
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceIconTheme

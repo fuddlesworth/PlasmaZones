@@ -464,7 +464,12 @@ endforeach()
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
 if(BUILD_PHOSPHOR_SHELL)
-    add_subdirectory(libs/phosphor-services) # DBus + platform-integration primitives (SNI tray, dbusmenu, icon-theme)
+    # Order: icontheme is consumed by phosphor-services (SNI links it),
+    # so it must be configured first. The other Phase 2.0 siblings are
+    # independent and can land in any order, but the listing tracks
+    # extraction sequence for readability.
+    add_subdirectory(libs/phosphor-service-icontheme) # XDG icon-theme resolver + Qt image provider (extracted in Phase 2.0)
+    add_subdirectory(libs/phosphor-services) # DBus + platform-integration primitives (SNI tray + dbusmenu only)
     add_subdirectory(libs/phosphor-service-upower) # UPower battery / power-supply readouts (extracted from phosphor-services in Phase 2.0)
     add_subdirectory(libs/phosphor-service-mpris)  # MPRIS2 media-player discovery + control (extracted from phosphor-services in Phase 2.0)
 endif()

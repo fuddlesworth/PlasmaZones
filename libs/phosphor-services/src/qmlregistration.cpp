@@ -4,11 +4,9 @@
 #include <PhosphorServices/QmlRegistration.h>
 
 #include <PhosphorServices/DBusMenuModel.h>
-#include <PhosphorServices/IconThemeResolver.h>
 #include <PhosphorServices/StatusNotifierHost.h>
 #include <PhosphorServices/StatusNotifierItem.h>
 #include <PhosphorServices/StatusNotifierItemModel.h>
-#include "iconimageprovider.h"
 
 #include <QQmlEngine>
 
@@ -41,29 +39,12 @@ void registerQmlTypes()
     // MPRIS now lives in phosphor-service-mpris; consumers import
     // `Phosphor.Service.Mpris 1.0` separately. UPower lives in
     // phosphor-service-upower (`Phosphor.Service.UPower 1.0`).
-    // Don't re-register either here.
-
-    // Singleton resolver — exposes themeName + iconForName() to QML
-    // shells that want to resolve their own theme icons (e.g. for an
-    // application-launcher widget that needs the same XDG lookup as
-    // the tray).
-    qmlRegisterSingletonInstance<IconThemeResolver>(kModule, kModuleVersionMajor, kModuleVersionMinor,
-                                                    "IconThemeResolver", IconThemeResolver::instance());
-}
-
-void installImageProvider(QQmlEngine* engine)
-{
-    if (!engine) {
-        qWarning("PhosphorServices::installImageProvider called with null engine");
-        return;
-    }
-    // QQmlEngine takes ownership of the provider — passing a raw new
-    // is the documented pattern. Repeated installs on the same engine
-    // would clash (Qt warns + drops the new one), but we only call
-    // this once per engine construction.
-    engine->addImageProvider(QStringLiteral("phosphor-services"), new IconImageProvider());
-    qInfo("PhosphorServices: image provider mounted at image://phosphor-services/ on engine %p",
-          static_cast<void*>(engine));
+    // The icon-theme resolver + image provider now live in
+    // phosphor-service-icontheme (`Phosphor.Service.IconTheme 1.0`);
+    // the host application calls
+    // `PhosphorServiceIconTheme::registerQmlTypes()` +
+    // `installImageProvider()` directly. Don't re-register any of
+    // these here.
 }
 
 } // namespace PhosphorServices

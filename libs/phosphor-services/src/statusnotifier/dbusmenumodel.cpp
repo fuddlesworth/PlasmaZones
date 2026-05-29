@@ -3,7 +3,7 @@
 
 #include <PhosphorServices/DBusMenuModel.h>
 
-#include <PhosphorServices/IconThemeResolver.h>
+#include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
 #include "dbusmenu_interface.h"
 #include "dbustypes.h"
@@ -163,11 +163,11 @@ QImage iconFromProps(const QVariantMap& props, int size, const QStringList& them
         // dbusmenu has its OWN IconThemePath list (plural — different
         // from SNI's singular). Try each.
         for (const auto& path : themePaths) {
-            auto img = IconThemeResolver::instance()->iconForName(iconName, size, 1, path);
+            auto img = PhosphorServiceIconTheme::IconThemeResolver::instance()->iconForName(iconName, size, 1, path);
             if (!img.isNull())
                 return img;
         }
-        return IconThemeResolver::instance()->iconForName(iconName, size, 1, {});
+        return PhosphorServiceIconTheme::IconThemeResolver::instance()->iconForName(iconName, size, 1, {});
     }
     const auto iconData = props.value(QStringLiteral("icon-data")).toByteArray();
     if (!iconData.isEmpty()) {

@@ -12,17 +12,18 @@
  * shells (and downstream apps) consume the C++/QML APIs and render the
  * results however they like.
  *
- * First tenant: StatusNotifierItem (system tray) host + watcher with
- * full XDG icon-theme spec lookup and com.canonical.dbusmenu support.
- * The icon-theme resolver is a co-tenant pending its own extraction.
- * Other desktop services have already moved into per-domain
- * `phosphor-service-*` siblings: UPower
- * (`PhosphorServiceUPower::`) and MPRIS (`PhosphorServiceMpris::`).
- * See `docs/phosphor-shell-design/04-implementation-plan.md`.
+ * Sole remaining tenant: StatusNotifierItem (system tray) host +
+ * watcher with `com.canonical.dbusmenu` support. Consumes
+ * `phosphor-service-icontheme` for XDG icon-theme lookup and image
+ * provider plumbing. Sibling services live in their own libraries:
+ * `phosphor-service-upower` (`PhosphorServiceUPower::`),
+ * `phosphor-service-mpris` (`PhosphorServiceMpris::`),
+ * `phosphor-service-icontheme` (`PhosphorServiceIconTheme::`). The
+ * umbrella will be deleted once SNI is extracted (Phase 2.0 final
+ * step). See `docs/phosphor-shell-design/04-implementation-plan.md`.
  */
 
 #include <PhosphorServices/StatusNotifierItem.h>
 #include <PhosphorServices/StatusNotifierItemModel.h>
 #include <PhosphorServices/StatusNotifierHost.h>
 #include <PhosphorServices/DBusMenuModel.h>
-#include <PhosphorServices/IconThemeResolver.h>

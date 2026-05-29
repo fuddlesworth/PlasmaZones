@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorServices/IconThemeResolver.h>
+#include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
 #include <QCoreApplication>
 #include <QDir>
@@ -18,7 +18,7 @@
 #include <QStringList>
 #include <QtEndian>
 
-namespace PhosphorServices {
+namespace PhosphorServiceIconTheme {
 
 // DirectoryEntry / ThemeIndex live at namespace scope (not in an
 // anonymous namespace) because Private caches a QHash<QString,
@@ -544,4 +544,4 @@ QImage IconThemeResolver::decodePixmaps(const QList<QPair<QSize, QByteArray>>& p
     return img;
 }
 
-} // namespace PhosphorServices
+} // namespace PhosphorServiceIconTheme

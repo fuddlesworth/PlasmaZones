@@ -21,11 +21,8 @@ function(_phosphorservices_test target source)
     )
 endfunction()
 
-# Smoke test — singletons + role plumbing.
+# Smoke test — role plumbing on the remaining SNI surface.
 _phosphorservices_test(test_phosphorservices_smoke test_smoke.cpp)
-
-# Full XDG icon-theme resolver coverage against a fixture theme tree.
-_phosphorservices_test(test_phosphorservices_iconthemeresolver test_iconthemeresolver.cpp)
 
 # StatusNotifierItemModel lifecycle (host attach/detach, role names
 # as public contract, invalid-row no-ops).

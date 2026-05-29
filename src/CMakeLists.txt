@@ -489,6 +489,7 @@ if(BUILD_PHOSPHOR_SHELL)
         PRIVATE
             PhosphorShell::PhosphorShell
             PhosphorServices::PhosphorServices
+            PhosphorServiceIconTheme::PhosphorServiceIconTheme
             PhosphorServiceUPower::PhosphorServiceUPower
             PhosphorServiceMpris::PhosphorServiceMpris
             PhosphorLayer::PhosphorLayer

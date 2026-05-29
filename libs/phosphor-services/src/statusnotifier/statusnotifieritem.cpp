@@ -3,7 +3,7 @@
 
 #include <PhosphorServices/StatusNotifierItem.h>
 
-#include <PhosphorServices/IconThemeResolver.h>
+#include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
 #include "dbustypes.h"
 #include "statusnotifieritem_interface.h"
@@ -157,7 +157,8 @@ public:
             return cache;
         }
         if (!themedName.isEmpty()) {
-            cache = IconThemeResolver::instance()->iconForName(themedName, preferredIconSize, 1, iconThemePath);
+            cache = PhosphorServiceIconTheme::IconThemeResolver::instance()->iconForName(themedName, preferredIconSize,
+                                                                                         1, iconThemePath);
         }
         if (cache.isNull() && !pixmaps.isEmpty()) {
             cache = pixmapListToImage(pixmaps, preferredIconSize);
