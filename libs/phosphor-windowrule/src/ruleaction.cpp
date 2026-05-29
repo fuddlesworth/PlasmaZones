@@ -80,10 +80,14 @@ std::optional<RuleAction> RuleAction::fromJson(const QJsonObject& obj)
     // `allowedKeys` set opts out (free-form params).
     const auto descriptor = ActionRegistry::instance().descriptor(type);
     if (descriptor && !descriptor->allowedKeys.isEmpty()) {
-        // Iterate via const-iterator rather than `keys()` — `QJsonObject::keys()`
-        // allocates a fresh QStringList of every key, which on the load hot
-        // path (called once per action of every rule in the store) burns a
-        // throwaway list per call. The iterator pair has zero overhead.
+        // Iterate via const-iterator rather than `keys()` to avoid the
+        // per-call QStringList allocation `QJsonObject::keys()` does.
+        // The per-key `allowedKeys.contains(...)` lookup is O(M) over a
+        // QStringList — acceptable at the built-in scale (M ≤ 3 allowed
+        // keys × K ≤ 3 params = 9 string compares per action load) and
+        // faster in practice than the QSet alternative at these sizes.
+        // If a future descriptor grows allowedKeys beyond a handful,
+        // switch the field type to QSet<QString> in ActionDescriptor.
         for (auto it = action.params.constBegin(); it != action.params.constEnd(); ++it) {
             if (!descriptor->allowedKeys.contains(it.key())) {
                 qCWarning(lcWindowRule) << "Action params carry an unexpected key — dropping action. type:" << type

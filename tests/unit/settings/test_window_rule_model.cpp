@@ -108,6 +108,8 @@ private Q_SLOTS:
     void addRuleAtInsertsAtIndexWithSingleSignal();
     void validationIssueCountRole();
     void screenIdsRoleHandlesInOperator();
+    void actionSummaryRendersAllEngineModes();
+    void disableEngineNamesTheModeBeingDisabled();
 };
 
 void TestWindowRuleModel::rolesExposed()
@@ -353,6 +355,76 @@ void TestWindowRuleModel::screenIdsRoleHandlesInOperator()
     QCOMPARE(ids2.size(), 2);
     QVERIFY(ids2.contains(QStringLiteral("HDMI-A-1")));
     QVERIFY(ids2.contains(QStringLiteral("eDP-1")));
+}
+
+void TestWindowRuleModel::actionSummaryRendersAllEngineModes()
+{
+    // Pin that `SetEngineMode` actionLabel renders all three vocabulary
+    // tokens (snapping / autotile / scrolling) as their localised display
+    // strings. A regression that collapsed the Scrolling branch back into
+    // raw-wire-token fallback would silently revert "Engine: Scrolling"
+    // to lowercase "Engine: scrolling" — caught by this assertion.
+    const auto buildRule = [](const QString& modeToken) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 300;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
+        RuleAction engine;
+        engine.type = QString(ActionType::SetEngineMode);
+        engine.params.insert(QLatin1String("mode"), modeToken);
+        rule.actions = {engine};
+        return rule;
+    };
+    WindowRuleModel model;
+    model.setRules({buildRule(QStringLiteral("snapping")), buildRule(QStringLiteral("autotile")),
+                    buildRule(QStringLiteral("scrolling"))});
+    QCOMPARE(model.rowCount(), 3);
+    const QString s0 = model.data(model.index(0, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s1 = model.data(model.index(1, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s2 = model.data(model.index(2, 0), WindowRuleModel::ActionSummaryRole).toString();
+    // Each summary must end with the properly-cased localised label —
+    // the i18n surface may add prefixes ("Engine: ") but the casing of
+    // the engine name is the load-bearing contract.
+    QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
+    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
+    // Negative assertion: no summary should leak the lowercase wire
+    // token — that would indicate the i18n branch fell through.
+    QVERIFY2(!s2.contains(QStringLiteral("scrolling")), qPrintable(s2));
+}
+
+void TestWindowRuleModel::disableEngineNamesTheModeBeingDisabled()
+{
+    // Pin that `DisableEngine` actionLabel names the engine being
+    // disabled rather than rendering a generic "Disabled" for every mode.
+    // A regression that collapsed the per-mode branches into "Disabled"
+    // would make two distinct disable rules read identically in the
+    // rules list — caught by asserting the labels differ.
+    const auto buildRule = [](const QString& modeToken) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 300;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
+        RuleAction disable;
+        disable.type = QString(ActionType::DisableEngine);
+        disable.params.insert(QLatin1String("mode"), modeToken);
+        rule.actions = {disable};
+        return rule;
+    };
+    WindowRuleModel model;
+    model.setRules({buildRule(QStringLiteral("snapping")), buildRule(QStringLiteral("autotile")),
+                    buildRule(QStringLiteral("scrolling"))});
+    const QString s0 = model.data(model.index(0, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s1 = model.data(model.index(1, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s2 = model.data(model.index(2, 0), WindowRuleModel::ActionSummaryRole).toString();
+    QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
+    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
+    // The three labels must be pairwise-distinct — otherwise a user with
+    // multiple disable rules sees ambiguous "Disabled" rows.
+    QVERIFY(s0 != s1);
+    QVERIFY(s1 != s2);
+    QVERIFY(s0 != s2);
 }
 
 QTEST_MAIN(TestWindowRuleModel)

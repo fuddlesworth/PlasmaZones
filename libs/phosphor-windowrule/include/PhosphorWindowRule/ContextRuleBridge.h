@@ -522,6 +522,17 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
         // A non-context or non-equality leaf is ignored — a flat mixed rule
         // still yields its context projection, per the contract above.
     }
+    // If no context-equality leaf was matched, the input was either a
+    // context-axis-empty mixed rule (e.g. `ScreenId NotEquals "DP-1"`) or
+    // a structurally-malformed All{}. Either way, no decomposition succeeded
+    // — return false so downstream classifiers don't read this as a
+    // successful catch-all decode. The catch-all case is handled at the
+    // top of the function (`isCatchAll() → return true`); reaching here
+    // with all three flags false means the leaves were all non-equality
+    // or non-context.
+    if (!sawScreen && !sawDesktop && !sawActivity) {
+        return false;
+    }
     return true;
 }
 

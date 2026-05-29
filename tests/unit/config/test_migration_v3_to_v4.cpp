@@ -884,17 +884,22 @@ private:
     /// no Snapping defaults). Keeps animation-specific tests narrow — they
     /// don't have to filter the provider-default + disable-rule noise out.
     ///
-    /// Routes the v4 group / key names through ConfigKeys::Legacy::v4* accessors —
-    /// the migration reads from the same accessors, so a future rename of
-    /// the frozen v4 wire shape can't drift between production and tests.
+    /// The v4 group / key names are pinned as inline `QStringLiteral`
+    /// literals — the test's role is to be an INDEPENDENT WITNESS of the
+    /// frozen v4 on-disk wire format. If a future maintainer violates the
+    /// freeze policy (forbidden by configkeys.h:638-651) and renames
+    /// `Legacy::v4AnimationAppRulesKey` from "AnimationAppRules", the
+    /// accessor-based form would silently update in lockstep with
+    /// production; inline-literal pins catch the drift. Mirrors the
+    /// sibling `makeV3Config` fixture's pattern for Display.* v3 keys.
     QJsonObject makeV3ConfigWithAnimationRules(const QJsonArray& animationRules)
     {
         QJsonObject root;
         root.insert(ConfigKeys::versionKey(), 3);
         if (!animationRules.isEmpty()) {
             QJsonObject animations;
-            animations.insert(ConfigKeys::Legacy::v4AnimationAppRulesKey(), animationRules);
-            root.insert(ConfigKeys::Legacy::v4AnimationsGroup(), animations);
+            animations.insert(QStringLiteral("AnimationAppRules"), animationRules);
+            root.insert(QStringLiteral("Animations"), animations);
         }
         return root;
     }

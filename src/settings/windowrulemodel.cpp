@@ -229,7 +229,28 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return PzI18n::tr("Tiling: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }
     if (action.type == ActionType::DisableEngine) {
-        return PzI18n::tr("Disabled");
+        // Name the engine being disabled — a rules list with "Disable
+        // Snapping on DP-1" and "Disable Autotile on DP-2" otherwise reads
+        // as two identical "Disabled" rows. Same vocabulary as
+        // SetEngineMode above (`engineModeOptions()` in
+        // libs/phosphor-windowrule/src/ruleaction.cpp), same
+        // localised-label switch so the i18n cost stays flat.
+        const QString mode = action.params.value(QLatin1String("mode")).toString();
+        QString label;
+        if (mode == QLatin1String("snapping")) {
+            label = PzI18n::tr("Snapping");
+        } else if (mode == QLatin1String("autotile")) {
+            label = PzI18n::tr("Autotile");
+        } else if (mode == QLatin1String("scrolling")) {
+            label = PzI18n::tr("Scrolling");
+        } else if (mode.isEmpty()) {
+            // No mode wire string at all — fall back to the generic
+            // "Disabled" label so a malformed rule still reads sensibly.
+            return PzI18n::tr("Disabled");
+        } else {
+            label = mode; // unknown / future token — surface verbatim.
+        }
+        return PzI18n::tr("Disable: %1").arg(label);
     }
     if (action.type == ActionType::Exclude) {
         return PzI18n::tr("Excluded — not managed");

@@ -37,6 +37,8 @@ private Q_SLOTS:
     void addUpdateRemoveByUuid();
     void dirtyTrackingAndRevert();
     void monitorOverviewSummarises();
+    void monitorOverviewClassifiesScrollingWithoutLayoutName();
+    void engineModePickerExposesAllVocabularyTokens();
     void moveRuleReorders();
     void authoringMetadata();
     void templatesProduceSeededRules();
@@ -175,6 +177,92 @@ void TestWindowRuleController::monitorOverviewSummarises()
     }
     QVERIFY(sawDp2);
     QVERIFY(sawEdp1);
+}
+
+void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutName()
+{
+    // Pin that a Scrolling-mode rule, even when carrying a stale snapping
+    // layout in its action payload, produces an EMPTY `layoutName` on the
+    // overview tile. The pre-Pass-3 inline `== "autotile"` / `== "snapping"`
+    // classifier silently coerced Scrolling rules into the "no engine pin
+    // → prefer snapping layout" fallback, mis-labelling the tile with the
+    // leftover layout. A regression to that shape is caught here.
+    WindowRuleController controller;
+
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+    match[QStringLiteral("value")] = QStringLiteral("DP-3");
+    rule[QStringLiteral("match")] = match;
+    // Build a SetEngineMode=scrolling action ALONGSIDE a stale snapping
+    // layout payload — the bug class drops the SetEngineMode mode token
+    // (silently mapping scrolling → snapping) and surfaces the snapping
+    // layout as the tile's layoutName. With the fix, the classifier sees
+    // mode=Scrolling and leaves layoutName empty.
+    rule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("scrolling")}},
+                     QVariantMap{{QStringLiteral("type"), QStringLiteral("setSnappingLayout")},
+                                 {QStringLiteral("layoutId"), QStringLiteral("{stale-layout-id-not-real}")}}};
+    QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-3")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 1);
+    const QVariantMap tile = overview.first().toMap();
+    QCOMPARE(tile.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-3"));
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+    QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
+    // The Scrolling branch yields no layout/algorithm to label — the tile
+    // must read empty here, NOT the stale snapping layout id/name that
+    // the pre-fix classifier would have surfaced.
+    QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
+             qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
+}
+
+void TestWindowRuleController::engineModePickerExposesAllVocabularyTokens()
+{
+    // Pin that the SetEngineMode + DisableEngine pickers expose exactly
+    // three options — snapping / autotile / scrolling — with non-empty
+    // localised labels. A regression that dropped the Scrolling enum
+    // option from `engineModeOptions()` or the GPL settings-layer label
+    // map would surface here.
+    WindowRuleController controller;
+    const QVariantList types = controller.actionTypes();
+    // Each entry in `actionTypes()` carries its own `params` list (see the
+    // descriptor docstring in windowrulecontroller.h:281-291). For each
+    // param of kind="enum", the `options` list contains `{value, label}`
+    // pairs. We walk to the `mode` param of each action and extract its
+    // options to verify the closed engine-mode vocabulary.
+    const auto findModeOptions = [&](const QString& typeWire) -> QVariantList {
+        for (const QVariant& t : types) {
+            const QVariantMap tm = t.toMap();
+            if (tm.value(QStringLiteral("value")).toString() != typeWire) {
+                continue;
+            }
+            for (const QVariant& p : tm.value(QStringLiteral("params")).toList()) {
+                const QVariantMap pm = p.toMap();
+                if (pm.value(QStringLiteral("key")).toString() == QLatin1String("mode")) {
+                    return pm.value(QStringLiteral("options")).toList();
+                }
+            }
+        }
+        return {};
+    };
+    for (const QString& actionWire : {QStringLiteral("setEngineMode"), QStringLiteral("disableEngine")}) {
+        const QVariantList options = findModeOptions(actionWire);
+        QCOMPARE(options.size(), 3);
+        QStringList wireValues;
+        for (const QVariant& opt : options) {
+            const QVariantMap om = opt.toMap();
+            wireValues.append(om.value(QStringLiteral("value")).toString());
+            QVERIFY2(!om.value(QStringLiteral("label")).toString().isEmpty(),
+                     qPrintable(QStringLiteral("empty label for %1 / %2")
+                                    .arg(actionWire, om.value(QStringLiteral("value")).toString())));
+        }
+        QVERIFY2(wireValues.contains(QStringLiteral("snapping")), qPrintable(wireValues.join(QLatin1Char(','))));
+        QVERIFY2(wireValues.contains(QStringLiteral("autotile")), qPrintable(wireValues.join(QLatin1Char(','))));
+        QVERIFY2(wireValues.contains(QStringLiteral("scrolling")), qPrintable(wireValues.join(QLatin1Char(','))));
+    }
 }
 
 void TestWindowRuleController::moveRuleReorders()

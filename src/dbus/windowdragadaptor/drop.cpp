@@ -229,7 +229,15 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // shape) would have consulted the wrong disable list whenever
         // the user had reconfigured the screen between drag-start and
         // drop, mirroring the same fix applied to useOverlayZone above.
-        if (screen && !selectorScreenLocked && m_contextResolver && !m_contextResolver->isDisabled(selectorCtx)) {
+        // Include `m_layoutManager` in the gate — `selectorCtx` is only
+        // populated under the matching gate above. A degenerate case
+        // where `m_contextResolver` is set but `m_layoutManager` is null
+        // would otherwise call `isDisabled` against a default-constructed
+        // handle (empty screenId / desktop=0 / activity=""), which
+        // short-circuits to "not disabled" and lets the snap path
+        // proceed against stale defaults.
+        if (screen && !selectorScreenLocked && m_contextResolver && m_layoutManager
+            && !m_contextResolver->isDisabled(selectorCtx)) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();
