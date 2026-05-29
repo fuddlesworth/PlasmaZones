@@ -34,24 +34,38 @@ int main(int argc, char** argv)
 }
 ```
 
-QML consumer:
+QML consumer (resolve an XDG icon, then route the resulting QImage through the image provider so QML's `Image.source` can consume it as a URL):
 
 ```qml
 import Phosphor.Service.IconTheme 1.0
+import QtQuick
 
 Image {
-    source: IconThemeResolver.iconForName("audio-volume-high", 24, 1) // returns a QImage path or empty
+    // IconThemeResolver.iconForName returns a QImage, which Image.source
+    // (a QUrl) cannot bind to directly. The C++ side must call
+    // IconImageProvider::setImage(id, image) and then expose the URL
+    // form below; the snippet here illustrates the QML end of that
+    // contract.
+    property string trayKey: "tray-audio-volume-high"
+    source: "image://phosphor-service-icontheme/" + trayKey + "?v=" + cacheVersion
+    property int cacheVersion: 0
     sourceSize: Qt.size(24, 24)
 }
 ```
 
-Publisher (typically internal to a service that holds raw `QImage` payloads):
+Publisher (typically internal to a service that holds raw `QImage` payloads, e.g. phosphor-service-sni's tray-item model):
 
 ```cpp
 #include <PhosphorServiceIconTheme/IconImageProvider.h>
+#include <PhosphorServiceIconTheme/QmlRegistration.h>
 
-PhosphorServiceIconTheme::IconImageProvider::setImage(itemId, qimage);
-// then expose: image://phosphor-service-icontheme/<itemId>?v=<qimage.cacheKey()>
+const QString trayKey = QStringLiteral("tray-audio-volume-high");
+PhosphorServiceIconTheme::IconImageProvider::setImage(trayKey, qimage);
+// then expose the QML-bindable URL:
+const QString url = QStringLiteral("image://")
+    + QString::fromLatin1(PhosphorServiceIconTheme::imageProviderUrlHost())
+    + QLatin1Char('/') + trayKey + QStringLiteral("?v=")
+    + QString::number(qimage.cacheKey());
 ```
 
 ## Design notes
@@ -66,4 +80,10 @@ PhosphorServiceIconTheme::IconImageProvider::setImage(itemId, qimage);
 
 ## Status
 
-Phase 2.0 extraction from the original `phosphor-services` umbrella. URL host renamed from `phosphor-services` to `phosphor-service-icontheme` for consistency with the new library name; consumers of the old URL fail loudly rather than silently fall back. Namespace `PhosphorServices::IconThemeResolver` → `PhosphorServiceIconTheme::IconThemeResolver`.
+Phase 2.0 extraction from the original `phosphor-services` umbrella. URL host renamed from `phosphor-services` to `phosphor-service-icontheme` for consistency with the new library name; consumers of the old URL fail loudly rather than silently fall back. Namespace `PhosphorServices::IconThemeResolver` becomes `PhosphorServiceIconTheme::IconThemeResolver`.
+
+## Current consumers
+
+- `phosphor-service-sni` calls `IconThemeResolver::instance()->iconForName(...)` for XDG-themed tray icons and routes raw IconPixmap blobs through `IconImageProvider::setImage` for QML binding.
+
+The QML singleton (`IconThemeResolver` under `Phosphor.Service.IconTheme 1.0`) is registered for future bar widgets and third-party shells; the bundled `examples/phosphor-shell/` does not import it yet.

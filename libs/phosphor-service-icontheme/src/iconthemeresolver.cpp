@@ -133,6 +133,10 @@ QStringList xdgIconSearchPath()
 class IconThemeResolver::Private
 {
 public:
+    // `q` is currently unused; impl helpers reach into the parsed
+    // theme + cache state directly. Kept for future signal emission
+    // patterns that need to call back into the outer class without
+    // moving every helper to non-static membership.
     explicit Private(IconThemeResolver* q)
         : q(q)
     {
@@ -390,12 +394,19 @@ QString IconThemeResolver::Private::findIconHelper(const QString& iconName, int 
 
 IconThemeResolver* IconThemeResolver::instance()
 {
-    static IconThemeResolver* s_instance = nullptr;
-    static QMutex s_initMutex;
-    QMutexLocker locker(&s_initMutex);
-    if (!s_instance) {
-        s_instance = new IconThemeResolver(QCoreApplication::instance());
-    }
+    // C++11 magic-statics guarantee thread-safe one-time initialization
+    // without a hand-rolled mutex. The instance parents to
+    // QCoreApplication on first call so it shares the application
+    // lifetime; the raw `new` is intentional (no leak, see below).
+    //
+    // The object is NOT a function-local static of type
+    // IconThemeResolver itself because Qt forbids destroying QObjects
+    // after QCoreApplication has been torn down (the meta-object
+    // system asserts), and a function-local static would destroy at
+    // process exit, potentially after QCoreApplication's destructor.
+    // Allocating with `new` + parenting to QCoreApplication delegates
+    // teardown to Qt's QObject tree, which runs before atexit().
+    static IconThemeResolver* s_instance = new IconThemeResolver(QCoreApplication::instance());
     return s_instance;
 }
 
@@ -477,12 +488,14 @@ QImage IconThemeResolver::iconForName(const QString& name, int size, int scale, 
         img = reader.read();
     }
 
-    // Cap the cache. Eviction policy is "drop a random entry" — the
-    // tray rarely has > 32 items × < 4 sizes, so we hit the cap only
-    // during pathological churn (icon-theme switches mid-flight). The
-    // simple eviction keeps cache pressure deterministic without
-    // building an LRU.
-    if (d->resolvedCache.size() >= Private::kCacheLimit) {
+    // Cap the cache. Eviction policy drops an arbitrary entry (the
+    // first bucket reported by QHash::begin), which is deterministic
+    // for a given seed and good enough since the tray rarely has
+    // > 32 items × < 4 sizes; we hit the cap only during pathological
+    // churn (icon-theme switches mid-flight). Skip eviction when the
+    // upcoming insert would just overwrite an existing slot, otherwise
+    // we evict an unrelated entry on every cache-hit update.
+    if (!d->resolvedCache.contains(cacheKey) && d->resolvedCache.size() >= Private::kCacheLimit) {
         d->resolvedCache.erase(d->resolvedCache.begin());
     }
     d->resolvedCache.insert(cacheKey, img);

@@ -44,9 +44,10 @@ public:
     };
     Q_ENUM(Status)
 
-    /// `dbusServiceAndPath` is the canonical form the Watcher produces:
-    /// "uniqueName/object/path". Splitting it is the host's job before
-    /// constructing.
+    /// `dbusService` is the unique bus name, `dbusPath` the object
+    /// path. Watchers produce the canonical "uniqueName/object/path"
+    /// concatenation; splitting it into the two args is the host's
+    /// job. The item itself only ever sees the split form.
     StatusNotifierItem(const QString& dbusService, const QString& dbusPath, QObject* parent = nullptr);
     ~StatusNotifierItem() override;
 
@@ -66,10 +67,12 @@ public:
     [[nodiscard]] bool isValid() const;
 
     /// Preferred render size in logical pixels. Passed through to the
-    /// icon resolver so we don't upscale a 16×16 themed icon when the
-    /// panel asks for 24×24 — XDG spec ranks "next-size-up" higher
-    /// than "scaled current size".
-    void setPreferredIconSize(int size);
+    /// icon resolver so we don't upscale a 16x16 themed icon when the
+    /// panel asks for 24x24 (XDG spec ranks "next-size-up" higher
+    /// than "scaled current size"). Q_INVOKABLE so QML delegates can
+    /// configure render size on the item directly (e.g. via
+    /// `Component.onCompleted: trayItem.setPreferredIconSize(36)`).
+    Q_INVOKABLE void setPreferredIconSize(int size);
     [[nodiscard]] int preferredIconSize() const;
 
 public Q_SLOTS:

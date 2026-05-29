@@ -46,8 +46,16 @@ public:
             if (players.at(i)->serviceName() == service) {
                 auto* player = players.at(i);
                 qCDebug(lcMprisHost) << "Player removed:" << service;
-                Q_EMIT owner->playerRemoved(player);
+                // Remove from the list BEFORE emitting playerRemoved so
+                // observers (including the synchronously-running
+                // _q_nameOwnerChanged ownership-transfer path that
+                // follows this call with addService(service)) see the
+                // already-detached state. Earlier order (emit then
+                // remove) lost the new player on every transfer
+                // because addService's dedup check at line 30 would
+                // match the still-listed old entry and return early.
                 players.removeAt(i);
+                Q_EMIT owner->playerRemoved(player);
                 Q_EMIT owner->playerCountChanged();
                 player->deleteLater();
                 return;
@@ -63,6 +71,14 @@ MprisHost::MprisHost(QObject* parent)
     d->owner = this;
 
     auto bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        // CI / headless / sandboxed environments may run without a
+        // session bus. We never block on bus presence, but logging it
+        // here makes "the media widget is empty" diagnosable without
+        // a strace.
+        qCInfo(lcMprisHost) << "session bus unavailable; MprisHost is inert";
+        return;
+    }
 
     // Subscribe to NameOwnerChanged directly. QDBusServiceWatcher does
     // NOT support wildcards — addWatchedService("org.mpris.MediaPlayer2.*")

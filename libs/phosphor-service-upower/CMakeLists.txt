@@ -26,13 +26,15 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 #
 # Core / DBus: the C++ surface is QObject + QDBusConnection. Qml: the
-# UPowerHost / UPowerDeviceModel / UPowerDevice types are exposed as
-# QML elements (registered via the QML module below). Gui is pulled in
-# transitively by the qmltyperegistrar output (it expects
-# QGuiApplication / QQmlEngine to be in scope) and is scoped onto the
-# QML plugin target rather than the core library, matching the
-# phosphor-ipc precedent — CLI consumers that only want the C++ API
-# don't drag in the full GUI stack.
+# UPowerHost / UPowerDeviceModel / UPowerDevice types are exposed
+# through a hand-rolled `qmlRegisterType` block in src/qmlregistration.cpp
+# (no `qt_add_qml_module()`, so no qmltyperegistrar TU is generated).
+# Qt::Gui is deliberately NOT linked: nothing in the lib uses QImage /
+# QColor / QGuiApplication, and consumers that put these types into a
+# QQmlEngine already drag in Qt::Gui themselves through their
+# application infrastructure. Keeping the lib Gui-free lets CLI
+# consumers (phosphorctl-style demos) link it without inheriting the
+# full GUI stack.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

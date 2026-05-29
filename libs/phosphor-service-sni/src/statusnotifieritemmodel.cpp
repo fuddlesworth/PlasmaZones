@@ -9,9 +9,14 @@
 #include <PhosphorServiceIconTheme/IconImageProvider.h>
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
 
+#include <QHash>
+#include <QImage>
 #include <QLoggingCategory>
+#include <QPointer>
 #include <QUrl>
 #include <QVariant>
+
+#include <array>
 
 Q_LOGGING_CATEGORY(lcSniModel, "phosphor.service.sni.model")
 
@@ -19,65 +24,129 @@ namespace PhosphorServiceSni {
 
 namespace {
 
+constexpr int kVariantNone = 0;
+constexpr int kVariantOverlay = 1;
+constexpr int kVariantAttention = 2;
+
 /// Provider key for an item's icon variant. Plain path-form
-/// (service|path[#variant]) — NO query string. Qt's image-provider
+/// (service|path[#variant]), NO query string. Qt's image-provider
 /// dispatch strips the URL's query component before calling
 /// requestImage(), so the provider only ever sees this path-form key.
-/// Earlier rev appended ?v=<cacheKey> to the publish key as well,
-/// which made every lookup miss (provider id != publish id).
-QString iconKeyBase(const StatusNotifierItem* item, const QString& variant)
+QString iconKeyBase(const StatusNotifierItem* item, int variant)
 {
     QString k = item->dbusService() + QLatin1Char('|') + item->dbusPath();
-    if (!variant.isEmpty()) {
-        k += QLatin1Char('#') + variant;
+    switch (variant) {
+    case kVariantOverlay:
+        k += QStringLiteral("#overlay");
+        break;
+    case kVariantAttention:
+        k += QStringLiteral("#attention");
+        break;
+    default:
+        break;
     }
     return k;
 }
 
-/// Snapshot the current QImage for the given variant, publish it to
-/// the image provider under the path-form key, and return a URL with
-/// a cacheKey-bearing query string. The query string is invisible to
-/// the provider (Qt strips it) but visible to QML's URL comparator,
-/// which is what gates whether `Image` re-fetches: same URL → reuse
-/// cached pixmap; different URL → call requestImage() again. So
-/// every icon-data change yields a new URL → new requestImage() call
-/// → fresh QImage from the registry.
-QString publishAndUrl(StatusNotifierItem* item, const QString& variant)
+QImage variantImage(const StatusNotifierItem* item, int variant)
 {
-    if (!item)
-        return {};
-    const QImage img = variant == QLatin1String("overlay") ? item->overlayIconImage()
-        : variant == QLatin1String("attention")            ? item->attentionIconImage()
-                                                           : item->iconImage();
-    const QString key = iconKeyBase(item, variant);
-    if (img.isNull()) {
-        // Empty URL = nothing for QML's Image to bind to → tray
-        // delegate's transparent Rectangle renders as zero-px wide.
-        // The log helps diagnose "tray items exist but I see nothing":
-        // it usually means the XDG icon-theme resolver couldn't find
-        // the named icon (item shipped IconName but no IconPixmap and
-        // no IconThemePath fallback) — pick a generic fallback icon
-        // in the QML delegate, OR teach the resolver about the app's
-        // theme dir, OR install the app's icon theme system-wide.
-        qCDebug(lcSniModel) << "no icon image for" << key
-                            << "— Image.source will be empty, delegate will render invisible";
-        return {};
+    switch (variant) {
+    case kVariantOverlay:
+        return item->overlayIconImage();
+    case kVariantAttention:
+        return item->attentionIconImage();
+    default:
+        return item->iconImage();
     }
-    qCDebug(lcSniModel) << "publishing icon for" << key << "size" << img.size() << "cacheKey" << img.cacheKey();
-    PhosphorServiceIconTheme::IconImageProvider::setImage(key, img);
-    // Resolve the URL host through phosphor-service-icontheme's
-    // accessor rather than hard-coding the string — a rename of the
-    // provider mount point on that side then forces a link/compile
-    // failure here instead of a silent runtime "image provider not
-    // found".
-    return QStringLiteral("image://") + QString::fromLatin1(PhosphorServiceIconTheme::imageProviderUrlHost())
-        + QLatin1Char('/') + key + QStringLiteral("?v=") + QString::number(img.cacheKey());
 }
+
+/// Build the QML URL for `key` against the current image-provider
+/// host. Routed through `imageProviderUrlHost()` so a future rename
+/// on the icontheme side forces a link failure rather than a silent
+/// "image provider not found" at runtime.
+QString providerUrl(const QString& key, qint64 cacheKey)
+{
+    return QStringLiteral("image://") + QString::fromLatin1(PhosphorServiceIconTheme::imageProviderUrlHost())
+        + QLatin1Char('/') + key + QStringLiteral("?v=") + QString::number(cacheKey);
+}
+
+/// Cache of published URLs per item variant. Held by the model's
+/// Private so a QML data() query is a hash lookup rather than the
+/// previous re-publish on every read (which was both wasteful and
+/// caused IconImageProvider's static registry to churn).
+struct IconUrlCache
+{
+    std::array<QString, 3> url{}; ///< one slot per variant
+    std::array<QString, 3> publishedKey{}; ///< what was setImage'd; used to clearImage on remove
+};
 
 } // namespace
 
+class StatusNotifierItemModel::Private
+{
+public:
+    QPointer<StatusNotifierHost> host;
+    // Mirrors host->items() in row order so rowFor / itemAt avoid the
+    // host's by-value QList copy and stay O(1) on add/remove.
+    QList<StatusNotifierItem*> items;
+    QHash<StatusNotifierItem*, IconUrlCache> iconUrls;
+
+    void publishAll(StatusNotifierItem* item)
+    {
+        auto& slot = iconUrls[item];
+        for (int v = 0; v < 3; ++v) {
+            republishVariant(item, v, slot);
+        }
+    }
+
+    // Recompute the URL for one variant if the QImage actually
+    // changed. Returns true when the cached URL string moved.
+    bool republishVariant(StatusNotifierItem* item, int variant, IconUrlCache& slot)
+    {
+        const QImage img = variantImage(item, variant);
+        const QString key = iconKeyBase(item, variant);
+
+        if (img.isNull()) {
+            // No payload; drop both the registry slot and the URL.
+            if (!slot.publishedKey[variant].isEmpty()) {
+                PhosphorServiceIconTheme::IconImageProvider::clearImage(slot.publishedKey[variant]);
+                slot.publishedKey[variant].clear();
+            }
+            if (slot.url[variant].isEmpty())
+                return false;
+            slot.url[variant].clear();
+            qCDebug(lcSniModel) << "no icon image for" << key << "; clearing URL";
+            return true;
+        }
+
+        const QString newUrl = providerUrl(key, img.cacheKey());
+        if (newUrl == slot.url[variant])
+            return false;
+
+        PhosphorServiceIconTheme::IconImageProvider::setImage(key, img);
+        slot.publishedKey[variant] = key;
+        slot.url[variant] = newUrl;
+        qCDebug(lcSniModel) << "publishing icon for" << key << "size" << img.size() << "cacheKey" << img.cacheKey();
+        return true;
+    }
+
+    void clearItem(StatusNotifierItem* item)
+    {
+        const auto it = iconUrls.constFind(item);
+        if (it == iconUrls.constEnd())
+            return;
+        for (int v = 0; v < 3; ++v) {
+            if (!it->publishedKey[v].isEmpty()) {
+                PhosphorServiceIconTheme::IconImageProvider::clearImage(it->publishedKey[v]);
+            }
+        }
+        iconUrls.erase(it);
+    }
+};
+
 StatusNotifierItemModel::StatusNotifierItemModel(QObject* parent)
     : QAbstractListModel(parent)
+    , d(std::make_unique<Private>())
 {
 }
 
@@ -85,77 +154,102 @@ StatusNotifierItemModel::~StatusNotifierItemModel() = default;
 
 StatusNotifierHost* StatusNotifierItemModel::host() const
 {
-    return m_host;
+    return d->host;
 }
 
 void StatusNotifierItemModel::setHost(StatusNotifierHost* host)
 {
-    if (m_host == host)
+    if (d->host == host)
         return;
 
-    if (m_host) {
+    const int previousCount = d->items.size();
+
+    if (d->host) {
         beginResetModel();
-        disconnect(m_host, nullptr, this, nullptr);
-        // Disconnect any item-level signals we hooked.
-        const auto existing = m_host->items();
-        for (auto* item : existing) {
+        disconnect(d->host, nullptr, this, nullptr);
+        for (auto* item : std::as_const(d->items)) {
             disconnect(item, nullptr, this, nullptr);
+            d->clearItem(item);
         }
+        d->items.clear();
         endResetModel();
     }
 
-    m_host = host;
+    d->host = host;
 
-    if (m_host) {
+    if (d->host) {
         beginResetModel();
-        const auto existing = m_host->items();
-        for (auto* item : existing) {
+        d->items = d->host->items();
+        for (auto* item : std::as_const(d->items)) {
             connectItem(item);
+            d->publishAll(item);
         }
         endResetModel();
 
-        connect(m_host, &StatusNotifierHost::itemAdded, this, &StatusNotifierItemModel::onItemAdded);
-        connect(m_host, &StatusNotifierHost::itemRemoved, this, &StatusNotifierItemModel::onItemRemoved);
+        connect(d->host, &StatusNotifierHost::itemAdded, this, &StatusNotifierItemModel::onItemAdded);
+        connect(d->host, &StatusNotifierHost::itemRemoved, this, &StatusNotifierItemModel::onItemRemoved);
+        // Host destruction nulls the QPointer automatically, but the
+        // model's mirrored item list (and the icon-URL cache) would
+        // still hold dangling pointers to the host's parent-owned
+        // children. Reset both to leave QML observers with a clean
+        // empty model rather than a crash on next data().
+        connect(d->host, &QObject::destroyed, this, [this]() {
+            beginResetModel();
+            d->items.clear();
+            for (auto it = d->iconUrls.constBegin(); it != d->iconUrls.constEnd(); ++it) {
+                for (int v = 0; v < 3; ++v) {
+                    if (!it->publishedKey[v].isEmpty())
+                        PhosphorServiceIconTheme::IconImageProvider::clearImage(it->publishedKey[v]);
+                }
+            }
+            d->iconUrls.clear();
+            endResetModel();
+            Q_EMIT hostChanged();
+            Q_EMIT countChanged();
+        });
     }
 
     Q_EMIT hostChanged();
-    // setHost wraps a beginResetModel/endResetModel — the model's
-    // row count moved from "old host count" to "new host count" but
-    // QML's `count` binding doesn't subscribe to modelReset, only to
-    // the property's NOTIFY signal. Fire it explicitly so QML
-    // recomputes on every host attach.
-    Q_EMIT countChanged();
+    // Emit countChanged only when the row count actually moved; the
+    // CLAUDE.md "only emit when value changed" rule applies even to
+    // attach/detach paths because spurious notifications cause QML
+    // bindings that read `count` to re-evaluate dependent expressions.
+    if (previousCount != d->items.size()) {
+        Q_EMIT countChanged();
+    }
 }
 
 void StatusNotifierItemModel::connectItem(StatusNotifierItem* item)
 {
-    // Every property-change signal triggers a per-row dataChanged so
-    // QML bindings refresh just that delegate. Connect lambdas
-    // because dataChanged() needs the (row, roles) lookup.
+    // Property-change signals trigger a per-row dataChanged so QML
+    // delegates refresh just that row. iconChanged is handled
+    // separately because it also updates the published URL cache.
     auto refresh = [this, item] {
         onItemDataChanged(item);
     };
     connect(item, &StatusNotifierItem::titleChanged, this, refresh);
     connect(item, &StatusNotifierItem::categoryChanged, this, refresh);
     connect(item, &StatusNotifierItem::statusChanged, this, refresh);
-    connect(item, &StatusNotifierItem::iconChanged, this, refresh);
     connect(item, &StatusNotifierItem::toolTipChanged, this, refresh);
     connect(item, &StatusNotifierItem::menuPathChanged, this, refresh);
     connect(item, &StatusNotifierItem::idChanged, this, refresh);
+    connect(item, &StatusNotifierItem::iconChanged, this, [this, item] {
+        onItemIconChanged(item);
+    });
 }
 
 int StatusNotifierItemModel::rowCount(const QModelIndex& parent) const
 {
-    if (parent.isValid() || !m_host)
+    if (parent.isValid())
         return 0;
-    return m_host->itemCount();
+    return d->items.size();
 }
 
 QVariant StatusNotifierItemModel::data(const QModelIndex& index, int role) const
 {
-    if (!m_host || !index.isValid())
+    if (!index.isValid() || index.row() < 0 || index.row() >= d->items.size())
         return {};
-    auto* item = m_host->itemAt(index.row());
+    auto* item = d->items.at(index.row());
     if (!item)
         return {};
 
@@ -169,11 +263,11 @@ QVariant StatusNotifierItemModel::data(const QModelIndex& index, int role) const
     case StatusRole:
         return QVariant::fromValue(item->status());
     case IconUrlRole:
-        return publishAndUrl(item, {});
+        return d->iconUrls.value(item).url[kVariantNone];
     case OverlayIconUrlRole:
-        return publishAndUrl(item, QStringLiteral("overlay"));
+        return d->iconUrls.value(item).url[kVariantOverlay];
     case AttentionIconUrlRole:
-        return publishAndUrl(item, QStringLiteral("attention"));
+        return d->iconUrls.value(item).url[kVariantAttention];
     case IconImageRole:
         return item->iconImage();
     case OverlayIconImageRole:
@@ -226,41 +320,60 @@ QHash<int, QByteArray> StatusNotifierItemModel::roleNames() const
 
 void StatusNotifierItemModel::onItemAdded(StatusNotifierItem* item)
 {
-    const int row = m_host->itemCount() - 1;
+    if (!item || d->items.contains(item))
+        return;
+    const int row = d->items.size();
     beginInsertRows({}, row, row);
+    d->items.append(item);
     connectItem(item);
+    d->publishAll(item);
     endInsertRows();
     Q_EMIT countChanged();
 }
 
 void StatusNotifierItemModel::onItemRemoved(StatusNotifierItem* item)
 {
-    const int row = rowFor(item);
+    const int row = d->items.indexOf(item);
     if (row < 0)
         return;
-    // The host emits itemRemoved BEFORE removing the item from its
-    // internal list, so rowFor() still finds a valid index here.
     beginRemoveRows({}, row, row);
     disconnect(item, nullptr, this, nullptr);
+    d->clearItem(item);
+    d->items.removeAt(row);
     endRemoveRows();
     Q_EMIT countChanged();
 }
 
 void StatusNotifierItemModel::onItemDataChanged(StatusNotifierItem* item)
 {
-    const int row = rowFor(item);
+    const int row = d->items.indexOf(item);
     if (row < 0)
         return;
     const auto idx = index(row);
     Q_EMIT dataChanged(idx, idx);
 }
 
+void StatusNotifierItemModel::onItemIconChanged(StatusNotifierItem* item)
+{
+    const int row = d->items.indexOf(item);
+    if (row < 0)
+        return;
+    auto& slot = d->iconUrls[item];
+    bool anyChanged = false;
+    for (int v = 0; v < 3; ++v) {
+        anyChanged = d->republishVariant(item, v, slot) || anyChanged;
+    }
+    if (!anyChanged)
+        return;
+    const auto idx = index(row);
+    Q_EMIT dataChanged(idx, idx,
+                       {IconUrlRole, OverlayIconUrlRole, AttentionIconUrlRole, IconImageRole, OverlayIconImageRole,
+                        AttentionIconImageRole});
+}
+
 int StatusNotifierItemModel::rowFor(StatusNotifierItem* item) const
 {
-    if (!m_host)
-        return -1;
-    const auto list = m_host->items();
-    return list.indexOf(item);
+    return d->items.indexOf(item);
 }
 
 void StatusNotifierItemModel::activate(int row, int x, int y)
@@ -289,9 +402,9 @@ void StatusNotifierItemModel::scroll(int row, int delta, const QString& orientat
 
 StatusNotifierItem* StatusNotifierItemModel::itemAt(int row) const
 {
-    if (!m_host)
+    if (row < 0 || row >= d->items.size())
         return nullptr;
-    return m_host->itemAt(row);
+    return d->items.at(row);
 }
 
 } // namespace PhosphorServiceSni

@@ -24,6 +24,7 @@ namespace PhosphorServiceSni {
 class StatusNotifierWatcher : public QObject, protected QDBusContext
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(StatusNotifierWatcher)
     // The Watcher properties — exported via DBus adaptor.
     Q_PROPERTY(QStringList RegisteredStatusNotifierItems READ registeredItems NOTIFY registeredItemsChanged)
     Q_PROPERTY(bool IsStatusNotifierHostRegistered READ isHostRegistered NOTIFY hostRegisteredChanged)

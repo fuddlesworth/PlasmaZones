@@ -15,6 +15,7 @@ namespace PhosphorServiceMpris {
 class PHOSPHORSERVICEMPRIS_EXPORT MprisPlayer : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(MprisPlayer)
 
     Q_PROPERTY(QString identity READ identity NOTIFY identityChanged)
     Q_PROPERTY(QString desktopEntry READ desktopEntry NOTIFY desktopEntryChanged)

@@ -71,6 +71,9 @@ working reference for consumers.
 
 ## See also
 
-- [`phosphor-services`](../phosphor-services/README.md) — system tray, MPRIS media, and UPower power services.
-- [`phosphor-layer`](../phosphor-layer/README.md) — Role vocabulary the window types compose from.
-- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md) — named Role recipes the panels use.
+- [`phosphor-service-sni`](../phosphor-service-sni/README.md): StatusNotifierItem tray + dbusmenu.
+- [`phosphor-service-mpris`](../phosphor-service-mpris/README.md): MPRIS2 media-player discovery + control.
+- [`phosphor-service-upower`](../phosphor-service-upower/README.md): battery + power-supply readouts.
+- [`phosphor-service-icontheme`](../phosphor-service-icontheme/README.md): XDG icon-theme resolver + Qt image provider used by the tray.
+- [`phosphor-layer`](../phosphor-layer/README.md): Role vocabulary the window types compose from.
+- [`phosphor-shell-patterns`](../phosphor-shell-patterns/README.md): named Role recipes the panels use.

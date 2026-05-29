@@ -23,20 +23,21 @@ endif()
 
 include(GenerateExportHeader)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml DBus)
 
 # The icon-theme resolver + image provider live in their own library
 # post Phase 2.0. SNI hands raw IconPixmap blobs to the image
-# provider's static registry (so QML's `Image.source` can route a
-# QImage through a QUrl) and walks XDG icon themes for IconName /
-# IconThemePath payloads — both of those are in
-# phosphor-service-icontheme. find_package is idempotent so this is a
-# no-op when the top-level project already configured the sibling.
+# provider's static registry (so QML's Image.source can route a QImage
+# through a QUrl) and walks XDG icon themes for IconName /
+# IconThemePath payloads. Both live in phosphor-service-icontheme.
+#
+# In-tree builds use add_subdirectory in the parent CMakeLists, which
+# defines the imported target eagerly; this find_package call is a
+# best-effort CONFIG probe for the standalone-build path. Either way
+# the imported target must exist before we link, so a missing target
+# is a hard failure.
 find_package(PhosphorServiceIconTheme QUIET)
 if(NOT TARGET PhosphorServiceIconTheme::PhosphorServiceIconTheme)
-    # Standalone build (e.g. via add_subdirectory from outside the
-    # PlasmaZones tree); fail loudly so the misconfiguration is
-    # obvious rather than producing unresolved symbols at link.
     message(FATAL_ERROR
         "PhosphorServiceSni requires PhosphorServiceIconTheme. "
         "Configure libs/phosphor-service-icontheme first (the root "
@@ -144,7 +145,6 @@ target_link_libraries(PhosphorServiceSni
         Qt6::Core
         Qt6::Gui
         Qt6::Qml
-        Qt6::Quick
         Qt6::DBus
         PhosphorServiceIconTheme::PhosphorServiceIconTheme
 )

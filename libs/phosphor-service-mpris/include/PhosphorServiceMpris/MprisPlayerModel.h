@@ -15,6 +15,7 @@ namespace PhosphorServiceMpris {
 class PHOSPHORSERVICEMPRIS_EXPORT MprisPlayerModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(MprisPlayerModel)
     Q_PROPERTY(PhosphorServiceMpris::MprisHost* host READ host WRITE setHost NOTIFY hostChanged)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 

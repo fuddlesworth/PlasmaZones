@@ -13,7 +13,7 @@ Watches the session bus for MPRIS players, surfaces their metadata + playback st
 
 | Type                | Role                                                                                                                                  |
 |---------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| `MprisPlayer`       | One player. Identity, track metadata, playback state, position, volume, loop / shuffle, capability flags, and invokables for play / pause / stop / next / previous / seek / setPosition / raise / quit. |
+| `MprisPlayer`       | One player. Identity, track metadata, playback state, position, volume, loop / shuffle, capability flags, and invokables for play / pause / stop / togglePlaying / next / previous / seek / setPosition / raise / quit. |
 | `MprisHost`         | Watches the session bus for `org.mpris.MediaPlayer2.*` names; owns the live `MprisPlayer` set; emits `playerAdded` / `playerRemoved`. |
 | `MprisPlayerModel`  | `QAbstractListModel` over `MprisHost`. Roles: `player`, `identity`, `playbackState`, `trackTitle`, `trackArtist`, `artUrl`.            |
 

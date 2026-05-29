@@ -18,6 +18,7 @@
 #include <QHash>
 #include <QImage>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QVariant>
 
 Q_LOGGING_CATEGORY(lcSniMenu, "phosphor.service.sni.menu")
@@ -83,9 +84,15 @@ QString labelFromProps(const QVariantMap& props)
                 ++i;
                 continue;
             }
-            // Lone marker = strip and move on; the NEXT char is the
-            // mnemonic but we don't need to do anything special with
-            // it (no underline rendering).
+            // Lone marker at end-of-string (e.g. an app that ships a
+            // single "&" as the label) is malformed but should not
+            // silently disappear; keep the char so the label survives.
+            if (i + 1 >= raw.size()) {
+                out.append(c);
+                continue;
+            }
+            // Lone marker mid-string = strip and move on; the NEXT
+            // char is the mnemonic but we don't render an underline.
             continue;
         }
         out.append(c);
@@ -583,6 +590,13 @@ void DBusMenuModel::triggerItem(int row)
     if (!d->proxy || row < 0 || row >= d->rows.size())
         return;
     const auto& r = d->rows.at(row);
+    // dbusmenu spec forbids sending `clicked` on a disabled row; some
+    // apps reject the Event as a protocol violation and log a noisy
+    // warning. The QML side already gates click handling on
+    // itemEnabled, but a buggy delegate (or a programmatic
+    // triggerItem(n) call) could still get here; check defensively.
+    if (!r.properties.value(QStringLiteral("enabled"), true).toBool())
+        return;
     // dbusmenu spec timestamps are milliseconds. Earlier rev divided
     // by 1000 (seconds), and some apps with focus-stealing prevention
     // reject the Event as "stale" because the timestamp didn't match

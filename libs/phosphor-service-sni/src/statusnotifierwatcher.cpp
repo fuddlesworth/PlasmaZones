@@ -157,10 +157,17 @@ void StatusNotifierWatcher::RegisterStatusNotifierItem(const QString& service)
             return;
         }
     }
-    // Adaptors don't pass the sender through automatically — but
+    // Adaptors don't pass the sender through automatically, but
     // QDBusContext does. The adaptor base class inherits QDBusContext
-    // and forwards message().service() as the unique sender name.
-    // QDBus annotates it on the QDBusMessage backing this call.
+    // and forwards message().service() as the unique sender name;
+    // QDBus annotates it on the QDBusMessage backing this call. When
+    // this method is reached outside a real D-Bus dispatch (e.g. a
+    // direct in-process call from a test fixture), message().service()
+    // is empty and the canonical would become a bare "/Item" with no
+    // owner key, breaking owner-tracked teardown. Reject that path.
+    if (!calledFromDBus() || message().service().isEmpty()) {
+        return;
+    }
     const auto sender = message().service();
     const auto canonical = canonicalItemService(service, sender);
 
@@ -222,23 +229,35 @@ void StatusNotifierWatcher::onServiceUnregistered(const QString& service)
         }
     }
 
-    bool hostsChanged = false;
+    int hostsRemoved = 0;
     for (auto it = m_hosts.begin(); it != m_hosts.end();) {
         if (it.value() == service) {
             it = m_hosts.erase(it);
-            hostsChanged = true;
+            ++hostsRemoved;
         } else {
             ++it;
         }
     }
 
-    m_busWatcher->removeWatchedService(service);
+    // Only remove the bus watch when this owner actually had something
+    // we were tracking; the watcher is idempotent but the call still
+    // costs a hash lookup + DBus match-rule rebuild on a heavily
+    // loaded session bus.
+    if (itemsChanged || hostsRemoved > 0) {
+        m_busWatcher->removeWatchedService(service);
+    }
 
     if (itemsChanged) {
         Q_EMIT registeredItemsChanged();
     }
-    if (hostsChanged) {
-        Q_EMIT StatusNotifierHostUnregistered();
+    if (hostsRemoved > 0) {
+        // Spec says one StatusNotifierHostUnregistered per host that
+        // went away; if a single owner had multiple host names
+        // registered, emit one signal per host so observers can keep
+        // accurate counts.
+        for (int i = 0; i < hostsRemoved; ++i) {
+            Q_EMIT StatusNotifierHostUnregistered();
+        }
         if (m_hosts.isEmpty()) {
             Q_EMIT hostRegisteredChanged();
         }

@@ -6,7 +6,11 @@
 #include <PhosphorServiceIconTheme/IconImageProvider.h>
 #include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
+#include <QCoreApplication>
+#include <QLoggingCategory>
 #include <QQmlEngine>
+
+Q_LOGGING_CATEGORY(lcIconThemeQml, "phosphor.service.icontheme.qml")
 
 namespace PhosphorServiceIconTheme {
 
@@ -19,10 +23,16 @@ constexpr const char* kImageProviderHost = "phosphor-service-icontheme";
 
 void registerQmlTypes()
 {
-    // Singleton resolver — exposes themeName + iconForName() to QML
+    // Singleton resolver: exposes themeName + iconForName() to QML
     // shells that want to resolve their own theme icons (e.g. for an
     // application-launcher widget that needs the same XDG lookup as
-    // the tray).
+    // the tray). IconThemeResolver::instance() parents the QObject
+    // to QCoreApplication, so the singleton outlives every
+    // QQmlEngine the shell may construct during hot reload.
+    if (!QCoreApplication::instance()) {
+        qCWarning(lcIconThemeQml) << "registerQmlTypes called before QCoreApplication; refusing to register";
+        return;
+    }
     qmlRegisterSingletonInstance<IconThemeResolver>(kModule, kModuleVersionMajor, kModuleVersionMinor,
                                                     "IconThemeResolver", IconThemeResolver::instance());
 }
@@ -30,16 +40,17 @@ void registerQmlTypes()
 void installImageProvider(QQmlEngine* engine)
 {
     if (!engine) {
-        qWarning("PhosphorServiceIconTheme::installImageProvider called with null engine");
+        qCWarning(lcIconThemeQml) << "installImageProvider called with null engine";
         return;
     }
-    // QQmlEngine takes ownership of the provider — passing a raw new
-    // is the documented pattern. Repeated installs on the same engine
-    // would clash (Qt warns + drops the new one), but we only call
-    // this once per engine construction.
+    // QQmlEngine takes ownership of the provider; the documented
+    // pattern is to pass a raw `new`. Re-installing on the same
+    // engine with the same host name would make Qt warn and drop the
+    // new one, but shells construct a fresh QQmlEngine on every hot
+    // reload so the per-engine mount is the expected lifecycle.
     engine->addImageProvider(QString::fromLatin1(kImageProviderHost), new IconImageProvider());
-    qInfo("PhosphorServiceIconTheme: image provider mounted at image://%s/ on engine %p", kImageProviderHost,
-          static_cast<void*>(engine));
+    qCInfo(lcIconThemeQml).nospace() << "image provider mounted at image://" << kImageProviderHost << "/ on engine "
+                                     << static_cast<void*>(engine);
 }
 
 const char* imageProviderUrlHost()

@@ -8,9 +8,11 @@
 namespace PhosphorServiceUPower {
 
 /// Register every PhosphorServiceUPower QML type under the
-/// `Phosphor.Service.UPower` module at version 1.0. Idempotent on
-/// repeat calls — relies on Qt's `qmlRegisterType` no-op behaviour
-/// for duplicate registrations.
+/// `Phosphor.Service.UPower` module at version 1.0. Intended to be
+/// called once per process at startup. `qmlRegisterType` is NOT a
+/// true no-op on repeat calls; the second registration overwrites
+/// and Qt issues a debug-level duplicate-registration warning. Call
+/// exactly once.
 ///
 /// Called from the consuming binary (typically `src/shell/main.cpp`
 /// for the reference shell, but any QGuiApplication that wants to

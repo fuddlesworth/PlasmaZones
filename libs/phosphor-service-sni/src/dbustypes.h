@@ -23,6 +23,20 @@ struct DBusImage
     int width = 0;
     int height = 0;
     QByteArray data;
+
+    // Byte-level equality so QList<DBusImage>::operator== works. Used
+    // by StatusNotifierItem's change detection: a same-count pixmap
+    // list with mutated bytes (rare, but seen with players that send
+    // a fresh ARGB blob without resizing) must invalidate the icon
+    // cache and re-emit iconChanged.
+    friend bool operator==(const DBusImage& lhs, const DBusImage& rhs)
+    {
+        return lhs.width == rhs.width && lhs.height == rhs.height && lhs.data == rhs.data;
+    }
+    friend bool operator!=(const DBusImage& lhs, const DBusImage& rhs)
+    {
+        return !(lhs == rhs);
+    }
 };
 using DBusImageList = QList<DBusImage>;
 

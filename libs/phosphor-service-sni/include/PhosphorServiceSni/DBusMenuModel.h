@@ -6,8 +6,6 @@
 #include <PhosphorServiceSni/phosphorservicesni_export.h>
 
 #include <QAbstractListModel>
-#include <QPointer>
-#include <QQmlEngine>
 #include <QString>
 
 #include <memory>
@@ -28,7 +26,6 @@ class PHOSPHORSERVICESNI_EXPORT DBusMenuModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(DBusMenuModel)
-    QML_ELEMENT
     Q_PROPERTY(QString service READ service WRITE setService NOTIFY sourceChanged)
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY sourceChanged)
     Q_PROPERTY(int rootId READ rootId WRITE setRootId NOTIFY rootIdChanged)

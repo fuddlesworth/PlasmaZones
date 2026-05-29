@@ -30,11 +30,15 @@ int main(int argc, char* argv[])
     // Register every Phosphor.Service.* QML type BEFORE the engine
     // loads shell.qml. Post Phase 2.0 the umbrella is gone; each
     // service lib owns its own module URI:
-    //   SNI       → Phosphor.Service.Sni 1.0       (StatusNotifierHost, models, items)
-    //   IconTheme → Phosphor.Service.IconTheme 1.0 (IconThemeResolver singleton)
-    //   UPower    → Phosphor.Service.UPower 1.0    (UPowerHost, devices, model)
-    //   Mpris     → Phosphor.Service.Mpris 1.0     (MprisHost, players, model)
-    // Idempotent under repeated calls.
+    //   SNI       Phosphor.Service.Sni 1.0       (StatusNotifierHost, models, items)
+    //   IconTheme Phosphor.Service.IconTheme 1.0 (IconThemeResolver singleton)
+    //   UPower    Phosphor.Service.UPower 1.0    (UPowerHost, devices, model)
+    //   Mpris     Phosphor.Service.Mpris 1.0     (MprisHost, players, model)
+    // Each registerQmlTypes call is invoked exactly once here at
+    // startup; the lib-side `qmlRegisterType` family is NOT idempotent
+    // (Qt warns and overwrites on second registration with the same
+    // URI / version / element name) so calling them twice is wrong,
+    // not free.
     PhosphorServiceSni::registerQmlTypes();
     PhosphorServiceIconTheme::registerQmlTypes();
     PhosphorServiceUPower::registerQmlTypes();
@@ -75,12 +79,13 @@ int main(int argc, char* argv[])
         &app);
 
     // Mount the icon image provider on every QQmlEngine the shell
-    // constructs — startup + every hot-reload. Without this the
-    // tray `Image.source` URLs published by StatusNotifierItemModel
+    // constructs (startup + every hot-reload). Without this the
+    // tray Image.source URLs published by StatusNotifierItemModel
     // fall through to "image provider not found" and panel icons
     // render as broken-image placeholders. The provider lives in
-    // phosphor-service-icontheme post Phase 2.0; SNI in
-    // phosphor-services calls into its static registry.
+    // phosphor-service-icontheme post Phase 2.0; phosphor-service-sni
+    // publishes raw IconPixmap blobs through its static registry via
+    // PhosphorServiceIconTheme::IconImageProvider::setImage.
     engine.addEngineHook([](QQmlEngine* qmlEngine) {
         PhosphorServiceIconTheme::installImageProvider(qmlEngine);
     });

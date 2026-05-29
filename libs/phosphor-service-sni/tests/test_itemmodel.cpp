@@ -26,17 +26,23 @@ private Q_SLOTS:
     {
         StatusNotifierItemModel m;
         const auto roles = m.roleNames();
-        // The QML side relies on these specific role names — bind names
-        // are a public contract (renaming them silently breaks the
-        // shell's Repeater delegates).
+        // The QML side relies on these specific role names; bind
+        // names are a public contract (renaming them silently breaks
+        // the shell's Repeater delegates).
         QVERIFY(roles.values().contains("itemId"));
         QVERIFY(roles.values().contains("title"));
-        QVERIFY(roles.values().contains("iconUrl"));
-        QVERIFY(roles.values().contains("iconImage"));
+        QVERIFY(roles.values().contains("category"));
         QVERIFY(roles.values().contains("status"));
+        QVERIFY(roles.values().contains("iconUrl"));
+        QVERIFY(roles.values().contains("overlayIconUrl"));
+        QVERIFY(roles.values().contains("attentionIconUrl"));
+        QVERIFY(roles.values().contains("iconImage"));
+        QVERIFY(roles.values().contains("overlayIconImage"));
+        QVERIFY(roles.values().contains("attentionIconImage"));
         QVERIFY(roles.values().contains("toolTipTitle"));
         QVERIFY(roles.values().contains("toolTipBody"));
         QVERIFY(roles.values().contains("menuPath"));
+        QVERIFY(roles.values().contains("itemIsMenu"));
         QVERIFY(roles.values().contains("dbusService"));
         QVERIFY(roles.values().contains("dbusPath"));
         QVERIFY(roles.values().contains("item"));

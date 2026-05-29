@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorServiceUPower/UPowerDeviceModel.h>
 #include <PhosphorServiceUPower/UPowerHost.h>
@@ -64,30 +64,65 @@ private Q_SLOTS:
         QCOMPARE(model.host(), &host);
         QCOMPARE(hostSpy.count(), 1);
         // countChanged fires unconditionally on host change because the
-        // row set is rebuilt from the host's snapshot — the test
-        // doesn't depend on UPower being present, just that the model
-        // emits the contract.
+        // row set is rebuilt from the host's snapshot; the test does
+        // not depend on UPower being present, just on the contract.
         QCOMPARE(countSpy.count(), 1);
 
         model.setHost(nullptr);
         QCOMPARE(model.host(), nullptr);
         QCOMPARE(hostSpy.count(), 2);
+        QCOMPARE(countSpy.count(), 2);
+    }
+
+    void modelSurvivesHostDestruction()
+    {
+        // Pins the destroyed-lambda installed by setHost. Without it,
+        // a host destroyed while still bound to a model would leave
+        // m_host dangling and the next data()/rowCount() would crash.
+        // The lambda must reset m_host to nullptr and clear m_rows
+        // inside a beginResetModel / endResetModel pair so QML views
+        // observe a clean detach.
+        PhosphorServiceUPower::UPowerDeviceModel model;
+        QSignalSpy hostSpy(&model, &PhosphorServiceUPower::UPowerDeviceModel::hostChanged);
+        QSignalSpy countSpy(&model, &PhosphorServiceUPower::UPowerDeviceModel::countChanged);
+        {
+            PhosphorServiceUPower::UPowerHost host;
+            model.setHost(&host);
+            QCOMPARE(model.host(), &host);
+        }
+        QCOMPARE(model.host(), nullptr);
+        QCOMPARE(model.rowCount(), 0);
+        // setHost (attach) emitted once; destroyed-lambda emits again
+        // on detach.
+        QCOMPARE(hostSpy.count(), 2);
+        QCOMPARE(countSpy.count(), 2);
     }
 
     void uPowerDeviceEnumValuesArePublicContract()
     {
         // The DeviceState / DeviceType enum values are wire constants
-        // mirroring UPower's own enum — they must not change without
-        // a coordinated upstream bump.
+        // mirroring UPower's own enum; they must not change without a
+        // coordinated upstream bump. Pin every enumerator: the prior
+        // partial pin would have missed a renumber that started past
+        // the last asserted value.
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::UnknownState), 0);
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Charging), 1);
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Discharging), 2);
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Empty), 3);
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::FullyCharged), 4);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::PendingCharge), 5);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::PendingDischarge), 6);
 
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::UnknownType), 0);
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::LinePower), 1);
         QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Battery), 2);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Ups), 3);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Monitor), 4);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Mouse), 5);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Keyboard), 6);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Pda), 7);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::Phone), 8);
+        QCOMPARE(static_cast<int>(PhosphorServiceUPower::UPowerDevice::MediaPlayer), 9);
     }
 };
 

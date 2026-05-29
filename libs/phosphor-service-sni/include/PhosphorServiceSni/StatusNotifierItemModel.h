@@ -13,8 +13,8 @@
 #include <PhosphorServiceSni/StatusNotifierItem.h>
 
 #include <QAbstractListModel>
-#include <QPointer>
-#include <QQmlEngine>
+
+#include <memory>
 
 namespace PhosphorServiceSni {
 
@@ -26,7 +26,6 @@ class PHOSPHORSERVICESNI_EXPORT StatusNotifierItemModel : public QAbstractListMo
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(StatusNotifierItemModel)
-    QML_ELEMENT
     Q_PROPERTY(PhosphorServiceSni::StatusNotifierHost* host READ host WRITE setHost NOTIFY hostChanged)
     // `count` mirrors rowCount() and emits countChanged on every
     // insert/remove. QAbstractListModel does NOT expose this by
@@ -92,13 +91,15 @@ Q_SIGNALS:
     void countChanged();
 
 private:
-    QPointer<StatusNotifierHost> m_host;
+    class Private;
+    std::unique_ptr<Private> d;
 
     void connectItem(StatusNotifierItem* item);
     void onItemAdded(StatusNotifierItem* item);
     void onItemRemoved(StatusNotifierItem* item);
     void onItemDataChanged(StatusNotifierItem* item);
-    int rowFor(StatusNotifierItem* item) const;
+    void onItemIconChanged(StatusNotifierItem* item);
+    [[nodiscard]] int rowFor(StatusNotifierItem* item) const;
 };
 
 } // namespace PhosphorServiceSni

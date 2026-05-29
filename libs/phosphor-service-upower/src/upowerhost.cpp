@@ -29,6 +29,7 @@ public:
     UPowerHost* owner = nullptr;
     QList<UPowerDevice*> devices;
     UPowerDevice* displayDevice = nullptr;
+    QString displayDevicePath; ///< tracks the path so setDisplayDevice can detect a swap
     bool onBattery = false;
 
     void setOnBattery(bool value)
@@ -37,6 +38,26 @@ public:
             return;
         onBattery = value;
         Q_EMIT owner->onBatteryChanged();
+    }
+
+    // Replace the cached display device if the path actually changed.
+    // UPower normally exposes a stable aggregate path
+    // (/org/freedesktop/UPower/devices/DisplayDevice), but a daemon
+    // restart or a hot-swap of all batteries can produce a different
+    // path on the next GetDisplayDevice reply. The previous one-shot
+    // behaviour silently retained the old, now-dangling QObject.
+    void setDisplayDevice(const QString& path)
+    {
+        if (path == displayDevicePath)
+            return;
+        if (displayDevice) {
+            displayDevice->deleteLater();
+            displayDevice = nullptr;
+        }
+        displayDevicePath = path;
+        if (!path.isEmpty())
+            displayDevice = new UPowerDevice(path, owner);
+        Q_EMIT owner->displayDeviceChanged();
     }
 
     void addDevice(const QString& path)
@@ -58,8 +79,11 @@ public:
             if (devices.at(i)->dbusPath() == path) {
                 auto* device = devices.at(i);
                 qCDebug(lcUPowerHost) << "Device removed:" << path;
-                Q_EMIT owner->deviceRemoved(device);
+                // Detach from the list BEFORE the public signal so
+                // observers that walk devices()/deviceCount() from
+                // inside the slot see the post-remove state.
                 devices.removeAt(i);
+                Q_EMIT owner->deviceRemoved(device);
                 Q_EMIT owner->deviceCountChanged();
                 device->deleteLater();
                 return;
@@ -80,7 +104,7 @@ UPowerHost::UPowerHost(QObject* parent)
         return;
     }
 
-    bus.connect(QLatin1String(kService), QLatin1String(kPath), QStringLiteral("org.freedesktop.DBus.Properties"),
+    bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kPropsIface),
                 QStringLiteral("PropertiesChanged"), this,
                 SLOT(_q_onPropertiesChanged(QString, QVariantMap, QStringList)));
 
@@ -109,7 +133,11 @@ UPowerHost::UPowerHost(QObject* parent)
         });
     }
 
-    // Get display device
+    // Get display device. setDisplayDevice's path-tracking makes this
+    // safe to call repeatedly: the first reply mounts the aggregate,
+    // a subsequent reply (e.g., after a upower respawn) with a
+    // different path replaces the QObject instead of leaving the old
+    // pointer dangling.
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
                                                           QLatin1String(kIface), QStringLiteral("GetDisplayDevice"));
@@ -119,11 +147,7 @@ UPowerHost::UPowerHost(QObject* parent)
             const QDBusPendingReply<QDBusObjectPath> reply = *call;
             if (reply.isError())
                 return;
-            const QString devPath = reply.value().path();
-            if (!devPath.isEmpty() && !d->displayDevice) {
-                d->displayDevice = new UPowerDevice(devPath, this);
-                Q_EMIT displayDeviceChanged();
-            }
+            d->setDisplayDevice(reply.value().path());
         });
     }
 

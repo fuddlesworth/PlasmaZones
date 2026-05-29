@@ -14,17 +14,19 @@ QT_END_NAMESPACE
 namespace PhosphorServiceIconTheme {
 
 /// Register the `IconThemeResolver` QML singleton under the
-/// `Phosphor.Service.IconTheme` module at version 1.0. Idempotent on
-/// repeat calls — relies on Qt's `qmlRegisterType` no-op behaviour
-/// for duplicate registrations.
+/// `Phosphor.Service.IconTheme` module at version 1.0. Intended to be
+/// called once per process at startup; `qmlRegisterSingletonInstance`
+/// is not a true no-op on repeat calls (Qt would log a duplicate-
+/// registration warning and rebind the singleton instance, which is
+/// well-defined but wasteful).
 PHOSPHORSERVICEICONTHEME_EXPORT void registerQmlTypes();
 
 /// Mount the icon image provider on `engine` under the URL scheme
 /// `image://phosphor-service-icontheme/`. The provider is what makes
 /// raw `QImage` payloads (e.g. SNI tray icons that arrive as IconPixmap
-/// over D-Bus) reachable from QML's `Image.source` (a `QUrl` property
-/// — QImage doesn't auto-convert). Per-engine because `QQmlEngine`
-/// takes ownership of its providers and tears them down with itself.
+/// over D-Bus) reachable from QML's `Image.source` (a `QUrl` property;
+/// QImage doesn't auto-convert). Per-engine because `QQmlEngine` takes
+/// ownership of its providers and tears them down with itself.
 PHOSPHORSERVICEICONTHEME_EXPORT void installImageProvider(QQmlEngine* engine);
 
 /// Stable URL host segment for the image provider, exported so

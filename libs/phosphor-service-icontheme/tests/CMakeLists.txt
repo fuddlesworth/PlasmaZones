@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LGPL-2.1-or-later
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Test)
 
@@ -20,3 +20,6 @@ endfunction()
 
 # Full XDG icon-theme resolver coverage against a fixture theme tree.
 _phosphorserviceicontheme_test(test_phosphorserviceicontheme_resolver test_iconthemeresolver.cpp)
+
+# IconImageProvider round-trip + URL host rename + decodePixmaps.
+_phosphorserviceicontheme_test(test_phosphorserviceicontheme_imageprovider test_imageprovider.cpp)

@@ -15,6 +15,7 @@ namespace PhosphorServiceMpris {
 class PHOSPHORSERVICEMPRIS_EXPORT MprisHost : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(MprisHost)
     Q_PROPERTY(int playerCount READ playerCount NOTIFY playerCountChanged)
 
 public:

@@ -20,7 +20,7 @@
 #include <QLoggingCategory>
 #include <QStringList>
 
-Q_LOGGING_CATEGORY(lcSniHost, "phosphor.service.sni")
+Q_LOGGING_CATEGORY(lcSniHost, "phosphor.service.sni.host")
 
 namespace PhosphorServiceSni {
 
@@ -86,17 +86,12 @@ void StatusNotifierHost::Private::connectToWatcher()
 
     auto bus = QDBusConnection::sessionBus();
 
-    // Subscribe to the Watcher's signals over the bus regardless of
-    // whether we own the service: another process may be the
-    // canonical Watcher, and we still need its ItemRegistered
-    // signals.
-    bus.connect(kWatcherService(), kWatcherPath(), kWatcherInterface(), QStringLiteral("StatusNotifierItemRegistered"),
-                q, SLOT(_q_remoteItemRegistered(QString)));
-    bus.connect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
-                QStringLiteral("StatusNotifierItemUnregistered"), q, SLOT(_q_remoteItemUnregistered(QString)));
-
-    // If we own the Watcher, the in-process signals fire too. Wire
-    // them up so we don't depend on the bus loopback round-trip.
+    // Wire item-registered / item-unregistered. If we own the watcher
+    // service, prefer the in-process Qt signal (one direct call, no
+    // bus round-trip); the bus loopback would fire too and
+    // onItemRegistered's contains() guard would suppress it but at
+    // the cost of a wasted dispatch per item. When another process
+    // owns the watcher we have to rely on the bus subscription.
     if (watcher->isServiceOwner()) {
         QObject::connect(watcher, &StatusNotifierWatcher::StatusNotifierItemRegistered, q, [this](const QString& c) {
             onItemRegistered(c);
@@ -104,20 +99,43 @@ void StatusNotifierHost::Private::connectToWatcher()
         QObject::connect(watcher, &StatusNotifierWatcher::StatusNotifierItemUnregistered, q, [this](const QString& c) {
             onItemUnregistered(c);
         });
+    } else {
+        bus.connect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
+                    QStringLiteral("StatusNotifierItemRegistered"), q, SLOT(_q_remoteItemRegistered(QString)));
+        bus.connect(kWatcherService(), kWatcherPath(), kWatcherInterface(),
+                    QStringLiteral("StatusNotifierItemUnregistered"), q, SLOT(_q_remoteItemUnregistered(QString)));
     }
 }
 
 void StatusNotifierHost::Private::registerHost()
 {
     auto bus = QDBusConnection::sessionBus();
-    hostServiceName = QStringLiteral("org.kde.StatusNotifierHost-%1").arg(QCoreApplication::applicationPid());
-    bus.interface()->registerService(hostServiceName, QDBusConnectionInterface::DontQueueService);
+    // applicationPid() is process-stable, so the host name is too;
+    // recompute once and reuse. Subsequent calls (after the watcher
+    // respawned) only need to re-issue the RegisterStatusNotifierHost
+    // notification + the item seed, not the local name claim.
+    bool isFirstRegistration = false;
+    if (hostServiceName.isEmpty()) {
+        hostServiceName = QStringLiteral("org.kde.StatusNotifierHost-%1").arg(QCoreApplication::applicationPid());
+        const auto reply =
+            bus.interface()->registerService(hostServiceName, QDBusConnectionInterface::DontQueueService);
+        if (!reply.isValid() || reply.value() == QDBusConnectionInterface::ServiceNotRegistered) {
+            qCWarning(lcSniHost) << "failed to register host service" << hostServiceName << ":"
+                                 << (reply.isValid() ? QStringLiteral("not registered") : reply.error().message());
+            hostServiceName.clear();
+            return;
+        }
+        isFirstRegistration = true;
+    }
 
     // Tell whichever process owns the Watcher service that we're a
-    // host. Async — if the Watcher isn't up yet, the NameOwnerChanged
+    // host. Async; if the Watcher isn't up yet, the NameOwnerChanged
     // wire (below) will retry once it appears.
     QDBusInterface watcherIface(kWatcherService(), kWatcherPath(), kWatcherInterface(), bus);
-    qCInfo(lcSniHost) << "host name registered:" << hostServiceName << "watcher iface valid?" << watcherIface.isValid();
+    if (isFirstRegistration) {
+        qCInfo(lcSniHost) << "host name registered:" << hostServiceName << "watcher iface valid?"
+                          << watcherIface.isValid();
+    }
     if (watcherIface.isValid()) {
         watcherIface.asyncCall(QStringLiteral("RegisterStatusNotifierHost"), hostServiceName);
         seedExistingItems();

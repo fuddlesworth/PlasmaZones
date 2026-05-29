@@ -35,10 +35,13 @@ public:
 
     QImage requestImage(const QString& id, QSize* size, const QSize& requestedSize) override;
 
-    /// Register / replace the image associated with `id`. Called from
-    /// publishers (e.g. an SNI item model) when an item's `iconImage()`
-    /// changes, so the next frame's `Image.source` rebind reads the
-    /// fresh data.
+    /// Register or replace the image associated with `id`. Called
+    /// from publishers (e.g. an SNI item model) when an item's
+    /// `iconImage()` changes, so the next frame's `Image.source`
+    /// rebind reads the fresh data. Passing a null QImage is treated
+    /// as a clear of the entry, equivalent to `clearImage(id)`;
+    /// publishers that want to publish "no icon" should drop the URL
+    /// instead (Qt's `Image.source = ""` is the cleaner signal).
     static void setImage(const QString& id, const QImage& image);
 
     /// Drop the image. Called on item-unregistered to keep the

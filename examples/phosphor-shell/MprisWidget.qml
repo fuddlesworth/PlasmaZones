@@ -340,7 +340,10 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     Accessible.role: Accessible.Button
                     Accessible.name: "Previous track"
-                    onClicked: root.currentPlayer.previous()
+                    onClicked: {
+                        if (root.hasPlayer)
+                            root.currentPlayer.previous();
+                    }
                 }
             }
 
@@ -394,7 +397,10 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     Accessible.role: Accessible.Button
                     Accessible.name: "Next track"
-                    onClicked: root.currentPlayer.next()
+                    onClicked: {
+                        if (root.hasPlayer)
+                            root.currentPlayer.next();
+                    }
                 }
             }
         }

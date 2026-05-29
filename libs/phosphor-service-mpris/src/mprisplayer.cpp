@@ -14,6 +14,7 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <cmath>
 
 Q_LOGGING_CATEGORY(lcMpris, "phosphor.service.mpris")
@@ -180,10 +181,20 @@ public:
                         &MprisPlayer::desktopEntryChanged, owner);
     }
 
+    // Wrapper called from getAll's reply path so the member-function-
+    // pointer signature stays uniform with applyRoot. Pins
+    // fromGetAll=true so applyPlayer can scope Position acceptance to
+    // the only path the MPRIS spec permits it on.
+    void applyPlayerFromGetAll(const QVariantMap& props)
+    {
+        applyPlayer(props, true);
+    }
+
     // Applies a player-interface property map. Works for both a full
-    // GetAll reply and a partial PropertiesChanged `changed` map — every
-    // field is gated on contains().
-    void applyPlayer(const QVariantMap& props)
+    // GetAll reply and a partial PropertiesChanged `changed` map; every
+    // field is gated on contains(). `fromGetAll` scopes Position
+    // acceptance — see the matching comment at the Position branch.
+    void applyPlayer(const QVariantMap& props, bool fromGetAll = false)
     {
         if (props.contains(QStringLiteral("PlaybackStatus"))) {
             const QString s = props.value(QStringLiteral("PlaybackStatus")).toString();
@@ -235,9 +246,14 @@ public:
             setBoolField(canControl, props.value(QStringLiteral("CanControl")).toBool(),
                          &MprisPlayer::canControlChanged, owner);
         // Position is only present in a GetAll reply (the MPRIS spec
-        // forbids it in PropertiesChanged); the contains() guard makes
-        // the partial-update case a no-op.
-        if (props.contains(QStringLiteral("Position"))) {
+        // forbids it in PropertiesChanged). Accepting it here from
+        // any path would let a misbehaving player stomp the
+        // interpolated value with arbitrary state. applyPlayer is
+        // shared between GetAll and PropertiesChanged dispatch, so
+        // the explicit `fromGetAll` flag scopes Position to the
+        // GetAll path only; partial updates ignore Position even if
+        // present.
+        if (fromGetAll && props.contains(QStringLiteral("Position"))) {
             const qint64 newPos = props.value(QStringLiteral("Position")).toLongLong();
             if (positionUs != newPos) {
                 positionUs = newPos;
@@ -364,7 +380,7 @@ public:
         } else if (iface == QLatin1String(kPlayerIface)) {
             applyPlayer(changed);
             if (!invalidated.isEmpty())
-                getAll(kPlayerIface, &Private::applyPlayer);
+                getAll(kPlayerIface, &Private::applyPlayerFromGetAll);
         }
     }
 
@@ -425,7 +441,7 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     // Async initial fetch — properties populate as the replies land; the
     // GUI thread is never blocked waiting on a slow player.
     d->getAll(kRootIface, &Private::applyRoot);
-    d->getAll(kPlayerIface, &Private::applyPlayer);
+    d->getAll(kPlayerIface, &Private::applyPlayerFromGetAll);
 
     // Retry GetAll(Player) on a backoff schedule if the initial reply
     // lacked mpris:artUrl. Different players publish the artUrl on
@@ -449,7 +465,7 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     for (int delayMs : {500, 1500, 3000}) {
         QTimer::singleShot(delayMs, this, [this]() {
             if (d->trackArtUrl.isEmpty() && d->playbackState != Stopped)
-                d->getAll(kPlayerIface, &Private::applyPlayer);
+                d->getAll(kPlayerIface, &Private::applyPlayerFromGetAll);
         });
     }
 }
@@ -543,10 +559,18 @@ bool MprisPlayer::canControl() const
 
 void MprisPlayer::setVolume(qreal v)
 {
-    // Reject non-finite input at the boundary — a NaN/inf would be
-    // marshalled straight onto the bus to the player.
+    // Reject non-finite input at the boundary; a NaN/inf would be
+    // marshalled straight onto the bus to the player. Clamp to the
+    // MPRIS-spec range [0.0, 1.0]: a scroll-wheel widget that
+    // accumulates past 1.0 otherwise either gets silently rejected by
+    // the player (slider binding stops mirroring state) or accepted
+    // at unsafe gain. Echoing the clamped value back into d->volume
+    // via setRealField keeps a QML slider in sync without waiting on
+    // the PropertiesChanged round-trip.
     if (!std::isfinite(v))
         return;
+    v = std::clamp(v, 0.0, 1.0);
+    setRealField(d->volume, v, &MprisPlayer::volumeChanged, this);
     dbusSetProperty(d->bus, d->service, kPlayerIface, "Volume", v);
 }
 void MprisPlayer::setShuffle(bool s)
@@ -592,7 +616,15 @@ void MprisPlayer::previous()
 void MprisPlayer::seek(qreal offsetSeconds)
 {
     // A non-finite offset would make the static_cast<qint64> below UB.
+    // Cap at the largest second-count that survives the * 1e6
+    // microsecond conversion without overflowing qint64 (INT64_MAX is
+    // about 9.22e18; 1e13 * 1e6 = 1e19 already overflows, so the safe
+    // limit is ~9e12 seconds, about 285 millennia — well beyond any
+    // legitimate seek).
     if (!std::isfinite(offsetSeconds))
+        return;
+    constexpr qreal kMaxSeekSeconds = 9.0e12;
+    if (std::abs(offsetSeconds) > kMaxSeekSeconds)
         return;
     QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
                                                       QLatin1String(kPlayerIface), QStringLiteral("Seek"));
@@ -602,13 +634,24 @@ void MprisPlayer::seek(qreal offsetSeconds)
 
 void MprisPlayer::setPosition(qreal absoluteSeconds)
 {
-    // A non-finite position would make the static_cast<qint64> below UB.
+    // Same overflow rationale as seek().
     if (!std::isfinite(absoluteSeconds))
+        return;
+    constexpr qreal kMaxPositionSeconds = 9.0e12;
+    if (std::abs(absoluteSeconds) > kMaxPositionSeconds)
         return;
     QDBusMessage msg = QDBusMessage::createMethodCall(d->service, QLatin1String(kMprisPath),
                                                       QLatin1String(kPlayerIface), QStringLiteral("SetPosition"));
-    QString trackPath = d->trackId.isEmpty() ? QStringLiteral("/org/mpris/MediaPlayer2/TrackList/NoTrack") : d->trackId;
-    msg << QVariant::fromValue(QDBusObjectPath(trackPath)) << static_cast<qint64>(absoluteSeconds * 1e6);
+    // If trackId is empty we have not seen any Metadata yet; the spec
+    // requires SetPosition's TrackId arg to match the currently
+    // playing track, so the call would be ignored anyway. Log the
+    // drop so the UI side (which has no signal for it) can be
+    // debugged from the bus log.
+    if (d->trackId.isEmpty()) {
+        qCDebug(lcMpris) << "setPosition dropped: no trackId yet for" << d->service;
+        return;
+    }
+    msg << QVariant::fromValue(QDBusObjectPath(d->trackId)) << static_cast<qint64>(absoluteSeconds * 1e6);
     d->bus.asyncCall(msg);
 }
 

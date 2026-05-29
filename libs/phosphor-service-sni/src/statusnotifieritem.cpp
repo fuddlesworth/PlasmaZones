@@ -228,8 +228,14 @@ void StatusNotifierItem::Private::refreshAll()
         attentionIconName = newAttentionName;
         changedIcon = true;
     }
-    if (newIconPixmap.size() != iconPixmap.size() || newOverlayPixmap.size() != overlayIconPixmap.size()
-        || newAttentionPixmap.size() != attentionIconPixmap.size()) {
+    // Byte-level pixmap comparison. Earlier rev only compared
+    // list.size() which missed the case of an app re-publishing a
+    // pixmap of the same dimensions but different ARGB content
+    // (Discord and a few electron apps do this on theme-change).
+    // DBusImage::operator== walks width/height/data; QList's
+    // operator== walks the list.
+    if (newIconPixmap != iconPixmap || newOverlayPixmap != overlayIconPixmap
+        || newAttentionPixmap != attentionIconPixmap) {
         iconPixmap = newIconPixmap;
         overlayIconPixmap = newOverlayPixmap;
         attentionIconPixmap = newAttentionPixmap;
@@ -288,9 +294,10 @@ void StatusNotifierItem::Private::refreshIcons()
     const auto newIconThemePath = proxy->iconThemePath();
     const auto newIconPixmap = proxy->iconPixmap();
     const auto newOverlayIconPixmap = proxy->overlayIconPixmap();
+    // See applyAll for the byte-level comparison rationale.
     const bool changed = newIconName != iconName || newOverlayIconName != overlayIconName
-        || newIconThemePath != iconThemePath || newIconPixmap.size() != iconPixmap.size()
-        || newOverlayIconPixmap.size() != overlayIconPixmap.size();
+        || newIconThemePath != iconThemePath || newIconPixmap != iconPixmap
+        || newOverlayIconPixmap != overlayIconPixmap;
     if (!changed) {
         return;
     }
@@ -436,7 +443,13 @@ QImage StatusNotifierItem::attentionIconImage() const
 
 void StatusNotifierItem::setPreferredIconSize(int size)
 {
-    if (size < 8 || size == d->preferredIconSize)
+    // Reject implausible sizes at both ends. The lower bound matches
+    // the XDG-spec minimum useful render; the upper bound caps the
+    // worst-case render allocation a buggy QML delegate could request
+    // (256 px is already huge for a tray icon).
+    static constexpr int kMinIconSize = 8;
+    static constexpr int kMaxIconSize = 256;
+    if (size < kMinIconSize || size > kMaxIconSize || size == d->preferredIconSize)
         return;
     d->preferredIconSize = size;
     d->invalidateIconCache();
