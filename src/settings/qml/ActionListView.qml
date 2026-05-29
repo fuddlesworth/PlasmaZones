@@ -95,10 +95,20 @@ ColumnLayout {
             return rawStr;
         }
         if (kind === "snappingLayout" || kind === "tilingAlgorithm") {
+            // Layouts are serialised via `toVariantMap(LayoutPreview)` which
+            // stamps the friendly title under `displayName`. The previous
+            // `.name` read returned undefined, leaving the read-only rule
+            // row's value pill blank even when the layout existed in
+            // `appSettings.layouts`. Fall back to the raw id when no
+            // matching layout is found (hand-edited UUID typo, deleted
+            // layout, etc.) so the user can SEE what the rule contains
+            // rather than an empty pill.
             var layouts = root.appSettings && root.appSettings.layouts ? root.appSettings.layouts : [];
             for (var j = 0; j < layouts.length; ++j) {
-                if (layouts[j].id === raw)
-                    return layouts[j].name;
+                if (layouts[j].id === raw) {
+                    var name = layouts[j].displayName;
+                    return name ? name : rawStr;
+                }
             }
             return rawStr;
         }
