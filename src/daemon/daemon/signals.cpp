@@ -190,8 +190,7 @@ void Daemon::initializeAutotile()
             // mode the user is actually trying to interact with.
             // Note: intentionally shown regardless of showOsdOnLayoutSwitch — this is
             // direct feedback to an explicit user action, not a passive layout-switch OSD.
-            const auto currentMode =
-                m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
+            const auto currentMode = currentModeFor(screenId);
             // Legacy direct settings check — kept inline because the OSD
             // surface needs the rich PlasmaZones::DisabledReason enum
             // (which carries axis info for the user-facing message);
@@ -685,6 +684,18 @@ void Daemon::connectOverlaySignals()
                     m_overlayService->hideSnapAssist();
                 }
             });
+
+    // Mid-drag close cleanup: WindowDragAdaptor holds transient drag state
+    // (m_draggedWindowId, m_pendingSnapDragWindowId, m_snapAssistPendingWindowId,
+    // overlay refs) that must be torn down if the dragged window closes before
+    // endDrag fires. The canonical close path runs through WTA::windowClosed
+    // (called by the kwin-effect's notifyWindowClosed); we fan that out
+    // in-process here instead of re-exposing a D-Bus surface no external
+    // caller was wiring up.
+    if (m_windowDragAdaptor) {
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_windowDragAdaptor,
+                &WindowDragAdaptor::handleWindowClosed);
+    }
 }
 
 void Daemon::finalizeStartup()
@@ -811,6 +822,14 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
     // to KWin effect's NavigationHandler::m_floatingWindows via D-Bus signal.
     // Also track autotile origin so mode transitions can distinguish
     // autotile-originated floats from manual snapping-mode floats.
+    //
+    // Null-guard the engines: this slot is connected to autotile-engine
+    // signals, so a queued-connection delivery that lands after
+    // m_autotileEngine.reset() (shutdown window) would otherwise deref
+    // a freed pointer. Mirrors the windowsReleased connect block above.
+    if (!m_autotileEngine || !m_snapEngine) {
+        return;
+    }
     if (m_windowTrackingAdaptor) {
         PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
         if (floating) {
@@ -869,7 +888,10 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     // says floating from a prior snap-mode Meta+F). The window already has a
     // valid position (the drop location); teleporting it via the stored
     // pre-tile rect would resize and jump it — discussion #271.
-    if (!m_windowTrackingAdaptor) {
+    //
+    // Null-guard the engines for the same shutdown-window reason as
+    // syncAutotileFloatState above.
+    if (!m_autotileEngine || !m_snapEngine || !m_windowTrackingAdaptor) {
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
@@ -909,7 +931,9 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
 
 void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId)
 {
-    if (!m_windowTrackingAdaptor) {
+    // Symmetric null-guard with syncAutotileFloatState — shutdown-window
+    // queued connections shouldn't deref freed engine pointers.
+    if (!m_autotileEngine || !m_windowTrackingAdaptor) {
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();

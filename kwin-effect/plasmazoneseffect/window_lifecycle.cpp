@@ -591,8 +591,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 pushWindowMetadata(safeW);
             }
         };
+        // Class / desktop-file mutations invalidate the animation rule
+        // evaluator's per-window match cache. The cache is keyed on the
+        // window's frozen composite id but the cascade resolves against
+        // the LIVE windowClass — so without invalidation, a SetOpacity /
+        // OverrideAnimation* rule for the post-rename class silently
+        // never applies (Electron/CEF/Steam family). pushLatest already
+        // refreshes the daemon's WindowRegistry record; mirror that
+        // refresh on the effect's local resolver cache. Caption /
+        // desktops / activities / role changes don't feed the
+        // WindowClass matcher so they don't need the cache drop.
+        auto invalidateRuleCache = [this]() {
+            m_shaderManager.animationRuleEvaluator().clearCache();
+        };
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
+        connect(kw, &KWin::Window::windowClassChanged, this, invalidateRuleCache);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
+        connect(kw, &KWin::Window::desktopFileNameChanged, this, invalidateRuleCache);
         connect(kw, &KWin::Window::captionChanged, this, pushLatest);
         // Per-window virtual-desktop / activity / role changes also refresh the
         // registry so context-aware rule resolution sees current values. Same

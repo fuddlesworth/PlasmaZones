@@ -474,6 +474,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // catches deletion — the bare set entry then needs explicit
         // cleanup here.
         m_shaderManager.m_pendingShaderExpiryEnd.remove(w);
+        // Drop the per-frame SetOpacity cache entry for this window. The cache
+        // is normally cleared at postPaintScreen, but a window deleted
+        // mid-frame leaves a stale raw-pointer key; KWin reuses EffectWindow
+        // heap addresses, so a stale entry surviving until postPaintScreen
+        // could be read by a paintWindow call that landed at the same
+        // address.
+        m_shaderManager.m_frameOpacityCache.remove(w);
     });
 
     connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &PlasmaZonesEffect::slotWindowActivated);

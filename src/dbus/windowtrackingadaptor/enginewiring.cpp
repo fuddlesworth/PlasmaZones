@@ -107,9 +107,15 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 });
     } else if (snapEngine) {
         // Snap-mode window state signals are critical for WTS correctness.
-        // A non-SnapEngine in the snap slot means state notifications are lost.
-        Q_ASSERT_X(false, "WindowTrackingAdaptor::setEngines",
-                   "snapEngine must be a SnapEngine — snap-specific signals not connected");
+        // A non-SnapEngine in the snap slot means state notifications are
+        // lost — silently in release builds if we only Q_ASSERT here. The
+        // construction-time pattern in snapadaptor.cpp uses qFatal for the
+        // same class of misconfiguration; mirror it so debug AND release
+        // both halt loudly instead of corrupting state propagation.
+        qFatal(
+            "WindowTrackingAdaptor::setEngines: snapEngine (%p) is not a SnapEngine — "
+            "snap-specific signal wiring would silently drop window-state notifications",
+            static_cast<void*>(snapEngine));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

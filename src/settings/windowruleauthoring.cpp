@@ -32,7 +32,7 @@ using PhosphorWindowRule::RuleAction;
 /// through `PzI18n::tr` and `lupdate` extracts the strings. A missing
 /// entry falls back to the wire key — visible in the picker, so a missing
 /// entry stands out for the next translator pass.
-QString paramLabel(QLatin1StringView type, const QString& key)
+QString paramLabel(const QString& type, const QString& key)
 {
     namespace ActionParam = PhosphorWindowRule::ActionParam;
     if (type == ActionType::SetEngineMode && key == ActionParam::Mode) {
@@ -68,7 +68,7 @@ QString paramLabel(QLatin1StringView type, const QString& key)
 /// Translated label for one enum wire value on action @p type, param @p key.
 /// Mirrors paramLabel — structural enum membership lives on the descriptor;
 /// the human-facing label is per `(type, key, wireValue)`.
-QString enumOptionLabel(QLatin1StringView type, const QString& key, const QString& wireValue)
+QString enumOptionLabel(const QString& type, const QString& key, const QString& wireValue)
 {
     namespace ActionParam = PhosphorWindowRule::ActionParam;
     if ((type == ActionType::SetEngineMode || type == ActionType::DisableEngine) && key == ActionParam::Mode) {
@@ -89,10 +89,10 @@ QString enumOptionLabel(QLatin1StringView type, const QString& key, const QStrin
 /// structural `params` and supplemented by GPL-side translated labels. The
 /// QML editor's per-param Loader dispatches on `kind`, so the wire shape
 /// here is the contract between the descriptor and the editor.
-QVariantList paramsForActionTypeImpl(QLatin1StringView type)
+QVariantList paramsForActionTypeImpl(const QString& type)
 {
     QVariantList params;
-    const auto descriptor = PhosphorWindowRule::ActionRegistry::instance().descriptor(QString::fromLatin1(type));
+    const auto descriptor = PhosphorWindowRule::ActionRegistry::instance().descriptor(type);
     if (!descriptor.has_value()) {
         return params;
     }
@@ -137,7 +137,7 @@ QVariantList paramsForActionTypeImpl(QLatin1StringView type)
     return params;
 }
 
-QString actionTypeLabelImpl(QLatin1StringView type)
+QString actionTypeLabelImpl(const QString& type)
 {
     if (type == ActionType::SetEngineMode) {
         return PzI18n::tr("Set engine mode");
@@ -169,7 +169,7 @@ QString actionTypeLabelImpl(QLatin1StringView type)
     if (type == ActionType::SetOpacity) {
         return PzI18n::tr("Set opacity");
     }
-    return WindowRuleModel::actionTypeFallbackLabel(QString::fromLatin1(type));
+    return WindowRuleModel::actionTypeFallbackLabel(type);
 }
 
 QString operatorLabelImpl(Operator op)
@@ -212,13 +212,19 @@ QVariantList matchFields()
     //     CLAUDE.md), so the picker would always read as blank.
     // The Field enum keeps both values for back-compat with already-saved
     // rules; only the authoring UI hides them.
-    static const QList<Field> kFields = {
-        Field::AppId,       Field::WindowClass, Field::DesktopFile,    Field::Title,
-        Field::WindowType,  Field::IsSticky,    Field::IsFullscreen,   Field::IsMinimized,
-        Field::IsMaximized, Field::ScreenId,    Field::VirtualDesktop, Field::Activity,
-    };
+    //
+    // Iterate the Field enum directly with a deny-set rather than a
+    // hand-maintained allow-list: a new Field value (e.g. a hypothetical
+    // future `MimeType`) auto-surfaces in the picker unless it's
+    // explicitly hidden here. Mirrors the `userAuthorable` filter shape
+    // that replaced `kTypes` in actionTypes() above.
+    static const QSet<Field> kHiddenFields = {Field::Pid, Field::WindowRole};
     QVariantList out;
-    for (Field f : kFields) {
+    for (int i = 0; i < PhosphorWindowRule::FieldCount; ++i) {
+        const auto f = static_cast<Field>(i);
+        if (kHiddenFields.contains(f)) {
+            continue;
+        }
         QVariantMap entry;
         entry[QStringLiteral("value")] = static_cast<int>(f);
         // The JSON wire string for this field — QML keys off this rather than
@@ -329,23 +335,17 @@ QVariantList actionTypes()
 
     QVariantList out;
     for (const QString& typeStr : orderedTypes) {
-        // Materialise a stable QByteArray for the QLatin1StringView's
-        // backing storage — a temporary `toLatin1()` would dangle past
-        // the semicolon and `actionTypeLabelImpl` / `paramsForActionTypeImpl`
-        // would read invalid memory.
-        const QByteArray typeBytes = typeStr.toLatin1();
-        const QLatin1StringView type{typeBytes.constData(), static_cast<qsizetype>(typeBytes.size())};
         QVariantMap entry;
         entry[QStringLiteral("value")] = typeStr;
-        entry[QStringLiteral("label")] = actionTypeLabelImpl(type);
-        entry[QStringLiteral("params")] = paramsForActionTypeImpl(type);
+        entry[QStringLiteral("label")] = actionTypeLabelImpl(typeStr);
+        entry[QStringLiteral("params")] = paramsForActionTypeImpl(typeStr);
         // Domain wire string drives the picker's compatibility flag — the
         // QML side disables a context-domain action type when the current
         // match references window-property fields (the silently-never-fires
         // combination). Looked up via a probe RuleAction so the descriptor's
         // own `domain` field stays the single source of truth.
         RuleAction probe;
-        probe.type = QString::fromLatin1(type);
+        probe.type = typeStr;
         const auto domain = PhosphorWindowRule::ActionRegistry::instance().domainFor(probe);
         entry[QStringLiteral("domain")] =
             domain == PhosphorWindowRule::ActionDomain::Context ? QStringLiteral("context") : QStringLiteral("window");
@@ -366,9 +366,7 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
     QVariantMap payload;
     payload[QStringLiteral("type")] = typeWire;
 
-    const QByteArray typeBytes = typeWire.toLatin1();
-    const QVariantList params =
-        paramsForActionTypeImpl(QLatin1StringView{typeBytes.constData(), static_cast<qsizetype>(typeBytes.size())});
+    const QVariantList params = paramsForActionTypeImpl(typeWire);
     for (const QVariant& v : params) {
         const QVariantMap p = v.toMap();
         const QString key = p.value(QStringLiteral("key")).toString();

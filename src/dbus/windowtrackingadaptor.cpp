@@ -118,10 +118,14 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
                 // writeCompleted only fires from writes WE enqueued (the
                 // sync-fallback path calls m_sessionBackend->sync() directly
                 // without routing through the worker), so the queue head
-                // must exist. Assert instead of hedging — a disappearing
-                // head would indicate a bug in enqueue/dequeue pairing.
-                Q_ASSERT(!m_pendingWriteMasks.isEmpty());
+                // must exist. Debug builds halt; release builds log and
+                // bail (silent return without the warning would mask the
+                // enqueue/dequeue-pairing bug in production).
                 if (m_pendingWriteMasks.isEmpty()) {
+                    qCWarning(lcDbusWindow)
+                        << "writeCompleted callback with empty m_pendingWriteMasks for" << filePath
+                        << "— enqueue/dequeue pairing bug; ignoring this callback to keep the queue consistent";
+                    Q_ASSERT(false);
                     return;
                 }
                 const PhosphorPlacement::WindowTrackingService::DirtyMask committed = m_pendingWriteMasks.dequeue();
@@ -482,6 +486,12 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
         m_windowRegistry->releaseCanonical(instanceId);
     }
 
+    // Drive in-process sibling-adaptor cleanup (WindowDragAdaptor) without
+    // re-introducing a D-Bus surface that nothing outside the daemon was
+    // calling. Emitted after the canonical WTS teardown above so listeners
+    // see consistent post-close state.
+    Q_EMIT windowClosedNotification(windowId);
+
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
 }
 
@@ -730,9 +740,9 @@ QStringList WindowTrackingAdaptor::getSnappedWindows()
 void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
 {
     const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
-    int pruned = m_service->pruneStaleAssignments(alive);
+    int persistedPruned = m_service->pruneStaleAssignments(alive);
     if (m_autotileEngine) {
-        pruned += m_autotileEngine->pruneStaleWindows(alive);
+        persistedPruned += m_autotileEngine->pruneStaleWindows(alive);
     }
     // Defensive sweep of the frame-geometry shadow store. The primary
     // cleanup path is `windowClosed`, but if a window dies without a
@@ -740,16 +750,25 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // crash, lost D-Bus call), the entry would otherwise leak forever.
     // The effect calls pruneStaleWindows precisely for this defensive
     // case — extend the same alive-set filter to m_frameGeometry.
+    int frameGeoPruned = 0;
     for (auto it = m_frameGeometry.begin(); it != m_frameGeometry.end();) {
         if (!alive.contains(it.key())) {
             it = m_frameGeometry.erase(it);
-            ++pruned;
+            ++frameGeoPruned;
         } else {
             ++it;
         }
     }
-    if (pruned > 0) {
-        qCInfo(lcDbusWindow) << "Pruned" << pruned << "stale window assignments (not in KWin)";
+    const int totalPruned = persistedPruned + frameGeoPruned;
+    if (totalPruned > 0) {
+        qCInfo(lcDbusWindow) << "Pruned" << totalPruned << "stale window assignments (not in KWin)";
+    }
+    // Only schedule a save when something PERSISTED was pruned. Frame-
+    // geometry is the compositor-layer shadow store (not on disk), so a
+    // frame-geo-only prune would fire scheduleSaveState → takeDirty →
+    // DirtyNone-early-return — pointless debounced wake-up. Mirrors the
+    // narrow-dirty-mask discipline the rest of the file follows.
+    if (persistedPruned > 0) {
         scheduleSaveState();
     }
 }

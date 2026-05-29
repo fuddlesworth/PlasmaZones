@@ -19,12 +19,15 @@
  *   - the field / operator / action authoring metadata is well-formed.
  */
 
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUuid>
 
 #include "settings/windowrulecontroller.h"
 #include "settings/windowrulemodel.h"
+
+#include <PhosphorWindowRule/RuleAction.h>
 
 using namespace PlasmaZones;
 
@@ -40,6 +43,7 @@ private Q_SLOTS:
     void monitorOverviewClassifiesScrollingWithoutLayoutName();
     void monitorOverviewDisableEngineMatchesEffectiveMode();
     void engineModePickerExposesAllVocabularyTokens();
+    void userAuthorableFilterHidesInternalActions();
     void moveRuleReorders();
     void authoringMetadata();
     void templatesProduceSeededRules();
@@ -336,6 +340,79 @@ void TestWindowRuleController::engineModePickerExposesAllVocabularyTokens()
         QVERIFY2(wireValues.contains(QStringLiteral("snapping")), qPrintable(wireValues.join(QLatin1Char(','))));
         QVERIFY2(wireValues.contains(QStringLiteral("autotile")), qPrintable(wireValues.join(QLatin1Char(','))));
         QVERIFY2(wireValues.contains(QStringLiteral("scrolling")), qPrintable(wireValues.join(QLatin1Char(','))));
+    }
+}
+
+void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
+{
+    // Pin that the controller's actionTypes() picker honours the
+    // `userAuthorable=false` flag on ActionDescriptor. Without this test the
+    // filter is dead code — every shipped descriptor currently defaults to
+    // userAuthorable=true, so a regression that bypasses the filter (e.g.
+    // re-introducing a hand-maintained allow-list) would slip through CI.
+    //
+    // Register a sentinel descriptor flagged as non-authorable, walk the
+    // picker, then restore the descriptor to its prior state so the rest
+    // of the test suite isn't disturbed.
+    using PhosphorWindowRule::ActionDescriptor;
+    using PhosphorWindowRule::ActionDomain;
+    using PhosphorWindowRule::ActionRegistry;
+
+    static const QString kSentinelType = QStringLiteral("test-sentinel-internal-action");
+    auto& registry = ActionRegistry::instance();
+    const bool prevExists = registry.isRegistered(kSentinelType);
+    const std::optional<ActionDescriptor> prev = registry.descriptor(kSentinelType);
+
+    ActionDescriptor sentinel;
+    sentinel.type = kSentinelType;
+    sentinel.slotFor = [](const QJsonObject&) {
+        return QStringLiteral("test-sentinel-slot");
+    };
+    sentinel.validate = [](const QJsonObject&) {
+        return true;
+    };
+    sentinel.terminal = false;
+    sentinel.domain = ActionDomain::Window;
+    sentinel.userAuthorable = false;
+    registry.registerAction(sentinel);
+
+    WindowRuleController controller;
+    const QVariantList types = controller.actionTypes();
+    bool found = false;
+    for (const QVariant& t : types) {
+        const QVariantMap tm = t.toMap();
+        if (tm.value(QStringLiteral("value")).toString() == kSentinelType) {
+            found = true;
+            break;
+        }
+    }
+    QVERIFY2(!found, "actionTypes() must exclude descriptors with userAuthorable=false");
+
+    // Now flip the descriptor to userAuthorable=true and confirm the same
+    // sentinel surfaces — the filter is the only thing keeping it hidden.
+    sentinel.userAuthorable = true;
+    registry.registerAction(sentinel);
+    const QVariantList typesAuthorable = controller.actionTypes();
+    bool foundAuthorable = false;
+    for (const QVariant& t : typesAuthorable) {
+        const QVariantMap tm = t.toMap();
+        if (tm.value(QStringLiteral("value")).toString() == kSentinelType) {
+            foundAuthorable = true;
+            break;
+        }
+    }
+    QVERIFY2(foundAuthorable, "actionTypes() must include descriptors with userAuthorable=true");
+
+    // Restore prior state. The registry has no public erase; if the
+    // sentinel wasn't registered before, leaving it registered would leak
+    // a non-action type into later tests. Workaround: if the sentinel
+    // wasn't there originally, set it to userAuthorable=false so any
+    // accidental later reuse is at least filtered from the picker.
+    if (prevExists && prev.has_value()) {
+        registry.registerAction(*prev);
+    } else {
+        sentinel.userAuthorable = false;
+        registry.registerAction(sentinel);
     }
 }
 

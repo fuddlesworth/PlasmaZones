@@ -197,15 +197,22 @@ void PlasmaZonesEffect::postPaintScreen()
     // above only iterates `m_shaderManager.m_shaderTransitions`, so
     // suppression-active-but-shader-active windows would lose their
     // surface-extent damage). Screen-level damage avoids the clip entirely.
-    for (auto it = m_restoreSuppress.cbegin(); it != m_restoreSuppress.cend(); ++it) {
-        KWin::EffectWindow* sw = it.key();
-        if (!sw || sw->isDeleted() || !KWin::effects) {
-            continue;
-        }
-        if (const auto* output = sw->screen()) {
-            KWin::effects->addRepaint(output->geometry());
-        } else {
-            KWin::effects->addRepaintFull();
+    if (KWin::effects) {
+        // KWin::effects cannot go null mid-loop (it's a global owned by
+        // KWin's effect system, not by any window we touch), so hoist the
+        // null-check above the loop — the per-iteration test was dead
+        // overhead in a hot path that runs every frame while any window
+        // has a restore-suppression active.
+        for (auto it = m_restoreSuppress.cbegin(); it != m_restoreSuppress.cend(); ++it) {
+            KWin::EffectWindow* sw = it.key();
+            if (!sw || sw->isDeleted()) {
+                continue;
+            }
+            if (const auto* output = sw->screen()) {
+                KWin::effects->addRepaint(output->geometry());
+            } else {
+                KWin::effects->addRepaintFull();
+            }
         }
     }
     KWin::effects->postPaintScreen();
@@ -216,6 +223,11 @@ void PlasmaZonesEffect::postPaintScreen()
     // in shader_resolve.cpp's resolveShaderClock(), instead of reading
     // a stale pinned timestamp from this cycle.
     m_shaderManager.setCurrentFrameClockMs(-1);
+    // Drop the per-frame SetOpacity cache so next frame's prePaintWindow
+    // re-resolves against any rule-set or window-metadata changes that
+    // landed between frames. See ShaderTransitionManager's cache-block
+    // comment for the per-frame contract rationale.
+    m_shaderManager.clearFrameOpacityCache();
 }
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
@@ -259,10 +271,18 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // and clear the opaque region. Geometry is untouched
         // (setTransformed deliberately NOT called) since SetOpacity is
         // a pure alpha change.
+        //
+        // Resolve once per frame and cache: paintWindow below re-uses
+        // the same `(window, frame)` lookup, and walking the rule
+        // cascade twice per visible window per frame is wasted work
+        // for a hot path the project explicitly tracks. The cache is
+        // dropped at postPaintScreen.
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
-            if (auto opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w));
-                opacity && *opacity < 1.0) {
+            const auto opacity =
+                resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w));
+            m_shaderManager.cacheFrameOpacity(w, opacity);
+            if (opacity && *opacity < 1.0) {
                 data.setTranslucent();
             }
         }
@@ -363,8 +383,18 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     if (!m_shaderManager.animationRuleSet().isEmpty()) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
-            if (auto opacity =
-                    resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w))) {
+            // Reuse the per-frame cache populated by prePaintWindow above.
+            // Falls back to a live resolve only when prePaintWindow wasn't
+            // called this frame (defensive bootstrap, test harness — KWin
+            // normally guarantees prePaintWindow→paintWindow ordering).
+            std::optional<qreal> opacity;
+            if (m_shaderManager.frameOpacityCached(w)) {
+                opacity = m_shaderManager.cachedFrameOpacity(w);
+            } else {
+                opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w));
+                m_shaderManager.cacheFrameOpacity(w, opacity);
+            }
+            if (opacity) {
                 data.setOpacity(*opacity);
             }
         }
@@ -884,10 +914,20 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     Q_UNUSED(mask)
     Q_UNUSED(data)
 
+    // Defensive: KWin may dispatch a paint to us for a window already
+    // marked deleted (slot ordering vs. our windowDeleted handler). The
+    // expandedGeometry / frameGeometry / screen accessors below would
+    // deref freed Item state for a deleted window. Mirrors the same
+    // guard endShaderTransition applies for the same race.
+    if (!window || window->isDeleted()) {
+        return;
+    }
     // Only surface-extent transitions deform the quad list. Anchor-extent
     // transitions and plain redirected windows are drawn 1:1 over their
-    // own geometry — leave their quads untouched.
-    const auto* st = m_shaderManager.findTransition(window);
+    // own geometry — leave their quads untouched. Non-const handle: the
+    // handedness-cache block below mutates it on the first call, saving a
+    // redundant `findTransition` lookup.
+    auto* st = m_shaderManager.findTransition(window);
     if (!st || !st->surfaceExtent || quads.isEmpty()) {
         return;
     }
@@ -943,24 +983,38 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // exactly as it does for the window's own quad. Window content is
     // axis-aligned, so u is linear in x and v in y — derive each axis's
     // sign from the source quad's extreme vertices.
-    const KWin::WindowQuad& srcQuad = quads.first();
-    int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
-    for (int i = 1; i < 4; ++i) {
-        if (srcQuad[i].y() < srcQuad[topIdx].y())
-            topIdx = i;
-        if (srcQuad[i].y() > srcQuad[bottomIdx].y())
-            bottomIdx = i;
-        if (srcQuad[i].x() < srcQuad[leftIdx].x())
-            leftIdx = i;
-        if (srcQuad[i].x() > srcQuad[rightIdx].x())
-            rightIdx = i;
+    //
+    // Cache the result on the transition: the handedness depends only on
+    // KWin's quad convention, which doesn't shift mid-transition. Without
+    // the cache, every surface-extent shader pays the 3-vertex search +
+    // 4 comparisons per quad per frame for its entire lifetime. `st` is
+    // already known non-null (early-returned at line 928), so the cache
+    // population reuses that handle instead of paying a second lookup.
+    if (!st->handednessCached) {
+        const KWin::WindowQuad& srcQuad = quads.first();
+        int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
+        for (int i = 1; i < 4; ++i) {
+            if (srcQuad[i].y() < srcQuad[topIdx].y())
+                topIdx = i;
+            if (srcQuad[i].y() > srcQuad[bottomIdx].y())
+                bottomIdx = i;
+            if (srcQuad[i].x() < srcQuad[leftIdx].x())
+                leftIdx = i;
+            if (srcQuad[i].x() > srcQuad[rightIdx].x())
+                rightIdx = i;
+        }
+        // The surface quad spans the whole output, so its texcoords are the
+        // full 0..1 range; only the handedness comes from the source quad.
+        st->uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
+        st->uAtRight = 1.0 - st->uAtLeft;
+        st->vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
+        st->vAtBottom = 1.0 - st->vAtTop;
+        st->handednessCached = true;
     }
-    // The surface quad spans the whole output, so its texcoords are the
-    // full 0..1 range; only the handedness comes from the source quad.
-    const double uAtLeft = (srcQuad[leftIdx].u() <= srcQuad[rightIdx].u()) ? 0.0 : 1.0;
-    const double uAtRight = 1.0 - uAtLeft;
-    const double vAtTop = (srcQuad[topIdx].v() <= srcQuad[bottomIdx].v()) ? 0.0 : 1.0;
-    const double vAtBottom = 1.0 - vAtTop;
+    const double uAtLeft = st->uAtLeft;
+    const double uAtRight = st->uAtRight;
+    const double vAtTop = st->vAtTop;
+    const double vAtBottom = st->vAtBottom;
 
     // One quad covering the whole output, clockwise from top-left (the
     // vertex order WindowQuad documents). The shared kwin vertex stage

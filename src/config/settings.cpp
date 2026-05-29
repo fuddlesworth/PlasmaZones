@@ -564,10 +564,12 @@ void Settings::setAudioSpectrumBarCount(int count)
 #define PZ_STORE_SET_BOOL(fn, group, key, signal)                                                                      \
     void Settings::fn(bool value)                                                                                      \
     {                                                                                                                  \
-        if (m_store->read<bool>(ConfigDefaults::group(), ConfigDefaults::key()) == value) {                            \
+        const bool before = m_store->read<bool>(ConfigDefaults::group(), ConfigDefaults::key());                       \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const bool after = m_store->read<bool>(ConfigDefaults::group(), ConfigDefaults::key());                        \
+        if (after == before) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
-        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
         Q_EMIT signal();                                                                                               \
         Q_EMIT settingsChanged();                                                                                      \
     }
@@ -601,10 +603,12 @@ void Settings::setAudioSpectrumBarCount(int count)
 #define PZ_STORE_SET_COLOR(fn, group, key, signal)                                                                     \
     void Settings::fn(const QColor& value)                                                                             \
     {                                                                                                                  \
-        if (m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key()) == value) {                          \
+        const QColor before = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                   \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const QColor after = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                    \
+        if (after == before) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
-        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
         Q_EMIT signal();                                                                                               \
         Q_EMIT settingsChanged();                                                                                      \
     }
@@ -612,10 +616,12 @@ void Settings::setAudioSpectrumBarCount(int count)
 #define PZ_STORE_SET_STRING(fn, group, key, signal)                                                                    \
     void Settings::fn(const QString& value)                                                                            \
     {                                                                                                                  \
-        if (m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key()) == value) {                         \
+        const QString before = m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key());                 \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const QString after = m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key());                  \
+        if (after == before) {                                                                                         \
             return;                                                                                                    \
         }                                                                                                              \
-        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
         Q_EMIT signal();                                                                                               \
         Q_EMIT settingsChanged();                                                                                      \
     }
@@ -1324,11 +1330,14 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     const QStringList after = canonical(entries);
 
     // No-op guard: when the canonical disable sets are equal there is nothing
-    // to persist. Return AHEAD of the kept-rebuild + setAllRules call — the
-    // rebuild mints fresh QUuids per disable rule (makeDisableRule) and
-    // WindowRule::operator== compares ids, so an unchanged set would still
-    // produce a rule list that fails setAllRules's equality check, needlessly
-    // rewriting windowrules.json and firing rulesChanged().
+    // to persist. Skip the kept-rebuild + setAllRules walk entirely — the
+    // rebuild would produce a structurally identical rule list
+    // (makeDisableRule is deterministic via disableRuleIdFor's createUuidV5
+    // over (screenId, desktop, activity, modeToken), so the ids match
+    // byte-for-byte and setAllRules would correctly detect "no change"),
+    // but walking every rule in the store and allocating fresh WindowRule
+    // copies just to discover that is wasted work. Pure micro-optimisation,
+    // not a correctness guard against UUID churn.
     if (before == after) {
         return;
     }
@@ -2477,6 +2486,23 @@ bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop
 
 void Settings::setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity, bool locked)
 {
+    // Composite-key format mirrors isContextLocked():
+    //   name                          → per-screen lock
+    //   name:<desktop>                → per-(screen,desktop) lock
+    //   name:<desktop>:<activity>     → per-(screen,desktop,activity) lock
+    //
+    // (screen, 0, "activity") has no representable form in the current
+    // schema. Silently composing just `name` would land the caller on a
+    // whole-screen lock while their intent was activity-scoped — that's
+    // data loss masquerading as success. Reject loudly at the boundary so
+    // the caller can either supply a desktop or accept the screen scope
+    // explicitly with an empty activity.
+    if (virtualDesktop <= 0 && !activity.isEmpty()) {
+        qCWarning(lcConfig) << "Settings::setContextLocked: activity supplied without a virtual desktop —"
+                            << "(screen, 0, activity) cannot be expressed in the lockedScreens schema."
+                            << "Refusing to write a whole-screen lock that would silently drop the activity.";
+        return;
+    }
     QString key = screenIdOrName;
     if (virtualDesktop > 0) {
         key += QStringLiteral(":") + QString::number(virtualDesktop);

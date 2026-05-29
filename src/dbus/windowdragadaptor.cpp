@@ -278,6 +278,7 @@ void WindowDragAdaptor::cancelSnap()
     // does the same two-line clear for the same reason.
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
+    m_snapAssistPendingDesktop = 0;
 }
 
 void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
@@ -325,16 +326,15 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
     if (windowId == m_snapAssistPendingWindowId) {
         m_snapAssistPendingWindowId.clear();
         m_snapAssistPendingScreenId.clear();
+        m_snapAssistPendingDesktop = 0;
     }
 
-    // Delegate tracking cleanup to WindowTrackingAdaptor. We do not know the
-    // window's structural kind from this internal drag path — pass `Unknown`
-    // so the PendingRestore kind gate stays permissive for these entries.
-    // The kwin-effect's notifyWindowClosed path is the canonical kind source
-    // and runs alongside this for compositor-driven closes.
-    if (m_windowTracking) {
-        m_windowTracking->windowClosed(windowId, static_cast<int>(PhosphorEngine::WindowKind::Unknown));
-    }
+    // NOTE: This slot is now driven by WTA::windowClosedNotification (wired in
+    // daemon/signals.cpp), which is emitted at the END of WTA::windowClosed
+    // after the canonical tracking-cleanup has already run. Re-invoking
+    // m_windowTracking->windowClosed() here would re-enter WTA's slot, re-emit
+    // the notification, and recurse infinitely. The drag-state teardown above
+    // is the only work this slot owns.
 }
 
 void WindowDragAdaptor::registerCancelOverlayShortcut()
@@ -630,6 +630,13 @@ void WindowDragAdaptor::clearForCompositorReconnect()
     // snapAssistReady would never be emitted.
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
+    // Clear the desktop snapshot alongside the id pair so the (windowId,
+    // screenId, desktop) triple is always cleared together. The id-empty
+    // early-return in computeAndEmitSnapAssist makes a leftover desktop
+    // value harmless today, but the symmetric clear matches the cancelSnap
+    // and handleWindowClosed sites and survives a future refactor that
+    // drops the id-empty guard.
+    m_snapAssistPendingDesktop = 0;
     // Drop any pending snap-drag state — if a beginDrag landed snap-path
     // but activation never fired (no trigger held), the pending fields
     // would survive compositor reconnect and bleed into the next drag

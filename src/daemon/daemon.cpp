@@ -1739,10 +1739,14 @@ void Daemon::stop()
     // main thread) would deref an adapter whose backing service had
     // already been freed by the existing engine-pointer teardown below.
     //
-    // SnapAdaptor's resolver was already nulled by clearEngine() above
-    // (snapadaptor.cpp); WindowDragAdaptor and WindowTrackingAdaptor
-    // need their own clears here because they don't go through a
-    // clearEngine path.
+    // Explicit symmetric clear across all three borrowers — SnapAdaptor's
+    // resolver is also nulled defensively by clearEngine() above, but doing
+    // it here too keeps the teardown contract grep-discoverable and survives
+    // a future refactor of clearEngine() that might stop touching the
+    // resolver pointer.
+    if (m_snapAdaptor) {
+        m_snapAdaptor->setContextResolver(nullptr);
+    }
     if (m_windowDragAdaptor) {
         m_windowDragAdaptor->setContextResolver(nullptr);
     }

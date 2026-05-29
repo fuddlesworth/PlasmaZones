@@ -196,9 +196,9 @@ public:
      *
      * Wraps `ISettings::isContextLocked` with the Mode → lock-key
      * composition the adapter performs internally. Consumers that
-     * previously called `Utils::contextLockKey(modeInt, screenId)` and
-     * fed the result into `isContextLocked` now go through this method
-     * directly with a typed handle.
+     * previously called `Utils::contextLockKey(static_cast<int>(mode),
+     * screenId)` and fed the result into `isContextLocked` now go through
+     * this method directly with a typed handle.
      */
     virtual bool isLocked(const ContextHandle& handle) const = 0;
 

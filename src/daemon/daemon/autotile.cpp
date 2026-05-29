@@ -43,6 +43,14 @@ void Daemon::updateAutotileScreens()
     if (!m_autotileEngine || !m_layoutManager || !m_screenManager) {
         return;
     }
+    // Every entry path into this function is wired in init() or later
+    // (settingsChanged, layoutAssigned, virtual-screen reconfigure), so
+    // the resolver is always live by the time we run. The earlier guard
+    // here had a settings-cascade fallback — that path was unreachable
+    // and let isContextDisabled stay alive in the daemon as dead code.
+    if (!m_contextResolver) {
+        return;
+    }
 
     const int desktop = currentDesktop();
     const QString activity = currentActivity();
@@ -52,17 +60,10 @@ void Daemon::updateAutotileScreens()
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
         // Skip screens/desktops/activities where PlasmaZones is disabled.
-        // Routes through ContextResolver when wired (post-init) so this
-        // path shares the same cascade as every other consumer — see
-        // libs/phosphor-context-resolver/README.md. Falls back to the
-        // direct settings check only if the resolver isn't yet available
-        // (early-init path before init() finishes wiring it).
-        const bool disabled = m_contextResolver
-            ? m_contextResolver->isDisabled(
-                  m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
-            : isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, desktop,
-                                activity);
-        if (disabled) {
+        // Single cascade path through the resolver — see
+        // libs/phosphor-context-resolver/README.md.
+        if (m_contextResolver->isDisabled(
+                m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))) {
             continue;
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);

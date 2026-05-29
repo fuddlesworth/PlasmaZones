@@ -114,13 +114,22 @@ public:
     /// from config.json, then — as the last, irreversible step — deletes
     /// assignments.json.
     ///
-    /// Idempotent: a no-op when windowrules.json already exists at
-    /// `_version >= 4`. Safe to call on every startup.
+    /// Idempotent: a no-op when windowrules.json already exists as a valid
+    /// v4 `WindowRuleSet` (probed via `WindowRuleSet::loadFromFile`, which
+    /// requires `_version == ConfigSchemaVersion` exactly). Safe to call on
+    /// every startup.
     ///
-    /// Rebuild trigger: a missing windowrules.json with a surviving
-    /// assignments.json ALWAYS triggers a rebuild, independent of any
-    /// config.json corruption context. There is no separate "config is
-    /// corrupt" guard — the rebuild keys solely off the two sidecar files.
+    /// Rebuild trigger: a missing/invalid windowrules.json triggers a
+    /// rebuild PROVIDED config.json has reached
+    /// `_version == ConfigSchemaVersion`. When assignments.json is absent
+    /// the rebuild still runs and writes a rule set carrying only the
+    /// provider-default catch-all (plus any disable-list / animation-rule
+    /// stash entries from config.json). If the migration chain stalled
+    /// below v4 (e.g. a chain step's side-effect write failed),
+    /// finalizeV4Conversion refuses to commit a stub windowrules.json so
+    /// the next run can retry the chain without masking the stall. The
+    /// rebuild-vs-no-op decision keys off the windowrules.json probe alone;
+    /// the config-version gate is layered on top to refuse the stub case.
     ///
     /// Degraded path under config corruption: if config.json is corrupt (or
     /// absent) with no INI fallback, the rebuild proceeds with an empty

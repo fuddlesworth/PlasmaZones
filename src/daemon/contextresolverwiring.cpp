@@ -102,11 +102,13 @@ bool DaemonSettingsGateAdapter::isContextLocked(PhosphorZones::AssignmentEntry::
     if (!m_settings)
         return false;
     // Fold the Mode into the screen-key the way every pre-migration call
-    // site did (`Utils::contextLockKey(static_cast<int>(mode), screenId)`).
-    // The lock store is keyed by composite "mode:screenId" strings so the
-    // Mode axis stays implicit on the wire format — changing that is a
-    // schema migration, not an adapter concern.
-    return m_settings->isContextLocked(Utils::contextLockKey(mode, screenId), desktop, activity);
+    // site did. Explicit cast over the unscoped-enum implicit conversion:
+    // the wire format takes an int, and writing the cast keeps the call
+    // safe if `AssignmentEntry::Mode` ever migrates to `enum class`.
+    // The lock store is keyed by composite "mode:screenId" strings so
+    // the Mode axis stays implicit on the wire format — changing that
+    // is a schema migration, not an adapter concern.
+    return m_settings->isContextLocked(Utils::contextLockKey(static_cast<int>(mode), screenId), desktop, activity);
 }
 
 } // namespace PlasmaZones

@@ -113,18 +113,32 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
         return;
     }
 
-    // Only emit signal if value actually changed
-    QStringList previousZones = m_snapState->zonesForWindow(windowId);
-    bool zoneChanged = (previousZones != validZoneIds);
+    // Snapshot every axis the underlying SnapState may mutate so we can gate
+    // both the change signal and the dirty mark on a real diff. A same-zone
+    // different-screen/desktop call (e.g. pinned-window resnap after a desktop
+    // switch, or sticky-window virtualDesktop=0 → !=0 commit) still needs the
+    // DirtyZoneAssignments mark so the next save persists the new (screen,
+    // desktop) tuple — otherwise the on-disk state silently rots.
+    const QStringList previousZones = m_snapState->zonesForWindow(windowId);
+    const QString previousScreen = m_snapState->screenForWindow(windowId);
+    const int previousDesktop = m_snapState->desktopForWindow(windowId);
+    const bool zoneChanged = (previousZones != validZoneIds);
+    const bool screenChanged = (previousScreen != screenId);
+    const bool desktopChanged = (previousDesktop != virtualDesktop);
 
     m_snapState->assignWindowToZones(windowId, validZoneIds, screenId, virtualDesktop);
 
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
     }
-    // Only the zone/screen/desktop maps changed. Narrower than DirtyAll so
-    // the next save rewrites exactly one JSON field instead of all ten.
-    markDirty(DirtyZoneAssignments);
+    if (zoneChanged || screenChanged || desktopChanged) {
+        // Only the zone/screen/desktop maps changed. Narrower than DirtyAll
+        // so the next save rewrites exactly one JSON field instead of all
+        // ten. Gated on a real diff for the same reason the signal is — a
+        // no-op assign call shouldn't churn the dirty mask and force a
+        // redundant serialise on the next save.
+        markDirty(DirtyZoneAssignments);
+    }
 }
 
 void WindowTrackingService::unassignWindow(const QString& windowId)
@@ -317,7 +331,26 @@ bool WindowTrackingService::isWindowFloating(const QString& windowId) const
 void WindowTrackingService::setWindowFloating(const QString& windowId, bool floating)
 {
     // Use full windowId so each window instance has independent floating state
-    // (appId would collide for multiple instances of the same app)
+    // (appId would collide for multiple instances of the same app).
+    //
+    // Gate every downstream effect — snap-state mutation AND the persistence
+    // schedule — on an actual state change. The earlier shape unconditionally
+    // called scheduleSaveState, which ORs DirtyAll into the dirty mask and
+    // defeats the delta-write design when the call was a no-op.
+    //
+    // Use the appId-aware `isWindowFloating` predicate (which checks both
+    // the full windowId AND the session-restored appId fallback at
+    // line 309-318). A naive `m_floatingWindows.contains(windowId)` would
+    // return false when only the appId entry exists post-session-restore,
+    // letting the early-return short-circuit the cleanup path below — the
+    // appId entry would never be removed and isWindowFloating would keep
+    // reporting true, breaking clearFloatingForSnap and the daemon's
+    // syncAutotileFloatState callers.
+    const bool wasFloating = isWindowFloating(windowId);
+    if (floating == wasFloating) {
+        return;
+    }
+
     if (floating) {
         m_floatingWindows.insert(windowId);
     } else {

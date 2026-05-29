@@ -104,8 +104,8 @@ public:
  * (`isMonitorDisabled` / `isDesktopDisabled` / `isActivityDisabled`); the
  * fourth (`isContextLocked`) is owned by the broader `ISettings` and
  * historically takes a pre-composed `screenIdOrName` lock-key string
- * (`Utils::contextLockKey(modeInt, screenId)`). Adapter implementations
- * are expected to do that composition internally so the resolver's public
+ * (`Utils::contextLockKey(mode, screenId)`). Adapter implementations are
+ * expected to do that composition internally so the resolver's public
  * API stays purely typed in `(Mode, screenId, desktop, activity)`.
  *
  * The cascade is **read-only**. Toggling a disable list or a lock still

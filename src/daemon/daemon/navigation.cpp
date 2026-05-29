@@ -37,6 +37,16 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
     return m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId);
 }
 
+PhosphorZones::AssignmentEntry::Mode Daemon::currentModeFor(const QString& screenId) const
+{
+    if (m_screenModeRouter) {
+        return m_screenModeRouter->modeFor(screenId);
+    }
+    // Same Snapping fallback DaemonScreenModeAdapter applies — see
+    // contextresolverwiring.cpp.
+    return PhosphorZones::AssignmentEntry::Snapping;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation handlers — single code path per operation, dispatched through
 // ScreenModeRouter::engineFor() so there's no mode-branching in the daemon
@@ -98,6 +108,11 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
 bool Daemon::isFocusedContextGated(const QString& screenId) const
 {
     return !m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleFor(screenId));
+}
+
+bool Daemon::isFocusedContextGatedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const
+{
+    return !m_contextResolver || m_contextResolver->isDisabled(m_contextResolver->handleForMode(screenId, mode));
 }
 
 void Daemon::handleRotate(bool clockwise)
@@ -287,9 +302,7 @@ void Daemon::handleIncreaseMasterRatio()
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
-    if (!m_contextResolver
-        || m_contextResolver->isDisabled(
-            m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile)))
+    if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
         return;
     // Set the engine's active-screen hint before the parameterless engine
     // call — the engine's NavigationController resolves the target screen
@@ -313,9 +326,7 @@ void Daemon::handleDecreaseMasterRatio()
     const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
-    if (!m_contextResolver
-        || m_contextResolver->isDisabled(
-            m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile)))
+    if (isFocusedContextGatedForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
         return;
     // See handleIncreaseMasterRatio for the active-screen-hint rationale.
     m_autotileEngine->setActiveScreenHint(screenId);
@@ -354,9 +365,7 @@ void Daemon::handleRetile()
     if (!isAutotileScreen(focusedScreen)) {
         return;
     }
-    if (!m_contextResolver
-        || m_contextResolver->isDisabled(
-            m_contextResolver->handleForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile))) {
+    if (isFocusedContextGatedForMode(focusedScreen, PhosphorZones::AssignmentEntry::Autotile)) {
         return;
     }
     m_autotileEngine->retile();

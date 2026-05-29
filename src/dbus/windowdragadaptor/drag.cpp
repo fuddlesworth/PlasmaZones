@@ -27,11 +27,8 @@
 
 namespace PlasmaZones {
 
-void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y, double width, double height,
-                                    int mouseButtons)
+void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y, double width, double height)
 {
-    Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
-
     if (windowId.isEmpty()) {
         qCWarning(lcDbusWindow) << "dragStarted: empty windowId";
         return;
@@ -71,7 +68,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_isMultiZoneMode = false;
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
-    m_modifierConflictWarned = false;
+    // m_modifierConflictWarned reset moved to beginDrag — keeping it
+    // here only covered snap-path drags, leaving the latch stale across
+    // bypass drags.
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     m_lastLoggedActivationActive = false;
