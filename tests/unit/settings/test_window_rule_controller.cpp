@@ -470,22 +470,38 @@ void TestWindowRuleController::authoringMetadata()
     // fields back to `string` (silently breaking the picker UX) is caught.
     bool sawScreenKind = false;
     bool sawActivityKind = false;
+    bool sawWindowTypeKind = false;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
         QVERIFY(f.contains(QStringLiteral("value")));
         QVERIFY(!f.value(QStringLiteral("label")).toString().isEmpty());
         const QString kind = f.value(QStringLiteral("valueKind")).toString();
         QVERIFY(kind == QLatin1String("string") || kind == QLatin1String("number") || kind == QLatin1String("bool")
-                || kind == QLatin1String("screen") || kind == QLatin1String("activity"));
+                || kind == QLatin1String("screen") || kind == QLatin1String("activity")
+                || kind == QLatin1String("windowType"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }
         if (kind == QLatin1String("activity")) {
             sawActivityKind = true;
         }
+        if (kind == QLatin1String("windowType")) {
+            sawWindowTypeKind = true;
+            // windowType must carry an `options` array of {value, wire, label}
+            // triples so the editor can render the enum dropdown.
+            const QVariantList options = f.value(QStringLiteral("options")).toList();
+            QVERIFY2(!options.isEmpty(), "windowType valueKind must expose enum options for the dropdown");
+            for (const QVariant& opt : options) {
+                const QVariantMap m = opt.toMap();
+                QVERIFY(m.contains(QStringLiteral("value")));
+                QVERIFY(m.contains(QStringLiteral("wire")));
+                QVERIFY(!m.value(QStringLiteral("label")).toString().isEmpty());
+            }
+        }
     }
     QVERIFY(sawScreenKind);
     QVERIFY(sawActivityKind);
+    QVERIFY(sawWindowTypeKind);
 
     // AppId (Field enum 0) supports the AppIdMatches operator.
     const QVariantList appOps = controller.operatorsForField(0);

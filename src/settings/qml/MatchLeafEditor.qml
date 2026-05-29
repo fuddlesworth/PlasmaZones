@@ -35,14 +35,13 @@ RowLayout {
     readonly property string _valueKind: leaf._fieldEntry !== undefined ? leaf._fieldEntry.valueKind : "string"
 
     signal leafChanged(var updatedLeaf)
-    signal removeRequested()
+    signal removeRequested
 
     /// The descriptor in @p options whose `wire` equals @p wire, or undefined.
     function _entryForWire(options, wire) {
         for (var i = 0; i < options.length; ++i) {
             if (options[i].wire === wire)
                 return options[i];
-
         }
         return undefined;
     }
@@ -53,7 +52,6 @@ RowLayout {
         for (var i = 0; i < options.length; ++i) {
             if (options[i].wire === wire)
                 return i;
-
         }
         return -1;
     }
@@ -104,7 +102,7 @@ RowLayout {
 
         var picker = leaf.appSettings ? leaf.appSettings.windowPicker : null;
         if (!picker)
-            return ;
+            return;
 
         picker.picked.connect(pickedHandler);
         picker.closed.connect(closedHandler);
@@ -158,9 +156,9 @@ RowLayout {
         // silently coercing it to the first field.
         currentIndex: leaf._indexForWire(leaf.fieldOptions, leaf.node.field)
         Accessible.name: i18n("Match field")
-        onActivated: function(index) {
+        onActivated: function (index) {
             if (currentValue === leaf.node.field)
-                return ;
+                return;
 
             // Changing the field invalidates the carried-over value and
             // (often) the carried-over operator. Concrete examples:
@@ -195,10 +193,9 @@ RowLayout {
         model: leaf._operatorOptions
         currentIndex: leaf._indexForWire(leaf._operatorOptions, leaf.node.op)
         Accessible.name: i18n("Match operator")
-        onActivated: function(index) {
+        onActivated: function (index) {
             if (currentValue !== leaf.node.op)
                 leaf._emit(leaf.node.field, currentValue, leaf.node.value);
-
         }
     }
 
@@ -217,6 +214,9 @@ RowLayout {
 
             if (leaf._valueKind === "activity")
                 return activityValueEditor;
+
+            if (leaf._valueKind === "windowType")
+                return windowTypeValueEditor;
 
             return stringValueEditor;
         }
@@ -260,9 +260,7 @@ RowLayout {
                 visible: leaf._fieldIsPickable(leaf.node.field)
                 onClicked: leaf._openWindowPicker()
             }
-
         }
-
     }
 
     Component {
@@ -280,7 +278,6 @@ RowLayout {
             Accessible.name: i18n("Match value")
             onValueModified: leaf._emit(leaf.node.field, leaf.node.op, value)
         }
-
     }
 
     Component {
@@ -292,7 +289,6 @@ RowLayout {
             Accessible.name: i18n("Match value")
             onToggled: leaf._emit(leaf.node.field, leaf.node.op, checked)
         }
-
     }
 
     Component {
@@ -314,7 +310,6 @@ RowLayout {
                 for (var i = 0; i < list.length; ++i) {
                     if (list[i].name === target)
                         return i;
-
                 }
                 return -1;
             }
@@ -324,13 +319,11 @@ RowLayout {
             // tell what the rule pins to instead of an empty dropdown.
             displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose a monitor…"))
             Accessible.name: i18n("Monitor")
-            onActivated: function(index) {
+            onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);
-
             }
         }
-
     }
 
     Component {
@@ -351,7 +344,6 @@ RowLayout {
                 for (var i = 0; i < list.length; ++i) {
                     if (list[i].id === target)
                         return i;
-
                 }
                 return -1;
             }
@@ -360,13 +352,43 @@ RowLayout {
             // current activity matches.
             displayText: currentIndex >= 0 ? currentText : (leaf.node.value || i18n("Choose an activity…"))
             Accessible.name: i18n("Activity")
-            onActivated: function(index) {
+            onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);
-
             }
         }
-
     }
 
+    Component {
+        id: windowTypeValueEditor
+
+        WideComboBox {
+            // The field entry's `options` carry `{value: int, wire: token,
+            // label: localised}` triples — the wire value persisted in the
+            // rule store is the underlying int of the PhosphorProtocol::
+            // WindowType enum.
+            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+
+            model: _options
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < _options.length; ++i) {
+                    if (_options[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            // Show the raw stored value (e.g. an out-of-range int from a
+            // hand-edited rule or a newer schema version) when no option
+            // matches, mirroring the screen / activity pickers above.
+            displayText: currentIndex >= 0 ? currentText : (leaf.node.value !== undefined && leaf.node.value !== null ? String(leaf.node.value) : i18n("Choose a window type…"))
+            Accessible.name: i18n("Window type")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
 }

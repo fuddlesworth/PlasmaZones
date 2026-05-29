@@ -129,6 +129,22 @@ ColumnLayout {
                 }
             }
         }
+        if (kind === "windowType") {
+            // The field entry's `options` carry the {value, label} pairs the
+            // editor surfaces; reuse them so the read-only summary shows
+            // "Dialog" instead of the bare int "2".
+            for (var k = 0; k < root.matchFieldOptions.length; ++k) {
+                var entry = root.matchFieldOptions[k];
+                if (entry.wire !== fieldWire)
+                    continue;
+                var opts = entry.options || [];
+                for (var o = 0; o < opts.length; ++o) {
+                    if (opts[o].value === value)
+                        return opts[o].label || String(value);
+                }
+                break;
+            }
+        }
         return String(value);
     }
 

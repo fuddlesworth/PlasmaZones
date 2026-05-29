@@ -7,6 +7,7 @@
 
 #include "../pz_i18n.h"
 
+#include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorWindowRule/MatchTypes.h>
 #include <PhosphorWindowRule/RuleAction.h>
 
@@ -15,6 +16,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <array>
 
 namespace PlasmaZones::WindowRuleAuthoring {
 
@@ -232,7 +234,47 @@ QVariantList matchFields()
         entry[QStringLiteral("wire")] = PhosphorWindowRule::fieldToString(f);
         entry[QStringLiteral("label")] = WindowRuleModel::fieldLabel(f);
         QString kind = QStringLiteral("string");
-        if (PhosphorWindowRule::fieldIsNumeric(f) || f == Field::WindowType) {
+        if (f == Field::WindowType) {
+            // WindowType is stored as the int underlying the
+            // PhosphorProtocol::WindowType enum on the wire. Rendering it
+            // as a plain "number" SpinBox left users with no idea what
+            // each value meant ("2" — Dialog? Utility?). Surface the
+            // friendly token instead via a dedicated kind that the
+            // editor renders as a dropdown.
+            kind = QStringLiteral("windowType");
+            QVariantList options;
+            // Order mirrors the enum declaration in WindowTypeEnum.h —
+            // Unknown first as the safe default, then Normal as the
+            // most common authoring choice.
+            struct WindowTypeEntry
+            {
+                PhosphorProtocol::WindowType type;
+                QString label;
+            };
+            const std::array<WindowTypeEntry, 13> kWindowTypes = {{
+                {PhosphorProtocol::WindowType::Unknown, PzI18n::tr("Unknown")},
+                {PhosphorProtocol::WindowType::Normal, PzI18n::tr("Normal window")},
+                {PhosphorProtocol::WindowType::Dialog, PzI18n::tr("Dialog")},
+                {PhosphorProtocol::WindowType::Utility, PzI18n::tr("Utility")},
+                {PhosphorProtocol::WindowType::Toolbar, PzI18n::tr("Toolbar")},
+                {PhosphorProtocol::WindowType::Splash, PzI18n::tr("Splash screen")},
+                {PhosphorProtocol::WindowType::Menu, PzI18n::tr("Menu")},
+                {PhosphorProtocol::WindowType::Tooltip, PzI18n::tr("Tooltip")},
+                {PhosphorProtocol::WindowType::Notification, PzI18n::tr("Notification")},
+                {PhosphorProtocol::WindowType::Dock, PzI18n::tr("Dock / panel")},
+                {PhosphorProtocol::WindowType::Desktop, PzI18n::tr("Desktop")},
+                {PhosphorProtocol::WindowType::OnScreenDisplay, PzI18n::tr("On-screen display")},
+                {PhosphorProtocol::WindowType::Popup, PzI18n::tr("Popup")},
+            }};
+            for (const auto& opt : kWindowTypes) {
+                QVariantMap option;
+                option[QStringLiteral("value")] = static_cast<int>(opt.type);
+                option[QStringLiteral("wire")] = PhosphorProtocol::windowTypeToString(opt.type);
+                option[QStringLiteral("label")] = opt.label;
+                options.append(option);
+            }
+            entry[QStringLiteral("options")] = options;
+        } else if (PhosphorWindowRule::fieldIsNumeric(f)) {
             kind = QStringLiteral("number");
         } else if (PhosphorWindowRule::fieldIsBool(f)) {
             kind = QStringLiteral("bool");
