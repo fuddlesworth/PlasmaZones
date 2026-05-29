@@ -192,12 +192,30 @@ bool PaletteStore::loadFromFile(const QString& path)
     const auto data = file.readAll();
     file.close();
 
+    // Set m_sourcePath BEFORE applying the palette so QML bindings that
+    // observe both palette and sourcePath see a coherent transition
+    // (new palette → new path). Otherwise paletteChanged fires with
+    // sourcePath still empty / pointing at the prior source, then
+    // sourcePathChanged catches up on the next event-loop tick. Roll
+    // back on parse failure so a bad file doesn't leave sourcePath
+    // pointing at a file whose tokens never actually loaded.
+    const QString previousSourcePath = m_sourcePath;
+    const bool sourcePathMoved = (m_sourcePath != absolutePath);
+    if (sourcePathMoved) {
+        m_sourcePath = absolutePath;
+        Q_EMIT sourcePathChanged();
+    }
+
     // Bypass the public loadFromJson entry so the watcher-drop side
     // effect doesn't fire here: loadFromFile is the explicit "watch
     // this path" branch and arms the watcher below. Calling
     // loadFromJson would drop the just-armed watcher on a subsequent
     // load (and emit a spurious sourcePathChanged-to-empty).
     if (!parseAndApplyJson(data, /*dropWatchedSource=*/false)) {
+        if (sourcePathMoved) {
+            m_sourcePath = previousSourcePath;
+            Q_EMIT sourcePathChanged();
+        }
         Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON or empty token map"));
         return false;
     }
@@ -222,11 +240,6 @@ bool PaletteStore::loadFromFile(const QString& path)
     const QString parentDir = QFileInfo(absolutePath).absolutePath();
     if (!parentDir.isEmpty()) {
         m_watcher->addPath(parentDir);
-    }
-
-    if (m_sourcePath != absolutePath) {
-        m_sourcePath = absolutePath;
-        Q_EMIT sourcePathChanged();
     }
     return true;
 }
@@ -256,6 +269,15 @@ void PaletteStore::resetToDefaults()
         m_sourcePath.clear();
         Q_EMIT sourcePathChanged();
     }
+    // Discard the current palette so any extra tokens layered in by a
+    // previous loadFromJson / loadFromFile (matugen-extended brand_*,
+    // hand-edited custom keys) don't survive the reset. applyPalette's
+    // merge semantics make sense for mid-session edits, but reset is
+    // explicitly a "back to canonical defaults" action — leaving stray
+    // user tokens behind contradicts the IThemeService contract. After
+    // the clear, every entry in defaultDarkPalette() is an insert, so
+    // applyPalette's `changed` flag fires paletteChanged.
+    m_palette.clear();
     applyPalette(detail::defaultDarkPalette());
 }
 

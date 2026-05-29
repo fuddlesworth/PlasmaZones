@@ -31,6 +31,7 @@ private Q_SLOTS:
     void applyTokens_emptyIsNoOp();
     void applyTokens_normalisesStringHexToColor();
     void resetToDefaults_clearsSourcePath();
+    void resetToDefaults_dropsExtraUserTokens();
     void resetToDefaults_releasesDirectoryWatch();
     void hotReload_picksUpInPlaceEdit();
     void hotReload_survivesConsecutiveInPlaceEdits();
@@ -173,6 +174,31 @@ void TestPaletteStore::resetToDefaults_clearsSourcePath()
     QCOMPARE(pathSpy.count(), 1);
     QCOMPARE(palSpy.count(), 1);
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
+}
+
+void TestPaletteStore::resetToDefaults_dropsExtraUserTokens()
+{
+    // Regression for the Pass-3 finding: resetToDefaults was
+    // delegating to applyPalette (a merge), so any extra tokens
+    // layered in by a previous loadFromJson / loadFromFile (matugen-
+    // extended brand_*, hand-edited custom keys) survived the reset.
+    // The contract is "back to canonical defaults" — extra keys must
+    // not persist.
+    PaletteStore s;
+    const QByteArray withExtras = R"({"primary": "#abcdef", "ghost_token": "#112233", "brand_custom": "#445566"})";
+    QVERIFY(s.loadFromJson(withExtras));
+    QVERIFY(s.palette().contains(QStringLiteral("ghost_token")));
+    QVERIFY(s.palette().contains(QStringLiteral("brand_custom")));
+
+    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
+    s.resetToDefaults();
+
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
+    QVERIFY2(!s.palette().contains(QStringLiteral("ghost_token")),
+             "resetToDefaults left a non-canonical user token behind");
+    QVERIFY2(!s.palette().contains(QStringLiteral("brand_custom")),
+             "resetToDefaults left a non-canonical brand token behind");
+    QVERIFY(palSpy.count() >= 1);
 }
 
 void TestPaletteStore::hotReload_picksUpInPlaceEdit()
