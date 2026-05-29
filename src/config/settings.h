@@ -884,8 +884,8 @@ public:
     // Shader Effects — backed by PhosphorConfig::Store (see settingsschema.cpp).
     // Getters read through the store (validator clamps FrameRate and BarCount
     // ranges uniformly); setters route the write through the store so the
-    // value is coerced + persisted in memory on the same call, with
-    // syncConfig()/save() flushing to disk.
+    // value is coerced + persisted in memory on the same call, with save()
+    // flushing to disk.
     bool enableShaderEffects() const override;
     void setEnableShaderEffects(bool enable) override;
     int shaderFrameRate() const override;
@@ -1043,7 +1043,6 @@ public:
     // TilingQuickLayoutSlots — read/write via the shared config backend
     QString readTilingQuickLayoutSlot(int slotNumber) const;
     void writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutId);
-    void syncConfig();
 
     // Persistence
     void load() override;
@@ -1109,7 +1108,7 @@ private:
                         CommaListSignalFn specificSignal);
 
     /// Member-function-pointer alias for the three per-mode disable NOTIFY
-    /// signals passed into @ref writeDisableList. The signals carry the mode
+    /// signals passed into @ref writeDisableEntries. The signals carry the mode
     /// that flipped so listeners only react to their own axis.
     using DisableModeSignalFn = void (Settings::*)(PhosphorZones::AssignmentEntry::Mode);
 

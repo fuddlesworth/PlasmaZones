@@ -5,6 +5,7 @@
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../modetracker.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
@@ -47,15 +48,17 @@ void showKdeTextOsd(const QString& icon, const QString& text)
 
 void Daemon::showOverlay()
 {
-    // Don't show overlay when all screens are in autotile mode
-    // (the overlay is for manual zone selection during drag)
+    // The overlay shows manual snap-zone selection during a drag. Don't
+    // show it when no screen is in snap mode — that covers both
+    // "every screen is autotile" and "every screen is in scrolling
+    // (passthrough) mode" (a regression on the prior shape, which only
+    // guarded the autotile-only case and let an all-scrolling setup
+    // surface an empty overlay).
     if (m_screenModeRouter && m_screenManager) {
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
         const auto parts = m_screenModeRouter->partitionByMode(effectiveIds);
-        if (!parts.autotile.isEmpty()) {
-            if (parts.snap.isEmpty()) {
-                return;
-            }
+        if (parts.snap.isEmpty()) {
+            return;
         }
     }
     // Per-screen autotile exclusion is handled by OverlayService::initializeOverlay()
@@ -503,9 +506,39 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
         }
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
         for (const QString& screenId : effectiveIds) {
-            const auto mode =
-                m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
-            const DisabledReason why = contextDisabledReason(m_settings.get(), mode, screenId, desktop, activity);
+            // Route the disabled-context probe through the resolver so this
+            // OSD pass uses the same single snapshot façade as every other
+            // call site — the prior hand-stitched (modeFor → settings →
+            // contextDisabledReason) cascade was the exact 3-step rebuild
+            // PhosphorContext::IContextResolver was introduced to collapse.
+            // `handleForPersisted` is the right axis here because the
+            // caller already pinned the (desktop, activity) tuple the OSD
+            // reports against, while the screen's mode stays live.
+            DisabledReason why = DisabledReason::NotDisabled;
+            if (m_contextResolver) {
+                // Map PhosphorContext::DisabledReason → PlasmaZones::DisabledReason.
+                // The two enums are value-identical by intent (the LGPL lib's
+                // DisabledReason.h documents it mirrors the GPL daemon's),
+                // but the conversion is written as a switch so a future enum
+                // value added on one side surfaces here as a compile-time
+                // -Wswitch warning rather than a silent value coercion.
+                const auto reason = m_contextResolver->disabledReason(
+                    m_contextResolver->handleForPersisted(screenId, desktop, activity));
+                switch (reason) {
+                case PhosphorContext::DisabledReason::NotDisabled:
+                    why = DisabledReason::NotDisabled;
+                    break;
+                case PhosphorContext::DisabledReason::MonitorDisabled:
+                    why = DisabledReason::MonitorDisabled;
+                    break;
+                case PhosphorContext::DisabledReason::DesktopDisabled:
+                    why = DisabledReason::DesktopDisabled;
+                    break;
+                case PhosphorContext::DisabledReason::ActivityDisabled:
+                    why = DisabledReason::ActivityDisabled;
+                    break;
+                }
+            }
             if (why != DisabledReason::NotDisabled) {
                 showContextDisabledOsd(screenId, desktop, activity, why);
                 continue;
@@ -513,7 +546,7 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
-                auto* algo = m_algorithmRegistry.get()->algorithm(algoId);
+                auto* algo = m_algorithmRegistry->algorithm(algoId);
                 const QString displayName = algo ? algo->name() : algoId;
                 showLayoutOsdForAlgorithm(algoId, displayName, screenId);
             } else {
@@ -538,25 +571,12 @@ QString Daemon::currentActivity() const
         : QString();
 }
 
-bool Daemon::isCurrentContextLocked(const QString& screenId) const
+bool Daemon::isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const
 {
-    // Check both snapping and tiling locks (mode-agnostic check).
-    // Spell the mode constants via AssignmentEntry::Mode so the
-    // call sites stay readable when someone greps for "Snapping" /
-    // "Autotile" — raw `0` / `1` were silent on intent.
-    if (!m_settings)
+    if (!m_contextResolver) {
         return false;
-    return m_settings->isContextLocked(Utils::contextLockKey(PhosphorZones::AssignmentEntry::Snapping, screenId),
-                                       currentDesktop(), currentActivity())
-        || m_settings->isContextLocked(Utils::contextLockKey(PhosphorZones::AssignmentEntry::Autotile, screenId),
-                                       currentDesktop(), currentActivity());
-}
-
-bool Daemon::isCurrentContextLockedForMode(const QString& screenId, int mode) const
-{
-    if (!m_settings)
-        return false;
-    return m_settings->isContextLocked(Utils::contextLockKey(mode, screenId), currentDesktop(), currentActivity());
+    }
+    return m_contextResolver->isLocked(m_contextResolver->handleForMode(screenId, mode));
 }
 
 } // namespace PlasmaZones

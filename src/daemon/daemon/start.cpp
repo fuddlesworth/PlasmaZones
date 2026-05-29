@@ -124,10 +124,8 @@ void Daemon::connectScreenSignals()
                 // refreshVirtualConfigs() in response to its own change signal.
                 const QString physId = screen.identifier;
                 const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
-                const int desktop = m_virtualDesktopManager->currentDesktop();
-                const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-                    ? m_activityManager->currentActivity()
-                    : QString();
+                const int desktop = currentDesktop();
+                const QString activity = currentActivity();
                 for (const QString& sid : vsIds) {
                     PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
                     if (screenLayout) {
@@ -252,8 +250,7 @@ void Daemon::connectDesktopActivity()
                     // Prune both per-mode lists — a stale entry in either side leaks
                     // gates on now-deleted desktops just as effectively.
                     bool changed = false;
-                    for (const auto mode :
-                         {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                    for (const auto mode : PhosphorZones::allModes()) {
                         QStringList disabled = m_settings->disabledDesktops(mode);
                         if (pruneDisabledDesktopEntries(disabled, newCount)) {
                             m_settings->setDisabledDesktops(mode, disabled);
@@ -284,7 +281,7 @@ void Daemon::connectDesktopActivity()
 
     // Set initial virtual desktop on components that maintain their own copy
     // (WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen())
-    const int initialDesktop = m_virtualDesktopManager->currentDesktop();
+    const int initialDesktop = currentDesktop();
     m_overlayService->setCurrentVirtualDesktop(initialDesktop);
     m_layoutManager->setCurrentVirtualDesktop(initialDesktop);
     if (m_autotileEngine) {
@@ -308,8 +305,7 @@ void Daemon::connectDesktopActivity()
             // Prune both per-mode disabled-activity lists.
             if (m_settings) {
                 bool changed = false;
-                for (const auto mode :
-                     {PhosphorZones::AssignmentEntry::Snapping, PhosphorZones::AssignmentEntry::Autotile}) {
+                for (const auto mode : PhosphorZones::allModes()) {
                     QStringList disabled = m_settings->disabledActivities(mode);
                     if (pruneDisabledActivityEntries(disabled, validSet)) {
                         m_settings->setDisabledActivities(mode, disabled);
@@ -563,8 +559,8 @@ void Daemon::connectShortcutSignals()
     // Escape no longer exists), so we register the global Escape
     // accelerator on every snap-assist show — cancelSnap() routes
     // Escape to hideSnapAssist() via the existing
-    // isSnapAssistVisible() branch (windowdragadaptor.cpp:265). The
-    // matching unregister fires on snapAssistDismissed via
+    // isSnapAssistVisible() branch in WindowDragAdaptor::cancelSnap.
+    // The matching unregister fires on snapAssistDismissed via
     // WindowDragAdaptor::onSnapAssistDismissed.
     connect(m_overlayService.get(), &IOverlayService::snapAssistShown, this,
             [this](const QString&, const PhosphorProtocol::EmptyZoneList&,
@@ -589,11 +585,14 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        // Check if screen is locked for its current mode
+        // Check if screen is locked for its current mode. Route through
+        // the resolver's `handleFor(screenId)` — it composes the live
+        // (mode, desktop, activity) tuple via the bound IModeProvider /
+        // IWorkspaceState adapters, so this site stops re-stitching the
+        // 3-step cascade the resolver was introduced to collapse.
         QString screenId = m_unifiedLayoutController->currentScreenName();
-        if (!screenId.isEmpty() && m_layoutManager) {
-            int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(screenId, mode)) {
+        if (!screenId.isEmpty() && m_contextResolver) {
+            if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
                 showLockedPreviewOsd(screenId);
                 return;
             }
@@ -610,12 +609,18 @@ void Daemon::connectShortcutSignals()
         // Screen-targeted (locks a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested above for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty() || !m_settings || !m_layoutManager) {
+        if (screenId.isEmpty() || !m_settings || !m_contextResolver) {
             return;
         }
-        int desktop = currentDesktop();
-        QString activity = currentActivity();
-        int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, desktop, activity));
+        // Read the live mode through the resolver's frozen snapshot so this
+        // site stops re-stitching (modeForScreen + Utils::contextLockKey)
+        // — the resolver already composes the same Mode-typed lock key
+        // internally via DaemonSettingsGateAdapter. We only need the
+        // wire-encoded `key` here for the existing settings.setScreenLocked
+        // mutation path, so the cast-and-compose stays — but the mode it
+        // derives from is the resolver's authoritative value.
+        const auto handle = m_contextResolver->handleFor(screenId);
+        const int mode = static_cast<int>(handle.mode);
         QString key = Utils::contextLockKey(mode, screenId);
         // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
         // and matches the KCM's screen-level lock button
@@ -672,11 +677,16 @@ void Daemon::pruneContextMapsForActivities(const QSet<QString>& validActivities)
 
 bool Daemon::isScreenLockedForLayoutChange(const QString& screenId)
 {
-    if (!m_layoutManager) {
+    // Route through the resolver — it composes the live (mode, desktop,
+    // activity) tuple from the bound IModeProvider/IWorkspaceState, so
+    // this site stops re-stitching the cascade Pass 1's sister sites
+    // (`layoutPickerSelected`, `toggleLayoutLockRequested`) already
+    // migrated. Null-guard the resolver for the same shutdown-window
+    // reason as the other lock-check sites.
+    if (!m_contextResolver) {
         return false;
     }
-    int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
-    if (isCurrentContextLockedForMode(screenId, mode)) {
+    if (m_contextResolver->isLocked(m_contextResolver->handleFor(screenId))) {
         showLockedPreviewOsd(screenId);
         return true;
     }
@@ -797,10 +807,8 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // that any PhosphorTiles::TilingState created by the upcoming updateAutotileScreens
     // call (and the resnap below) reads fresh zone bounds. The screenAdded
     // handler does the same inline recalc for newly-added physical screens.
-    const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
     const QStringList affectedScreenIds = config.hasSubdivisions()
         ? m_screenManager->virtualScreenIdsFor(physicalScreenId)
         : QStringList{physicalScreenId};
@@ -882,10 +890,8 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     // pass on top of the engine's own, producing the visible "move then
     // retile" double-movement reported on VS swap/rotate.
 
-    const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
     const QStringList affectedScreenIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
     for (const QString& sid : affectedScreenIds) {
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);

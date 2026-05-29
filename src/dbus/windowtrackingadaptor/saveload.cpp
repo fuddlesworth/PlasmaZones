@@ -8,6 +8,7 @@
 #include "../../config/configbackends.h"
 #include "../../core/interfaces.h"
 #include "../../core/screenmoderouter.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
@@ -60,21 +61,23 @@ bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, 
     // snap entries pre-multi-monitor, sticky windows, etc.). Loading and
     // keeping them is the historical default — the alternative drops snap
     // state on every windowless desktop session.
-    //
-    // m_screenModeRouter is wired post-construction by the daemon; the very
-    // first call site is loadState() (invoked from this adaptor's own ctor
-    // before the daemon calls setScreenModeRouter), where it is still null.
-    // Snap-side consumers (WindowZoneAssignmentsFull, PendingRestoreQueues,
-    // PreFloat* maps) and snap's ShouldTrackPredicate route through here and
-    // get the Snapping fallback. Autotile's ShouldPersistRestorePredicate also
-    // routes through here and supplies its own activity tag — `modeFor` picks
-    // up the screen's current Autotile mode whenever the router is wired.
     if (screenId.isEmpty()) {
         return false;
     }
-    const PhosphorZones::AssignmentEntry::Mode mode =
-        m_screenModeRouter ? m_screenModeRouter->modeFor(screenId) : PhosphorZones::AssignmentEntry::Snapping;
-    return isContextDisabled(m_settings, mode, screenId, virtualDesktop, activity);
+    if (!m_contextResolver) {
+        // Pre-`setContextResolver` path — the first call lands from
+        // this adaptor's ctor (loadState()) before Daemon hands the
+        // resolver over. Returns "nothing is disabled" so the
+        // historical "load everything when no settings backend is
+        // wired" behaviour is preserved.
+        return false;
+    }
+    // Routes through `handleForPersisted` which resolves the screen's
+    // mode via the bound IModeProvider — every consumer (snap-side
+    // ShouldTrackPredicate, autotile-side ShouldPersistRestorePredicate,
+    // and the save/load filters) ends up applying the cascade keyed on
+    // the mode the screen is actually running.
+    return m_contextResolver->isDisabled(m_contextResolver->handleForPersisted(screenId, virtualDesktop, activity));
 }
 
 void WindowTrackingAdaptor::saveState()
@@ -218,19 +221,37 @@ void WindowTrackingAdaptor::saveState()
         const auto& allGeoms = m_snapEngine->unmanagedGeometries();
         filteredGeoms.reserve(allGeoms.size());
         for (auto it = allGeoms.constBegin(); it != allGeoms.constEnd(); ++it) {
-            if (isPersistedContextDisabled(it.value().screenId, 0)) {
+            // Pre-tile geometries are persisted under the full windowId, so
+            // the entry carries an implicit per-window desktop in the live
+            // `desktopAssignments()` map. Hard-coding `0` here would only
+            // gate on the monitor-level disable list, so a window minimized
+            // or unsnapped on Desktop 2 (where snapping is disabled per
+            // desktop, not per monitor) would still have its pre-tile
+            // geometry persisted and replayed on next session restore.
+            // Mirrors the zone-assignments save filter (lines 122-145).
+            const int desktop = m_service->desktopAssignments().value(it.key(), 0);
+            if (isPersistedContextDisabled(it.value().screenId, desktop)) {
                 continue;
             }
             filteredGeoms.insert(it.key(), it.value());
         }
-        tracking->writeString(ConfigKeys::preTileGeometriesFullKey(), serializeGeometryMapFull(filteredGeoms));
+        tracking->writeString(ConfigKeys::preTileGeometriesFullKey(),
+                              serializeGeometryMapFull(filteredGeoms, m_service));
         tracking->writeString(ConfigKeys::preTileGeometriesKey(), serializeGeometryMap(filteredGeoms, m_service));
     }
 
     // Save last used zone info (from service)
     if (dirty & D::DirtyLastUsedZone) {
         tracking->writeString(ConfigKeys::lastUsedZoneIdKey(), m_service->lastUsedZoneId());
-        // Note: Other last-used fields would need accessors in service
+        // lastUsedZoneClass, lastUsedScreenName, and lastUsedDesktop are
+        // exposed on PhosphorPlacement::WindowTrackingService but are
+        // intentionally NOT persisted here: each is a transient hint used
+        // during the current session's snap-restore lookup and is
+        // recomputed from the live zone topology on the next snap event.
+        // Persisting them would lock-in stale state across config changes
+        // (zone added / removed / renamed). The matching loadState read
+        // (saveload.cpp around 780) only restores the id and threads the
+        // live companions through unchanged to avoid blanking them.
     }
 
     // Float state is ephemeral (session-only) — do NOT persist across restarts.
@@ -244,13 +265,18 @@ void WindowTrackingAdaptor::saveState()
     // 0 and the monitor-disabled list is the load-bearing check anyway.
     // Build the set of dropped appIds from the screen map so the zone map
     // can drop its paired entries without re-doing the screen lookup.
+    // Gated on the PreFloat dirty bits — saves where only unrelated bits
+    // are dirty (e.g. DirtyActiveLayoutId, DirtyZoneAssignments alone)
+    // shouldn't pay for this walk.
     QSet<QString> droppedPreFloatAppIds;
-    for (auto it = m_service->preFloatScreenAssignments().constBegin();
-         it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
-        if (isPersistedContextDisabled(it.value(), 0)) {
-            const QString key = m_service->currentAppIdFor(it.key());
-            if (!key.isEmpty()) {
-                droppedPreFloatAppIds.insert(key);
+    if (dirty & (D::DirtyPreFloatScreens | D::DirtyPreFloatZones)) {
+        for (auto it = m_service->preFloatScreenAssignments().constBegin();
+             it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
+            if (isPersistedContextDisabled(it.value(), 0)) {
+                const QString key = m_service->currentAppIdFor(it.key());
+                if (!key.isEmpty()) {
+                    droppedPreFloatAppIds.insert(key);
+                }
             }
         }
     }
@@ -357,22 +383,23 @@ void WindowTrackingAdaptor::saveState()
     } else {
         // Fallback synchronous path.
         //
-        // This branch is only reachable when m_sessionBackend is not a
-        // PhosphorConfig::JsonBackend — i.e. tests that wire a memory-only backend.
-        // The production daemon always uses PhosphorConfig::JsonBackend, so the
-        // async/retry path above is the only one exercised outside of
-        // the test harness.
+        // Reachable in two cases:
+        //   1. m_sessionBackend is not a PhosphorConfig::JsonBackend —
+        //      tests that wire a memory-only backend.
+        //   2. The production shutdown path: `saveStateOnShutdown` resets
+        //      `m_persistenceWorker` before calling `saveState()`, so the
+        //      async branch is unavailable on the very last save.
         //
         // sync() returns void, so we have no way to detect a failed
         // write and re-mark the committed bits for retry. The mask has
         // already been taken (above), which means a silent failure here
         // silently loses the committed bits — same behavior as
-        // pre-Phase-3 code, and acceptable only because this path is
-        // test-only. Log a one-time warning on first hit so any future
-        // production regression is obvious in logs.
+        // pre-Phase-3 code. Log a one-time warning on first hit so any
+        // unexpected production regression (steady-state saves landing
+        // here instead of the shutdown one-shot) is obvious in logs.
         if (!m_syncFallbackWarned) {
             qCWarning(lcDbusWindow) << "saveState: using synchronous fallback backend; failed writes cannot be retried "
-                                       "(expected only in unit tests)";
+                                       "(expected for the one shutdown save and for unit tests with a memory backend)";
             m_syncFallbackWarned = true;
         }
         m_sessionBackend->sync();
@@ -580,11 +607,7 @@ void WindowTrackingAdaptor::loadState()
                     // wire ints are clamped: never reinterpret a corrupt value
                     // as a concrete enum.
                     const int kindInt = entryObj[QLatin1String("windowKind")].toInt(0);
-                    entry.windowKind = (kindInt == static_cast<int>(PhosphorEngine::WindowKind::Normal))
-                        ? PhosphorEngine::WindowKind::Normal
-                        : (kindInt == static_cast<int>(PhosphorEngine::WindowKind::Transient))
-                        ? PhosphorEngine::WindowKind::Transient
-                        : PhosphorEngine::WindowKind::Unknown;
+                    entry.windowKind = PhosphorEngine::clampWindowKindFromWire(kindInt);
                     // Disabled-context filter (discussion #461 item 2).
                     // Pre-fix sessions may contain restore entries for a
                     // monitor / desktop the user has since disabled snapping
@@ -719,7 +742,12 @@ void WindowTrackingAdaptor::loadState()
                            entry[QLatin1String("width")].toInt(), entry[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
                     QString screen = entry[QLatin1String("screen")].toString();
-                    if (isPersistedContextDisabled(screen, 0)) {
+                    // Use the persisted desktop (or 0 = all-desktops for
+                    // legacy entries) so the load gate mirrors the save gate.
+                    // Without the desktop axis, a desktop-disabled context's
+                    // entries would persist correctly but reload anyway.
+                    const int desktop = entry[QLatin1String("desktop")].toInt();
+                    if (isPersistedContextDisabled(screen, desktop)) {
                         continue;
                     }
                     unmanagedGeometries[windowId] = UnmanagedEntry{geom, screen};
@@ -741,14 +769,31 @@ void WindowTrackingAdaptor::loadState()
     }
     if (m_snapEngine) {
         m_snapEngine->setUnmanagedGeometries(unmanagedGeometries);
+    } else {
+        // The adaptor's ctor calls loadState() before the daemon calls
+        // setEngines(), so on initial startup m_snapEngine is null here
+        // and the push would silently drop the persisted pre-tile
+        // geometries. Stash them for replay from setEngines() once the
+        // engine is wired.
+        m_pendingUnmanagedGeometries = unmanagedGeometries;
     }
 
-    // Load last used zone info
-    QString lastZoneId = readVal(ConfigKeys::lastUsedZoneIdKey(), QString());
-    QString lastScreenId = readVal(ConfigKeys::lastUsedScreenNameKey(), QString());
-    QString lastZoneClass = readVal(ConfigKeys::lastUsedZoneClassKey(), QString());
-    int lastDesktop = readIntVal(ConfigKeys::lastUsedDesktopKey(), 0);
-    m_service->setLastUsedZone(lastZoneId, lastScreenId, lastZoneClass, lastDesktop);
+    // Load last used zone info. Only the id is persisted by saveState
+    // (lastUsedZoneClass/Screen/Desktop are intentionally session-local —
+    // see saveload.cpp ~245). Skip the setLastUsedZone call entirely
+    // when the id key is absent — calling it with empty id + empty
+    // companions would destructively overwrite any live values the
+    // service holds. The service's own write paths populate the
+    // companions at runtime as the user snaps windows; restoring the
+    // id alone is sufficient for the cross-session "last used zone"
+    // intent.
+    const QString lastZoneId = readVal(ConfigKeys::lastUsedZoneIdKey(), QString());
+    if (!lastZoneId.isEmpty()) {
+        // Pass through the current service state for the companions so
+        // a same-session reload doesn't blank them.
+        m_service->setLastUsedZone(lastZoneId, m_service->lastUsedScreenName(), m_service->lastUsedZoneClass(),
+                                   m_service->lastUsedDesktop());
+    }
 
     // Float state is ephemeral (session-only) — skip loading.
     // Any stale FloatingWindows entries from older versions are cleaned up in saveState().

@@ -41,16 +41,33 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     , m_virtualDesktopManager(virtualDesktopManager)
     , m_sessionBackend(createSessionBackend())
 {
-    Q_ASSERT(layoutManager);
-    Q_ASSERT(zoneDetector);
-    Q_ASSERT(settings);
+    // Null dependencies are a daemon-wiring bug, not a recoverable runtime
+    // condition: the earlier "refuse to wire" early-return left m_service,
+    // m_persistenceWorker, m_saveTimer, and m_sessionBackend null while
+    // many public slots (setWindowSticky, windowClosed, cursorScreenChanged,
+    // windowActivated, pruneStaleWindows, getEmptyZones, getLastUsedZoneId,
+    // findEmptyZone, zoneGeometryRect) plus the saveStateOnShutdown path
+    // dereference m_service unguarded — so the early-return just deferred
+    // the crash to the first D-Bus call. qFatal aborts unambiguously in both
+    // debug and release builds, supersedes Q_ASSERT (debug-only) entirely,
+    // and prints which dependency was null so a wiring regression is loud
+    // and immediate, not concealed in an "it works until first slot fires"
+    // failure mode.
+    if (!layoutManager || !zoneDetector || !settings) {
+        qFatal(
+            "WindowTrackingAdaptor: null dependency at construction "
+            "(layoutManager=%p, zoneDetector=%p, settings=%p) — daemon-wiring bug",
+            static_cast<void*>(layoutManager), static_cast<void*>(zoneDetector), static_cast<void*>(settings));
+    }
 
-    // Create geometry resolver (bridges ISettings to the library's IGeometryResolver)
-    m_geometryResolver = new PlasmaZones::DaemonGeometryResolver(settings);
+    // Create geometry resolver (bridges ISettings to the library's
+    // IGeometryResolver). Owned via unique_ptr — WindowTrackingService
+    // takes a non-owning raw pointer to it.
+    m_geometryResolver = std::make_unique<PlasmaZones::DaemonGeometryResolver>(settings);
 
     // Create business logic service
     m_service = new PhosphorPlacement::WindowTrackingService(
-        layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver,
+        layoutManager, zoneDetector, screenManager, virtualDesktopManager, m_geometryResolver.get(),
         PhosphorPlacement::PlacementConfig{settings->keepWindowsInZonesOnResolutionChange()}, this);
 
     // Wire the disabled-context gate consulted before recording a snap-side
@@ -128,7 +145,6 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
                 // window would cause the shutdown inline sync() to skip a real
                 // pending write. The WTS dirty mask is the authoritative
                 // gate for async writes anyway.
-                Q_UNUSED(filePath);
             });
 
     // Active-layout changes: single handler. onLayoutChanged() covers the
@@ -313,6 +329,14 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     if (!validateWindowId(windowId, QStringLiteral("screen changed"))) {
         return;
     }
+    // An empty newScreenId would propagate through the cross-engine
+    // handoff below and store an empty toScreenId in the engine's
+    // tracking. Bail early — every downstream consumer treats an empty
+    // screen id as "no tracking", and re-running with the live screen
+    // would arrive via the next windowScreenChanged callback anyway.
+    if (newScreenId.isEmpty()) {
+        return;
+    }
 
     // Floating window with a tracked screen: refresh the engine's
     // screen-tracking via the cross-engine handoff contract so subsequent
@@ -444,13 +468,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // Drop frame-geometry shadow entry for this window.
     m_frameGeometry.remove(windowId);
 
-    // Clamp unknown wire values to WindowKind::Unknown rather than
-    // reinterpret_cast'ing a possibly-corrupt int into the enum.
-    const PhosphorEngine::WindowKind kind = (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Normal))
-        ? PhosphorEngine::WindowKind::Normal
-        : (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Transient))
-        ? PhosphorEngine::WindowKind::Transient
-        : PhosphorEngine::WindowKind::Unknown;
+    const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     m_service->windowClosed(windowId, kind);
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
@@ -484,7 +502,12 @@ void WindowTrackingAdaptor::setWindowRegistry(PhosphorEngine::WindowRegistry* re
     QObject::connect(registry, &PhosphorEngine::WindowRegistry::metadataChanged, this,
                      [this](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
                             const PhosphorEngine::WindowMetadata& newMeta) {
-                         if (oldMeta.appId == newMeta.appId || !m_service) {
+                         // QPointer auto-nulls m_windowRegistry if the registered
+                         // object outlives this adaptor — guard against that
+                         // alongside the m_service belt-and-braces guard so the
+                         // `m_windowRegistry->instancesWithAppId(...)` deref
+                         // below can't fault.
+                         if (oldMeta.appId == newMeta.appId || !m_service || !m_windowRegistry) {
                              return;
                          }
                          // If the last-used-zone tracking is stamped with the old class and
@@ -711,6 +734,20 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     if (m_autotileEngine) {
         pruned += m_autotileEngine->pruneStaleWindows(alive);
     }
+    // Defensive sweep of the frame-geometry shadow store. The primary
+    // cleanup path is `windowClosed`, but if a window dies without a
+    // matching close signal reaching the adaptor (effect bug, compositor
+    // crash, lost D-Bus call), the entry would otherwise leak forever.
+    // The effect calls pruneStaleWindows precisely for this defensive
+    // case — extend the same alive-set filter to m_frameGeometry.
+    for (auto it = m_frameGeometry.begin(); it != m_frameGeometry.end();) {
+        if (!alive.contains(it.key())) {
+            it = m_frameGeometry.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
     if (pruned > 0) {
         qCInfo(lcDbusWindow) << "Pruned" << pruned << "stale window assignments (not in KWin)";
         scheduleSaveState();
@@ -774,21 +811,6 @@ QRect WindowTrackingAdaptor::zoneGeometryRect(const QString& zoneId, const QStri
         qCDebug(lcDbusWindow) << "zoneGeometryRect: invalid geometry for zone:" << zoneId;
     }
     return geo;
-}
-
-QJsonObject WindowTrackingAdaptor::buildStateObject(const QString& windowId, const QString& zoneId,
-                                                    const QJsonArray& zoneIds, const QString& screenId, bool isFloating,
-                                                    const QString& changeType) const
-{
-    QJsonObject obj;
-    obj[QLatin1String("windowId")] = windowId;
-    obj[QLatin1String("zoneId")] = zoneId;
-    obj[QLatin1String("zoneIds")] = zoneIds;
-    obj[QLatin1String("screenId")] = screenId;
-    obj[QLatin1String("isFloating")] = isFloating;
-    obj[QLatin1String("isSticky")] = m_service ? m_service->isWindowSticky(windowId) : false;
-    obj[QLatin1String("changeType")] = changeType;
-    return obj;
 }
 
 } // namespace PlasmaZones

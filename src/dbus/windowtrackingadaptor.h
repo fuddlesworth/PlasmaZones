@@ -26,6 +26,10 @@
 
 #include <PhosphorConfig/IBackend.h>
 
+namespace PhosphorContext {
+class IContextResolver;
+} // namespace PhosphorContext
+
 namespace PhosphorZones {
 class IZoneDetector;
 class Layout;
@@ -151,6 +155,19 @@ public:
     void setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
                     PhosphorEngine::PlacementEngineBase* autotileEngine);
 
+    /**
+     * @brief Set the frozen-snapshot resolver used by saveload's disable
+     *        gate to short-circuit restore on a disabled context.
+     *
+     * Late-bound for the same reason as setEngines / setShortcutRegistrar —
+     * the resolver is constructed after this adaptor. Daemon calls this
+     * once after `m_contextResolver` lands. Pass nullptr during shutdown.
+     */
+    void setContextResolver(PhosphorContext::IContextResolver* resolver)
+    {
+        m_contextResolver = resolver;
+    }
+
     PhosphorSnapEngine::SnapEngine* snapEngine() const;
 
     /**
@@ -260,15 +277,6 @@ public Q_SLOTS:
 
     // calculateUnfloatRestore moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
 
-    /**
-     * Store window geometry before snapping (for unsnap restoration)
-     * @param windowId Window ID
-     * @param x Window X position
-     * @param y Window Y position
-     * @param width Window width
-     * @param height Window height
-     * @note Only stores on FIRST snap - subsequent snaps (A→B) keep original
-     */
     /**
      * Store geometry before tiling (unified snap + autotile)
      * @param windowId Window ID
@@ -807,27 +815,18 @@ private:
     // applySnapResult moved to SnapAdaptor.
 
     /**
-     * @brief Build a unified window state JSON object for windowStateChanged emission
-     * @param windowId Window identifier
-     * @param zoneId Primary zone ID (may be empty for unsnap)
-     * @param zoneIds All zone IDs (QJsonArray)
-     * @param screenId Screen identifier
-     * @param isFloating Current float state
-     * @param changeType One of: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
-     * @return QJsonObject ready for serialization
-     */
-    QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
-                                 const QString& screenId, bool isFloating, const QString& changeType) const;
-
-    /**
      * @brief Test whether the given (screen, virtualDesktop, activity) tuple is currently disabled.
      *
      * Used by the save/load filters to drop entries persisted before the user
-     * disabled a monitor / virtual desktop / activity. Selects the mode via the
-     * ScreenModeRouter when wired; falls back to Snapping mode otherwise
-     * (consistent with the snap-side write gate, and the helper's only
-     * load-time caller chain is snap-side anyway). Empty screenId is treated
-     * as "context unknown" and the entry is kept.
+     * disabled a monitor / virtual desktop / activity. Routes through
+     * `PhosphorContext::IContextResolver::handleForPersisted`, which queries
+     * the screen's current mode internally via its bound `IModeProvider`.
+     * Returns `false` when the resolver has not yet been wired (e.g. during
+     * the adaptor's own construction, before `Daemon` calls
+     * `setContextResolver`) — keeping the entry is safe at that point because
+     * no save/load can race the ctor on the same thread. Empty screenId
+     * carries through to the resolver, which treats it as a sentinel
+     * (matches no per-screen disable entry).
      *
      * The activity parameter is optional and defaults to empty — snap-mode
      * storage carries no per-window activity tag (SnapState does not track it)
@@ -869,6 +868,11 @@ private:
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager;
     ISettings* m_settings;
+    /// Non-owning resolver pointer, late-bound via setContextResolver after
+    /// Daemon constructs `m_contextResolver`. Replaces the previous
+    /// `(m_screenModeRouter->modeFor → currentVirtualDesktop → currentActivity
+    /// → isContextDisabled)` cascade rebuild in `saveload.cpp`.
+    PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
 
@@ -877,6 +881,14 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
+
+    // Pre-tile geometries loaded by loadState BEFORE m_snapEngine was
+    // wired (the ctor calls loadState, but setEngines is called later by
+    // the daemon). Replayed into the snap engine the moment setEngines
+    // wires it. Without this buffer, every restart silently drops the
+    // persisted unmanaged-geometry map and breaks drag-out-unsnap
+    // pre-snap-size restore across sessions.
+    QHash<QString, PhosphorEngine::PlacementEngineBase::UnmanagedEntry> m_pendingUnmanagedGeometries;
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.
@@ -894,8 +906,21 @@ private:
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service
+    //
+    // INVARIANT: post-construction, `m_service` is non-null for the
+    // lifetime of this adaptor. The constructor `qFatal`s on any null
+    // dependency, so reaching any member function with a null `m_service`
+    // is impossible under the current contract. The few `if (!m_service)
+    // return;` guards in public slots are belt-and-braces against a
+    // future regression that introduces a clear-to-null path (none
+    // currently exists); the qFatal is the authoritative gate.
     // ═══════════════════════════════════════════════════════════════════════════════
-    PhosphorPlacement::IGeometryResolver* m_geometryResolver = nullptr;
+    // Owned: DaemonGeometryResolver is a plain non-QObject and the
+    // adaptor's destructor would otherwise leak it. WindowTrackingService
+    // borrows the resolver by raw pointer (no ownership transfer), so this
+    // unique_ptr must outlive m_service — declare it BEFORE m_service so
+    // reverse-order member destruction tears m_service down first.
+    std::unique_ptr<PhosphorPlacement::IGeometryResolver> m_geometryResolver;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
 
     // Shared registry: compositor-supplied instance id → current metadata.

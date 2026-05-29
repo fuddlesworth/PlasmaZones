@@ -17,8 +17,11 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
 #include <PhosphorWindowRule/WindowQuery.h>
 
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QtGlobal>
 
 namespace PlasmaZones {
@@ -189,6 +192,73 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
         }
     }
     return out;
+}
+
+std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluator& evaluator,
+                                          const QString& windowClass, const QString& windowId)
+{
+    // Empty inputs short-circuit — windowClass is the predicate axis SetOpacity
+    // rules match on (same WindowClass-only shape as the animation cascade),
+    // and windowId keys the evaluator's per-window cache. Either being empty
+    // means there is nothing to resolve, and avoiding the cached walk here
+    // keeps the paint hot path from churning the cache on every paint of a
+    // window with no class (sub-surfaces, drop shadows, screen-edge proxies).
+    if (windowClass.isEmpty() || windowId.isEmpty()) {
+        return std::nullopt;
+    }
+    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, animationQuery(windowClass));
+    // The opacity-slot id is a constant; hoist its QString materialisation
+    // out of the per-paint hot path so each `resolveWindowOpacity` call
+    // reuses the same heap allocation. `static const` is thread-safe under
+    // C++11+ [stmt.dcl] without further synchronisation.
+    static const QString kOpacitySlot = QString(PhosphorWindowRule::ActionSlot::Opacity);
+    const auto action = resolved.slot(kOpacitySlot);
+    if (!action) {
+        return std::nullopt;
+    }
+    // The action descriptor's validator in ruleaction.cpp already rejected
+    // rules whose `value` falls outside [0.0, 1.0] at load time, but a
+    // future loader path (legacy migration, hand-edited JSON) could land an
+    // out-of-range value here. Validate at the consumer too — defence in
+    // depth keeps the paint pipeline from setting a negative opacity (which
+    // KWin renders as "invisible window the user can still focus through").
+    //
+    // Gate on the QVariant conversion path because the QJsonObject may
+    // have been populated programmatically (rule editor builder, future
+    // migration porter) with a `QVariant(int)` or numeric-string payload
+    // that round-trips through `QJsonValue` as a non-Double type. JSON-
+    // parsed numeric literals all surface as `QJsonValue::Double` (Qt6
+    // collapses int/float at parse time), but construction paths that
+    // bypass the parser don't.
+    //
+    // Extraction MUST go through `toVariant().toDouble(&ok)` rather than
+    // `raw.toDouble()` — the latter is the QJsonValue method, which
+    // returns 0.0 for any non-Double JSON type. A `"value": "0.5"`
+    // payload would pass the canConvert gate but `raw.toDouble()` would
+    // return 0.0, silently rendering the window completely invisible.
+    const QJsonValue raw = action->params.value(PhosphorWindowRule::ActionParam::Value);
+    if (raw.isNull() || raw.isUndefined()) {
+        return std::nullopt;
+    }
+    // QVariant::toDouble on a bool returns 1.0/0.0 with ok=true — surfacing
+    // a programmatically-built `"value": true` rule as a fully-visible /
+    // completely-invisible window. The action descriptor's load-time
+    // validator already rejects bools (it requires `isDouble`); reject
+    // them at the consumer too so a runtime-constructed payload that
+    // bypasses the parser can't silently change opacity behaviour.
+    const QVariant v = raw.toVariant();
+    if (v.typeId() == QMetaType::Bool) {
+        return std::nullopt;
+    }
+    bool ok = false;
+    const double value = v.toDouble(&ok);
+    if (!ok) {
+        return std::nullopt;
+    }
+    if (value < 0.0 || value > 1.0) {
+        return std::nullopt;
+    }
+    return value;
 }
 
 } // namespace PlasmaZones

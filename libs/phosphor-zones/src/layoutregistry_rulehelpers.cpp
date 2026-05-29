@@ -58,6 +58,31 @@ bool hasEngineModeAction(const PWR::WindowRule& rule)
     return false;
 }
 
+bool isPureAssignmentRule(const PWR::WindowRule& rule)
+{
+    // True when every action belongs to the three assignment slots
+    // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). Used by
+    // the shape-based scan in findExactContextRule to refuse to claim a
+    // user-authored rule that carries non-assignment actions
+    // (SetOpacity, OverrideAnimation*, Float, Exclude, ...) — admitting
+    // such a rule would silently strip those actions through the
+    // assignment-rebuild path (upsertAssignmentRule, assignLayout,
+    // applyBatchAssignments) since makeAssignmentActions emits only the
+    // three slot actions. False on an empty action list as well — a
+    // context match with no actions is not an assignment rule.
+    if (rule.actions.isEmpty()) {
+        return false;
+    }
+    for (const PWR::RuleAction& action : rule.actions) {
+        if (action.type != QLatin1String(PWR::ActionType::SetEngineMode)
+            && action.type != QLatin1String(PWR::ActionType::SetSnappingLayout)
+            && action.type != QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool matchIsExactContextBase(const PWR::MatchExpression& match)
 {
     return CRB::matchIsExactContextBase(match);
@@ -91,13 +116,27 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::WindowRule& rule)
     entry.mode = AssignmentEntry::Snapping;
     for (const PWR::RuleAction& action : rule.actions) {
         if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
-            entry.mode = action.params.value(QLatin1String("mode")).toString() == QLatin1String("autotile")
-                ? AssignmentEntry::Autotile
-                : AssignmentEntry::Snapping;
+            // Decode through `modeFromWireString` so every token the
+            // ActionRegistry validator accepts round-trips end-to-end.
+            // The canonical vocabulary lives at `engineModeOptions()` in
+            // libs/phosphor-windowrule/src/ruleaction.cpp — today
+            // snapping / autotile / scrolling. The previous two-valued
+            // `== "autotile"` ternary silently coerced every non-Autotile
+            // token to Snapping — including the registered, picker-exposed
+            // "scrolling" wire string written by Settings via
+            // `modeToWireString(Scrolling)`. Unknown tokens
+            // (`modeFromWireString` returns nullopt) leave the entry on
+            // its prior value, which is the Snapping default initialized
+            // above — matching the bridge's open-vocabulary contract
+            // documented in ContextRuleBridge.h's makeAssignmentActions.
+            const QString modeToken = action.params.value(PWR::ActionParam::Mode).toString();
+            if (const auto mode = modeFromWireString(modeToken)) {
+                entry.mode = *mode;
+            }
         } else if (action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)) {
-            entry.snappingLayout = action.params.value(QLatin1String("layoutId")).toString();
+            entry.snappingLayout = action.params.value(PWR::ActionParam::LayoutId).toString();
         } else if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
-            entry.tilingAlgorithm = action.params.value(QLatin1String("algorithm")).toString();
+            entry.tilingAlgorithm = action.params.value(PWR::ActionParam::Algorithm).toString();
         }
     }
     return entry;

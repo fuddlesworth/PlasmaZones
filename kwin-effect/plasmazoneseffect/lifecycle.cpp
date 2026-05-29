@@ -123,8 +123,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // the original animator running its geometry tween, and that
         // animator's eventual completion would prematurely kill the
         // successor (whose own QTimer hasn't fired yet).
-        auto it = m_shaderManager.m_shaderTransitions.find(w);
-        if (it == m_shaderManager.m_shaderTransitions.end() || it->second.durationMs > 0) {
+        const auto* st = m_shaderManager.findTransition(w);
+        if (!st || st->durationMs > 0) {
             return;
         }
         endShaderTransition(w);
@@ -132,11 +132,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(&m_shaderManager.m_animationShaderRegistry,
             &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this, [this]() {
                 QVarLengthArray<KWin::EffectWindow*, 8> windows;
-                for (auto& [w, _] : m_shaderManager.m_shaderTransitions)
+                for (auto& [w, _] : m_shaderManager.shaderTransitions())
                     windows.push_back(w);
                 for (auto* w : windows)
                     endShaderTransition(w);
-                Q_ASSERT(m_shaderManager.m_shaderTransitions.empty());
+                Q_ASSERT(m_shaderManager.empty());
                 m_shaderManager.m_shaderCache.clear();
                 // Drop the texture cache too — a hot-reload that swaps a
                 // texture file behind the same metadata.json path needs
@@ -635,6 +635,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_daemonReadyRestoresDone = false;
         m_daemonReadyWindowStateProcessed = false;
         m_snapRestoreCache.clear();
+        // Reset the rules-subscription gate so the next daemon's
+        // `rulesChanged` broadcasts can be re-subscribed. Without this,
+        // the daemonReady disconnect+reconnect dance below would re-wire
+        // daemonReady against the new bus name but the rulesChanged
+        // subscription guard would still latch and skip the re-subscribe
+        // — silently dropping rule edits across daemon restarts.
+        m_windowRulesSubscribed = false;
         // Release any pending first-frame open suppression. Without the
         // daemon there is no `resolveWindowRestore` reply coming and no
         // autotile reposition either, so the suppression entry would just
@@ -718,13 +725,13 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
 {
     // Sever the registry's `effectsChanged` connection BEFORE anything
     // else runs. The slot lambda touches `m_shaderManager.m_shaderTransitions`,
-    // `m_shaderManager.m_shaderCache`, and `m_shaderManager.m_textureCache` — all declared AFTER
-    // `m_shaderManager.m_animationShaderRegistry` in the header (h:507 vs h:698+), so
-    // they destruct FIRST in C++ reverse-declaration order. The
-    // registry destructs LAST, and any signal it (or its underlying
-    // file-watcher) emits during its own member teardown would
-    // dispatch to the slot AFTER the cache members are gone — UAF.
-    // Disconnect now while everything is still alive.
+    // `m_shaderManager.m_shaderCache`, and `m_shaderManager.m_textureCache` — all
+    // declared AFTER `m_animationShaderRegistry` in shadertransitionmanager.h,
+    // so they destruct FIRST in C++ reverse-declaration order. The registry
+    // destructs LAST, and any signal it (or its underlying file-watcher) emits
+    // during its own member teardown would dispatch to the slot AFTER the
+    // cache members are gone — UAF. Disconnect now while everything is still
+    // alive.
     disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
 
     // Drain the texture loader pool before any other teardown. A
@@ -784,7 +791,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // the offscreen state when KWin::effects is gone.
     if (KWin::effects) {
         QVarLengthArray<KWin::EffectWindow*, 8> activeWindows;
-        for (auto& [w, _] : m_shaderManager.m_shaderTransitions) {
+        for (auto& [w, _] : m_shaderManager.shaderTransitions()) {
             activeWindows.push_back(w);
         }
         for (auto* w : activeWindows) {

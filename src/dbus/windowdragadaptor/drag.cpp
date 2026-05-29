@@ -10,6 +10,7 @@
 #include "../../core/enums.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Layout.h>
@@ -156,8 +157,13 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
         return nullptr;
     }
     outScreenId = resolved.screenId;
-    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, outScreenId,
-                          m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
+    // Live-mode disable check — `handleFor` not `handleForMode(Snapping)`.
+    // The cursor can cross from a snap-mode screen onto an autotile-mode
+    // screen mid-drag; gating on the hard-coded Snapping disable list
+    // would consult the wrong list for the destination. Mirrors the
+    // matching fix in drop.cpp::useOverlayZone and
+    // drag_protocol.cpp::computeDragPolicy.
+    if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(outScreenId))) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;

@@ -5,6 +5,8 @@
 
 #include <PhosphorZones/LayoutRegistry.h>
 
+#include <QtGlobal>
+
 namespace PlasmaZones {
 
 ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager,
@@ -14,9 +16,17 @@ ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager,
     , m_snapEngine(snapEngine)
     , m_autotileEngine(autotileEngine)
 {
-    Q_ASSERT(layoutManager);
-    Q_ASSERT(snapEngine);
-    Q_ASSERT(autotileEngine);
+    // qFatal aborts unambiguously in both debug and release builds.
+    // modeFor() / partitionByMode() unconditionally deref each pointer,
+    // so a null dependency is a wiring bug that crashes on the first
+    // call — escalate at construction so the failure is loud and
+    // attributable to the construction site, not the first user.
+    if (!layoutManager || !snapEngine || !autotileEngine) {
+        qFatal(
+            "ScreenModeRouter: null dependency at construction "
+            "(layoutManager=%p, snapEngine=%p, autotileEngine=%p) — daemon-wiring bug",
+            static_cast<void*>(layoutManager), static_cast<void*>(snapEngine), static_cast<void*>(autotileEngine));
+    }
 }
 
 PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
@@ -36,6 +46,12 @@ PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& sc
     // stale assignment state during a mode transition — trust the engine
     // and downgrade to Snapping. (A second isActiveOnScreen check here
     // would be dead code given the early return above.)
+    //
+    // Scrolling reports pass through unchanged: there is no engine to
+    // cross-check (engineFor returns nullptr for Scrolling), so the
+    // cascade is authoritative for the no-engine modes. Only Autotile
+    // needs the engine cross-check because it's the one whose live
+    // state can diverge from a stale assignment.
     if (mode == PhosphorZones::AssignmentEntry::Autotile) {
         return PhosphorZones::AssignmentEntry::Snapping;
     }
@@ -49,6 +65,13 @@ PhosphorEngine::IPlacementEngine* ScreenModeRouter::engineFor(const QString& scr
         return m_autotileEngine;
     case PhosphorZones::AssignmentEntry::Snapping:
         return m_snapEngine;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        // No scrolling engine is wired yet — the assignment is honoured
+        // by leaving the screen unmanaged (KWin's native placement runs
+        // unimpeded). Returning nullptr matches the existing contract:
+        // navigation.cpp / drag pipelines null-check the engine pointer
+        // and treat null as "no managed window-placement here".
+        return nullptr;
     }
     // Switch above is exhaustive over PhosphorZones::AssignmentEntry::Mode. Deliberately
     // no `default:` case so that adding a new enum value triggers -Wswitch
@@ -72,10 +95,20 @@ ScreenModeRouter::Partitioned ScreenModeRouter::partitionByMode(const QStringLis
 {
     Partitioned out;
     for (const QString& sid : screenIds) {
-        if (isAutotileMode(sid)) {
+        // Switch instead of isSnapMode/isAutotileMode pair so adding a
+        // future mode produces a -Wswitch diagnostic here rather than
+        // silently bucketing the new mode into `snap` (the original
+        // pre-Scrolling default).
+        switch (modeFor(sid)) {
+        case PhosphorZones::AssignmentEntry::Autotile:
             out.autotile.append(sid);
-        } else {
+            break;
+        case PhosphorZones::AssignmentEntry::Snapping:
             out.snap.append(sid);
+            break;
+        case PhosphorZones::AssignmentEntry::Scrolling:
+            out.passthrough.append(sid);
+            break;
         }
     }
     return out;

@@ -64,7 +64,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // single-digit counts.
     m_windowAnimator->advanceAnimations();
 
-    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.m_shaderTransitions.empty()) {
+    if (m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()) {
         // Windows have translation transforms that move them outside their
         // frame geometry bounds — force full compositing mode. Shader
         // transitions also need this: without
@@ -90,7 +90,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // times across outputs); reading KWin::effects->cursorPos() at every
     // call multiplies up. Caching here also guarantees every transition
     // this frame reads an identical iMouse, eliminating sub-frame jitter.
-    if (KWin::effects && !m_shaderManager.m_shaderTransitions.empty()) {
+    if (KWin::effects && !m_shaderManager.empty()) {
         m_shaderManager.m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
@@ -125,9 +125,9 @@ void PlasmaZonesEffect::postPaintScreen()
     // window so the next vsync runs our paint chain. Animator-driven
     // transitions (durationMs == 0) are kept alive by
     // m_windowAnimator->scheduleRepaints above.
-    if (!m_shaderManager.m_shaderTransitions.empty()) {
+    if (!m_shaderManager.empty()) {
         const qint64 now = shaderClockNowMs();
-        for (const auto& [w, transition] : m_shaderManager.m_shaderTransitions) {
+        for (const auto& [w, transition] : m_shaderManager.shaderTransitions()) {
             if (!w || w->isDeleted()) {
                 continue;
             }
@@ -209,15 +209,19 @@ void PlasmaZonesEffect::postPaintScreen()
         }
     }
     KWin::effects->postPaintScreen();
+    // Unpin the per-frame clock. Any paintWindow() invocation outside
+    // the prePaintScreen→postPaintScreen bracket (defensive bootstrap,
+    // future test harness, an unexpected mid-cycle paint) then falls
+    // back to the live `shaderClockNowMs()` via the -1 sentinel branch
+    // in shader_resolve.cpp's resolveShaderClock(), instead of reading
+    // a stale pinned timestamp from this cycle.
+    m_shaderManager.setCurrentFrameClockMs(-1);
 }
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                                        std::chrono::milliseconds presentTime)
 {
-    if (w
-        && (m_windowAnimator->hasAnimation(w)
-            || m_shaderManager.m_shaderTransitions.find(w) != m_shaderManager.m_shaderTransitions.end()
-            || m_restoreSuppress.contains(w))) {
+    if (w && (m_windowAnimator->hasAnimation(w) || m_shaderManager.hasTransition(w) || m_restoreSuppress.contains(w))) {
         // Mark as transformed so paintWindow applies our translate+scale, and
         // so the OffscreenEffect redirect drives full-window repaints for the
         // shader leg's iTime advance even when the underlying window content
@@ -243,6 +247,25 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // the whole animation. setTranslucent() clears the opaque region
         // so every frame fully recomposites under the window.
         data.setTranslucent();
+    } else if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
+        // SetOpacity-only case: a rule may dim this window via
+        // `data.setOpacity()` in paintWindow below, but with neither an
+        // animation, shader transition, nor restore suppression in
+        // flight the branch above didn't fire setTranslucent(). Without
+        // it, KWin keeps the window's deviceOpaque region and skips
+        // recompositing whatever sits behind it — stale background
+        // pixels show through the dimmed window the moment anything
+        // behind it moves. Probe the rule cascade for an opacity < 1.0
+        // and clear the opaque region. Geometry is untouched
+        // (setTransformed deliberately NOT called) since SetOpacity is
+        // a pure alpha change.
+        const QString winClass = w->windowClass();
+        if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
+            if (auto opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w));
+                opacity && *opacity < 1.0) {
+                data.setTranslucent();
+            }
+        }
     }
 
     OffscreenEffect::prePaintWindow(view, w, data, presentTime);
@@ -291,11 +314,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // visible. Reset `lastPaintTimeMs = -1` for the same reason —
         // the first visible paint computes iTimeDelta = 0 ("first frame"
         // semantics), avoiding a 250ms-stale spike.
-        if (auto sit = m_shaderManager.m_shaderTransitions.find(w); sit != m_shaderManager.m_shaderTransitions.end()) {
-            if (sit->second.durationMs > 0) {
-                sit->second.startTimeMs = frameNowMs;
+        if (auto* st = m_shaderManager.findTransition(w)) {
+            if (st->durationMs > 0) {
+                st->startTimeMs = frameNowMs;
             }
-            sit->second.lastPaintTimeMs = -1;
+            st->lastPaintTimeMs = -1;
         }
         if (frameNowMs < supIt->deadlineMs) {
             return;
@@ -309,15 +332,53 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         m_restoreSuppress.erase(supIt);
     }
 
+    // SetOpacity rule consumer — sets the window's painted opacity before
+    // downstream transforms run. Absolute set (not multiplyOpacity) because
+    // SetOpacity rules describe a target opacity, not a scale factor —
+    // "make Firefox 80% opaque" should land at 0.8 regardless of whatever
+    // opacity another effect previously composed. Uses the shader-manager's
+    // window-rule evaluator because the SetOpacity action lives in the same
+    // effect-side rule bag as OverrideAnimation{Shader,Curve,Timing} —
+    // sharing the evaluator also shares its per-window cache, so the paint
+    // hot path pays at most one cascade walk per window per rule-set
+    // revision.
+    //
+    // Skip our own overlay/editor/snap-assist surfaces and plasma-shell
+    // panels — a user-authored rule like `WindowClass contains "plasmashell"`
+    // would otherwise dim our own UI or the system panel. This is a
+    // narrower exclusion than `shouldHandleWindow` (which also rejects
+    // xdg-desktop-portal surfaces) — deliberately so. SetOpacity is a
+    // user-visible cosmetic effect that the user opts into by authoring
+    // a class-matching rule; we exclude only the surfaces whose dimming
+    // would feel like a daemon bug (our own UI, panels), and let the
+    // user-authored rule reach everything else the rule explicitly
+    // names.
+    //
+    // Short-circuit on an empty rule set — the common case for users without
+    // any effect-side rules. The animation-cascade sister consumers
+    // (window_filtering.cpp, drag_snap.cpp) follow the same `isEmpty()` gate
+    // to keep default-state cost to two pointer reads; without it, every
+    // paintWindow call churns the rule evaluator's per-window cache for
+    // zero benefit.
+    if (!m_shaderManager.animationRuleSet().isEmpty()) {
+        const QString winClass = w->windowClass();
+        if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
+            if (auto opacity =
+                    resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w))) {
+                data.setOpacity(*opacity);
+            }
+        }
+    }
+
     m_windowAnimator->applyTransform(w, data);
 
-    auto sit = m_shaderManager.m_shaderTransitions.find(w);
-    if (sit != m_shaderManager.m_shaderTransitions.end() && sit->second.cached && sit->second.cached->shader) {
+    auto* st = m_shaderManager.findTransition(w);
+    if (st && st->cached && st->cached->shader) {
         // Non-const reference because the per-frame book-keeping (`frameCount`,
         // `lastPaintTimeMs`) advances on every paintWindow tick that feeds
         // the transition. Without the mutation, `iFrame` would stay at 0 and
         // `iTimeDelta` would always read 0.
-        auto& transition = sit->second;
+        auto& transition = *st;
         // Two progress sources, picked by the transition's mode (see
         // ShaderTransition's docstring). Lifecycle events (window.*)
         // started via tryBeginShaderForEvent set durationMs > 0 and drive
@@ -777,11 +838,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // `endShaderTransition` on the successor and kill it before
             // it ever paints. Mirrors the timer-driven teardown pattern
             // in `tryBeginShaderForEvent`'s post-install QTimer::singleShot.
-            // Iterator `sit` was obtained earlier in this function and no
-            // intervening code mutates m_shaderManager.m_shaderTransitions, so the read is
-            // safe. The assertion documents that contract for future edits.
-            Q_ASSERT(sit != m_shaderManager.m_shaderTransitions.end());
-            const quint64 expiringGeneration = sit->second.generation;
+            // Pointer `st` was obtained earlier in this function and no
+            // intervening code mutates `m_shaderManager`'s transition map,
+            // so the read is safe. The assertion documents that contract
+            // for future edits.
+            Q_ASSERT(st != nullptr);
+            const quint64 expiringGeneration = st->generation;
             QMetaObject::invokeMethod(
                 this,
                 [this, safeWindow, rawWindow, expiringGeneration]() {
@@ -796,9 +858,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // ended via a different path (synchronous teardown,
                     // windowDeleted, generation-mismatch successor).
                     m_shaderManager.m_pendingShaderExpiryEnd.remove(rawWindow);
-                    auto liveIt = m_shaderManager.m_shaderTransitions.find(safeWindow.data());
-                    if (liveIt != m_shaderManager.m_shaderTransitions.end()
-                        && liveIt->second.generation == expiringGeneration) {
+                    if (const auto* live = m_shaderManager.findTransition(safeWindow.data());
+                        live && live->generation == expiringGeneration) {
                         endShaderTransition(safeWindow.data());
                     }
                     // else: a successor replaced us (last-event-wins) and
@@ -826,8 +887,8 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // Only surface-extent transitions deform the quad list. Anchor-extent
     // transitions and plain redirected windows are drawn 1:1 over their
     // own geometry — leave their quads untouched.
-    auto it = m_shaderManager.m_shaderTransitions.find(window);
-    if (it == m_shaderManager.m_shaderTransitions.end() || !it->second.surfaceExtent || quads.isEmpty()) {
+    const auto* st = m_shaderManager.findTransition(window);
+    if (!st || !st->surfaceExtent || quads.isEmpty()) {
         return;
     }
     const auto* output = window->screen();
@@ -860,9 +921,9 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // maps the output.
     double qLeft = quads.first().left();
     double qTop = quads.first().top();
-    for (const KWin::WindowQuad& q : quads) {
-        qLeft = qMin(qLeft, q.left());
-        qTop = qMin(qTop, q.top());
+    for (qsizetype i = 1; i < quads.size(); ++i) {
+        qLeft = qMin(qLeft, quads[i].left());
+        qTop = qMin(qTop, quads[i].top());
     }
     const double ox = qLeft + (outputGeo.x() - textureGeo.x());
     const double oy = qTop + (outputGeo.y() - textureGeo.y());

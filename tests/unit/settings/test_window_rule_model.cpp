@@ -38,7 +38,7 @@ WindowRule monitorRule(const QString& screenId, const QString& name)
     rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, screenId);
     RuleAction engine;
     engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(QLatin1String("mode"), QStringLiteral("autotile"));
+    engine.params.insert(ActionParam::Mode, QStringLiteral("autotile"));
     rule.actions = {engine};
     return rule;
 }
@@ -67,8 +67,8 @@ WindowRule animationRule(const QString& windowClass, const QString& name)
     rule.match = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, windowClass);
     RuleAction shader;
     shader.type = QString(ActionType::OverrideAnimationShader);
-    shader.params.insert(QLatin1String("event"), QStringLiteral("window.open"));
-    shader.params.insert(QLatin1String("effectId"), QStringLiteral("dissolve"));
+    shader.params.insert(ActionParam::Event, QStringLiteral("window.open"));
+    shader.params.insert(ActionParam::EffectId, QStringLiteral("dissolve"));
     rule.actions = {shader};
     return rule;
 }
@@ -108,6 +108,9 @@ private Q_SLOTS:
     void addRuleAtInsertsAtIndexWithSingleSignal();
     void validationIssueCountRole();
     void screenIdsRoleHandlesInOperator();
+    void actionSummaryRendersAllEngineModes();
+    void disableEngineNamesTheModeBeingDisabled();
+    void setOpacityRendersValidValuesAndGuardsRejectPaths();
 };
 
 void TestWindowRuleModel::rolesExposed()
@@ -142,7 +145,7 @@ void TestWindowRuleModel::sectionDerivation()
     activity.match = MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("{uuid}"));
     RuleAction engine;
     engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(QLatin1String("mode"), QStringLiteral("snapping"));
+    engine.params.insert(ActionParam::Mode, QStringLiteral("snapping"));
     activity.actions = {engine};
     QCOMPARE(WindowRuleModel::sectionFor(activity), WindowRuleModel::Section::Activity);
 }
@@ -293,7 +296,7 @@ void TestWindowRuleModel::validationIssueCountRole()
     badRule.match = MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox"));
     RuleAction engine;
     engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(QLatin1String("mode"), QStringLiteral("autotile"));
+    engine.params.insert(ActionParam::Mode, QStringLiteral("autotile"));
     badRule.actions = {engine};
 
     WindowRuleModel model;
@@ -323,7 +326,7 @@ void TestWindowRuleModel::screenIdsRoleHandlesInOperator()
                                            QVariantList{QStringLiteral("DP-2"), QStringLiteral("DP-3")});
     RuleAction engine;
     engine.type = QString(ActionType::SetEngineMode);
-    engine.params.insert(QLatin1String("mode"), QStringLiteral("autotile"));
+    engine.params.insert(ActionParam::Mode, QStringLiteral("autotile"));
     rule.actions = {engine};
 
     WindowRuleModel model;
@@ -353,6 +356,126 @@ void TestWindowRuleModel::screenIdsRoleHandlesInOperator()
     QCOMPARE(ids2.size(), 2);
     QVERIFY(ids2.contains(QStringLiteral("HDMI-A-1")));
     QVERIFY(ids2.contains(QStringLiteral("eDP-1")));
+}
+
+void TestWindowRuleModel::actionSummaryRendersAllEngineModes()
+{
+    // Pin that `SetEngineMode` actionLabel renders all three vocabulary
+    // tokens (snapping / autotile / scrolling) as their localised display
+    // strings. A regression that collapsed the Scrolling branch back into
+    // raw-wire-token fallback would silently revert "Engine: Scrolling"
+    // to lowercase "Engine: scrolling" — caught by this assertion.
+    const auto buildRule = [](const QString& modeToken) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 300;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
+        RuleAction engine;
+        engine.type = QString(ActionType::SetEngineMode);
+        engine.params.insert(ActionParam::Mode, modeToken);
+        rule.actions = {engine};
+        return rule;
+    };
+    WindowRuleModel model;
+    model.setRules({buildRule(QStringLiteral("snapping")), buildRule(QStringLiteral("autotile")),
+                    buildRule(QStringLiteral("scrolling"))});
+    QCOMPARE(model.rowCount(), 3);
+    const QString s0 = model.data(model.index(0, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s1 = model.data(model.index(1, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s2 = model.data(model.index(2, 0), WindowRuleModel::ActionSummaryRole).toString();
+    // Each summary must end with the properly-cased localised label —
+    // the i18n surface may add prefixes ("Engine: ") but the casing of
+    // the engine name is the load-bearing contract.
+    QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
+    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
+    // Negative assertion: no summary should leak the lowercase wire
+    // token — that would indicate the i18n branch fell through.
+    QVERIFY2(!s2.contains(QStringLiteral("scrolling")), qPrintable(s2));
+}
+
+void TestWindowRuleModel::disableEngineNamesTheModeBeingDisabled()
+{
+    // Pin that `DisableEngine` actionLabel names the engine being
+    // disabled rather than rendering a generic "Disabled" for every mode.
+    // A regression that collapsed the per-mode branches into "Disabled"
+    // would make two distinct disable rules read identically in the
+    // rules list — caught by asserting the labels differ.
+    const auto buildRule = [](const QString& modeToken) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 300;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1"));
+        RuleAction disable;
+        disable.type = QString(ActionType::DisableEngine);
+        disable.params.insert(ActionParam::Mode, modeToken);
+        rule.actions = {disable};
+        return rule;
+    };
+    WindowRuleModel model;
+    model.setRules({buildRule(QStringLiteral("snapping")), buildRule(QStringLiteral("autotile")),
+                    buildRule(QStringLiteral("scrolling"))});
+    const QString s0 = model.data(model.index(0, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s1 = model.data(model.index(1, 0), WindowRuleModel::ActionSummaryRole).toString();
+    const QString s2 = model.data(model.index(2, 0), WindowRuleModel::ActionSummaryRole).toString();
+    QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
+    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
+    // The three labels must be pairwise-distinct — otherwise a user with
+    // multiple disable rules sees ambiguous "Disabled" rows.
+    QVERIFY(s0 != s1);
+    QVERIFY(s1 != s2);
+    QVERIFY(s0 != s2);
+}
+
+void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
+{
+    // Pin that the SetOpacity actionLabel matches every resolver reject
+    // path (shader_resolve.cpp::resolveWindowOpacity): valid in-range
+    // values render as a percentage; null/undefined Value renders as
+    // bare "Opacity"; bool / out-of-range values render as
+    // "Opacity (invalid)". Without this guard the label would lie about
+    // a behaviour the runtime won't honour.
+    const auto buildRule = [](std::function<void(RuleAction&)> tweakAction) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 200;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        RuleAction action;
+        action.type = QString(ActionType::SetOpacity);
+        tweakAction(action);
+        rule.actions = {action};
+        return rule;
+    };
+
+    WindowRuleModel model;
+    model.setRules({
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, 0.5);
+        }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, 1.0);
+        }),
+        buildRule([](RuleAction&) { }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, true);
+        }),
+        buildRule([](RuleAction& a) {
+            a.params.insert(ActionParam::Value, 2.0);
+        }),
+    });
+
+    const auto labelAt = [&](int row) {
+        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+    };
+    QVERIFY2(labelAt(0).contains(QStringLiteral("50")), qPrintable(labelAt(0)));
+    QVERIFY2(labelAt(1).contains(QStringLiteral("100")), qPrintable(labelAt(1)));
+    // Missing Value: bare "Opacity" placeholder (no percent number)
+    QCOMPARE(labelAt(2), QStringLiteral("Opacity"));
+    // Bool payload: rejected with the (invalid) marker
+    QVERIFY2(labelAt(3).contains(QStringLiteral("invalid")), qPrintable(labelAt(3)));
+    // Out-of-range: same marker
+    QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
 }
 
 QTEST_MAIN(TestWindowRuleModel)

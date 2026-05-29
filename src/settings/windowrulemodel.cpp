@@ -9,6 +9,8 @@
 #include <PhosphorWindowRule/MatchTypes.h>
 #include <PhosphorWindowRule/RuleAction.h>
 
+#include <PhosphorZones/AssignmentEntry.h>
+
 #include <QJsonArray>
 #include <QStringList>
 
@@ -179,6 +181,33 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const WindowRuleM
                                     resolveOne(predicate.value.toString()));
 }
 
+/// Localise a single engine-mode wire token. Returns an empty QString
+/// for an empty input so callers can branch on it; unknown tokens
+/// (a future picker option, a hand-edited rule) round-trip verbatim.
+/// Routes through `PhosphorZones::modeFromWireString` so the wire-token
+/// enumeration stays in one place — a future Mode enum extension lands
+/// at the AssignmentEntry switch + the engineModeOptions() picker, not
+/// here.
+QString engineModeDisplayLabel(const QString& wire)
+{
+    if (wire.isEmpty()) {
+        return {};
+    }
+    const auto mode = PhosphorZones::modeFromWireString(wire);
+    if (!mode) {
+        return wire;
+    }
+    switch (*mode) {
+    case PhosphorZones::AssignmentEntry::Snapping:
+        return PzI18n::tr("Snapping");
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return PzI18n::tr("Autotile");
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return PzI18n::tr("Scrolling");
+    }
+    return wire;
+}
+
 /// Human label for one action ("Snapping", "Float", "Excluded"). @p
 /// snappingLayoutLookup resolves SetSnappingLayout's layoutId UUIDs;
 /// @p tilingAlgorithmLookup resolves SetTilingAlgorithm's wire tokens
@@ -196,26 +225,17 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     };
 
     if (action.type == ActionType::SetEngineMode) {
-        const QString mode = action.params.value(QLatin1String("mode")).toString();
-        // Render the wire token (`snapping` / `autotile`) as a properly-cased
-        // display label — matches the editor's enum-picker labels.
-        QString label;
-        if (mode == QLatin1String("snapping")) {
-            label = PzI18n::tr("Snapping");
-        } else if (mode == QLatin1String("autotile")) {
-            label = PzI18n::tr("Autotile");
-        } else {
-            label = mode; // unknown / future token — surface verbatim.
-        }
-        return PzI18n::tr("Engine: %1").arg(label);
+        const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
+        const QString label = engineModeDisplayLabel(mode);
+        return PzI18n::tr("Engine: %1").arg(label.isEmpty() ? mode : label);
     }
     if (action.type == ActionType::SetSnappingLayout) {
-        const QString layoutId = action.params.value(QLatin1String("layoutId")).toString();
+        const QString layoutId = action.params.value(PhosphorWindowRule::ActionParam::LayoutId).toString();
         return layoutId.isEmpty() ? PzI18n::tr("Snapping layout")
                                   : PzI18n::tr("Snapping: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetTilingAlgorithm) {
-        const QString algo = action.params.value(QLatin1String("algorithm")).toString();
+        const QString algo = action.params.value(PhosphorWindowRule::ActionParam::Algorithm).toString();
         // Algorithms are wire tokens (`bsp`, `grid`, …). The dedicated
         // tilingAlgorithm lookup knows about autotile entries — the
         // WindowRuleController wires it from settingsController.layouts,
@@ -223,7 +243,17 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return PzI18n::tr("Tiling: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }
     if (action.type == ActionType::DisableEngine) {
-        return PzI18n::tr("Disabled");
+        // Name the engine being disabled — a rules list with "Disable
+        // Snapping on DP-1" and "Disable Autotile on DP-2" otherwise reads
+        // as two identical "Disabled" rows. Empty mode → fall back to
+        // the generic "Disabled" label so a malformed rule still reads
+        // sensibly.
+        const QString mode = action.params.value(PhosphorWindowRule::ActionParam::Mode).toString();
+        const QString label = engineModeDisplayLabel(mode);
+        if (label.isEmpty()) {
+            return PzI18n::tr("Disabled");
+        }
+        return PzI18n::tr("Disable: %1").arg(label);
     }
     if (action.type == ActionType::Exclude) {
         return PzI18n::tr("Excluded — not managed");
@@ -232,19 +262,35 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return PzI18n::tr("Float");
     }
     if (action.type == ActionType::SetOpacity) {
-        const double v = action.params.value(QLatin1String("value")).toDouble();
+        // Mirror EVERY resolver reject path (shader_resolve.cpp's
+        // resolveWindowOpacity) so the label never claims a behaviour
+        // the runtime won't honour: null/undefined → label-only,
+        // bool payload → "Opacity (invalid)", out-of-range value → same.
+        const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
+        if (raw.isNull() || raw.isUndefined()) {
+            return PzI18n::tr("Opacity");
+        }
+        const QVariant rv = raw.toVariant();
+        if (rv.typeId() == QMetaType::Bool) {
+            return PzI18n::tr("Opacity (invalid)");
+        }
+        bool ok = false;
+        const double v = rv.toDouble(&ok);
+        if (!ok || v < 0.0 || v > 1.0) {
+            return PzI18n::tr("Opacity (invalid)");
+        }
         return PzI18n::tr("Opacity %1%").arg(static_cast<int>(v * 100.0 + 0.5));
     }
     if (action.type == ActionType::OverrideAnimationShader) {
-        const QString id = action.params.value(QLatin1String("effectId")).toString();
+        const QString id = action.params.value(PhosphorWindowRule::ActionParam::EffectId).toString();
         return id.isEmpty() ? PzI18n::tr("Block animation shader") : PzI18n::tr("Shader \"%1\"").arg(id);
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
-        const int ms = action.params.value(QLatin1String("durationMs")).toInt();
+        const int ms = action.params.value(PhosphorWindowRule::ActionParam::DurationMs).toInt();
         return ms > 0 ? PzI18n::tr("Duration %1 ms").arg(ms) : PzI18n::tr("Animation duration");
     }
     if (action.type == ActionType::OverrideAnimationCurve) {
-        const QString curve = action.params.value(QLatin1String("curve")).toString();
+        const QString curve = action.params.value(PhosphorWindowRule::ActionParam::Curve).toString();
         return curve.isEmpty() ? PzI18n::tr("Animation curve") : PzI18n::tr("Curve %1").arg(curve);
     }
     return WindowRuleModel::actionTypeFallbackLabel(action.type);
@@ -632,7 +678,12 @@ void WindowRuleModel::setActivityLabelLookup(LabelLookup fn)
 void WindowRuleModel::setLayoutLabelLookup(LabelLookup fn)
 {
     // Back-compat shim: wire the same lookup into both split lookups so
-    // callers that haven't migrated to the typed pair keep working.
+    // callers that haven't migrated to the typed pair keep working. Like
+    // its siblings (setSnappingLayoutLabelLookup, setTilingAlgorithmLabelLookup,
+    // setActivityLabelLookup, setScreenLabelLookup) this setter emits no
+    // signal — the lookups are install-once at controller-construction
+    // time, and any later UI refresh routes through refreshLabels()
+    // emitting `dataChanged` for the affected roles.
     m_snappingLayoutLookup = fn;
     m_tilingAlgorithmLookup = std::move(fn);
 }

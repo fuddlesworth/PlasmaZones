@@ -16,6 +16,7 @@
 #include <opengl/gltexture.h>
 
 #include <QHash>
+#include <QLoggingCategory>
 #include <QPointF>
 #include <QPointer>
 #include <QSet>
@@ -36,6 +37,8 @@ class EffectWindow;
 }
 
 namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 class PlasmaZonesEffect;
 
@@ -84,24 +87,27 @@ public:
         return m_shaderProfileTree;
     }
 
-    /// Rebuild the animation `WindowRuleSet` from `m_windowRuleAnimationRules`
-    /// — the rules from `windowrules.json` that carry an `OverrideAnimation*`
-    /// action. Call after every mutation of that list. The bound
-    /// `RuleEvaluator` picks up the new revision transparently and its match
-    /// cache is invalidated.
+    /// Rebuild the effect-rule `WindowRuleSet` from `m_windowRuleAnimationRules`
+    /// — the rules from `windowrules.json` that carry any effect-consumed
+    /// action (the `OverrideAnimation*` triple plus `SetOpacity`; see
+    /// `PhosphorWindowRule::ActionType::isEffectRuleAction`). Call after
+    /// every mutation of that list. The bound `RuleEvaluator` picks up
+    /// the new revision transparently and its match cache is invalidated.
     void rebuildAnimationRuleSet();
 
-    /// Replace the set of `windowrules.json` rules that carry an
-    /// `overrideAnimation*` action. The effect refreshes this on the
+    /// Replace the set of `windowrules.json` rules that carry any
+    /// effect-consumed action (`OverrideAnimation*` or `SetOpacity` —
+    /// see `isEffectRuleAction`). The effect refreshes this on the
     /// `org.plasmazones.WindowRules.rulesChanged` D-Bus signal so a new
-    /// animation rule authored in the settings UI fires without a restart.
+    /// effect rule authored in the settings UI fires without a restart.
     /// Triggers `rebuildAnimationRuleSet()` only when the list actually
     /// changes — a no-op rewrite keeps the evaluator's match cache warm.
     void setWindowRuleAnimationRules(QList<PhosphorWindowRule::WindowRule> rules);
 
-    /// The evaluator bound to the animation rule set. Resolution of the
-    /// per-window animation override cascade (WindowRules carrying any
-    /// `OverrideAnimation*` action) routes through this evaluator.
+    /// The evaluator bound to the effect-rule set. Resolution of the
+    /// per-window cascade for every effect-consumed action (the
+    /// `OverrideAnimation*` triple plus `SetOpacity`) routes through
+    /// this evaluator.
     const PhosphorWindowRule::RuleEvaluator& animationRuleEvaluator() const
     {
         return m_animationRuleEvaluator;
@@ -139,34 +145,6 @@ public:
     // Per-frame State (set by prePaintScreen, read by paintWindow)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Update the cached cursor position (call once per prePaintScreen).
-    void setCachedCursorGlobal(const QPointF& pos)
-    {
-        m_cachedCursorGlobal = pos;
-    }
-    QPointF cachedCursorGlobal() const
-    {
-        return m_cachedCursorGlobal;
-    }
-
-    /// 1 Hz iDate cache (call once per prePaintScreen or when stale).
-    qint64 lastIDateRefreshMs() const
-    {
-        return m_lastIDateRefreshMs;
-    }
-    void setLastIDateRefreshMs(qint64 ms)
-    {
-        m_lastIDateRefreshMs = ms;
-    }
-    QVector4D cachedIDate() const
-    {
-        return m_cachedIDate;
-    }
-    void setCachedIDate(const QVector4D& v)
-    {
-        m_cachedIDate = v;
-    }
-
     /// Frame-pinned shader clock. `prePaintScreen` samples
     /// `shaderClockNowMs()` once and stores it here; every `paintWindow`
     /// call within that compositor cycle reads this value instead of
@@ -193,16 +171,16 @@ public:
     // Per-window State
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Access the in-flight shader transition map (for paintWindow).
-    ///
-    /// @note The raw map exposure is a transitional shim. Prefer the
-    /// focused accessors below (`hasTransition`, `findTransition`,
-    /// `eraseTransition`) for new call sites — they preserve the
-    /// option of adding generation gating, instrumentation, or
-    /// invariant assertions in the manager without touching every
-    /// caller. Existing direct uses live in `shader_transitions.cpp`
-    /// (via `friend class PlasmaZonesEffect`) and migrate as those
-    /// sites are touched.
+    /// Access the in-flight shader transition map. Raw map access is
+    /// retained for the few hot-path iteration call sites
+    /// (`paint_pipeline.cpp`'s prePaint/postPaint sweeps,
+    /// `shader_transitions.cpp`'s `endShaderTransition` cleanup loop)
+    /// that walk every entry. Single-entry call sites should use
+    /// `hasTransition` / `findTransition` / `insertTransition` /
+    /// `eraseTransition` / `empty()` below, which document intent and
+    /// preserve the option of adding generation gating, instrumentation,
+    /// or invariant assertions in the manager without touching every
+    /// caller.
     std::unordered_map<KWin::EffectWindow*, ShaderTransition>& shaderTransitions()
     {
         return m_shaderTransitions;
@@ -212,19 +190,24 @@ public:
         return m_shaderTransitions;
     }
 
+    /// True when no transitions are in flight. Hot-path single-test
+    /// idiom used by every prePaint/postPaint check.
+    bool empty() const
+    {
+        return m_shaderTransitions.empty();
+    }
     /// Focused accessors. Each is a thin wrapper over the underlying
     /// `std::unordered_map` so call sites that don't need raw iterator
-    /// access can express their intent at the manager API level. New
-    /// code should prefer these.
+    /// access can express their intent at the manager API level.
     bool hasTransition(KWin::EffectWindow* window) const
     {
         return m_shaderTransitions.find(window) != m_shaderTransitions.end();
     }
     /// Returns nullptr when the window has no in-flight transition.
-    /// The pointer is stable until the next `eraseTransition` /
-    /// `insertTransition` call for THAT window — the underlying
-    /// `unordered_map` does not invalidate other entries' pointers
-    /// on insertion or erasure.
+    /// The pointer is stable until that window's entry is erased or
+    /// replaced — `std::unordered_map` guarantees that insertion and
+    /// erasure do not invalidate references to OTHER entries (only the
+    /// erased entry's references become dangling).
     ShaderTransition* findTransition(KWin::EffectWindow* window)
     {
         auto it = m_shaderTransitions.find(window);
@@ -235,70 +218,36 @@ public:
         auto it = m_shaderTransitions.find(window);
         return it != m_shaderTransitions.end() ? &it->second : nullptr;
     }
+    /// Insert a transition for @p window, taking ownership of the moved
+    /// payload. Returns the pointer to the inserted entry on success,
+    /// or `nullptr` if an entry for @p window already existed (the
+    /// moved-in payload is discarded in that case, and the caller MUST
+    /// either `eraseTransition` first or handle the rollback explicitly
+    /// — silently writing through the returned pointer would corrupt the
+    /// pre-existing transition's grab state). Q_ASSERT covers debug;
+    /// the runtime guard covers release, so the contract violation is
+    /// loud in both build modes.
+    ShaderTransition* insertTransition(KWin::EffectWindow* window, ShaderTransition&& transition)
+    {
+        auto result = m_shaderTransitions.emplace(window, std::move(transition));
+        Q_ASSERT(result.second);
+        if (!result.second) {
+            // Forensic breadcrumb so a release-build duplicate-key event
+            // surfaces in the journal instead of only showing up as the
+            // caller's downstream rollback. Q_ASSERT above already covers
+            // debug.
+            qCWarning(lcEffect,
+                      "ShaderTransitionManager::insertTransition: duplicate key for window %p — "
+                      "caller failed to eraseTransition first",
+                      static_cast<void*>(window));
+            return nullptr;
+        }
+        return &result.first->second;
+    }
     /// Returns true when an entry was actually erased.
     bool eraseTransition(KWin::EffectWindow* window)
     {
         return m_shaderTransitions.erase(window) > 0;
-    }
-
-    /// Windows with a pending deferred endShaderTransition queued.
-    QSet<KWin::EffectWindow*>& pendingShaderExpiryEnd()
-    {
-        return m_pendingShaderExpiryEnd;
-    }
-
-    /// Per-window edge-detection for windowMaximizedStateChanged.
-    QHash<KWin::EffectWindow*, bool>& lastFullyMaximized()
-    {
-        return m_lastFullyMaximized;
-    }
-
-    /// Last window we fired a window.focus shader on.
-    QPointer<KWin::EffectWindow>& lastFocusShaderWindow()
-    {
-        return m_lastFocusShaderWindow;
-    }
-
-    /// Access the compiled shader cache (for paintWindow uniform upload).
-    std::map<QString, CachedShader>& shaderCache()
-    {
-        return m_shaderCache;
-    }
-    const std::map<QString, CachedShader>& shaderCache() const
-    {
-        return m_shaderCache;
-    }
-
-    /// Access the texture cache (for paintWindow bind).
-    std::map<QString, CachedTexture>& textureCache()
-    {
-        return m_textureCache;
-    }
-    const std::map<QString, CachedTexture>& textureCache() const
-    {
-        return m_textureCache;
-    }
-
-    /// Bump the texture cache generation (call on effectsChanged hot-reload).
-    void bumpTextureCacheGeneration()
-    {
-        ++m_textureCacheGeneration;
-    }
-    quint64 textureCacheGeneration() const
-    {
-        return m_textureCacheGeneration;
-    }
-
-    /// Bump and read the access tick (for LRU tracking).
-    quint64 nextAccessTick()
-    {
-        return ++m_textureCacheAccessTick;
-    }
-
-    /// Bump the shader transition generation counter.
-    quint64 nextShaderTransitionGeneration()
-    {
-        return ++m_shaderTransitionGenerationCounter;
     }
 
 private:
@@ -312,9 +261,11 @@ private:
     PhosphorAnimationShaders::AnimationShaderRegistry m_animationShaderRegistry;
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorAnimation::ProfileTree m_motionProfileTree;
-    // Rules from windowrules.json that carry an OverrideAnimation* action.
-    // Refreshed from the daemon's org.plasmazones.WindowRules interface on
-    // every `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
+    // Rules from windowrules.json that carry any effect-consumed action
+    // (`OverrideAnimation*` triple OR `SetOpacity` — see
+    // `PhosphorWindowRule::ActionType::isEffectRuleAction`). Refreshed
+    // from the daemon's org.plasmazones.WindowRules interface on every
+    // `rulesChanged` signal; mirrored into `m_animationRuleSet` so the
     // bound RuleEvaluator picks up the new revision.
     QList<PhosphorWindowRule::WindowRule> m_windowRuleAnimationRules;
 

@@ -12,7 +12,6 @@
 #include <QMap>
 #include <QString>
 #include <QVariant>
-#include <span>
 
 namespace PlasmaZones {
 
@@ -34,14 +33,6 @@ namespace PlasmaZones {
 ///     animation overrides exclusively from the unified rule store. See
 ///     docs/window-rule-refactor-design.md §8.
 inline constexpr int ConfigSchemaVersion = 4;
-
-/// A single schema migration step: transforms root JSON in-place from
-/// fromVersion to fromVersion+1, then stamps the new _version.
-struct MigrationStep
-{
-    int fromVersion;
-    void (*migrate)(QJsonObject& root);
-};
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -92,16 +83,14 @@ public:
     /// Run the migration chain in-memory (for INI→JSON + upgrade in one pass).
     static void runMigrationChainInMemory(QJsonObject& root);
 
-    /// The ordered list of all migration steps.
-    static std::span<const MigrationStep> migrationSteps();
-
     // Schema migration functions (one per version bump).
-    // Public so the MigrationStep function pointers can reference them.
+    // Public so the `PhosphorConfig::MigrationStep` registry built in
+    // makeMigrationSchema() can take their addresses.
     static void migrateV1ToV2(QJsonObject& root);
     static void migrateV2ToV3(QJsonObject& root);
 
-    /// v3 → v4 schema step. A MigrationStep is `void(QJsonObject&)` — it can
-    /// only touch config.json. This step:
+    /// v3 → v4 schema step. Each migration step has signature
+    /// `void(QJsonObject&)` — it can only touch config.json. This step:
     ///   - Removes the Display.*Disabled* keys and stashes their values under
     ///     the temporary `_v4DisableStash` root key.
     ///   - Removes the `Animations.AnimationAppRules` array and stashes it
@@ -113,7 +102,7 @@ public:
 
     /// Post-chain finalizer for the v4 conversion. The cross-file migration
     /// (config.json + assignments.json → windowrules.json) cannot live in a
-    /// single `void(QJsonObject&)` MigrationStep, so this runs after the
+    /// single `void(QJsonObject&)` migration step, so this runs after the
     /// chain, from @ref ensureJsonConfigImpl.
     ///
     /// It reads assignments.json + the `_v4DisableStash` and

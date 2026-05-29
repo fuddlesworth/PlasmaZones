@@ -51,9 +51,18 @@ void Daemon::updateAutotileScreens()
     QHash<QString, QString> screenAlgorithms;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
-        // Skip screens/desktops/activities where PlasmaZones is disabled
-        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, desktop,
-                              activity)) {
+        // Skip screens/desktops/activities where PlasmaZones is disabled.
+        // Routes through ContextResolver when wired (post-init) so this
+        // path shares the same cascade as every other consumer — see
+        // libs/phosphor-context-resolver/README.md. Falls back to the
+        // direct settings check only if the resolver isn't yet available
+        // (early-init path before init() finishes wiring it).
+        const bool disabled = m_contextResolver
+            ? m_contextResolver->isDisabled(
+                  m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))
+            : isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, desktop,
+                                activity);
+        if (disabled) {
             continue;
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
@@ -98,7 +107,7 @@ void Daemon::updateAutotileScreens()
             // Inject algorithm from layout assignment (authoritative source)
             if (screenAlgorithms.contains(screenId)) {
                 const QString screenAlgo = screenAlgorithms.value(screenId);
-                overrides[QStringLiteral("Algorithm")] = screenAlgo;
+                overrides[PerScreenKeys::Algorithm] = screenAlgo;
 
                 // When the per-screen algorithm differs from the engine's
                 // current global algorithm and there's no explicit MaxWindows
@@ -134,7 +143,7 @@ void Daemon::updateAutotileScreens()
                         // setAlgorithm syncs settings via QSignalBlocker.
                         const int runtimeMaxWindows = m_autotileEngine->runtimeMaxWindows();
                         if (!globalAlgoPtr || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
-                            overrides[QStringLiteral("MaxWindows")] = screenAlgoPtr->defaultMaxWindows();
+                            overrides[PerScreenKeys::MaxWindows] = screenAlgoPtr->defaultMaxWindows();
                         }
                     } else {
                         qCWarning(lcDaemon) << "updateAutotileScreens: unknown per-screen algorithm" << screenAlgo
@@ -348,34 +357,6 @@ QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
     return orders;
 }
 
-void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, int desktop, const QString& activity)
-{
-    // Legacy path — emits individual D-Bus signals. Prefer buildAutotileRestoreEntries()
-    // + emitBatchedResnap() to batch float-restores into the resnap signal.
-    if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
-        return;
-    }
-    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-    if (!wts) {
-        return;
-    }
-    for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
-        if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
-            continue;
-        }
-        const QString& screenId = it.key().screenId;
-        for (const QString& windowId : it.value()) {
-            if (excludeWindows.contains(windowId))
-                continue;
-            if (wts->isWindowSnapped(windowId))
-                continue;
-            if (wts->isWindowFloating(windowId))
-                continue;
-            m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
-        }
-    }
-}
-
 QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
                                                                  const QString& activity)
 {
@@ -406,7 +387,6 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
             // window to stale coordinates left behind by a ghost instance.
             // Leaving the window at its current tiled position is the least
             // surprising outcome.
-            // Strict per-instance lookup: no appId fallback.
             auto geo = wts->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
             if (geo) {
                 ZoneAssignmentEntry entry;
@@ -427,7 +407,12 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
 
 void Daemon::presaveSnapFloats(const QString& screenId)
 {
-    if (!m_windowTrackingAdaptor) {
+    // Reachable from `Settings::settingsChanged` (daemon.cpp ~830) before
+    // the engines exist — any synchronous re-entry into settingsChanged
+    // during the D-Bus retry loop in init() would hit this path with
+    // null engine pointers. Symmetric null-check with seedAutotileOrderForScreen
+    // below.
+    if (!m_windowTrackingAdaptor || !m_autotileEngine || !m_snapEngine) {
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
@@ -491,10 +476,8 @@ void Daemon::processPendingGeometryUpdates()
     // tracks pending (screenId, layoutId) pairs explicitly so unrelated
     // geometriesComputed emissions (e.g. from an async layoutAssigned firing
     // mid-barrier) cannot drain it prematurely.
-    const int desktop = m_virtualDesktopManager->currentDesktop();
-    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
 
     // Key = (screenId, layoutId). Matches what geometriesComputed carries.

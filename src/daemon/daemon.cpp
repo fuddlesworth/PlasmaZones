@@ -60,6 +60,9 @@
 #include "../core/logging.h"
 #include "../core/animationbootstrap.h"
 #include "../core/screenmoderouter.h"
+#include "contextresolverwiring.h"
+
+#include <PhosphorContext/ContextResolver.h>
 #include "../core/utils.h"
 #include "../pz_i18n.h"
 #include "../config/configdefaults.h"
@@ -87,6 +90,7 @@
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -311,9 +315,10 @@ void Daemon::setupAnimationProfiles()
     using namespace PhosphorAnimation;
 
     // Wipe any entries left over from prior wiring on this same daemon
-    // instance. setupAnimationProfiles is called exactly once per
-    // Daemon::init() today, so the registry is always empty when we get
-    // here — the narrow-clear is a no-op in current code paths.
+    // instance. setupAnimationProfiles is called exactly once per Daemon
+    // construction (from the ctor — not init()), so the registry is
+    // always empty when we get here — the narrow-clear is a no-op in
+    // current code paths.
     //
     // Narrow the clear to the two partitions we publish under: the
     // loader-owned user-JSON partition (clearOwner by tag) and each
@@ -615,11 +620,11 @@ bool Daemon::init()
     // pool is single-threaded (QShaderBaker / glslang isn't thread-
     // safe), so animation and zone bakes serialise without interfering.
     //
-    // Include-path resolution mirrors surfaceanimator.cpp:1358-1361:
-    // every animation search-path's `/shared` subdir is added so an
-    // effect's vert / frag can `#include <animation_uniforms.glsl>`
-    // and the bake worker resolves it identically to the render-
-    // thread load path. The vertex-path fallback (default
+    // Include-path resolution mirrors `SurfaceAnimator::runLeg`
+    // (surfaceanimator.cpp): every animation search-path's `/shared`
+    // subdir is added so an effect's vert / frag can
+    // `#include <animation_uniforms.glsl>` and the bake worker resolves
+    // it identically to the render-thread load path. The vertex-path fallback (default
     // `shared/animation.vert` when an effect doesn't ship its own)
     // also mirrors the runtime, otherwise the warm-baked entry's
     // cache key would differ from what runtime queries.
@@ -876,10 +881,20 @@ bool Daemon::init()
         // Resnap after autotile disabled: restore windows to their pre-autotile
         // zone positions. PhosphorZones::Zone assignments are preserved during autotile (onLayoutChanged
         // skips autotile screens) so resnap uses original snap assignments.
-        if (autotileToggled && !autotileNow && m_windowTrackingAdaptor) {
+        if (autotileToggled && !autotileNow && m_windowTrackingAdaptor && m_snapAdaptor && m_snapEngine) {
             m_suppressResnapOsd = 1;
             m_snapAdaptor->resnapCurrentAssignments();
-            restoreAutotileOnlyGeometries();
+            // Batched float-restore: one resnap signal per autotile-disabled
+            // toggle instead of per-window D-Bus chatter. Downcast mirrors
+            // signals.cpp's resnap-batching path; a non-snap concrete engine
+            // would simply skip the batch (no behaviour regression vs the
+            // pre-batch shape, which used per-window D-Bus calls).
+            if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+                const QVector<ZoneAssignmentEntry> entries = buildAutotileRestoreEntries();
+                if (!entries.isEmpty()) {
+                    concreteSnap->emitBatchedResnap(entries);
+                }
+            }
         }
 
         // Re-resolve the active layout from assignments for the current context.
@@ -1024,6 +1039,34 @@ bool Daemon::init()
     m_snapEngine = std::move(engines.snap);
     m_screenModeRouter = std::move(engines.router);
 
+    // Build the PhosphorContext::ContextResolver wiring NOW — after the
+    // workspace managers, settings, and router exist; before any D-Bus
+    // adaptor or OverlayService method that consumes it runs. Three
+    // narrow adapters one-line forward to the existing services; the
+    // resolver borrows them. Declaration order in daemon.h guarantees
+    // reverse-tear-down: resolver first, then adapters, then services.
+    m_workspaceStateAdapter =
+        std::make_unique<DaemonWorkspaceStateAdapter>(m_virtualDesktopManager.get(), m_activityManager.get());
+    m_screenModeAdapter = std::make_unique<DaemonScreenModeAdapter>(m_screenModeRouter.get());
+    m_settingsGateAdapter = std::make_unique<DaemonSettingsGateAdapter>(m_settings.get());
+    m_contextResolver = std::make_unique<PhosphorContext::ContextResolver>(
+        m_workspaceStateAdapter.get(), m_screenModeAdapter.get(), m_settingsGateAdapter.get());
+
+    // Late-bind the resolver into the D-Bus adaptors that gate their
+    // handlers on the disable/lock cascade. Each adaptor was constructed
+    // earlier (before m_settings/m_screenModeRouter were ready); the
+    // resolver only exists now. The setters mirror setAutotileEngine /
+    // setShortcutRegistrar / setScreenModeRouter — same late-binding
+    // pattern the daemon already uses for cross-cutting deps.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setContextResolver(m_contextResolver.get());
+    }
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setContextResolver(m_contextResolver.get());
+    }
+    // m_snapAdaptor is constructed below at the engine-adaptor block; its
+    // contextResolver wire lives there.
+
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::settingsPersistRequested, this, [this]() {
         if (m_settings) {
             m_settings->save();
@@ -1086,7 +1129,6 @@ bool Daemon::init()
     // Config arg for m_screenManager). The swapper is constructed here
     // because navigation handlers don't run before init() returns anyway.
     m_virtualScreenSwapper = std::make_unique<PhosphorScreens::VirtualScreenSwapper>(m_virtualScreenStore.get());
-    Q_ASSERT(m_virtualScreenSwapper);
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
     // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking
@@ -1153,7 +1195,7 @@ bool Daemon::init()
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(snapEngine, m_windowTrackingAdaptor, m_settings.get(), this);
-    m_snapAdaptor->setScreenModeRouter(m_screenModeRouter.get());
+    m_snapAdaptor->setContextResolver(m_contextResolver.get());
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_screenManager.get(), m_algorithmRegistry.get(), this);
 
     // Control adaptor - high-level convenience API for third-party integrations.
@@ -1217,14 +1259,23 @@ bool Daemon::init()
             // pattern used for the mode-toggle locked feedback in connectShortcutSignals().
             const bool osdEnabled = m_settings && m_settings->showOsdOnLayoutSwitch();
             for (const auto& osd : std::as_const(osdEntries)) {
-                int mode = osd.isAutotile ? 1 : 0;
+                const PhosphorZones::AssignmentEntry::Mode mode = osd.isAutotile
+                    ? PhosphorZones::AssignmentEntry::Autotile
+                    : PhosphorZones::AssignmentEntry::Snapping;
                 if (isCurrentContextLockedForMode(osd.screenId, mode)) {
                     showLockedPreviewOsd(osd.screenId);
                 } else if (!osdEnabled) {
                     continue;
                 } else if (osd.isAutotile) {
-                    if (!osd.algoId.isEmpty())
-                        showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
+                    if (!osd.algoId.isEmpty()) {
+                        // Resolve the algorithm's human-readable display
+                        // name via the registry instead of surfacing the
+                        // wire-format id (e.g. "bsp" → "Binary Split").
+                        // Mirrors osd.cpp:548-551.
+                        const auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(osd.algoId) : nullptr;
+                        const QString displayName = algo ? algo->name() : osd.algoId;
+                        showLayoutOsdForAlgorithm(osd.algoId, displayName, osd.screenId);
+                    }
                 } else {
                     PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
                     if (layout)
@@ -1245,8 +1296,19 @@ bool Daemon::init()
     // so QTimer-based async approaches won't fire. Delays are kept short (700ms total max).
     constexpr int maxRetries = 3;
     constexpr int baseDelayMs = 100; // 100ms, 200ms, 400ms exponential backoff
+    // Worst-case blocking: 100 + 200 + 400 = 700 ms on the GUI thread.
+    // init() runs before QGuiApplication::exec(), so QTimer-based async
+    // approaches don't fire — synchronous sleep is the only retry path
+    // available here. The retry is bounded by `maxRetries`, and a bus
+    // disconnect during the wait would render every subsequent retry
+    // pointless (lastError type stays ServiceUnknown but the actual
+    // problem is connection-level).
     bool serviceRegistered = false;
     for (int attempt = 0; attempt < maxRetries; ++attempt) {
+        if (!bus.isConnected()) {
+            qCCritical(lcDaemon) << "D-Bus bus connection lost mid-retry — aborting service registration";
+            return false;
+        }
         if (bus.registerService(QString(PhosphorProtocol::Service::Name))) {
             serviceRegistered = true;
             break;
@@ -1323,6 +1385,19 @@ void Daemon::start()
     // already contemplates this cycle to avoid stacking the aboutToQuit
     // handler; this is the matching reset on the value side.
     m_shuttingDown = false;
+
+    // Re-publish the QML static defaults. stop() nulls all three
+    // (`PhosphorCurve::setDefaultRegistry(nullptr)` etc.) to prevent
+    // borrowed-pointer UAF during teardown; without this re-publish,
+    // a stop()→start() cycle (tests, programmatic restart) leaves QML
+    // resolving against nullptr defaults — every
+    // `PhosphorMotionAnimation { profile: … }` and every clock-driven
+    // animated-value lookup silently fails until the next ctor runs.
+    // The setters are idempotent: storing the same pointer the ctor
+    // installed is a no-op on the first start() of a fresh daemon.
+    PhosphorAnimation::PhosphorCurve::setDefaultRegistry(&m_curveRegistry);
+    PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(&m_profileRegistry);
+    PhosphorAnimation::QtQuickClockManager::setDefaultManager(m_clockManager.get());
 
     // Suppress OSDs once Qt begins shutdown (SIGTERM, programmatic quit).
     // Connected once — m_aboutToQuitConnected prevents stacking on stop()→start().
@@ -1526,18 +1601,22 @@ void Daemon::stop()
         m_layoutManager->setSnappingPreferredProvider({});
     }
 
-    if (!m_running) {
-        return;
-    }
-
-    // Null the QML static registry / manager pointers before our owned
-    // members are destroyed (unique_ptr / value-typed member destruction
-    // runs AFTER ~Daemon body completes — tearing the static borrowed
-    // pointers now guarantees no QML callsite landing during teardown
-    // or in a subsequent Daemon instance dereferences freed memory.
+    // Null the QML static registry / manager pointers BEFORE the m_running
+    // gate. These three statics are published unconditionally from
+    // `setupAnimationProfiles()` in the ctor — which runs before `init()`
+    // or `start()`. A Daemon constructed but never started (test fixtures,
+    // early-fail init paths) still has them pinned to the about-to-die
+    // members, so the clear must run on every teardown path, not just the
+    // post-start one. Same "borrowed-pointer + late member destruction"
+    // window as the provider lambdas above. The setDefault*(nullptr)
+    // calls are unconditionally null-safe.
     PhosphorAnimation::PhosphorCurve::setDefaultRegistry(nullptr);
     PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(nullptr);
     PhosphorAnimation::QtQuickClockManager::setDefaultManager(nullptr);
+
+    if (!m_running) {
+        return;
+    }
 
     // Tear down the daemon-owned PhosphorProfileRegistry entries this
     // Daemon published so a later Daemon reconstruction (tests, or a
@@ -1650,9 +1729,40 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
     }
 
-    // Null out the router's reference before destroying it — straggler calls
-    // to engineForScreen() during the shutdown window get nullptr instead of
-    // a dangling pointer. Then destroy the router.
+    // Tear down the context-resolver triple before destroying the
+    // services the adapters borrow from. Order: borrowers (D-Bus
+    // adaptors) drop their non-owning resolver pointer first, then the
+    // resolver and its three adapters die, then the underlying router
+    // / VirtualDesktopManager / ActivityManager / Settings can safely
+    // reset(). Without this, a queued D-Bus method that lands between
+    // here and ~Daemon (or a shortcut-manager signal still alive on the
+    // main thread) would deref an adapter whose backing service had
+    // already been freed by the existing engine-pointer teardown below.
+    //
+    // SnapAdaptor's resolver was already nulled by clearEngine() above
+    // (snapadaptor.cpp); WindowDragAdaptor and WindowTrackingAdaptor
+    // need their own clears here because they don't go through a
+    // clearEngine path.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setContextResolver(nullptr);
+    }
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->setContextResolver(nullptr);
+        // m_screenModeRouter is destroyed below; null its WTA borrow
+        // before that reset so any D-Bus call landing in the gap
+        // between this teardown and the bus unregister can't deref
+        // a freed router pointer. SnapAdaptor's clearEngine() does
+        // the symmetric clear (snapadaptor.cpp).
+        m_windowTrackingAdaptor->setScreenModeRouter(nullptr);
+    }
+    m_contextResolver.reset();
+    m_settingsGateAdapter.reset();
+    m_screenModeAdapter.reset();
+    m_workspaceStateAdapter.reset();
+
+    // Destroy the router. Engines below outlive it so any in-flight
+    // navigatorForShortcut path completes with the engine pointers it
+    // already captured before the router went away.
     m_screenModeRouter.reset();
 
     // Destroy engines now (during stop(), before Qt child destruction order).
@@ -1671,26 +1781,37 @@ void Daemon::stop()
     // and the SettingsAdaptor dtor's save-on-teardown would deref a freed
     // Settings object. Each adaptor's detach() is null-safe + idempotent.
     //
-    // WHY ONLY THESE THREE: SettingsAdaptor has the confirmed dtor-UAF
+    // WHY ONLY THESE FOUR: SettingsAdaptor has the confirmed dtor-UAF
     // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
     // non-trivial signal wiring + cached state that benefits from
     // explicit teardown for the same "queued D-Bus call lands during
-    // destruction window" defense-in-depth.
+    // destruction window" defense-in-depth. WindowRuleAdaptor borrows
+    // m_windowRuleStore (a unique_ptr) and m_settings; without detach
+    // its slot bodies could deref freed memory during the window after
+    // ~Daemon's body returns — that is when the unique_ptr members
+    // (including m_windowRuleStore) run their destructors, and the
+    // raw-Qt-parented WindowRuleAdaptor only runs its own destructor
+    // *after* that, as part of QObject child cleanup.
     //
-    // The other eight raw-Qt-parented adaptors (LayoutAdaptor,
+    // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
-    // DBusScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor) all
-    // ship `= default` destructors (verified — see their class headers),
-    // so they have no dtor body to UAF. QDBusConnection::unregisterObject
-    // (invoked above) blocks new method dispatch to them before we begin
-    // tearing down, and Qt's sender-destruction auto-disconnect cleans
-    // up signal wiring when the borrowed sender (m_layoutManager, etc.)
-    // is destroyed during member destruction. Adding detach() to those
-    // eight would require null-guarding every slot body (they currently
-    // rely on the "borrowed pointer is always valid" invariant), which
-    // is a larger refactor than the defense-in-depth buys. If a future
-    // adaptor grows a dtor body that derefs a borrowed member, add
-    // detach() to it AND wire the call here — same pattern as these three.
+    // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
+    // SnapAdaptor, AutotileAdaptor) all ship no-op destructors —
+    // either explicit `= default` in their headers, an empty body
+    // declared inline, or an empty out-of-line body (`{}`) in their
+    // .cpp (DBusScreenAdaptor + WindowTrackingAdaptor follow that
+    // shape). The substantive safety claim is "no member deref runs
+    // in any of their destructors" — confirmed by inspecting each
+    // header + cpp pair, not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
+    // method dispatch to them before we begin tearing down, and Qt's
+    // sender-destruction auto-disconnect cleans up signal wiring when the
+    // borrowed sender (m_layoutManager, etc.) is destroyed during member
+    // destruction. Adding detach() to those nine would require null-guarding
+    // every slot body (they currently rely on the "borrowed pointer is
+    // always valid" invariant), which is a larger refactor than the
+    // defense-in-depth buys. If a future adaptor grows a dtor body that
+    // derefs a borrowed member, add detach() to it AND wire the call here
+    // — same pattern as these four.
     if (m_settingsAdaptor) {
         m_settingsAdaptor->detach();
     }

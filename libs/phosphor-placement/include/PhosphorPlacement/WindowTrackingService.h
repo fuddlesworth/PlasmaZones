@@ -409,6 +409,19 @@ public:
     QString lastUsedZoneClass() const;
 
     /**
+     * @brief Screen name companion of the last-used-zone tracking.
+     *
+     * Returned alongside `lastUsedZoneId` so persistence-layer reloads
+     * can round-trip the companion fields without blanking them.
+     */
+    QString lastUsedScreenName() const;
+
+    /**
+     * @brief Virtual-desktop companion of the last-used-zone tracking.
+     */
+    int lastUsedDesktop() const;
+
+    /**
      * @brief Update the last-used-zone class tag without touching zone/screen.
      *
      * Called by the reactive metadata handler when a window renames mid-session

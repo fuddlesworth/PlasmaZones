@@ -23,6 +23,8 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../core/constants.h"
 #include "../config/settings.h"
+#include <PhosphorContext/ContextHandle.h>
+#include <PhosphorContext/IContextResolver.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -48,20 +50,21 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
     , m_settings(settings)
     , m_windowTracking(windowTracking)
 {
-    // Debug-only assertions for development
-    Q_ASSERT(overlay);
-    Q_ASSERT(detector);
-    Q_ASSERT(layoutManager);
-    Q_ASSERT(settings);
-    Q_ASSERT(windowTracking);
-
-    // Runtime null checks for release builds - log warning but don't crash
+    // Every dep is mandatory — a misordered Daemon wiring that
+    // constructs WindowDragAdaptor before its dependencies would
+    // otherwise produce a silently-no-op (but D-Bus-callable) object
+    // that crashes on the first slot dispatch instead of at
+    // construction. qFatal aborts in both debug and release, matching
+    // the sibling WindowTrackingAdaptor + SnapAdaptor defensive
+    // pattern, so a wiring regression is loud and immediate.
     if (!overlay || !detector || !layoutManager || !settings || !windowTracking) {
-        qCWarning(lcDbusWindow) << "One or more required dependencies are null!"
-                                << "overlay:" << (overlay != nullptr) << "detector:" << (detector != nullptr)
-                                << "layoutManager:" << (layoutManager != nullptr)
-                                << "settings:" << (settings != nullptr)
-                                << "windowTracking:" << (windowTracking != nullptr);
+        qFatal(
+            "WindowDragAdaptor: null dependency at construction "
+            "(overlay=%p, detector=%p, layoutManager=%p, settings=%p, windowTracking=%p) "
+            "— daemon-wiring bug",
+            static_cast<void*>(overlay), static_cast<void*>(detector), static_cast<void*>(layoutManager),
+            static_cast<void*>(settings), static_cast<void*>(windowTracking));
+        return; // See snapadaptor.cpp's matching `return` for the MSVC noreturn caveat.
     }
 
     // Connect to layout change signals to invalidate cached zone geometry mid-drag
@@ -266,6 +269,15 @@ void WindowDragAdaptor::cancelSnap()
     if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
         m_overlayService->hideSnapAssist();
     }
+    // Clear any pending snap-assist payload scheduled by a prior endDrag.
+    // QTimer::singleShot(0) for computeAndEmitSnapAssist fires on the next
+    // event-loop tick; if Escape lands between scheduling and that tick,
+    // computeAndEmitSnapAssist would still emit snapAssistReady for a snap
+    // the user just cancelled. Clearing the pending IDs makes the deferred
+    // call early-return on its empty-id guard. clearForCompositorReconnect
+    // does the same two-line clear for the same reason.
+    m_snapAssistPendingWindowId.clear();
+    m_snapAssistPendingScreenId.clear();
 }
 
 void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
@@ -294,6 +306,7 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_snapCancelled = false;
         m_wasSnapped = false;
         m_currentDragPolicy = {};
+        m_dragReorderActive = false;
     }
 
     // Drop pending snap-drag state if this window was the pending target
@@ -301,6 +314,17 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
     if (windowId == m_pendingSnapDragWindowId) {
         clearPendingSnapDragState();
         m_currentDragPolicy = {};
+    }
+
+    // Drop any pending snap-assist payload addressed to this window — endDrag
+    // schedules `computeAndEmitSnapAssist` via QTimer::singleShot(0); if the
+    // window closes before that tick, the deferred call would emit
+    // `snapAssistReady` for a window that no longer exists. cancelSnap and
+    // clearForCompositorReconnect do the same two-line clear for the same
+    // reason.
+    if (windowId == m_snapAssistPendingWindowId) {
+        m_snapAssistPendingWindowId.clear();
+        m_snapAssistPendingScreenId.clear();
     }
 
     // Delegate tracking cleanup to WindowTrackingAdaptor. We do not know the
@@ -399,15 +423,28 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
     QString selectorScreenId = resolved.screenId;
     QScreen* screen = resolved.qscreen;
-    if (screen
-        && isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, selectorScreenId,
-                             m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
-        if (m_zoneSelectorShown) {
-            m_zoneSelectorShown = false;
-            m_zoneSelectorShownOn.clear();
-            m_overlayService->hideZoneSelector();
+    // Disable gate via single resolver snapshot, mirroring the Pass 4
+    // pattern in drop.cpp's zone-selector and layout-activation gates.
+    // The legacy `isContextDisabled(..., AssignmentEntry::Snapping, ...)` had
+    // two issues: (a) split-snapshot race — the (desktop, activity) reads
+    // were independent of the mode lookup, so a virtual-desktop switch
+    // between them decoupled them; (b) hard-coded `Snapping` consulted the
+    // wrong disable list when the screen's live mode was autotile. Take
+    // one `handleFor` snapshot so all three axes agree, override the mode
+    // in place via the layout manager's per-(desktop, activity) lookup,
+    // then gate via `isDisabled`.
+    if (screen && m_contextResolver && m_layoutManager) {
+        PhosphorContext::ContextHandle selectorCtx = m_contextResolver->handleFor(selectorScreenId);
+        selectorCtx.mode =
+            m_layoutManager->modeForScreen(selectorScreenId, selectorCtx.virtualDesktop, selectorCtx.activity);
+        if (m_contextResolver->isDisabled(selectorCtx)) {
+            if (m_zoneSelectorShown) {
+                m_zoneSelectorShown = false;
+                m_zoneSelectorShownOn.clear();
+                m_overlayService->hideZoneSelector();
+            }
+            return;
         }
-        return;
     }
 
     bool nearEdge = isNearTriggerEdge(screen, cursorX, cursorY, selectorScreenId);
@@ -565,7 +602,8 @@ void WindowDragAdaptor::hideOverlayAndSelector()
         // AND set m_zoneDataDirty = false to protect the blank state.
         // Calling clearHighlight() here would redundantly re-write the
         // same properties AND flip m_zoneDataDirty back to true — the
-        // next shader-timer tick (shader.cpp:245) would then re-run
+        // next shader-timer tick (overlayservice/shader.cpp's
+        // `updateShaderUniforms` m_zoneDataDirty branch) would then re-run
         // updateZonesForAllWindows() and repopulate the zones, leaving
         // the overlay visibly showing zones after drag-end.
         if (!didIdle) {
@@ -592,6 +630,23 @@ void WindowDragAdaptor::clearForCompositorReconnect()
     // snapAssistReady would never be emitted.
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
+    // Drop any pending snap-drag state — if a beginDrag landed snap-path
+    // but activation never fired (no trigger held), the pending fields
+    // would survive compositor reconnect and bleed into the next drag
+    // until the next beginDrag's `clearPendingSnapDragState()` ran. Be
+    // explicit here so the post-reconnect state is well-defined.
+    clearPendingSnapDragState();
+    // Clear the last-computed drag policy. Both code paths in
+    // `handleWindowClosed` clear it on the equivalent "session torn down"
+    // events; clearForCompositorReconnect should match.
+    m_currentDragPolicy = {};
+    // Clear the last-logged activation-transition state. Otherwise the
+    // first dragMoved tick of the next drag may suppress its
+    // transition log because the stale value matches the new tick.
+    // beginDrag() resets this at the start of every drag, but the
+    // reconnect path can leave a window where the next beginDrag has
+    // not yet fired.
+    m_lastLoggedActivationActive = false;
     // Drop any picker-nav lambda registrations: their captures
     // include OverlayService* which the compositor-reconnect path
     // may tear down before the next picker-show re-registers.
@@ -637,15 +692,8 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // computeAndEmitSnapAssist consumes-and-clears the IDs after reading.
 }
 
-void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId)
+void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, const QRect& originalGeometry)
 {
-    // Delegate to overload - wasSnapped param is now unused but kept for compatibility
-    tryStorePreSnapGeometry(windowId, m_wasSnapped, m_originalGeometry);
-}
-
-void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, bool wasSnapped, const QRect& originalGeometry)
-{
-    Q_UNUSED(wasSnapped)
     // Store pre-tile geometry for restore on unsnap/float (first-only: overwrite=false).
     // PlacementEngineBase is the single store for unmanaged geometry.
     if (m_windowTracking && m_windowTracking->snapEngine() && originalGeometry.isValid()) {

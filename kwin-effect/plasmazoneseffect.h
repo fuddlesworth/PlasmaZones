@@ -638,9 +638,10 @@ private:
     ///
     /// Both cases are correctly handled by `tryBeginShaderForEvent`'s
     /// "skip the timer" branch. A future caller writing a manual install
-    /// path that needs to distinguish the two should compare the
-    /// pre-call `m_shaderTransitions.find(window)` result against the
-    /// post-call result to detect case (a).
+    /// path that needs to distinguish the two should snapshot
+    /// `m_shaderManager.findTransition(window)` (and its generation)
+    /// pre-call and compare against the post-call snapshot to detect
+    /// case (a).
     bool beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
                                bool holdAddedGrab = false);

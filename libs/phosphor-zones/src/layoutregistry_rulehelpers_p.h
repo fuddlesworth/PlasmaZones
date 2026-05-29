@@ -80,6 +80,15 @@ bool matchIsExactContext(const PWR::MatchExpression& match, const QString& scree
 // the matchIsExactContext* shape filters reject a catch-all anyway.
 bool hasEngineModeAction(const PWR::WindowRule& rule);
 
+// True when every action on @p rule is one of the three assignment slots
+// (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). False on an
+// empty action list. Used by the shape-based fallback in
+// findExactContextRule to refuse to claim a user-authored rule that
+// carries non-assignment actions (SetOpacity, OverrideAnimation*, Float,
+// Exclude, ...) — admitting it would silently strip those actions
+// through the assignment-rebuild path.
+bool isPureAssignmentRule(const PWR::WindowRule& rule);
+
 // Shape predicates for the per-screen-base / per-desktop / per-activity
 // context rule families — used by the batch setters to drop one family
 // before writing the new entries, and by the introspection helpers to keep

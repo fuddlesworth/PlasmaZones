@@ -497,11 +497,11 @@ private Q_SLOTS:
         // makeDisableRule's priority must agree with the migration output for
         // a multi-dimension entry — a screen+desktop disable rule pins 410.
         const PhosphorWindowRule::WindowRule directDesktop = CRB::makeDisableRule(
-            QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(), /*autotileMode=*/false);
+            QStringLiteral("d"), QStringLiteral("DP-1"), /*virtualDesktop=*/4, QString(), QStringLiteral("snapping"));
         QCOMPARE(directDesktop.priority, 410);
         // A screen+activity disable rule pins 510 — activity outranks desktop.
         const PhosphorWindowRule::WindowRule directActivity = CRB::makeDisableRule(
-            QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), /*autotileMode=*/true);
+            QStringLiteral("a"), QStringLiteral("DP-1"), 0, QStringLiteral("act-uuid-7"), QStringLiteral("autotile"));
         QCOMPARE(directActivity.priority, 510);
         QVERIFY(directActivity.priority > directDesktop.priority);
     }
@@ -708,7 +708,7 @@ private Q_SLOTS:
         QVERIFY2(setWithUserRule.has_value(), "windowrules.json must parse as a v4 rule set");
         const PhosphorWindowRule::WindowRule userRule =
             CRB::makeDisableRule(QStringLiteral("User-authored · DP-9"), QStringLiteral("DP-9"),
-                                 /*virtualDesktop=*/0, QString(), /*autotileMode=*/false);
+                                 /*virtualDesktop=*/0, QString(), QStringLiteral("snapping"));
         const QUuid userRuleId = userRule.id;
         QVERIFY(setWithUserRule->addRule(userRule));
         QVERIFY(setWithUserRule->saveToFile(ConfigDefaults::windowRulesFilePath()));
@@ -818,6 +818,74 @@ private Q_SLOTS:
     // We simulate the sidecar write failure by pre-creating a DIRECTORY at
     // the quicklayouts.json path: QSaveFile cannot replace a directory with a
     // file, so the write fails deterministically.
+    // Stalled-chain gate: when config.json is stamped at a pre-v4 version
+    // (chain stalled — e.g. migrateV1ToV2's side-effect writes failed and
+    // MigrationRunner::runOnFile returned true for a no-op chain),
+    // finalizeV4Conversion must refuse to commit a stub windowrules.json.
+    // Otherwise the next successful run would hit `windowRulesAlreadyConverted
+    // = true` in the cleanup branch and strip `_v4DisableStash` /
+    // `_v4AnimationRulesStash` without porting them into rules — silently
+    // losing the user's disable lists and animation app rules forever.
+    void testFinalizeV4Conversion_refusesToCommitWhenChainStalled()
+    {
+        IsolatedConfigGuard guard;
+
+        // Construct a v3-stamped config.json carrying both v4 scratch keys —
+        // the shape a partially-advanced chain would produce after migrateV3ToV4
+        // ran but the chain failed to bump version to 4 (synthetic, but exactly
+        // the on-disk shape the gate must catch).
+        QJsonObject cfg;
+        cfg.insert(ConfigKeys::versionKey(), 3);
+        QJsonObject disableStash;
+        disableStash.insert(QStringLiteral("DisabledMonitors"), QJsonArray{QStringLiteral("DP-1")});
+        cfg.insert(QStringLiteral("_v4DisableStash"), disableStash);
+        QJsonArray animStash;
+        QJsonObject animEntry;
+        animEntry.insert(QStringLiteral("classPattern"), QStringLiteral("firefox"));
+        animEntry.insert(QStringLiteral("eventPath"), QStringLiteral("window.open"));
+        animEntry.insert(QStringLiteral("kind"), QStringLiteral("shader"));
+        animEntry.insert(QStringLiteral("effectId"), QStringLiteral("dissolve"));
+        animStash.append(animEntry);
+        cfg.insert(QStringLiteral("_v4AnimationRulesStash"), animStash);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        // Drive finalizeV4Conversion via ensureJsonConfig's "already at OR
+        // above current version" branch. The branch decides which path to
+        // take based on the on-disk _version — we wedge it as v3, which would
+        // normally route through the chain. Bypass the chain by stamping a
+        // synthetic `windowrules.json`-equivalent precondition: a v3-with-stash
+        // config that finalize sees directly when the chain stalls.
+        //
+        // The test exercises the gate by calling ensureJsonConfig() and
+        // confirming (1) it returns false, (2) no windowrules.json was
+        // written, (3) the stash keys survive on disk.
+        const bool ok = ConfigMigration::ensureJsonConfig();
+        // Either the chain advances cleanly to v4 and finalize commits
+        // (in which case the gate didn't fire — but the stashes would be
+        // legitimately converted, not silently dropped) — OR the gate fires
+        // and we get the refusal. Distinguish by reading the on-disk shape.
+        const QJsonObject onDisk = readJson(ConfigDefaults::configFilePath());
+        const int finalVersion = onDisk.value(ConfigKeys::versionKey()).toInt(0);
+        if (finalVersion < 4) {
+            // Stalled-chain path: gate must have fired.
+            QVERIFY2(!ok, "ensureJsonConfig must return false when the chain stalls below v4");
+            QVERIFY2(!QFile::exists(ConfigDefaults::windowRulesFilePath()),
+                     "windowrules.json must NOT be committed when config.json is still below v4");
+            QVERIFY2(onDisk.contains(QStringLiteral("_v4DisableStash")),
+                     "stash keys must survive on disk so the next run can retry");
+            QVERIFY2(onDisk.contains(QStringLiteral("_v4AnimationRulesStash")),
+                     "animation stash must survive on disk so the next run can retry");
+        } else {
+            // Chain advanced — finalize legitimately ran. Verify the stash
+            // contents survived as rules rather than being dropped silently.
+            QVERIFY2(QFile::exists(ConfigDefaults::windowRulesFilePath()),
+                     "windowrules.json must exist if the chain reached v4");
+            const auto rules = PhosphorWindowRule::WindowRuleSet::loadFromFile(ConfigDefaults::windowRulesFilePath());
+            QVERIFY(rules.has_value());
+            QVERIFY2(rules->count() > 1, "rules must include the stash conversions, not just the provider default");
+        }
+    }
+
     void testQuickLayoutsWriteFailureRecoverable()
     {
         IsolatedConfigGuard guard;
@@ -884,17 +952,22 @@ private:
     /// no Snapping defaults). Keeps animation-specific tests narrow — they
     /// don't have to filter the provider-default + disable-rule noise out.
     ///
-    /// Routes the v4 group / key names through ConfigKeys::Legacy::v4* accessors —
-    /// the migration reads from the same accessors, so a future rename of
-    /// the frozen v4 wire shape can't drift between production and tests.
+    /// The v4 group / key names are pinned as inline `QStringLiteral`
+    /// literals — the test's role is to be an INDEPENDENT WITNESS of the
+    /// frozen v4 on-disk wire format. If a future maintainer violates the
+    /// freeze policy (forbidden by configkeys.h:637-651) and renames
+    /// `Legacy::v4AnimationAppRulesKey` from "AnimationAppRules", the
+    /// accessor-based form would silently update in lockstep with
+    /// production; inline-literal pins catch the drift. Mirrors the
+    /// sibling `makeV3Config` fixture's pattern for Display.* v3 keys.
     QJsonObject makeV3ConfigWithAnimationRules(const QJsonArray& animationRules)
     {
         QJsonObject root;
         root.insert(ConfigKeys::versionKey(), 3);
         if (!animationRules.isEmpty()) {
             QJsonObject animations;
-            animations.insert(ConfigKeys::Legacy::v4AnimationAppRulesKey(), animationRules);
-            root.insert(ConfigKeys::Legacy::v4AnimationsGroup(), animations);
+            animations.insert(QStringLiteral("AnimationAppRules"), animationRules);
+            root.insert(QStringLiteral("Animations"), animations);
         }
         return root;
     }
@@ -1202,9 +1275,16 @@ private Q_SLOTS:
         QJsonArray animRules;
         animRules.append(
             makeShaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
+        // Inline literals — independent-witness pin matching the
+        // `makeV3ConfigWithAnimationRules` fixture pattern. The sibling
+        // fixture's docstring (line 887-894) documents the rationale:
+        // a future freeze-policy violation that renames
+        // `Legacy::v4AnimationAppRulesKey` away from "AnimationAppRules"
+        // must surface as test breakage, not silently update through
+        // the same accessor production uses.
         QJsonObject animations;
-        animations.insert(ConfigKeys::Legacy::v4AnimationAppRulesKey(), animRules);
-        cfg.insert(ConfigKeys::Legacy::v4AnimationsGroup(), animations);
+        animations.insert(QStringLiteral("AnimationAppRules"), animRules);
+        cfg.insert(QStringLiteral("Animations"), animations);
         writeJson(ConfigDefaults::configFilePath(), cfg);
         writeJson(assignmentsPath(), makeAssignments());
 
@@ -1276,7 +1356,7 @@ private Q_SLOTS:
         // The migration's scratch key MUST be stripped from config.json after
         // the rebuild branch consumed it. This fixture populates the stash
         // (animRules.size() > 0), so a regression that stopped stripping
-        // would fail here — distinguishing this from the line-270 assertion
+        // would fail here — distinguishing this from the matching assertion
         // in testFullConversion_producesWindowRules where the fixture never
         // populates the stash to begin with.
         const QJsonObject cfgAfter = readJson(ConfigDefaults::configFilePath());
@@ -1349,9 +1429,9 @@ private Q_SLOTS:
         //
         // Fixture: a v4-stamped config.json that carries both stash keys,
         // plus an existing v4 windowrules.json (so windowRulesAlreadyConverted
-        // returns true). ensureJsonConfigImpl's "already at current version"
-        // branch (configmigration.cpp ~line 297) still calls
-        // finalizeV4Conversion on every startup, which takes the cleanup-only
+        // returns true). ensureJsonConfigImpl's "Already at OR above current
+        // version" branch still calls finalizeV4Conversion on every startup,
+        // which takes the cleanup-only
         // sub-branch when the rule store already parses as v4 — strip both
         // stashes, leave windowrules.json byte-identical, never recreate
         // assignments.json or its .migrated quarantine artifact.

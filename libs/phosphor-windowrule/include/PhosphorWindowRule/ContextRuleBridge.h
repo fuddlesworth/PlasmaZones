@@ -63,7 +63,8 @@ namespace PhosphorWindowRule {
 namespace ContextRuleBridge {
 
 /// The base priority of any pinned context rule. A rule that pins at least
-/// the screen sits at @c kBasePriority + the per-dimension weights below.
+/// one dimension (screen, desktop, or activity) sits at @c kBasePriority +
+/// the per-dimension weights below.
 inline constexpr int kBasePriority = 300;
 inline constexpr int kActivityWeight = 200;
 inline constexpr int kDesktopWeight = 100;
@@ -187,10 +188,12 @@ inline int contextPriority(bool screenPinned, bool desktopPinned, bool activityP
  *        for a given (screen, desktop, activity) tuple.
  *
  * Exposing the id derivation as a public helper lets callers look up a stored
- * assignment rule by its identity tuple in O(1) (via
- * `WindowRuleSet::ruleById`) instead of scanning the rule list. Two callers
- * deriving the same tuple necessarily land on the same id, so the lookup
- * stays correct across processes and across persistence round-trips.
+ * assignment rule by deterministic id derivation rather than evaluating each
+ * rule's match shape — `WindowRuleSet::ruleById` itself is still a linear
+ * scan, but the per-rule comparison collapses to a single QUuid equality
+ * instead of a tuple-shape predicate. Two callers deriving the same tuple
+ * necessarily land on the same id, so the lookup stays correct across
+ * processes and across persistence round-trips.
  */
 inline QUuid assignmentRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity)
 {
@@ -201,18 +204,35 @@ inline QUuid assignmentRuleIdFor(const QString& screenId, int virtualDesktop, co
 
 /**
  * @brief The deterministic v5 rule id @ref makeDisableRule would assign for a
- *        given (screen, desktop, activity, autotileMode) tuple.
+ *        given `(screen, desktop, activity, modeToken)` tuple.
  *
- * The disable rule's id includes the engine the rule disables — snapping and
- * autotile disables for the same context are distinct rules, so the id helper
- * mirrors that distinction.
+ * The disable rule's id includes the engine the rule disables — different
+ * engines' disables for the same context are distinct rules, so the id helper
+ * mirrors that distinction. @p modeToken is the wire string for the engine
+ * (e.g. @c "snapping" / @c "autotile" / @c "scrolling") — supplying it as a
+ * token (not a `bool`) means a future engine extends the identity key namespace
+ * without rewriting existing UUIDs (the @c "disable-snapping" and
+ * @c "disable-autotile" identity keys are preserved verbatim, so every rule
+ * already on disk keeps its id).
  */
-inline QUuid disableRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity, bool autotileMode)
+inline QUuid disableRuleIdFor(const QString& screenId, int virtualDesktop, const QString& activity,
+                              const QString& modeToken)
 {
-    return QUuid::createUuidV5(detail::namespaceUuid(),
-                               detail::contextIdentityKey(autotileMode ? QLatin1StringView("disable-autotile")
-                                                                       : QLatin1StringView("disable-snapping"),
-                                                          screenId, virtualDesktop, activity));
+    // contextIdentityKey() takes a QLatin1StringView, but the source bytes
+    // are produced via `toUtf8()` so non-Latin1 tokens (a future
+    // non-ASCII mode wire string) injectively distinguish their UUIDs —
+    // `toLatin1()` replaces every non-Latin1 codepoint with '?', collapsing
+    // distinct tokens onto identical UUIDs. For the current ASCII-only
+    // vocabulary ("snapping" / "autotile" / "scrolling") UTF-8 and
+    // Latin1 produce identical bytes, so existing rule UUIDs are preserved
+    // verbatim; only future non-ASCII tokens diverge. The view's source
+    // bytes must live for the full call — naming the QByteArray local
+    // keeps it from expiring before createUuidV5 reads through the view.
+    const QByteArray tag = QByteArray("disable-") + modeToken.toUtf8();
+    return QUuid::createUuidV5(
+        detail::namespaceUuid(),
+        detail::contextIdentityKey(QLatin1StringView(tag.constData(), static_cast<qsizetype>(tag.size())), screenId,
+                                   virtualDesktop, activity));
 }
 
 /**
@@ -251,7 +271,8 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * `snappingLayout` and `tilingAlgorithm` so flipping mode never drops the
  * other field. The migrated rule therefore carries up to **three** actions:
  *
- *   - `SetEngineMode` — always (the mode token, "snapping" or "autotile").
+ *   - `SetEngineMode` — always (the mode token, e.g. "snapping" / "autotile"
+ *     / "scrolling").
  *   - `SetSnappingLayout` — only when @p snappingLayout is non-empty (the
  *     action descriptor rejects an empty `layoutId`).
  *   - `SetTilingAlgorithm` — only when @p tilingAlgorithm is non-empty (the
@@ -261,29 +282,41 @@ inline MatchExpression makeContextMatch(const QString& screenId, int virtualDesk
  * algorithm" shape) yields a single `SetEngineMode` action; the mode token
  * alone preserves the user's intent.
  *
- * @param autotileMode true → mode token "autotile"; false → "snapping".
+ * Open-vocabulary by design: the `SetEngineMode` descriptor's validator
+ * checks only that `modeToken` is non-empty — vocabulary validation lives
+ * at consumers via `PhosphorZones::modeFromWireString`, NOT at load time.
+ * Settings routes `PhosphorZones::Mode → QString` via `modeToWireString`
+ * (the authoritative mapping), so a production caller never produces an
+ * unrecognised token. An empty token writes a malformed rule that load
+ * does reject (the validator's non-empty check fires there). An unknown
+ * token like `"bogus"` survives load and is silently inert at consumption:
+ * the assignment-side consumer `PhosphorZones::RuleHelpers::
+ * entryFromRuleMatchActions` decodes via `modeFromWireString`, which
+ * returns `nullopt` for unknown tokens and leaves the entry on its
+ * Snapping default. Every token the validator accepts — today
+ * `snapping`/`autotile`/`scrolling`, see `engineModeOptions()` in
+ * `ruleaction.cpp` — round-trips end-to-end through the consumer.
  */
-inline QList<RuleAction> makeAssignmentActions(bool autotileMode, const QString& snappingLayout,
+inline QList<RuleAction> makeAssignmentActions(const QString& modeToken, const QString& snappingLayout,
                                                const QString& tilingAlgorithm)
 {
     QList<RuleAction> actions;
 
     RuleAction modeAction;
     modeAction.type = QString(ActionType::SetEngineMode);
-    modeAction.params.insert(QLatin1String("mode"),
-                             autotileMode ? QLatin1String("autotile") : QLatin1String("snapping"));
+    modeAction.params.insert(ActionParam::Mode, modeToken);
     actions.append(modeAction);
 
     if (!snappingLayout.isEmpty()) {
         RuleAction layoutAction;
         layoutAction.type = QString(ActionType::SetSnappingLayout);
-        layoutAction.params.insert(QLatin1String("layoutId"), snappingLayout);
+        layoutAction.params.insert(ActionParam::LayoutId, snappingLayout);
         actions.append(layoutAction);
     }
     if (!tilingAlgorithm.isEmpty()) {
         RuleAction tilingAction;
         tilingAction.type = QString(ActionType::SetTilingAlgorithm);
-        tilingAction.params.insert(QLatin1String("algorithm"), tilingAlgorithm);
+        tilingAction.params.insert(ActionParam::Algorithm, tilingAlgorithm);
         actions.append(tilingAction);
     }
     return actions;
@@ -294,10 +327,11 @@ inline QList<RuleAction> makeAssignmentActions(bool autotileMode, const QString&
  *
  * The match is context-only; the priority follows the cascade formula; the
  * actions are the lossless three-action set. @p name is a human-readable
- * label for the settings UI.
+ * label for the settings UI. @p modeToken is the wire string for the
+ * assignment's mode (see `makeAssignmentActions` for vocabulary contract).
  */
 inline WindowRule makeAssignmentRule(const QString& name, const QString& screenId, int virtualDesktop,
-                                     const QString& activity, bool autotileMode, const QString& snappingLayout,
+                                     const QString& activity, const QString& modeToken, const QString& snappingLayout,
                                      const QString& tilingAlgorithm)
 {
     WindowRule rule;
@@ -308,7 +342,7 @@ inline WindowRule makeAssignmentRule(const QString& name, const QString& screenI
     rule.enabled = true;
     rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
     rule.match = makeContextMatch(screenId, virtualDesktop, activity);
-    rule.actions = makeAssignmentActions(autotileMode, snappingLayout, tilingAlgorithm);
+    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm);
     return rule;
 }
 
@@ -317,9 +351,10 @@ inline WindowRule makeAssignmentRule(const QString& name, const QString& screenI
  *
  * An empty-`All{}` match at priority 0 — strictly the lowest. It carries the
  * global default mode/layout the cascade falls through to when no pinned
- * context rule matches.
+ * context rule matches. @p modeToken is the wire string for the default
+ * engine mode (see `makeAssignmentActions` for vocabulary contract).
  */
-inline WindowRule makeProviderDefaultRule(const QString& name, bool autotileMode, const QString& snappingLayout,
+inline WindowRule makeProviderDefaultRule(const QString& name, const QString& modeToken, const QString& snappingLayout,
                                           const QString& tilingAlgorithm)
 {
     WindowRule rule;
@@ -332,7 +367,7 @@ inline WindowRule makeProviderDefaultRule(const QString& name, bool autotileMode
     rule.enabled = true;
     rule.priority = kProviderDefaultPriority;
     rule.match = MatchExpression(); // empty All{} catch-all
-    rule.actions = makeAssignmentActions(autotileMode, snappingLayout, tilingAlgorithm);
+    rule.actions = makeAssignmentActions(modeToken, snappingLayout, tilingAlgorithm);
     return rule;
 }
 
@@ -340,9 +375,16 @@ inline WindowRule makeProviderDefaultRule(const QString& name, bool autotileMode
  * @brief Build a `DisableEngine` context rule for a per-mode disable entry.
  *
  * Per-mode disable lists ("snapping is off on monitor X") become context
- * rules carrying a single `DisableEngine` action. The `mode` param records
- * which engine the rule disables ("snapping" / "autotile") so the evaluator
- * can scope the gate.
+ * rules carrying a single `DisableEngine` action. @p modeToken records which
+ * engine the rule disables (the wire string, e.g. @c "snapping" /
+ * @c "autotile" / @c "scrolling") so the evaluator can scope the gate.
+ *
+ * Validation: this helper trusts the caller to pass a token recognised by the
+ * `DisableEngine` descriptor's validator. The Settings layer routes Mode →
+ * token through `PhosphorZones::modeToWireString`, so an unrecognised token
+ * here is a programmer error and the resulting rule would be rejected at
+ * load by `RuleAction::fromJson`. Passing an empty token writes a malformed
+ * rule with action params `{mode: ""}` — also caught at load.
  *
  * The disable rule shares the cascade priority formula with assignment rules
  * — a desktop-scoped disable outranks a monitor-scoped one, mirroring the
@@ -350,13 +392,13 @@ inline WindowRule makeProviderDefaultRule(const QString& name, bool autotileMode
  * the other way (a more specific disable wins).
  */
 inline WindowRule makeDisableRule(const QString& name, const QString& screenId, int virtualDesktop,
-                                  const QString& activity, bool autotileMode)
+                                  const QString& activity, const QString& modeToken)
 {
     WindowRule rule;
     // Deterministic id — a disable rule's identity is its context tuple plus
-    // which engine it disables (snapping/autotile disables for the same
-    // context are distinct rules and must not collide).
-    rule.id = disableRuleIdFor(screenId, virtualDesktop, activity, autotileMode);
+    // which engine it disables (per-mode disables for the same context are
+    // distinct rules and must not collide).
+    rule.id = disableRuleIdFor(screenId, virtualDesktop, activity, modeToken);
     rule.name = name;
     rule.enabled = true;
     rule.priority = contextPriority(!screenId.isEmpty(), virtualDesktop > 0, !activity.isEmpty());
@@ -364,7 +406,7 @@ inline WindowRule makeDisableRule(const QString& name, const QString& screenId, 
 
     RuleAction action;
     action.type = QString(ActionType::DisableEngine);
-    action.params.insert(QLatin1String("mode"), autotileMode ? QLatin1String("autotile") : QLatin1String("snapping"));
+    action.params.insert(ActionParam::Mode, modeToken);
     rule.actions.append(action);
     return rule;
 }
@@ -388,9 +430,12 @@ inline bool isContextEqualsLeaf(const MatchExpression& expr, Field field)
  *
  * @p screenId / @p virtualDesktop / @p activity are reset, then filled from
  * whichever `ScreenId` / `VirtualDesktop` / `Activity` equality leaves the
- * match carries. An empty catch-all leaves all three at their defaults.
- * Window-property leaves (AppId etc.) are ignored — only context fields are
- * read, so a mixed *flat* rule still yields its context projection.
+ * match carries. An empty catch-all leaves all three at their defaults
+ * and returns true. Window-property leaves (AppId etc.) are ignored — only
+ * context fields are read, so a mixed *flat* rule still yields its context
+ * projection. When no context-equality leaf was found (e.g. an `All{}` of
+ * only window-property leaves), the function returns false; the empty
+ * catch-all remains the only success case with all-default outputs.
  *
  * **Contract** — this is strictly the inverse of @ref makeContextMatch, so it
  * only understands the shapes that helper produces: an empty catch-all, a
@@ -449,7 +494,25 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
                 return false;
             }
             sawDesktop = true;
-            virtualDesktop = leaf.predicate().value.toInt();
+            // Refuse a malformed VirtualDesktop value — `QVariant::toInt()`
+            // silently returns 0 for "abc" or a non-positive int, which the
+            // bridge contract reads as "no desktop pinned" and would
+            // misclassify the rule as a monitor-axis match. `makeContextMatch`
+            // only stores a strictly-positive int here, so any other source
+            // is a hand-edit or migration error — bail to the same
+            // refuse-to-coerce shape the duplicate-leaf guards use.
+            bool ok = false;
+            const int desktopValue = leaf.predicate().value.toInt(&ok);
+            if (!ok || desktopValue <= 0) {
+                qCWarning(lcWindowRule)
+                    << "ContextRuleBridge::contextDimsOf: malformed VirtualDesktop value — refusing to coerce."
+                    << leaf.predicate().value;
+                screenId.clear();
+                virtualDesktop = 0;
+                activity.clear();
+                return false;
+            }
+            virtualDesktop = desktopValue;
         } else if (isContextEqualsLeaf(leaf, Field::Activity)) {
             if (sawActivity) {
                 qCWarning(lcWindowRule)
@@ -464,6 +527,17 @@ inline bool contextDimsOf(const MatchExpression& match, QString& screenId, int& 
         }
         // A non-context or non-equality leaf is ignored — a flat mixed rule
         // still yields its context projection, per the contract above.
+    }
+    // If no context-equality leaf was matched, the input was either a
+    // context-axis-empty mixed rule (e.g. `ScreenId NotEquals "DP-1"`) or
+    // a structurally-malformed All{}. Either way, no decomposition succeeded
+    // — return false so downstream classifiers don't read this as a
+    // successful catch-all decode. The catch-all case is handled at the
+    // top of the function (`isCatchAll() → return true`); reaching here
+    // with all three flags false means the leaves were all non-equality
+    // or non-context.
+    if (!sawScreen && !sawDesktop && !sawActivity) {
+        return false;
     }
     return true;
 }
@@ -531,18 +605,27 @@ inline bool matchIsExactContext(const MatchExpression& match, const QString& scr
 }
 
 /**
- * @brief If @p rule is a per-mode disable rule, return whether it disables
- *        autotile (`true`) or snapping (`false`); otherwise nullopt.
+ * @brief If @p rule is a per-mode disable rule, return its mode wire token
+ *        verbatim; otherwise nullopt.
  *
  * A rule qualifies iff **exactly one** of its actions is a `DisableEngine`
- * action *and* that action's `mode` param is a recognised token
- * ("snapping" / "autotile"). The exactly-one rule is enforced: a second
- * `DisableEngine` action makes the rule ambiguous — it is not a
- * bridge-authored disable rule — so the function bails to nullopt. An
- * unrecognised `mode` token is likewise rejected rather than silently
- * coerced to "snapping".
+ * action *and* that action's `mode` param is a non-empty wire token. The
+ * exactly-one rule is enforced: a second `DisableEngine` action makes the
+ * rule ambiguous — it is not a bridge-authored disable rule — so the
+ * function bails to nullopt. An empty token is treated as a malformed
+ * payload and also returns nullopt.
+ *
+ * Open-vocabulary within the bridge itself. At persistence boundaries the
+ * DisableEngine action descriptor's load-time validator already enforces
+ * the closed `engineModeOptions()` set (see ruleaction.cpp), so a rule
+ * that survived load has a vocabulary-valid token. The bridge keeps the
+ * verbatim contract so an in-memory caller building a rule programmatically
+ * — or a test pinning the bridge's unrecognised-token behaviour — can
+ * carry any non-empty token without coupling PhosphorWindowRule to
+ * PhosphorZones, and so a future mode addition round-trips through the
+ * bridge without a coordinated edit.
  */
-inline std::optional<bool> disableRuleAutotileMode(const WindowRule& rule)
+inline std::optional<QString> disableRuleMode(const WindowRule& rule)
 {
     const RuleAction* disableAction = nullptr;
     for (const RuleAction& action : rule.actions) {
@@ -559,15 +642,17 @@ inline std::optional<bool> disableRuleAutotileMode(const WindowRule& rule)
     if (disableAction == nullptr) {
         return std::nullopt;
     }
-    const QString mode = disableAction->params.value(QLatin1String("mode")).toString();
-    if (mode == QLatin1String("autotile")) {
-        return true;
+    const QString mode = disableAction->params.value(ActionParam::Mode).toString();
+    if (mode.isEmpty()) {
+        // An empty token is a malformed payload, not a recognised mode.
+        return std::nullopt;
     }
-    if (mode == QLatin1String("snapping")) {
-        return false;
-    }
-    // An unrecognised mode token — reject rather than defaulting.
-    return std::nullopt;
+    // The wire vocabulary is the open set the DisableEngine descriptor's
+    // validator recognises — Settings does the wire → Mode mapping via
+    // `PhosphorZones::modeFromWireString`, which is the authoritative
+    // recognised-tokens list. This helper stays string-typed so the
+    // PhosphorWindowRule lib does not need to depend on PhosphorZones.
+    return mode;
 }
 
 } // namespace ContextRuleBridge

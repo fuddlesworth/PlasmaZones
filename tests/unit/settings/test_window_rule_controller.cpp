@@ -37,6 +37,9 @@ private Q_SLOTS:
     void addUpdateRemoveByUuid();
     void dirtyTrackingAndRevert();
     void monitorOverviewSummarises();
+    void monitorOverviewClassifiesScrollingWithoutLayoutName();
+    void monitorOverviewDisableEngineMatchesEffectiveMode();
+    void engineModePickerExposesAllVocabularyTokens();
     void moveRuleReorders();
     void authoringMetadata();
     void templatesProduceSeededRules();
@@ -175,6 +178,165 @@ void TestWindowRuleController::monitorOverviewSummarises()
     }
     QVERIFY(sawDp2);
     QVERIFY(sawEdp1);
+}
+
+void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutName()
+{
+    // Pin that a Scrolling-mode rule, even when carrying a stale snapping
+    // layout in its action payload, produces an EMPTY `layoutName` on the
+    // overview tile. The pre-Pass-3 inline `== "autotile"` / `== "snapping"`
+    // classifier silently coerced Scrolling rules into the "no engine pin
+    // → prefer snapping layout" fallback, mis-labelling the tile with the
+    // leftover layout. A regression to that shape is caught here.
+    WindowRuleController controller;
+
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+    match[QStringLiteral("value")] = QStringLiteral("DP-3");
+    rule[QStringLiteral("match")] = match;
+    // Build a SetEngineMode=scrolling action ALONGSIDE a stale snapping
+    // layout payload — the bug class drops the SetEngineMode mode token
+    // (silently mapping scrolling → snapping) and surfaces the snapping
+    // layout as the tile's layoutName. With the fix, the classifier sees
+    // mode=Scrolling and leaves layoutName empty.
+    rule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("scrolling")}},
+                     QVariantMap{{QStringLiteral("type"), QStringLiteral("setSnappingLayout")},
+                                 {QStringLiteral("layoutId"), QStringLiteral("{stale-layout-id-not-real}")}}};
+    QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-3")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 1);
+    const QVariantMap tile = overview.first().toMap();
+    QCOMPARE(tile.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-3"));
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+    QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
+    // The Scrolling branch yields no layout/algorithm to label — the tile
+    // must read empty here, NOT the stale snapping layout id/name that
+    // the pre-fix classifier would have surfaced.
+    QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
+             qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
+}
+
+void TestWindowRuleController::monitorOverviewDisableEngineMatchesEffectiveMode()
+{
+    // Pin that `tilingEnabled` on the overview tile resolves the
+    // DisableEngine action against the screen's EFFECTIVE engine mode,
+    // not "any DisableEngine action present". A DisableEngine{snapping}
+    // rule on an Autotile-effective screen must NOT flip tilingEnabled
+    // off — the cascade resolution in the daemon would never treat that
+    // rule as disabling autotile. The matching positive case
+    // (DisableEngine{mode} == effective mode) must flip it off.
+    WindowRuleController controller;
+    // DP-A: SetEngineMode=autotile + DisableEngine=autotile → engine off.
+    {
+        QVariantMap modeRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = modeRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-A");
+        modeRule[QStringLiteral("match")] = match;
+        modeRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(modeRule).isEmpty());
+
+        QVariantMap disableRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap dmatch = disableRule.value(QStringLiteral("match")).toMap();
+        dmatch[QStringLiteral("value")] = QStringLiteral("DP-A");
+        disableRule[QStringLiteral("match")] = dmatch;
+        disableRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(disableRule).isEmpty());
+    }
+    // DP-B: SetEngineMode=autotile + DisableEngine=snapping → engine ON
+    // (cross-mode disable must not flip the tile).
+    {
+        QVariantMap modeRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = modeRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-B");
+        modeRule[QStringLiteral("match")] = match;
+        modeRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(modeRule).isEmpty());
+
+        QVariantMap disableRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap dmatch = disableRule.value(QStringLiteral("match")).toMap();
+        dmatch[QStringLiteral("value")] = QStringLiteral("DP-B");
+        disableRule[QStringLiteral("match")] = dmatch;
+        disableRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                     {QStringLiteral("mode"), QStringLiteral("snapping")}}};
+        QVERIFY(!controller.addRuleFromJson(disableRule).isEmpty());
+    }
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-A")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-B")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+    bool sawA = false;
+    bool sawB = false;
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        const QString id = tile.value(QStringLiteral("screenId")).toString();
+        if (id == QLatin1String("DP-A")) {
+            sawA = true;
+            QCOMPARE(tile.value(QStringLiteral("tilingEnabled")).toBool(), false);
+        } else if (id == QLatin1String("DP-B")) {
+            sawB = true;
+            QCOMPARE(tile.value(QStringLiteral("tilingEnabled")).toBool(), true);
+        }
+    }
+    QVERIFY(sawA);
+    QVERIFY(sawB);
+}
+
+void TestWindowRuleController::engineModePickerExposesAllVocabularyTokens()
+{
+    // Pin that the SetEngineMode + DisableEngine pickers expose exactly
+    // three options — snapping / autotile / scrolling — with non-empty
+    // localised labels. A regression that dropped the Scrolling enum
+    // option from `engineModeOptions()` or the GPL settings-layer label
+    // map would surface here.
+    WindowRuleController controller;
+    const QVariantList types = controller.actionTypes();
+    // Each entry in `actionTypes()` carries its own `params` list (see the
+    // descriptor docstring in windowrulecontroller.h:281-291). For each
+    // param of kind="enum", the `options` list contains `{value, label}`
+    // pairs. We walk to the `mode` param of each action and extract its
+    // options to verify the closed engine-mode vocabulary.
+    const auto findModeOptions = [&](const QString& typeWire) -> QVariantList {
+        for (const QVariant& t : types) {
+            const QVariantMap tm = t.toMap();
+            if (tm.value(QStringLiteral("value")).toString() != typeWire) {
+                continue;
+            }
+            for (const QVariant& p : tm.value(QStringLiteral("params")).toList()) {
+                const QVariantMap pm = p.toMap();
+                if (pm.value(QStringLiteral("key")).toString() == QLatin1String("mode")) {
+                    return pm.value(QStringLiteral("options")).toList();
+                }
+            }
+        }
+        return {};
+    };
+    for (const QString& actionWire : {QStringLiteral("setEngineMode"), QStringLiteral("disableEngine")}) {
+        const QVariantList options = findModeOptions(actionWire);
+        QCOMPARE(options.size(), 3);
+        QStringList wireValues;
+        for (const QVariant& opt : options) {
+            const QVariantMap om = opt.toMap();
+            wireValues.append(om.value(QStringLiteral("value")).toString());
+            QVERIFY2(!om.value(QStringLiteral("label")).toString().isEmpty(),
+                     qPrintable(QStringLiteral("empty label for %1 / %2")
+                                    .arg(actionWire, om.value(QStringLiteral("value")).toString())));
+        }
+        QVERIFY2(wireValues.contains(QStringLiteral("snapping")), qPrintable(wireValues.join(QLatin1Char(','))));
+        QVERIFY2(wireValues.contains(QStringLiteral("autotile")), qPrintable(wireValues.join(QLatin1Char(','))));
+        QVERIFY2(wireValues.contains(QStringLiteral("scrolling")), qPrintable(wireValues.join(QLatin1Char(','))));
+    }
 }
 
 void TestWindowRuleController::moveRuleReorders()
@@ -422,13 +584,16 @@ void TestWindowRuleController::defaultPayloadForSeedsParams()
     QCOMPARE(floatPayload.value(QStringLiteral("type")).toString(), QStringLiteral("float"));
     QCOMPARE(floatPayload.size(), 1);
 
-    // SetOpacity stores `display * scale`; the descriptor says min=0, so the
-    // seeded value is the wire-form 0.0 — the SpinBox renders that as 0%.
-    // A future bump of min would automatically flow through here.
+    // SetOpacity stores `display * scale`; the descriptor declares
+    // defaultDisplay=100 with scale=0.01, so the seeded wire value is
+    // 1.0 (100% — no visible change). A future change to the descriptor's
+    // defaultDisplay would automatically flow through here. The earlier
+    // seed-at-`min`=0 behaviour was a bug: a SetOpacity rule was savable
+    // immediately at 0% (invisible window) before the user adjusted.
     const QVariantMap opacityPayload = controller.defaultPayloadFor(QStringLiteral("setOpacity"));
     QCOMPARE(opacityPayload.value(QStringLiteral("type")).toString(), QStringLiteral("setOpacity"));
     QVERIFY(opacityPayload.contains(QStringLiteral("value")));
-    QCOMPARE(opacityPayload.value(QStringLiteral("value")).toInt(), 0);
+    QCOMPARE(opacityPayload.value(QStringLiteral("value")).toDouble(), 1.0);
 
     // SetEngineMode's `mode` is an enum — seeded to the first option's wire
     // value. The engineModeOptions list begins with snapping, so the default

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorZones/AssignmentEntry.h>
+
 #include <QString>
 
 // Macro to define a static config key accessor returning a QStringLiteral.
@@ -408,11 +410,11 @@ public:
     PZ_CONFIG_KEY(quickLayoutKeyPattern, "QuickLayout%1")
     static QString quickLayoutKey(int n)
     {
-        Q_ASSERT_X(n >= 1 && n <= 9, "quickLayoutKey", "n out of range");
-        // Release-build guard: Q_ASSERT_X is compiled out in release builds,
-        // so an out-of-range `n` would silently yield "QuickLayout100" (or
-        // similar) and ghost the config namespace. qFatal aborts unambiguously
-        // in both build modes — the contract is "n in 1..9, no exceptions".
+        // qFatal aborts unambiguously in both debug and release builds —
+        // the contract is "n in 1..9, no exceptions". A bare Q_ASSERT_X
+        // would compile out in release and let an out-of-range value
+        // silently yield "QuickLayout100" (or similar), ghosting the
+        // config namespace.
         if (n < 1 || n > 9) {
             qFatal("quickLayoutKey: n out of range: %d", n);
         }
@@ -440,9 +442,7 @@ public:
     PZ_CONFIG_KEY(snapToZoneKeyPattern, "SnapToZone%1")
     static QString snapToZoneKey(int n)
     {
-        Q_ASSERT_X(n >= 1 && n <= 9, "snapToZoneKey", "n out of range");
-        // See quickLayoutKey above for the rationale on the release-build
-        // qFatal guard — same contract, same failure mode if violated.
+        // See quickLayoutKey above for the rationale on the qFatal guard.
         if (n < 1 || n > 9) {
             qFatal("snapToZoneKey: n out of range: %d", n);
         }
@@ -574,21 +574,82 @@ public:
         PZ_CONFIG_KEY(v1AnimationMinDistanceKey, "AnimationMinDistance")
         PZ_CONFIG_KEY(v1AnimationSequenceModeKey, "AnimationSequenceMode")
         PZ_CONFIG_KEY(v1AnimationStaggerIntervalKey, "AnimationStaggerInterval")
+        /// v1 INI key for the rendering backend selection — both the v1→v2 migration
+        /// step and the v1 INI dispatcher consume this through one accessor so a
+        /// future rename of the literal can't drift one site behind the other.
+        PZ_CONFIG_KEY(v1RenderingBackendKey, "RenderingBackend")
         PZ_CONFIG_GROUP(v1GlobalShortcutsGroup, "GlobalShortcuts")
         PZ_CONFIG_GROUP(v1EditorGroup, "Editor") // = v2 editorGroup
         PZ_CONFIG_GROUP(v1OrderingGroup, "Ordering") // = v2 orderingGroup
         PZ_CONFIG_GROUP(v1RenderingGroup, "Rendering") // = v2 renderingGroup
         PZ_CONFIG_GROUP(v1ShadersGroup, "Shaders") // = v2 shadersGroup
+        // v1 WindowTracking group — only read in the v1→v2 step where it's
+        // moved out to session.json. The live runtime accessor
+        // `ConfigKeys::windowTrackingGroup()` happens to return the same
+        // "WindowTracking" string today, but a future rename of the live
+        // accessor must not silently retarget this read at a path no v1
+        // INI ever held — that would drop user session state.
+        PZ_CONFIG_GROUP(v1WindowTrackingGroup, "WindowTracking")
 
         // v2 legacy keys — used ONLY by migrateV2ToV3.
         // The v2 group itself (Snapping.Behavior.Display) lives on past v3 — it
         // still holds ShowOnAllMonitors and FilterByAspectRatio. Only the three
-        // disabled-* keys move out, so we name the keys with a v2 prefix; the
-        // migration walks the canonical snappingBehaviorDisplayGroup() dot-path
-        // (split on '.') to descend the JSON tree.
+        // disabled-* keys move out, so we name the keys with a v2 prefix.
+        // The migration uses the frozen `v2SnappingBehaviorDisplayGroup` group
+        // accessor to descend the JSON tree — a future rename of the LIVE
+        // `snappingBehaviorDisplayGroup()` accessor must NOT silently retarget
+        // the v2→v3 step to a path no v2 config ever had on disk (the same
+        // freeze-policy hazard the v3→v4 step avoids by using `v3DisplayGroup`).
+        PZ_CONFIG_GROUP(v2SnappingBehaviorDisplayGroup, "Snapping.Behavior.Display")
         PZ_CONFIG_KEY(v2DisabledMonitorsKey, "DisabledMonitors")
         PZ_CONFIG_KEY(v2DisabledDesktopsKey, "DisabledDesktops")
         PZ_CONFIG_KEY(v2DisabledActivitiesKey, "DisabledActivities")
+
+        // v2 destination group names — used as both v1→v2 destinations
+        // (in `migrateV1ToV2`) and v2 source coordinates. The frozen
+        // accessors mirror the v3→v4 step's `v3DisplayGroup` pattern
+        // and ensure a future rename of the matching live
+        // `snappingGroup()` / `tilingGroup()` / etc. accessor does not
+        // silently retarget the migration to a path no v2 config ever
+        // had on disk.
+        PZ_CONFIG_GROUP(v2SnappingGroup, "Snapping")
+        PZ_CONFIG_GROUP(v2TilingGroup, "Tiling")
+        PZ_CONFIG_GROUP(v2PerformanceGroup, "Performance")
+        PZ_CONFIG_GROUP(v2ExclusionsGroup, "Exclusions")
+        PZ_CONFIG_GROUP(v2RenderingGroup, "Rendering")
+        PZ_CONFIG_GROUP(v2ShadersGroup, "Shaders")
+        PZ_CONFIG_GROUP(v2ShortcutsGroup, "Shortcuts")
+        PZ_CONFIG_GROUP(v2EditorGroup, "Editor")
+        PZ_CONFIG_GROUP(v2OrderingGroup, "Ordering")
+        // Parameterised v2 destinations: v1→v2 renames v1's
+        // `QuickLayout%1Shortcut` to v2's `QuickLayout%1` and preserves
+        // v1's `SnapToZone%1` verbatim. Frozen accessors pin the v2
+        // wire-format names so a future rename of the matching live
+        // pattern accessors stays isolated from migration.
+        PZ_CONFIG_KEY(v1QuickLayoutShortcutKeyPattern, "QuickLayout%1Shortcut")
+        PZ_CONFIG_KEY(v2QuickLayoutKeyPattern, "QuickLayout%1")
+        PZ_CONFIG_KEY(v2SnapToZoneKeyPattern, "SnapToZone%1")
+        static QString v1QuickLayoutShortcutKey(int n)
+        {
+            if (n < 1 || n > 9) {
+                qFatal("Legacy::v1QuickLayoutShortcutKey: n out of range: %d", n);
+            }
+            return v1QuickLayoutShortcutKeyPattern().arg(n);
+        }
+        static QString v2QuickLayoutKey(int n)
+        {
+            if (n < 1 || n > 9) {
+                qFatal("Legacy::v2QuickLayoutKey: n out of range: %d", n);
+            }
+            return v2QuickLayoutKeyPattern().arg(n);
+        }
+        static QString v2SnapToZoneKey(int n)
+        {
+            if (n < 1 || n > 9) {
+                qFatal("Legacy::v2SnapToZoneKey: n out of range: %d", n);
+            }
+            return v2SnapToZoneKeyPattern().arg(n);
+        }
 
         // v3 legacy keys/groups — used ONLY by migration code.
         //
@@ -641,6 +702,16 @@ public:
         // the next rename. Do not do it.
         PZ_CONFIG_GROUP(v4AnimationsGroup, "Animations")
         PZ_CONFIG_KEY(v4AnimationAppRulesKey, "AnimationAppRules")
+
+        // v4 migration scratch-root keys — set on the root by `migrateV3ToV4`
+        // and consumed by `finalizeV4Conversion`. `Settings::purgeStaleKeys`
+        // (src/config/settings.cpp) ALSO references these to preserve them
+        // across save() cycles when the chain stalls (see the stalled-chain
+        // gate in `finalizeV4Conversion`); routing both call sites through
+        // the same frozen accessor stops a future rename in one file from
+        // silently breaking the protection in the other.
+        PZ_CONFIG_KEY(v4DisableStashKey, "_v4DisableStash")
+        PZ_CONFIG_KEY(v4AnimationRulesStashKey, "_v4AnimationRulesStash")
 
         // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
         // finalizeV4Conversion. These mirror the live `displayGroup`,
@@ -716,9 +787,30 @@ inline QString snappingDisableRulePrefix()
     return QStringLiteral("Snapping off · ");
 }
 
-inline QString disableRulePrefixFor(bool autotile)
+inline QString scrollingDisableRulePrefix()
 {
-    return autotile ? autotileDisableRulePrefix() : snappingDisableRulePrefix();
+    return QStringLiteral("Scrolling off · ");
+}
+
+/// Persistent label-prefix for the WindowRule::name field of a per-mode
+/// disable rule. Exhaustive switch — a future `Mode` enum value added in
+/// `AssignmentEntry.h` without an entry here fires a `Q_UNREACHABLE`
+/// diagnostic rather than silently producing an empty prefix that lands
+/// in the persisted `WindowRule::name` as bare ` · DP-1` (parseable but
+/// anonymous, and identical across modes — losing the screen→mode
+/// affinity that makes the rule editor scannable).
+inline QString disableRulePrefixFor(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Snapping:
+        return snappingDisableRulePrefix();
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return autotileDisableRulePrefix();
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return scrollingDisableRulePrefix();
+    }
+    Q_UNREACHABLE();
+    return QString();
 }
 
 inline QString disableRuleDesktopSuffix(int desktop)

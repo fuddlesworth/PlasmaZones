@@ -27,19 +27,6 @@ QVariantList operatorsForField(int fieldValue);
 /// here and surfaces this list verbatim.
 QVariantList actionTypes();
 
-/// Parameter descriptor list for @p typeWire — the editor `Loader` is driven
-/// entirely off this so the per-type `if (t === "...")` ladder lives in C++
-/// only. Empty list for parameterless types (`float`, `exclude`).
-QVariantList paramsForActionType(const QString& typeWire);
-
-/// Localized label for the action @p typeWire, falling back to
-/// `WindowRuleModel::actionTypeFallbackLabel` for unknown ids.
-QString actionTypeLabel(const QString& typeWire);
-
-/// Localized label for an operator @p operatorValue (a
-/// `PhosphorWindowRule::Operator` enum int). Empty string for an unknown value.
-QString operatorLabel(int operatorValue);
-
 /// A complete, default-seeded action payload for @p typeWire — a JSON map of
 /// the form `{ type: <typeWire>, ...defaults }` ready to drop into a rule's
 /// `actions` list. See `WindowRuleController::defaultPayloadFor` for the

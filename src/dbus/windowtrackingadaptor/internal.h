@@ -86,11 +86,15 @@ inline QString serializeGeometryMap(const QHash<QString, PhosphorEngine::Placeme
 
 /**
  * Serialize geometry map preserving full windowId keys.
- * Returns a JSON array of {windowId, x, y, width, height, screen} objects.
+ * Returns a JSON array of {windowId, x, y, width, height, screen, desktop} objects.
  * Used for daemon-only restarts where KWin UUIDs are stable, so
- * multi-instance apps keep per-window pre-tile geometry.
+ * multi-instance apps keep per-window pre-tile geometry. The desktop field
+ * lets the load-side filter gate against the same per-desktop disable list
+ * the save-side filter used; missing on legacy entries (treated as 0 = all
+ * desktops, which the gate short-circuits to monitor-only).
  */
-inline QString serializeGeometryMapFull(const QHash<QString, PhosphorEngine::PlacementEngineBase::UnmanagedEntry>& map)
+inline QString serializeGeometryMapFull(const QHash<QString, PhosphorEngine::PlacementEngineBase::UnmanagedEntry>& map,
+                                        const PhosphorPlacement::WindowTrackingService* service)
 {
     QJsonArray result;
     for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
@@ -108,6 +112,12 @@ inline QString serializeGeometryMapFull(const QHash<QString, PhosphorEngine::Pla
             obj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().screenId)
                 ? it.value().screenId
                 : PhosphorScreens::ScreenIdentity::idForName(it.value().screenId);
+        }
+        if (service) {
+            const int desktop = service->desktopAssignments().value(it.key(), 0);
+            if (desktop > 0) {
+                obj[QLatin1String("desktop")] = desktop;
+            }
         }
         result.append(obj);
     }

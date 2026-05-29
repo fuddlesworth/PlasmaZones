@@ -77,7 +77,13 @@ jobs:
         # so a hijacked tag can't run arbitrary code in our build matrix.
         uses: hendrikmuhs/ccache-action@a1209f81afb8c005c13b4296c32e363431bffea5
         with:
-          key: ${{ matrix.distro }}-${{ matrix.kde }}
+          # Matrix is single-distro (arch only) so the ccache key is just
+          # the kde toggle. Adding a second distro to the matrix above
+          # needs a matching prefix here so the per-distro caches stay
+          # isolated — `${{ matrix.distro }}-${{ matrix.kde }}` was the
+          # earlier shape but `matrix.distro` is empty today, producing
+          # a misleading `-ON` / `-OFF` key.
+          key: arch-${{ matrix.kde }}
           max-size: 500M
 
       - name: Configure

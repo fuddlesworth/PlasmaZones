@@ -392,9 +392,9 @@ public:
     /// Used by tests to verify the cache populates and invalidates against
     /// rule-set revision bumps. Not for production callers — the value
     /// drifts as cursor-move resolves come in. Return type is `int` because
-    /// the cache is bounded at 256 entries (kContextResolveCacheLimit), well
-    /// within `int` range — keeps test assertions free of the `qsizetype`
-    /// `int` widening dance.
+    /// the cache is bounded at 256 entries (`kMaxEntries` in
+    /// layoutregistry_assignments.cpp), well within `int` range — keeps
+    /// test assertions free of the `qsizetype` `int` widening dance.
     [[nodiscard]] int contextResolveCacheSize() const
     {
         return static_cast<int>(m_contextResolveCache.size());
@@ -465,9 +465,13 @@ private:
     /// insert — a mismatch clears the whole map before falling through to the
     /// linear walk. No explicit signal-time clear is required: a real edit
     /// bumps the revision (see @c WindowRuleSet::setRules), so the next
-    /// resolve sees the bump and re-populates. The cache is bounded by
-    /// live (screens × desktops × activities) — order-of-1000 in the
-    /// worst realistic case — which fits comfortably in a @c QHash.
+    /// resolve sees the bump and re-populates. A soft cap (256 entries — see
+    /// the @c kMaxEntries constant in @c layoutregistry_assignments.cpp)
+    /// guards against pathological growth from clients probing unique
+    /// non-existent tuples; on overflow the cache is cleared entirely (the
+    /// next walk re-seeds it cleanly). 256 sits comfortably above any
+    /// realistic live (screens × desktops × activities) footprint and far
+    /// below any heap-pressure concern.
     ///
     /// Thread-affinity: like the rest of @c LayoutRegistry, this method
     /// (and the cache it mutates through @c mutable members) must only be

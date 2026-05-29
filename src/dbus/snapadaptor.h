@@ -13,6 +13,10 @@
 #include <QStringList>
 #include <QVector>
 
+namespace PhosphorContext {
+class IContextResolver;
+} // namespace PhosphorContext
+
 namespace PhosphorSnapEngine {
 class SnapEngine;
 }
@@ -30,7 +34,7 @@ class ISettings;
  *
  * Owns the snap-specific D-Bus surface: commit/uncommit, snap-restore
  * (appRule / persisted / emptyZone / lastZone / resolveWindowRestore),
- * resnap, calculateSnapAll, windowsSnappedBatch, snap-mode navigation
+ * resnap, calculateSnapAllWindows, windowsSnappedBatch, snap-mode navigation
  * (move/focus/swap/push/snap-by-number/rotate/cycle/restore),
  * snap-mode convenience (moveWindowToZone, swapWindowsById), and
  * snap-mode float (toggleFloat, setWindowFloat, calculateUnfloatRestore,
@@ -72,14 +76,15 @@ public:
     void clearEngine();
 
     /**
-     * @brief Set the ScreenModeRouter for resnap screen filtering
+     * @brief Set the frozen-snapshot resolver used by snaprestore's disable
+     *        gate. Late-bound: created post-construction by Daemon::init.
      *
-     * Required for resnapCurrentAssignments and resnapForVirtualScreenReconfigure
-     * to correctly partition screens by mode.
-     *
-     * @param router ScreenModeRouter instance (not owned, must outlive adaptor)
+     * @param resolver IContextResolver instance (not owned, must outlive adaptor)
      */
-    void setScreenModeRouter(ScreenModeRouter* router);
+    void setContextResolver(PhosphorContext::IContextResolver* resolver)
+    {
+        m_contextResolver = resolver;
+    }
 
     /**
      * @brief Access the underlying SnapEngine (for daemon-side callers)
@@ -317,9 +322,10 @@ private:
      *        clear floating state, and track the zone assignment.
      *
      * Returns false (and leaves the out-params at 0 / false) when the snap is
-     * refused — missing dependencies, or the target context is disabled. A
-     * false return means no commit happened; callers must skip any post-snap
-     * work (e.g. consumePendingAssignment, success logging).
+     * refused: missing dependencies, the global `snappingEnabled()` kill-switch
+     * is off, or the target context is disabled by the cascade. A false return
+     * means no commit happened; callers must skip any post-snap work (e.g.
+     * consumePendingAssignment, success logging).
      */
     bool applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
                          int& snapHeight, bool& shouldSnap);
@@ -327,7 +333,9 @@ private:
     PhosphorSnapEngine::SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
     ISettings* m_settings = nullptr;
-    ScreenModeRouter* m_screenModeRouter = nullptr;
+    /// Late-bound by Daemon via setContextResolver — replaces the inline
+    /// `(modeFor → isContextDisabled)` cascade in snaprestore.cpp.
+    PhosphorContext::IContextResolver* m_contextResolver = nullptr;
 
     // Stored handles for the signal relays wired in the constructor so
     // clearEngine() can disconnect exactly the connections this class

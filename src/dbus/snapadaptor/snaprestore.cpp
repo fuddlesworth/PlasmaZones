@@ -9,6 +9,7 @@
 #include <PhosphorScreens/Manager.h>
 #include "../../core/isettings.h"
 #include "../../core/screenmoderouter.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 
 namespace PlasmaZones {
@@ -53,6 +54,14 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
+
+    // Empty windowId is a precondition violation that the sibling slots
+    // (snapToAppRule, snapToEmptyZone, restoreToPersistedZone) all guard;
+    // mirror their early-return so the input contract is symmetric across
+    // the snap-restore family.
+    if (windowId.isEmpty()) {
+        return;
+    }
 
     if (!m_adaptor || !m_adaptor->service()) {
         return;
@@ -208,12 +217,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
-    // Clamp unknown wire values to WindowKind::Unknown.
-    const PhosphorEngine::WindowKind kind = (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Normal))
-        ? PhosphorEngine::WindowKind::Normal
-        : (windowKind == static_cast<int>(PhosphorEngine::WindowKind::Transient))
-        ? PhosphorEngine::WindowKind::Transient
-        : PhosphorEngine::WindowKind::Unknown;
+    const PhosphorEngine::WindowKind kind = PhosphorEngine::clampWindowKindFromWire(windowKind);
     SnapResult result = m_engine->resolveWindowRestore(windowId, screenId, sticky, kind);
     if (!result.shouldSnap) {
         return;
@@ -267,11 +271,12 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         // is not the current one — calculateRestoreFromSession and
         // calculateSnapToLastZone both return noSnap on a desktop mismatch. A
         // restored window therefore lands on the current desktop/activity.
-        const PhosphorZones::AssignmentEntry::Mode mode = m_screenModeRouter
-            ? m_screenModeRouter->modeFor(result.screenId)
-            : PhosphorZones::AssignmentEntry::Snapping;
-        if (isContextDisabled(m_settings, mode, result.screenId, m_engine->currentVirtualDesktop(),
-                              m_engine->currentActivity())) {
+        // Resolver's handleFor pulls (currentVirtualDesktop, currentActivity)
+        // from the daemon's VDM/AM — same values the snap engine sees on
+        // its own state surface — and routes the screen through the mode
+        // provider, collapsing the 3-step `(modeFor + currentVirtualDesktop
+        // + currentActivity)` cascade rebuild to one snapshot call.
+        if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(result.screenId))) {
             qCInfo(lcDbusWindow) << "applySnapResult: refusing auto-snap of" << windowId
                                  << "— PlasmaZones is disabled for screen" << result.screenId;
             return false;
