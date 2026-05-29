@@ -186,6 +186,19 @@ bool PluginLoader::ensurePluginRootExists() const
     // process-per-root, which is louder without being more
     // diagnostic for the common case (the shell only constructs one
     // PluginLoader per session).
+    //
+    // Thread-safety: this set is intentionally NOT guarded by a
+    // mutex. The PluginLoader contract (documented on the class) is
+    // GUI-thread-only: ensurePluginRootExists is called only from
+    // performScanCycle (via the watcher's rescan tick) and from
+    // scanAndLoad, both of which are on the GUI thread. A
+    // multi-thread caller would violate the class contract before
+    // it racily mutated this set; a lock here would mask that misuse
+    // rather than catch it. If a future refactor moves any
+    // PluginLoader operation off the GUI thread, this set MUST be
+    // promoted to either a QMutex-guarded structure or an instance
+    // member (whichever the new threading model supports), and the
+    // class contract docs MUST be updated in lockstep.
     static QSet<QString> s_logged;
 
     QDir dir(m_pluginRoot);

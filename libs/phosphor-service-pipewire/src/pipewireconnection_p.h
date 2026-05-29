@@ -127,6 +127,15 @@ public:
     static constexpr int kNoPendingSync = -1;
     int pendingSyncSeq = kNoPendingSync;
 
+    /// Loop-thread flag: set by onCoreError when a core-level error
+    /// fires while `core` is still alive, cleared by doConnect (after
+    /// the recovery teardown) and doDisconnect (after a full teardown).
+    /// doConnect gates its wedge-recovery teardown on this flag rather
+    /// than inferring it from `!connected.load()` — an in-flight
+    /// handshake also has `connected == false` but is not wedged, and
+    /// must not be torn down by a re-entrant connect() call.
+    bool wedged = false;
+
     /// Per-node loop-thread state. We hold the pw_proxy for the node
     /// (for SPA_PARAM_Props enumeration) and the spa_hook for its
     /// listener wire. Keyed by PipeWire global id. Only touched on
@@ -162,17 +171,17 @@ public:
     QHash<quint32, PwNode*> guiNodes;
 
     // Snapshot of state for GUI-thread getters. The atomics carry the
-    // cross-thread truth: loop-thread callbacks (onCoreDone /
-    // onCoreError / doConnect failure paths) flip them synchronously
-    // so isConnected() / isDaemonAvailable() report the truth the
-    // moment the next caller looks. The GUI-thread `lastEmitted*`
-    // shadows track what observers were last told via the NOTIFY
-    // signal; setConnected / setDaemonAvailable consult those (not
-    // the atomic) to decide whether a real transition needs to be
-    // announced. This separation is what makes the "synchronous flip
-    // + queued setter" pattern emit exactly one connectedChanged per
-    // observable transition even when the atomic has already been
-    // pre-flipped on the loop thread.
+    // cross-thread truth: loop-thread callbacks (onCoreInfo,
+    // onCoreDone, onCoreError, doConnect failure paths, and
+    // doDisconnect) flip them synchronously so isConnected() /
+    // isDaemonAvailable() report the truth the moment the next caller
+    // looks. The GUI-thread `lastEmitted*` shadows track what observers
+    // were last told via the NOTIFY signal; setConnected /
+    // setDaemonAvailable consult those (not the atomic) to decide
+    // whether a real transition needs to be announced. This separation
+    // is what makes the "synchronous flip + queued setter" pattern
+    // emit exactly one connectedChanged per observable transition even
+    // when the atomic has already been pre-flipped on the loop thread.
     std::atomic<bool> connected{false};
     std::atomic<bool> daemonAvailable{false};
     bool lastEmittedConnected = false;
@@ -277,9 +286,13 @@ public:
                            int (*dispatcher)(struct spa_loop*, bool, uint32_t, const void*, size_t, void*),
                            const char* label);
 
-    // GUI-thread setters. Always invoked via queued cross-thread
-    // signals so the NOTIFY emits and atomic writes both happen on
-    // the GUI thread.
+    // GUI-thread setters. Invoked via queued cross-thread signals;
+    // they only shadow-dedup and emit NOTIFY. The atomics are
+    // loop-thread truth, written synchronously by the callers
+    // (onCoreInfo, onCoreDone, onCoreError, doConnect failure paths,
+    // doDisconnect) BEFORE queueing these setters — these setters
+    // never touch the atomic. The string setters carry no atomic and
+    // simply value-equal-skip + emit.
     void setConnected(bool value);
     void setDaemonAvailable(bool value);
     void setDefaultSinkName(QString name);

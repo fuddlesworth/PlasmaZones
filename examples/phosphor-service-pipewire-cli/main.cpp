@@ -25,12 +25,21 @@ namespace {
 // under 250 ms; param echoes after a write land within ~80 ms; metadata
 // writes round-trip through WirePlumber within ~150 ms. The metadata
 // spin-wait deadline is set generously because the round-trip varies
-// with WirePlumber load. Override the connect timeout via
-// PHOSPHOR_PW_CONNECT_TIMEOUT_MS for slow-boot scenarios.
+// with WirePlumber load. Slow-boot or loaded CI machines can override
+// the connect timeout via PHOSPHOR_PW_CONNECT_TIMEOUT_MS, the
+// post-write (volume/mute echo) deadline via
+// PHOSPHOR_PW_POST_WRITE_SETTLE_MS, and the post-metadata
+// (set-default-sink/source echo) deadline via
+// PHOSPHOR_PW_POST_METADATA_SETTLE_MS.
 constexpr int kDefaultPostReadSettleMs = 80;
 constexpr int kDefaultPostWriteSettleMs = 200;
 constexpr int kDefaultPostMetadataSettleMs = 500;
 constexpr int kDefaultConnectTimeoutMs = 2000;
+// Shutdown settle: small fixed budget for the loop thread to flush any
+// in-flight write before ~PipeWireConnection runs. Not env-overridable
+// because the destructor handles teardown safely on its own; this is
+// just an ordering hint for the metadata/volume write paths.
+constexpr int kDefaultShutdownSettleMs = 50;
 
 QTextStream& out()
 {
@@ -83,21 +92,48 @@ int usage()
           << "  64  usage error (bad/missing arguments)\n"
           << "  70  internal software error (e.g., maintainer-introduced dispatch gap)\n"
           << "\n"
-          << "  PHOSPHOR_PW_CONNECT_TIMEOUT_MS overrides the daemon-connect timeout\n"
-          << "  (default 2000 ms). Use a larger value if the daemon is slow to start.\n";
+          << "env overrides (positive int ms; malformed values fall back to defaults):\n"
+          << "  PHOSPHOR_PW_CONNECT_TIMEOUT_MS         daemon-connect timeout       (default 2000)\n"
+          << "  PHOSPHOR_PW_POST_WRITE_SETTLE_MS       volume/mute echo deadline    (default 200)\n"
+          << "  PHOSPHOR_PW_POST_METADATA_SETTLE_MS    set-default echo deadline    (default 500)\n";
     return 64; // EX_USAGE
+}
+
+/// Read a positive-int env var override, or fall back to `fallbackMs`
+/// on empty / malformed / non-positive values. Centralises the parse so
+/// every settle-timeout knob has the same defensive behaviour: a typo'd
+/// env value never silently routes through to 0 (which would defeat the
+/// echo waits entirely).
+int envOverrideMs(const char* name, int fallbackMs)
+{
+    const QByteArray overrideEnv = qgetenv(name);
+    if (overrideEnv.isEmpty())
+        return fallbackMs;
+    bool ok = false;
+    const int v = overrideEnv.toInt(&ok);
+    return (ok && v > 0) ? v : fallbackMs;
 }
 
 /// Connect-timeout sourced from the env var so users hitting slow-boot
 /// scenarios can override without recompiling.
 int connectTimeoutMs()
 {
-    const QByteArray override = qgetenv("PHOSPHOR_PW_CONNECT_TIMEOUT_MS");
-    if (override.isEmpty())
-        return kDefaultConnectTimeoutMs;
-    bool ok = false;
-    const int v = override.toInt(&ok);
-    return (ok && v > 0) ? v : kDefaultConnectTimeoutMs;
+    return envOverrideMs("PHOSPHOR_PW_CONNECT_TIMEOUT_MS", kDefaultConnectTimeoutMs);
+}
+
+/// Post-write (volume/mute) settle deadline. Loaded CI hosts can extend
+/// the window via PHOSPHOR_PW_POST_WRITE_SETTLE_MS without recompiling.
+int postWriteSettleMs()
+{
+    return envOverrideMs("PHOSPHOR_PW_POST_WRITE_SETTLE_MS", kDefaultPostWriteSettleMs);
+}
+
+/// Post-metadata (set-default-sink/source) settle deadline. WirePlumber
+/// round-trip varies with load; extend via
+/// PHOSPHOR_PW_POST_METADATA_SETTLE_MS on slow hosts.
+int postMetadataSettleMs()
+{
+    return envOverrideMs("PHOSPHOR_PW_POST_METADATA_SETTLE_MS", kDefaultPostMetadataSettleMs);
 }
 
 /// Wait for the connection to either reach the connected state or to
@@ -365,7 +401,7 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
     // this, `node->volumes()` re-read after the wait could show a
     // divergent snapshot (e.g. another channel updated between match
     // and read) that doesn't reflect what we actually saw match.
-    QVector<qreal> matchedVolumes;
+    QList<qreal> matchedVolumes;
     const auto matchesRequest = [node, linear, &matchedVolumes]() {
         const auto echoed = node->volumes();
         if (echoed.isEmpty())
@@ -378,11 +414,11 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
         return true;
     };
     node->setVolume(linear);
-    const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, kDefaultPostWriteSettleMs, "set-volume");
+    const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, postWriteSettleMs(), "set-volume");
     // On match, print the captured matched snapshot; on timeout, fall
     // back to the current live snapshot so the diagnostic still shows
     // what the daemon currently exposes.
-    const QVector<qreal> echoedVolumes = echoed ? matchedVolumes : node->volumes();
+    const QList<qreal> echoedVolumes = echoed ? matchedVolumes : node->volumes();
     out() << "set node " << node->id() << " (" << node->name() << ") volume = " << QString::number(linear, 'f', 3)
           << " (linear), echoed = [";
     for (int i = 0; i < echoedVolumes.size(); ++i) {
@@ -416,7 +452,12 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
         return node->muted() == muted;
     };
     node->setMuted(muted);
-    const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, kDefaultPostWriteSettleMs, "mute");
+    // Shares postWriteSettleMs() with set-volume: both ride the same
+    // SPA_PARAM_Props echo path so a single tunable governs both
+    // deadlines. The predicate above narrows to muted == requested, so
+    // a parallel session manager re-flipping mute can only delay the
+    // match — never spuriously satisfy it.
+    const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, postWriteSettleMs(), "mute");
     const bool echoedMuted = echoed ? muted : node->muted();
     out() << "set node " << node->id() << " (" << node->name() << ") muted = " << (muted ? "true" : "false")
           << ", echoed = " << (echoedMuted ? "true" : "false") << "\n";
@@ -478,6 +519,57 @@ QString resolveTargetToName(PhosphorServicePipeWire::PipeWireConnection& conn, c
     return node->name();
 }
 
+/// Shared body for set-default-sink and set-default-source. The two
+/// subcommands differ only in the signal they listen on, the accessor
+/// they spin-wait against, the setter they invoke, and the diagnostic
+/// label they print. Extracting the body keeps the dispatch arms thin
+/// and stops a fix to one branch silently skipping the other.
+///
+/// Returns rc: 0 on echoed success, 1 on sentinel rejection / unresolved
+/// target / timeout.
+int cmdSetDefault(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& spec, const char* label,
+                  void (PhosphorServicePipeWire::PipeWireConnection::*changedSignal)(),
+                  const std::function<QString()>& accessor, const std::function<void(const QString&)>& setter)
+{
+    const QString trimmed = spec.trimmed();
+    // The `default.audio.*` sentinels are read-side only; the
+    // configured-default key needs a real node.name to do anything
+    // meaningful. Reject up-front so callers don't silently write the
+    // sentinel literally into WirePlumber's metadata. Distinguish the
+    // two sentinels in the diagnostic so users typing the wrong one (or
+    // hitting one via a shell alias) see which sentinel was rejected.
+    if (trimmed.isEmpty()) {
+        err() << label << " requires a real node.name (got empty spec)\n";
+        return 1;
+    }
+    if (trimmed == QLatin1String("default.audio.sink")) {
+        err() << label << " rejects 'default.audio.sink' sentinel; pass a real node.name (see `list sinks`)\n";
+        return 1;
+    }
+    if (trimmed == QLatin1String("default.audio.source")) {
+        err() << label << " rejects 'default.audio.source' sentinel; pass a real node.name (see `list sources`)\n";
+        return 1;
+    }
+    // Pre-resolve so a numeric id is converted to the matching
+    // node.name; writing "55" verbatim into WirePlumber's default
+    // metadata would corrupt the key for every other session-manager
+    // consumer.
+    const QString name = resolveTargetToName(conn, trimmed);
+    if (name.isEmpty())
+        return 1;
+    setter(name);
+    // Signal-driven wait until WirePlumber echoes the new default back
+    // through the metadata observer. On timeout exit non-zero so wrapper
+    // scripts can detect partial application.
+    const int deadlineMs = postMetadataSettleMs();
+    if (!waitForString(conn, changedSignal, accessor, name, deadlineMs)) {
+        err() << label << ": timed out waiting for WirePlumber echo (" << deadlineMs << "ms)\n";
+        return 1;
+    }
+    out() << "set " << label << " = " << name << "\n";
+    return 0;
+}
+
 /// Explicit disconnect + a brief settle so the loop thread has time to
 /// flush any in-flight write before the connection destructor runs. The
 /// destructor handles teardown safely on its own, but routing through
@@ -487,7 +579,7 @@ void cleanShutdown(PhosphorServicePipeWire::PipeWireConnection& conn)
 {
     conn.disconnect();
     QEventLoop loop;
-    QTimer::singleShot(50, &loop, &QEventLoop::quit);
+    QTimer::singleShot(kDefaultShutdownSettleMs, &loop, &QEventLoop::quit);
     loop.exec();
 }
 
@@ -574,72 +666,23 @@ int main(int argc, char** argv)
     } else if (cmd == QLatin1String("mute") || cmd == QLatin1String("unmute")) {
         rc = cmdMute(conn, args.at(2), cmd == QLatin1String("mute"));
     } else if (cmd == QLatin1String("set-default-sink")) {
-        // Trim BEFORE the sentinel check so trailing whitespace
-        // ("default.audio.sink ") doesn't bypass the rejection and
-        // write a corrupt name into WirePlumber's metadata.
-        const QString spec = args.at(2).trimmed();
-        // The `default.audio.*` sentinels are read-side only; the
-        // configured-default key needs a real node.name to do anything
-        // meaningful. Reject up-front so callers don't silently write
-        // the sentinel literally into WirePlumber's metadata.
-        if (spec.isEmpty() || spec == QLatin1String("default.audio.sink")
-            || spec == QLatin1String("default.audio.source")) {
-            err() << "set-default-sink requires a real node.name (see `list sinks`)\n";
-            rc = 1;
-        } else {
-            // Pre-resolve so a numeric id is converted to the matching
-            // node.name; writing "55" verbatim into WirePlumber's
-            // default metadata would corrupt the key for every other
-            // session-manager consumer.
-            const QString name = resolveTargetToName(conn, spec);
-            if (name.isEmpty()) {
-                rc = 1;
-            } else {
+        rc = cmdSetDefault(
+            conn, args.at(2), "default sink", &PhosphorServicePipeWire::PipeWireConnection::defaultSinkNameChanged,
+            [&conn]() {
+                return conn.defaultSinkName();
+            },
+            [&conn](const QString& name) {
                 conn.setDefaultSink(name);
-                // Signal-driven wait until WirePlumber echoes the new
-                // default back through the metadata observer. On
-                // timeout exit non-zero so wrapper scripts can detect
-                // partial application.
-                if (!waitForString(
-                        conn, &PhosphorServicePipeWire::PipeWireConnection::defaultSinkNameChanged,
-                        [&conn]() {
-                            return conn.defaultSinkName();
-                        },
-                        name, kDefaultPostMetadataSettleMs)) {
-                    err() << "set-default-sink: timed out waiting for WirePlumber echo ("
-                          << kDefaultPostMetadataSettleMs << "ms)\n";
-                    rc = 1;
-                } else {
-                    out() << "set default sink = " << name << "\n";
-                }
-            }
-        }
+            });
     } else if (cmd == QLatin1String("set-default-source")) {
-        const QString spec = args.at(2).trimmed();
-        if (spec.isEmpty() || spec == QLatin1String("default.audio.sink")
-            || spec == QLatin1String("default.audio.source")) {
-            err() << "set-default-source requires a real node.name (see `list sources`)\n";
-            rc = 1;
-        } else {
-            const QString name = resolveTargetToName(conn, spec);
-            if (name.isEmpty()) {
-                rc = 1;
-            } else {
+        rc = cmdSetDefault(
+            conn, args.at(2), "default source", &PhosphorServicePipeWire::PipeWireConnection::defaultSourceNameChanged,
+            [&conn]() {
+                return conn.defaultSourceName();
+            },
+            [&conn](const QString& name) {
                 conn.setDefaultSource(name);
-                if (!waitForString(
-                        conn, &PhosphorServicePipeWire::PipeWireConnection::defaultSourceNameChanged,
-                        [&conn]() {
-                            return conn.defaultSourceName();
-                        },
-                        name, kDefaultPostMetadataSettleMs)) {
-                    err() << "set-default-source: timed out waiting for WirePlumber echo ("
-                          << kDefaultPostMetadataSettleMs << "ms)\n";
-                    rc = 1;
-                } else {
-                    out() << "set default source = " << name << "\n";
-                }
-            }
-        }
+            });
     } else {
         // The pre-connect knownCommands guard already routes every
         // unknown subcommand through usage(), so reaching this arm

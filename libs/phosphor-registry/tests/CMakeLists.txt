@@ -15,7 +15,7 @@ find_package(Qt6 REQUIRED COMPONENTS Test Quick)
 #             ${CMAKE_CURRENT_BINARY_DIR}/)
 #   source  - .cpp file relative to ${CMAKE_CURRENT_SOURCE_DIR}/
 #   linkQt  - "FACTORY" to PRIVATE-link the full Qt + PhosphorRegistry
-#             stack (canonical fixture shape — the plugin builds a
+#             stack (canonical fixture shape: the plugin builds a
 #             real factory subclass against the public ABI);
 #             "MINIMAL" for fixtures that only need Q_DECL_EXPORT
 #             from QtCore (e.g. the noentry fixture that exports a

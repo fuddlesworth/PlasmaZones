@@ -234,6 +234,17 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
     // flushes posted events before tearing Private down (see
     // ~PipeWireConnection).
     d->connected.store(false, std::memory_order_release);
+    // Clear pendingSyncSeq so a stale `done` event echoing the original
+    // syncRc can't pass onCoreDone's sentinel check and re-flip
+    // `connected` back to true. PipeWire's daemon-teardown sequence can
+    // emit error + done back-to-back, and the done arrives on this same
+    // loop thread, so writing the sentinel here (loop-thread truth) is
+    // race-free with the equality check in onCoreDone. Also flag the
+    // wedged state so doConnect's recovery teardown can distinguish
+    // "core listener died with an error" from "mid-handshake, sync
+    // not yet acked".
+    d->pendingSyncSeq = kNoPendingSync;
+    d->wedged = true;
     QMetaObject::invokeMethod(
         d->q,
         [d, msg]() {
@@ -426,16 +437,28 @@ void PipeWireConnection::Private::onNodeParam(void* data, int seq, uint32_t para
 
 void PipeWireConnection::Private::doConnect()
 {
-    // Recovery path: an earlier onCoreError flipped `connected` to
-    // false but left core/context/registry hanging. Tear them down
+    // Recovery path: an earlier onCoreError flagged the connection
+    // wedged but left core/context/registry hanging. Tear them down
     // first so this reconnect starts from a clean slate. This is the
     // counterpart to the deliberate "don't teardown from the error
     // callback" choice in onCoreError — recovery happens here, on the
     // loop thread, exactly when the next caller asks to reconnect.
-    if (core && !connected.load(std::memory_order_acquire))
+    //
+    // Gate on the explicit `wedged` flag, NOT on inferred
+    // `!connected.load()`: an in-flight handshake (core != nullptr,
+    // connected == false because the sync hasn't acked yet) would
+    // otherwise look identical to the post-error wedge and we'd tear
+    // down a perfectly healthy mid-handshake state on a re-entrant
+    // connect() call.
+    if (core && wedged)
         doDisconnect();
     if (core)
         return; // already connected (or mid-handshake)
+    // Past the recovery gate; we're about to build a fresh core, so
+    // any prior wedge is resolved. Clear the flag before any failure
+    // path so a fresh wedge from this attempt isn't masked by the old
+    // one.
+    wedged = false;
     pw_main_loop* mainLoop = loop.load(std::memory_order_acquire);
     if (!mainLoop) {
         qCWarning(lcPipeWire) << "doConnect called before loop creation";
@@ -504,10 +527,32 @@ void PipeWireConnection::Private::doConnect()
     // band).
     const int syncRc = pw_core_sync(core, PW_ID_CORE, 0);
     if (syncRc < 0) {
+        // Mirror the other doConnect failure paths: a sync request the
+        // loop refused leaves the handshake unable to complete, so
+        // tear down core/context/registry/listeners on the loop thread
+        // and flip BOTH atomics. Without the teardown a subsequent
+        // connect() would short-circuit on `if (core) return;` and the
+        // caller would be stuck with a wedged-but-not-wedged core that
+        // never acks. resetGuiSnapshot mirrors the pw_context_connect
+        // failure path so observers see one round of NOTIFY signals on
+        // the GUI thread.
+        if (registry) {
+            spa_hook_remove(&registryListener);
+            pw_proxy_destroy(reinterpret_cast<pw_proxy*>(registry));
+            registry = nullptr;
+        }
+        spa_hook_remove(&coreListener);
+        pw_core_disconnect(core);
+        core = nullptr;
+        pw_context_destroy(context);
+        context = nullptr;
         pendingSyncSeq = kNoPendingSync;
+        connected.store(false, std::memory_order_release);
+        daemonAvailable.store(false, std::memory_order_release);
         QMetaObject::invokeMethod(
             q,
             [this, syncRc]() {
+                resetGuiSnapshot();
                 Q_EMIT q->error(QStringLiteral("pw_core_sync failed: %1").arg(syncRc));
             },
             Qt::QueuedConnection);
@@ -552,6 +597,10 @@ void PipeWireConnection::Private::doDisconnect()
         context = nullptr;
     }
     pendingSyncSeq = kNoPendingSync;
+    // Clear the wedged flag: after a full teardown there is no stale
+    // core/context to recover from, so the next doConnect must NOT
+    // misinterpret a fresh in-flight handshake as a wedge.
+    wedged = false;
     // Synchronously flip the atomics on the loop thread BEFORE queueing
     // the GUI-side reset. After this point both isConnected() and
     // isDaemonAvailable() report false the moment the next caller

@@ -1,26 +1,34 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Shape-traversal contract — `extractTokensOrEmpty` is THE single
-// source of truth for the wrapped-vs-flat JSON layout rules used
-// by every code path that inspects a parsed payload:
+// Shape-traversal contract — `extractValidTokens` is THE single
+// source of truth for both the wrapped-vs-flat JSON layout rules
+// AND the QColor accept set used by every code path that inspects
+// a parsed payload:
 //
-//   - validateDoc       (read-only shape check, runs in loadFromJson)
+//   - validateDoc       (read-only shape + accept-set check,
+//                        runs in loadFromJson before any commit)
 //   - applyParsedJson   (the actual merge into m_palette)
 //
-// Both callers route through extractTokensOrEmpty so any future
-// failure mode added to the shape rules is visible to BOTH the
-// validator and the applier in lockstep. A previous version of
-// this file open-coded the wrapped/flat traversal in both
-// validateDoc and applyParsedJson and relied on a Q_ASSERT after
-// the apply step to catch drift; in release builds the assert
-// would compile out and a half-committed loadFromJson (watcher
-// dropped, sourcePath cleared, paletteChanged NOT fired) would
-// surface silently. Routing both call sites through one helper
-// makes the divergence structurally impossible.
+// extractValidTokens wraps extractTokensOrEmpty (shape probe) and
+// adds the QColor-parse pass, returning the normalised QVariantMap
+// both callers consume. Two file-load entry points (loadFromFile
+// and reloadFromCurrentPath) further share the I/O + parse +
+// apply pipeline through readParseAndApply so the diagnostic
+// wording on every failure mode is identical across fresh-load
+// and hot-reload paths.
+//
+// A previous version of this file open-coded the wrapped/flat
+// traversal in both validateDoc and applyParsedJson and relied on
+// a Q_ASSERT after the apply step to catch drift; in release
+// builds the assert would compile out and a half-committed
+// loadFromJson (watcher dropped, sourcePath cleared,
+// paletteChanged NOT fired) would surface silently. Routing both
+// call sites through one helper makes the divergence structurally
+// impossible.
 //
 // If you add a new ApplyResult variant or change the shape rules,
-// update extractTokensOrEmpty and its callers stay correct by
+// update extractValidTokens and its callers stay correct by
 // construction.
 
 #include <PhosphorTheme/PaletteStore.h>
@@ -107,6 +115,20 @@ PaletteStore::PaletteStore(QObject* parent)
         if (m_sourcePath.isEmpty()) {
             return;
         }
+        // Re-arm the parent-directory watch if it was dropped. A
+        // common operator pattern is `rm -rf <dir>; mkdir <dir>`
+        // (live editing a palette pack), which destroys the parent
+        // directory and recreates it. QFileSystemWatcher silently
+        // drops the watch for a directory that ceases to exist;
+        // without re-adding it on the next directoryChanged
+        // delivery, a subsequent atomic-rename save inside the
+        // recreated directory would never trigger any further
+        // events. Re-arm covers both this case and the rename-over
+        // case the constructor's original comment focused on.
+        const QString parentDir = QFileInfo(m_sourcePath).absolutePath();
+        if (!parentDir.isEmpty() && QFileInfo::exists(parentDir) && !m_watcher->directories().contains(parentDir)) {
+            m_watcher->addPath(parentDir);
+        }
         if (QFileInfo::exists(m_sourcePath)) {
             if (!m_watcher->files().contains(m_sourcePath)) {
                 m_watcher->addPath(m_sourcePath);
@@ -177,10 +199,12 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
     dropWatcherAndClearSourcePath();
     const auto applied = applyParsedJson(doc);
     // validateDoc and applyParsedJson cannot disagree because both
-    // route through extractTokensOrEmpty (the single source of
-    // truth for the shape rules). This invariant pin catches a
-    // hypothetical regression that introduces a second extraction
-    // path in only one of the two callers. Kept as Q_ASSERT for the
+    // route through extractValidTokens (the single source of truth
+    // for the shape rules AND the QColor accept set — the validator
+    // discards the cached map, the applier merges it). This
+    // invariant pin catches a hypothetical regression that
+    // introduces a second extraction path in only one of the two
+    // callers. Kept as Q_ASSERT for the
     // debug-build tripwire; the structural guarantee from the
     // shared helper is the real safety net.
     Q_ASSERT(applied == ApplyResult::Ok);
@@ -214,27 +238,57 @@ QJsonObject PaletteStore::extractTokensOrEmpty(const QJsonDocument& doc, ApplyRe
     return root;
 }
 
-PaletteStore::ApplyResult PaletteStore::validateDoc(const QJsonDocument& doc)
+std::optional<QVariantMap> PaletteStore::extractValidTokens(const QJsonDocument& doc, ApplyResult& outError)
 {
-    // Route through extractTokensOrEmpty so the wrapped/flat shape
-    // rules cannot drift between the validator and the merger. The
-    // validity probe uses QColor(QString) explicitly so the accept
-    // set matches applyParsedJson's merge step exactly. The full
-    // QColor instance is discarded; we only need the validity bit.
+    // Single QColor-parse pass over the wrapped/flat token map. Both
+    // the validator and the merger consume this normalised map so the
+    // accept set is identical by construction (no per-call-site
+    // QColor probes that could drift on a future regex tweak). The
+    // returned map can be empty: callers must distinguish "shape
+    // error" (outError != Ok, optional is nullopt) from "shape Ok but
+    // no usable colors found" (outError == Ok, optional holds empty
+    // map) — applyParsedJson maps the latter to NoUsableTokens.
+    outError = ApplyResult::Ok;
     ApplyResult shapeError = ApplyResult::Ok;
     const QJsonObject tokens = extractTokensOrEmpty(doc, shapeError);
     if (shapeError != ApplyResult::Ok) {
-        return shapeError;
+        outError = shapeError;
+        return std::nullopt;
     }
+    QVariantMap parsed;
     for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
-        if (!it.value().isString()) {
+        const auto& val = it.value();
+        if (!val.isString()) {
+            // Tokens are colors; non-strings are either matugen metadata
+            // we don't care about (the "$schema" / "version" keys) or
+            // user mistakes we can't usefully repair. Silently skip.
             continue;
         }
-        if (QColor(it.value().toString()).isValid()) {
-            return ApplyResult::Ok;
+        QColor c(val.toString());
+        if (!c.isValid()) {
+            continue;
         }
+        parsed.insert(it.key(), c);
     }
-    return ApplyResult::NoUsableTokens;
+    return parsed;
+}
+
+PaletteStore::ApplyResult PaletteStore::validateDoc(const QJsonDocument& doc)
+{
+    // Route through extractValidTokens so the wrapped/flat shape
+    // rules AND the QColor accept set cannot drift between the
+    // validator and the merger. The parsed map is discarded here;
+    // we only need the verdict.
+    ApplyResult err = ApplyResult::Ok;
+    const auto parsed = extractValidTokens(doc, err);
+    if (err != ApplyResult::Ok) {
+        return err;
+    }
+    Q_ASSERT(parsed.has_value());
+    if (parsed->isEmpty()) {
+        return ApplyResult::NoUsableTokens;
+    }
+    return ApplyResult::Ok;
 }
 
 void PaletteStore::dropWatcherAndClearSourcePath()
@@ -247,14 +301,13 @@ void PaletteStore::dropWatcherAndClearSourcePath()
     // m_sourcePath so QML bindings re-evaluate.
     //
     // Clear m_sourcePath BEFORE stopping the debounce + removing
-    // watch paths so this helper is structurally symmetric with
-    // resetToDefaults — both watcher-dropping paths follow the same
-    // clear-then-disarm sequence. The symmetry is a defense-in-depth
-    // guard: any future refactor that reorders signal emit, watcher
-    // teardown, or debounce stop in EITHER routine still preserves
-    // the invariant "by the time any user slot sees the change,
-    // m_sourcePath is already empty so reloadFromCurrentPath's
-    // empty-source short-circuit covers any racing tick".
+    // watch paths so any user slot that observes
+    // sourcePathChanged sees an already-empty source — that lets
+    // reloadFromCurrentPath's empty-source short-circuit cover
+    // any racing debounce tick. Both watcher-dropping callers
+    // (loadFromJson and resetToDefaults) route through this one
+    // helper, so the sequence cannot drift between them by
+    // construction.
     //
     // Also stop any pending debounce so a queued reload tick can't
     // run reloadFromCurrentPath against the (now empty) source.
@@ -276,37 +329,21 @@ void PaletteStore::dropWatcherAndClearSourcePath()
 
 PaletteStore::ApplyResult PaletteStore::applyParsedJson(const QJsonDocument& doc)
 {
-    // Route through extractTokensOrEmpty (the single source of
-    // truth for the wrapped-vs-flat shape rules). validateDoc
-    // uses the same helper, so the two cannot disagree on which
-    // payloads pass the shape check.
-    ApplyResult shapeError = ApplyResult::Ok;
-    const QJsonObject tokens = extractTokensOrEmpty(doc, shapeError);
-    if (shapeError != ApplyResult::Ok) {
-        return shapeError;
+    // Route through extractValidTokens (the single source of truth
+    // for the wrapped-vs-flat shape rules AND the QColor accept
+    // set). validateDoc uses the same helper, so the two cannot
+    // disagree on which payloads pass the shape check.
+    ApplyResult err = ApplyResult::Ok;
+    auto parsed = extractValidTokens(doc, err);
+    if (err != ApplyResult::Ok) {
+        return err;
     }
-
-    QVariantMap parsed;
-    for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
-        const auto& val = it.value();
-        if (!val.isString()) {
-            // Tokens are colors; non-strings are either matugen metadata
-            // we don't care about (the "$schema" / "version" keys) or
-            // user mistakes we can't usefully repair. Silently skip.
-            continue;
-        }
-        QColor c(val.toString());
-        if (!c.isValid()) {
-            continue;
-        }
-        parsed.insert(it.key(), c);
-    }
-
-    if (parsed.isEmpty()) {
+    Q_ASSERT(parsed.has_value());
+    if (parsed->isEmpty()) {
         return ApplyResult::NoUsableTokens;
     }
 
-    applyPalette(parsed);
+    applyPalette(*parsed);
     return ApplyResult::Ok;
 }
 
@@ -331,36 +368,45 @@ bool PaletteStore::loadFromFile(const QString& path)
     const QString canonical = info.canonicalFilePath();
     const QString absolutePath = canonical.isEmpty() ? info.absoluteFilePath() : canonical;
 
-    QFile file(absolutePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        Q_EMIT loadError(absolutePath, file.errorString());
-        return false;
-    }
-    const auto data = file.readAll();
-    if (file.error() != QFileDevice::NoError) {
-        // readAll() returns whatever it managed to read on a short
-        // read (truncated NFS mounts, signal-interrupted reads).
-        // Without this check we'd silently parse a partial buffer as
-        // if it were the full file and either mutate state from a
-        // half-payload or report a misleading "invalid JSON" error
-        // for what is actually an I/O failure. Mirrors the check in
-        // TemplateEngine::renderFile.
-        Q_EMIT loadError(absolutePath, file.errorString());
-        return false;
-    }
-    file.close();
-
-    // Parse + validate FIRST against a local QJsonDocument so a
-    // failed parse doesn't observably mutate sourcePath / the
-    // watcher. The previous order (set m_sourcePath, parse, roll
-    // back on failure) emitted sourcePathChanged twice (new → old)
-    // for a single failed load, which QML bindings would see as
-    // two transient states.
-    QJsonParseError err{};
-    const auto doc = QJsonDocument::fromJson(data, &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON"));
-        return false;
+    // Pre-flight parse: read + parse the file into a local
+    // QJsonDocument so an outright I/O or parse failure doesn't
+    // observably mutate sourcePath / the watcher. The previous order
+    // (set m_sourcePath, parse, roll back on failure) emitted
+    // sourcePathChanged twice (new → old) for a single failed load,
+    // which QML bindings would see as two transient states. We
+    // re-read the same file inside readParseAndApply below — that
+    // duplicates one file open but keeps the shape-failure paths
+    // (TokensKeyNotObject / NoUsableTokens) able to commit
+    // sourcePath BEFORE surfacing the error so editor-driven fix-
+    // ups can hot-reload without re-triggering load. The cost is a
+    // single re-open of a file the kernel just had in cache.
+    //
+    // Path-equality is case-sensitive here. PlasmaZones is Linux-
+    // only (Wayland-only per the project rules), and Linux
+    // filesystems used in practice (ext4, btrfs, xfs, tmpfs) are
+    // case-sensitive at the inode level. A future port to a case-
+    // insensitive filesystem (HFS+, exFAT, NTFS) would need this
+    // comparison switched to QFileInfo-based equality so two
+    // capitalisations of the same path don't trigger a redundant
+    // watcher swap. Today this is YAGNI.
+    {
+        QFile preflight(absolutePath);
+        if (!preflight.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            Q_EMIT loadError(absolutePath, preflight.errorString());
+            return false;
+        }
+        const auto preflightData = preflight.readAll();
+        if (preflight.error() != QFileDevice::NoError) {
+            Q_EMIT loadError(absolutePath, preflight.errorString());
+            return false;
+        }
+        preflight.close();
+        QJsonParseError err{};
+        const auto preflightDoc = QJsonDocument::fromJson(preflightData, &err);
+        if (err.error != QJsonParseError::NoError || !preflightDoc.isObject()) {
+            Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON"));
+            return false;
+        }
     }
 
     // Commit the path BEFORE applyParsedJson so QML bindings that
@@ -409,28 +455,61 @@ bool PaletteStore::loadFromFile(const QString& path)
         Q_EMIT sourcePathChanged();
     }
 
-    // Apply the (already-parsed) document via the typed-error
-    // overload so we can split the two failure modes into distinct
-    // user-facing messages instead of the prior catch-all "invalid
-    // JSON or empty token map". applyParsedJson can still return
-    // a non-Ok result on an empty token map / non-object tokens key;
-    // in those cases we emit a precise loadError but leave
-    // sourcePath + the watcher pointed at the new file — the file
-    // exists, the JSON is syntactically fine, the contents just had
-    // no usable tokens. That is the shape a user can fix in-editor
-    // without re-triggering load, so keeping the watcher armed is
-    // the right call.
-    switch (applyParsedJson(doc)) {
+    // Route through the shared file-read-parse-apply pipeline so
+    // loadFromFile and reloadFromCurrentPath surface identical
+    // diagnostic wording for every failure mode. The pipeline
+    // emits loadError itself on every non-Ok path.
+    return readParseAndApply(absolutePath, /*isReload=*/false) == ApplyResult::Ok;
+}
+
+PaletteStore::ApplyResult PaletteStore::readParseAndApply(const QString& absolutePath, bool isReload)
+{
+    // Shared file-read-parse-apply path. Both loadFromFile (after
+    // its watcher/path bookkeeping) and reloadFromCurrentPath (from
+    // the debounce timer) call here so the error messages a fresh
+    // load surfaces are identical to the messages a hot-reload
+    // surfaces. The isReload parameter is plumbed for forward
+    // compatibility with a future "[hot-reload]" message prefix but
+    // is intentionally unused today — diagnostic granularity is
+    // already provided by the typed ApplyResult enum.
+    Q_UNUSED(isReload);
+    QFile file(absolutePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        Q_EMIT loadError(absolutePath, file.errorString());
+        return ApplyResult::NoUsableTokens;
+    }
+    const auto data = file.readAll();
+    if (file.error() != QFileDevice::NoError) {
+        // readAll() returns whatever it managed to read on a short
+        // read (truncated NFS mounts, signal-interrupted reads).
+        // Without this check we'd silently parse a partial buffer as
+        // if it were the full file and either mutate state from a
+        // half-payload or report a misleading "invalid JSON" error
+        // for what is actually an I/O failure. Mirrors the check in
+        // TemplateEngine::renderFile.
+        Q_EMIT loadError(absolutePath, file.errorString());
+        return ApplyResult::NoUsableTokens;
+    }
+    file.close();
+
+    QJsonParseError err{};
+    const auto doc = QJsonDocument::fromJson(data, &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON"));
+        return ApplyResult::NoUsableTokens;
+    }
+    const ApplyResult result = applyParsedJson(doc);
+    switch (result) {
     case ApplyResult::Ok:
-        return true;
+        return ApplyResult::Ok;
     case ApplyResult::TokensKeyNotObject:
         Q_EMIT loadError(absolutePath, QStringLiteral("tokens key must be a JSON object"));
-        return false;
+        return result;
     case ApplyResult::NoUsableTokens:
         Q_EMIT loadError(absolutePath, QStringLiteral("no usable color tokens"));
-        return false;
+        return result;
     }
-    return false;
+    Q_UNREACHABLE();
 }
 
 void PaletteStore::applyTokens(const QVariantMap& tokens)
@@ -443,28 +522,21 @@ void PaletteStore::applyTokens(const QVariantMap& tokens)
 
 void PaletteStore::resetToDefaults()
 {
-    // Clear m_sourcePath BEFORE stopping the debounce so a future
-    // refactor that reorders the watcher-drop or signal emit still
-    // benefits from reloadFromCurrentPath's empty-source short-
-    // circuit. The header contract is "stops any active filesystem
-    // watch" — that covers both the file watch and its paired
-    // parent-directory watch. Leaking the directory watch would
-    // hold an inotify slot forever even after the user dropped
-    // back to defaults.
-    const bool sourcePathWasSet = !m_sourcePath.isEmpty();
-    if (sourcePathWasSet) {
-        m_sourcePath.clear();
-    }
-    m_reloadDebounce->stop();
-    if (!m_watcher->files().isEmpty()) {
-        m_watcher->removePaths(m_watcher->files());
-    }
-    if (!m_watcher->directories().isEmpty()) {
-        m_watcher->removePaths(m_watcher->directories());
-    }
-    if (sourcePathWasSet) {
-        Q_EMIT sourcePathChanged();
-    }
+    // Tear the watcher down + clear sourcePath via the dedicated
+    // helper so the two watcher-tearing paths (loadFromJson and
+    // resetToDefaults) share the same sequence by CONSTRUCTION,
+    // not by parallel-edited copies of the same five-step ritual.
+    // A previous version of this method open-coded the sequence
+    // inline; the symmetry was load-bearing for the
+    // sourcePathChanged-before-paletteChanged signal-ordering
+    // contract and parallel implementations were a regression
+    // surface every time either path was touched. Routing both
+    // through the helper makes the divergence structurally
+    // impossible. The helper also handles the
+    // sourcePathChanged emit, so by the time control returns
+    // here m_sourcePath is empty and any user slot has already
+    // seen the new (empty) value.
+    dropWatcherAndClearSourcePath();
 
     // True replace-with-defaults: drop any user-extended tokens
     // that aren't part of the canonical default set, then apply
@@ -496,21 +568,13 @@ void PaletteStore::resetToDefaults()
         }
     }
 
-    // applyPalette emits paletteChanged itself if any value
-    // changed. If it doesn't (store already at defaults for every
-    // default key) but we dropped at least one extra key above,
-    // we still need to fire paletteChanged because the palette
-    // observably changed. Use a one-shot connection to detect
-    // applyPalette's emit so we don't double-fire.
-    bool applyEmitted = false;
-    const auto conn = connect(
-        this, &PaletteStore::paletteChanged, this,
-        [&applyEmitted]() {
-            applyEmitted = true;
-        },
-        Qt::DirectConnection);
-    applyPalette(defaults);
-    disconnect(conn);
+    // applyPalette returns whether it emitted paletteChanged. If
+    // it didn't (store already at defaults for every default key)
+    // but we dropped at least one extra key above, we still need
+    // to fire paletteChanged because the palette observably
+    // changed. Reading the return value avoids the previous
+    // connect/lambda/disconnect dance to observe the emit.
+    const bool applyEmitted = applyPalette(defaults);
     if (droppedExtras && !applyEmitted) {
         Q_EMIT paletteChanged();
     }
@@ -525,7 +589,14 @@ QString PaletteStore::sourcePath() const
 // side effect that used to live here moved into the dedicated
 // dropWatcherAndClearSourcePath() helper — applyPalette is now
 // purely a token-merge primitive with no watcher coupling.
-void PaletteStore::applyPalette(const QVariantMap& tokens)
+//
+// Returns true iff at least one stored value changed (i.e.
+// paletteChanged was emitted). resetToDefaults reads the return
+// value to decide whether it needs to fire paletteChanged itself
+// for an "extras dropped but defaults already in place" case,
+// without resorting to a transient signal-spy connection to detect
+// the emit.
+bool PaletteStore::applyPalette(const QVariantMap& tokens)
 {
     // Merge over the current palette: tokens absent from the new payload
     // keep their previous value. This is the documented behaviour from
@@ -560,6 +631,7 @@ void PaletteStore::applyPalette(const QVariantMap& tokens)
     if (changed) {
         Q_EMIT paletteChanged();
     }
+    return changed;
 }
 
 void PaletteStore::reloadFromCurrentPath()
@@ -567,52 +639,19 @@ void PaletteStore::reloadFromCurrentPath()
     if (m_sourcePath.isEmpty()) {
         return;
     }
-    QFile file(m_sourcePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        Q_EMIT loadError(m_sourcePath, file.errorString());
-        return;
-    }
-    const auto data = file.readAll();
-    if (file.error() != QFileDevice::NoError) {
-        // Short-read guard — same rationale as loadFromFile. A
-        // truncated NFS read or signal-interrupted readAll() would
-        // otherwise feed the parser a partial buffer and either
-        // silently mutate the palette from a half-payload or emit
-        // a misleading "invalid JSON" error. Mirrors
-        // TemplateEngine::renderFile.
-        Q_EMIT loadError(m_sourcePath, file.errorString());
-        return;
-    }
-    file.close();
-
-    // Mirror loadFromFile's parse-first + typed-apply pattern so
-    // hot-reload surfaces the SAME precise error messages a fresh
-    // load would. The previous catch-all "invalid JSON or empty
-    // token map" string conflated malformed JSON, non-object
-    // `tokens`, and empty token maps — three distinct failures the
-    // user fixes in different ways. Routing through the typed
-    // ApplyResult switch keeps the diagnostic granularity
-    // consistent across loadFromFile and reloadFromCurrentPath.
-    //
     // The watcher stays armed throughout: this method is reached
     // only via the debounced timer, and dropWatcherAndClearSourcePath
-    // is the sole watcher-tearing path (loadFromJson, resetToDefaults).
-    QJsonParseError err{};
-    const auto doc = QJsonDocument::fromJson(data, &err);
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        Q_EMIT loadError(m_sourcePath, QStringLiteral("invalid JSON"));
-        return;
-    }
-    switch (applyParsedJson(doc)) {
-    case ApplyResult::Ok:
-        return;
-    case ApplyResult::TokensKeyNotObject:
-        Q_EMIT loadError(m_sourcePath, QStringLiteral("tokens key must be a JSON object"));
-        return;
-    case ApplyResult::NoUsableTokens:
-        Q_EMIT loadError(m_sourcePath, QStringLiteral("no usable color tokens"));
-        return;
-    }
+    // is the sole watcher-tearing path (loadFromJson,
+    // resetToDefaults). Route through the shared
+    // readParseAndApply pipeline so the diagnostic wording on every
+    // failure mode matches loadFromFile exactly — the user must see
+    // the same "invalid JSON" / "tokens key must be a JSON object"
+    // / "no usable color tokens" string whether they triggered the
+    // load explicitly or via a hot-reload tick. The return value is
+    // ignored: reloadFromCurrentPath has no caller to surface
+    // success/failure to; the loadError signal is the only
+    // observable side-channel.
+    (void)readParseAndApply(m_sourcePath, /*isReload=*/true);
 }
 
 } // namespace PhosphorTheme

@@ -49,11 +49,17 @@ class PHOSPHORSERVICEPIPEWIRE_EXPORT PipeWireConnection : public QObject
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(PipeWireConnection)
     Q_PROPERTY(bool connected READ isConnected NOTIFY connectedChanged)
-    /// True when the PipeWire daemon was reachable at the last
-    /// `connect()` attempt. Distinct from `connected`: a daemon may
-    /// exist on the bus but reject the handshake (version mismatch,
-    /// permission denial). QML uses `daemonAvailable` to drive the
-    /// "PipeWire is installed but unreachable" diagnostic.
+    /// True once the PipeWire daemon has answered the `pw_core` info
+    /// event for the current connection (i.e. `pw_context_connect`
+    /// succeeded AND the daemon shipped its core info). Distinct from
+    /// `connected`: the daemon may answer info but still fail the
+    /// follow-up handshake sync (version mismatch, permission denial,
+    /// transient teardown), in which case `daemonAvailable` stays true
+    /// but `connected` never flips on. QML uses `daemonAvailable` to
+    /// drive the "PipeWire is installed but unreachable" diagnostic.
+    /// Reset to false on disconnect and on every pre-info failure
+    /// path (`pw_context_new` / `pw_context_connect` returning null,
+    /// `pw_core_sync` failing).
     Q_PROPERTY(bool daemonAvailable READ isDaemonAvailable NOTIFY daemonAvailableChanged)
     /// Canonical PipeWire `node.name` of the WirePlumber default audio
     /// sink. Empty when no default metadata has been reported yet (no
@@ -75,9 +81,11 @@ public:
     /// C++ callers only. Live pointers — they're owned by this
     /// connection (QObject parent chain) and survive until the
     /// corresponding `nodeRemoved` signal fires. Returned by value
-    /// (a copy of the internal vector), so the caller can iterate
-    /// without locking; the underlying list is mutated only on the
-    /// GUI thread.
+    /// (a freshly-built QList copy of the values from the internal
+    /// `QHash<quint32, PwNode*>`), so the caller can iterate without
+    /// locking; the underlying hash is mutated only on the GUI thread.
+    /// Iteration order is unspecified — the underlying storage is a
+    /// hash, not a sequence; do not rely on registry-insertion order.
     ///
     /// QML consumers must NOT use this accessor: a by-value
     /// `QList<QObject*>` return is not bindable from QML. The

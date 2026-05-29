@@ -132,7 +132,12 @@ void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id
     // global_remove can plausibly fire before that ack (proxy bind
     // races a daemon-side teardown). Compare against the registry id
     // we captured at bind time instead — that one is always valid.
-    if (d->defaultMetadata && d->defaultMetadataId != SPA_ID_INVALID && d->defaultMetadataId == id) {
+    // The `id != SPA_ID_INVALID` clause rejects the unbound sentinel
+    // even if PipeWire ever surfaced one; the equality test against
+    // `defaultMetadataId` already implies `defaultMetadata != nullptr`
+    // via the invariant documented on `defaultMetadataId`, so no
+    // separate `defaultMetadata` null-check is needed.
+    if (d->defaultMetadataId == id && id != SPA_ID_INVALID) {
         spa_hook_remove(&d->defaultMetadataListener);
         pw_proxy_destroy(d->defaultMetadata);
         d->defaultMetadata = nullptr;

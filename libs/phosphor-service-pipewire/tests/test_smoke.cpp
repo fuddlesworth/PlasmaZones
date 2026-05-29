@@ -230,8 +230,8 @@ private Q_SLOTS:
 
         // Pre-connect writes must early-out cleanly (loop running but
         // no core/registry yet, so the node id lookup will fail).
-        conn.writeVolumes(99999, {0.5, 0.5});
-        conn.writeMuted(99999, true);
+        conn.writeVolumes(99999u, {0.5, 0.5});
+        conn.writeMuted(99999u, true);
         QTest::qWait(50);
         // Pre-connect: still disconnected, no error surfaced.
         QCOMPARE(conn.isConnected(), false);
@@ -244,8 +244,8 @@ private Q_SLOTS:
         conn.connect();
         QTest::qWait(250);
         const bool wasConnected = conn.isConnected();
-        conn.writeVolumes(99999, {0.5});
-        conn.writeMuted(99999, false);
+        conn.writeVolumes(99999u, {0.5});
+        conn.writeMuted(99999u, false);
         QTest::qWait(100);
 
         if (wasConnected) {
@@ -327,16 +327,27 @@ private Q_SLOTS:
         QSignalSpy availSpy(&host, &PhosphorServicePipeWire::PipeWireHost::daemonAvailableChanged);
         // Host construction kicked off connect() — give it a moment.
         QTest::qWait(250);
-        if (host.isConnected()) {
-            QVERIFY(connSpy.count() >= 1);
-            QVERIFY(availSpy.count() >= 1);
-            // Property forwarding matches the connection's truth.
-            QCOMPARE(host.defaultSinkName(), host.connection()->defaultSinkName());
+        if (!host.isConnected()) {
+            // Surface a real skip in the CI dashboard rather than a
+            // silent fallthrough; a "no-daemon" run looks identical to a
+            // "real check" run otherwise, hiding regressions on the
+            // forwarding path.
+            QSKIP("no PipeWire daemon present");
         }
-        // reconnect() exercises the disconnect → connect cycle.
+        QVERIFY(connSpy.count() >= 1);
+        QVERIFY(availSpy.count() >= 1);
+        // Property forwarding matches the connection's truth.
+        QCOMPARE(host.defaultSinkName(), host.connection()->defaultSinkName());
+        // reconnect() exercises the disconnect → connect cycle. After
+        // it returns, the connection accessor must still be live and the
+        // connectedChanged spy must have observed at least one more
+        // transition (the disconnect half of the cycle) plus the second
+        // reconnect half if the daemon answered the new handshake.
         host.reconnect();
         QTest::qWait(150);
-        QVERIFY(true);
+        QVERIFY(host.connection() != nullptr);
+        if (host.isConnected())
+            QVERIFY(connSpy.count() >= 2);
     }
 
     /// WirePlumber's default metadata should surface a non-empty
@@ -402,16 +413,20 @@ private Q_SLOTS:
         }
     }
 
-    /// When no default metadata has been bound (no WirePlumber bound
-    /// yet, or pre-handshake), `defaultSinkName()` /
-    /// `defaultSourceName()` must stay empty and the connection must
-    /// not crash. This test only pins the library's contract; it does
-    /// NOT exercise the CLI's resolveTarget() sentinel handling (that's
-    /// the CLI's own responsibility). The empty-default contract
-    /// pinned here is what the CLI relies on to surface its
-    /// "no node matches default sentinel" diagnostic on bare-daemon
-    /// hosts.
-    void connectionSurvivesEmptyDefaultSentinels()
+    /// Pin the pre-connect empty-defaults baseline plus the
+    /// post-handshake survival contract: when no default metadata has
+    /// been bound yet (pre-connect, or on a bare-daemon host with no
+    /// WirePlumber), `defaultSinkName()` / `defaultSourceName()` must
+    /// stay empty and the connection must not crash. On the
+    /// daemon-connected path we only assert that the connection stayed
+    /// up — we can't distinguish "bare-daemon, no WirePlumber" from
+    /// "WirePlumber present" without probing further, so this is
+    /// post-handshake survival, NOT a daemon-side empty-defaults
+    /// assertion. The populated-default path lives in
+    /// `defaultSinkNameSurfacesFromWirePlumber`. CLI sentinel handling
+    /// (resolveTarget) is the CLI's own responsibility and is covered
+    /// by the CLI tests.
+    void connectionSurvivesPostHandshake()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
         // Pre-connect: no metadata has been bound yet. These

@@ -697,7 +697,9 @@ add_subdirectory(examples/phosphor-perscreen-demo)
 # exercising the read paths (list sinks/sources/streams, default),
 # write paths (set-volume, mute/unmute), and metadata writes
 # (set-default-sink/source) against a live PipeWire + WirePlumber
-# daemon.
+# daemon. Gated to match libs/phosphor-service-pipewire itself: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the
+# CLI can't link.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-pipewire-cli)
 endif()

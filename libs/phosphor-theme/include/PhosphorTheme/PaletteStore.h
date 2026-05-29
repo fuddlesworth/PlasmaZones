@@ -12,6 +12,7 @@
 #include <QtQmlIntegration/qqmlintegration.h>
 
 #include <memory>
+#include <optional>
 
 class QFileSystemWatcher;
 class QJsonDocument;
@@ -160,10 +161,35 @@ private:
     /// touching the watcher / m_sourcePath, satisfying the "failed
     /// load does not observably mutate state" contract without
     /// duplicating the shape-check logic across two call sites.
-    /// Implemented via extractTokensOrEmpty so it can't drift from
-    /// applyParsedJson on the shape rules.
+    /// Implemented via extractValidTokens so it can't drift from
+    /// applyParsedJson on the shape rules — both call sites consume
+    /// the same already-normalised token map.
     static ApplyResult validateDoc(const QJsonDocument& doc);
+    /// Shared extraction + normalisation step that both validateDoc
+    /// and applyParsedJson route through. Walks the wrapped/flat
+    /// shape via extractTokensOrEmpty, then QColor-parses every
+    /// string entry exactly once and caches the validated map. On
+    /// shape error returns the matching ApplyResult variant; on an
+    /// otherwise valid payload returns the normalised QVariantMap
+    /// (empty if no usable colors were found — applyParsedJson maps
+    /// that to NoUsableTokens). Caching the parsed map prevents
+    /// double QColor-parsing in the load-then-validate-then-apply
+    /// path and ensures the validator and applier accept the exact
+    /// same byte sequence.
+    static std::optional<QVariantMap> extractValidTokens(const QJsonDocument& doc, ApplyResult& outError);
     ApplyResult applyParsedJson(const QJsonDocument& doc);
+    /// Post-path-resolution pipeline shared by loadFromFile and
+    /// reloadFromCurrentPath: open + short-read guard + close +
+    /// parse + applyParsedJson with identical error wording on
+    /// every failure mode. The caller (loadFromFile or the
+    /// debounce-driven reloadFromCurrentPath) handles watcher and
+    /// sourcePath management around this; this helper is a pure
+    /// "read these bytes off disk, push them through the apply
+    /// pipeline, surface the typed result" operation. isReload is
+    /// retained for future divergence in the diagnostic wording but
+    /// is unused today — the contract is identical messages across
+    /// both paths.
+    ApplyResult readParseAndApply(const QString& absolutePath, bool isReload);
     /// Disarms the active filesystem watch (file + parent directory),
     /// cancels any pending debounced reload, and clears m_sourcePath
     /// (emitting sourcePathChanged if it was non-empty). The
@@ -175,8 +201,12 @@ private:
     /// normalised to QColor. Emits paletteChanged when at least
     /// one stored value differs from the incoming one. Pure
     /// in-memory merge: does NOT touch the watcher, the source
-    /// path, or trigger any file I/O.
-    void applyPalette(const QVariantMap& tokens);
+    /// path, or trigger any file I/O. Returns true iff at least
+    /// one stored value changed (i.e. paletteChanged was emitted),
+    /// so callers like resetToDefaults can compose the merge result
+    /// with their own "did anything else change?" signal without
+    /// resorting to a connect/disconnect dance to observe the emit.
+    bool applyPalette(const QVariantMap& tokens);
     void reloadFromCurrentPath();
 
     QVariantMap m_palette;
