@@ -91,8 +91,13 @@ void SettingsController::buildApplicationController()
     // rename the controller id to something like "animations-staging" so
     // the two surfaces are independent.
     regPage(m_animationsPage, QString(), PzI18n::tr("Animations"), QString(), QStringLiteral("media-playback-start"));
-    regVirtual(QStringLiteral("rules"), QString(), PzI18n::tr("Rules"), QString(), QStringLiteral("view-list-details"),
-               /*collapsible=*/true, /*divider=*/true);
+    // Window Rules sits at the top level — it used to live under a
+    // collapsible "Rules" category alongside Exclusions, but after the v4
+    // fold there is only one rule surface left, so the parent category
+    // would add navigation without organising anything. Promoting it
+    // gets the page one click closer too.
+    regPage(m_windowRulesPage, QString(), PzI18n::tr("Window Rules"), QStringLiteral("WindowRulesPage.qml"),
+            QStringLiteral("view-list-details"));
     regPage(m_editorPage, QString(), PzI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
             QStringLiteral("document-edit"));
     regPage(m_generalPage, QString(), PzI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
@@ -105,17 +110,6 @@ void SettingsController::buildApplicationController()
                QStringLiteral("VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"));
     regVirtual(QStringLiteral("layouts"), QStringLiteral("display"), PzI18n::tr("Layouts"),
                QStringLiteral("LayoutsPage.qml"), QStringLiteral("view-grid"));
-
-    // Rules children — exclusions used to live here as a sibling page (excluded
-    // applications + window classes lists). v4 folds those entries into
-    // Window Rules as Application-subject Exclude rules
-    // (ConfigMigration::migrateV3ToV4 → finalizeV4Conversion), and the three
-    // global window-filtering knobs that also lived on that page
-    // (excludeTransientWindows / minimumWindowWidth / minimumWindowHeight)
-    // moved to the General page's "Window filtering" card. No standalone
-    // Exclusions entry remains.
-    regPage(m_windowRulesPage, QStringLiteral("rules"), PzI18n::tr("Window Rules"),
-            QStringLiteral("WindowRulesPage.qml"), QStringLiteral("view-list-details"));
 
     // Snapping children — the *-cat entries mirror the legacy collapsible
     // category headers (Visual / Behavior / Configuration). They have no
@@ -296,7 +290,9 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
-        {QStringLiteral("rules"), QStringLiteral("window-rules")},
+        // The "rules" parent virtual retired when Window Rules promoted
+        // to a top-level entry; no redirect needed because there is no
+        // longer a parent id to land on.
         // The *-cat virtual headers (registered as collapsible category
         // entries in buildApplicationController above) are real entries
         // in the framework PageRegistry — without an explicit redirect,
@@ -400,7 +396,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // child page is dirty. Mirrors the registry topology in
         // buildApplicationController() above.
         {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
-        {QStringLiteral("rules"), {QStringLiteral("window-rules")}},
+        // No "rules" entry — Window Rules is a top-level leaf so its
+        // dirty state propagates without a parent-bucket intermediary.
     };
     return groups;
 }
