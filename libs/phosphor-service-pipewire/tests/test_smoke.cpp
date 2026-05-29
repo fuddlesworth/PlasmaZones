@@ -195,8 +195,14 @@ private Q_SLOTS:
         const auto toSet = [](const QStringList& list) {
             return QStringSet(list.cbegin(), list.cend());
         };
+        // Assert both set membership AND list size so a stutter regression
+        // (e.g. {"Audio/Sink", "Audio/Sink"}) doesn't pass — QSet membership
+        // alone would collapse the duplicate.
+        QCOMPARE(sinks.mediaClasses().size(), 1);
         QCOMPARE(toSet(sinks.mediaClasses()), QStringSet{QStringLiteral("Audio/Sink")});
+        QCOMPARE(sources.mediaClasses().size(), 1);
         QCOMPARE(toSet(sources.mediaClasses()), QStringSet{QStringLiteral("Audio/Source")});
+        QCOMPARE(streams.mediaClasses().size(), 2);
         QCOMPARE(toSet(streams.mediaClasses()),
                  (QStringSet{QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")}));
     }
@@ -278,9 +284,16 @@ private Q_SLOTS:
                 QVERIFY2(propsSpy.count() >= 1,
                          "subsequent known-good write produced no propsChanged echo (silent-swallow regression?)");
                 // Restore the previous mute state so this test is
-                // side-effect-clean for the developer host.
+                // side-effect-clean for the developer host. Wait for
+                // the restore echo too so the next test starts from a
+                // settled state rather than a fire-and-forget write
+                // that might still be in flight.
+                const int beforeRestore = propsSpy.count();
                 sink->setMuted(!flipTo);
-                QTest::qWait(100);
+                if (propsSpy.count() == beforeRestore)
+                    propsSpy.wait(500);
+                QVERIFY2(propsSpy.count() > beforeRestore,
+                         "restore write produced no propsChanged echo (test left dirty state)");
             }
             // No sink available (rare: a connected daemon with zero
             // audio sinks). The negative half still pinned no-crash
@@ -331,8 +344,11 @@ private Q_SLOTS:
         QSignalSpy sinkSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::defaultSinkNameChanged);
         conn.connect();
         QTest::qWait(300);
+        // Surface a real skip in the CI dashboard rather than a silent
+        // pass; a "no-daemon" run looks identical to a "real check"
+        // run otherwise, which hides regressions on the daemon path.
         if (!conn.isConnected())
-            return;
+            QSKIP("no PipeWire daemon present", SkipSingle);
         // After handshake + initial registry walk, defaults should
         // have landed if WirePlumber is running. If they didn't, we
         // accept that (bare-daemon edge case) without failing.
@@ -358,8 +374,11 @@ private Q_SLOTS:
         conn.connect();
         QTest::qWait(300);
 
+        // Surface a real skip in the CI dashboard rather than a silent
+        // pass; a "no-daemon" run looks identical to a "real check"
+        // run otherwise, which hides regressions on the daemon path.
         if (!conn.isConnected())
-            return; // No daemon — nothing more to assert.
+            QSKIP("no PipeWire daemon present", SkipSingle);
 
         // Every row of each model must match the model's filter.
         for (int i = 0; i < sinks.rowCount(); ++i) {
@@ -388,7 +407,9 @@ private Q_SLOTS:
     void defaultSentinelMissingMetadataIsHandled()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
-        // Pre-connect: no metadata has been bound yet.
+        // Pre-connect: no metadata has been bound yet. These
+        // assertions are checked unconditionally so the test reports
+        // a real verification regardless of host configuration.
         QCOMPARE(conn.defaultSinkName(), QString());
         QCOMPARE(conn.defaultSourceName(), QString());
 
@@ -399,16 +420,18 @@ private Q_SLOTS:
         conn.connect();
         QTest::qWait(250);
         if (!conn.isConnected()) {
-            // No daemon at all — must still expose empty defaults
-            // without crashing.
-            QCOMPARE(conn.defaultSinkName(), QString());
-            QCOMPARE(conn.defaultSourceName(), QString());
+            // No daemon at all — surface a real skip in the CI dashboard
+            // so the post-connect contract isn't silently treated as
+            // verified on a no-daemon host.
+            QSKIP("no PipeWire daemon present", SkipSingle);
         }
-        // If a daemon + WirePlumber are present the defaults will be
-        // populated; we don't assert that here (the
-        // `defaultSinkNameSurfacesFromWirePlumber` test covers the
-        // populated path). The contract this test pins is: empty stays
-        // empty when metadata is absent, no crashes either way.
+        // Daemon connected. We can't distinguish "bare-daemon, no
+        // WirePlumber" from "WirePlumber present" without probing
+        // further, but either way the connection must survive without
+        // crashing. The populated-default path is covered by
+        // `defaultSinkNameSurfacesFromWirePlumber`; here we only pin
+        // that an empty-default daemon doesn't crash the connection.
+        QVERIFY(conn.isConnected());
     }
 
     /// After disconnect() any tracked nodes must be removed (the
@@ -423,15 +446,23 @@ private Q_SLOTS:
         conn.connect();
         QTest::qWait(250);
         const int trackedBeforeDisconnect = conn.nodes().size();
+        // Snapshot the removed-count BEFORE disconnect so we can assert
+        // the disconnect-driven delta. A pre-disconnect spurious
+        // nodeRemoved (a node legitimately going away during the
+        // handshake) would otherwise be counted against the
+        // disconnect-driven removals and mask a regression.
+        const int removedBeforeDisconnect = removedSpy.count();
         conn.disconnect();
         QTest::qWait(150);
         // Every node that was being tracked at disconnect time must
-        // have a matching nodeRemoved emission. Use >= because the
-        // daemon may also remove nodes mid-shutdown.
-        QVERIFY2(
-            removedSpy.count() >= trackedBeforeDisconnect,
-            qPrintable(
-                QStringLiteral("removed %1, expected >= %2").arg(removedSpy.count()).arg(trackedBeforeDisconnect)));
+        // have a matching nodeRemoved emission attributable to the
+        // disconnect itself. Use >= because the daemon may also remove
+        // nodes mid-shutdown.
+        const int disconnectDrivenRemovals = removedSpy.count() - removedBeforeDisconnect;
+        QVERIFY2(disconnectDrivenRemovals >= trackedBeforeDisconnect,
+                 qPrintable(QStringLiteral("disconnect-driven removed %1, expected >= %2")
+                                .arg(disconnectDrivenRemovals)
+                                .arg(trackedBeforeDisconnect)));
         // Post-disconnect the snapshot must be empty regardless of
         // whether a daemon was present.
         QCOMPARE(conn.nodes().size(), 0);

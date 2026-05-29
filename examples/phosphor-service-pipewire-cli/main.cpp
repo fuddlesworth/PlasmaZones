@@ -8,6 +8,7 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 #include <QTextStream>
 #include <QTimer>
@@ -278,31 +279,50 @@ int cmdDefault(PhosphorServicePipeWire::PipeWireConnection& conn)
 /// re-check the predicate; the wait continues until the predicate
 /// matches or the deadline elapses. `label` is used for the timeout
 /// diagnostic on stderr.
+///
+/// The `node` handle is guarded by QPointer so a daemon-side node
+/// removal mid-write cleanly breaks the loop instead of leaving the
+/// lambda calling methods on a dangling pointer.
+///
+/// After the deadline elapses we run the predicate one final time so a
+/// late echo that landed during the disconnect / loop-exit window is
+/// still caught. This keeps the function symmetric with waitForString's
+/// post-loop recheck.
 bool waitForPropsEchoAndVerify(PhosphorServicePipeWire::PwNode* node, const std::function<bool()>& predicate,
                                int timeoutMs, const char* label)
 {
-    if (!node)
+    QPointer<PhosphorServicePipeWire::PwNode> guard(node);
+    if (!guard)
         return false;
     if (predicate())
         return true;
     QElapsedTimer timer;
     timer.start();
     while (timer.elapsed() < timeoutMs) {
+        if (!guard)
+            break;
         QEventLoop loop;
         const int remaining = timeoutMs - static_cast<int>(timer.elapsed());
         if (remaining <= 0)
             break;
-        auto conn1 = QObject::connect(node, &PhosphorServicePipeWire::PwNode::propsChanged, &loop, [&loop]() {
+        auto conn1 = QObject::connect(guard.data(), &PhosphorServicePipeWire::PwNode::propsChanged, &loop, [&loop]() {
             loop.quit();
         });
         QTimer::singleShot(remaining, &loop, &QEventLoop::quit);
         loop.exec();
         QObject::disconnect(conn1);
+        if (!guard)
+            break;
         if (predicate())
             return true;
         // Unrelated emission (or spurious wake): fall through and
         // re-arm the wait for any remaining budget.
     }
+    // Final recheck: a propsChanged that arrived during the disconnect
+    // / loop-exit window would otherwise be missed, producing a spurious
+    // timeout even though the daemon committed the value.
+    if (guard && predicate())
+        return true;
     err() << label << ": timed out waiting for propsChanged echo (" << timeoutMs << "ms)\n";
     return false;
 }
@@ -333,7 +353,13 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
     // unrelated emissions so a parallel app tweaking another channel
     // can't cause an early-quit.
     constexpr qreal kVolumeEpsilon = 0.01;
-    const auto matchesRequest = [node, linear]() {
+    // Capture the matched snapshot inside the predicate so a later
+    // unrelated propsChanged can't clobber the values we print. Without
+    // this, `node->volumes()` re-read after the wait could show a
+    // divergent snapshot (e.g. another channel updated between match
+    // and read) that doesn't reflect what we actually saw match.
+    QVector<qreal> matchedVolumes;
+    const auto matchesRequest = [node, linear, &matchedVolumes]() {
         const auto echoed = node->volumes();
         if (echoed.isEmpty())
             return false;
@@ -341,11 +367,15 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
             if (std::fabs(v - linear) > kVolumeEpsilon)
                 return false;
         }
+        matchedVolumes = echoed;
         return true;
     };
     node->setVolume(linear);
     const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, kDefaultPostWriteSettleMs, "set-volume");
-    const auto echoedVolumes = node->volumes();
+    // On match, print the captured matched snapshot; on timeout, fall
+    // back to the current live snapshot so the diagnostic still shows
+    // what the daemon currently exposes.
+    const QVector<qreal> echoedVolumes = echoed ? matchedVolumes : node->volumes();
     out() << "set node " << node->id() << " (" << node->name() << ") volume = " << QString::number(linear, 'f', 3)
           << " (linear), echoed = [";
     for (int i = 0; i < echoedVolumes.size(); ++i) {
@@ -358,7 +388,14 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
         // Distinguish a true timeout (no matching echo) from a mismatch
         // (echo arrived but values diverged). Both route through rc=1
         // because the contract is the same: we couldn't confirm the
-        // requested value landed.
+        // requested value landed. waitForPropsEchoAndVerify already
+        // logged the timeout itself; we only add a divergence note when
+        // values actually arrived but didn't match.
+        if (echoedVolumes.isEmpty()) {
+            // No echo at all — the timeout diagnostic from
+            // waitForPropsEchoAndVerify already covers it.
+            return 1;
+        }
         for (const qreal v : echoedVolumes) {
             if (std::fabs(v - linear) > kVolumeEpsilon) {
                 err() << "set-volume: echoed value " << QString::number(v, 'f', 3) << " differs from requested "
@@ -381,16 +418,26 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
     // Hook the echo wait BEFORE issuing the write so we can confirm
     // PipeWire actually committed the new mute state; otherwise the
     // CLI returns success even when the write was silently dropped.
-    const auto matchesRequest = [node, muted]() {
-        return node->muted() == muted;
+    //
+    // Capture the matched snapshot so an unrelated propsChanged
+    // (e.g. a parallel volume tweak) between predicate match and the
+    // output print can't clobber the value we report.
+    bool matchedMuted = false;
+    const auto matchesRequest = [node, muted, &matchedMuted]() {
+        if (node->muted() == muted) {
+            matchedMuted = node->muted();
+            return true;
+        }
+        return false;
     };
     node->setMuted(muted);
     const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, kDefaultPostWriteSettleMs, "mute");
+    const bool echoedMuted = echoed ? matchedMuted : node->muted();
     out() << "set node " << node->id() << " (" << node->name() << ") muted = " << (muted ? "true" : "false")
-          << ", echoed = " << (node->muted() ? "true" : "false") << "\n";
+          << ", echoed = " << (echoedMuted ? "true" : "false") << "\n";
     if (!echoed) {
-        if (node->muted() != muted) {
-            err() << "mute: echoed value " << (node->muted() ? "true" : "false") << " differs from requested "
+        if (echoedMuted != muted) {
+            err() << "mute: echoed value " << (echoedMuted ? "true" : "false") << " differs from requested "
                   << (muted ? "true" : "false") << "\n";
         }
         return 1;
@@ -488,9 +535,10 @@ int main(int argc, char** argv)
     // Validate `list <kind>` before connecting too: a bad kind used to
     // pay the full 2s handshake cost only to return 1, which is
     // indistinguishable from a real runtime error from the user's
-    // perspective.
+    // perspective. argv[0]=program, [1]=cmd, [2]=kind — strict
+    // equality so trailing-junk ("list sinks oops") also fails fast.
     if (cmd == QLatin1String("list")) {
-        if (args.size() < 3)
+        if (args.size() != 3)
             return usage();
         if (!isKnownListKind(args.at(2))) {
             err() << "unknown list kind: " << args.at(2) << " (use sinks, sources, or streams)\n";
@@ -500,12 +548,15 @@ int main(int argc, char** argv)
     // Same rationale for the write subcommands: a bare `mute` or
     // `set-volume foo` previously paid the full 2s handshake before
     // discovering it was a usage error. Hoist the arg-count checks here
-    // so under-arg typos fail fast with rc=64.
-    if (cmd == QLatin1String("set-volume") && args.size() < 4)
+    // so under-arg AND trailing-junk typos fail fast with rc=64.
+    if (cmd == QLatin1String("set-volume") && args.size() != 4)
         return usage();
-    if ((cmd == QLatin1String("mute") || cmd == QLatin1String("unmute")) && args.size() < 3)
+    if ((cmd == QLatin1String("mute") || cmd == QLatin1String("unmute")) && args.size() != 3)
         return usage();
-    if ((cmd == QLatin1String("set-default-sink") || cmd == QLatin1String("set-default-source")) && args.size() < 3)
+    if ((cmd == QLatin1String("set-default-sink") || cmd == QLatin1String("set-default-source")) && args.size() != 3)
+        return usage();
+    // `default` takes no extra arguments; trailing junk is a usage error.
+    if (cmd == QLatin1String("default") && args.size() != 2)
         return usage();
 
     PhosphorServicePipeWire::PipeWireConnection conn;
@@ -608,12 +659,16 @@ int main(int argc, char** argv)
             }
         }
     } else {
-        // Unreachable: the pre-connect knownCommands guard already
-        // routed every unknown subcommand through usage(). Keep this
-        // arm as a hard-fail so a future command added to
-        // knownCommands but not wired up here surfaces as a logic
-        // bug instead of silently exiting 0.
-        Q_UNREACHABLE();
+        // The pre-connect knownCommands guard already routes every
+        // unknown subcommand through usage(), so reaching this arm
+        // means a future maintainer added a command to knownCommands
+        // without wiring up its dispatch. Q_UNREACHABLE() is only a
+        // hint in release builds (UB), so emit a real diagnostic and
+        // return a distinct exit code so the misbehaviour surfaces
+        // observably instead of silently exiting 0.
+        err() << "internal logic error: unhandled command " << cmd << "\n";
+        cleanShutdown(conn);
+        return 64;
     }
     cleanShutdown(conn);
     return rc;

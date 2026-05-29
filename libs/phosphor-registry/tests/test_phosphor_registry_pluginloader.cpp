@@ -15,11 +15,16 @@
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QtMessageHandler>
 
 #ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR
 #error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR must be defined by tests/CMakeLists.txt"
+#endif
+#ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_SECONDARY_DIR
+#error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_SECONDARY_DIR must be defined by tests/CMakeLists.txt"
 #endif
 #ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR
 #error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR must be defined by tests/CMakeLists.txt"
@@ -32,6 +37,55 @@
 #endif
 
 using namespace PhosphorRegistry;
+
+namespace {
+
+// File-scope sink that captures every qWarning emitted while the
+// scoped installer below is active. We can't enforce the
+// "no qWarning fires" contract via the process-wide
+// QT_FATAL_WARNINGS env var because the sibling tests in this
+// binary rely on QTest::ignoreMessage to suppress intentional
+// warning paths (ignoresInvalidManifest, rejectsAbiVersionMismatch,
+// ...), and Qt's default handler aborts on a fatal-warning trigger
+// before the ignore-message infrastructure can match. Per-test
+// instrumentation it is.
+QStringList* g_warningSink = nullptr;
+QtMessageHandler g_priorHandler = nullptr;
+
+void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
+{
+    if (type == QtWarningMsg && g_warningSink) {
+        g_warningSink->append(message);
+    }
+    if (g_priorHandler) {
+        g_priorHandler(type, context, message);
+    }
+}
+
+// RAII guard: installs warningCapturingHandler on construction and
+// restores the previous handler on destruction. Pointed at a
+// caller-owned QStringList so each test gets a fresh sink with no
+// cross-test bleed-through. Restoring the handler in the destructor
+// (not just clearing the sink) protects sibling tests that rely on
+// the default handler's QTest::ignoreMessage routing.
+class WarningCapture
+{
+public:
+    explicit WarningCapture(QStringList& sink)
+    {
+        g_warningSink = &sink;
+        g_priorHandler = qInstallMessageHandler(warningCapturingHandler);
+    }
+    ~WarningCapture()
+    {
+        qInstallMessageHandler(g_priorHandler);
+        g_priorHandler = nullptr;
+        g_warningSink = nullptr;
+    }
+    Q_DISABLE_COPY_MOVE(WarningCapture)
+};
+
+} // namespace
 
 class TestPluginLoader : public QObject
 {
@@ -57,6 +111,7 @@ private Q_SLOTS:
     void destructorPinsLibraryBeforeFactoryDestruction();
     void destructorWithoutPriorRescanDoesNotCrash();
     void rescanReentryFromPluginUnloadedSlotIsSafe();
+    void rescanReentryRemovingSecondPluginExercisesConstFindGuard();
 
 private:
     // Helper: install one of the templated fake-plugin fixtures into
@@ -80,6 +135,19 @@ private:
     {
         return installPluginFixture(pluginRoot, subdir, QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR),
                                     QStringLiteral("libphosphor_registry_test_fake_plugin"), destDir);
+    }
+
+    [[nodiscard]] bool installFakePluginSecondary(const QString& pluginRoot, const QString& subdir,
+                                                  QString& destDir) const
+    {
+        // Distinct manifest id ("fake-plugin-secondary") so the loader
+        // can hold BOTH the primary and secondary fixtures in m_plugins
+        // at the same time. Required by the constFind-early-continue
+        // regression test, which needs the outer scan loop's snapshot
+        // to contain two ids so the inner rescan can clear one of them
+        // between iterations.
+        return installPluginFixture(pluginRoot, subdir, QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_SECONDARY_DIR),
+                                    QStringLiteral("libphosphor_registry_test_fake_plugin_secondary"), destDir);
     }
 
     [[nodiscard]] bool installFakePluginIdMismatch(const QString& pluginRoot, QString& destDir) const
@@ -529,27 +597,20 @@ void TestPluginLoader::destructorPinsLibraryBeforeFactoryDestruction()
 
 void TestPluginLoader::rescanReentryFromPluginUnloadedSlotIsSafe()
 {
-    // Regression test for the constFind-early-continue path in
-    // pluginloader.cpp's performScanCycle unload loop. That guard
-    // exists for the re-entry case: a slot wired to pluginUnloaded
-    // (or, transitively, to the registry's factoryUnregistered)
-    // can mutate m_plugins / call rescanNow before the outer
-    // cycle's iteration finishes. The defensive constFind keeps
-    // us from dereffing a default-constructed shared_ptr if the
-    // entry was already removed.
-    //
-    // With a single fake-plugin fixture we cannot construct the
-    // exact two-plugin scenario where the early-continue fires
-    // on the second iteration (that would require a second
-    // distinct manifest id; the existing fixtures all collide on
-    // "fake-plugin"). What we CAN pin is the behavioural
-    // guarantee that matters: re-entry from a pluginUnloaded slot
-    // that calls rescanNow() is safe — no crash, no qWarning flood.
+    // Companion to rescanReentryRemovingSecondPluginExercisesConstFindGuard
+    // below. This test pins the *safety* half of the contract: a slot
+    // wired to pluginUnloaded that calls back into rescanNow() must
+    // not crash and must not flood the journal with warnings. The
+    // sibling test pins the *coverage* half by constructing the
+    // exact two-plugin scenario where the constFind-with-missing-
+    // entry branch fires on the outer loop's second iteration.
     //
     // The constFind path was downgraded from qWarning to qDebug in
     // the same audit pass: legitimate re-entry handling on the
-    // happy path should not emit a warning. Pin that by asserting
-    // no qWarning fires across the entire sequence.
+    // happy path should not emit a warning. Pin that here by
+    // installing a per-test qWarning sink — any qWarning that fires
+    // across the loader call sequence below shows up in the captured
+    // list, which we then assert is empty.
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
@@ -581,12 +642,14 @@ void TestPluginLoader::rescanReentryFromPluginUnloadedSlotIsSafe()
 
     QDir(installedDir).removeRecursively();
 
-    // No qWarning expected. If the constFind guard ever regresses to
-    // qWarning on the happy re-entry path (or the early-continue
-    // never gets exercised but a different warning fires), this
-    // ignoreMessage stays silent and any unexpected qWarning fails
-    // the test under QT_FATAL_WARNINGS.
-    loader.rescanNow();
+    // Capture qWarnings ONLY across the re-entry sequence. The
+    // capture is scoped so sibling tests in this binary keep their
+    // default message routing (QTest::ignoreMessage interop).
+    QStringList capturedWarnings;
+    {
+        WarningCapture capture(capturedWarnings);
+        loader.rescanNow();
+    }
 
     QCOMPARE(unloadedSpy.count(), 1);
     QCOMPARE(unloadedSpy.first().at(0).toString(), QStringLiteral("fake-plugin"));
@@ -596,11 +659,121 @@ void TestPluginLoader::rescanReentryFromPluginUnloadedSlotIsSafe()
     // The slot re-entered exactly once. The inner rescan ran (it
     // finds no plugins, no work to do) and completed cleanly. Outer
     // rescan completed afterwards. Total rescanCompleted fires:
-    //   1 from scanAndLoad's initial scan
+    //   1 from scanAndLoad's initial scan (above)
     //   1 from the reentrant inner rescanNow
     //   1 from the outer rescanNow
     QVERIFY(reentered);
     QCOMPARE(rescanSpy.count(), 3);
+
+    // The contract: legitimate re-entry on the happy path emits no
+    // qWarning. A regression that re-elevates the early-continue
+    // from qDebug to qWarning would surface a captured entry here.
+    QVERIFY2(capturedWarnings.isEmpty(),
+             qPrintable(QStringLiteral("unexpected qWarning during re-entry: %1")
+                            .arg(capturedWarnings.join(QStringLiteral("\n")))));
+}
+
+void TestPluginLoader::rescanReentryRemovingSecondPluginExercisesConstFindGuard()
+{
+    // Coverage test for the constFind-with-missing-entry branch in
+    // pluginloader.cpp's performScanCycle unload loop. The branch
+    // exists for the race where a slot wired to pluginUnloaded (or,
+    // transitively, to the registry's factoryUnregistered) mutates
+    // m_plugins out from under the iterating outer cycle. Exercising
+    // it requires TWO distinct plugins in m_plugins so the outer
+    // loop's keys-snapshot has two ids:
+    //
+    //   currentIds = [a, b]
+    //
+    // We then:
+    //
+    //   1. Remove BOTH plugin directories on disk before the outer
+    //      rescan starts, so the outer scan sees an empty
+    //      discoveredIds set and both ids are marked for unload.
+    //   2. Wire a slot on pluginUnloaded that, on `a`'s unload, calls
+    //      rescanNow(). The inner rescan re-runs performScanCycle,
+    //      which finds no plugins on disk, then iterates ITS own
+    //      m_plugins.keys() snapshot (which still contains `b` because
+    //      the outer loop is mid-iteration on `a`). The inner cycle
+    //      removes `b` from m_plugins via the standard unload path.
+    //   3. Control returns to the outer cycle. The outer loop advances
+    //      to its second snapshot id — `b` — and calls constFind,
+    //      which returns m_plugins.constEnd() because the inner rescan
+    //      already removed it. The early-continue branch fires.
+    //
+    // Without the constFind guard the outer loop would
+    // m_plugins[pluginId] a non-existent entry, deref a
+    // default-constructed shared_ptr's null library, and crash. With
+    // the guard the loop logs once at qDebug and continues cleanly.
+    //
+    // The per-test WarningCapture below pins the qDebug-vs-qWarning
+    // half of the contract: any regression that re-elevates the
+    // early-continue to qWarning shows up in the captured list and
+    // fails the test.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString primaryDir;
+    QString secondaryDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), primaryDir));
+    QVERIFY(installFakePluginSecondary(pluginRoot, QStringLiteral("fake-plugin-secondary"), secondaryDir));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    QSignalSpy unloadedSpy(&loader, &PluginLoader::pluginUnloaded);
+
+    loader.scanAndLoad();
+    QCOMPARE(loadedSpy.count(), 2);
+    QCOMPARE(registry.size(), 2);
+    QCOMPARE(loader.loadedPluginIds().size(), 2);
+
+    // Wire the re-entry slot. The latch ensures only the FIRST
+    // pluginUnloaded triggers the inner rescan — without the latch
+    // every unload would recurse, blowing the stack on a many-plugin
+    // tree. In the two-plugin case the inner rescan unloads the
+    // remaining sibling itself, so by the time control returns to
+    // the outer loop the second snapshot id is already gone — exactly
+    // the state the constFind early-continue guard is meant to
+    // handle.
+    bool reentered = false;
+    QObject::connect(&loader, &PluginLoader::pluginUnloaded, &loader, [&]() {
+        if (!reentered) {
+            reentered = true;
+            loader.rescanNow();
+        }
+    });
+
+    // Remove BOTH plugin directories before the outer rescan starts.
+    // The outer scan's discoveredIds will be empty and the unload
+    // loop's snapshot will hold both ids.
+    QVERIFY(QDir(primaryDir).removeRecursively());
+    QVERIFY(QDir(secondaryDir).removeRecursively());
+
+    // Capture qWarnings ONLY across the rescan that exercises the
+    // early-continue branch. Sibling tests in this binary that rely
+    // on the default handler (QTest::ignoreMessage) are unaffected.
+    QStringList capturedWarnings;
+    {
+        WarningCapture capture(capturedWarnings);
+        loader.rescanNow();
+    }
+
+    // Both plugins were unloaded exactly once each. The constFind
+    // guard fired during the outer cycle's second iteration, so the
+    // outer loop didn't double-process the entry the inner cycle
+    // had already removed.
+    QCOMPARE(unloadedSpy.count(), 2);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+    QVERIFY(reentered);
+
+    // The early-continue branch must stay at qDebug. Any captured
+    // qWarning here is either a regression that re-elevated the
+    // branch or a different warning we should investigate.
+    QVERIFY2(capturedWarnings.isEmpty(),
+             qPrintable(QStringLiteral("unexpected qWarning during re-entry: %1")
+                            .arg(capturedWarnings.join(QStringLiteral("\n")))));
 }
 
 void TestPluginLoader::destructorWithoutPriorRescanDoesNotCrash()

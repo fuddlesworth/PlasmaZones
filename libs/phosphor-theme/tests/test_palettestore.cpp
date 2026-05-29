@@ -29,6 +29,8 @@ private Q_SLOTS:
     void loadFromJson_rejectsWrappedTokensWithNonObjectValue();
     void loadFromFile_persistsSourcePath();
     void loadFromFile_emitsErrorOnMissingFile();
+    void loadFromFile_tokensKeyNotObjectKeepsWatcherArmed();
+    void loadFromFile_noUsableTokensKeepsWatcherArmed();
     void applyTokens_emptyIsNoOp();
     void applyTokens_normalisesStringHexToColor();
     void resetToDefaults_clearsSourcePath();
@@ -109,10 +111,17 @@ void TestPaletteStore::loadFromJson_failedAfterFileLoadPreservesSourcePath()
     // watcher torn down, m_sourcePath cleared, and sourcePathChanged
     // fired — all while the function returned false. The contract
     // is "a failed load does not observably mutate state". This
-    // test pins that contract: load a good file, then attempt two
-    // failing loadFromJson calls (malformed JSON + valid JSON with
-    // no usable tokens), assert sourcePath survives unchanged and
-    // sourcePathChanged fires exactly ONCE (the initial loadFromFile).
+    // test pins that contract: load a good file, then attempt THREE
+    // failing loadFromJson calls covering each failure mode the
+    // validator distinguishes:
+    //   1. Outright malformed (parse error)
+    //   2. Valid JSON but no usable color tokens (NoUsableTokens)
+    //   3. Wrapped tokens key whose value is not an object
+    //      (TokensKeyNotObject)
+    // After each failure we assert sourcePath survives unchanged,
+    // sourcePathChanged fires exactly ONCE total (the initial
+    // loadFromFile), and the watcher remains armed on the file +
+    // parent directory.
     QTemporaryDir tmp;
     QVERIFY(tmp.isValid());
     const QString goodPath = tmp.filePath(QStringLiteral("good.json"));
@@ -129,20 +138,38 @@ void TestPaletteStore::loadFromJson_failedAfterFileLoadPreservesSourcePath()
     QVERIFY(!sourceAfterLoad.isEmpty());
     QCOMPARE(pathSpy.count(), 1);
 
+    // The watcher is constructed with `this` as parent (see ctor),
+    // so findChildren surfaces it. We pin watcher state through every
+    // failing call below — a regression that re-introduced the
+    // watcher-torn-down-on-failed-load bug would only be visible by
+    // direct watcher inspection because sourcePath alone could be
+    // restored on rollback while the underlying watch stayed dropped.
+    const auto watchers = s.findChildren<QFileSystemWatcher*>();
+    QCOMPARE(watchers.size(), 1);
+    QFileSystemWatcher* watcher = watchers.first();
+    QVERIFY(!watcher->files().isEmpty());
+    QVERIFY(!watcher->directories().isEmpty());
+
     // Failing loadFromJson #1: outright malformed.
     QVERIFY(!s.loadFromJson("not json"));
     QCOMPARE(s.sourcePath(), sourceAfterLoad);
     QCOMPARE(pathSpy.count(), 1); // no additional fire
+    QVERIFY(!watcher->files().isEmpty());
+    QVERIFY(!watcher->directories().isEmpty());
 
     // Failing loadFromJson #2: valid JSON, no usable tokens.
     QVERIFY(!s.loadFromJson(R"({"tokens": {"primary": 42}})"));
     QCOMPARE(s.sourcePath(), sourceAfterLoad);
     QCOMPARE(pathSpy.count(), 1); // still no additional fire
+    QVERIFY(!watcher->files().isEmpty());
+    QVERIFY(!watcher->directories().isEmpty());
 
     // Failing loadFromJson #3: wrapped tokens with non-object value.
     QVERIFY(!s.loadFromJson(R"({"tokens": "see other.json"})"));
     QCOMPARE(s.sourcePath(), sourceAfterLoad);
     QCOMPARE(pathSpy.count(), 1);
+    QVERIFY(!watcher->files().isEmpty());
+    QVERIFY(!watcher->directories().isEmpty());
 
     // Palette tokens that were committed by the file load survive.
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
@@ -172,6 +199,89 @@ void TestPaletteStore::loadFromFile_emitsErrorOnMissingFile()
     QSignalSpy errSpy(&s, &PaletteStore::loadError);
     QVERIFY(!s.loadFromFile(QStringLiteral("/definitely/does/not/exist.json")));
     QCOMPARE(errSpy.count(), 1);
+}
+
+void TestPaletteStore::loadFromFile_tokensKeyNotObjectKeepsWatcherArmed()
+{
+    // Pins the documented asymmetry between loadFromJson (atomic on
+    // shape failure) and loadFromFile (commits sourcePath + watcher
+    // BEFORE shape check). When the wrapped layout's `tokens` key is
+    // not an object the apply step returns TokensKeyNotObject; the
+    // header contract says the new source + watcher are retained so
+    // the user can fix the shape in-editor and trigger an automatic
+    // reload. This test pins both halves: (1) loadError fires with
+    // the precise message text, (2) sourcePath holds the new file's
+    // path, (3) the watcher still tracks the file + parent directory.
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath(QStringLiteral("bad-tokens.json"));
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": "see other.json"})");
+    }
+
+    PaletteStore s;
+    QSignalSpy errSpy(&s, &PaletteStore::loadError);
+    QSignalSpy pathSpy(&s, &PaletteStore::sourcePathChanged);
+
+    QVERIFY(!s.loadFromFile(path));
+
+    QCOMPARE(errSpy.count(), 1);
+    QCOMPARE(errSpy.first().at(1).toString(), QStringLiteral("tokens key must be a JSON object"));
+
+    // sourcePath was committed (asymmetric with loadFromJson).
+    QCOMPARE(s.sourcePath(), path);
+    QCOMPARE(pathSpy.count(), 1);
+
+    // Watcher remains armed against the new file + parent directory.
+    const auto watchers = s.findChildren<QFileSystemWatcher*>();
+    QCOMPARE(watchers.size(), 1);
+    QFileSystemWatcher* watcher = watchers.first();
+    QVERIFY(watcher->files().contains(path));
+    QVERIFY(!watcher->directories().isEmpty());
+
+    // Active palette is unchanged (still defaults).
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
+}
+
+void TestPaletteStore::loadFromFile_noUsableTokensKeepsWatcherArmed()
+{
+    // Companion to the TokensKeyNotObject test: same asymmetry, but
+    // the JSON is shaped fine and only the contents are unusable.
+    // The wrapped tokens map contains entries that aren't valid
+    // colors (numeric value here) so applyParsedJson short-circuits
+    // with NoUsableTokens. Same retention contract: sourcePath +
+    // watcher stay committed, loadError carries the precise message,
+    // active palette unchanged.
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath(QStringLiteral("no-tokens.json"));
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": {"primary": 42}})");
+    }
+
+    PaletteStore s;
+    QSignalSpy errSpy(&s, &PaletteStore::loadError);
+    QSignalSpy pathSpy(&s, &PaletteStore::sourcePathChanged);
+
+    QVERIFY(!s.loadFromFile(path));
+
+    QCOMPARE(errSpy.count(), 1);
+    QCOMPARE(errSpy.first().at(1).toString(), QStringLiteral("no usable color tokens"));
+
+    QCOMPARE(s.sourcePath(), path);
+    QCOMPARE(pathSpy.count(), 1);
+
+    const auto watchers = s.findChildren<QFileSystemWatcher*>();
+    QCOMPARE(watchers.size(), 1);
+    QFileSystemWatcher* watcher = watchers.first();
+    QVERIFY(watcher->files().contains(path));
+    QVERIFY(!watcher->directories().isEmpty());
+
+    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
 }
 
 void TestPaletteStore::applyTokens_emptyIsNoOp()

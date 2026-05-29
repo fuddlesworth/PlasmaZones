@@ -77,7 +77,30 @@ public:
     // IThemeService.
     [[nodiscard]] QVariantMap palette() const override;
     [[nodiscard]] Q_INVOKABLE QColor token(const QString& name) const override;
+    // loadFromJson is atomic: a failed parse / shape check leaves
+    // sourcePath, the watcher, and the active palette unchanged
+    // (the implementation validates the payload up-front, then
+    // commits only on success). A previously-file-loaded store
+    // therefore keeps its watcher armed across a failed
+    // loadFromJson call. Callers can treat any false return as a
+    // pure no-op.
     Q_INVOKABLE bool loadFromJson(const QByteArray& json) override;
+    // loadFromFile is INTENTIONALLY ASYMMETRIC with loadFromJson:
+    // it commits the new sourcePath + swaps the watcher BEFORE
+    // applying the parsed tokens, so a shape-failure return
+    // (`tokens` key non-object, empty token map) still leaves
+    // sourcePath pointing at the new file and the watcher armed
+    // against it. Rationale: those failures are recoverable in
+    // the user's editor without re-triggering load — the file
+    // exists, the JSON parses, the contents just had no usable
+    // tokens. Keeping the watcher armed means the next save in
+    // the editor reloads automatically. Outright parse failures
+    // (malformed JSON) still leave sourcePath untouched because
+    // the parse runs before any commit. Outright I/O failures
+    // (cannot open, short read) also leave sourcePath untouched
+    // for the same reason. Callers that need atomic-commit
+    // semantics across every failure mode should validate the
+    // file out-of-band and route through loadFromJson instead.
     Q_INVOKABLE bool loadFromFile(const QString& path) override;
     Q_INVOKABLE void applyTokens(const QVariantMap& tokens) override;
     Q_INVOKABLE void resetToDefaults() override;
@@ -115,6 +138,14 @@ private:
         TokensKeyNotObject,
         NoUsableTokens,
     };
+    /// Pure shape-validator for a parsed JSON document. Returns the
+    /// same ApplyResult value applyParsedJson would return for the
+    /// document, but WITHOUT applying or mutating any state. Lets
+    /// loadFromJson decide whether the payload will succeed BEFORE
+    /// touching the watcher / m_sourcePath, satisfying the "failed
+    /// load does not observably mutate state" contract without
+    /// duplicating the shape-check logic across two call sites.
+    static ApplyResult validateDoc(const QJsonDocument& doc);
     ApplyResult applyParsedJson(const QJsonDocument& doc);
     /// Disarms the active filesystem watch (file + parent directory),
     /// cancels any pending debounced reload, and clears m_sourcePath

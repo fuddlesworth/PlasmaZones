@@ -132,12 +132,14 @@ Q_SIGNALS:
     /// `node->mediaClass()`. Node info / props are empty in this
     /// signal handler; subscribe to `PwNode::infoChanged` /
     /// `propsChanged` for populated values.
-    /// NOTE: keep in sync with qRegisterMetaType in pipewireconnection.cpp
+    /// PwNode* metatype is registered automatically in
+    /// pipewireconnection.cpp's ensurePipeWireInit().
     void nodeAdded(PhosphorServicePipeWire::PwNode* node);
     /// Fired from the GUI thread BEFORE the PwNode is destroyed so
     /// observers (models) can detach. The pointer is still valid
     /// during this signal.
-    /// NOTE: keep in sync with qRegisterMetaType in pipewireconnection.cpp
+    /// PwNode* metatype is registered automatically in
+    /// pipewireconnection.cpp's ensurePipeWireInit().
     void nodeRemoved(PhosphorServicePipeWire::PwNode* node);
 
 private:

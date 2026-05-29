@@ -62,6 +62,20 @@ PaletteStore::PaletteStore(QObject* parent)
     // already reflects the new source. Stale-watcher reads inside a
     // signal slot are therefore not possible.
     connect(m_watcher.get(), &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
+        // Guard against stale fileChanged events whose `path` belongs
+        // to a previously-watched source. QFileSystemWatcher delivers
+        // events asynchronously via the platform notifier (inotify on
+        // Linux); a fileChanged for the OLD source can sit in the Qt
+        // event queue while loadFromFile swaps m_sourcePath + removes
+        // the file from the watcher's tracked paths. Without this
+        // guard the lambda would re-add the stale path to the watcher
+        // (resurrecting a watch that loadFromFile just dropped) and
+        // schedule a debounce tick that, when it fires, would reload
+        // from the NEW source — wasted I/O at best, or worse if a
+        // subsequent loadFromJson cleared the source entirely.
+        if (path != m_sourcePath) {
+            return;
+        }
         if (QFileInfo::exists(path) && !m_watcher->files().contains(path)) {
             m_watcher->addPath(path);
         }
@@ -128,36 +142,53 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
         return false;
     }
 
-    // Shape-validate the document against the same accepted layouts
-    // applyParsedJson recognises, but WITHOUT applying — we need
-    // to know up-front whether the apply will succeed so we can
-    // avoid touching the watcher / sourcePath on failure. The two
-    // checks below are intentional duplicates of applyParsedJson's
-    // first two failure conditions; they run cheaply (no merge, no
-    // QColor normalisation beyond a validity probe) and let us
-    // commit-or-abort atomically.
+    // Shape-validate via the same routine applyParsedJson uses
+    // internally. validateDoc is a pure check (no merge, no signal,
+    // no QColor stored), so we can run it BEFORE
+    // dropWatcherAndClearSourcePath without any observable side
+    // effect. A non-Ok result short-circuits with the watcher and
+    // sourcePath untouched — the atomic-commit contract.
+    if (validateDoc(doc) != ApplyResult::Ok) {
+        return false;
+    }
+
+    dropWatcherAndClearSourcePath();
+    const auto applied = applyParsedJson(doc);
+    // validateDoc agrees with applyParsedJson on every payload
+    // because both run the same shape rules. A divergence would
+    // indicate the two have drifted — pin it so a future refactor
+    // that adds a new failure mode to one but not the other trips
+    // immediately in a debug build.
+    Q_ASSERT(applied == ApplyResult::Ok);
+    return applied == ApplyResult::Ok;
+}
+
+PaletteStore::ApplyResult PaletteStore::validateDoc(const QJsonDocument& doc)
+{
+    // Mirror applyParsedJson's two accepted layouts:
+    //   1. `{ "tokens": { ... } }` (wrapped, matugen-style)
+    //   2. `{ "primary": "#...", ... }` (flat top-level)
+    // and apply the same two failure conditions:
+    //   - `tokens` key present but not an object → TokensKeyNotObject
+    //   - no string token parses to a valid QColor → NoUsableTokens
+    // We deliberately use QColor(QString) here so the validity probe
+    // matches the merge step's accept set exactly. The full QColor
+    // instance is discarded; we only need the validity bit.
     const auto root = doc.object();
     if (root.contains(QLatin1String("tokens")) && !root.value(QLatin1String("tokens")).isObject()) {
-        return false;
+        return ApplyResult::TokensKeyNotObject;
     }
     const QJsonObject tokens =
         root.contains(QLatin1String("tokens")) ? root.value(QLatin1String("tokens")).toObject() : root;
-    bool hasUsable = false;
     for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
         if (!it.value().isString()) {
             continue;
         }
         if (QColor(it.value().toString()).isValid()) {
-            hasUsable = true;
-            break;
+            return ApplyResult::Ok;
         }
     }
-    if (!hasUsable) {
-        return false;
-    }
-
-    dropWatcherAndClearSourcePath();
-    return applyParsedJson(doc) == ApplyResult::Ok;
+    return ApplyResult::NoUsableTokens;
 }
 
 void PaletteStore::dropWatcherAndClearSourcePath()
@@ -170,12 +201,14 @@ void PaletteStore::dropWatcherAndClearSourcePath()
     // m_sourcePath so QML bindings re-evaluate.
     //
     // Clear m_sourcePath BEFORE stopping the debounce + removing
-    // watch paths so a future refactor that reorders the watcher-
-    // drop still benefits from reloadFromCurrentPath's empty-source
-    // short-circuit (an in-flight debounce tick that fires between
-    // the clear and the removePaths sees no source and bails). This
-    // ordering matches resetToDefaults — both watcher-dropping paths
-    // are now symmetric.
+    // watch paths so this helper is structurally symmetric with
+    // resetToDefaults — both watcher-dropping paths follow the same
+    // clear-then-disarm sequence. The symmetry is a defense-in-depth
+    // guard: any future refactor that reorders signal emit, watcher
+    // teardown, or debounce stop in EITHER routine still preserves
+    // the invariant "by the time any user slot sees the change,
+    // m_sourcePath is already empty so reloadFromCurrentPath's
+    // empty-source short-circuit covers any racing tick".
     //
     // Also stop any pending debounce so a queued reload tick can't
     // run reloadFromCurrentPath against the (now empty) source.

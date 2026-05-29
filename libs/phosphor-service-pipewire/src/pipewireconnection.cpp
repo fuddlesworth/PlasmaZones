@@ -151,9 +151,24 @@ void PipeWireConnection::Private::onCoreInfo(void* data, const struct pw_core_in
 void PipeWireConnection::Private::onCoreDone(void* data, uint32_t id, int seq)
 {
     auto* d = static_cast<Private*>(data);
-    if (id != PW_ID_CORE || seq != d->pendingSyncSeq)
+    // Reject the sentinel explicitly: when no sync is in flight,
+    // pendingSyncSeq holds kNoPendingSync. PipeWire never emits a
+    // negative seq, so this check is belt-and-braces — the equality
+    // test already fails for any real seq because kNoPendingSync is
+    // out of band — but stating it up front documents the invariant.
+    if (id != PW_ID_CORE || d->pendingSyncSeq == kNoPendingSync || seq != d->pendingSyncSeq)
         return;
     qCDebug(lcPipeWire) << "pw_core done seq" << seq << "handshake complete";
+    // Symmetric with onCoreError: synchronously flip `connected` on the
+    // loop thread BEFORE queueing the GUI-side setConnected lambda.
+    // doConnect's wedge-recovery check (`if (core && !connected.load())
+    // doDisconnect()`) runs on the loop thread; without this store, a
+    // re-issued connect() landing between the queue-and-drain window
+    // would see connected == false and tear down a freshly-completed
+    // handshake. setConnected's exchange-equal-skip early return dedupes
+    // the queued mutation so the GUI thread emits connectedChanged
+    // exactly once.
+    d->connected.store(true, std::memory_order_release);
     QMetaObject::invokeMethod(
         d->q,
         [d]() {
@@ -172,15 +187,22 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
                             .arg(message ? QString::fromUtf8(message) : QStringLiteral("(no message)"));
     qCWarning(lcPipeWire) << msg;
     // Synchronously flip `connected` on the loop thread BEFORE queueing
-    // the GUI-side emit. doConnect's wedge-recovery check
+    // the GUI-side work. doConnect's wedge-recovery check
     // (`if (core && !connected.load(...)) doDisconnect()`) runs on the
     // loop thread, so it must observe the truthful value the moment the
-    // next connect() request lands — even if the queued setConnected
-    // lambda hasn't drained yet. Using exchange() here lets us capture
-    // the prior value so the GUI-side queued lambda can still emit
-    // connectedChanged exactly when the state genuinely transitioned
-    // (setConnected would otherwise no-op because the atomic is already
-    // false by the time it runs).
+    // next connect() request lands — even if no queued lambda has
+    // drained yet.
+    //
+    // L1-override pattern: a prior onCoreDone may have already queued a
+    // setConnected(true) lambda (L1) that hasn't drained on the GUI
+    // thread yet. If L1 runs after this callback returns, it would flip
+    // the atomic back to true and emit connectedChanged. To prevent
+    // that we ALSO queue an explicit setConnected(false) lambda (L2)
+    // that lands strictly AFTER any stale L1: FIFO delivery of
+    // QueuedConnection posts on the same target guarantees ordering.
+    // setConnected's exchange-equal-skip early return makes the
+    // double-mutation idempotent — the GUI thread sees at most one
+    // connectedChanged for the transition that actually happened.
     //
     // We deliberately do NOT tear core/context/registry down from this
     // callback. The next caller-initiated connect() observes the wedged
@@ -188,12 +210,11 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
     // doDisconnect first, so recovery is automatic and the teardown
     // stays on the loop thread without us having to post another
     // pw_loop_invoke.
-    const bool wasConnected = d->connected.exchange(false, std::memory_order_acq_rel);
+    d->connected.store(false, std::memory_order_release);
     QMetaObject::invokeMethod(
         d->q,
-        [d, msg, wasConnected]() {
-            if (wasConnected)
-                Q_EMIT d->q->connectedChanged();
+        [d, msg]() {
+            d->setConnected(false);
             Q_EMIT d->q->error(msg);
         },
         Qt::QueuedConnection);
@@ -399,19 +420,22 @@ void PipeWireConnection::Private::doConnect()
     }
     context = pw_context_new(pw_main_loop_get_loop(mainLoop), nullptr, 0);
     if (!context) {
-        // Failure paths that leave `core` null must also reset
-        // `connected`: an earlier onCoreError may have left it stale-
-        // true on the GUI atomic until its queued lambda drained. Flip
-        // it synchronously on the loop thread so isConnected() reports
-        // the truth immediately, and queue setConnected(false) so the
-        // GUI observers still see connectedChanged on the right thread.
-        const bool wasConnected = connected.exchange(false, std::memory_order_acq_rel);
+        // Failure paths that leave `core` null must also reset every
+        // piece of cached connection state. Flip `connected`
+        // synchronously on the loop thread so isConnected() reports
+        // the truth immediately, then queue the GUI-side snapshot
+        // reset (setConnected handles its own dedupe via
+        // exchange-equal-skip, mirroring the onCoreError L1-override
+        // pattern) so observers see one round of NOTIFY signals on the
+        // right thread. resetGuiSnapshot() also clears default
+        // sink/source names — without that, a previous connection's
+        // stale defaults would survive a failed reconnect and ghost
+        // the UI.
+        connected.store(false, std::memory_order_release);
         QMetaObject::invokeMethod(
             q,
-            [this, wasConnected]() {
-                if (wasConnected)
-                    Q_EMIT q->connectedChanged();
-                setDaemonAvailable(false);
+            [this]() {
+                resetGuiSnapshot();
                 Q_EMIT q->error(QStringLiteral("pw_context_new returned null"));
             },
             Qt::QueuedConnection);
@@ -421,13 +445,11 @@ void PipeWireConnection::Private::doConnect()
     if (!core) {
         pw_context_destroy(context);
         context = nullptr;
-        const bool wasConnected = connected.exchange(false, std::memory_order_acq_rel);
+        connected.store(false, std::memory_order_release);
         QMetaObject::invokeMethod(
             q,
-            [this, wasConnected]() {
-                if (wasConnected)
-                    Q_EMIT q->connectedChanged();
-                setDaemonAvailable(false);
+            [this]() {
+                resetGuiSnapshot();
                 Q_EMIT q->error(QStringLiteral("pw_context_connect returned null (no running daemon?)"));
             },
             Qt::QueuedConnection);
@@ -447,11 +469,14 @@ void PipeWireConnection::Private::doConnect()
     // completion marker. A negative return value is an errno code
     // from the loop layer (e.g. -EINVAL on a torn-down core), in
     // which case the handshake will never complete; surface it as a
-    // hard error and leave pendingSyncSeq at zero so an unrelated
-    // seq=0 done event can't be misread as our handshake.
+    // hard error and leave pendingSyncSeq at the kNoPendingSync
+    // sentinel so onCoreDone's equality check can never spuriously
+    // match an unrelated daemon-side done event (PipeWire emits only
+    // non-negative seq values, so the sentinel is permanently out of
+    // band).
     const int syncRc = pw_core_sync(core, PW_ID_CORE, 0);
     if (syncRc < 0) {
-        pendingSyncSeq = 0;
+        pendingSyncSeq = kNoPendingSync;
         QMetaObject::invokeMethod(
             q,
             [this, syncRc]() {
@@ -498,14 +523,11 @@ void PipeWireConnection::Private::doDisconnect()
         pw_context_destroy(context);
         context = nullptr;
     }
-    pendingSyncSeq = 0;
+    pendingSyncSeq = kNoPendingSync;
     QMetaObject::invokeMethod(
         q,
         [this]() {
-            setConnected(false);
-            setDaemonAvailable(false);
-            setDefaultSinkName(QString());
-            setDefaultSourceName(QString());
+            resetGuiSnapshot();
             guiNodesReset();
         },
         Qt::QueuedConnection);
@@ -537,15 +559,28 @@ int PipeWireConnection::Private::dispatchDisconnect(struct spa_loop* loop, bool 
 
 void PipeWireConnection::Private::setConnected(bool value)
 {
-    if (connected.exchange(value) == value)
+    // Update the cross-thread atomic AND the GUI-thread shadow, then
+    // decide whether to emit based on the shadow. Using the shadow
+    // (rather than the atomic) for the dedup is essential: loop-thread
+    // callbacks pre-flip the atomic synchronously to keep
+    // isConnected() honest for re-entrant connect() calls, so an
+    // atomic-based dedup would swallow the GUI-side NOTIFY entirely.
+    connected.store(value, std::memory_order_release);
+    if (lastEmittedConnected == value)
         return;
+    lastEmittedConnected = value;
     Q_EMIT q->connectedChanged();
 }
 
 void PipeWireConnection::Private::setDaemonAvailable(bool value)
 {
-    if (daemonAvailable.exchange(value) == value)
+    // Same shadow-vs-atomic split as setConnected — for symmetry and
+    // future-proofing: if a loop-thread path ever pre-flips
+    // daemonAvailable synchronously, the dedup remains correct.
+    daemonAvailable.store(value, std::memory_order_release);
+    if (lastEmittedDaemonAvailable == value)
         return;
+    lastEmittedDaemonAvailable = value;
     Q_EMIT q->daemonAvailableChanged();
 }
 
@@ -563,6 +598,19 @@ void PipeWireConnection::Private::setDefaultSourceName(QString name)
         return;
     defaultSourceName = std::move(name);
     Q_EMIT q->defaultSourceNameChanged();
+}
+
+void PipeWireConnection::Private::resetGuiSnapshot()
+{
+    // Order is intentional: flip the connection-state booleans before
+    // wiping the strings so any observer chained off
+    // connectedChanged sees the cleared names when it reads back.
+    // Each setter is its own dedupe; calling them on already-clean
+    // state is free.
+    setConnected(false);
+    setDaemonAvailable(false);
+    setDefaultSinkName(QString());
+    setDefaultSourceName(QString());
 }
 
 void PipeWireConnection::Private::guiNodeAdded(quint32 id, QString mediaClass, QHash<QString, QString> props)

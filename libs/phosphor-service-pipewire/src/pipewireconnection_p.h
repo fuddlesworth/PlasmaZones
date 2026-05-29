@@ -116,7 +116,16 @@ public:
     spa_hook coreListener{};
     spa_hook registryListener{};
     spa_hook defaultMetadataListener{};
-    int pendingSyncSeq = 0;
+    /// Sequence number returned by `pw_core_sync`, matched against the
+    /// `seq` field of the corresponding `done` event to decide whether
+    /// the handshake completed. Initialised to `kNoPendingSync` (a
+    /// sentinel PipeWire never emits, since pw_core seq numbers are
+    /// non-negative) so an unrelated seq=0 done event arriving before
+    /// our sync request landed cannot be misread as our handshake.
+    /// Reset back to the sentinel on disconnect and on sync-submission
+    /// failure.
+    static constexpr int kNoPendingSync = -1;
+    int pendingSyncSeq = kNoPendingSync;
 
     /// Per-node loop-thread state. We hold the pw_proxy for the node
     /// (for SPA_PARAM_Props enumeration) and the spa_hook for its
@@ -152,12 +161,22 @@ public:
     /// Touched only on the GUI thread.
     QHash<quint32, PwNode*> guiNodes;
 
-    // Snapshot of state for GUI-thread getters. Updated by the GUI
-    // thread itself via queued cross-thread signals; the atomics let
-    // a property-system getter return the cached value without a
-    // round-trip to the worker thread.
+    // Snapshot of state for GUI-thread getters. The atomics carry the
+    // cross-thread truth: loop-thread callbacks (onCoreDone /
+    // onCoreError / doConnect failure paths) flip them synchronously
+    // so isConnected() / isDaemonAvailable() report the truth the
+    // moment the next caller looks. The GUI-thread `lastEmitted*`
+    // shadows track what observers were last told via the NOTIFY
+    // signal; setConnected / setDaemonAvailable consult those (not
+    // the atomic) to decide whether a real transition needs to be
+    // announced. This separation is what makes the "synchronous flip
+    // + queued setter" pattern emit exactly one connectedChanged per
+    // observable transition even when the atomic has already been
+    // pre-flipped on the loop thread.
     std::atomic<bool> connected{false};
     std::atomic<bool> daemonAvailable{false};
+    bool lastEmittedConnected = false;
+    bool lastEmittedDaemonAvailable = false;
 
     // String state touched only on the GUI thread (read via the
     // accessors, written by the GUI-thread setter slots posted from
@@ -265,6 +284,15 @@ public:
     void setDaemonAvailable(bool value);
     void setDefaultSinkName(QString name);
     void setDefaultSourceName(QString name);
+
+    /// GUI-thread helper: reset every cached snapshot that the public
+    /// API exposes (connected, daemonAvailable, default sink/source
+    /// names). Used by doConnect's failure paths and doDisconnect so a
+    /// failed reconnect can't leave stale defaults from a previous
+    /// session ghosting the UI. Each setter dedupes via
+    /// exchange-equal-skip / equality compare, so observers see at
+    /// most one NOTIFY per genuinely-changed property.
+    void resetGuiSnapshot();
 
     // GUI-thread handlers, posted from the loop callbacks via
     // QueuedConnection. These mutate `guiNodes` and emit nodeAdded /

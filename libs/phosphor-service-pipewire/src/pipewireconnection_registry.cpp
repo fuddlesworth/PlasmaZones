@@ -66,11 +66,16 @@ void PipeWireConnection::Private::bindDefaultMetadata(uint32_t id, const char* t
         qCWarning(lcPipeWire) << "pw_registry_bind failed for default metadata global" << id;
         return;
     }
-    // Cache the registry id so onRegistryGlobalRemove can identify
-    // the metadata proxy even before its bound_id event arrives.
-    defaultMetadataId = id;
     pw_metadata_add_listener(reinterpret_cast<pw_metadata*>(defaultMetadata), &defaultMetadataListener,
                              &kDefaultMetadataEvents, this);
+    // Cache the registry id LAST so the invariant "defaultMetadataId !=
+    // SPA_ID_INVALID implies defaultMetadata is bound AND its listener
+    // is attached" holds at every observation point. If a future
+    // refactor inserts a failure path between the bind and the
+    // listener attach, the id stays at SPA_ID_INVALID and
+    // onRegistryGlobalRemove cannot misroute against a half-bound
+    // proxy.
+    defaultMetadataId = id;
     qCDebug(lcPipeWire) << "bound default metadata id" << id;
 }
 
@@ -110,11 +115,10 @@ void PipeWireConnection::Private::bindAudioNode(uint32_t id, const char* type, c
     uint32_t subscribeIds[] = {SPA_PARAM_Props};
     pw_node_subscribe_params(reinterpret_cast<pw_node*>(proxy), subscribeIds, 1);
 
-    Private* d = this;
     QMetaObject::invokeMethod(
         q,
-        [d, id, mediaClass, props]() {
-            d->guiNodeAdded(id, mediaClass, props);
+        [this, id, mediaClass, props]() {
+            guiNodeAdded(id, mediaClass, props);
         },
         Qt::QueuedConnection);
 }
