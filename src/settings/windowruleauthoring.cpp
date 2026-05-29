@@ -251,7 +251,10 @@ QVariantList matchFields()
                 PhosphorProtocol::WindowType type;
                 QString label;
             };
-            const std::array<WindowTypeEntry, 13> kWindowTypes = {{
+            // Use CTAD so the array size is deduced from the brace-list
+            // — adding a new WindowType enum value here can't silently
+            // drop the trailing entry by mismatching a hardcoded size.
+            const std::array kWindowTypes = std::to_array<WindowTypeEntry>({
                 {PhosphorProtocol::WindowType::Unknown, PzI18n::tr("Unknown")},
                 {PhosphorProtocol::WindowType::Normal, PzI18n::tr("Normal window")},
                 {PhosphorProtocol::WindowType::Dialog, PzI18n::tr("Dialog")},
@@ -265,7 +268,7 @@ QVariantList matchFields()
                 {PhosphorProtocol::WindowType::Desktop, PzI18n::tr("Desktop")},
                 {PhosphorProtocol::WindowType::OnScreenDisplay, PzI18n::tr("On-screen display")},
                 {PhosphorProtocol::WindowType::Popup, PzI18n::tr("Popup")},
-            }};
+            });
             for (const auto& opt : kWindowTypes) {
                 QVariantMap option;
                 option[QStringLiteral("value")] = static_cast<int>(opt.type);

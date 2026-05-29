@@ -382,8 +382,23 @@ RowLayout {
             }
             // Show the raw stored value (e.g. an out-of-range int from a
             // hand-edited rule or a newer schema version) when no option
-            // matches, mirroring the screen / activity pickers above.
-            displayText: currentIndex >= 0 ? currentText : (leaf.node.value !== undefined && leaf.node.value !== null ? String(leaf.node.value) : i18n("Choose a window type…"))
+            // matches, mirroring the screen / activity pickers above. The
+            // empty-string sentinel is the "no value yet" state the field
+            // combo emits when the user switches FROM another field's
+            // string value INTO WindowType (MatchLeafEditor.qml:184) — treat
+            // it as no-value so the placeholder shows. Plain `||` would also
+            // map int 0 (WindowType::Unknown) to the placeholder when no
+            // option matched it, but that path is unreachable: 0 always
+            // matches the Unknown option so currentIndex >= 0 and the
+            // fallback never runs.
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+                var v = leaf.node.value;
+                if (v === undefined || v === null || v === "")
+                    return i18n("Choose a window type…");
+                return String(v);
+            }
             Accessible.name: i18n("Window type")
             onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
