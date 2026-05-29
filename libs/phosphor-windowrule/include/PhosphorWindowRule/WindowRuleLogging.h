@@ -16,8 +16,12 @@
 
 namespace PhosphorWindowRule {
 
-PHOSPHORWINDOWRULE_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcWindowRule)
-
-    PHOSPHORWINDOWRULE_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcRuleEval)
+// Trailing semicolons keep clang-format from continuation-indenting the
+// second category — `Q_DECLARE_LOGGING_CATEGORY` is statement-shaped but
+// the macro itself doesn't consume one, so two adjacent invocations
+// without trailing semicolons render with the second visually nested
+// under the first.
+PHOSPHORWINDOWRULE_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcWindowRule);
+PHOSPHORWINDOWRULE_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcRuleEval);
 
 } // namespace PhosphorWindowRule

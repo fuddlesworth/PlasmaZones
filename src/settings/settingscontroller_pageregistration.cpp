@@ -408,8 +408,13 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 
 const QSet<QString>& SettingsController::validPageNames()
 {
-    // Keep in sync with _pageComponents in Main.qml — every entry here must
-    // have a corresponding QML component file in that map.
+    // Keep in sync with the `regPage` / `regVirtual` registrations in
+    // `buildApplicationController` above — every entry here must resolve
+    // to a registered page, otherwise external --page invocations and
+    // sidebar navigation will silently fall through to the default page.
+    // (The legacy `_pageComponents` Main.qml map this comment used to
+    // name was retired when Main.qml moved to PhosphorUi.SettingsAppWindow's
+    // framework-driven PageHost Loader, keyed off the registry.)
     static const QSet<QString> pages{
         QStringLiteral("overview"),
         QStringLiteral("layouts"),

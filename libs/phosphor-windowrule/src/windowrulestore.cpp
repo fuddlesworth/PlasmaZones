@@ -15,8 +15,23 @@ WindowRuleStore::WindowRuleStore(const QString& filePath, QObject* parent)
     : QObject(parent)
     , m_filePath(filePath)
 {
+    // Q_ASSERT_X catches misuse in debug builds, but Q_ASSERT_X compiles out
+    // in release. A release-build caller passing an empty path would
+    // otherwise silently drift through: `QFile::exists("")` returns false
+    // so `load()` becomes a no-op, every `save()` writes to an unwritable
+    // path. Flag the misconfiguration loudly so packagers / embedders see
+    // it in journalctl. The store still constructs — caller may swap the
+    // path through a future setter, and a hard return here would change
+    // the QObject construction contract.
     Q_ASSERT_X(!m_filePath.isEmpty(), "WindowRuleStore",
                "filePath is required — the library never derives config locations");
+    if (m_filePath.isEmpty()) {
+        qCCritical(lcWindowRule)
+            << "WindowRuleStore: constructed with empty filePath — load() and save() will be no-ops"
+            << "until the path is corrected. The library never derives config locations; callers"
+            << "must pass an absolute path.";
+        return;
+    }
     // QSaveFile (inside WindowRuleSet::saveToFile) needs the parent directory
     // to exist. The path is fixed for the store's lifetime, so create the
     // directory once here rather than on every mutating save().

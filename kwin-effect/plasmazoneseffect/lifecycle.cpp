@@ -689,6 +689,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_autotileHandler->restoreAllBorderless();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
+        // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
+        // `m_animationExclusionRuleSet`, or the shader manager's animation
+        // rule set. Across a daemon restart the user's last-known rule set
+        // remains authoritative — clearing here would briefly drop every
+        // exclusion / animation override during the bringup race, flashing
+        // un-filtered animations and unstyled snaps until the new daemon
+        // replays its rulesChanged broadcast. The sets get refreshed once
+        // the new daemon's `loadWindowRuleAnimationsFromDbus` reply lands.
     });
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon registered: waiting for daemonReady signal";

@@ -347,8 +347,12 @@ bool ConfigMigration::ensureJsonConfigImpl()
                             return false;
                         }
                         // The v3→v4 chain step stamps _version and stashes
-                        // disable-list data; the two-file conversion (reading
-                        // assignments.json, writing windowrules.json) happens
+                        // disable-list, animation-rules, snap-exclusion, and
+                        // animation-exclusion data under the four `_v4*Stash`
+                        // root keys. The multi-step finalizer (reading
+                        // assignments.json + the four stashes, writing
+                        // windowrules.json + quicklayouts.json, stripping the
+                        // stash keys, retiring assignments.json) happens
                         // here, after the chain. Idempotent — safe to always run.
                         return finalizeV4Conversion(jsonPath);
                     }
@@ -1643,10 +1647,15 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // empty. Group access routes through `Legacy::v4AnimationsGroup()`
     // so this block stays in lockstep with the AnimationAppRules block
     // above; a future rename of the frozen accessor flows through both.
-    // The "WindowFiltering" subgroup segment stays inline — there is no
-    // dedicated frozen accessor for it, and the live `windowFilteringKey()`
-    // is a leaf accessor that would create drift if reused as a subgroup
-    // name.
+    // The "WindowFiltering" subgroup segment is spelled inline because no
+    // frozen v4 accessor exists for it — the live `animationsWindowFilteringGroup()`
+    // accessor returns the full dot-path `Animations.WindowFiltering`, not
+    // the bare leaf segment, so reusing it here would not match the v3
+    // on-disk shape this migration needs to read. If a future schema bump
+    // calls for routing this segment through a frozen accessor too, add a
+    // dedicated `Legacy::v4WindowFilteringSegment()` and replace the inline
+    // literal here AND in the matching `animationsForFiltering[…]` write
+    // below in lockstep.
     QJsonObject animationsForFiltering = root.value(ConfigKeys::Legacy::v4AnimationsGroup()).toObject();
     QJsonObject animationFiltering = animationsForFiltering.value(QStringLiteral("WindowFiltering")).toObject();
     QJsonObject animationExclusionStash;
@@ -1672,7 +1681,7 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     root[ConfigKeys::versionKey()] = 4;
 }
 
-// ── v4 finalizer: the two-file conversion ───────────────────────────────────
+// ── v4 finalizer: the multi-step cross-file conversion ─────────────────────
 
 namespace {
 

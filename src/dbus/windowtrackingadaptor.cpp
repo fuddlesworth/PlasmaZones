@@ -212,7 +212,21 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
 // that originally required this has moved to SnapEngine (Phase 5E), but
 // the destructor is kept out-of-line to avoid churning every translation
 // unit that includes this header.
-WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
+//
+// Symmetric clear of the should-track predicate to mirror the
+// `setShouldRestorePredicate({})` / `setShouldPersistRestorePredicate({})`
+// calls in enginewiring.cpp's `setEngines()` (predicate handoff path).
+// `m_service` is parented to WTA and dies with it, so the captured
+// `this` never outlives the predicate today — the clear keeps the
+// "every late-bound predicate is cleared symmetrically before its
+// captured `this` becomes unsafe" contract defensible if a future
+// refactor moves service ownership or re-parents the m_service member.
+WindowTrackingAdaptor::~WindowTrackingAdaptor()
+{
+    if (m_service) {
+        m_service->setShouldTrackPredicate({});
+    }
+}
 
 PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
 {

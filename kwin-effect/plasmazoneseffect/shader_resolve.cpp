@@ -8,9 +8,12 @@
 // `tryCreate` fallback, the engaged-empty `effectId` sentinel, and the
 // empty-input short-circuits localised here so the evaluator stays generic.
 //
-// This translation unit never sees a KWin type — it works purely off the
-// rule engine and the animation library value types, so the LGPL boundary
-// stays clean.
+// SPDX is GPL-3 because this TU lives in the effect tree, but it deliberately
+// touches no KWin type — it operates purely on the LGPL rule engine and
+// animation library value types, so it could be promoted to an LGPL library
+// in the future without source changes. Per-window context is threaded in
+// via PhosphorWindowRule::WindowQuery built KWin-side by
+// `windowRuleQueryFor()` (window_query.h).
 
 #include "shader_resolve.h"
 

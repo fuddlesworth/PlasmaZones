@@ -11,15 +11,6 @@
 
 namespace PlasmaZones {
 
-namespace {
-
-/// Map KWin's overlapping window-type predicates onto exactly one
-/// PhosphorProtocol::WindowType. Ordered most-specific-first because a window
-/// can satisfy several predicates at once (a modal dialog is both a dialog and
-/// modal — modality is orthogonal state, deliberately not a WindowType).
-/// Mirrors the same precedence as the sister helper in window_identity.cpp
-/// (used for D-Bus metadata pushes); kept independent because the consumers
-/// differ — one feeds the rule evaluator, the other serialises over D-Bus.
 PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
 {
     using PhosphorProtocol::WindowType;
@@ -62,8 +53,6 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     return WindowType::Unknown;
 }
 
-} // namespace
-
 PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w)
 {
     PhosphorWindowRule::WindowQuery query;
@@ -101,6 +90,11 @@ PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w)
         if (!desktopFile.isEmpty()) {
             query.desktopFile = desktopFile;
         }
+        // Canonical appId derivation lives in `PlasmaZonesEffect::getWindowAppId`
+        // (window_identity.cpp). Inlined here because `getWindowAppId` is a
+        // private member and this builder is a free helper — the actual logic
+        // is one call to `PhosphorIdentity::WindowId::normalizeAppId`, the
+        // canonical implementation lives in `phosphor-identity`.
         const QString appId = ::PhosphorIdentity::WindowId::normalizeAppId(desktopFile, windowClass);
         if (!appId.isEmpty()) {
             query.appId = appId;

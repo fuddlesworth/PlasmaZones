@@ -668,6 +668,15 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
             continue;
         }
 
+        // Hide the daemon's own overlay / editor windows from the rule picker —
+        // surfacing `plasmazonesd` or `plasmazones-editor` as an authoring
+        // target invites users to write rules against the very surfaces that
+        // implement the rule engine. The settings app windowClass falls
+        // outside `isOwnOverlayClass` so it stays pickable.
+        if (isOwnOverlayClass(windowClass)) {
+            continue;
+        }
+
         // Normalize X11 "resourceName resourceClass" to just resourceClass,
         // matching the format used by getWindowId() for app rule matching.
         int spaceIdx = windowClass.indexOf(QLatin1Char(' '));

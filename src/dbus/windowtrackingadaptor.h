@@ -546,6 +546,12 @@ public Q_SLOTS:
     // MOC misparses std::function<void(const QJsonArray&)> as function<const void(QJsonArray&)>,
     // generating code that fails to compile. This method is not a signal/slot, but MOC still
     // processes all public member declarations in Q_OBJECT classes. Guard is required.
+    //
+    // Note: hiding the declarations from MOC ALSO suppresses Qt meta-object
+    // visibility for these methods — they cannot be invoked via
+    // QMetaObject::invokeMethod or bound from QML. Both are internal C++
+    // wiring (the daemon hands its tiling persistence callbacks here at
+    // startup); no external caller should rely on meta-object access.
 #ifndef Q_MOC_RUN
     void setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
                                  std::function<void(const QJsonArray&)> deserializeFn);
@@ -586,10 +592,12 @@ public Q_SLOTS:
      * point it wires the rules-changed subscription, which lands after
      * WTA::loadState in the daemon's init order).
      *   1. Daemon::init's `refilterExcludeRules` lambda — fired once
-     *      eagerly at wire-up AND again on every `WindowRuleStore::
-     *      rulesChanged` so a settings-app rule edit prunes queued
-     *      restores live. The autotile queue is not yet loaded at the
-     *      eager-init call, so the autotile-side prune is a no-op there.
+     *      after wire-up completes (the priming call directly below the
+     *      subscription is wired) AND again on every
+     *      `WindowRuleStore::rulesChanged` so a settings-app rule edit
+     *      prunes queued restores live. The autotile queue is not yet
+     *      loaded at the priming call, so the autotile-side prune is a
+     *      no-op there.
      *   2. Daemon::finalizeStartup, after AutotileEngine::loadState has
      *      populated the autotile queue, so the autotile-side prune
      *      actually has something to process.

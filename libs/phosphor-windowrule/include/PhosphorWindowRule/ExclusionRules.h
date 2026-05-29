@@ -63,17 +63,24 @@ inline bool ruleIsExclude(const WindowRule& rule)
 }
 
 /// Walk @p source and return a derived `WindowRuleSet` containing only
-/// the rules whose action list includes @p actionType. Rule ids,
+/// the ENABLED rules whose action list includes @p actionType. Rule ids,
 /// priorities and matches are copied verbatim — the derived set gets
 /// bound to a `RuleEvaluator` downstream and has to preserve the
 /// source rule's resolution semantics exactly. An empty match yields
 /// an empty set so callers keep a `!set.isEmpty()` fast path.
+///
+/// Disabled rules are skipped at slicing time so the derived set is the
+/// minimum admitted by the user. The `RuleEvaluator` already gates on
+/// `enabled` at resolve time, so functionally this is a no-op — but
+/// carrying disabled rules in the derived set bloats the priority-order
+/// index and inflates the `!isEmpty()` fast-path cost for users who
+/// have disabled all of one shape (e.g. all snapping Exclude rules off).
 inline WindowRuleSet rulesWithAction(const WindowRuleSet& source, QLatin1StringView actionType)
 {
     QList<WindowRule> kept;
     kept.reserve(source.count());
     for (const WindowRule& rule : source.rules()) {
-        if (ruleHasAction(rule, actionType)) {
+        if (rule.enabled && ruleHasAction(rule, actionType)) {
             kept.append(rule);
         }
     }

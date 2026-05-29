@@ -12,6 +12,8 @@
 
 #include <QLoggingCategory>
 
+#include <optional>
+
 #include "../navigationhandler.h"
 #include "window_query.h"
 
@@ -232,31 +234,44 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
         return false;
     }
 
+    // Lazy per-window query — built at most once across the rule-override
+    // gate AND the exclusion gate below. Both gates take the same full-
+    // context WindowQuery (AppId / WindowClass / Title / WindowRole /
+    // DesktopFile / WindowType / Pid / state flags), and `windowRuleQueryFor`
+    // walks ~10 KWin accessors plus several QString copies — wasted work
+    // when both rule sets fire. The std::optional memoises so the function
+    // pays at most one build no matter how many gates consult it, while
+    // the `!isEmpty()` fast paths below keep the no-rules user's cost at
+    // two pointer reads (query never built).
+    std::optional<PhosphorWindowRule::WindowQuery> cachedQuery;
+    auto query = [&]() -> const PhosphorWindowRule::WindowQuery& {
+        if (!cachedQuery) {
+            cachedQuery = windowRuleQueryFor(w);
+        }
+        return *cachedQuery;
+    };
+
     // Rule-override path. ANY animation rule whose match expression matches
     // the window signals deliberate user intent to animate this app — the
     // event-scoped slot (shader vs timing, which eventPath) is NOT narrowed
     // here because the user's act of creating a rule whose match resolves
     // for this window is itself the opt-in signal. `hasAnyMatch` is the
     // event-agnostic query for exactly this — a yes/no over the bound
-    // animation rule set without allocating a ResolvedActions. The
-    // `!isEmpty()` fast path keeps the default-state cost to two pointer
-    // reads.
-    //
-    // The query carries every window-side field a user-authored rule may
-    // match on: a user can pin an OverrideAnimation* rule to AppId,
-    // Title, isFullscreen, etc. — not just WindowClass — so the rule's
-    // match-expression has to see the full window context here, same
-    // shape the exclusion gates below use. `windowRuleQueryFor(w)` also
-    // gates each string assignment on a non-empty value so the
-    // `Contains ""` / `Equals ""` foot-guns stay disengaged.
+    // animation rule set without allocating a ResolvedActions.
     //
     // `m_shaderManager.animationRuleSet()` is filtered to OverrideAnimation*
     // /SetOpacity rules at admission (shader_transitions.cpp's
     // `isEffectRuleAction` loop), so this `hasAnyMatch` never surfaces
-    // an `ExcludeAnimations` rule and the exclusion gate below stays
-    // authoritative for that path.
+    // a rule whose actions are EXCLUSIVELY `ExcludeAnimations` — those
+    // are routed through the exclusion gate below. A mixed-action rule
+    // carrying BOTH an OverrideAnimation* action AND an `ExcludeAnimations`
+    // action would be admitted to `animationRuleSet` (it matches
+    // `isEffectRuleAction`) and the rule-override path would short-circuit
+    // before the exclusion gate fires. Mixed shapes like that are
+    // ambiguous user intent — they don't appear in the v3→v4 migration
+    // output and the rule editor doesn't author them today.
     if (!m_shaderManager.animationRuleSet().isEmpty()) {
-        if (m_shaderManager.animationRuleEvaluator().hasAnyMatch(windowRuleQueryFor(w))) {
+        if (m_shaderManager.animationRuleEvaluator().hasAnyMatch(query())) {
             return true;
         }
     }
@@ -303,12 +318,14 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
 
     // User-configured exclusion lists — routed through the unified
     // RuleEvaluator over the animation exclusion rule set, the same path
-    // `shouldHandleWindow` uses for the snapping exclusions. The animation
-    // and snapping filter sets stay in lockstep on match semantics
-    // (case-insensitive substring `Contains`) even though their lists are
-    // independent. The `!isEmpty()` fast path keeps a no-exclusions user free.
+    // `shouldHandleWindow` uses for the snapping exclusions. Both filter
+    // sets walk the full WindowQuery match expression (AppId / WindowClass /
+    // Title / WindowRole / DesktopFile / WindowType / Pid / state flags),
+    // so the two are in lockstep on match semantics even though their rule
+    // sets are independent. The `!isEmpty()` fast path keeps a no-exclusions
+    // user free.
     if (!m_animationExclusionRuleSet.isEmpty()) {
-        if (m_animationExclusionEvaluator.resolve(windowRuleQueryFor(w)).isExcluded()) {
+        if (m_animationExclusionEvaluator.resolve(query()).isExcluded()) {
             return false;
         }
     }

@@ -114,12 +114,6 @@ SettingsFlickable {
         target: page.appSettings
     }
 
-    // The standalone window-filtering picker retired in v4 alongside the
-    // per-app and per-class exclusion list cards — the legacy lists
-    // folded into ExcludeAnimations WindowRules, and the unified Window
-    // Rules page hosts its own running-window picker on the AppId match
-    // leaf.
-
     ColumnLayout {
         id: content
 
@@ -129,7 +123,6 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            visible: true
             text: i18n("These defaults apply to every animation event unless a sub-page (Window, Zone, OSD, etc.) defines its own override.")
         }
 
@@ -306,7 +299,6 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            visible: true
             text: i18n("Filtered windows are not animated. Use a Window Rule to keep a specific application animated even when a filter would exclude it.")
         }
 
@@ -359,6 +351,10 @@ SettingsFlickable {
                         to: 1000
                         stepSize: 10
                         value: page.appSettings.animationMinimumWindowWidth
+                        // textFromValue already emits the localised "%1 px" suffix; suppress
+                        // SettingsSpinBox's default "px" Label so the displayed value reads
+                        // "100 px" rather than "100 px px" (and "Off" rather than "Off px").
+                        unitText: ""
                         Accessible.name: i18n("Minimum window width for animations")
                         onValueModified: value => {
                             page.appSettings.animationMinimumWindowWidth = value;
@@ -380,6 +376,10 @@ SettingsFlickable {
                         to: 1000
                         stepSize: 10
                         value: page.appSettings.animationMinimumWindowHeight
+                        // textFromValue already emits the localised "%1 px" suffix; see the
+                        // width SettingsSpinBox above for rationale on suppressing
+                        // SettingsSpinBox's default "px" Label.
+                        unitText: ""
                         Accessible.name: i18n("Minimum window height for animations")
                         onValueModified: value => {
                             page.appSettings.animationMinimumWindowHeight = value;
@@ -391,12 +391,5 @@ SettingsFlickable {
                 }
             }
         }
-
-        // The "Excluded Applications (Animations)" and "Excluded Window
-        // Classes (Animations)" list cards retired in v4 — those legacy
-        // settings lists folded into ExcludeAnimations WindowRules. To
-        // exclude a window from animation overrides, author an
-        // Application-subject rule with the "Exclude from animations"
-        // action in Window Rules instead.
     }
 }

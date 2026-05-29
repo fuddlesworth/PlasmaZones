@@ -1368,11 +1368,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
     // Animations.WindowFiltering exclusions (transient / min-size /
     // app / class) AND lets a WindowRule carrying any OverrideAnimation*
-    // action override the filter when the rule's matcher substring-matches
-    // the window's class. Skipping this for shader transitions only would
-    // leave the motion-side cascade in `applySnapGeometry` doing its own
-    // check; both call sites gate identically so the filter is a single
-    // concept across the two paths.
+    // or SetOpacity action override the filter when the rule's match
+    // expression resolves for the window's full WindowQuery (AppId /
+    // WindowClass / Title / WindowRole / DesktopFile / WindowType / Pid /
+    // state flags). Skipping this for shader transitions only would leave
+    // the motion-side cascade in `applySnapGeometry` doing its own check;
+    // both call sites gate identically so the filter is a single concept
+    // across the two paths.
     if (!shouldAnimateWindow(window)) {
         return;
     }
@@ -1650,9 +1652,12 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         // payload — `loadWindowRuleAnimationsFromDbus` is the effect's one
         // and only rule-store sync point, so the snapping-exclusion gate
         // refreshes here too rather than chasing a second D-Bus fetch. The
-        // filter keeps only rules with a terminal Exclude action; setRules
-        // bumps the bound rule set's revision so
-        // m_snappingExclusionEvaluator drops its prior per-revision cache.
+        // filter keeps only enabled rules with a terminal Exclude action;
+        // setRules bumps the bound rule set's revision so
+        // m_snappingExclusionEvaluator's per-revision sort index rebuilds
+        // on its next walk (these evaluators call uncached `resolve()`, so
+        // there is no per-window match cache to drop — the sort index is
+        // the only revision-keyed artifact).
         m_snappingExclusionRuleSet.setRules(PhosphorWindowRule::ExclusionRules::excludeRulesFrom(*setOpt).rules());
 
         // Same refresh for the animation-side exclusion rule set, sliced

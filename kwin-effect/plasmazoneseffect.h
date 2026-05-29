@@ -303,14 +303,16 @@ private:
      * `Animations.WindowFiltering` cache so the two filter sets can
      * diverge.
      *
-     * A WindowRule carrying any OverrideAnimation* action whose
-     * matcher substring-matches the window's class OVERRIDES the
-     * filter — the existence of even one targeted rule signals
+     * A WindowRule carrying any OverrideAnimation* or SetOpacity
+     * action whose match expression resolves for the window OVERRIDES
+     * the filter — the existence of even one targeted rule signals
      * deliberate user intent to animate this app, regardless of
-     * which event the cascade is firing for. Match is the same
-     * case-insensitive `WindowClass Contains <pattern>` matcher the
-     * shader_resolve cascade walks. Empty windowClass falls through
-     * to the filter (no rule can match an unidentified window).
+     * which event the cascade is firing for. The match expression
+     * walks the full per-window query (AppId / WindowClass / Title /
+     * WindowRole / DesktopFile / WindowType / Pid / state flags) so
+     * a rule pinned to any of those axes triggers the override; a
+     * window with no rule-matchable attributes at all falls through
+     * to the filter.
      */
     bool shouldAnimateWindow(KWin::EffectWindow* w) const;
 
@@ -747,11 +749,13 @@ private:
     // Animation window filtering — separate cache from the snapping/tiling
     // exclusions because the user can opt for divergent filter sets. The
     // filter gates the animation cascade BEFORE rule resolution, but a
-    // class-pattern rule whose pattern matches the window's class
-    // overrides the filter (so a user can disable animations broadly via
-    // an app exclusion AND still keep one class animated through a
-    // targeted rule). Defaults are permissive (no filter) until D-Bus
-    // populates them; matches the per-key defaults in ConfigDefaults.
+    // rule whose match expression resolves for the window overrides the
+    // filter (so a user can disable animations broadly via an app exclusion
+    // AND still keep one app animated through a targeted rule). The match
+    // expression sees the full per-window query (AppId / WindowClass /
+    // Title / WindowRole / DesktopFile / WindowType / Pid / state flags).
+    // Defaults are permissive (no filter) until D-Bus populates them;
+    // matches the per-key defaults in ConfigDefaults.
     bool m_animationExcludeTransientWindows = false;
     // Notification / OSD surfaces — excluded by default (see
     // ConfigDefaults::animationExcludeNotificationsAndOsd). Initialised

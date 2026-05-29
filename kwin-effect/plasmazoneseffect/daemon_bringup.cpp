@@ -552,9 +552,9 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     // Animation window filtering — independent of the snapping/tiling
     // exclusions cached above. Used by `shouldAnimateWindow()` to gate
-    // the animation cascade; class-pattern rules override the filter
-    // at the resolver layer so a targeted rule can re-enable animation
-    // for an otherwise-excluded app.
+    // the animation cascade; rules whose match expression resolves for
+    // the window override the filter at the resolver layer so a targeted
+    // rule can re-enable animation for an otherwise-excluded app.
     loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
         m_animationExcludeTransientWindows = v.toBool();
     });

@@ -134,7 +134,7 @@ SettingsFlickable {
                             appSettings.minimumWindowWidth = value;
                         }
                         textFromValue: function (value) {
-                            return value === 0 ? i18n("Off") : value + " px";
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
                         }
                     }
                 }
@@ -156,7 +156,7 @@ SettingsFlickable {
                             appSettings.minimumWindowHeight = value;
                         }
                         textFromValue: function (value) {
-                            return value === 0 ? i18n("Off") : value + " px";
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
                         }
                     }
                 }

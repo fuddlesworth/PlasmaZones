@@ -532,13 +532,16 @@ private:
     // `PhosphorWindowRule::ExclusionRules::excludeRulesFrom` and kept in
     // lockstep with the unified store via the rulesChanged subscription
     // wired in init(). SnapEngine borrows a pointer into this set for its
-    // `isAppIdExcluded` probe; the WindowTrackingAdaptor extracts AppId
-    // patterns from the same filtered slice for its pending-restore prune.
-    // Held as a member (stable address) rather than rebuilt per access so
-    // the bound RuleEvaluator's per-revision cache stays valid across
-    // back-to-back resolves. Replaces the legacy
-    // ExclusionListBridge::toDaemonRuleSet path that derived the equivalent
-    // set from two flat QStringList settings.
+    // `isAppIdExcluded` probe; the WindowTrackingAdaptor's
+    // `pruneExcludedPendingRestores` receives the AppId patterns extracted
+    // from this same filtered slice by the daemon at refilter time. Held
+    // as a member (stable address) rather than rebuilt per access so the
+    // bound RuleEvaluator's per-revision cache stays valid across
+    // back-to-back resolves. Replaces the legacy `ExclusionListBridge` +
+    // `ExcludeRuleFilter` path that derived the equivalent set from two
+    // flat QStringList settings — the v4 schema folded those into
+    // Application-subject WindowRules and the unified
+    // `PhosphorWindowRule::ExclusionRules` namespace now does the slicing.
     PhosphorWindowRule::WindowRuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old

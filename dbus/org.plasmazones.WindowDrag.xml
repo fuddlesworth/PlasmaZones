@@ -3,7 +3,7 @@
 <node>
     <!-- Window Drag Interface (KWin script -> Daemon) -->
     <interface name="org.plasmazones.WindowDrag">
-        <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin script calls dragStarted/dragMoved/dragStopped; daemon returns snap geometry. Uses double for window rect (KWin QML) and int for cursor/modifiers."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin effect calls beginDrag / updateDragCursor / endDrag; daemon returns a DragPolicy and a DragOutcome that drive the compositor's drag streaming, keyboard grab, snap geometry, and snap-assist follow-on. Uses int for cursor / modifier flags and the typed DragPolicy / DragOutcome structs for the typed payloads."/>
         <method name="beginDrag">
             <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon-authoritative begin. Returns a DragPolicy that the compositor plugin uses to decide streaming, keyboard grab, and immediate-float behavior. Replaces dragStarted as the canonical drag-begin entry point. Single source of truth — no effect-side cache to go stale after settings reloads."/>
             <arg name="windowId" type="s" direction="in">

@@ -209,7 +209,12 @@ PhosphorUi.SettingsAppWindow {
         function onDiscardOnCloseFailed(errors) {
             // Toast before the deferred close fires so the user sees
             // the message even though the window is about to close.
-            window.showToast(i18n("Discard did not complete: %1", errors.join("; ")));
+            // SettingsAppWindow already gates the emit on a non-empty
+            // errors array, but mirror the apply-on-close guard shape
+            // here so a future library refactor that loosens that
+            // check can't surface a `null.join(...)` runtime error.
+            const detail = (errors && errors.length > 0) ? errors.join("; ") : i18n("(no details)");
+            window.showToast(i18n("Discard did not complete: %1", detail));
         }
 
         target: window
@@ -261,10 +266,6 @@ PhosphorUi.SettingsAppWindow {
     // the framework-owned PageHost Loader, so we read it via the
     // settingsApp activeFocusItem chain. Pages that haven't opted into
     // the property contribute false; the guard stays correct.
-    // Shared enable-guard for page-navigation shortcuts. Hoisted from
-    // the two identical inline expressions so a future dialog addition
-    // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
-    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen
     /// Cross-cutting flag that pages opt into by writing through
     /// `window._pageOwnedModalOpen` when they open / close their own
     /// modal stack. WindowRulesPage publishes its
@@ -273,7 +274,13 @@ PhosphorUi.SettingsAppWindow {
     /// shortcuts (Ctrl+PgUp / PgDown) cannot drag the user off the
     /// page while a destructive modal is open. Pages without modals
     /// never touch this property and contribute false by default.
+    /// Declared BEFORE `_navShortcutsEnabled` so a top-down reader
+    /// sees the property's purpose before the guard that consumes it.
     property bool _pageOwnedModalOpen: false
+    // Shared enable-guard for page-navigation shortcuts. Hoisted from
+    // the two identical inline expressions so a future dialog addition
+    // doesn't drift between Ctrl+PgUp / Ctrl+PgDown.
+    readonly property bool _navShortcutsEnabled: window.active && !whatsNewDialog.visible && !resetConfirmDialog.visible && !defaultsConfirmDialog.visible && !sectionToggleDiscardConfirm.visible && !window._showShortcuts && !window._pageOwnedModalOpen
 
     Shortcut {
         sequence: "Ctrl+PgUp"

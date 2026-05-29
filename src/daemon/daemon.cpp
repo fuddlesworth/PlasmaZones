@@ -1107,8 +1107,24 @@ bool Daemon::init()
         if (!snapEnginePtr) {
             return;
         }
+        // Symmetric guard for the rule store. `m_windowRuleStore` is a
+        // unique_ptr owned by Daemon, so it currently shares Daemon's
+        // lifetime; the guard exists so a future refactor that drops
+        // and re-creates the store on the fly (or moves ownership
+        // out) can't UAF this lambda.
+        if (!m_windowRuleStore) {
+            return;
+        }
         m_excludeRuleSet.setRules(
             PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
+        // SnapEngine's pointer back-reference never changes after the
+        // first wiring — calling `setExcludeRuleSet` every refresh is an
+        // intentional idempotent fence so a future hot-reload that
+        // swaps `m_excludeRuleSet` for a different member is observed.
+        // Cache invalidation for matched windows happens through the
+        // `setRules` revision bump above; the evaluator inside SnapEngine
+        // reads `m_excludeRuleSet`'s revision and drops its per-revision
+        // index / cache automatically.
         snapEnginePtr->setExcludeRuleSet(&m_excludeRuleSet);
         // Prune any pending-restore queues for apps now covered by an
         // Exclude rule. Snap-engine's resolveWindowRestore already refuses
@@ -1117,10 +1133,17 @@ bool Daemon::init()
         // — daemon/signals.cpp's finalizeStartup re-runs the prune once
         // AutotileEngine::loadState has populated them.
         if (m_windowTrackingAdaptor) {
+            // Shutdown-window guard, mirrors snapEnginePtr null-check above.
             m_windowTrackingAdaptor->pruneExcludedPendingRestores(
                 PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
         }
     };
+    // Prime the rule set + cache once: the first call seeds the revision
+    // counter, hands SnapEngine its non-null pointer, and triggers the
+    // first prune of any restore queues populated by the WTA loadState
+    // above. Without this priming call the snapping side stays at
+    // revision=0 with a null exclude set until the user (or migration)
+    // edits a rule — masking any default-state exclusion until then.
     refilterExcludeRules();
     connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
             [refilterExcludeRules](bool /*persisted*/) {

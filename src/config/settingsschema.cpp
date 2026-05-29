@@ -522,13 +522,14 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
          clampInt(CD::minimumWindowHeightMin(), CD::minimumWindowHeightMax())},
     };
 
-    // Animation window filtering — same key shapes as the Exclusions
-    // group above but stored independently so a user can disable
-    // animations for an app while still snapping it (or vice versa).
+    // Animation window filtering — same shape as the Exclusions group
+    // above plus a NotificationsAndOsd knob, stored independently so a
+    // user can disable animations for an app while still snapping it
+    // (or vice versa).
     schema.groups[CD::animationsWindowFilteringGroup()] = {
         // The `Applications` / `WindowClasses` leaf keys retired in v4 —
         // the v4 migration drains them into ExcludeAnimations WindowRules.
-        // Only the three global knobs survive in this group.
+        // Only the four global knobs survive in this group.
         {CD::transientWindowsKey(), CD::animationExcludeTransientWindows(), QMetaType::Bool},
         {CD::notificationsAndOsdKey(), CD::animationExcludeNotificationsAndOsd(), QMetaType::Bool},
         {CD::minimumWindowWidthKey(),
