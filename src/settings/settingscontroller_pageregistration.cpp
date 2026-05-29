@@ -95,9 +95,13 @@ void SettingsController::buildApplicationController()
     // collapsible "Rules" category alongside Exclusions, but after the v4
     // fold there is only one rule surface left, so the parent category
     // would add navigation without organising anything. Promoting it
-    // gets the page one click closer too.
+    // gets the page one click closer too. Divider after it closes the
+    // feature-configuration block (Display / Snapping / Tiling /
+    // Animations / Window Rules) and separates it from the tools-and-
+    // meta block below (Editor / General / About) so the rail's visual
+    // rhythm has a clear seam where the per-feature pages end.
     regPage(m_windowRulesPage, QString(), PzI18n::tr("Window Rules"), QStringLiteral("WindowRulesPage.qml"),
-            QStringLiteral("view-list-details"));
+            QStringLiteral("view-list-details"), /*collapsible=*/false, /*divider=*/true);
     regPage(m_editorPage, QString(), PzI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
             QStringLiteral("document-edit"));
     regPage(m_generalPage, QString(), PzI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
