@@ -529,7 +529,7 @@ private:
     std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_windowRuleStore;
     // Filtered slice of m_windowRuleStore — only rules whose action list
     // contains a terminal `Exclude`. Built via
-    // `PhosphorWindowRule::ExcludeRuleFilter::excludeRulesFrom` and kept in
+    // `PhosphorWindowRule::ExclusionRules::excludeRulesFrom` and kept in
     // lockstep with the unified store via the rulesChanged subscription
     // wired in init(). SnapEngine borrows a pointer into this set for its
     // `isAppIdExcluded` probe; the WindowTrackingAdaptor extracts AppId

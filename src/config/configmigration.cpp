@@ -1916,7 +1916,7 @@ void appendAnimationRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
 }
 
 /// Fixed v5-UUID namespace for migrated exclusion-rule identities. Held
-/// byte-for-byte the same as `PhosphorWindowRule::ExclusionListBridge::detail::namespaceUuid()`
+/// byte-for-byte the same as `PhosphorWindowRule::ExclusionRules::detail::namespaceUuid()`
 /// so a daemon that bridge-built a rule from the same `(field, op, pattern)`
 /// tuple at runtime produces the same id post-migration. That guarantees
 /// `WindowRuleStore::addRule` (or a downstream dedupe) collapses to a no-op

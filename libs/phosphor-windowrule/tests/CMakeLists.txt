@@ -38,5 +38,5 @@ pwr_add_test(phosphorwindowrule_test_ruleevaluator_cascade test_ruleevaluator_ca
 pwr_add_test(phosphorwindowrule_test_ruleevaluator_benchmark test_ruleevaluator_benchmark.cpp)
 
 # Phase 2 in-memory bridges.
-pwr_add_test(phosphorwindowrule_test_exclusionlistbridge test_exclusionlistbridge.cpp)
+pwr_add_test(phosphorwindowrule_test_exclusionrules test_exclusionrules.cpp)
 pwr_add_test(phosphorwindowrule_test_contextrulebridge test_contextrulebridge.cpp)

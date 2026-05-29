@@ -6,7 +6,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorWindowRule/ExclusionListBridge.h>
+#include <PhosphorWindowRule/ExclusionRules.h>
 #include <PhosphorWindowRule/WindowQuery.h>
 
 #include <effect/effecthandler.h>
@@ -245,15 +245,17 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return rejectedBecause(rejectReason, "Plasma shell layer-shell surface");
     }
 
-    // Check user-configured exclusion lists (needed for drag gating — daemon also enforces
-    // for keyboard nav, but the effect must filter for drag operations and lifecycle
-    // reporting). Routed through the unified RuleEvaluator: ExclusionListBridge converts
-    // the lists into terminal Exclude rules, so a window that hits any of them resolves
-    // to `isExcluded()`. The `!isEmpty()` fast path keeps a no-exclusions user at two
-    // pointer reads — the same cost the prior `!isEmpty()` QStringList guards paid.
+    // Check user-authored / migrated Exclude rules (needed for drag gating —
+    // daemon also enforces these for keyboard navigation, but the effect
+    // must filter for drag operations and lifecycle reporting).
+    // `m_snappingExclusionRuleSet` mirrors the Exclude-shaped slice of the
+    // unified WindowRule store, refreshed on every rulesChanged via
+    // loadWindowRuleAnimationsFromDbus (see shader_transitions.cpp). The
+    // `!isEmpty()` fast path keeps a no-exclusions user at two pointer
+    // reads — same cost as the prior list-derived check.
     if (!m_snappingExclusionRuleSet.isEmpty()) {
         if (m_snappingExclusionEvaluator.resolve(exclusionQueryFor(w)).isExcluded()) {
-            return rejectedBecause(rejectReason, "user exclusion list match (app/class)");
+            return rejectedBecause(rejectReason, "user exclusion rule match");
         }
     }
 
@@ -274,19 +276,9 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     return true;
 }
 
-void PlasmaZonesEffect::rebuildSnappingExclusionRuleSet()
-{
-    // ExclusionListBridge drops empty patterns and builds one terminal Exclude
-    // rule per surviving pattern. `setRules` bumps the rule set revision so the
-    // bound evaluator discards stale cache entries.
-    const PhosphorWindowRule::WindowRuleSet rebuilt =
-        PhosphorWindowRule::ExclusionListBridge::toRuleSet(m_excludedApplications, m_excludedWindowClasses);
-    m_snappingExclusionRuleSet.setRules(rebuilt.rules());
-}
-
 void PlasmaZonesEffect::rebuildAnimationExclusionRuleSet()
 {
-    const PhosphorWindowRule::WindowRuleSet rebuilt = PhosphorWindowRule::ExclusionListBridge::toRuleSet(
+    const PhosphorWindowRule::WindowRuleSet rebuilt = PhosphorWindowRule::ExclusionRules::toRuleSet(
         m_animationExcludedApplications, m_animationExcludedWindowClasses);
     m_animationExclusionRuleSet.setRules(rebuilt.rules());
 }

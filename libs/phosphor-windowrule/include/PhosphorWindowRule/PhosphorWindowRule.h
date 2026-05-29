@@ -25,7 +25,7 @@
  */
 
 #include "ContextRuleBridge.h"
-#include "ExclusionListBridge.h"
+#include "ExclusionRules.h"
 #include "IdentityKey.h"
 #include "MatchExpression.h"
 #include "MatchTypes.h"

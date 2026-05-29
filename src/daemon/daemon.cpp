@@ -86,7 +86,7 @@
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../dbus/windowruleadaptor.h"
-#include <PhosphorWindowRule/ExcludeRuleFilter.h>
+#include <PhosphorWindowRule/ExclusionRules.h>
 #include <PhosphorWindowRule/WindowRuleStore.h>
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -1096,7 +1096,7 @@ bool Daemon::init()
     // ExclusionListBridge::toDaemonRuleSet path that derived the same set
     // from two flat QStringList settings.
     auto refilterExcludeRules = [this, snapEngine] {
-        m_excludeRuleSet = PhosphorWindowRule::ExcludeRuleFilter::excludeRulesFrom(m_windowRuleStore->ruleSet());
+        m_excludeRuleSet = PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet());
         snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
     };
     refilterExcludeRules();

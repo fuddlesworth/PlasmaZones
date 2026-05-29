@@ -18,6 +18,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
+#include <PhosphorWindowRule/ExclusionRules.h>
 #include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/WindowRule.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
@@ -1636,6 +1637,15 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         m_shaderManager.setWindowRuleAnimationRules(std::move(animationRules));
         qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
                           << "total animation rules to the evaluator";
+
+        // Update the drag-gate exclusion rule set from the same unified
+        // payload — `loadWindowRuleAnimationsFromDbus` is the effect's one
+        // and only rule-store sync point, so the snapping-exclusion gate
+        // refreshes here too rather than chasing a second D-Bus fetch. The
+        // filter keeps only rules with a terminal Exclude action; setRules
+        // bumps the bound rule set's revision so
+        // m_snappingExclusionEvaluator drops its prior per-revision cache.
+        m_snappingExclusionRuleSet.setRules(PhosphorWindowRule::ExclusionRules::excludeRulesFrom(*setOpt).rules());
         // Force a full repaint on EITHER bookend so a user-authored rule
         // applies to static (un-damaged) windows immediately AND so a
         // removed rule reverts previously-dimmed windows immediately, not

@@ -720,23 +720,16 @@ private:
     // beginDrag is called unconditionally at drag-start; the deferred-send
     // optimization is obsolete now that the daemon always knows about the drag.
 
-    // User-configured exclusion lists — cached from daemon for shouldHandleWindow() gating.
-    // The daemon also enforces these for keyboard navigation, but the effect needs them
-    // for drag operations and window lifecycle reporting (slotWindowAdded, dragTracker).
-    QStringList m_excludedApplications;
-    QStringList m_excludedWindowClasses;
-
-    // Window-rule view of the snapping/tiling exclusion lists. ExclusionListBridge
-    // converts the two QStringLists above into a WindowRuleSet of terminal
-    // Exclude rules; the bound RuleEvaluator drives shouldHandleWindow()'s
-    // exclusion gate. Rebuilt by rebuildSnappingExclusionRuleSet() on every
-    // exclusion-list D-Bus load. Declaration ORDER MATTERS — the rule set
-    // must precede (and outlive) the evaluator that binds a reference to it.
+    // Drag-gate exclusion rule set — the Exclude-shaped slice of the
+    // unified WindowRule store the effect mirrors over D-Bus. Filled by
+    // loadWindowRuleAnimationsFromDbus's parse step (which already
+    // deserialises the full rule set for the animation override path),
+    // via `PhosphorWindowRule::ExclusionRules::excludeRulesFrom`. The
+    // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate.
+    // Declaration ORDER MATTERS — the rule set must precede (and outlive)
+    // the evaluator that binds a reference to it.
     PhosphorWindowRule::WindowRuleSet m_snappingExclusionRuleSet;
     PhosphorWindowRule::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
-
-    /// Rebuild m_snappingExclusionRuleSet from the snapping exclusion lists.
-    void rebuildSnappingExclusionRuleSet();
 
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForAutotileNotify() to prevent small utility

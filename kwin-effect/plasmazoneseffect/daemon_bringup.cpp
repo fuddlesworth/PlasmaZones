@@ -505,14 +505,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     // cached here for drag-operation gating (shouldHandleWindow).
     m_triggersLoaded = false; // Permissive until new triggers arrive (#175)
 
-    loadSettingAsync(QStringLiteral("excludedApplications"), [this](const QVariant& v) {
-        m_excludedApplications = v.toStringList();
-        rebuildSnappingExclusionRuleSet();
-    });
-    loadSettingAsync(QStringLiteral("excludedWindowClasses"), [this](const QVariant& v) {
-        m_excludedWindowClasses = v.toStringList();
-        rebuildSnappingExclusionRuleSet();
-    });
+    // excludedApplications / excludedWindowClasses are GONE — the v4
+    // migration folded those lists into the unified WindowRule store, and
+    // the effect's drag-gate exclusion rule set is now derived from the
+    // store-side Exclude rules pulled via WindowRules.rulesChanged →
+    // loadWindowRuleAnimationsFromDbus. No D-Bus settings fetch needed.
     loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
         m_cachedMinWindowWidth = v.toInt();
     });

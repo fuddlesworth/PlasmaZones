@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <PhosphorWindowRule/ExclusionListBridge.h>
+#include <PhosphorWindowRule/ExclusionRules.h>
 #include <PhosphorWindowRule/RuleEvaluator.h>
 
 #include <QStringList>
@@ -25,7 +25,7 @@ WindowQuery windowQuery(const QString& desktopFile, const QString& windowClass)
 
 } // namespace
 
-class TestExclusionListBridge : public QObject
+class TestExclusionRules : public QObject
 {
     Q_OBJECT
 
@@ -35,7 +35,7 @@ private Q_SLOTS:
 
     void testEmptyLists_yieldEmptySet()
     {
-        const WindowRuleSet set = ExclusionListBridge::toRuleSet({}, {});
+        const WindowRuleSet set = ExclusionRules::toRuleSet({}, {});
         QVERIFY(set.isEmpty());
     }
 
@@ -43,7 +43,7 @@ private Q_SLOTS:
     {
         // Empty / blank patterns must not survive — a `Contains ""` predicate
         // would match every window.
-        const WindowRuleSet set = ExclusionListBridge::toRuleSet({QString(), QStringLiteral("")}, {QString()});
+        const WindowRuleSet set = ExclusionRules::toRuleSet({QString(), QStringLiteral("")}, {QString()});
         QVERIFY(set.isEmpty());
     }
 
@@ -51,7 +51,7 @@ private Q_SLOTS:
 
     void testApplicationPattern_buildsDesktopFileExcludeRule()
     {
-        const WindowRuleSet set = ExclusionListBridge::toRuleSet({QStringLiteral("firefox")}, {});
+        const WindowRuleSet set = ExclusionRules::toRuleSet({QStringLiteral("firefox")}, {});
         QCOMPARE(set.count(), 1);
 
         const WindowRule& rule = set.rules().first();
@@ -67,14 +67,14 @@ private Q_SLOTS:
 
     void testWindowClassPattern_buildsWindowClassExcludeRule()
     {
-        const WindowRuleSet set = ExclusionListBridge::toRuleSet({}, {QStringLiteral("steam")});
+        const WindowRuleSet set = ExclusionRules::toRuleSet({}, {QStringLiteral("steam")});
         QCOMPARE(set.count(), 1);
         QCOMPARE(set.rules().first().match.predicate().field, Field::WindowClass);
     }
 
     void testMixedLists_countMatchesSurvivingPatterns()
     {
-        const WindowRuleSet set = ExclusionListBridge::toRuleSet(
+        const WindowRuleSet set = ExclusionRules::toRuleSet(
             {QStringLiteral("firefox"), QString(), QStringLiteral("thunderbird")}, {QStringLiteral("steam")});
         // 2 app patterns + 1 class pattern survive; 1 empty dropped.
         QCOMPARE(set.count(), 3);
@@ -84,7 +84,7 @@ private Q_SLOTS:
 
     void testEvaluator_excludesMatchingApplication()
     {
-        const WindowRuleSet set = ExclusionListBridge::toRuleSet({QStringLiteral("firefox")}, {});
+        const WindowRuleSet set = ExclusionRules::toRuleSet({QStringLiteral("firefox")}, {});
         RuleEvaluator eval(set);
         const ResolvedActions r =
             eval.resolve(windowQuery(QStringLiteral("org.mozilla.firefox"), QStringLiteral("firefox")));
@@ -93,7 +93,7 @@ private Q_SLOTS:
 
     void testEvaluator_excludesMatchingWindowClass()
     {
-        const WindowRuleSet set = ExclusionListBridge::toRuleSet({}, {QStringLiteral("Steam")});
+        const WindowRuleSet set = ExclusionRules::toRuleSet({}, {QStringLiteral("Steam")});
         RuleEvaluator eval(set);
         const ResolvedActions r =
             eval.resolve(windowQuery(QStringLiteral("com.valvesoftware.Steam"), QStringLiteral("steam")));
@@ -103,7 +103,7 @@ private Q_SLOTS:
     void testEvaluator_caseInsensitiveSubstring()
     {
         // matchesExclusionLists() is case-insensitive substring — parity check.
-        const WindowRuleSet set = ExclusionListBridge::toRuleSet({QStringLiteral("FIRE")}, {});
+        const WindowRuleSet set = ExclusionRules::toRuleSet({QStringLiteral("FIRE")}, {});
         RuleEvaluator eval(set);
         QVERIFY(
             eval.resolve(windowQuery(QStringLiteral("org.mozilla.firefox"), QStringLiteral("firefox"))).isExcluded());
@@ -111,8 +111,7 @@ private Q_SLOTS:
 
     void testEvaluator_nonMatchingWindowNotExcluded()
     {
-        const WindowRuleSet set =
-            ExclusionListBridge::toRuleSet({QStringLiteral("firefox")}, {QStringLiteral("steam")});
+        const WindowRuleSet set = ExclusionRules::toRuleSet({QStringLiteral("firefox")}, {QStringLiteral("steam")});
         RuleEvaluator eval(set);
         const ResolvedActions r =
             eval.resolve(windowQuery(QStringLiteral("org.kde.konsole"), QStringLiteral("konsole")));
@@ -124,7 +123,7 @@ private Q_SLOTS:
     {
         // A windowless context query carries no desktopFile / windowClass —
         // an Exclude rule must not fire.
-        const WindowRuleSet set = ExclusionListBridge::toRuleSet({QStringLiteral("firefox")}, {});
+        const WindowRuleSet set = ExclusionRules::toRuleSet({QStringLiteral("firefox")}, {});
         RuleEvaluator eval(set);
         WindowQuery contextOnly;
         contextOnly.screenId = QStringLiteral("DP-1");
@@ -132,5 +131,5 @@ private Q_SLOTS:
     }
 };
 
-QTEST_MAIN(TestExclusionListBridge)
-#include "test_exclusionlistbridge.moc"
+QTEST_MAIN(TestExclusionRules)
+#include "test_exclusionrules.moc"
