@@ -420,6 +420,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // encoded in the PhosphorProtocol::DragOutcome.
                 callEndDrag(w, windowId, cancelled);
 
+                // Bump the per-drag generation so any in-flight beginDrag
+                // reply for the drag we just ended is discarded by the
+                // reply lambda's generation check. Without this bump, the
+                // mismatch check only fires when a NEW drag starts before
+                // the reply arrives — a drag that ends WITHOUT a successor
+                // would leave the captured generation equal to the current
+                // value, the reply would pass the guard, and write its
+                // policy + retroactive autotile float into stale state.
+                ++m_dragGeneration;
+
                 // Clear drag state for the next session.
                 m_currentDragPolicy = PhosphorProtocol::DragPolicy{};
                 m_dragBypassedForAutotile = false;

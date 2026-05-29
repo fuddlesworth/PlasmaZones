@@ -393,6 +393,12 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_windowIdReverse.remove(closedWindowId);
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
+    // Symmetric with the windowDeleted handler (lifecycle.cpp:483). Close
+    // shaders held via `holdCloseGrab=true` keep the EffectWindow alive
+    // past slotWindowClosed and the close-path paints can still touch the
+    // opacity cache; clearing here ensures the next windowDeleted has
+    // nothing to clean up if the close shader runs zero frames.
+    m_shaderManager.m_frameOpacityCache.remove(w);
 }
 
 void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)

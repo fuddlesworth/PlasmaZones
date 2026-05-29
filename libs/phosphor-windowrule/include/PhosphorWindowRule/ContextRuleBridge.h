@@ -576,35 +576,40 @@ inline bool matchIsExactContextDesktop(const MatchExpression& match)
     return contextAxisFor(match) == ContextAxis::Desktop;
 }
 
-/// True if @p match is a context-only rule pinning an activity (with screen),
-/// whether or not it ALSO pins a desktop. Mirrors the historical per-activity
-/// family classifier: a screen+activity rule and a screen+desktop+activity
-/// rule both belong to the per-activity family.
+/// BROAD per-activity family classifier — true if @p match is a context-only
+/// rule pinning an activity (with screen), whether or not it ALSO pins a
+/// desktop. Used by the cascade-family union @ref isContextAssignmentRule
+/// (in layoutregistry_rulehelpers.cpp) to admit Combined rules into the
+/// cascade-family union.
+///
+/// DO NOT use as a per-activity batch reader/writer family classifier — the
+/// Activity batch API ((screen, activity) → layout) cannot represent a
+/// desktop-pinned Combined rule, so a round-trip through this predicate
+/// silently drops the desktop pin. Use @ref matchIsExactContextActivityStrict
+/// for the strict per-Activity classifier.
 inline bool matchIsExactContextActivity(const MatchExpression& match)
 {
     const ContextAxis axis = contextAxisFor(match);
     return axis == ContextAxis::Activity || axis == ContextAxis::Combined;
 }
 
-/// True if @p match is the STRICT per-activity shape — screen+activity ONLY,
-/// no desktop pin. Use for the Activity batch reader/writer family classifier:
-/// the public Activity batch API ((screen, activity) → layout) cannot
-/// distinguish desktop-pinned Combined rules from pure Activity rules, so a
-/// `activityAssignments()` → `setAllActivityAssignments()` round-trip with
-/// the broader `matchIsExactContextActivity` would silently drop the desktop
-/// pin on every Combined rule. The strict predicate keeps Combined rules
-/// invisible to the Activity API — they survive intact and are only
-/// reachable through the rule editor / lower-level set rules API.
-inline bool matchIsExactlyActivity(const MatchExpression& match)
+/// STRICT per-activity classifier — screen+activity ONLY, no desktop pin.
+/// Used by the Activity batch reader/writer (activityAssignments() /
+/// setAllActivityAssignments) so a Combined rule is NOT projected through
+/// the (screen, activity) key (would otherwise overwrite a pure-Activity
+/// entry or get its desktop pin dropped on round-trip). Combined rules
+/// live outside the Activity API's projection and only round-trip through
+/// the dedicated Combined batch.
+inline bool matchIsExactContextActivityStrict(const MatchExpression& match)
 {
     return contextAxisFor(match) == ContextAxis::Activity;
 }
 
-/// True if @p match is the STRICT Combined shape — screen + desktop +
-/// activity all pinned. Used by the Combined batch API's family classifier
-/// so the round-trip touches ONLY Combined rules and leaves the other
-/// axes (Monitor, Desktop, Activity) untouched.
-inline bool matchIsExactlyCombined(const MatchExpression& match)
+/// STRICT Combined classifier — screen + desktop + activity all pinned.
+/// Used by the Combined batch API's family classifier so the round-trip
+/// touches ONLY Combined rules and leaves the other axes (Monitor,
+/// Desktop, Activity) untouched.
+inline bool matchIsExactContextCombined(const MatchExpression& match)
 {
     return contextAxisFor(match) == ContextAxis::Combined;
 }

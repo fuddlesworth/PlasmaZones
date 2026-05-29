@@ -55,6 +55,7 @@
 
 #include "../helpers/IsolatedConfigGuard.h"
 #include "config/configdefaults.h"
+#include "config/configkeys.h"
 
 namespace PWR = PhosphorWindowRule;
 namespace CRB = PhosphorWindowRule::ContextRuleBridge;
@@ -124,8 +125,8 @@ private:
         f.guard = std::make_unique<IsolatedConfigGuard>();
         f.store = std::make_unique<PWR::WindowRuleStore>(ConfigDefaults::windowRulesFilePath());
         f.registry =
-            std::make_unique<PhosphorZones::LayoutRegistry>(f.store.get(), QStringLiteral("plasmazones/layouts"));
-        const QString layoutDir = f.guard->dataPath() + QStringLiteral("/plasmazones/layouts");
+            std::make_unique<PhosphorZones::LayoutRegistry>(f.store.get(), PlasmaZones::ConfigKeys::layoutsSubdir());
+        const QString layoutDir = f.guard->dataPath() + QLatin1Char('/') + PlasmaZones::ConfigKeys::layoutsSubdir();
         QDir().mkpath(layoutDir);
         f.registry->setLayoutDirectory(layoutDir);
         return f;

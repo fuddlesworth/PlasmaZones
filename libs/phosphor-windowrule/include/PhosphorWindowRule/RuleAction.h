@@ -187,6 +187,14 @@ public:
     /// future-phase consumers that add new action types.
     void registerAction(const ActionDescriptor& descriptor);
 
+    /// Remove a previously-registered descriptor. Returns true if @p type
+    /// was present and removed, false otherwise. Counterpart to
+    /// @ref registerAction so tests / future consumers can symmetrically
+    /// undo a registration (without it, every test-time sentinel would
+    /// leak into the process-wide singleton for the remainder of the
+    /// test binary's lifetime).
+    bool unregisterAction(const QString& type);
+
     /// True if @p type names a registered action.
     bool isRegistered(const QString& type) const;
 

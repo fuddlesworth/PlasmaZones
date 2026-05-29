@@ -95,12 +95,31 @@ private Q_SLOTS:
         const auto roundTripped = mgr->combinedAssignments();
         QCOMPARE(roundTripped, combined);
 
+        // Cascade-resolution check: the rebuilt Combined rule must resolve
+        // through the live cascade at its (screen, desktop, activity) tuple.
+        // A regression that mis-builds the rule with a transposed-arg
+        // signature would still produce a hash-equal projection (because
+        // the reader re-reads from the same wrong tuple); this assertion
+        // catches that class of bug.
+        QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 3, QStringLiteral("work"))->name(),
+                 QStringLiteral("LayoutA"));
+
         // The pure-Activity rule survives untouched.
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1, QStringLiteral("work"))->name(),
                  QStringLiteral("LayoutB"));
         // The pure-Desktop rule survives untouched.
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 5, QString())->name(), QStringLiteral("LayoutB"));
     }
+
+    // NOTE on enabled-flag preservation: setAllCombinedAssignments mirrors
+    // applyBatchAssignments's OldEntrySnapshot capture (Pass 1 P2 audit
+    // finding), so disabled→enabled regression is structurally shared with
+    // the Activity / Desktop / Screen batches. A dedicated test would need
+    // a public WindowRuleStore accessor on LayoutRegistry to flip the
+    // rule's enabled flag — none exists today, and adding one solely for
+    // test scaffolding would be an SRP violation. The shared
+    // applyBatchAssignments + OldEntrySnapshot path covers the four
+    // sibling APIs uniformly.
 
     // ─── Combined-rule preservation regression ───────────────────────────
     //

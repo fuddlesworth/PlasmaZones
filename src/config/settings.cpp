@@ -1309,14 +1309,38 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
     // resolves on read: without this, re-saving a list that stores a
     // connector name where the getter reports the canonical id would look
     // like a change and misfire the changed signal.
+    // Resolve the SCREEN segment of any composite entry to its canonical id.
+    // For Monitor axis the entry IS the screen id; for Desktop/Activity the
+    // entry is `screenId/desktop` or `screenId/activity` and the leading
+    // segment needs the same resolution. Without this, a write that mixes
+    // connector-name and canonical-id forms produces two separate WindowRules
+    // (different UUIDs via disableRuleIdFor) covering the same logical
+    // context, and the no-op short-circuit below misfires because the
+    // pre/post sets look different.
     const auto canonical = [axis](const QStringList& list) {
+        const auto resolveScreen = [](const QString& screen) {
+            if (PhosphorScreens::ScreenIdentity::isConnectorName(screen)) {
+                const QString resolved = PhosphorScreens::ScreenIdentity::idForName(screen);
+                if (resolved != screen) {
+                    return resolved;
+                }
+            }
+            return screen;
+        };
         QStringList c;
         for (const QString& raw : list) {
             QString value = raw.trimmed();
-            if (axis == DisableAxis::Monitor && PhosphorScreens::ScreenIdentity::isConnectorName(value)) {
-                const QString resolved = PhosphorScreens::ScreenIdentity::idForName(value);
-                if (resolved != value) {
-                    value = resolved;
+            if (axis == DisableAxis::Monitor) {
+                value = resolveScreen(value);
+            } else if (axis == DisableAxis::Desktop || axis == DisableAxis::Activity) {
+                // Composite entry: split on the LAST '/' so a screen id
+                // that happens to contain a '/' (rare but legal in the
+                // disambiguated `Manuf:Model:Serial/CONNECTOR` shape)
+                // doesn't truncate.
+                const int slash = value.lastIndexOf(QLatin1Char('/'));
+                if (slash > 0 && slash < value.size() - 1) {
+                    const QString screen = resolveScreen(value.left(slash));
+                    value = screen + QLatin1Char('/') + value.mid(slash + 1);
                 }
             }
             if (!value.isEmpty() && !c.contains(value)) {

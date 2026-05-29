@@ -769,7 +769,8 @@ void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QStrin
         [](const BatchContext& ctx) {
             return !ctx.screenId.isEmpty() && !ctx.activity.isEmpty();
         },
-        PWR::ContextRuleBridge::matchIsExactlyActivity, /*emitDesktop=*/0, /*emitActivity=*/QString(), "activity");
+        PWR::ContextRuleBridge::matchIsExactContextActivityStrict, /*emitDesktop=*/0, /*emitActivity=*/QString(),
+        "activity");
 }
 
 void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey, QString>& assignments)
@@ -796,7 +797,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
 
     QList<PWR::WindowRule> kept;
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
-        if (hasEngineModeAction(rule) && PWR::ContextRuleBridge::matchIsExactlyCombined(rule.match)) {
+        if (hasEngineModeAction(rule) && PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)) {
             continue;
         }
         kept.append(rule);
@@ -805,7 +806,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     int count = 0;
     // (screen, desktop) tuples that ended up with at least one stored rule;
     // each gets one layoutAssigned emit at end so observers refresh.
-    QSet<QPair<QString, int>> emittedKeys;
+    QSet<CombinedAssignmentKey> emittedKeys;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const CombinedAssignmentKey& key = it.key();
         const QString& layoutId = it.value();
@@ -825,18 +826,23 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             entry.snappingLayout, entry.tilingAlgorithm);
         rebuilt.enabled = oldSnapshot.enabled;
         kept.append(rebuilt);
-        emittedKeys.insert(qMakePair(key.screenId, key.virtualDesktop));
+        emittedKeys.insert(key);
         ++count;
         qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << logContext;
     }
 
     m_ruleStore->setAllRules(kept);
-    // Per-(screen, desktop) emit — activity not threaded because the
-    // layoutAssigned signal only carries (screenId, desktop, layoutPtr).
-    // Activity-scoped observers refresh via the broader rulesChanged
-    // signal instead.
-    for (const QPair<QString, int>& pair : std::as_const(emittedKeys)) {
-        emitLayoutAssigned(pair.first, pair.second, assignmentIdForScreen(pair.first, pair.second, QString()));
+    // Per-rule emit using the rule's own (screen, desktop, activity) — the
+    // earlier shape passed an empty activity to assignmentIdForScreen, which
+    // never resolved to the just-stored Combined rule (Combined rules pin a
+    // non-empty activity, so the empty-activity cascade query falls through
+    // to a wider Desktop/Monitor rule). Observers would receive
+    // layoutAssigned(screen, desktop, wrongLayoutPtr) for the just-stored
+    // Combined rule. The signal still only carries (screenId, desktop,
+    // layoutPtr), but the layoutPtr we resolve here is now the right one.
+    for (const CombinedAssignmentKey& emitKey : std::as_const(emittedKeys)) {
+        emitLayoutAssigned(emitKey.screenId, emitKey.virtualDesktop,
+                           assignmentIdForScreen(emitKey.screenId, emitKey.virtualDesktop, emitKey.activity));
     }
     qCInfo(lcZonesLib) << "Batch set" << count << "combined assignments";
 }
@@ -847,7 +853,7 @@ QHash<CombinedAssignmentKey, QString> LayoutRegistry::combinedAssignments() cons
     for (const PWR::WindowRule& rule : m_ruleStore->ruleSet().rules()) {
         // Strict Combined-only classifier — Activity-only and Desktop-only
         // rules stay in their own projections.
-        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactlyCombined(rule.match)) {
+        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextCombined(rule.match)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);
@@ -884,7 +890,7 @@ QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() co
         // vice versa) keyed by the same pair, silently losing one of
         // the rules. Combined rules live outside this projection and
         // are only reachable through the rule editor.
-        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactlyActivity(rule.match)) {
+        if (!hasEngineModeAction(rule) || !PWR::ContextRuleBridge::matchIsExactContextActivityStrict(rule.match)) {
             continue;
         }
         const ContextDims dims = decodeDims(rule.match);

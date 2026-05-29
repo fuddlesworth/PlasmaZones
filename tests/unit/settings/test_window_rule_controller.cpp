@@ -363,6 +363,28 @@ void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
     const bool prevExists = registry.isRegistered(kSentinelType);
     const std::optional<ActionDescriptor> prev = registry.descriptor(kSentinelType);
 
+    // RAII cleanup: restore the prior descriptor (or unregister the sentinel
+    // entirely) even if an assertion throws / fails mid-test. Without this,
+    // a QVERIFY2 failure between the two registerAction calls would skip
+    // the trailing cleanup and leak the sentinel into the registry for the
+    // remainder of the test binary's lifetime.
+    struct RegistryGuard
+    {
+        ActionRegistry& registry;
+        QString type;
+        bool prevExists;
+        std::optional<ActionDescriptor> prev;
+        ~RegistryGuard()
+        {
+            if (prevExists && prev.has_value()) {
+                registry.registerAction(*prev);
+            } else {
+                registry.unregisterAction(type);
+            }
+        }
+    };
+    RegistryGuard guard{registry, kSentinelType, prevExists, prev};
+
     ActionDescriptor sentinel;
     sentinel.type = kSentinelType;
     sentinel.slotFor = [](const QJsonObject&) {
@@ -402,18 +424,7 @@ void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
         }
     }
     QVERIFY2(foundAuthorable, "actionTypes() must include descriptors with userAuthorable=true");
-
-    // Restore prior state. The registry has no public erase; if the
-    // sentinel wasn't registered before, leaving it registered would leak
-    // a non-action type into later tests. Workaround: if the sentinel
-    // wasn't there originally, set it to userAuthorable=false so any
-    // accidental later reuse is at least filtered from the picker.
-    if (prevExists && prev.has_value()) {
-        registry.registerAction(*prev);
-    } else {
-        sentinel.userAuthorable = false;
-        registry.registerAction(sentinel);
-    }
+    // RegistryGuard's dtor handles cleanup.
 }
 
 void TestWindowRuleController::moveRuleReorders()

@@ -136,11 +136,18 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     // clearFloatingForSnap before assignWindowToZones) shadow this, but the
     // shadowing is fragile and the explicit sync here makes the cross-layer
     // contract robust.
-    if (m_floatingWindows.remove(windowId) > 0) {
-        const QString appId = currentAppIdFor(windowId);
-        if (appId != windowId) {
-            m_floatingWindows.remove(appId);
-        }
+    //
+    // Remove BOTH the windowId AND the appId entry unconditionally — the
+    // post-session-restore case has the appId entry present without the
+    // windowId one (see m_floatingWindows comments in WindowTrackingService.h),
+    // so gating the appId removal on the windowId removal succeeding would
+    // miss exactly the case the comment block above describes. QSet::remove
+    // on a missing key is a documented no-op so the unconditional form is
+    // cost-equivalent in the no-op path.
+    m_floatingWindows.remove(windowId);
+    const QString appId = currentAppIdFor(windowId);
+    if (appId != windowId) {
+        m_floatingWindows.remove(appId);
     }
 
     if (zoneChanged) {
