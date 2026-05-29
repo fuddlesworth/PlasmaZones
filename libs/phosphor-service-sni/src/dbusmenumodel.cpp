@@ -3,21 +3,15 @@
 
 #include <PhosphorServiceSni/DBusMenuModel.h>
 
-#include <PhosphorServiceIconTheme/IconThemeResolver.h>
-
 #include "dbusmenu_interface.h"
+#include "dbusmenuhelpers.h"
 #include "dbustypes.h"
 
-#include <QBuffer>
-#include <QByteArray>
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDateTime>
 #include <QDebug>
-#include <QHash>
 #include <QImage>
-#include <QImageReader>
 #include <QLoggingCategory>
 #include <QSet>
 #include <QVariant>
@@ -28,189 +22,14 @@ namespace PhosphorServiceSni {
 
 namespace {
 
-// dbusmenu spec timestamps are unix-epoch milliseconds, truncated to
-// 32 bits. Centralised so the four Event() call sites can't drift
-// (an earlier rev divided by 1000 and produced "stale" rejections on
-// apps with focus-stealing prevention because the timestamps didn't
-// match the platform's input-event clock).
-uint dbusmenuTimestamp()
+// Icon-defining properties on a dbusmenu row. Used both by
+// onPropertiesUpdated (to invalidate the per-row icon cache when one
+// changes) and by refresh (to decide whether a same-shape row's
+// cached icon can be carried into the new Row instance).
+const QSet<QString>& iconPropKeys()
 {
-    return uint(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFu);
-}
-
-/// Visit each level-1 child variant under a layout struct and unpack
-/// it into a DBusMenuLayoutItem. The dbus marshalling already gave
-/// us flat (id, props, children-variants) — we just need to recurse
-/// one level for the rendered list-model row data and lazily for
-/// submenus.
-DBusMenuLayoutItem unpackLayoutVariant(const QVariant& v)
-{
-    DBusMenuLayoutItem out;
-    auto arg = v.value<QDBusArgument>();
-    if (arg.currentType() == QDBusArgument::StructureType) {
-        arg >> out;
-        return out;
-    }
-    // Some apps send the layout as a Variant<(ia{sv}av)> instead of
-    // a straight struct. Unwrap one level — but ONLY after we've
-    // verified the unwrapped argument is itself a struct. A malicious
-    // (or buggy) sender can deliver a variant wrapping anything else
-    // (an integer, an array, an empty argument), and `arg >> out`
-    // against a non-struct argument is undefined per QtDBus's
-    // assertion semantics. Validate before dereferencing.
-    if (!v.canConvert<QDBusVariant>()) {
-        return out;
-    }
-    const QDBusVariant dv = v.value<QDBusVariant>();
-    auto inner = dv.variant().value<QDBusArgument>();
-    if (inner.currentType() != QDBusArgument::StructureType) {
-        return out;
-    }
-    inner >> out;
-    return out;
-}
-
-QString labelFromProps(const QVariantMap& props)
-{
-    // dbusmenu labels embed accelerator markers in two flavours,
-    // depending on whether the publishing app uses GTK or Qt
-    // conventions:
-    //
-    //   GTK   — `_` before the accel char, `__` for a literal _
-    //   Qt    — `&` before the accel char, `&&` for a literal &
-    //
-    // The Deskflow app indicator publishes GTK-style ("_Quit",
-    // "Rest_art"), KDE's own indicators publish Qt-style. We strip
-    // BOTH because we don't render underline-on-Alt either way.
-    auto raw = props.value(QStringLiteral("label")).toString();
-    QString out;
-    out.reserve(raw.size());
-    for (int i = 0; i < raw.size(); ++i) {
-        const QChar c = raw[i];
-        if (c == QLatin1Char('&') || c == QLatin1Char('_')) {
-            // Doubled = literal character; keep one copy and skip the
-            // duplicate.
-            if (i + 1 < raw.size() && raw[i + 1] == c) {
-                out.append(c);
-                ++i;
-                continue;
-            }
-            // Lone marker at end-of-string (e.g. an app that ships a
-            // single "&" as the label) is malformed but should not
-            // silently disappear; keep the char so the label survives.
-            if (i + 1 >= raw.size()) {
-                out.append(c);
-                continue;
-            }
-            // Lone marker mid-string = strip and move on; the NEXT
-            // char is the mnemonic but we don't render an underline.
-            continue;
-        }
-        out.append(c);
-    }
-    return out;
-}
-
-/// Parse the `shortcut` property — the dbusmenu spec types it as
-/// `aas` (array of array of strings), where each outer entry is an
-/// alternative key-press and each inner entry is a modifier list
-/// terminating in the key. Example: [["Control","S"], ["Control","Q"]]
-/// means "Ctrl+S or Ctrl+Q". We render only the first chord.
-///
-/// Modifier strings come straight from the spec — "Control", "Shift",
-/// "Alt", "Super". We map them to the standard human display form
-/// ("Ctrl", "Shift", "Alt", "Super") and join with "+".
-QString shortcutFromProps(const QVariantMap& props)
-{
-    const QVariant raw = props.value(QStringLiteral("shortcut"));
-    if (!raw.isValid()) {
-        return {};
-    }
-    // Use qdbus_cast on the variant rather than manual
-    // QDBusArgument iteration: hand-rolling beginArray/endArray on
-    // a QDBusArgument obtained via `raw.value<QDBusArgument>()`
-    // triggers Qt 6's "write from a read-only object" diagnostic —
-    // the returned arg's internal state machine flips to read-only
-    // and beginArray() is overloaded as a write operation when no
-    // metatype id is supplied. qdbus_cast knows about both
-    // QList<T> and QStringList natively, so a single cast does the
-    // full demarshalling without that wrinkle.
-    const QList<QStringList> chords = qdbus_cast<QList<QStringList>>(raw);
-    if (chords.isEmpty() || chords.first().isEmpty()) {
-        return {};
-    }
-
-    static const QHash<QString, QString> modifierDisplay{
-        {QStringLiteral("Control"), QStringLiteral("Ctrl")},
-        {QStringLiteral("Shift"), QStringLiteral("Shift")},
-        {QStringLiteral("Alt"), QStringLiteral("Alt")},
-        {QStringLiteral("Super"), QStringLiteral("Super")},
-    };
-
-    QStringList rendered;
-    for (const auto& part : chords.first()) {
-        rendered.append(modifierDisplay.value(part, part));
-    }
-    return rendered.join(QLatin1Char('+'));
-}
-
-/// Encode a QImage as a data:image/png;base64 URL. Used for menu
-/// icons because they're per-row, short-lived (only while the menu
-/// is open), and small (typically 16×16) — no point routing them
-/// through a stateful image provider with cleanup plumbing. Empty
-/// input → empty string, so the QML side can `visible: src.length`.
-QString iconToDataUrl(const QImage& img)
-{
-    if (img.isNull()) {
-        return {};
-    }
-    QByteArray buf;
-    QBuffer dev(&buf);
-    dev.open(QIODevice::WriteOnly);
-    img.save(&dev, "PNG");
-    return QStringLiteral("data:image/png;base64,") + QString::fromLatin1(buf.toBase64());
-}
-
-QImage iconFromProps(const QVariantMap& props, int size, const QStringList& themePaths)
-{
-    // dbusmenu lets items specify icon-name (themed) OR icon-data
-    // (PNG bytes). Try icon-name first since it's smaller on the
-    // wire; fall back to inline data.
-    const auto iconName = props.value(QStringLiteral("icon-name")).toString();
-    if (!iconName.isEmpty()) {
-        // dbusmenu has its OWN IconThemePath list (plural — different
-        // from SNI's singular). Try each.
-        for (const auto& path : themePaths) {
-            auto img = PhosphorServiceIconTheme::IconThemeResolver::instance()->iconForName(iconName, size, 1, path);
-            if (!img.isNull())
-                return img;
-        }
-        return PhosphorServiceIconTheme::IconThemeResolver::instance()->iconForName(iconName, size, 1, {});
-    }
-    const auto iconData = props.value(QStringLiteral("icon-data")).toByteArray();
-    if (!iconData.isEmpty()) {
-        // Decode through QImageReader with a hard alloc cap. Qt's
-        // default QImageReader::allocationLimit is 128 MiB, which a
-        // hostile menu provider could exploit per-row across a long
-        // menu (128 MiB * N rows). Tray-menu icons are 16-32 px, so a
-        // 4 MiB cap is generous and bounds the damage. Dimension cap
-        // mirrors the SNI item path (kMaxIconDim = 4096) for the same
-        // reason.
-        QBuffer buf;
-        buf.setData(iconData);
-        buf.open(QIODevice::ReadOnly);
-        QImageReader reader(&buf);
-        reader.setAllocationLimit(4); // MiB
-        constexpr int kMaxIconDim = 4096;
-        const QSize wireSize = reader.size();
-        if (wireSize.isValid() && (wireSize.width() > kMaxIconDim || wireSize.height() > kMaxIconDim))
-            return {};
-        QImage img;
-        if (!reader.read(&img))
-            return {};
-        return img;
-    }
-    return {};
+    static const QSet<QString> keys{QStringLiteral("icon-name"), QStringLiteral("icon-data")};
+    return keys;
 }
 
 } // namespace
@@ -284,7 +103,7 @@ public:
     void refresh();
     void scheduleProxyRebuild();
     void runScheduledRebuild();
-    void flushPendingRebuild();
+    [[nodiscard]] bool flushPendingRebuild();
     void onLayoutUpdated(uint rev, int parent);
     void onPropertiesUpdated(const DBusMenuItemPropertiesList& updated, const DBusMenuItemKeysList& removed);
     QString rowType(const Row& r) const;
@@ -312,7 +131,7 @@ void DBusMenuModel::Private::runScheduledRebuild()
     refresh();
 }
 
-void DBusMenuModel::Private::flushPendingRebuild()
+bool DBusMenuModel::Private::flushPendingRebuild()
 {
     // Synchronously execute any queued rebuild before a method that
     // depends on `proxy` runs. Required because the public open/close
@@ -323,9 +142,15 @@ void DBusMenuModel::Private::flushPendingRebuild()
     // app's proxy (first popup with prior content) or null (first
     // popup of a fresh model), neither of which is correct. The queued
     // tick is still a no-op when it later fires (rebuildScheduled
-    // returns to false here).
-    if (rebuildScheduled)
+    // returns to false here). Returns true when a flush actually ran
+    // so callers (setRootId, public refresh) can skip a follow-up
+    // refresh that would otherwise duplicate the GetLayout the flushed
+    // rebuild already issued.
+    if (rebuildScheduled) {
         runScheduledRebuild();
+        return true;
+    }
+    return false;
 }
 
 void DBusMenuModel::Private::buildProxy()
@@ -414,7 +239,7 @@ void DBusMenuModel::Private::refresh()
         watcher->deleteLater();
         QDBusPendingReply<uint, DBusMenuLayoutItem> reply = *watcher;
         if (reply.isError()) {
-            // App misconfigurations are common — SNI items advertise
+            // App misconfigurations are common, SNI items advertise
             // a Menu path that's empty, stale, or implements something
             // OTHER than canonical dbusmenu. Log at info, not warning:
             // these are user-visible only via the popup-auto-close
@@ -439,7 +264,7 @@ void DBusMenuModel::Private::refresh()
         for (const auto& childVariant : root.children) {
             const auto child = unpackLayoutVariant(childVariant);
             // hasChildren is signalled by the "children-display"
-            // property being "submenu" — the actual children aren't
+            // property being "submenu", the actual children aren't
             // included at depth=1.
             const bool hasChildren =
                 child.properties.value(QStringLiteral("children-display")).toString() == QLatin1String("submenu");
@@ -456,7 +281,7 @@ void DBusMenuModel::Private::refresh()
         }
 
         // Use dataChanged when the row count + id sequence hasn't
-        // changed — keeps the QML view's delegate-cache warm across
+        // changed, keeps the QML view's delegate-cache warm across
         // property-only refreshes (status toggling, dynamic labels).
         // beginResetModel destroys every delegate, which is expensive
         // and visually flickers the menu.
@@ -479,10 +304,10 @@ void DBusMenuModel::Private::refresh()
             // onPropertiesUpdated already invalidates the cache on
             // icon-prop changes; this just preserves the cache for
             // rows that didn't move.
-            static const QSet<QString> kIconProps{QStringLiteral("icon-name"), QStringLiteral("icon-data")};
+            const QSet<QString>& iconKeys = iconPropKeys();
             for (int i = 0; i < nextRows.size(); ++i) {
                 bool iconUnchanged = true;
-                for (const auto& key : kIconProps) {
+                for (const auto& key : iconKeys) {
                     if (rows[i].properties.value(key) != nextRows[i].properties.value(key)) {
                         iconUnchanged = false;
                         break;
@@ -534,7 +359,7 @@ void DBusMenuModel::Private::onPropertiesUpdated(const DBusMenuItemPropertiesLis
 {
     // Invalidate icon cache if any of the visual properties change.
     // Anything that affects iconFromProps' return value goes here.
-    static const QSet<QString> kIconProps{QStringLiteral("icon-name"), QStringLiteral("icon-data")};
+    const QSet<QString>& iconKeys = iconPropKeys();
 
     for (const auto& upd : updated) {
         for (int i = 0; i < rows.size(); ++i) {
@@ -542,7 +367,7 @@ void DBusMenuModel::Private::onPropertiesUpdated(const DBusMenuItemPropertiesLis
                 continue;
             for (auto it = upd.properties.begin(); it != upd.properties.end(); ++it) {
                 rows[i].properties.insert(it.key(), it.value());
-                if (kIconProps.contains(it.key())) {
+                if (iconKeys.contains(it.key())) {
                     rows[i].iconCacheValid = false;
                 }
             }
@@ -557,7 +382,7 @@ void DBusMenuModel::Private::onPropertiesUpdated(const DBusMenuItemPropertiesLis
                 continue;
             for (const auto& k : rem.keys) {
                 rows[i].properties.remove(k);
-                if (kIconProps.contains(k)) {
+                if (iconKeys.contains(k)) {
                     rows[i].iconCacheValid = false;
                 }
             }
@@ -635,9 +460,12 @@ void DBusMenuModel::setRootId(int id)
     // setRootId reaches d->refresh() which dereferences d->proxy via
     // d->proxy->GetLayout(...). Flush any pending rebuild first so the
     // refresh runs against the new proxy rather than the prior app's
-    // (or a stale null after the queued tick races behind us).
-    d->flushPendingRebuild();
-    d->refresh();
+    // (or a stale null after the queued tick races behind us). If the
+    // flush ran, the rebuild already issued a GetLayout for the new
+    // rootId (which was set above before the flush) so we don't need
+    // to issue another one here.
+    if (!d->flushPendingRebuild())
+        d->refresh();
     Q_EMIT rootIdChanged();
 }
 
@@ -699,7 +527,7 @@ QVariant DBusMenuModel::data(const QModelIndex& index, int role) const
 
 QHash<int, QByteArray> DBusMenuModel::roleNames() const
 {
-    // `itemEnabled` / `itemVisible` rather than the plain names — the
+    // `itemEnabled` / `itemVisible` rather than the plain names, the
     // QML side renders these as Item delegates, and Item exposes
     // `enabled` + `visible` as Q_PROPERTYs (visible is FINAL). A
     // matching role name would shadow QQuickItem's property and fail
@@ -723,7 +551,7 @@ QHash<int, QByteArray> DBusMenuModel::roleNames() const
 
 void DBusMenuModel::triggerItem(int row)
 {
-    d->flushPendingRebuild();
+    (void)d->flushPendingRebuild();
     if (!d->proxy || row < 0 || row >= d->rows.size())
         return;
     const auto& r = d->rows.at(row);
@@ -739,7 +567,7 @@ void DBusMenuModel::triggerItem(int row)
 
 int DBusMenuModel::aboutToShowSubmenu(int row)
 {
-    d->flushPendingRebuild();
+    (void)d->flushPendingRebuild();
     if (!d->proxy || row < 0 || row >= d->rows.size())
         return -1;
     const auto& r = d->rows.at(row);
@@ -770,7 +598,7 @@ int DBusMenuModel::aboutToShowSubmenu(int row)
 
 void DBusMenuModel::aboutToShow()
 {
-    d->flushPendingRebuild();
+    (void)d->flushPendingRebuild();
     if (!d->proxy)
         return;
     // AboutToShow's needUpdate reply triggers a refresh only when the
@@ -800,14 +628,19 @@ void DBusMenuModel::aboutToShow()
 
 void DBusMenuModel::refresh()
 {
-    d->flushPendingRebuild();
+    // If a rebuild was queued, the flush already issued a fresh
+    // GetLayout via refresh; calling d->refresh() again here would
+    // cancel that watcher and issue a duplicate request for the
+    // same rootId.
+    const bool flushed = d->flushPendingRebuild();
     qCDebug(lcSniMenu) << "refresh() invoked for" << d->service << d->path << "proxy=" << (d->proxy ? "live" : "null");
-    d->refresh();
+    if (!flushed)
+        d->refresh();
 }
 
 void DBusMenuModel::aboutToHide()
 {
-    d->flushPendingRebuild();
+    (void)d->flushPendingRebuild();
     if (!d->proxy) {
         d->openedIds.clear();
         return;

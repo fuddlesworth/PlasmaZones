@@ -102,10 +102,13 @@ Item {
     // Shared MPRIS derived-state + flicker-free art URL (see
     // MprisPlayerState.qml). `sampling` is gated on visibility so the
     // QML `progress` binding goes dormant when the widget is hidden
-    // (the sampling=false short-circuit drops `player.position` as a
-    // tracked dependency). The C++ position timer keeps firing
-    // regardless; this just saves the per-tick Math.min/Math.max + the
-    // requestPaint scheduling cost on the Canvas below.
+    // (sampling=false short-circuits before `player.position` is read,
+    // so the binding tracker drops it as a dependency). The C++
+    // position timer keeps firing regardless; this just saves the
+    // per-tick Math.min/Math.max in MprisPlayerState's `progress`
+    // binding. The Canvas `requestPaint` scheduling cost is already
+    // gated separately by `prog`'s `root.visible` short-circuit and
+    // the `if (root.visible) requestPaint()` guard.
     MprisPlayerState {
         id: playerState
 
@@ -231,6 +234,16 @@ Item {
                 // and skip the per-second requestPaint cycle that would
                 // otherwise re-rasterize the ring once per MPRIS position
                 // tick regardless of visibility.
+                //
+                // The `root.visible && root.hasPlayer` guard here is
+                // layered with MprisPlayerState's own sampling check
+                // (which produces 0 when sampling=false=!root.visible)
+                // and player-null check (root.progress already returns 0
+                // when !hasPlayer). Both layers are intentional:
+                // simplifying to `root.progress` would lose the local
+                // guarantee that `prog` reads 0 during the brief layout
+                // pass where `root.visible` transitions but
+                // playerState.sampling has not yet propagated.
                 property real prog: (root.visible && root.hasPlayer) ? root.progress : 0
 
                 anchors.fill: parent

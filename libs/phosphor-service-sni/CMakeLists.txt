@@ -95,6 +95,7 @@ set(phosphorservicesni_SRCS
     src/statusnotifierhost.cpp
     src/statusnotifieritem.cpp
     src/statusnotifieritemmodel.cpp
+    src/dbusmenuhelpers.cpp
     src/dbusmenumodel.cpp
 )
 

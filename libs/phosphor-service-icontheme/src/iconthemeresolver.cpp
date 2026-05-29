@@ -25,7 +25,7 @@ namespace PhosphorServiceIconTheme {
 
 // DirectoryEntry / ThemeIndex live at namespace scope (not in an
 // anonymous namespace) because Private caches a QHash<QString,
-// ThemeIndex> as a member — anonymous-namespace types pulled into
+// ThemeIndex> as a member, anonymous-namespace types pulled into
 // the data members of a class with external linkage trip
 // -Wsubobject-linkage. They're only used inside this TU regardless.
 struct DirectoryEntry
@@ -76,7 +76,7 @@ bool directoryMatchesSize(const DirectoryEntry& d, int size, int scale)
 
 int directorySizeDistance(const DirectoryEntry& d, int size, int scale)
 {
-    // XDG Icon Theme Spec 0.13, "Icon Lookup" — `DirectorySizeDistance`.
+    // XDG Icon Theme Spec 0.13, "Icon Lookup", `DirectorySizeDistance`.
     // Returned distance is in scaled-pixel units; smaller is better.
     if (d.type == QLatin1String("Fixed")) {
         return qAbs(d.size * d.scale - size * scale);
@@ -90,7 +90,7 @@ int directorySizeDistance(const DirectoryEntry& d, int size, int scale)
         }
         return 0;
     }
-    // Threshold — spec formula uses `(Size ± Threshold) * Scale`, NOT
+    // Threshold, spec formula uses `(Size ± Threshold) * Scale`, NOT
     // `minSize` / `maxSize`. Earlier rev mixed the two and produced
     // nonsense distances for Threshold directories whose minSize /
     // maxSize defaulted to Size (giving the right magnitude by
@@ -112,7 +112,7 @@ QStringList xdgIconSearchPath()
     const auto home = QDir::homePath();
     paths << home + QStringLiteral("/.icons");
 
-    // Use Qt's GenericDataLocation list — that's $XDG_DATA_HOME +
+    // Use Qt's GenericDataLocation list, that's $XDG_DATA_HOME +
     // $XDG_DATA_DIRS, which covers /usr/local/share + /usr/share + flatpak +
     // snap + etc. We append "/icons" to each.
     const auto dataDirs = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
@@ -182,7 +182,7 @@ public:
     mutable QHash<QString, QImage> resolvedCache;
     // FIFO eviction order for `resolvedCache`. We push on insert,
     // pop oldest on overflow. Pure FIFO (not LRU on hit) is enough
-    // for the tray workload — tray icons either stay hot or churn
+    // for the tray workload, tray icons either stay hot or churn
     // entirely on theme switch, and we already clear both caches
     // wholesale in `setThemeName`. Anti-LRU (`erase(begin())`)
     // would re-evict whatever bucket QHash::begin happens to
@@ -202,7 +202,7 @@ public:
 
 QString IconThemeResolver::Private::detectThemeName() const
 {
-    // Qt sets QIcon::themeName() from the platform integration —
+    // Qt sets QIcon::themeName() from the platform integration ,
     // works on Wayland too, sourced from xdg-portal / xsettings /
     // GSettings as the platform supports. Falls back to "hicolor"
     // which is always present.
@@ -259,7 +259,7 @@ QMap<QString, QMap<QString, QString>> parseIniFile(const QString& path)
         }
         auto key = line.left(eq).trimmed();
         const auto value = line.mid(eq + 1).trimmed();
-        // Drop `key[lang]` localisation suffixes — we only care about
+        // Drop `key[lang]` localisation suffixes, we only care about
         // the C locale for spec-defined keys (Size, Type, etc.).
         if (key.contains(QLatin1Char('['))) {
             continue;
@@ -283,7 +283,7 @@ const ThemeIndex& IconThemeResolver::Private::parseThemeIndex(const QString& the
     // Walk every search path looking for <path>/<theme>/index.theme.
     // The first one wins; the rest are checked only for their
     // Directories sections in case the theme is split across roots
-    // (KDE does this for "breeze" — half is in /usr/share, half in
+    // (KDE does this for "breeze", half is in /usr/share, half in
     // /usr/share/kf5 etc.).
     bool foundHeader = false;
     for (const auto& root : searchPath) {
@@ -423,7 +423,7 @@ QString IconThemeResolver::Private::lookupIcon(const QString& iconName, int size
     // insert into `themeCache` during the recursive `lookupIcon` call
     // for each parent (via the inner `themeIconPath` -> `parseThemeIndex`
     // chain). A QHash insertion can rehash and invalidate every
-    // reference and iterator into the table — including any reference
+    // reference and iterator into the table, including any reference
     // we hold to the value associated with `themeName`. Copying the
     // small QStringList up front decouples our iteration from any
     // subsequent rehashes.
@@ -439,7 +439,7 @@ QString IconThemeResolver::Private::lookupIcon(const QString& iconName, int size
 QString IconThemeResolver::Private::lookupFallbackIcon(const QString& iconName) const
 {
     // Last resort: scan the search path for `<root>/<iconName>.{png,svg,xpm}`
-    // directly. This is the "unthemed icons" path — /usr/share/pixmaps
+    // directly. This is the "unthemed icons" path, /usr/share/pixmaps
     // historically dumps a flat tree of app icons there.
     static const QStringList exts = {QStringLiteral(".png"), QStringLiteral(".svg"), QStringLiteral(".xpm")};
     for (const auto& root : searchPath) {

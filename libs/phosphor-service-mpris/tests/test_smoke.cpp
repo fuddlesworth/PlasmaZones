@@ -41,7 +41,7 @@ private Q_SLOTS:
         QVERIFY(roles.contains(PhosphorServiceMpris::MprisPlayerModel::TrackTitleRole));
         QVERIFY(roles.contains(PhosphorServiceMpris::MprisPlayerModel::TrackArtistRole));
         QVERIFY(roles.contains(PhosphorServiceMpris::MprisPlayerModel::ArtUrlRole));
-        // Pin role-name strings — they're the QML delegate contract.
+        // Pin role-name strings, they're the QML delegate contract.
         QCOMPARE(roles[PhosphorServiceMpris::MprisPlayerModel::PlayerRole], QByteArrayLiteral("player"));
         QCOMPARE(roles[PhosphorServiceMpris::MprisPlayerModel::IdentityRole], QByteArrayLiteral("identity"));
         QCOMPARE(roles[PhosphorServiceMpris::MprisPlayerModel::PlaybackStateRole], QByteArrayLiteral("playbackState"));

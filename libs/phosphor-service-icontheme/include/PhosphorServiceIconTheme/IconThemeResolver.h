@@ -41,7 +41,7 @@ public:
     [[nodiscard]] QString themeName() const;
 
     /// Look up an icon by name. `extraThemeDir` is the SNI item's
-    /// IconThemePath (if any) — when set, it's prepended to the
+    /// IconThemePath (if any), when set, it's prepended to the
     /// search path so an app's custom theme wins over the system
     /// one. `size` is the desired logical-pixel size; `scale` is
     /// the device pixel ratio (1 for traditional, 2 for HiDPI).

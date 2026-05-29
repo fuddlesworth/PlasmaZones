@@ -22,12 +22,12 @@ IconImageProvider::IconImageProvider()
 QImage IconImageProvider::requestImage(const QString& id, QSize* size, const QSize& requestedSize)
 {
     // Two transformations from URL → registry key:
-    //   1. Strip the ?v=<cacheKey> query string — that suffix exists
+    //   1. Strip the ?v=<cacheKey> query string, that suffix exists
     //      only to force QML's Image element to re-fetch when the
     //      underlying QImage data changes (Image only reloads when
     //      the URL string differs). The PUBLISH side never sees the
     //      cacheKey, so we mustn't either when looking up.
-    //   2. Percent-decode `%7C` back to `|` etc. — Qt's image-provider
+    //   2. Percent-decode `%7C` back to `|` etc., Qt's image-provider
     //      dispatch hands us the URL-path form, which on this version
     //      preserves percent-encoding. The publish side uses the
     //      decoded form (clean printable key).

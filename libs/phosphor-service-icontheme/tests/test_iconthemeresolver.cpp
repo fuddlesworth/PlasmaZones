@@ -21,7 +21,7 @@ private:
 
     // Build a minimal fixture theme tree on disk so the resolver has
     // something deterministic to walk. Real-system icon themes are
-    // both unpredictable AND huge — the fixture keeps the test
+    // both unpredictable AND huge, the fixture keeps the test
     // hermetic and < 1ms.
     void writeFixture()
     {
@@ -32,7 +32,7 @@ private:
         QDir().mkpath(themeRoot + QStringLiteral("/testtheme/scalable/apps"));
         QDir().mkpath(themeRoot + QStringLiteral("/hicolor/22x22/apps"));
 
-        // index.theme — declares the three directories and inherits hicolor.
+        // index.theme, declares the three directories and inherits hicolor.
         QFile index(themeRoot + QStringLiteral("/testtheme/index.theme"));
         QVERIFY(index.open(QIODevice::WriteOnly));
         index.write(R"([Icon Theme]
@@ -76,7 +76,7 @@ Context=Applications
         hicolorIndex.close();
 
         // Synthesise a 1×1 PNG for each "icon". We don't need to
-        // render — just need QImage::isNull() to be false after
+        // render, just need QImage::isNull() to be false after
         // resolution.
         QImage red(1, 1, QImage::Format_ARGB32);
         red.fill(Qt::red);

@@ -150,7 +150,7 @@ public:
     // ─── Async property fetch ─────────────────────────────────────────────
     // GetAll on the Properties interface pulls every property of an
     // interface in ONE round trip, and asyncCall keeps the GUI thread
-    // free while the (potentially slow — Spotify can take 500+ ms)
+    // free while the (potentially slow, Spotify can take 500+ ms)
     // reply is in flight. The watcher is parented to `owner`, so a
     // player destroyed mid-flight cancels delivery cleanly.
     void getAll(const char* iface, void (Private::*handler)(const QVariantMap&))
@@ -171,7 +171,7 @@ public:
             });
     }
 
-    // Lightweight async resync of just the Position property — used by
+    // Lightweight async resync of just the Position property, used by
     // the drift-correction tick. Position is excluded from
     // PropertiesChanged by the MPRIS spec, so it must be polled.
     void requestPosition()
@@ -220,7 +220,7 @@ public:
     // Applies a player-interface property map. Works for both a full
     // GetAll reply and a partial PropertiesChanged `changed` map; every
     // field is gated on contains(). `fromGetAll` scopes Position
-    // acceptance — see the matching comment at the Position branch.
+    // acceptance, see the matching comment at the Position branch.
     void applyPlayer(const QVariantMap& props, bool fromGetAll = false)
     {
         if (props.contains(QStringLiteral("PlaybackStatus"))) {
@@ -247,12 +247,21 @@ public:
                 setRealField(volume, std::clamp(v, 0.0, 1.0), &MprisPlayer::volumeChanged, owner);
         }
         if (props.contains(QStringLiteral("Rate"))) {
-            // Same boundary check as Volume; Rate is also reported as `d`.
-            // The position-tick math multiplies by `rate`, so a NaN here
-            // would corrupt positionUs on the very next tick.
+            // Same boundary check as Volume; Rate is also reported as
+            // `d`. The position-tick math multiplies by `rate`, so a
+            // NaN here would corrupt positionUs on the very next tick.
+            // Also clamp to a defensive [-64.0, 64.0] window. MPRIS
+            // declares MinimumRate/MaximumRate as opt-in player-side
+            // properties; we don't read them, but a hostile player
+            // publishing Rate ~= 1e15 would survive isfinite, and the
+            // subsequent `rate * kPositionPollMs * 1000` in
+            // tickPosition would overflow qint64 on the static_cast
+            // (implementation-defined per [conv.fpint]). 64x covers
+            // every realistic fast-forward / scrub / reverse-playback
+            // case mainline players use.
             const qreal r = props.value(QStringLiteral("Rate")).toDouble();
             if (std::isfinite(r))
-                setRealField(rate, r, &MprisPlayer::rateChanged, owner);
+                setRealField(rate, std::clamp(r, -64.0, 64.0), &MprisPlayer::rateChanged, owner);
         }
         if (props.contains(QStringLiteral("Shuffle")))
             setBoolField(shuffle, props.value(QStringLiteral("Shuffle")).toBool(), &MprisPlayer::shuffleChanged, owner);
@@ -311,7 +320,7 @@ public:
         };
         // mpris:trackid is a D-Bus object path (`o`). QVariant::toString()
         // does not unwrap a QDBusObjectPath, so metaString() would yield
-        // an empty string — extract the path explicitly. An empty trackId
+        // an empty string, extract the path explicitly. An empty trackId
         // breaks both SetPosition() and track-change detection (which
         // gates the art-URL pin).
         auto metaObjectPath = [](const QVariant& val) -> QString {
@@ -323,7 +332,7 @@ public:
             return inner.toString();
         };
         // Only update a field if the key is present in the map.
-        // PropertiesChanged delivers PARTIAL metadata — missing keys
+        // PropertiesChanged delivers PARTIAL metadata, missing keys
         // mean "unchanged", not "cleared". Without this guard, a
         // partial update (e.g. just mpris:length) wipes trackArtUrl.
         // Cap metadata string length at the boundary. A malicious or
@@ -460,7 +469,7 @@ public:
     {
         if (iface == QLatin1String(kRootIface)) {
             applyRoot(changed);
-            // Invalidated properties carry no value — re-fetch the whole
+            // Invalidated properties carry no value, re-fetch the whole
             // interface asynchronously to pick them up.
             if (!invalidated.isEmpty())
                 getAll(kRootIface, &Private::applyRoot);
@@ -474,7 +483,7 @@ public:
     void onSeeked(qint64 posUs)
     {
         positionUs = posUs;
-        // The reported position is now authoritative — restart the
+        // The reported position is now authoritative, restart the
         // resync cadence so interpolation drifts from this fresh base.
         positionTickCount = 0;
         Q_EMIT owner->positionChanged();
@@ -487,7 +496,7 @@ public:
         ++positionTickCount;
         if (positionTickCount >= kPositionResyncTicks) {
             positionTickCount = 0;
-            // Async resync — emits positionChanged itself if the value moved.
+            // Async resync, emits positionChanged itself if the value moved.
             requestPosition();
         } else {
             positionUs += static_cast<qint64>(rate * kPositionPollMs * 1000);
@@ -535,7 +544,7 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     if (!seekedOk)
         qCWarning(lcMprisPlayer) << "Seeked subscription failed for" << serviceName;
 
-    // Async initial fetch — properties populate as the replies land; the
+    // Async initial fetch, properties populate as the replies land; the
     // GUI thread is never blocked waiting on a slow player.
     d->getAll(kRootIface, &Private::applyRoot);
     d->getAll(kPlayerIface, &Private::applyPlayerFromGetAll);
@@ -552,7 +561,7 @@ MprisPlayer::MprisPlayer(const QString& serviceName, QObject* parent)
     //     fires with the full Metadata, but on a clean shell startup
     //     where the user is mid-track in Firefox, the image may have
     //     been written long ago and Firefox won't re-emit
-    //     PropertiesChanged until the page changes metadata — so we
+    //     PropertiesChanged until the page changes metadata, so we
     //     have to poll instead of relying on the signal.
     //   - Plain Spotify-Web-via-plasma-browser-integration: similar
     //     to Firefox, file:// URL written after a short delay.
@@ -725,7 +734,7 @@ void MprisPlayer::seek(qreal offsetSeconds)
     // Cap at the largest second-count that survives the * 1e6
     // microsecond conversion without overflowing qint64 (INT64_MAX is
     // about 9.22e18; 1e13 * 1e6 = 1e19 already overflows, so the safe
-    // limit is ~9e12 seconds, about 285 millennia — well beyond any
+    // limit is ~9e12 seconds, about 285 millennia, well beyond any
     // legitimate seek).
     if (!std::isfinite(offsetSeconds))
         return;

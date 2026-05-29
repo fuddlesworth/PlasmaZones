@@ -448,13 +448,14 @@ PanelWindow {
             Row {
                 spacing: root.statRowSpacing
                 anchors.verticalCenter: parent.verticalCenter
-                // Both gates: UPower must have published a displayDevice
-                // (`batteryVisible`) AND the rounded percentage must be
-                // non-empty. `battery.displayDevice` can flip non-null
-                // before the initial GetAll percentage read lands;
-                // without the length check the row would briefly render
-                // a bare "%" sign.
-                visible: root.batteryVisible && root.batteryPercent.length > 0
+                // Hide the row entirely when UPower has not published a
+                // displayDevice yet. shell.qml's binding renders "" when
+                // displayDevice is null and "0" + "%" once it appears
+                // (UPowerDevice initialises percentage = 0.0), so the
+                // length check on batteryPercent is redundant under the
+                // current binding contract; the batteryVisible gate is
+                // the only one that matters.
+                visible: root.batteryVisible
 
                 Text {
                     text: qsTr("BAT")

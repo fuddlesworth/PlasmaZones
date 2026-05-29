@@ -25,7 +25,7 @@ namespace PhosphorServiceIconTheme {
 /// The registry is process-global (a static member) rather than
 /// per-engine because shells may construct multiple engines during
 /// reload cycles, and the icons are valid across them. Locking is
-/// coarse (one mutex for the whole map) — icon updates are at human
+/// coarse (one mutex for the whole map), icon updates are at human
 /// timescales, so contention is a non-issue.
 class PHOSPHORSERVICEICONTHEME_EXPORT IconImageProvider : public QQuickImageProvider
 {

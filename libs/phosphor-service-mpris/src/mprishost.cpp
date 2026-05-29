@@ -88,13 +88,13 @@ MprisHost::MprisHost(QObject* parent)
     }
 
     // Subscribe to NameOwnerChanged directly. QDBusServiceWatcher does
-    // NOT support wildcards — addWatchedService("org.mpris.MediaPlayer2.*")
+    // NOT support wildcards, addWatchedService("org.mpris.MediaPlayer2.*")
     // builds a match rule with arg0 set to that literal string, which
     // never fires for real MPRIS service names like
     // "org.mpris.MediaPlayer2.spotify". The startup scan below would
     // catch already-running players, but a player launched AFTER the
     // host's construction would never produce a serviceRegistered
-    // signal — symptom: the panel widget stays hidden until the shell
+    // signal, symptom: the panel widget stays hidden until the shell
     // is restarted with the player already up.
     //
     // The bus-wide NameOwnerChanged subscription has no arg0 filter so
@@ -114,8 +114,8 @@ MprisHost::MprisHost(QObject* parent)
         qCWarning(lcMprisHost) << "NameOwnerChanged subscription failed; new players will not be detected";
     }
 
-    // Startup scan for already-running players via an async ListNames —
-    // a blocking call here would freeze the GUI thread on a slow session
+    // Startup scan for already-running players via an async ListNames.
+    // A blocking call here would freeze the GUI thread on a slow session
     // bus. The watcher is parented to `this` so it cancels cleanly if the
     // host is destroyed before the reply lands.
     QDBusMessage listMsg =
@@ -145,7 +145,7 @@ void MprisHost::_q_nameOwnerChanged(const QString& service, const QString& oldOw
     // NameOwnerChanged semantics: oldOwner empty + newOwner non-empty
     // = service registered. oldOwner non-empty + newOwner empty =
     // service unregistered. Both non-empty = ownership transferred
-    // (rare for MPRIS) — handled by destroying the old MprisPlayer and
+    // (rare for MPRIS), handled by destroying the old MprisPlayer and
     // constructing a fresh one against the new owner.
     if (newOwner.isEmpty()) {
         d->removeService(service);
