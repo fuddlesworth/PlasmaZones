@@ -357,34 +357,6 @@ QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
     return orders;
 }
 
-void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, int desktop, const QString& activity)
-{
-    // Legacy path — emits individual D-Bus signals. Prefer buildAutotileRestoreEntries()
-    // + emitBatchedResnap() to batch float-restores into the resnap signal.
-    if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
-        return;
-    }
-    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-    if (!wts) {
-        return;
-    }
-    for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
-        if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
-            continue;
-        }
-        const QString& screenId = it.key().screenId;
-        for (const QString& windowId : it.value()) {
-            if (excludeWindows.contains(windowId))
-                continue;
-            if (wts->isWindowSnapped(windowId))
-                continue;
-            if (wts->isWindowFloating(windowId))
-                continue;
-            m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
-        }
-    }
-}
-
 QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
                                                                  const QString& activity)
 {
@@ -415,7 +387,6 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
             // window to stale coordinates left behind by a ghost instance.
             // Leaving the window at its current tiled position is the least
             // surprising outcome.
-            // Strict per-instance lookup: no appId fallback.
             auto geo = wts->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
             if (geo) {
                 ZoneAssignmentEntry entry;
@@ -436,7 +407,12 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
 
 void Daemon::presaveSnapFloats(const QString& screenId)
 {
-    if (!m_windowTrackingAdaptor) {
+    // Reachable from `Settings::settingsChanged` (daemon.cpp ~830) before
+    // the engines exist — any synchronous re-entry into settingsChanged
+    // during the D-Bus retry loop in init() would hit this path with
+    // null engine pointers. Symmetric null-check with seedAutotileOrderForScreen
+    // below.
+    if (!m_windowTrackingAdaptor || !m_autotileEngine || !m_snapEngine) {
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
@@ -500,10 +476,8 @@ void Daemon::processPendingGeometryUpdates()
     // tracks pending (screenId, layoutId) pairs explicitly so unrelated
     // geometriesComputed emissions (e.g. from an async layoutAssigned firing
     // mid-barrier) cannot drain it prematurely.
-    const int desktop = m_virtualDesktopManager->currentDesktop();
-    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
 
     // Key = (screenId, layoutId). Matches what geometriesComputed carries.

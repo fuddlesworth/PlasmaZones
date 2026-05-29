@@ -772,12 +772,22 @@ void WindowTrackingAdaptor::loadState()
         m_snapEngine->setUnmanagedGeometries(unmanagedGeometries);
     }
 
-    // Load last used zone info
-    QString lastZoneId = readVal(ConfigKeys::lastUsedZoneIdKey(), QString());
-    QString lastScreenId = readVal(ConfigKeys::lastUsedScreenNameKey(), QString());
-    QString lastZoneClass = readVal(ConfigKeys::lastUsedZoneClassKey(), QString());
-    int lastDesktop = readIntVal(ConfigKeys::lastUsedDesktopKey(), 0);
-    m_service->setLastUsedZone(lastZoneId, lastScreenId, lastZoneClass, lastDesktop);
+    // Load last used zone info. Only the id is persisted by saveState
+    // (lastUsedZoneClass/Screen/Desktop are intentionally session-local —
+    // see saveload.cpp ~245). Skip the setLastUsedZone call entirely
+    // when the id key is absent — calling it with empty id + empty
+    // companions would destructively overwrite any live values the
+    // service holds. The service's own write paths populate the
+    // companions at runtime as the user snaps windows; restoring the
+    // id alone is sufficient for the cross-session "last used zone"
+    // intent.
+    const QString lastZoneId = readVal(ConfigKeys::lastUsedZoneIdKey(), QString());
+    if (!lastZoneId.isEmpty()) {
+        // Pass through the current service state for the companions so
+        // a same-session reload doesn't blank them.
+        m_service->setLastUsedZone(lastZoneId, m_service->lastUsedScreenName(), m_service->lastUsedZoneClass(),
+                                   m_service->lastUsedDesktop());
+    }
 
     // Float state is ephemeral (session-only) — skip loading.
     // Any stale FloatingWindows entries from older versions are cleaned up in saveState().

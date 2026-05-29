@@ -15,24 +15,18 @@ SnapAdaptor::SnapAdaptor(PhosphorSnapEngine::SnapEngine* engine, WindowTrackingA
     , m_adaptor(adaptor)
     , m_settings(settings)
 {
-    // Engine + adaptor + settings are mandatory — every public slot defends
-    // against `m_engine == nullptr` / `m_adaptor == nullptr` but a misordered
-    // Daemon wiring that constructs SnapAdaptor before its dependencies
-    // creates a silently-no-op D-Bus object that swallows every method call.
-    // Assert at construction so the wiring bug is loud during development
-    // (the runtime warning + early return below remains for release builds).
-    Q_ASSERT_X(m_engine && m_adaptor && m_settings, "SnapAdaptor::SnapAdaptor",
-               "engine / adaptor / settings dependencies must not be null");
-    // Symmetric with the assertion above — release builds bail on any null
-    // dep, not just engine/adaptor. The previous form silently constructed
-    // a no-op adaptor when settings was null in release, diverging from the
-    // debug-build assert. Per-slot defences downstream still null-check
-    // m_settings for shutdown-window safety.
+    // Engine + adaptor + settings are mandatory — a misordered Daemon
+    // wiring that constructs SnapAdaptor before its dependencies would
+    // otherwise produce a silently-no-op D-Bus object that swallows every
+    // method call. qFatal aborts unambiguously in both debug and release
+    // builds, matching the sibling WindowTrackingAdaptor's defensive
+    // pattern — a wiring regression is loud and immediate at construction,
+    // not at the first D-Bus call.
     if (!m_engine || !m_adaptor || !m_settings) {
-        qCWarning(lcDbusWindow) << "SnapAdaptor created with null engine / adaptor / settings — refusing to wire."
-                                << "engine:" << (m_engine != nullptr) << "adaptor:" << (m_adaptor != nullptr)
-                                << "settings:" << (m_settings != nullptr);
-        return;
+        qFatal(
+            "SnapAdaptor: null dependency at construction "
+            "(engine=%p, adaptor=%p, settings=%p) — daemon-wiring bug",
+            static_cast<void*>(m_engine), static_cast<void*>(m_adaptor), static_cast<void*>(m_settings));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

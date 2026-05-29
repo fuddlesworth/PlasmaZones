@@ -392,9 +392,9 @@ public:
     /// Used by tests to verify the cache populates and invalidates against
     /// rule-set revision bumps. Not for production callers — the value
     /// drifts as cursor-move resolves come in. Return type is `int` because
-    /// the cache is bounded at 256 entries (kContextResolveCacheLimit), well
-    /// within `int` range — keeps test assertions free of the `qsizetype`
-    /// `int` widening dance.
+    /// the cache is bounded at 256 entries (`kMaxEntries` in
+    /// layoutregistry_assignments.cpp), well within `int` range — keeps
+    /// test assertions free of the `qsizetype` `int` widening dance.
     [[nodiscard]] int contextResolveCacheSize() const
     {
         return static_cast<int>(m_contextResolveCache.size());

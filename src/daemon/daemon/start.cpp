@@ -281,7 +281,7 @@ void Daemon::connectDesktopActivity()
 
     // Set initial virtual desktop on components that maintain their own copy
     // (WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen())
-    const int initialDesktop = m_virtualDesktopManager->currentDesktop();
+    const int initialDesktop = currentDesktop();
     m_overlayService->setCurrentVirtualDesktop(initialDesktop);
     m_layoutManager->setCurrentVirtualDesktop(initialDesktop);
     if (m_autotileEngine) {

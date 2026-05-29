@@ -247,6 +247,25 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // the whole animation. setTranslucent() clears the opaque region
         // so every frame fully recomposites under the window.
         data.setTranslucent();
+    } else if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
+        // SetOpacity-only case: a rule may dim this window via
+        // `data.setOpacity()` in paintWindow below, but with neither an
+        // animation, shader transition, nor restore suppression in
+        // flight the branch above didn't fire setTranslucent(). Without
+        // it, KWin keeps the window's deviceOpaque region and skips
+        // recompositing whatever sits behind it — stale background
+        // pixels show through the dimmed window the moment anything
+        // behind it moves. Probe the rule cascade for an opacity < 1.0
+        // and clear the opaque region. Geometry is untouched
+        // (setTransformed deliberately NOT called) since SetOpacity is
+        // a pure alpha change.
+        const QString winClass = w->windowClass();
+        if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
+            if (auto opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w));
+                opacity && *opacity < 1.0) {
+                data.setTranslucent();
+            }
+        }
     }
 
     OffscreenEffect::prePaintWindow(view, w, data, presentTime);

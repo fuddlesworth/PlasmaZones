@@ -334,7 +334,7 @@ private:
     /** @brief Handle cycle-layout shortcut (previous or next) */
     void handleCycleLayout(const QString& screenId, bool forward);
 
-    // Start-up sub-methods (defined in start.cpp)
+    // Start-up sub-methods (definitions split across start.cpp and signals.cpp).
     void connectScreenSignals();
     void connectDesktopActivity();
     void connectShortcutSignals();
@@ -388,16 +388,17 @@ private:
     QHash<TilingStateKey, QStringList> captureAutotileOrders() const;
 
     /**
-     * @brief Restore pre-tile geometry for autotile-only windows
+     * @brief Build pre-tile geometry restore entries for autotile-only windows.
      *
-     * Iterates m_lastAutotileOrders and calls applyGeometryForFloat for each
-     * window that has no zone assignment (never manually snapped). PhosphorZones::Zone-snapped
-     * windows are already handled by resnapCurrentAssignments.
+     * Iterates m_lastAutotileOrders and produces a `ZoneAssignmentEntry` per
+     * autotile-only window (no zone assignment, never manually snapped).
+     * Returns the batch so the caller can feed it to
+     * `SnapEngine::emitBatchedResnap` — one batched signal per autotile
+     * toggle instead of per-window D-Bus chatter. Zone-snapped windows are
+     * already handled by `SnapAdaptor::resnapCurrentAssignments`.
      */
-    void restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
-                                       const QString& activity = QString());
-    QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
-                                                             const QString& activity);
+    QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
+                                                             const QString& activity = QString());
 
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
     void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId);

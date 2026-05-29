@@ -87,13 +87,15 @@ ContextHandle ContextResolver::handleForPersisted(const QString& screenId, int v
     // saveload.cpp).
     //
     // The desktop value is a system-boundary input (read from JSON
-    // without prior validation). `<= 0` is the "pinned across all
-    // desktops" sentinel handled by the IContextGateSource adapter's
-    // own short-circuit (see `IContextInputs.h` IContextGateSource
-    // contract). A negative value would survive into that path and
-    // is undefined; clamp to 0 here so a hand-edited file with a
-    // negative desktop reads as "pinned" rather than reaching the
-    // settings store with a value its API does not document.
+    // without prior validation). Clamp strictly-negative values to 0;
+    // positive values pass through. `0` is the "pinned across all
+    // desktops" sentinel that the IContextGateSource adapter's own
+    // `<= 0` short-circuit treats as "skip the per-desktop check"
+    // (see IContextInputs.h IContextGateSource contract). A negative
+    // value would survive into that path and is undefined; clamping
+    // here means a hand-edited file with a negative desktop reads as
+    // "pinned" rather than reaching the settings store with a value
+    // its API does not document.
     ContextHandle handle;
     handle.screenId = screenId;
     handle.virtualDesktop = virtualDesktop < 0 ? 0 : virtualDesktop;

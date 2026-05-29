@@ -316,6 +316,16 @@ void Settings::purgeStaleKeys()
         ConfigDefaults::generalGroup(),
         ConfigDefaults::tilingQuickLayoutSlotsGroup(),
         ConfigDefaults::updatesGroup(),
+        // v4-migration scratch roots. If the v1→v2→v3→v4 chain stalls,
+        // these survive on disk so the next run can retry porting the
+        // stashed content into windowrules.json (see
+        // configmigration.cpp::finalizeV4Conversion's stalled-chain
+        // gate). Without these, the first user-triggered save() between
+        // a stalled migration and the next successful one would purge
+        // the stash — silently losing the user's disable lists and
+        // animation app rules.
+        QStringLiteral("_v4DisableStash"),
+        QStringLiteral("_v4AnimationRulesStash"),
     };
 
     // Compute the set of paths the Store claims. These must not be
@@ -858,7 +868,14 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     // will return before vs. after the write.
     const PhosphorAnimation::Profile prev = animationProfile();
     const int prevDuration = qRound(prev.effectiveDuration());
-    const QString prevCurveWire = prev.curve ? prev.curve->toString() : ConfigDefaults::animationEasingCurve();
+    // Read the pre-write curve directly off the on-disk blob via the
+    // same path the live `animationEasingCurve()` getter takes. Going
+    // through `prev.curve->toString()` would null-fall-back to the
+    // ConfigDefaults default whenever `CurveRegistry::tryCreate`
+    // failed to resolve the stored spec — comparing that fallback
+    // against the unchanged on-disk value below would always flag a
+    // difference and fire a spurious `animationEasingCurveChanged`.
+    const QString prevCurveWire = animationEasingCurve();
     const int prevMinDistance = prev.effectiveMinDistance();
     const int prevSequenceMode = static_cast<int>(prev.effectiveSequenceMode());
     const int prevStaggerInterval = prev.effectiveStaggerInterval();
@@ -2149,6 +2166,14 @@ QString Settings::defaultLayoutId() const
 void Settings::setDefaultLayoutId(const QString& layoutId)
 {
     const QString normalized = normalizeUuidString(layoutId);
+    // A non-empty input that normalised to empty is a malformed UUID
+    // (the normaliser logs a warning at that point). Treat as a no-op
+    // rather than silently clearing a previously-valid stored value —
+    // a typo in the KCM picker should not wipe the user's configured
+    // default layout.
+    if (normalized.isEmpty() && !layoutId.isEmpty()) {
+        return;
+    }
     if (defaultLayoutId() == normalized) {
         return;
     }
@@ -2555,7 +2580,17 @@ void Settings::reset()
             }
         }
         if (kept.size() != m_windowRuleStore->count()) {
-            m_windowRuleStore->setAllRules(kept);
+            if (!m_windowRuleStore->setAllRules(kept)) {
+                // Persistence failed — the in-memory store advanced but the
+                // on-disk file is stale, so on next launch the cleared
+                // disable rules re-appear. Mirror writeDisableEntries'
+                // failure path: surface a warning and skip the aggregate
+                // signal so dirty-state trackers don't believe the reset
+                // landed on disk.
+                qCWarning(lcConfig)
+                    << "reset: failed to persist window-rule store — disable rules will reappear on next "
+                       "launch";
+            }
         }
     }
 
@@ -2864,11 +2899,6 @@ void Settings::writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutI
         return;
     auto group = m_configBackend->group(ConfigDefaults::tilingQuickLayoutSlotsGroup());
     group->writeString(QString::number(slotNumber), layoutId);
-}
-
-void Settings::syncConfig()
-{
-    m_configBackend->sync();
 }
 
 // ── Color helpers ────────────────────────────────────────────────────────────

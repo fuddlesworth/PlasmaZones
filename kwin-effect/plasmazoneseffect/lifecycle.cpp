@@ -718,13 +718,13 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
 {
     // Sever the registry's `effectsChanged` connection BEFORE anything
     // else runs. The slot lambda touches `m_shaderManager.m_shaderTransitions`,
-    // `m_shaderManager.m_shaderCache`, and `m_shaderManager.m_textureCache` — all declared AFTER
-    // `m_shaderManager.m_animationShaderRegistry` in the header (h:507 vs h:698+), so
-    // they destruct FIRST in C++ reverse-declaration order. The
-    // registry destructs LAST, and any signal it (or its underlying
-    // file-watcher) emits during its own member teardown would
-    // dispatch to the slot AFTER the cache members are gone — UAF.
-    // Disconnect now while everything is still alive.
+    // `m_shaderManager.m_shaderCache`, and `m_shaderManager.m_textureCache` — all
+    // declared AFTER `m_animationShaderRegistry` in shadertransitionmanager.h,
+    // so they destruct FIRST in C++ reverse-declaration order. The registry
+    // destructs LAST, and any signal it (or its underlying file-watcher) emits
+    // during its own member teardown would dispatch to the slot AFTER the
+    // cache members are gone — UAF. Disconnect now while everything is still
+    // alive.
     disconnect(&m_shaderManager.m_animationShaderRegistry, nullptr, this, nullptr);
 
     // Drain the texture loader pool before any other teardown. A

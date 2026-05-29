@@ -17,7 +17,7 @@ inline RuleAction engineMode(const QString& mode)
 {
     RuleAction a;
     a.type = QString(ActionType::SetEngineMode);
-    a.params.insert(QStringLiteral("mode"), mode);
+    a.params.insert(ActionParam::Mode, mode);
     return a;
 }
 
@@ -25,7 +25,7 @@ inline RuleAction snappingLayout(const QString& layoutId)
 {
     RuleAction a;
     a.type = QString(ActionType::SetSnappingLayout);
-    a.params.insert(QStringLiteral("layoutId"), layoutId);
+    a.params.insert(ActionParam::LayoutId, layoutId);
     return a;
 }
 
@@ -33,7 +33,7 @@ inline RuleAction tilingAlgorithm(const QString& algorithm)
 {
     RuleAction a;
     a.type = QString(ActionType::SetTilingAlgorithm);
-    a.params.insert(QStringLiteral("algorithm"), algorithm);
+    a.params.insert(ActionParam::Algorithm, algorithm);
     return a;
 }
 
@@ -62,8 +62,8 @@ inline RuleAction overrideShader(const QString& event, const QString& effectId)
 {
     RuleAction a;
     a.type = QString(ActionType::OverrideAnimationShader);
-    a.params.insert(QStringLiteral("event"), event);
-    a.params.insert(QStringLiteral("effectId"), effectId);
+    a.params.insert(ActionParam::Event, event);
+    a.params.insert(ActionParam::EffectId, effectId);
     return a;
 }
 
@@ -71,7 +71,7 @@ inline RuleAction setOpacity(double value)
 {
     RuleAction a;
     a.type = QString(ActionType::SetOpacity);
-    a.params.insert(QStringLiteral("value"), value);
+    a.params.insert(ActionParam::Value, value);
     return a;
 }
 

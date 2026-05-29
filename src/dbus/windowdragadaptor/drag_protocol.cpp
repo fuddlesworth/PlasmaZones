@@ -300,15 +300,39 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
     // the drop location — otherwise the stale zone assignment persists.
     if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId == windowId) {
         const bool wasSnapped = m_pendingSnapDragWasSnapped;
+        // Snapshot the bypass reason BEFORE clearing m_currentDragPolicy.
+        // updateDragCursor may have flipped the policy to a non-None
+        // bypassReason (e.g. cursor crossed onto an autotile screen)
+        // while m_draggedWindowId was still empty because activation
+        // never triggered. Treat that exactly like the non-pending bypass
+        // paths below — drop to the dispatch matrix instead of forcing
+        // the unsnap-only NoOp branch.
+        const PhosphorProtocol::DragBypassReason pendingBypass = m_currentDragPolicy.bypassReason;
         qCInfo(lcDbusWindow) << "endDrag: pending snap drag never activated" << windowId << "wasSnapped=" << wasSnapped
-                             << "cancelled=" << cancelled;
+                             << "cancelled=" << cancelled << "bypass=" << pendingBypass;
         clearPendingSnapDragState();
-        m_currentDragPolicy = {};
-        if (!cancelled && wasSnapped && m_windowTracking) {
-            m_windowTracking->notifyDragOutUnsnap(windowId);
+        if (pendingBypass != PhosphorProtocol::DragBypassReason::None) {
+            // Promote to a bypass drop so the matrix below
+            // (AutotileScreen → ApplyFloat at release cursor;
+            // SnappingDisabled / ContextDisabled → NoOp) decides the
+            // final outcome. Populate m_draggedWindowId so the matrix
+            // branches that check it (e.g. the autotile drag-insert
+            // commit) see a consistent state. The matching clears live
+            // in those branches.
+            m_draggedWindowId = windowId;
+            if (!cancelled && wasSnapped && m_windowTracking) {
+                m_windowTracking->notifyDragOutUnsnap(windowId);
+            }
+            // Fall through — outcome is decided by the bypass dispatch
+            // matrix below.
+        } else {
+            m_currentDragPolicy = {};
+            if (!cancelled && wasSnapped && m_windowTracking) {
+                m_windowTracking->notifyDragOutUnsnap(windowId);
+            }
+            outcome.action = PhosphorProtocol::DragOutcome::NoOp;
+            return outcome;
         }
-        outcome.action = PhosphorProtocol::DragOutcome::NoOp;
-        return outcome;
     }
 
     if (m_draggedWindowId != windowId) {

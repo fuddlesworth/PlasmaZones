@@ -500,6 +500,18 @@ QString WindowTrackingService::lastUsedZoneClass() const
     return m_snapState->lastUsedZoneClass();
 }
 
+QString WindowTrackingService::lastUsedScreenName() const
+{
+    Q_ASSERT(m_snapState);
+    return m_snapState->lastUsedScreenId();
+}
+
+int WindowTrackingService::lastUsedDesktop() const
+{
+    Q_ASSERT(m_snapState);
+    return m_snapState->lastUsedDesktop();
+}
+
 void WindowTrackingService::retagLastUsedZoneClass(const QString& newClass)
 {
     Q_ASSERT(m_snapState);

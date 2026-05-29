@@ -142,34 +142,6 @@ public:
     // Per-frame State (set by prePaintScreen, read by paintWindow)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Update the cached cursor position (call once per prePaintScreen).
-    void setCachedCursorGlobal(const QPointF& pos)
-    {
-        m_cachedCursorGlobal = pos;
-    }
-    QPointF cachedCursorGlobal() const
-    {
-        return m_cachedCursorGlobal;
-    }
-
-    /// 1 Hz iDate cache (call once per prePaintScreen or when stale).
-    qint64 lastIDateRefreshMs() const
-    {
-        return m_lastIDateRefreshMs;
-    }
-    void setLastIDateRefreshMs(qint64 ms)
-    {
-        m_lastIDateRefreshMs = ms;
-    }
-    QVector4D cachedIDate() const
-    {
-        return m_cachedIDate;
-    }
-    void setCachedIDate(const QVector4D& v)
-    {
-        m_cachedIDate = v;
-    }
-
     /// Frame-pinned shader clock. `prePaintScreen` samples
     /// `shaderClockNowMs()` once and stores it here; every `paintWindow`
     /// call within that compositor cycle reads this value instead of
@@ -258,66 +230,6 @@ public:
     bool eraseTransition(KWin::EffectWindow* window)
     {
         return m_shaderTransitions.erase(window) > 0;
-    }
-
-    /// Windows with a pending deferred endShaderTransition queued.
-    QSet<KWin::EffectWindow*>& pendingShaderExpiryEnd()
-    {
-        return m_pendingShaderExpiryEnd;
-    }
-
-    /// Per-window edge-detection for windowMaximizedStateChanged.
-    QHash<KWin::EffectWindow*, bool>& lastFullyMaximized()
-    {
-        return m_lastFullyMaximized;
-    }
-
-    /// Last window we fired a window.focus shader on.
-    QPointer<KWin::EffectWindow>& lastFocusShaderWindow()
-    {
-        return m_lastFocusShaderWindow;
-    }
-
-    /// Access the compiled shader cache (for paintWindow uniform upload).
-    std::map<QString, CachedShader>& shaderCache()
-    {
-        return m_shaderCache;
-    }
-    const std::map<QString, CachedShader>& shaderCache() const
-    {
-        return m_shaderCache;
-    }
-
-    /// Access the texture cache (for paintWindow bind).
-    std::map<QString, CachedTexture>& textureCache()
-    {
-        return m_textureCache;
-    }
-    const std::map<QString, CachedTexture>& textureCache() const
-    {
-        return m_textureCache;
-    }
-
-    /// Bump the texture cache generation (call on effectsChanged hot-reload).
-    void bumpTextureCacheGeneration()
-    {
-        ++m_textureCacheGeneration;
-    }
-    quint64 textureCacheGeneration() const
-    {
-        return m_textureCacheGeneration;
-    }
-
-    /// Bump and read the access tick (for LRU tracking).
-    quint64 nextAccessTick()
-    {
-        return ++m_textureCacheAccessTick;
-    }
-
-    /// Bump the shader transition generation counter.
-    quint64 nextShaderTransitionGeneration()
-    {
-        return ++m_shaderTransitionGenerationCounter;
     }
 
 private:

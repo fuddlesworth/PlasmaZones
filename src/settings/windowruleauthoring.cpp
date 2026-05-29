@@ -419,6 +419,15 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             } else {
                 payload[key] = displaySource;
             }
+        } else if (kind == QLatin1String("bool")) {
+            // Bool kind seeds to `false` so the wire value is a real
+            // boolean from the first save (the descriptor may carry a
+            // `defaultDisplay` override of either polarity; honour it
+            // when present). Without this branch a future bool-kind
+            // descriptor would fall into the `payload[key] = QString()`
+            // default and fail the validator on save.
+            const QVariant defaultDisplay = p.value(QStringLiteral("defaultDisplay"));
+            payload[key] = defaultDisplay.isValid() ? QVariant(defaultDisplay.toBool()) : QVariant(false);
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
             // shaderEffect, curveEditor) and plain strings all start empty —

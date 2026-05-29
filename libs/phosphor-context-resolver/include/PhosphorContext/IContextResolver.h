@@ -209,11 +209,12 @@ public:
      * trips. Provided as a one-liner for consumers that need both
      * checks at the same site — today's actual consumers gate on only
      * one or the other and call those methods directly (see
-     * `src/daemon/daemon/navigation.cpp::isFocusedContextGated` for the
-     * disable-only pattern, `src/daemon/daemon/start.cpp:597` for the
-     * lock-only pattern). Kept on the interface for symmetry with the
-     * documented cascade collapse and to support future call sites
-     * that genuinely need both gates atomically.
+     * `Daemon::isFocusedContextGated` in src/daemon/daemon/navigation.cpp
+     * for the disable-only pattern, the `layoutPickerSelected` lambda
+     * in src/daemon/daemon/start.cpp for the lock-only pattern). Kept
+     * on the interface for symmetry with the documented cascade collapse
+     * and to support future call sites that genuinely need both gates
+     * atomically.
      */
     bool isGated(const ContextHandle& handle) const
     {

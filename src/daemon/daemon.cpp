@@ -880,10 +880,20 @@ bool Daemon::init()
         // Resnap after autotile disabled: restore windows to their pre-autotile
         // zone positions. PhosphorZones::Zone assignments are preserved during autotile (onLayoutChanged
         // skips autotile screens) so resnap uses original snap assignments.
-        if (autotileToggled && !autotileNow && m_windowTrackingAdaptor) {
+        if (autotileToggled && !autotileNow && m_windowTrackingAdaptor && m_snapAdaptor && m_snapEngine) {
             m_suppressResnapOsd = 1;
             m_snapAdaptor->resnapCurrentAssignments();
-            restoreAutotileOnlyGeometries();
+            // Batched float-restore: one resnap signal per autotile-disabled
+            // toggle instead of per-window D-Bus chatter. Downcast mirrors
+            // signals.cpp's resnap-batching path; a non-snap concrete engine
+            // would simply skip the batch (no behaviour regression vs the
+            // pre-batch shape, which used per-window D-Bus calls).
+            if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+                const QVector<ZoneAssignmentEntry> entries = buildAutotileRestoreEntries();
+                if (!entries.isEmpty()) {
+                    concreteSnap->emitBatchedResnap(entries);
+                }
+            }
         }
 
         // Re-resolve the active layout from assignments for the current context.
@@ -1278,8 +1288,19 @@ bool Daemon::init()
     // so QTimer-based async approaches won't fire. Delays are kept short (700ms total max).
     constexpr int maxRetries = 3;
     constexpr int baseDelayMs = 100; // 100ms, 200ms, 400ms exponential backoff
+    // Worst-case blocking: 100 + 200 + 400 = 700 ms on the GUI thread.
+    // init() runs before QGuiApplication::exec(), so QTimer-based async
+    // approaches don't fire — synchronous sleep is the only retry path
+    // available here. The retry is bounded by `maxRetries`, and a bus
+    // disconnect during the wait would render every subsequent retry
+    // pointless (lastError type stays ServiceUnknown but the actual
+    // problem is connection-level).
     bool serviceRegistered = false;
     for (int attempt = 0; attempt < maxRetries; ++attempt) {
+        if (!bus.isConnected()) {
+            qCCritical(lcDaemon) << "D-Bus bus connection lost mid-retry — aborting service registration";
+            return false;
+        }
         if (bus.registerService(QString(PhosphorProtocol::Service::Name))) {
             serviceRegistered = true;
             break;
@@ -1356,6 +1377,19 @@ void Daemon::start()
     // already contemplates this cycle to avoid stacking the aboutToQuit
     // handler; this is the matching reset on the value side.
     m_shuttingDown = false;
+
+    // Re-publish the QML static defaults. stop() nulls all three
+    // (`PhosphorCurve::setDefaultRegistry(nullptr)` etc.) to prevent
+    // borrowed-pointer UAF during teardown; without this re-publish,
+    // a stop()→start() cycle (tests, programmatic restart) leaves QML
+    // resolving against nullptr defaults — every
+    // `PhosphorMotionAnimation { profile: … }` and every clock-driven
+    // animated-value lookup silently fails until the next ctor runs.
+    // The setters are idempotent: storing the same pointer the ctor
+    // installed is a no-op on the first start() of a fresh daemon.
+    PhosphorAnimation::PhosphorCurve::setDefaultRegistry(&m_curveRegistry);
+    PhosphorAnimation::PhosphorProfileRegistry::setDefaultRegistry(&m_profileRegistry);
+    PhosphorAnimation::QtQuickClockManager::setDefaultManager(m_clockManager.get());
 
     // Suppress OSDs once Qt begins shutdown (SIGTERM, programmatic quit).
     // Connected once — m_aboutToQuitConnected prevents stacking on stop()→start().

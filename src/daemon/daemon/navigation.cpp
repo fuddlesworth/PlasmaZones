@@ -119,6 +119,14 @@ void Daemon::handleRotate(bool clockwise)
 
 void Daemon::handleFloat()
 {
+    // Debounce keyboard auto-repeat — float toggling kicks unsnap →
+    // float → resnap on un-float, each of which is a real geometry
+    // commit. Mirrors the rotate handler's pile-up guard.
+    if (m_floatDebounce.isValid() && m_floatDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+    m_floatDebounce.restart();
+
     // Float toggles the active window regardless of which screen it's on.
     // The navigatorForShortcut helper pulls both windowId and screenId
     // from the WTA shadow, so the engine call is fully resolved without

@@ -81,13 +81,17 @@ class PHOSPHORCONTEXTRESOLVER_EXPORT IModeProvider
 public:
     virtual ~IModeProvider() = default;
 
-    /// Resolve @p screenId to a Mode. Implementations must return their
-    /// documented default mode (typically `AssignmentEntry::Snapping` per
-    /// the daemon's `ScreenModeRouter` adapter) when @p screenId is empty
-    /// or unknown — never an undefined-behaviour path. The chosen default
-    /// is observable through `IContextResolver::globalHandle()`'s mode
-    /// field, so an adapter that overrides it (e.g. in tests) propagates
-    /// transparently.
+    /// Resolve @p screenId to a Mode. Implementations must return a
+    /// deterministic value for any input — never an undefined-behaviour
+    /// path. Concrete implementations document their own fallback:
+    /// the daemon's `DaemonScreenModeAdapter` (contextresolverwiring.cpp)
+    /// returns `AssignmentEntry::Snapping` when its router is null; when
+    /// the router IS wired, the result for an empty / unknown screenId
+    /// flows through `ScreenModeRouter::modeFor`, which may return any
+    /// registered mode based on the cascade.
+    /// The chosen value is observable through
+    /// `IContextResolver::globalHandle()`'s mode field, so an adapter
+    /// override (e.g. in tests) propagates transparently.
     virtual PhosphorZones::AssignmentEntry::Mode modeFor(const QString& screenId) const = 0;
 };
 

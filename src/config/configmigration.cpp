@@ -226,8 +226,15 @@ bool ConfigMigration::ensureJsonConfig()
         // Couldn't acquire the lock within the timeout. The peer may have
         // completed successfully (in which case our next call will see
         // the current schema version and return early) — fall through and
-        // let ensureJsonConfigImpl re-check the on-disk state.
-        qWarning("ConfigMigration: could not acquire migration lock within 5s — proceeding without lock");
+        // let ensureJsonConfigImpl re-check the on-disk state. If the peer
+        // is still running its migration when we proceed, both processes
+        // race the read-migrate-write sequence; the later atomic-rename
+        // wins, and session.json / assignments.json are written by both —
+        // either survives, but a session-state inconsistency between them
+        // is possible until the next save() reconciles.
+        qWarning(
+            "ConfigMigration: could not acquire migration lock within 5s — proceeding without lock; "
+            "if the lock-holding peer is still migrating, the later atomic-rename wins");
     }
 
     // Re-read the on-disk file under the lock. `ensureJsonConfigImpl`
@@ -1243,7 +1250,9 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
     // unconditionally if present (even when the value isn't a string — we
     // don't want a hand-edited array or null lingering past the migration
     // and looking like live v2 data on a v3-stamped config), and return
-    // the string representation when one is available.
+    // the string representation when one is available. Logs a warning
+    // when a non-string value is erased so a user reviewing the log can
+    // recover their hand-edit by hand.
     auto takeKey = [](QJsonObject& obj, const QString& key) -> QString {
         const auto it = obj.find(key);
         if (it == obj.end()) {
@@ -1253,6 +1262,11 @@ void ConfigMigration::migrateV2ToV3(QJsonObject& root)
         QString result;
         if (v.isString()) {
             result = v.toString();
+        } else if (!v.isNull() && !v.isUndefined()) {
+            qWarning(
+                "ConfigMigration::migrateV2ToV3: discarding non-string value at v2 key %s — hand-edited "
+                "values that don't match the v2 wire format do not survive migration",
+                qPrintable(key));
         }
         obj.erase(it);
         return result;

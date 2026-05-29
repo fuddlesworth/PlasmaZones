@@ -321,6 +321,17 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_currentDragPolicy = {};
     }
 
+    // Drop any pending snap-assist payload addressed to this window — endDrag
+    // schedules `computeAndEmitSnapAssist` via QTimer::singleShot(0); if the
+    // window closes before that tick, the deferred call would emit
+    // `snapAssistReady` for a window that no longer exists. cancelSnap and
+    // clearForCompositorReconnect do the same two-line clear for the same
+    // reason.
+    if (windowId == m_snapAssistPendingWindowId) {
+        m_snapAssistPendingWindowId.clear();
+        m_snapAssistPendingScreenId.clear();
+    }
+
     // Delegate tracking cleanup to WindowTrackingAdaptor. We do not know the
     // window's structural kind from this internal drag path — pass `Unknown`
     // so the PendingRestore kind gate stays permissive for these entries.

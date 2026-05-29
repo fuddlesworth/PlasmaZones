@@ -310,7 +310,8 @@ void Daemon::initializeAutotile()
             // it would find zone assignments from OTHER desktops' windows that happen
             // to share the same screen, producing wrong results.
             // Windows that were autotile-only (never zone-snapped) get their
-            // pre-autotile floating geometry restored by restoreAutotileOnlyGeometries.
+            // pre-autotile floating geometry restored via the batched buildAutotileRestoreEntries → emitBatchedResnap
+            // path.
             auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get());
             if (applied && wasAutotile && !concreteSnap) {
                 if (m_snapEngine) {
@@ -319,7 +320,7 @@ void Daemon::initializeAutotile()
             } else if (applied && wasAutotile && concreteSnap) {
                 // Build exclusion set: windows that fit into the target layout's zones
                 // will be zone-snapped by the resnap D-Bus signal. Without excluding them,
-                // restoreAutotileOnlyGeometries sends float-geometry D-Bus calls that
+                // buildAutotileRestoreEntries + emitBatchedResnap send float-geometry D-Bus calls that
                 // arrive AFTER the resnap and overwrite the zone positions.
                 // Use per-screen zone count (not global activeLayout) because each screen
                 // may have a different layout assigned with a different zone count.
@@ -348,7 +349,7 @@ void Daemon::initializeAutotile()
                     // restored their snap-float state. Resnapping them would override
                     // the restored float with a zone snap.
                     // Also skip windows with no zone assignment (never snapped before
-                    // autotile) — they get pre-autotile geometry via restoreAutotileOnlyGeometries.
+                    // autotile) — they get pre-autotile geometry via buildAutotileRestoreEntries + emitBatchedResnap.
                     QStringList windowOrder;
                     for (const QString& windowId : fullOrder) {
                         if (wts && wts->isWindowFloating(windowId)) {

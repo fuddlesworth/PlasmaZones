@@ -64,7 +64,7 @@ inline WindowKind clampWindowKindFromWire(int wire)
 struct ResnapEntry
 {
     QString windowId;
-    int zonePosition;
+    int zonePosition = 0;
     QList<int> allZonePositions;
     QString screenId;
     int virtualDesktop = 0;

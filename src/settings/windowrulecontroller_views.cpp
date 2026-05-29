@@ -135,15 +135,15 @@ QVariantList WindowRuleController::monitorOverview(const QVariantList& screens) 
     // sort it was O(N × tree-depth). Sorting ints stays O(N log N) in
     // ints regardless of rule complexity.
     const auto& rules = m_model.rules();
-    QList<int> indices;
+    QList<qsizetype> indices;
     indices.reserve(rules.size());
-    for (int i = 0; i < rules.size(); ++i)
+    for (qsizetype i = 0; i < rules.size(); ++i)
         indices.append(i);
-    std::stable_sort(indices.begin(), indices.end(), [&rules](int a, int b) {
+    std::stable_sort(indices.begin(), indices.end(), [&rules](qsizetype a, qsizetype b) {
         return rules[a].priority > rules[b].priority;
     });
 
-    for (int idx : indices) {
+    for (qsizetype idx : indices) {
         const WindowRule& rule = rules[idx];
         // Only context-only rules that pin a monitor count toward a tile.
         if (!rule.match.isContextOnly()) {

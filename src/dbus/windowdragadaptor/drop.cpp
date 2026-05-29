@@ -267,24 +267,30 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                         }
                     }
                     if (zoneUuid.isEmpty()) {
-                        qCWarning(lcDbusWindow)
-                            << "Could not resolve zone UUID from selector - layout:" << selectedLayoutId
-                            << "index:" << selectedZoneIndex;
-                        // Fallback to synthetic format (navigation won't work, but tracking still happens)
-                        zoneUuid = QStringLiteral("zoneselector-%1-%2").arg(selectedLayoutId).arg(selectedZoneIndex);
+                        // Refuse to commit a synthetic non-UUID id: it would
+                        // propagate into zoneAssignments + persistence verbatim
+                        // and break every downstream consumer that parses zone
+                        // ids as QUuid (navigation, restore-by-id, serialisation
+                        // round-trips). Skip the commit entirely and let the
+                        // window float-drop at the release cursor.
+                        qCWarning(lcDbusWindow) << "Could not resolve zone UUID from selector — skipping snap commit"
+                                                << "layout:" << selectedLayoutId << "index:" << selectedZoneIndex;
+                        shouldApplyGeometry = false;
+                    } else {
+                        // Publish the resolved id so drag_protocol.cpp can
+                        // populate PhosphorProtocol::DragOutcome.zoneId.
+                        // Without this, the zone-selector path would still
+                        // surface m_currentZoneId (which is never written by
+                        // this branch) and the post-Phase-1B validator would
+                        // drop the ApplySnap outcome for an empty zoneId.
+                        resolvedZoneIdOut = zoneUuid;
+                        auto* snapEng = m_windowTracking->snapEngine();
+                        if (snapEng)
+                            snapEng->commitSnap(windowId, zoneUuid, releaseScreenId);
+                        // Record user-initiated snap (not auto-snap)
+                        // This prevents auto-snapping windows that were never manually snapped by user
+                        m_windowTracking->service()->recordSnapIntent(windowId, true);
                     }
-                    // Publish the resolved id so drag_protocol.cpp can populate
-                    // PhosphorProtocol::DragOutcome.zoneId. Without this, the zone-selector path
-                    // would still surface m_currentZoneId (which is never written
-                    // by this branch) and the post-Phase-1B validator would drop
-                    // the ApplySnap outcome for an empty zoneId.
-                    resolvedZoneIdOut = zoneUuid;
-                    auto* snapEng = m_windowTracking->snapEngine();
-                    if (snapEng)
-                        snapEng->commitSnap(windowId, zoneUuid, releaseScreenId);
-                    // Record user-initiated snap (not auto-snap)
-                    // This prevents auto-snapping windows that were never manually snapped by user
-                    m_windowTracking->service()->recordSnapIntent(windowId, true);
 
                     // The QML hover commit path is gone — ZoneSelectorContent is
                     // `interactive: false`, so the slot's MouseAreas never fire and
@@ -474,13 +480,7 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // back to the physScreen path if no valid virtual-screen geometry is
     // found, so we pass nullptr when we can't match — the VS path will
     // handle it via screenId lookup inside buildEmptyZoneList itself.
-    QScreen* releaseScreen = nullptr;
-    for (QScreen* s : QGuiApplication::screens()) {
-        if (PhosphorScreens::ScreenIdentity::identifierFor(s) == screenId || s->name() == screenId) {
-            releaseScreen = s;
-            break;
-        }
-    }
+    QScreen* releaseScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenId);
 
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {

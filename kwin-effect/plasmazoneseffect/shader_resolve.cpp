@@ -223,19 +223,28 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluato
     // depth keeps the paint pipeline from setting a negative opacity (which
     // KWin renders as "invisible window the user can still focus through").
     //
-    // Gate on `toVariant().canConvert<double>()` rather than `isDouble()`
-    // because the QJsonObject may have been populated programmatically
-    // (rule editor builder, future migration porter) with a `QVariant(int)`
-    // or numeric-string payload that round-trips through `QJsonValue` as
-    // a non-Double type. JSON-parsed numeric literals all surface as
-    // `QJsonValue::Double` (Qt6 collapses int/float at parse time), but
-    // construction paths that bypass the parser don't, so the broader
-    // `canConvert<double>` check covers both.
+    // Gate on the QVariant conversion path because the QJsonObject may
+    // have been populated programmatically (rule editor builder, future
+    // migration porter) with a `QVariant(int)` or numeric-string payload
+    // that round-trips through `QJsonValue` as a non-Double type. JSON-
+    // parsed numeric literals all surface as `QJsonValue::Double` (Qt6
+    // collapses int/float at parse time), but construction paths that
+    // bypass the parser don't.
+    //
+    // Extraction MUST go through `toVariant().toDouble(&ok)` rather than
+    // `raw.toDouble()` — the latter is the QJsonValue method, which
+    // returns 0.0 for any non-Double JSON type. A `"value": "0.5"`
+    // payload would pass the canConvert gate but `raw.toDouble()` would
+    // return 0.0, silently rendering the window completely invisible.
     const QJsonValue raw = action->params.value(PhosphorWindowRule::ActionParam::Value);
-    if (raw.isNull() || raw.isUndefined() || !raw.toVariant().canConvert<double>()) {
+    if (raw.isNull() || raw.isUndefined()) {
         return std::nullopt;
     }
-    const double value = raw.toDouble();
+    bool ok = false;
+    const double value = raw.toVariant().toDouble(&ok);
+    if (!ok) {
+        return std::nullopt;
+    }
     if (value < 0.0 || value > 1.0) {
         return std::nullopt;
     }

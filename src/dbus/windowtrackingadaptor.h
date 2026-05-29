@@ -278,15 +278,6 @@ public Q_SLOTS:
     // calculateUnfloatRestore moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
 
     /**
-     * Store window geometry before snapping (for unsnap restoration)
-     * @param windowId Window ID
-     * @param x Window X position
-     * @param y Window Y position
-     * @param width Window width
-     * @param height Window height
-     * @note Only stores on FIRST snap - subsequent snaps (A→B) keep original
-     */
-    /**
      * Store geometry before tiling (unified snap + autotile)
      * @param windowId Window ID
      * @param x Window X position
