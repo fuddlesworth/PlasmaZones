@@ -53,13 +53,22 @@ public:
     {
         if (path == displayDevicePath)
             return;
+        // The bare "/" sentinel (UPower's "no display device") and any
+        // path outside `/org/freedesktop/UPower/devices/` reach us only
+        // from a misbehaving daemon, but instantiating a UPowerDevice
+        // against them would create a permanent-zero stub whose
+        // `bus.connect` and GetAll silently fail. Normalize to the
+        // "no display device" state instead.
+        const bool hasReal = !path.isEmpty() && isValidDevicePath(path);
         if (displayDevice) {
             displayDevice->deleteLater();
             displayDevice = nullptr;
         }
-        displayDevicePath = path;
-        if (!path.isEmpty())
+        displayDevicePath = hasReal ? path : QString();
+        if (hasReal)
             displayDevice = new UPowerDevice(path, owner);
+        else if (!path.isEmpty())
+            qCDebug(lcUPowerHost) << "Ignoring DisplayDevice with non-device path:" << path;
         Q_EMIT owner->displayDeviceChanged();
     }
 
@@ -227,12 +236,30 @@ UPowerDevice* UPowerHost::deviceAt(int index) const
 }
 
 void UPowerHost::_q_onPropertiesChanged(const QString& iface, const QVariantMap& changed,
-                                        const QStringList& /*invalidated*/)
+                                        const QStringList& invalidated)
 {
     if (iface != QLatin1String(kIface))
         return;
     if (changed.contains(QStringLiteral("OnBattery")))
         d->setOnBattery(changed.value(QStringLiteral("OnBattery")).toBool());
+    // UPower may invalidate (rather than change) OnBattery during a
+    // daemon-side reload. Without an explicit re-fetch the cached flag
+    // would silently stick at the prior value; mirror the per-device
+    // UPowerDevice slot's invalidated-path GetAll re-issue.
+    if (invalidated.contains(QStringLiteral("OnBattery"))) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            QStringLiteral("org.freedesktop.UPower"), QStringLiteral("/org/freedesktop/UPower"),
+            QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+        msg << QLatin1String(kIface) << QStringLiteral("OnBattery");
+        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(msg), this);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            const QDBusPendingReply<QVariant> reply = *w;
+            if (reply.isError())
+                return;
+            d->setOnBattery(reply.value().toBool());
+        });
+    }
 }
 
 void UPowerHost::_q_onDeviceAdded(const QDBusObjectPath& path)

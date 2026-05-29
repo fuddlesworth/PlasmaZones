@@ -135,10 +135,17 @@ Item {
             let total = 0;
             let available = 0;
             for (const line of content.split('\n')) {
-                if (line.startsWith('MemTotal:')) {
-                    total = parseInt(line.split(/\s+/)[1], 10);
-                } else if (line.startsWith('MemAvailable:')) {
-                    available = parseInt(line.split(/\s+/)[1], 10);
+                // Trim leading whitespace first: a containerised or
+                // future-kernel /proc/meminfo line with a leading space
+                // would make split(/\s+/)[0] empty and [1] the label
+                // ("MemTotal:"), which parseInt would silently turn
+                // into NaN and the Number.isFinite guard below would
+                // skip the update with no visible cause.
+                const trimmed = line.trim();
+                if (trimmed.startsWith('MemTotal:')) {
+                    total = parseInt(trimmed.split(/\s+/)[1], 10);
+                } else if (trimmed.startsWith('MemAvailable:')) {
+                    available = parseInt(trimmed.split(/\s+/)[1], 10);
                     break;
                 }
             }

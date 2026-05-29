@@ -86,6 +86,11 @@ Item {
     }
 
     visible: hasPlayer
+    // The visibility-gated width branch matches the implicitHeight
+    // discipline below but is also load-bearing for the parent Row's
+    // layout: when this widget is hidden (no MPRIS players present),
+    // Row reserves zero width so adjacent siblings collapse against
+    // each other instead of stranding the widget's intrinsic slot.
     implicitWidth: visible ? capsule.implicitWidth : 0
     // Pin the widget's implicit height to its own content rather than
     // querying parent.height. The parent here is a Row, which sizes its

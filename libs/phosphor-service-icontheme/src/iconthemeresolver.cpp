@@ -178,6 +178,23 @@ bool isUnsafeIconDir(const QString& dir)
     return false;
 }
 
+// Theme names are concatenated into filesystem paths (root + "/" +
+// themeName + "/index.theme") and themed directory walks, so the same
+// path-traversal hardening applied to icon names and IconThemePath
+// applies. Reject path separators, parent-dir tokens, and NUL.
+bool isUnsafeThemeName(const QString& name)
+{
+    if (name.contains(QLatin1Char('/')))
+        return true;
+    if (name.contains(QLatin1Char('\\')))
+        return true;
+    if (name.contains(QLatin1String("..")))
+        return true;
+    if (name.contains(QChar(QChar::Null)))
+        return true;
+    return false;
+}
+
 } // namespace
 
 class IconThemeResolver::Private
@@ -529,6 +546,10 @@ IconThemeResolver::~IconThemeResolver() = default;
 
 void IconThemeResolver::setThemeName(const QString& themeName)
 {
+    if (!themeName.isEmpty() && isUnsafeThemeName(themeName)) {
+        qCWarning(lcIconTheme) << "rejected unsafe theme name:" << themeName;
+        return;
+    }
     QMutexLocker locker(&d->mutex);
     if (d->configuredTheme == themeName)
         return;
@@ -586,8 +607,14 @@ QImage IconThemeResolver::iconForName(const QString& name, int size, int scale, 
         QMutexLocker locker(&d->mutex);
 
         const QString theme = d->configuredTheme.isEmpty() ? d->detectThemeName() : d->configuredTheme;
-        cacheKey = theme + QLatin1Char('|') + name + QLatin1Char('|') + extraThemeDir + QLatin1Char('|')
-            + QString::number(size) + QLatin1Char(':') + QString::number(scale);
+        // Field separator: NUL is rejected by every validator
+        // (isUnsafeIconName / isUnsafeIconDir / isUnsafeThemeName), so
+        // it cannot appear inside any field. Using `|` allowed a
+        // collision when extraThemeDir contained the delimiter; NUL
+        // makes the key unambiguous regardless of input shape.
+        const QChar sep = QChar(QChar::Null);
+        cacheKey = theme + sep + name + sep + extraThemeDir + sep + QString::number(size) + QLatin1Char(':')
+            + QString::number(scale);
         if (auto it = d->resolvedCache.constFind(cacheKey); it != d->resolvedCache.constEnd()) {
             return *it;
         }

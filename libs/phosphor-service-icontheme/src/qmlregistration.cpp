@@ -64,8 +64,11 @@ void installImageProvider(QQmlEngine* engine)
     // QQmlEngine per hot reload, so re-install is the steady-state
     // pattern.
     engine->addImageProvider(QString::fromLatin1(kImageProviderHost), new IconImageProvider());
-    qCInfo(lcIconThemeQml).nospace() << "image provider mounted at image://" << kImageProviderHost << "/ on engine "
-                                     << static_cast<void*>(engine);
+    // Pointer addresses leak ASLR layout into logs that may be
+    // forwarded; log the URL host (the actionable identity) and gate
+    // engine identity behind qCDebug for in-process correlation.
+    qCInfo(lcIconThemeQml).nospace() << "image provider mounted at image://" << kImageProviderHost << "/";
+    qCDebug(lcIconThemeQml).nospace() << "image provider engine=" << static_cast<void*>(engine);
 }
 
 const char* imageProviderUrlHost()

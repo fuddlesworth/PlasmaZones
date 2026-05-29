@@ -185,7 +185,11 @@ Item {
                 onClicked: mouse => {
                     // Defensive: don't depend on the enclosing Item's
                     // `visible` (length > 0) clause to keep this safe.
-                    if (!root.hasPlayer || root.currentPlayer.length <= 0)
+                    // Also guard width<=0: a transient layout pass with
+                    // zero width would make `mouse.x / width` NaN or
+                    // Infinity and setPosition(NaN) would push garbage
+                    // onto the MPRIS wire.
+                    if (!root.hasPlayer || root.currentPlayer.length <= 0 || width <= 0)
                         return;
 
                     let ratio = mouse.x / width;

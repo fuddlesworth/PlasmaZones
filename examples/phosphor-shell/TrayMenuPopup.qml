@@ -269,17 +269,20 @@ PopupWindow {
                             color: Theme.on_surface
                             font.pixelSize: root.labelFontSize
                             anchors.verticalCenter: parent.verticalCenter
-                            // Width budget for the label slot. The Row
-                            // reserves icon + chevron slot widths, the
-                            // two side paddings, the shortcut's
-                            // intrinsic width when present, and the
-                            // spacer between shortcut and chevron when
-                            // the shortcut is non-empty. Clamp to >= 0
-                            // so a pathological shortcut string can't
-                            // drive the label width negative (Qt would
-                            // clamp to 0 and elide silently, leaving an
+                            // Width budget for the label slot, computed
+                            // against the actual visible Row children
+                            // and the Row spacings between them. Row
+                            // skips both the invisible child AND its
+                            // adjacent spacing slot, so the formula adds
+                            // a spacing slot only when the corresponding
+                            // sibling is visible. Clamp to >= 0 so a
+                            // pathological shortcut string can't drive
+                            // the label width negative (Qt would clamp
+                            // to 0 and elide silently, leaving an
                             // unlabelled row).
-                            readonly property int reserved: 2 * root.rowPadX + 2 * root.iconSlotSize + root.rowSpacing + shortcutText.width + (shortcutText.text.length > 0 ? root.rowSpacing : 0)
+                            readonly property bool shortcutVisible: shortcutText.text.length > 0
+                            readonly property bool chevronVisible: chevronText.visible
+                            readonly property int reserved: 2 * root.rowPadX + root.iconSlotSize + (shortcutVisible ? shortcutText.width + root.rowSpacing : 0) + (chevronVisible ? chevronText.implicitWidth + root.rowSpacing : 0) + root.rowSpacing
                             width: Math.max(0, row.width - reserved)
                             elide: Text.ElideRight
                         }
@@ -308,6 +311,8 @@ PopupWindow {
                         // Submenu chevron, only renders when the item
                         // has children.
                         Text {
+                            id: chevronText
+
                             visible: menuRow.childrenDisplay === "submenu"
                             text: "▸"
                             color: Theme.on_surface_variant

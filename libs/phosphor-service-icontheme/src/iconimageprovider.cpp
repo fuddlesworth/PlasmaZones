@@ -92,6 +92,17 @@ QImage IconImageProvider::requestImage(const QString& id, QSize* size, const QSi
 
 void IconImageProvider::setImage(const QString& id, const QImage& image)
 {
+    // requestImage truncates the lookup id at the first '?' to strip
+    // the cache-bust query string. A published id containing '?' would
+    // therefore be unreachable. Reject at publish time so the failure
+    // is logged at the publishing call site rather than as a silent
+    // miss on the consumer side.
+    if (id.contains(QLatin1Char('?'))) {
+        qCWarning(lcImageProvider) << "rejected setImage id containing '?'; ids must not collide with the cache-bust "
+                                      "query string. id="
+                                   << id;
+        return;
+    }
     QMutexLocker lock(&s_mutex);
     if (image.isNull()) {
         s_registry.remove(id);
