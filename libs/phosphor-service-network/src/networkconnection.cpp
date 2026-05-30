@@ -57,8 +57,16 @@ public:
                 qCDebug(lcNetworkConnection) << "GetSettings failed for" << path << ":" << reply.error().message();
                 return;
             }
-            const QVariant first = reply.reply().arguments().value(0);
-            applySettings(first.value<QDBusArgument>());
+            // Guard the wire shape before demarshalling: a malformed peer
+            // (or a non-NM service squatting the path) could return a reply
+            // with no arguments or a non-container first arg, and calling
+            // beginMap() on a default-constructed QDBusArgument is not safe.
+            const QVariantList replyArgs = reply.reply().arguments();
+            if (replyArgs.isEmpty() || !replyArgs.at(0).canConvert<QDBusArgument>()) {
+                qCDebug(lcNetworkConnection) << "GetSettings returned an unexpected reply shape for" << path;
+                return;
+            }
+            applySettings(replyArgs.at(0).value<QDBusArgument>());
         });
     }
 

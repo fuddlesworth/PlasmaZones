@@ -56,9 +56,19 @@ private:
     void connectDevice(NetworkDevice* device);
 
     NetworkHost* m_host = nullptr;
-    // Row mirror owned by the model. rowCount and data index into this
-    // list, never the host's, so the transaction boundaries always
-    // straddle the actual mutation.
+    // Row mirror of host-owned NetworkDevice pointers. rowCount and data
+    // index into this list, never the host's, so the transaction
+    // boundaries always straddle the actual mutation. The model does NOT
+    // own these objects and never deletes them.
+    //
+    // Mirror-safety invariant (relied on instead of a per-device
+    // destroyed watch): NetworkHost only ever destroys a device AFTER
+    // emitting deviceRemoved (see NetworkHost::Private::removeDevice,
+    // which removes the row via onDeviceRemoved before deleteLater), and
+    // on host teardown QObject::destroyed fires before the host's device
+    // children are deleted (so the host-destroyed lambda clears m_rows
+    // while every pointer is still valid). A device pointer can therefore
+    // never dangle in m_rows.
     QList<NetworkDevice*> m_rows;
 };
 

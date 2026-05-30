@@ -47,9 +47,14 @@ void AccessPointModel::setDevice(NetworkDevice* device)
         // uses the cached path, not m_device, which is essential here: by
         // the time QObject::destroyed fires, NetworkDevice's pimpl is gone.
         connect(m_device, &QObject::destroyed, this, [this]() {
+            // Null m_device FIRST: clearRows() emits model-reset signals,
+            // and anything they re-enter must observe the detached state,
+            // never the dying device pointer. unsubscribe() keys off the
+            // cached m_subscribedPath, so its order relative to this is
+            // immaterial.
+            m_device = nullptr;
             unsubscribe();
             clearRows();
-            m_device = nullptr;
             Q_EMIT deviceChanged();
         });
         subscribe();
