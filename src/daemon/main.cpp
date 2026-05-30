@@ -154,8 +154,10 @@ int main(int argc, char* argv[])
             qCInfo(PlasmaZones::lcDaemon) << "Vulkan instance created successfully";
         } else {
             qCCritical(PlasmaZones::lcDaemon)
-                << "Failed to create Vulkan instance after app init — falling back to OpenGL."
-                << "Check that Vulkan drivers are installed (vulkan-icd-loader, mesa-vulkan-drivers, etc.)";
+                << "Vulkan unavailable (instance creation failed or no enumerable GPU) — falling back to OpenGL."
+                << "Check that Vulkan drivers are installed and match the running kernel module"
+                << "(a GPU driver upgrade without a reboot leaves a userspace/kernel version skew that"
+                << "breaks device enumeration).";
             useVulkan = false;
         }
     }

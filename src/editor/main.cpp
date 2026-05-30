@@ -104,7 +104,9 @@ int main(int argc, char* argv[])
     if (useVulkan) {
         if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
             qCCritical(PlasmaZones::lcEditor)
-                << "Failed to create Vulkan instance — falling back to OpenGL for shader preview.";
+                << "Vulkan unavailable (instance creation failed or no enumerable GPU) —"
+                << "falling back to OpenGL for shader preview. If a GPU driver was upgraded,"
+                << "a reboot may be needed to match the kernel module to the userspace driver.";
             useVulkan = false;
         }
     }
