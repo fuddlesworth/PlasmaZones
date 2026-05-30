@@ -355,15 +355,6 @@ Q_SIGNALS:
     /// "window-rules" entry to its dirty-pages set when revert failed during
     /// the `setNeedsSave(false)` blanket-clear it does for every other page.
     void revertFinished(bool success);
-    /// Emitted exactly once when ALL four label resolvers
-    /// (screen / activity / snapping-layout / tiling-algorithm) have
-    /// been wired by the parent SettingsController. QML pages (notably
-    /// WindowRulesPage and monitorOverview consumers) gate "show raw
-    /// model" on this signal so the brief startup window where
-    /// `monitorOverview` would return raw UUIDs / wire tokens never
-    /// becomes visible to the user. Emitted at most once per controller
-    /// instance — the resolvers are install-once, not refreshable.
-    void lookupsReady();
 
 private:
     void setDirty(bool dirty);
@@ -462,21 +453,6 @@ private:
     /// Held so the model LabelLookup installed in setCurveLabelResolver can
     /// re-invoke it live on every summary rebuild.
     QJSValue m_curveResolver;
-    /// Bit-mask of resolvers wired so far. When all four bits are set,
-    /// emit lookupsReady() once. Tracks individual setters because the
-    /// parent SettingsController wires them across separate calls in
-    /// its constructor and the QML side wants a single "everything is
-    /// ready" signal.
-    enum LookupBit : unsigned {
-        LookupScreen = 1u << 0,
-        LookupActivity = 1u << 1,
-        LookupSnappingLayout = 1u << 2,
-        LookupTilingAlgorithm = 1u << 3,
-        AllLookups = LookupScreen | LookupActivity | LookupSnappingLayout | LookupTilingAlgorithm,
-    };
-    unsigned m_wiredLookups = 0;
-    bool m_lookupsReadyEmitted = false;
-    void markLookupWired(LookupBit bit);
 };
 
 } // namespace PlasmaZones
