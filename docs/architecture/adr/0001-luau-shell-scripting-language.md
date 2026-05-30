@@ -11,6 +11,7 @@
 | **Scope** | Shell/compositor scripting surface; first increment = scripted autotiling |
 | **Supersedes** | — |
 | **Spike** | `spike/luau-autotile-embed` (throwaway, `spikes/luau-autotile-embed/`) |
+| **Impl plan** | [luau-migration-impl-plan.md](../luau-migration-impl-plan.md) |
 
 > This is the first ADR in the PlasmaZones series. The `ADR-001…ADR-026`
 > references elsewhere in the tree belong to the bundled claude-flow tooling and
@@ -54,6 +55,14 @@ and configuration language**.
 3. Target architecture: **C++ compositor core + QML for first-party UI + Luau for
    user config/scripting/plugins.** The **QML↔Luau boundary is an explicit,
    owned interface**, designed up front.
+4. **Library factoring:** a new generic **`libs/phosphor-scripting`** (LGPL-2.1)
+   owns the Luau host (engine, sandbox, watchdog, compile/load, marshalling
+   core) with no tiling knowledge, so future shell surfaces reuse it.
+   `libs/phosphor-tiles` depends on it and implements the tiling binding
+   (`LuauTileAlgorithm`, the `pz` stdlib + `.d.lua`, params/state/tree
+   marshalling). **Luau is vendored** as a static git submodule by default
+   (opt-in `-DPLASMAZONES_SYSTEM_LUAU=ON`) because it is packaged for only Arch
+   and Nix — not Debian, Fedora, or openSUSE — and has no stable ABI.
 
 ### Why Luau specifically
 
@@ -121,18 +130,26 @@ marshalling/setup); watchdog ≈ wash but safer.
 
 ## Migration & sequencing
 
-Each step is its own branch with per-phase commits; PRs target `main`.
+The full phased breakdown lives in the
+[implementation plan](../luau-migration-impl-plan.md) (one `feat/luau-scripting`
+branch, per-phase commits; PRs target `main`). In summary:
 
-1. **Decide & document** — this ADR.
-2. **Build the shared Luau host** — sandbox, interrupt watchdog, marshalling,
-   the `pz` standard library, typed `.d.lua` definitions, and a `luau-analyze`
-   import-time type gate. Placement TBD: a new LGPL `libs/phosphor-luau` vs.
-   inside `libs/phosphor-tiles` (see open follow-ups).
-3. **Roll out on new shell surfaces first** (config/keybinds/rules) to validate
-   the QML↔Luau bridge before touching working code.
-4. **Migrate autotiling** — port the 25 algorithms; replace `ScriptedAlgorithm`'s
-   QJSEngine internals while keeping the `ITileAlgorithm` interface stable.
-5. **Remove the QJSEngine scripted path** once parity + tests pass.
+1. **Decide & document** — this ADR + the implementation plan.
+2. **Build `phosphor-scripting`** — the generic Luau host (engine, sandbox,
+   watchdog, compile/load, marshalling core), graduating the spike's `LuauHost`
+   into a tested LGPL library.
+3. **Migrate autotiling as the first consumer** — the tiling binding in
+   `phosphor-tiles` (`LuauTileAlgorithm`, `pz` stdlib, params/state/tree
+   marshalling), port the 25 algorithms under a golden parity test, swap the
+   loader backend, keep the `TilingAlgorithm` interface stable.
+4. **Remove the QJSEngine scripted path** once parity + tests pass.
+
+**Sequencing refinement.** This ADR originally proposed rolling out "new shell
+surfaces first." We now lead with **tiling as `phosphor-scripting`'s first
+consumer**: it has a contained contract and an existing test suite, and its path
+is pure **C++↔Luau with no QML bridge** — so it validates the embedding core
+without entangling the harder QML↔Luau UI boundary. The QML↔Luau bridge remains
+separate future work for actual shell UI surfaces.
 
 ## Alternatives considered
 
@@ -150,12 +167,19 @@ Each step is its own branch with per-phase commits; PRs target `main`.
 
 ## Open follow-ups
 
-- **Host library placement & license** — LGPL `phosphor-luau` vs. inside
-  `phosphor-tiles`.
+Resolved since first draft: host-library placement/license (→ new LGPL
+`libs/phosphor-scripting`) and vendoring strategy (→ static git submodule by
+default, opt-in system Luau) are now decided and captured in the
+[implementation plan](../luau-migration-impl-plan.md).
+
+Remaining:
+
 - **Memory-cap allocator** and the **`luau-analyze` import gate** — designed in
-  the spike, not yet built.
+  the spike, not yet built (impl plan phases 1 and 7).
+- **QML↔Luau bridge design** — deferred to the eventual shell-UI surfaces; not
+  needed for the tiling migration.
 
 A competitor-architecture study (how Hyprland / Noctalia-Quickshell structure
 their Lua and QML↔Lua boundaries) was considered and **deliberately skipped** —
-the QML↔Luau bridge will be validated directly via the incremental rollout
-(migration step 3), not by pre-studying other projects.
+the QML↔Luau bridge will be validated directly via the incremental rollout, not
+by pre-studying other projects.
