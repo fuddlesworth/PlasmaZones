@@ -163,6 +163,22 @@ QVariant LuauEngine::moduleField(int moduleHandle, const QString& key) const
     return value;
 }
 
+bool LuauEngine::hasFunction(int moduleHandle, const QString& name) const
+{
+    if (!m_L || moduleHandle < 0) {
+        return false;
+    }
+    lua_getref(m_L, moduleHandle);
+    if (!lua_istable(m_L, -1)) {
+        lua_pop(m_L, 1);
+        return false;
+    }
+    lua_getfield(m_L, -1, name.toUtf8().constData());
+    const bool isFn = lua_isfunction(m_L, -1);
+    lua_pop(m_L, 2); // field + module
+    return isFn;
+}
+
 LuauEngine::CallOutcome LuauEngine::callModule(int moduleHandle, const QString& function, const QVariantList& args,
                                                int timeoutMs)
 {

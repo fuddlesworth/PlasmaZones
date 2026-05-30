@@ -143,6 +143,12 @@ set_target_properties(test_luau_engine PROPERTIES AUTOMOC ON)
 target_link_libraries(test_luau_engine PRIVATE Qt6::Test Qt6::Core PhosphorScripting::PhosphorScripting)
 add_test(NAME test_luau_engine COMMAND test_luau_engine)
 
+add_executable(test_luau_tile_algorithm scripting/test_luau_tile_algorithm.cpp)
+set_target_properties(test_luau_tile_algorithm PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_tile_algorithm PRIVATE "PZ_LUAU_TEST_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/scripting\"")
+target_link_libraries(test_luau_tile_algorithm PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_tile_algorithm COMMAND test_luau_tile_algorithm)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile Engine Tests (core, master, minsize, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -82,6 +82,9 @@ public:
     /// an invalid QVariant if the handle/key is absent.
     QVariant moduleField(int moduleHandle, const QString& key) const;
 
+    /// Whether the module exposes a callable field named @p name.
+    bool hasFunction(int moduleHandle, const QString& name) const;
+
     /// Call `module[function](args...)` under the watchdog, returning a single
     /// result. @p timeoutMs <= 0 means no timeout.
     CallOutcome callModule(int moduleHandle, const QString& function, const QVariantList& args, int timeoutMs);

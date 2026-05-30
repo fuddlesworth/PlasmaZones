@@ -70,6 +70,7 @@ set(phosphortiles_public_HDRS
     include/PhosphorTiles/AlgorithmRegistry.h
     include/PhosphorTiles/ITileAlgorithmRegistry.h
     include/PhosphorTiles/ScriptedAlgorithm.h
+    include/PhosphorTiles/LuauTileAlgorithm.h
     include/PhosphorTiles/ScriptedAlgorithmHelpers.h
     include/PhosphorTiles/ScriptedAlgorithmJsBuiltins.h
     include/PhosphorTiles/ScriptedAlgorithmLoader.h
@@ -99,10 +100,13 @@ set(phosphortiles_SRCS
     src/scriptedalgorithmloader.cpp
     src/scriptedalgorithmsandbox.cpp
     src/scriptedalgorithmwatchdog.cpp
+    src/luautilealgorithm.cpp
     src/tileslogging.h
     src/tileslogging.cpp
     # Builtin JS helpers compiled into the binary as Qt resources.
     src/builtins.qrc
+    # The pz Luau standard library, compiled into the binary as a Qt resource.
+    src/pz.qrc
 )
 
 add_library(PhosphorTiles SHARED
@@ -139,6 +143,7 @@ target_link_libraries(PhosphorTiles
         Qt6::Qml
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorEngine::PhosphorEngine
+        PhosphorScripting::PhosphorScripting
         # PhosphorFsLoader is publicly exposed via
         # ScriptedAlgorithmLoader's `LiveReload` parameter — consumers
         # including `<PhosphorTiles/ScriptedAlgorithmLoader.h>` need
