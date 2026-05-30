@@ -6,6 +6,7 @@
 #include <PhosphorDBus/Client.h>
 
 #include <QDBusConnection>
+#include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusVariant>
@@ -192,6 +193,15 @@ void BluetoothAdapter::startDiscovery()
 void BluetoothAdapter::stopDiscovery()
 {
     d->callAdapterMethod(QStringLiteral("StopDiscovery"));
+}
+
+void BluetoothAdapter::removeDevice(const QString& devicePath)
+{
+    if (!d->bus.isConnected() || devicePath.isEmpty())
+        return;
+    PhosphorDBus::Client client(d->bus, QLatin1String(kService), d->path, &lcBluetoothAdapter());
+    client.fireAndForget(this, QLatin1String(kAdapterIface), QStringLiteral("RemoveDevice"),
+                         {QVariant::fromValue(QDBusObjectPath(devicePath))}, QStringLiteral("removeDevice"));
 }
 
 void BluetoothAdapter::_q_onPropertiesChanged(const QString& interfaceName, const QVariantMap& changed,

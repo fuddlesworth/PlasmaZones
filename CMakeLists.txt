@@ -682,6 +682,16 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-network-cli)
 endif()
 
+# phosphor-service-bluetooth-cli. Acceptance harness for the
+# phosphor-service-bluetooth library (Phase 2.3). Headless driver exercising
+# the read paths (status, list-adapters, list-devices) and write paths
+# (power, scan, pair, connect, trust, remove) against a live org.bluez, with
+# an interactive pairing agent. Gated like the lib: when BUILD_PHOSPHOR_SHELL
+# is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-bluetooth-cli)
+endif()
+
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third
 # (CPU-meter) widget builds as a separate .so + manifest.json and

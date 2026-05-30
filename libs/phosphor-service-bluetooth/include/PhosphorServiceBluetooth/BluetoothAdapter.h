@@ -66,6 +66,11 @@ public:
     Q_INVOKABLE void startDiscovery();
     Q_INVOKABLE void stopDiscovery();
 
+    /// Forget a device under this adapter (`org.bluez.Adapter1.RemoveDevice`),
+    /// dropping its pairing/cache. Fire-and-forget; the device disappears from
+    /// BluetoothHost via InterfacesRemoved.
+    Q_INVOKABLE void removeDevice(const QString& devicePath);
+
 Q_SIGNALS:
     void addressChanged();
     void nameChanged();
