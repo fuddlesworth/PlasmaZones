@@ -129,6 +129,15 @@ private Q_SLOTS:
     {
         compareAlgorithm(QStringLiteral("centered-master"));
     }
+    // Batch 9
+    void cascade()
+    {
+        compareAlgorithm(QStringLiteral("cascade"));
+    }
+    void tatami()
+    {
+        compareAlgorithm(QStringLiteral("tatami"));
+    }
 };
 
 void TestLuauParity::compareAlgorithm(const QString& name)
