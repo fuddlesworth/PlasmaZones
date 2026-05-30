@@ -519,8 +519,20 @@ SettingsController::SettingsController(QObject* parent)
         }
         return tokenOrId;
     };
+    // Snapping layouts are stored by UUID, which matches the layouts-list id
+    // directly. Tiling-algorithm actions, however, store the BARE algorithm
+    // token ("bsp"), while the layouts list keys autotile entries by the
+    // "autotile:<token>" form — so the bare token must be prefixed before the
+    // lookup, or the list shows the raw id instead of the friendly name. Try
+    // the prefixed form first, then fall back to the bare token (covering the
+    // bare-keyed shape PhosphorTiles can also ship, and already-prefixed data).
+    auto resolveTilingAlgorithmLookup = [resolveByLayoutsLookup](const QString& algorithmToken) -> QString {
+        const QString prefixed = QStringLiteral("autotile:") + algorithmToken;
+        const QString label = resolveByLayoutsLookup(prefixed);
+        return label == prefixed ? resolveByLayoutsLookup(algorithmToken) : label;
+    };
     m_windowRulesPage->setSnappingLayoutLookup(resolveByLayoutsLookup);
-    m_windowRulesPage->setTilingAlgorithmLookup(resolveByLayoutsLookup);
+    m_windowRulesPage->setTilingAlgorithmLookup(resolveTilingAlgorithmLookup);
     auto refreshRuleLabels = [this]() {
         if (m_windowRulesPage && m_windowRulesPage->model()) {
             m_windowRulesPage->model()->refreshLabels();
