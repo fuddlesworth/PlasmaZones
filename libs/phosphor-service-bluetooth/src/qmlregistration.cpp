@@ -3,6 +3,13 @@
 
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 
+#include <PhosphorServiceBluetooth/BluetoothAdapter.h>
+#include <PhosphorServiceBluetooth/BluetoothAdapterModel.h>
+#include <PhosphorServiceBluetooth/BluetoothAgent.h>
+#include <PhosphorServiceBluetooth/BluetoothDevice.h>
+#include <PhosphorServiceBluetooth/BluetoothDeviceModel.h>
+#include <PhosphorServiceBluetooth/BluetoothHost.h>
+
 #include <QQmlEngine>
 
 #include <mutex>
@@ -25,10 +32,28 @@ void registerQmlTypes()
     // phosphor-service-network pattern.
     static std::once_flag once;
     std::call_once(once, [] {
-        // Declare the module so `import Phosphor.Service.Bluetooth 1.0`
-        // resolves. The host / model / domain type registrations live here,
-        // next to the module declaration, as those types land.
-        qmlRegisterModule(kModule, kModuleVersionMajor, kModuleVersionMinor);
+        // Instantiable entry points. BluetoothHost is constructed in QML and
+        // handed to the models; it is a plain type, NOT a singleton (the
+        // project discourages singletons holding mutable global state).
+        qmlRegisterType<BluetoothHost>(kModule, kModuleVersionMajor, kModuleVersionMinor, "BluetoothHost");
+        qmlRegisterType<BluetoothAdapterModel>(kModule, kModuleVersionMajor, kModuleVersionMinor,
+                                               "BluetoothAdapterModel");
+        qmlRegisterType<BluetoothDeviceModel>(kModule, kModuleVersionMajor, kModuleVersionMinor,
+                                              "BluetoothDeviceModel");
+
+        // Pointer-receivable types. Exposed as Q_PROPERTY / role values from
+        // the host or models, never directly constructed in QML; registering
+        // them as uncreatable makes their metatype known so QML can read their
+        // properties and (for adapter/device) call their Q_INVOKABLE writes.
+        qmlRegisterUncreatableType<BluetoothAdapter>(
+            kModule, kModuleVersionMajor, kModuleVersionMinor, "BluetoothAdapter",
+            QStringLiteral("BluetoothAdapter is owned by BluetoothHost; bind via the host or model"));
+        qmlRegisterUncreatableType<BluetoothDevice>(
+            kModule, kModuleVersionMajor, kModuleVersionMinor, "BluetoothDevice",
+            QStringLiteral("BluetoothDevice is owned by BluetoothHost; bind via the host or model"));
+        qmlRegisterUncreatableType<BluetoothAgent>(
+            kModule, kModuleVersionMajor, kModuleVersionMinor, "BluetoothAgent",
+            QStringLiteral("BluetoothAgent is owned by BluetoothHost; access it via host.agent"));
     });
 }
 
