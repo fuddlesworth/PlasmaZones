@@ -313,9 +313,9 @@ This section is the post-implementation record of the shape that landed on `feat
 
 ---
 
-### 2.3: `phosphor-service-bluetooth` *(planned)*
+### 2.3: `phosphor-service-bluetooth` *(shipped)*
 
-Forward plan for `feat/phase-2.3-bluetooth-service`, in the shape of the §2.1 narrative. Backend is pure D-Bus `org.bluez` on the **system bus** via `phosphor-dbus`, with no `libbluetooth` / QtConnectivity dependency (keeps the wire contract direct; unlike 2.2 there is no optional native backend). Namespace `PhosphorServiceBluetooth`, export macro `PHOSPHORSERVICEBLUETOOTH_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Bluetooth 1.0`.
+Shipped on `feat/phase-2.3-bluetooth-service` (milestones 0-9), in the shape of the §2.1 narrative. Backend is pure D-Bus `org.bluez` on the **system bus** via `phosphor-dbus`, with no `libbluetooth` / QtConnectivity dependency (keeps the wire contract direct; unlike 2.2 there is no optional native backend). Namespace `PhosphorServiceBluetooth`, export macro `PHOSPHORSERVICEBLUETOOTH_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Bluetooth 1.0`.
 
 Two structural firsts versus 2.2:
 
