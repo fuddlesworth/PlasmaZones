@@ -450,6 +450,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-mpris)     # MPRIS2 media-player discovery + control
     add_subdirectory(libs/phosphor-service-pipewire)  # PipeWire mixer (Phase 2.1, shipped)
     add_subdirectory(libs/phosphor-service-network)   # NetworkManager devices / connectivity (Phase 2.2)
+    add_subdirectory(libs/phosphor-service-bluetooth) # BlueZ adapters / devices / pairing (Phase 2.3)
 endif()
 
 # Source directories

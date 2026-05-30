@@ -500,6 +500,7 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorServiceMpris::PhosphorServiceMpris
             PhosphorServicePipeWire::PhosphorServicePipeWire
             PhosphorServiceNetwork::PhosphorServiceNetwork
+            PhosphorServiceBluetooth::PhosphorServiceBluetooth
             PhosphorLayer::PhosphorLayer
             PhosphorWayland::PhosphorWayland
             PhosphorRendering::PhosphorRendering
