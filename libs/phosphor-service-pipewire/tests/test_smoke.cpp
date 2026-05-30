@@ -134,17 +134,22 @@ private Q_SLOTS:
 
         if (conn.isConnected()) {
             // Daemon present — registry should have surfaced at least
-            // the system's default audio sink. Don't assert the count
-            // (varies by host) but every node we received must have a
-            // valid audio media class. The non-empty check guards the
-            // registry-walk regression: a live PipeWire daemon ALWAYS
-            // has at least one audio node (the default sink), so an
-            // empty nodes() under a connected daemon means the registry
-            // observer is broken — accepting the empty case here would
-            // silently swallow that breakage.
+            // the system's default audio sink on session-manager-managed
+            // hosts (the developer workstation case). Bare-daemon hosts
+            // (headless containers running pipewired without WirePlumber
+            // / no audio modules, video-only embedded targets) can
+            // legitimately surface zero audio nodes — detect that case
+            // via the absence of a WirePlumber-published default-sink
+            // name and downgrade to a QSKIP rather than asserting the
+            // registry walk is broken. Every node we did receive must
+            // still carry a valid audio media class.
             QVERIFY(connectedSpy.count() >= 1);
             const auto nodes = conn.nodes();
-            QVERIFY2(!nodes.empty(), "connected daemon surfaced zero audio nodes — registry walk likely broken");
+            if (nodes.empty() && conn.defaultSinkName().isEmpty()) {
+                QSKIP("daemon connected but no session manager / audio nodes — bare-daemon host");
+            }
+            QVERIFY2(!nodes.empty(),
+                     "connected daemon with session manager surfaced zero audio nodes — registry walk likely broken");
             for (auto* node : nodes) {
                 QVERIFY(node != nullptr);
                 const QString mc = node->mediaClass();

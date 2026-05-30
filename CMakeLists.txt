@@ -784,12 +784,15 @@ add_custom_target(uninstall
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)
-# (Vulkan was previously plumbed via QVulkanInstance with a
-# `set_package_properties(WrapVulkanHeaders ...)` block here. The
-# corresponding `find_package(Vulkan)` and the QVulkanInstance call sites
-# were removed when the backend was descoped; the orphan property block
-# never showed up in feature_summary because no find_package had
-# registered it. Removed in PR #546.)
+# (Vulkan is still used at runtime via QVulkanInstance — see
+# src/daemon/vulkan_support.cpp and the QVulkanInstance owners in
+# src/daemon/main.cpp + src/editor/main.cpp. There is no
+# find_package(Vulkan) at configure time because Qt Wayland loads the
+# Vulkan loader via QLibrary at runtime, so a build-time package check
+# would only false-positive on systems missing the runtime loader. The
+# previous `set_package_properties(WrapVulkanHeaders ...)` block here
+# was orphaned (no corresponding find_package(Vulkan) ever ran), so it
+# never appeared in feature_summary; removed in PR #546.)
 feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                      OPTIONAL_PACKAGES_FOUND OPTIONAL_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)

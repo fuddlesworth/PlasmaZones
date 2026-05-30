@@ -21,13 +21,14 @@ Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
 
 int main(int argc, char* argv[])
 {
-    // MUST run before QGuiApplication is constructed: registers a Qt
-    // platform-integration plugin that the platform-plugin selector
-    // consults during QGuiApplication's static-init phase. Inserting any
+    // MUST run before QGuiApplication is constructed: selects the
+    // phosphorwayland Wayland shell-integration plugin (via the
+    // QT_WAYLAND_SHELL_INTEGRATION env var that Qt Wayland's
+    // QWaylandIntegration consults during platform init). Inserting any
     // QGuiApplication-touching call between this line and the
-    // QGuiApplication ctor would let Qt pick the default integration
-    // without the layer-shell hooks, silently disabling overlay
-    // positioning across the whole shell.
+    // QGuiApplication ctor would let Qt pick the default xdg-shell
+    // integration without the layer-shell hooks, silently disabling
+    // overlay positioning across the whole shell.
     PhosphorWayland::registerLayerShellPlugin();
 
     QGuiApplication app(argc, argv);

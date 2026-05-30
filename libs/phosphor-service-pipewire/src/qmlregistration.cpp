@@ -153,8 +153,10 @@ void registerQmlTypes()
                     // parent-child link atomically.
                     hostPtr = new PipeWireHost(app);
                 }
-                // QPointer::operator-> still works fine here; the parent-
-                // check above already proved hostPtr is non-null.
+                // QPointer's implicit conversion to PipeWireHost* is what
+                // the setObjectOwnership and return statements rely on;
+                // the parent-check above already proved hostPtr is
+                // non-null so the conversion can't decay to nullptr.
                 // setObjectOwnership lives OUTSIDE the construction
                 // guard: it is a per-engine policy registered against
                 // the engine-private QML metadata table, not against

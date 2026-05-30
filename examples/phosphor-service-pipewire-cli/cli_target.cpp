@@ -75,7 +75,17 @@ QString resolveTargetToName(PhosphorServicePipeWire::PipeWireConnection& conn, c
         err() << "no node matches target '" << spec << "'\n";
         return {};
     }
-    return node->name();
+    const QString name = node->name();
+    if (name.isEmpty()) {
+        // Node exists but its info event hasn't arrived from the
+        // daemon yet, so its node.name property is still empty. The
+        // caller (cmdSetDefault) would silently return rc=1 if we
+        // returned an empty QString here — emit a concrete diagnostic
+        // so the user knows what happened.
+        err() << "target '" << spec << "' matched node id " << node->id()
+              << " but its name has not been published yet (info event in flight)\n";
+    }
+    return name;
 }
 
 QString labelFor(PhosphorServicePipeWire::PwNode* node)

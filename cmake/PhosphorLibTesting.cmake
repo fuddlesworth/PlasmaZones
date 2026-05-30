@@ -54,7 +54,6 @@ function(phosphor_lib_enable_tests standaloneProjectName)
             # a project under e.g. /home/foo/dev+notes/ would silently take
             # the outside-tree branch. string(FIND) is a literal substring
             # check with no regex semantics.
-            string(LENGTH "${CMAKE_CURRENT_SOURCE_DIR}/" _pl_src_prefix_len)
             string(FIND "${_pl_tests_dir}" "${CMAKE_CURRENT_SOURCE_DIR}/" _pl_prefix_match)
             if(_pl_prefix_match EQUAL 0)
                 # Inside-tree path: add_subdirectory infers a binary dir

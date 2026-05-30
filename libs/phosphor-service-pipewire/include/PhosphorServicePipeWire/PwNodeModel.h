@@ -93,7 +93,12 @@ public Q_SLOTS:
     /// snapshot — filtered through `mediaClasses` — and subscribes to
     /// `nodeAdded` / `nodeRemoved` so subsequent registry events keep
     /// the model live. Idempotent: passing the current connection
-    /// pointer is a no-op (no signals fire, no rows churn). The
+    /// pointer is a no-op (no signals fire, no rows churn), with one
+    /// exception — when the previously-attached connection was destroyed
+    /// externally (e.g. the caller deleted it without first calling
+    /// `setConnection(nullptr)`), the internal `QPointer` clears and a
+    /// subsequent `setConnection(nullptr)` triggers a one-shot
+    /// `beginResetModel` to flush the now-dangling row caches. The
     /// `connectionChanged` notification is emitted AFTER the rebuild
     /// completes so any QML binding awakened by the signal observes a
     /// consistent state: `connection()` returns the new pointer AND

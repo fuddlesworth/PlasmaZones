@@ -61,8 +61,10 @@ bool isAudioMediaClass(const QString& mc);
 
 // Known list kinds. Used both for the pre-connect validation in main()
 // (so a typo'd kind fails fast) and inside cmdList() for the actual
-// filter. Kept in lock-step with kAudioMediaClasses via a runtime
-// mapping inside isKnownListKind's implementation.
+// filter. The kind → kAudioMediaClasses index mapping lives in cmdList()
+// (main.cpp), not here — isKnownListKind just validates the kind token.
+// When adding a new kind: extend BOTH the list literal in
+// isKnownListKind's body AND the switch in cmdList() in lock-step.
 bool isKnownListKind(const QString& kind);
 
 } // namespace PhosphorPipeWireCli

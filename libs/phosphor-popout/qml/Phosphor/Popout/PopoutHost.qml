@@ -274,7 +274,7 @@ Item {
             // restore, transport callback, telemetry) applies to the
             // click-outside path too.
             onClicked: root.dismiss()
-            Accessible.name: i18nc("@action accessibility", "Dismiss popout")
+            Accessible.name: i18nc("@action:button", "Dismiss popout")
         }
 
         Behavior on opacity {

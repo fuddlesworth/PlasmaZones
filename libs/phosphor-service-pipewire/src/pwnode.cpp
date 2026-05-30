@@ -185,15 +185,20 @@ void PwNode::applyProps(int channelCount, QList<qreal> volumes, bool muted)
     // values to zero so the cast never aliases as a huge positive
     // count: PipeWire shouldn't deliver negatives here, but a
     // defensive clamp is cheaper than tracking down a phantom
-    // multi-billion-channel node downstream.
+    // multi-billion-channel node downstream. The Q_ASSERT below
+    // catches the wiring-bug case in debug builds; the clamp keeps
+    // release builds well-behaved if the assertion ever evolves to
+    // accept negatives.
     const quint32 newChannelCount = channelCount < 0 ? 0u : static_cast<quint32>(channelCount);
     // Contract: caller (always pipewireconnection.cpp's onNodeParam path)
     // derives both `channelCount` and `volumes` from the SAME pod
     // traversal, so size mismatch here implies a wiring bug on the
     // producer side. A QML binding that does `Repeater { model:
     // node.channelCount }` and indexes `node.volumes[i]` would OOB on
-    // mismatch — make the violation loud in debug.
-    Q_ASSERT(volumes.size() == channelCount || (channelCount == 0 && volumes.isEmpty()));
+    // mismatch — make the violation loud in debug. Compare against the
+    // post-clamp value so the contract reads as "volumes.size() matches
+    // the published channelCount", which is what consumers observe.
+    Q_ASSERT(static_cast<quint32>(volumes.size()) == newChannelCount);
     if (d->channelCount != newChannelCount) {
         d->channelCount = newChannelCount;
         moved = true;
