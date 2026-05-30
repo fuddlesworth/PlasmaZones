@@ -14,10 +14,11 @@
  * The library is non-visual; QML consumers bind to the host singleton's
  * connection state and the (forthcoming) sink / source / stream models
  * and render however they like. The PipeWire main loop runs on a
- * dedicated `QThread` inside the same `QGuiApplication` that hosts the
- * shell (U3 resolution: single-process); all cross-thread communication
- * routes through Qt's queued-signal infrastructure so consumers see a
- * pure GUI-thread API.
+ * dedicated `QThread` inside the hosting `QCoreApplication` (a
+ * `QGuiApplication` works equally well — the library only requires
+ * `QCoreApplication` since it is non-visual) (U3 resolution:
+ * single-process); all cross-thread communication routes through Qt's
+ * queued-signal infrastructure so consumers see a pure GUI-thread API.
  */
 
 #include <PhosphorServicePipeWire/PipeWireConnection.h>

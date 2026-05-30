@@ -70,14 +70,15 @@ public:
     [[nodiscard]] QList<qreal> volumes() const;
     [[nodiscard]] bool muted() const;
     /// Full property hash (`node.name`, `application.name`,
-    /// `media.role`, ...). Read-only; QML rarely needs more than the
-    /// named accessors above but the hash is here for advanced
-    /// bindings.
+    /// `media.role`, ...). C++ callers only; QML should rely on the
+    /// named accessors above. Not exposed to QML — no Q_PROPERTY, no
+    /// Q_INVOKABLE, and `QHash<QString, QString>` is not a registered
+    /// metatype for QML bindings.
     [[nodiscard]] QHash<QString, QString> properties() const;
 
     /// Typed accessor for the owning connection. PwNode's write slots
-    /// (`setVolume`, `setMuted`) route through it so the loop-thread
-    /// dispatch is encapsulated.
+    /// (`setVolume`, `setVolumes`, `setMuted`) route through it so the
+    /// loop-thread dispatch is encapsulated.
     [[nodiscard]] PipeWireConnection* connection() const;
 
     /// @internal Called by `PipeWireConnection`'s loop→GUI thread bounce

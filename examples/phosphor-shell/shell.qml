@@ -20,8 +20,16 @@ Item {
     // call site, so any future maintenance that makes toggle() depend
     // on `this` (instead of lexically-captured ids) would silently
     // break. The closure binds the receiver explicitly.
+    //
+    // Null-guard panelPopupHost: a hot-reload race or a partial
+    // sibling-component teardown could leave the id unresolved at the
+    // moment the closure fires (the host might already be torn down,
+    // or a consumer could invoke togglePopup before the panel is
+    // instantiated on a future restructure). Silent no-op beats a
+    // TypeError that breaks every subsequent panel interaction.
     Component.onCompleted: shellRouter.togglePopup = function (kind) {
-        panelPopupHost.toggle(kind);
+        if (panelPopupHost)
+            panelPopupHost.toggle(kind);
     }
 
     // Single source of truth for battery presence + a finite percentage.
@@ -104,6 +112,13 @@ Item {
     // PanelPopupHost's own (initially undefined) `topPanel` required
     // property instead of the outer `id: topPanel`. Using a root alias
     // forces resolution against `root`, avoiding the shadowing hazard.
+    //
+    // Forward reference: the `topPanel` id resolves to the TopPanel
+    // block declared further down in this file. QML aliases are
+    // resolved at component-completion (after the whole tree is
+    // parsed), so a forward declaration like this is well-defined.
+    // Kept here next to `shellState`/`shellRouter` so the public
+    // surface a child component reads from `root.` stays grouped.
     readonly property alias topPanelRef: topPanel
 
     SystemClock {
@@ -282,6 +297,14 @@ Item {
         // returns invalid, which it does not for any valid system time.
         // Kept as defensive belt-and-braces against future SystemClock
         // refactors that could defer the initial update().
+        //
+        // Width caveat: Qt.locale().dateFormat(Locale.ShortFormat) is
+        // locale-driven and includes the year on most locales (e.g.
+        // "M/d/yy", "dd/MM/yyyy"). The panel's clock cell must
+        // accommodate the longest plausible string the user's locale
+        // produces; do NOT assume a fixed width here. If a no-year
+        // format is ever required, switch to an explicit format string
+        // rather than parsing the locale's pattern.
         clockText: clock.hours >= 0 ? String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0") + " · " + Qt.formatDate(clock.date, Qt.locale().dateFormat(Locale.ShortFormat)) : ""
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent

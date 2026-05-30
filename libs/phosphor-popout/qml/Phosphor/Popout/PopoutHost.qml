@@ -101,13 +101,15 @@ Item {
         open = false;
     }
 
-    // Anchoring is the transport's responsibility. The transport sets
-    // x, y, width, and height on this Item. By default the host fills
-    // its parent container, which is convenient for full-screen modal
-    // popouts. Qt treats `anchors.fill: parent` as a no-op while the
-    // Item has no parent yet, so a top-level instantiation with no
-    // parent assignment is safe without explicit null-guarding.
-    anchors.fill: parent
+    // Sizing is the transport's responsibility — the transport sets x,
+    // y, width, and height on this Item. The root Item deliberately
+    // does NOT anchors.fill its parent: an earlier revision did, which
+    // conflicted with the documented contract above (the transport,
+    // not the host, drives geometry) and produced double-bound
+    // width/height when the transport assigned them after construction.
+    // A host instantiated without an x/y/width/height assignment
+    // collapses to 0x0; that is the transport's responsibility to
+    // notice, not a host-side default.
     // Open going true resets the dismissed-fired latch AND records
     // that this host has begun a lifecycle. A re-used host can fire
     // dismissed again on the next close. A host destroyed without
@@ -123,6 +125,15 @@ Item {
             dismissLatch.dismissedFired = false;
             dismissLatch.everOpened = true;
         } else {
+            // Known limitation: QTimer samples interval at start(), so
+            // a Motion-token retune (theme switch mid-close) updates
+            // dismissEmitter.interval via the binding below but does
+            // NOT re-arm the already-running timer. The in-flight
+            // close will complete on the pre-switch duration; the
+            // next open-then-close cycle picks up the new tokens.
+            // Acceptable because mid-close theme swaps are rare and
+            // the visible Behavior animations interpolate independently
+            // — only the dismissed-signal emission timing is affected.
             dismissEmitter.start();
         }
     }
@@ -171,7 +182,15 @@ Item {
     // exact re-entrance the warning above forbids.
     Component.onDestruction: {
         if (dismissLatch.everOpened && !dismissLatch.dismissedFired) {
-            dismissEmitter.stop();
+            // Null-guard dismissEmitter: QML's child destruction order
+            // is not guaranteed (the Timer below might already have
+            // been torn down before this handler runs on the host),
+            // and reading a child that has been destructed yields
+            // null. Same null-read concern applies to dismissLatch
+            // earlier in the condition, but the guard here is on the
+            // method call that would crash if the child were gone.
+            if (dismissEmitter)
+                dismissEmitter.stop();
             dismissLatch.dismissedFired = true;
             root.dismissed();
         }
@@ -278,6 +297,10 @@ Item {
         // 1. Eagerly preloading the Loader (active: contentComponent
         // !== null) would close the window but at the cost of building
         // a delegate the host may never display.
+        //
+        // The `??` (nullish coalescing) operator requires Qt 6.4+ in
+        // QML's JS engine. The project pins QT_MIN_VERSION 6.6.0 (top-
+        // level CMakeLists.txt), so the operator is safe to use here.
         readonly property Item _visibleDelegate: root.contentItem ?? contentLoader.item
 
         function rebindContentItem() {
