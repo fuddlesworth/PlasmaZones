@@ -215,7 +215,6 @@ qt_add_qml_module(plasmazones-settings
         qml/TilingAppearancePage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml
-        qml/ExclusionsPage.qml
         qml/EditorPage.qml
         qml/LayoutsPage.qml
         qml/SnappingQuickShortcutsPage.qml
@@ -265,7 +264,6 @@ qt_add_qml_module(plasmazones-settings
         qml/LayoutThumbnail.qml
         qml/PerScreenOverrideHelper.qml
         qml/MonitorSelectorSection.qml
-        qml/ExclusionListCard.qml
         qml/LayoutGridDelegate.qml
         qml/LayoutToolbar.qml
         qml/LayoutFilterBar.qml

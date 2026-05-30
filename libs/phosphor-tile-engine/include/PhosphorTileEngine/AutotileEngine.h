@@ -149,10 +149,16 @@ public:
      * numbers.
      *
      * Callers that need the raw state map should add a purpose-built
-     * query method rather than iterating private state. The intent here
-     * is that external consumers can't iterate or mutate PhosphorTiles::TilingState
-     * objects through any public accessor — that's why screenStates()
-     * is private.
+     * query method rather than iterating private state. The
+     * `m_screenStates` map itself stays private (no public map
+     * accessor exists); per-screen lookup is available through
+     * `tilingStateForScreen(screenId)`
+     * which returns a (non-const) `PhosphorTiles::TilingState*` for
+     * the read/mutate sites that explicitly key off one screen.
+     * That accessor is public, so the restraint on mutating through it is
+     * convention only (not enforced by access level or `friend`): the
+     * intended writers are the engine's own call paths and the
+     * per-screen config resolver, while tests use it for read-only access.
      */
     QSet<int> desktopsWithActiveState() const override;
 
@@ -476,14 +482,15 @@ public:
      * Mirror of PhosphorPlacement::WindowTrackingService::pruneExcludedPendingRestores
      * for the autotile side. Patterns are compared via
      * PhosphorIdentity::WindowId::appIdMatches. The snap engine uses the same
-     * predicate when it gates runtime restores against the user's exclusion lists,
-     * so the disk-pruning verdict here matches what the runtime would already do.
+     * predicate when it gates runtime restores against the user's unified
+     * WindowRule store's Exclude rules, so the disk-pruning verdict here
+     * matches what the runtime would already do.
      *
      * The existing ShouldPersistRestorePredicate filters entries by disabled
      * context across screen, desktop, and activity but is blind to the
-     * exclusion-list axis. Entries authored before the user excluded an app
-     * remain on disk and bloat AutotilePendingRestores until this method
-     * runs at the next save.
+     * Exclude-rule axis. Entries authored before the user added an
+     * Application-subject Exclude rule remain on disk and bloat
+     * AutotilePendingRestores until this method runs at the next save.
      *
      * The engine is settings-agnostic by design to keep the LGPL boundary
      * clean. It takes plain patterns and does NOT mark dirty. The WTA caller
@@ -491,10 +498,11 @@ public:
      * the return value is greater than zero, so the next debounced save
      * persists the prune.
      *
-     * @param exclusionPatterns combined list of excludedApplications and
-     *                          excludedWindowClasses entries. Empty
-     *                          patterns are skipped. An empty list is a
-     *                          no-op.
+     * @param exclusionPatterns AppId patterns derived from `Exclude`-action
+     *                          WindowRules via
+     *                          `PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom`.
+     *                          Empty patterns are skipped. An empty list
+     *                          is a no-op.
      * @return number of appId entries fully removed.
      */
     int pruneExcludedPendingRestores(const QStringList& exclusionPatterns);

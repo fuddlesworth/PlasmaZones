@@ -12,12 +12,14 @@
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 #include <PhosphorProtocol/WindowTypes.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
 #include <QString>
 #include <QStringList>
 #include <functional>
+#include <optional>
 #include <memory>
 
 namespace PhosphorZones {
@@ -25,10 +27,12 @@ class IZoneDetector;
 class LayoutRegistry;
 }
 
-namespace PhosphorWindowRule {
-class RuleEvaluator;
-class WindowRuleSet;
-}
+// PhosphorWindowRule::RuleEvaluator is included as a member type of
+// std::optional below (needs a complete type at declaration); WindowRuleSet
+// is referenced only by pointer / reference, so a forward declaration would
+// suffice — but including RuleEvaluator.h pulls in WindowRuleSet.h
+// transitively anyway, so leave the explicit forward decls out and let
+// RuleEvaluator.h provide both.
 
 namespace PhosphorSnapEngine {
 
@@ -62,11 +66,16 @@ public:
                         QObject* parent = nullptr);
     ~SnapEngine() override;
 
-    /// Current virtual desktop (1-based; 0 when no virtual-desktop manager is
-    /// wired) and activity, forwarded from the injected managers. Exposed so
-    /// daemon adaptors that gate on disabled context (see isContextDisabled)
-    /// can read the same values the engine's own restore logic uses, without
-    /// each adaptor wiring its own managers.
+    /// Current virtual desktop (1-based; 0 when no virtual-desktop manager
+    /// is wired) and activity, forwarded from the injected managers.
+    /// Public for symmetry with AutotileEngine's analogous accessors and
+    /// to keep the engine's "current context" surface coherent — the
+    /// daemon uses `Daemon::currentDesktop()` / `Daemon::currentActivity()`
+    /// directly rather than going through the engine. The only current
+    /// in-tree caller of these two is `lifecycle.cpp` (snap-engine-
+    /// internal restore logic); kept public so a future adaptor that
+    /// wants the engine's own view (e.g. for a per-engine OSD) doesn't
+    /// have to wire its own VDM.
     int currentVirtualDesktop() const;
     QString currentActivity() const;
 
@@ -489,6 +498,50 @@ public:
         return m_lastActiveScreenId;
     }
 
+    /// Wire the daemon's filtered Exclude rule set into the snap engine.
+    /// See the comment block on the private members and the impl in
+    /// navigation_actions.cpp for the lifetime contract — the pointer is
+    /// borrowed and the cached evaluator drops on a pointer change.
+    ///
+    /// The borrowed rule set MUST outlive every subsequent
+    /// `isAppIdExcluded` call. The Daemon currently guarantees this
+    /// through member-declaration order (`m_excludeRuleSet` is declared
+    /// before `m_snapEngine` so reverse-order destruction tears the
+    /// engine down first), AND additionally clears the borrow
+    /// symmetrically by calling `setExcludeRuleSet(nullptr)` in
+    /// `Daemon::stop()` before `m_snapEngine.reset()` — that explicit
+    /// teardown survives a future reordering or ownership move that
+    /// would otherwise silently introduce a dangling pointer.
+    ///
+    /// Declared OUTSIDE the Q_SIGNALS section below: MOC treats every
+    /// declaration in `Q_SIGNALS:` as a signal and generates a stub body
+    /// for it, so placing this setter inside that section makes the
+    /// translation unit redefine the function and the link fails.
+    void setExcludeRuleSet(const PhosphorWindowRule::WindowRuleSet* ruleSet);
+
+    /// True if @p appId matches an enabled `Exclude`-action WindowRule
+    /// whose match leaf targets the `AppId` field. Public so the unit-
+    /// test layer can directly verify the wiring (nullptr borrow,
+    /// empty-set short-circuit, evaluator rebind on pointer change,
+    /// revision-bump invalidation on in-place setRules edits) without
+    /// staging the heavy navigation fixture every public navigation
+    /// method needs. Pure const observer — no side effects beyond the
+    /// `mutable` evaluator cache.
+    ///
+    /// **Limitation:** the engine builds a `WindowQuery` with only
+    /// `query.appId` populated and feeds it to the bound `RuleEvaluator`.
+    /// A user-authored Exclude rule whose match leaf targets a non-
+    /// `AppId` field (`WindowClass Contains "steam"`, `Title Regex …`,
+    /// a composite match) silently evaluates to false here because
+    /// those leaves never resolve against a query that only knows the
+    /// appId. Migration-produced rules are all `AppId AppIdMatches
+    /// <pattern>` so legacy v3 behaviour is preserved exactly; the gap
+    /// only opens for hand-authored rules with broader match leaves.
+    /// A more thorough check would require the caller to pass the full
+    /// `WindowQuery` it can build from the WTS registry's per-window
+    /// attributes, instead of just the appId.
+    bool isAppIdExcluded(const QString& appId) const;
+
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
     // Signals (relayed via SnapAdaptor -> WTA -> D-Bus -> effect)
@@ -579,42 +632,38 @@ private:
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
     /// Check whether the window is excluded from the given navigation
-    /// action by the user's excluded-apps / excluded-classes rules.
-    /// Emits navigationFeedback(false, action, "excluded", ...) and returns
-    /// true when excluded so callers can early-return. False otherwise.
+    /// action by a terminal `Exclude` action in the unified WindowRule
+    /// store. Emits navigationFeedback(false, action, "excluded", ...)
+    /// and returns true when excluded so callers can early-return. False
+    /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
-    /// True if @p appId matches any excluded-applications / excluded-window-
-    /// classes pattern. Resolution runs through the unified RuleEvaluator: the
-    /// two settings lists are converted to a daemon-flavour `Exclude` rule set
-    /// (`AppId AppIdMatches` leaves — the segment-aware reverse-DNS match) and
-    /// the @p appId is resolved against it. Returns false when settings are
-    /// unavailable or no pattern matches.
-    ///
-    /// The derived rule set and its evaluator are memoized: rebuilding the
-    /// WindowRuleSet and constructing a fresh RuleEvaluator on every call
-    /// (per window-open, per navigation keystroke) was wasteful. The cache is
-    /// rebuilt only when the excludedApplications / excludedWindowClasses
-    /// lists actually change — ISnapSettings exposes no change signal, so the
-    /// cache is keyed by the two lists' contents.
-    bool isAppIdExcluded(const QString& appId) const;
+    // `isAppIdExcluded` is declared in the public section above (so the
+    // unit tests can drive the wiring directly); full docstring + the
+    // AppId-only matching limitation live with that declaration.
 
-    /// Cached exclusion rule set + evaluator. Rebuilt by ensureExclusionCache()
-    /// only when the underlying settings lists differ from the cached keys.
-    /// The RuleEvaluator holds a reference to the WindowRuleSet, so the set is
-    /// heap-allocated (a stable address) and the evaluator is rebuilt in
-    /// lockstep with it. A non-null m_exclusionEvaluator IS the "cache valid"
-    /// signal — the rule set, evaluator and key fields are always set and
-    /// cleared together, so no separate validity flag is needed.
-    void ensureExclusionCache() const;
-    // These mutable members are daemon-main-thread-only — every access path
-    // (window-open, navigation keystrokes) runs on the daemon's main thread,
-    // so the cache is intentionally unsynchronised. Do not access from another
-    // thread without adding locking.
-    mutable std::unique_ptr<PhosphorWindowRule::WindowRuleSet> m_exclusionRuleSet;
-    mutable std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_exclusionEvaluator;
-    mutable QStringList m_exclusionCacheAppsKey;
-    mutable QStringList m_exclusionCacheClassesKey;
+    /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
+    /// in early-init paths (before the daemon wires the store) — the
+    /// `isAppIdExcluded` fast path short-circuits to false in that case.
+    ///
+    /// @note Daemon-main-thread-only. Every access path runs on the
+    /// daemon's main thread (rulesChanged signal delivery, navigation
+    /// slot dispatch, in-thread isAppIdExcluded calls). `setExcludeRuleSet`
+    /// writes the raw pointer non-atomically and the paired
+    /// `m_excludeEvaluator` mutates a lazy priority-order index that
+    /// must be externally serialised (see RuleEvaluator.h's thread-
+    /// safety note). Do not access from another thread without adding
+    /// locking.
+    const PhosphorWindowRule::WindowRuleSet* m_excludeRuleSet = nullptr;
+    /// Lazily constructed evaluator bound to @ref m_excludeRuleSet. Reset
+    /// in `setExcludeRuleSet` when the pointer changes; the evaluator's
+    /// internal prio-sort index and resolve cache key off the bound rule
+    /// set's revision counter, so an in-place rule edit through the store
+    /// invalidates the evaluator's per-revision state automatically — only
+    /// a different rule-set pointer needs the explicit reset.
+    ///
+    /// @note Same daemon-main-thread-only contract as @ref m_excludeRuleSet.
+    mutable std::optional<PhosphorWindowRule::RuleEvaluator> m_excludeEvaluator;
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;
@@ -624,9 +673,12 @@ private:
     QString m_lastActiveScreenId;
 
     // Auto-snap entry gate. Empty until the daemon wires it; while empty
-    // the engine treats every (screen, desktop) as active — preserving the
-    // historical default that unit tests rely on. See ShouldRestorePredicate
-    // doc above and discussion #461 item 7.
+    // the engine treats every screen as active — preserving the
+    // historical default that unit tests rely on. (The predicate's
+    // signature is `bool(const QString& screenId)` — the desktop and
+    // activity dimensions are resolved by the daemon-side closure at
+    // call time, not passed in here; see ShouldRestorePredicate doc
+    // above and discussion #461 item 7.)
     ShouldRestorePredicate m_shouldRestorePredicate{};
 };
 

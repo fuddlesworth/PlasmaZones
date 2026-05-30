@@ -592,20 +592,19 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     }
     const QString windowId = getWindowId(w);
     const QString screenId = getWindowScreenId(w);
-
-    // Autotile handler handles its own screens — only handle snap-mode here
-    if (m_autotileHandler->isAutotileScreen(screenId)) {
-        return;
-    }
-
     const bool minimized = w->isMinimized();
 
-    // window.minimize shader transition. We only fire on UN-minimize
-    // (forward 0→1, "appear"). The going-to-minimized direction is
-    // intentionally not a shader event on the kwin-effect path: KWin
-    // pulls the surface (collapses frame geometry to 0×0 / sets
-    // isMinimized=true) BEFORE this signal fires, and
-    // beginShaderTransition's collapsed-surface guard rejects the
+    // window.minimize shader transition fires for BOTH snap and autotile
+    // screens — the shader event is screen-mode-independent and the
+    // autotile handler's own minimised-change slot does not fire it
+    // (which would otherwise be asymmetric per-screen UX for the same
+    // user-configured "WindowMinimize" event).
+    //
+    // We only fire on UN-minimize (forward 0→1, "appear"). The
+    // going-to-minimized direction is intentionally not a shader event
+    // on the kwin-effect path: KWin pulls the surface (collapses frame
+    // geometry to 0×0 / sets isMinimized=true) BEFORE this signal fires,
+    // and beginShaderTransition's collapsed-surface guard rejects the
     // install — the FBO allocation aborts on a 0×0 redirect target.
     // A genuine "going away" minimise animation would need an
     // unredirect-time hook that captures the last live frame before
@@ -613,6 +612,12 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     if (!minimized) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
                                /*reverse=*/false);
+    }
+
+    // Snap-mode-only float bookkeeping below: the autotile handler runs
+    // its own snap-state / float-state machine for autotile screens.
+    if (m_autotileHandler->isAutotileScreen(screenId)) {
+        return;
     }
 
     if (minimized) {
@@ -668,11 +673,27 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
             continue;
         }
 
-        // Normalize X11 "resourceName resourceClass" to just resourceClass,
-        // matching the format used by getWindowId() for app rule matching.
-        int spaceIdx = windowClass.indexOf(QLatin1Char(' '));
-        if (spaceIdx > 0) {
-            windowClass = windowClass.mid(spaceIdx + 1);
+        // Hide the daemon's own overlay / editor windows from the rule picker —
+        // surfacing `plasmazonesd` or `plasmazones-editor` as an authoring
+        // target invites users to write rules against the very surfaces that
+        // implement the rule engine. The settings app windowClass falls
+        // outside `isOwnOverlayClass` so it stays pickable.
+        if (isOwnOverlayClass(windowClass)) {
+            continue;
+        }
+
+        // Normalize X11 "resourceName resourceClass" to just resourceClass
+        // (lowercased), matching the canonical form `normalizeAppId` produces
+        // for every other appId entry point — getWindowId, rule evaluators,
+        // pending-restore prune patterns. An inline first-space split would
+        // drift in two ways: (1) a three-token resource string like
+        // "foo bar baz" yields "bar baz" here but "baz" through
+        // normalizeAppId; (2) case is preserved here but lowercased
+        // downstream — a rule the user authors against the picker's
+        // case-preserved output with `Equals` would silently never match.
+        windowClass = ::PhosphorIdentity::WindowId::normalizeAppId(QString(), windowClass);
+        if (windowClass.isEmpty()) {
+            continue;
         }
 
         // Deduplicate by windowClass (first seen = topmost due to reverse iteration)

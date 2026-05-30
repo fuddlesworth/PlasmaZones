@@ -8,6 +8,7 @@
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
+#include <PhosphorWindowRule/ExclusionRules.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
@@ -61,7 +62,7 @@ void Daemon::initializeAutotile()
                     // change is irrelevant in that case.
                     if (m_running && m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
                         && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
-                        auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
+                        auto* algo = m_algorithmRegistry->algorithm(algorithmId);
                         QString displayName = algo ? algo->name() : algorithmId;
                         QString screenId;
                         if (m_autotileEngine) {
@@ -706,14 +707,18 @@ void Daemon::finalizeStartup()
         m_autotileEngine->loadState();
     }
 
-    // Now that AutotileEngine::loadState has deserialized m_pendingAutotileRestores,
-    // re-run the exclusion-list prune so any persisted entries for apps the user has
-    // since excluded are dropped here too. WTA's constructor already pruned the snap
-    // side. This call also touches the autotile queues that didn't exist at
-    // constructor time. The same prune is invoked live on excludedApplicationsChanged
-    // or excludedWindowClassesChanged via the WTA constructor's signal hookups.
+    // Now that AutotileEngine::loadState has deserialized
+    // m_pendingAutotileRestores, re-run the exclusion-rule prune so any
+    // persisted entries for apps that an Exclude rule covers are dropped
+    // here too. The snap side already got pruned by the init-prologue
+    // priming call at daemon.cpp's setExcludeRuleSet/setRules/prune
+    // sequence (run synchronously before the rulesChanged subscription
+    // wires); this call also touches the autotile queues that didn't
+    // exist at that earlier point. Patterns derive from the unified
+    // WindowRule store via PhosphorWindowRule::ExclusionRules.
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->pruneExcludedPendingRestoresFromSettings();
+        m_windowTrackingAdaptor->pruneExcludedPendingRestores(
+            PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
     }
 
     // Signal that daemon is fully initialized and ready for queries

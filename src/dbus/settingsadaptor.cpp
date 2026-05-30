@@ -474,9 +474,9 @@ void SettingsAdaptor::initializeRegistry()
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
 
-    // Exclusions
-    REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)
-    REGISTER_STRINGLIST_SETTING("excludedWindowClasses", excludedWindowClasses, setExcludedWindowClasses)
+    // Window filtering — the per-app / per-class exclusion lists
+    // (excludedApplications, excludedWindowClasses) retired in v4 along
+    // with their settings page; only the three global knobs below remain.
     REGISTER_BOOL_SETTING("excludeTransientWindows", excludeTransientWindows, setExcludeTransientWindows)
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
@@ -490,10 +490,10 @@ void SettingsAdaptor::initializeRegistry()
                           setAnimationExcludeNotificationsAndOsd)
     REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
     REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
-    REGISTER_STRINGLIST_SETTING("animationExcludedApplications", animationExcludedApplications,
-                                setAnimationExcludedApplications)
-    REGISTER_STRINGLIST_SETTING("animationExcludedWindowClasses", animationExcludedWindowClasses,
-                                setAnimationExcludedWindowClasses)
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // retired in v4 — folded into ExcludeAnimations WindowRules; the
+    // effect derives its animation exclusion rule set from the unified
+    // store via the WindowRules.rulesChanged subscription instead.
 
     // PhosphorZones::Zone selector settings
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)

@@ -403,6 +403,25 @@ void ActionRegistry::registerBuiltins()
                    P{.key = QString(ActionParam::Curve), .kind = QStringLiteral("curveEditor")}},
     });
 
+    // ── anim-exclude slot — terminal within the animation pipeline ──
+    // A rule with `ExcludeAnimations` suppresses every animation override
+    // for matched windows, regardless of event. Single event-agnostic
+    // slot (vs. the per-event AnimShader/AnimTiming/AnimCurve slots) so
+    // ONE rule covers the window's full animation surface. Terminal so
+    // an ExcludeAnimations action on the same rule as an
+    // OverrideAnimation* action wins. Migrated from the legacy
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // lists by the v3→v4 chain; user-authored via Window Rules going
+    // forward.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ExcludeAnimations),
+        .slotFor = constantSlot(ActionSlot::AnimExclude),
+        .validate = &acceptAny,
+        .terminal = true,
+        .allowedKeys = {},
+        .domain = ActionDomain::Window,
+    });
+
     // ── opacity slot ──
     // The wire value is a 0.0–1.0 fraction; the editor renders a 0–100
     // percentage, so the stored value is `display * scale`.

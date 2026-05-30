@@ -3,6 +3,7 @@
 
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
+#include "window_query.h"
 
 #include <effect/effecthandler.h>
 #include <opengl/glshader.h>
@@ -280,7 +281,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
             const auto opacity =
-                resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w));
+                resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w), getWindowId(w));
             m_shaderManager.cacheFrameOpacity(w, opacity);
             if (opacity && *opacity < 1.0) {
                 data.setTranslucent();
@@ -391,7 +392,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (m_shaderManager.frameOpacityCached(w)) {
                 opacity = m_shaderManager.cachedFrameOpacity(w);
             } else {
-                opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), winClass, getWindowId(w));
+                opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w),
+                                               getWindowId(w));
                 m_shaderManager.cacheFrameOpacity(w, opacity);
             }
             if (opacity) {
@@ -868,11 +870,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // `endShaderTransition` on the successor and kill it before
             // it ever paints. Mirrors the timer-driven teardown pattern
             // in `tryBeginShaderForEvent`'s post-install QTimer::singleShot.
-            // Pointer `st` was obtained earlier in this function and no
-            // intervening code mutates `m_shaderManager`'s transition map,
-            // so the read is safe. The assertion documents that contract
-            // for future edits.
-            Q_ASSERT(st != nullptr);
+            // Pointer `st` is provably non-null here: the enclosing
+            // `if (st && st->cached && st->cached->shader)` guard upstream
+            // already gated this branch on `st`, so the read is safe in
+            // both debug and release builds without a redundant Q_ASSERT
+            // (which only documented the contract in debug).
             const quint64 expiringGeneration = st->generation;
             QMetaObject::invokeMethod(
                 this,

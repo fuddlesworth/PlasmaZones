@@ -52,7 +52,7 @@ enum class ActionDomain : int {
  */
 struct PHOSPHORWINDOWRULE_EXPORT RuleAction
 {
-    QString type; ///< registered action type id (e.g. "setEngineMode")
+    QString type; ///< registered action type id (e.g. `ActionType::SetEngineMode`)
     /// Action-specific payload. NOTE: `"type"` is a **reserved param key** —
     /// `toJson()` writes `type` inline alongside `params`, so a `params`
     /// entry keyed `"type"` is clobbered on serialization (and stripped on
@@ -245,6 +245,15 @@ inline constexpr QLatin1StringView OverrideAnimationTiming{"overrideAnimationTim
 /// checks the curve slot first.
 inline constexpr QLatin1StringView OverrideAnimationCurve{"overrideAnimationCurve"};
 inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
+/// Disable every animation override on a matched window. The opposite of
+/// the OverrideAnimation* family — the effect's shouldAnimateWindow gate
+/// surfaces this as "no animation for this window, regardless of other
+/// rules". Distinct from the generic `Exclude` action (which marks the
+/// window unmanaged by snap/tile/etc); a user can have `Exclude` without
+/// `ExcludeAnimations` and vice versa. Migrated from the legacy
+/// animationExcludedApplications / animationExcludedWindowClasses
+/// settings lists by the v3→v4 chain.
+inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 
 /// True when @p type is one of the three OverrideAnimation* action wire
 /// strings — shader / timing / curve. The trio shares the same cascade
@@ -256,13 +265,18 @@ inline bool isAnimationOverrideAction(const QString& type)
     return type == OverrideAnimationShader || type == OverrideAnimationTiming || type == OverrideAnimationCurve;
 }
 
-/// True when @p type is one of the actions the KWin effect's window-rule
-/// evaluator consumes — the three OverrideAnimation* variants plus SetOpacity.
-/// The shader-transition manager loads rules carrying any of these so the
-/// effect side can resolve them per paint; rules without one of these actions
-/// never need to reach the effect-side evaluator. Keeping the predicate
-/// alongside `isAnimationOverrideAction` ensures adding a new effect-consumed
-/// action type updates the filter list in one place.
+/// True when @p type is one of the actions the KWin effect's **shader
+/// manager** loads into its OverrideAnimation rule set — the three
+/// OverrideAnimation* variants plus SetOpacity. ExcludeAnimations is
+/// DELIBERATELY NOT in this set even though the effect consumes it: it
+/// flows into the effect's separate `m_animationExclusionRuleSet`
+/// (filtered by `ExclusionRules::excludeAnimationsRulesFrom`), and
+/// admitting it into the shader manager would surface it through the
+/// rule-override `hasAnyMatch` path in `shouldAnimateWindow` and INVERT
+/// the user's exclude intent into an opt-in. The two slices are
+/// disjoint by action type by construction; do NOT re-admit
+/// ExcludeAnimations here without restructuring the rule-override
+/// path's `hasAnyMatch` query to filter on action type.
 inline bool isEffectRuleAction(const QString& type)
 {
     return isAnimationOverrideAction(type) || type == SetOpacity;
@@ -310,6 +324,20 @@ inline constexpr QLatin1StringView Opacity{"opacity"};
 inline constexpr QLatin1StringView AnimShaderPrefix{"anim-shader:"};
 inline constexpr QLatin1StringView AnimTimingPrefix{"anim-timing:"};
 inline constexpr QLatin1StringView AnimCurvePrefix{"anim-curve:"};
+/// Window-scoped, event-agnostic. Declared for ActionDescriptor
+/// completeness — ExcludeAnimations carries `.slotFor =
+/// constantSlot(ActionSlot::AnimExclude)`. NOT actually filled at
+/// resolve time: ExcludeAnimations is `.terminal = true`, so
+/// `RuleEvaluator::resolve` calls `markExcluded()` and breaks
+/// BEFORE `fillSlot()` runs. The effect's `shouldAnimateWindow`
+/// gates on `ResolvedActions::isExcluded()` (the dedicated
+/// `m_animationExclusionEvaluator`), never on `hasSlot("anim-exclude")`
+/// — so no consumer queries this slot id at runtime. Kept to satisfy
+/// the action-registry invariant that every non-terminal slot id is
+/// referenced; a future change that makes ExcludeAnimations non-
+/// terminal (e.g. composing with override actions) would start
+/// filling the slot, so the id stays load-bearing for that path.
+inline constexpr QLatin1StringView AnimExclude{"anim-exclude"};
 } // namespace ActionSlot
 
 } // namespace PhosphorWindowRule

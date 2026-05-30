@@ -187,19 +187,9 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // Load persisted window tracking state from previous session
     loadState();
 
-    // Prune any pending-restore queues for appIds that are now on the user's
-    // exclusion list. Snap-engine's resolveWindowRestore already refuses to
-    // honor them at runtime, but they live on disk until pruned and spam one
-    // "pending snap:" log line per entry at every startup. One-shot at boot
-    // catches entries authored before the user added the class to exclusions.
-    // The signal hookups cover live additions for the running session. The
-    // autotile-side prune happens again from the daemon's finalizeStartup
-    // after AutotileEngine::loadState populates m_pendingAutotileRestores.
-    pruneExcludedPendingRestoresFromSettings();
-    connect(m_settings, &ISettings::excludedApplicationsChanged, this,
-            &WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings);
-    connect(m_settings, &ISettings::excludedWindowClassesChanged, this,
-            &WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings);
+    // Exclude-pattern pruning is now driven from `Daemon::init` (and again
+    // from `Daemon::finalizeStartup` once AutotileEngine::loadState has
+    // populated the autotile queue) — see WTA::pruneExcludedPendingRestores.
 
     // If we have pending restores but missed activeLayoutChanged (layout was set before we
     // connected), set the flag so tryEmitPendingRestoresAvailable will emit when panel
@@ -215,7 +205,21 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
 // that originally required this has moved to SnapEngine (Phase 5E), but
 // the destructor is kept out-of-line to avoid churning every translation
 // unit that includes this header.
-WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
+//
+// Symmetric clear of the should-track predicate to mirror the
+// `setShouldRestorePredicate({})` / `setShouldPersistRestorePredicate({})`
+// calls in enginewiring.cpp's `setEngines()` (predicate handoff path).
+// `m_service` is parented to WTA and dies with it, so the captured
+// `this` never outlives the predicate today — the clear keeps the
+// "every late-bound predicate is cleared symmetrically before its
+// captured `this` becomes unsafe" contract defensible if a future
+// refactor moves service ownership or re-parents the m_service member.
+WindowTrackingAdaptor::~WindowTrackingAdaptor()
+{
+    if (m_service) {
+        m_service->setShouldTrackPredicate({});
+    }
+}
 
 PhosphorSnapEngine::SnapEngine* WindowTrackingAdaptor::snapEngine() const
 {
@@ -259,13 +263,8 @@ void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJson
     m_deserializePendingRestoresFn = std::move(deserializeFn);
 }
 
-void WindowTrackingAdaptor::pruneExcludedPendingRestoresFromSettings()
+void WindowTrackingAdaptor::pruneExcludedPendingRestores(const QStringList& patterns)
 {
-    if (!m_settings) {
-        return;
-    }
-    QStringList patterns = m_settings->excludedApplications();
-    patterns += m_settings->excludedWindowClasses();
     if (patterns.isEmpty()) {
         return;
     }

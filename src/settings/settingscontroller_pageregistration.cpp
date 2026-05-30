@@ -69,8 +69,11 @@ void SettingsController::buildApplicationController()
 
     // Top-level entries — matches the legacy _mainItems in Main.qml.
     // Divider placements mirror the legacy `hasDividerAfter: true` flags
-    // on overview/display/tiling/rules so the rail's visual rhythm is
-    // preserved across the migration.
+    // on overview/display/tiling/window-rules so the rail's visual
+    // rhythm is preserved across the migration. (The legacy parent
+    // virtual "rules" was retired when its only child was promoted to
+    // the top-level "window-rules" entry; the divider semantics moved
+    // with the promotion.)
     regVirtual(QStringLiteral("overview"), QString(), PzI18n::tr("Overview"), QStringLiteral("MonitorStatePage.qml"),
                QStringLiteral("monitor"), /*collapsible=*/false, /*divider=*/true);
     regVirtual(QStringLiteral("display"), QString(), PzI18n::tr("Display"), QString(),
@@ -79,8 +82,8 @@ void SettingsController::buildApplicationController()
                QStringLiteral("view-split-left-right"));
     regVirtual(QStringLiteral("tiling"), QString(), PzI18n::tr("Tiling"), QString(), QStringLiteral("window-duplicate"),
                /*collapsible=*/false, /*divider=*/true);
-    // FIXME(audit): m_animationsPage carries PageController id "animations"
-    // (see AnimationsPageController ctor — animationspagecontroller.cpp:159)
+    // DESIGN-NOTE: m_animationsPage carries PageController id "animations"
+    // (see the AnimationsPageController ctor in animationspagecontroller.cpp)
     // which is ALSO the navigation-parent id we redirect to
     // "animations-general" via parentPageRedirects(). The round-trip works
     // today because setActivePage resolves the parent before storing
@@ -91,8 +94,17 @@ void SettingsController::buildApplicationController()
     // rename the controller id to something like "animations-staging" so
     // the two surfaces are independent.
     regPage(m_animationsPage, QString(), PzI18n::tr("Animations"), QString(), QStringLiteral("media-playback-start"));
-    regVirtual(QStringLiteral("rules"), QString(), PzI18n::tr("Rules"), QString(), QStringLiteral("view-list-details"),
-               /*collapsible=*/true, /*divider=*/true);
+    // Window Rules sits at the top level — it used to live under a
+    // collapsible "Rules" category alongside Exclusions, but after the v4
+    // fold there is only one rule surface left, so the parent category
+    // would add navigation without organising anything. Promoting it
+    // gets the page one click closer too. Divider after it closes the
+    // feature-configuration block (Display / Snapping / Tiling /
+    // Animations / Window Rules) and separates it from the tools-and-
+    // meta block below (Editor / General / About) so the rail's visual
+    // rhythm has a clear seam where the per-feature pages end.
+    regPage(m_windowRulesPage, QString(), PzI18n::tr("Window Rules"), QStringLiteral("WindowRulesPage.qml"),
+            QStringLiteral("view-list-details"), /*collapsible=*/false, /*divider=*/true);
     regPage(m_editorPage, QString(), PzI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
             QStringLiteral("document-edit"));
     regPage(m_generalPage, QString(), PzI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
@@ -105,12 +117,6 @@ void SettingsController::buildApplicationController()
                QStringLiteral("VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"));
     regVirtual(QStringLiteral("layouts"), QStringLiteral("display"), PzI18n::tr("Layouts"),
                QStringLiteral("LayoutsPage.qml"), QStringLiteral("view-grid"));
-
-    // Rules children
-    regPage(m_windowRulesPage, QStringLiteral("rules"), PzI18n::tr("Window Rules"),
-            QStringLiteral("WindowRulesPage.qml"), QStringLiteral("view-list-details"));
-    regVirtual(QStringLiteral("exclusions"), QStringLiteral("rules"), PzI18n::tr("Exclusions"),
-               QStringLiteral("ExclusionsPage.qml"), QStringLiteral("dialog-cancel"));
 
     // Snapping children — the *-cat entries mirror the legacy collapsible
     // category headers (Visual / Behavior / Configuration). They have no
@@ -199,18 +205,32 @@ void SettingsController::buildApplicationController()
     // are guarded against re-entrancy by comparing the incoming value to the
     // already-stored one before propagating.
     m_app->setCurrentPageId(m_activePage);
+    // Context object for both connections below is `m_app.get()`, so Qt
+    // auto-disconnects them when `m_app` is destroyed — no manual
+    // null-guard on `m_app` inside the lambdas is needed.
     connect(this, &SettingsController::activePageChanged, m_app.get(), [this]() {
-        if (m_app && m_app->currentPageId() != m_activePage) {
+        if (m_app->currentPageId() != m_activePage) {
             m_app->setCurrentPageId(m_activePage);
         }
     });
     connect(m_app.get(), &PhosphorSettingsUi::ApplicationController::currentPageIdChanged, this, [this]() {
-        if (!m_app) {
+        const QString id = m_app->currentPageId();
+        if (id.isEmpty() || id == m_activePage) {
             return;
         }
-        const QString id = m_app->currentPageId();
-        if (!id.isEmpty() && id != m_activePage) {
-            setActivePage(id);
+        const QString previousActive = m_activePage;
+        setActivePage(id);
+        // setActivePage rejects unknown ids (e.g. a stale CLI
+        // --page=exclusions invocation after the page was folded
+        // out) with a warning and returns early — m_activePage
+        // stays at previousActive. The framework's m_app side has
+        // ALREADY accepted the invalid id from its own setter, so
+        // without a snap-back the two would diverge silently
+        // (m_app->currentPageId() == "exclusions" while
+        // m_activePage == "general"). Restore the authoritative
+        // controller-side id whenever validation failed.
+        if (m_activePage == previousActive && id != previousActive) {
+            m_app->setCurrentPageId(m_activePage);
         }
     });
 }
@@ -291,7 +311,9 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
         {QStringLiteral("animations-surfaces"), QStringLiteral("animations-windows")},
         {QStringLiteral("animations-library"), QStringLiteral("animations-presets")},
-        {QStringLiteral("rules"), QStringLiteral("window-rules")},
+        // The "rules" parent virtual retired when Window Rules promoted
+        // to a top-level entry; no redirect needed because there is no
+        // longer a parent id to land on.
         // The *-cat virtual headers (registered as collapsible category
         // entries in buildApplicationController above) are real entries
         // in the framework PageRegistry — without an explicit redirect,
@@ -346,9 +368,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
     // Mid-level *-cat collapsible category headers under the top-level
     // snapping / tiling parents. Sidebar.qml renders these as collapsible
-    // section headers; when COLLAPSED the trailing-row delegate at
-    // Main.qml:836-840 calls isPageDirty(<*-cat>) to decide whether to
-    // light the badge. Without these entries that lookup would always
+    // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
+    // Main.qml calls isPageDirty(<*-cat>) to decide whether to light the
+    // badge. Without these entries that lookup would always
     // return false even when a leaf inside the collapsed section is
     // dirty (mirrors the snapping/tiling parent entries above, just one
     // level deeper). Keep in sync with the regVirtual *-cat registrations
@@ -395,15 +417,21 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // child page is dirty. Mirrors the registry topology in
         // buildApplicationController() above.
         {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
-        {QStringLiteral("rules"), {QStringLiteral("window-rules"), QStringLiteral("exclusions")}},
+        // No "rules" entry — Window Rules is a top-level leaf so its
+        // dirty state propagates without a parent-bucket intermediary.
     };
     return groups;
 }
 
 const QSet<QString>& SettingsController::validPageNames()
 {
-    // Keep in sync with _pageComponents in Main.qml — every entry here must
-    // have a corresponding QML component file in that map.
+    // Keep in sync with the `regPage` / `regVirtual` registrations in
+    // `buildApplicationController` above — every entry here must resolve
+    // to a registered page, otherwise external --page invocations and
+    // sidebar navigation will silently fall through to the default page.
+    // (The legacy `_pageComponents` Main.qml map this comment used to
+    // name was retired when Main.qml moved to PhosphorUi.SettingsAppWindow's
+    // framework-driven PageHost Loader, keyed off the registry.)
     static const QSet<QString> pages{
         QStringLiteral("overview"),
         QStringLiteral("layouts"),
@@ -420,7 +448,6 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("window-rules"),
-        QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
         QStringLiteral("about"),

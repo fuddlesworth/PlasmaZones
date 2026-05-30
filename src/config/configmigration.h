@@ -30,7 +30,18 @@ namespace PlasmaZones {
 ///     folds into windowrules.json as OverrideAnimation{Shader,Timing} actions
 ///     on `WindowClass Contains <pattern>` matchers — the legacy
 ///     AnimationAppRule/Bridge types are removed and the runtime reads
-///     animation overrides exclusively from the unified rule store. See
+///     animation overrides exclusively from the unified rule store.
+///     The legacy `Exclusions` group (`Applications` / `WindowClasses`
+///     comma-joined pattern lists) folds into the same windowrules.json: each
+///     surviving pattern becomes an Application-subject `AppId AppIdMatches
+///     <pattern>` matcher with a terminal `Exclude` action, matching the
+///     shape the legacy runtime bridge produced (see
+///     `appendExclusionRulesFromStash` in configmigration.cpp for the
+///     builder) so an upgrading user's exclusion behaviour is preserved.
+///     The standalone
+///     "Exclusions" settings page disappears; the three global window-filtering
+///     knobs (excludeTransientWindows / minimumWindowWidth /
+///     minimumWindowHeight) move to the General page. See
 ///     docs/window-rule-refactor-design.md §8.
 inline constexpr int ConfigSchemaVersion = 4;
 
@@ -95,9 +106,16 @@ public:
     ///     the temporary `_v4DisableStash` root key.
     ///   - Removes the `Animations.AnimationAppRules` array and stashes it
     ///     under the temporary `_v4AnimationRulesStash` root key.
-    /// Both stashes feed @ref finalizeV4Conversion. Empty inputs produce no
-    /// stash entries (the finalizer treats an absent key as a no-op for that
-    /// input). Stamps `_version = 4`.
+    ///   - Removes the `Exclusions.Applications` and `Exclusions.WindowClasses`
+    ///     comma-joined pattern lists and stashes them under the temporary
+    ///     `_v4ExclusionStash` root key.
+    ///   - Removes the `Animations.WindowFiltering.Applications` and
+    ///     `Animations.WindowFiltering.WindowClasses` comma-joined pattern
+    ///     lists and stashes them under the temporary
+    ///     `_v4AnimationExclusionStash` root key.
+    /// All four stashes feed @ref finalizeV4Conversion. Empty inputs produce
+    /// no stash entries (the finalizer treats an absent key as a no-op for
+    /// that input). Stamps `_version = 4`.
     static void migrateV3ToV4(QJsonObject& root);
 
     /// Post-chain finalizer for the v4 conversion. The cross-file migration
@@ -105,31 +123,41 @@ public:
     /// single `void(QJsonObject&)` migration step, so this runs after the
     /// chain, from @ref ensureJsonConfigImpl.
     ///
-    /// It reads assignments.json + the `_v4DisableStash` and
-    /// `_v4AnimationRulesStash` left in config.json, builds the
+    /// It reads assignments.json + the four `_v4*` stashes left in
+    /// config.json (`_v4DisableStash`, `_v4AnimationRulesStash`,
+    /// `_v4ExclusionStash`, `_v4AnimationExclusionStash`), builds the
     /// WindowRuleSet (assignment rules + disable-list rules + per-window
     /// animation-override rules ported from the legacy AnimationAppRule
-    /// JSON), writes windowrules.json (atomic), relocates the QuickLayouts
-    /// slots into the quicklayouts.json sidecar, strips both stash keys
-    /// from config.json, then — as the last, irreversible step — deletes
-    /// assignments.json.
+    /// JSON + `Exclude`-action rules + `ExcludeAnimations`-action rules),
+    /// writes windowrules.json (atomic), relocates the QuickLayouts slots
+    /// into the quicklayouts.json sidecar, strips all four stash keys
+    /// from config.json, then — as the last, irreversible step — retires
+    /// assignments.json (renamed to `.migrated` for forensic recovery; if
+    /// the rename fails the file is removed outright).
     ///
-    /// Idempotent: a no-op when windowrules.json already exists as a valid
-    /// v4 `WindowRuleSet` (probed via `WindowRuleSet::loadFromFile`, which
-    /// requires `_version == ConfigSchemaVersion` exactly). Safe to call on
-    /// every startup.
+    /// Idempotent: the cleanup-only branch runs whenever windowrules.json
+    /// already exists as a valid v4 `WindowRuleSet` (probed via
+    /// `WindowRuleSet::loadFromFile`, which requires `_version ==
+    /// ConfigSchemaVersion` exactly). It is NOT a strict no-op — it
+    /// retries the still-pending tail steps (strip surviving `_v4*Stash`
+    /// keys, retire a still-present assignments.json) so a partial earlier
+    /// run that crashed between windowrules.json commit and the tail
+    /// converges to a clean state on the next startup. The rule-rebuild
+    /// path itself NEVER runs from the cleanup branch.
     ///
     /// Rebuild trigger: a missing/invalid windowrules.json triggers a
     /// rebuild PROVIDED config.json has reached
     /// `_version == ConfigSchemaVersion`. When assignments.json is absent
     /// the rebuild still runs and writes a rule set carrying only the
-    /// provider-default catch-all (plus any disable-list / animation-rule
-    /// stash entries from config.json). If the migration chain stalled
-    /// below v4 (e.g. a chain step's side-effect write failed),
-    /// finalizeV4Conversion refuses to commit a stub windowrules.json so
-    /// the next run can retry the chain without masking the stall. The
-    /// rebuild-vs-no-op decision keys off the windowrules.json probe alone;
-    /// the config-version gate is layered on top to refuse the stub case.
+    /// provider-default catch-all (plus any disable-list, animation-rule,
+    /// exclusion, and animation-exclusion stash entries from
+    /// config.json). If the migration chain stalled below v4 (e.g. a
+    /// chain step's side-effect write failed), finalizeV4Conversion
+    /// refuses to commit a stub windowrules.json so the next run can
+    /// retry the chain without masking the stall. The
+    /// rebuild-vs-cleanup-only decision keys off the windowrules.json
+    /// probe alone; the config-version gate is layered on top to refuse
+    /// the stub case.
     ///
     /// Degraded path under config corruption: if config.json is corrupt (or
     /// absent) with no INI fallback, the rebuild proceeds with an empty

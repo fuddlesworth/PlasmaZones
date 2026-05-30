@@ -314,20 +314,24 @@ void Settings::purgeStaleKeys()
     // would silently destroy those values.
     // Mixed list of (a) root-level GROUP names that must survive Pass 2's
     // blanket-delete loop ("General", "TilingQuickLayoutSlots", "Updates")
-    // and (b) root-level KEYS holding stash data — `_v4DisableStash` is a
-    // JSON OBJECT and survives via the Pass 2 listing below; the
-    // `_v4AnimationRulesStash` is a JSON ARRAY and is actually preserved
-    // by Pass 2 NOT enumerating non-object root values (jsonbackend's
-    // `groupList()` filter), with the listing here as defence-in-depth
-    // against future Pass 2 restructuring. Both stashes feed the v4
-    // chain-stall retry path in
-    // configmigration.cpp::finalizeV4Conversion.
+    // and (b) root-level KEYS holding stash data — `_v4DisableStash`,
+    // `_v4ExclusionStash` and `_v4AnimationExclusionStash` are JSON
+    // OBJECTS and survive Pass 2 via `preservedGroups.contains(topLevel)`
+    // membership in the loop body below (without that short-circuit Pass
+    // 2's group iteration WOULD delete them); the `_v4AnimationRulesStash`
+    // is a JSON ARRAY and is additionally preserved by Pass 2 NOT
+    // enumerating non-object root values (jsonbackend's `groupList()`
+    // filter), so the listing here is defence-in-depth for that case
+    // against future Pass 2 restructuring. All four stashes feed the v4
+    // chain-stall retry path in configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {
         ConfigDefaults::generalGroup(),
         ConfigDefaults::tilingQuickLayoutSlotsGroup(),
         ConfigDefaults::updatesGroup(),
         ConfigKeys::Legacy::v4DisableStashKey(),
         ConfigKeys::Legacy::v4AnimationRulesStashKey(),
+        ConfigKeys::Legacy::v4ExclusionStashKey(),
+        ConfigKeys::Legacy::v4AnimationExclusionStashKey(),
     };
 
     // Compute the set of paths the Store claims. These must not be
@@ -1450,9 +1454,16 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         // know. Surface it on the settings-side log too so users
         // grepping `lcConfig` see the failure, and skip the aggregate
         // `settingsChanged()` emit so dirty-state trackers don't
-        // believe the write made it to disk.
+        // believe the write made it to disk. Roll the in-memory store
+        // back to its on-disk state (mirrors the reset() rollback
+        // below) so subsequent reads through this Settings instance
+        // return the same view as cross-process consumers reading the
+        // unmodified file — without this, the in-memory state would
+        // diverge from disk indefinitely until the next save/load
+        // cycle.
         qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
                             << axisInt;
+        m_windowRuleStore->load();
         Q_EMIT(this->*signalFn)(mode);
         return;
     }
@@ -1634,98 +1645,24 @@ PZ_STORE_GET(bool, filterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, fil
 PZ_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey,
                   filterLayoutsByAspectRatioChanged)
 
-// ── Exclusions (PhosphorConfig::Store-backed) ───────────────────────────────
-
-QStringList Settings::excludedApplications() const
-{
-    return parseCommaList(m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey()));
-}
-
-void Settings::setExcludedApplications(const QStringList& apps)
-{
-    // Post-write compare — see writeDisableEntries for the canonicalisation
-    // rationale. Callers like addExcludedApplication rely on this setter not
-    // firing the changed signal when the de-duplicated / trimmed form
-    // already matches storage.
-    const QString before = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey());
-    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey(), apps.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT excludedApplicationsChanged();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::addExcludedApplication(const QString& app)
-{
-    const QString trimmed = app.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = excludedApplications();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setExcludedApplications(list);
-}
-
-void Settings::removeExcludedApplicationAt(int index)
-{
-    QStringList list = excludedApplications();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setExcludedApplications(list);
-}
-
-QStringList Settings::excludedWindowClasses() const
-{
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey()));
-}
-
-void Settings::setExcludedWindowClasses(const QStringList& classes)
-{
-    // Post-write compare — see writeDisableEntries for the canonicalisation
-    // rationale.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey());
-    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey(),
-                   classes.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT excludedWindowClassesChanged();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::addExcludedWindowClass(const QString& cls)
-{
-    const QString trimmed = cls.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = excludedWindowClasses();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setExcludedWindowClasses(list);
-}
-
-void Settings::removeExcludedWindowClassAt(int index)
-{
-    QStringList list = excludedWindowClasses();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setExcludedWindowClasses(list);
-}
+// ── Global exclusion knobs (PhosphorConfig::Store-backed) ──────────────────
+//
+// Three global behavioural knobs survive in the `Exclusions` group:
+// `excludeTransientWindows` (boolean), `minimumWindowWidth` (int px),
+// `minimumWindowHeight` (int px). Per-app / per-class exclusion lists
+// retired in v4 — the migration in src/config/configmigration.cpp drains
+// the legacy lists into Application-subject WindowRules, and runtime
+// evaluators in SnapEngine, the KWin effect, and the WTA
+// pending-restore prune route through `PhosphorWindowRule::ExclusionRules`
+// over the unified store.
+//
+// The on-disk group name `"Exclusions"` is INTENTIONALLY kept after the
+// UI moved these knobs into a card relabeled "Window filtering" on the
+// General page (see src/settings/qml/GeneralPage.qml). Renaming the
+// group would require a v4→v5 schema migration to remap every existing
+// user config without losing the three preserved knobs — disproportionate
+// for a label change. The accessor name `exclusionsGroup()` keeps the
+// disk shape, and the runtime UI label is independent.
 
 PZ_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
 PZ_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)
@@ -1736,12 +1673,13 @@ PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey
 
 // ── Animation Window Filtering (PhosphorConfig::Store-backed) ──────────────
 //
-// Mirrors the Exclusions block above but lives in
-// `Animations.WindowFiltering` so animation-time filtering is independent
-// of snapping/tiling exclusions. Scalar accessors use the same macro
-// pattern; the QStringList accessors mirror the comma-list canonicalisation
-// trick from `setExcludedApplications` (post-write read-back so addX /
-// removeXAt don't fire spurious signals on no-op writes).
+// Four global animation-filtering knobs in `Animations.WindowFiltering`:
+// `animationExcludeTransientWindows`, `animationExcludeNotificationsAndOsd`,
+// `animationMinimumWindowWidth`, `animationMinimumWindowHeight`. Mirrors
+// the Exclusions block above (plus a NotificationsAndOsd knob), stored
+// independently so a user can disable animations for an app while still
+// snapping it (or vice versa). Per-app / per-class animation exclusion
+// lists retired in v4 — they fold into ExcludeAnimations WindowRules.
 
 PZ_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
 PZ_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
@@ -1756,77 +1694,11 @@ PZ_STORE_GET(int, animationMinimumWindowHeight, animationsWindowFilteringGroup, 
 PZ_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup, minimumWindowHeightKey,
                  animationMinimumWindowHeightChanged)
 
-QStringList Settings::animationExcludedApplications() const
-{
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey()));
-}
-
-void Settings::setAnimationExcludedApplications(const QStringList& apps)
-{
-    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::applicationsKey(), apps,
-                   &Settings::animationExcludedApplicationsChanged);
-}
-
-void Settings::addAnimationExcludedApplication(const QString& app)
-{
-    const QString trimmed = app.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = animationExcludedApplications();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setAnimationExcludedApplications(list);
-}
-
-void Settings::removeAnimationExcludedApplicationAt(int index)
-{
-    QStringList list = animationExcludedApplications();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setAnimationExcludedApplications(list);
-}
-
-QStringList Settings::animationExcludedWindowClasses() const
-{
-    return parseCommaList(
-        m_store->read<QString>(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey()));
-}
-
-void Settings::setAnimationExcludedWindowClasses(const QStringList& classes)
-{
-    writeCommaList(ConfigDefaults::animationsWindowFilteringGroup(), ConfigDefaults::windowClassesKey(), classes,
-                   &Settings::animationExcludedWindowClassesChanged);
-}
-
-void Settings::addAnimationExcludedWindowClass(const QString& cls)
-{
-    const QString trimmed = cls.trimmed();
-    if (trimmed.isEmpty()) {
-        return;
-    }
-    QStringList list = animationExcludedWindowClasses();
-    if (list.contains(trimmed)) {
-        return;
-    }
-    list.append(trimmed);
-    setAnimationExcludedWindowClasses(list);
-}
-
-void Settings::removeAnimationExcludedWindowClassAt(int index)
-{
-    QStringList list = animationExcludedWindowClasses();
-    if (index < 0 || index >= list.size()) {
-        return;
-    }
-    list.removeAt(index);
-    setAnimationExcludedWindowClasses(list);
-}
+// animationExcludedApplications / animationExcludedWindowClasses (+ their
+// add*/remove* convenience methods) retired in v4 — the v4 migration drains
+// the Animations.WindowFiltering group's Applications / WindowClasses leaves
+// into `ExcludeAnimations` WindowRules. The settings accessors had no
+// consumers after the KWin effect rewired off the loadSettingAsync fetches.
 
 // ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
 // Three enum-ints exposed via both the typed setter and an Int adapter for
@@ -1971,29 +1843,6 @@ void Settings::writeTriggerList(const QString& group, const QString& key, const 
     const QVariantList before = m_store->readVariant(group, key).toList();
     m_store->write(group, key, triggers.mid(0, MaxTriggersPerAction));
     const QVariantList after = m_store->readVariant(group, key).toList();
-    if (before == after) {
-        return;
-    }
-    Q_EMIT(this->*specificSignal)();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::writeCommaList(const QString& group, const QString& key, const QStringList& list,
-                              CommaListSignalFn specificSignal)
-{
-    // Pre-write snapshot + post-write read-back. The schema's
-    // `canonicalCommaList` validator may trim / dedupe the joined
-    // string, so two writes that look different in memory can
-    // canonicalise to the same on-disk value — emitting in that case
-    // would dirty the page on a no-op. Pre-write equality alone would
-    // miss canonicalisation no-ops; post-write equality alone would
-    // miss the case where the list ends up identical because the
-    // validator collapsed it. Compare both sides of the round-trip so
-    // the signal fires only when the persisted value actually
-    // changed.
-    const QString before = m_store->read<QString>(group, key);
-    m_store->write(group, key, list.join(QLatin1Char(',')));
-    const QString after = m_store->read<QString>(group, key);
     if (before == after) {
         return;
     }
@@ -2638,7 +2487,6 @@ void Settings::reset()
                 kept.append(rule); // not a DisableEngine rule — preserve
             }
         }
-        bool rulesPersistOk = true;
         if (kept.size() != m_windowRuleStore->count()) {
             if (!m_windowRuleStore->setAllRules(kept)) {
                 // Persistence failed — the in-memory store advanced but the
@@ -2649,15 +2497,16 @@ void Settings::reset()
                 // (which reloads its own copy); the borrowed-store path
                 // (daemon) skips reloading the rules in load() and would
                 // otherwise leave the in-memory store advanced — explicitly
-                // reload via the store's own load() to roll back.
+                // reload via the store's own load() to roll back. The
+                // settings load() below also re-snapshots disable rules
+                // from the post-rollback store, so a follow-up flag was
+                // unnecessary.
                 qCWarning(lcConfig)
                     << "reset: failed to persist window-rule store — rolling back in-memory state; disable "
                        "rules will reappear on next launch";
                 m_windowRuleStore->load();
-                rulesPersistOk = false;
             }
         }
-        (void)rulesPersistOk; // load() below already covers signal correctness
     }
 
     load();

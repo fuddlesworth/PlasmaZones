@@ -7,6 +7,7 @@
 #include <QList>
 #include <QString>
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 
@@ -59,9 +60,16 @@ public:
     }
 
     /// All filled slot ids — for tests / introspection.
+    ///
+    /// Returned sorted so tests can compare against a stable list; without
+    /// the sort, `QHash::keys()` order is unspecified and varies across
+    /// runs (Qt hash seeds are randomised per-process). Callers are not
+    /// expected to be on a hot path.
     QStringList filledSlots() const
     {
-        return m_slots.keys();
+        QStringList keys = m_slots.keys();
+        std::sort(keys.begin(), keys.end());
+        return keys;
     }
 
     // ── Accumulation API — used by RuleEvaluator ──

@@ -505,14 +505,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     // cached here for drag-operation gating (shouldHandleWindow).
     m_triggersLoaded = false; // Permissive until new triggers arrive (#175)
 
-    loadSettingAsync(QStringLiteral("excludedApplications"), [this](const QVariant& v) {
-        m_excludedApplications = v.toStringList();
-        rebuildSnappingExclusionRuleSet();
-    });
-    loadSettingAsync(QStringLiteral("excludedWindowClasses"), [this](const QVariant& v) {
-        m_excludedWindowClasses = v.toStringList();
-        rebuildSnappingExclusionRuleSet();
-    });
+    // excludedApplications / excludedWindowClasses are GONE — the v4
+    // migration folded those lists into the unified WindowRule store, and
+    // the effect's drag-gate exclusion rule set is now derived from the
+    // store-side Exclude rules pulled via WindowRules.rulesChanged →
+    // loadWindowRuleAnimationsFromDbus. No D-Bus settings fetch needed.
     loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
         m_cachedMinWindowWidth = v.toInt();
     });
@@ -555,9 +552,9 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     // Animation window filtering — independent of the snapping/tiling
     // exclusions cached above. Used by `shouldAnimateWindow()` to gate
-    // the animation cascade; class-pattern rules override the filter
-    // at the resolver layer so a targeted rule can re-enable animation
-    // for an otherwise-excluded app.
+    // the animation cascade; rules whose match expression resolves for
+    // the window override the filter at the resolver layer so a targeted
+    // rule can re-enable animation for an otherwise-excluded app.
     loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
         m_animationExcludeTransientWindows = v.toBool();
     });
@@ -582,14 +579,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
         m_animationMinWindowHeight = qBound(0, v.toInt(), 2000);
     });
-    loadSettingAsync(QStringLiteral("animationExcludedApplications"), [this](const QVariant& v) {
-        m_animationExcludedApplications = v.toStringList();
-        rebuildAnimationExclusionRuleSet();
-    });
-    loadSettingAsync(QStringLiteral("animationExcludedWindowClasses"), [this](const QVariant& v) {
-        m_animationExcludedWindowClasses = v.toStringList();
-        rebuildAnimationExclusionRuleSet();
-    });
+    // animationExcludedApplications / animationExcludedWindowClasses are
+    // GONE — the v4 migration folded those lists into the unified
+    // WindowRule store as `ExcludeAnimations`-action rules, and
+    // loadWindowRuleAnimationsFromDbus's parse step rebuilds the effect's
+    // m_animationExclusionRuleSet from the same rule-set push that drives
+    // the OverrideAnimation* pipeline. No D-Bus settings fetch needed.
 
     loadShaderProfileFromDbus();
     loadMotionProfileTreeFromDbus();

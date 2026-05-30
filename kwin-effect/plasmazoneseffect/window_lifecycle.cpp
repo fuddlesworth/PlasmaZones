@@ -393,11 +393,24 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_windowIdReverse.remove(closedWindowId);
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
-    // Symmetric with the windowDeleted handler (lifecycle.cpp:483). Close
-    // shaders held via `holdCloseGrab=true` keep the EffectWindow alive
-    // past slotWindowClosed and the close-path paints can still touch the
-    // opacity cache; clearing here ensures the next windowDeleted has
-    // nothing to clean up if the close shader runs zero frames.
+    // Drop any pending-but-not-yet-flushed frame geometry for the
+    // closing window. The windowDeleted lambda in lifecycle.cpp does
+    // the same removal as belt-and-suspenders against a
+    // windowFrameGeometryChanged emission re-inserting between this
+    // slot and windowDeleted (possible for windows held alive via
+    // WindowClosedGrabRole). Daemon would discard a stale
+    // setFrameGeometry call for a no-longer-tracked windowId anyway,
+    // so the leak was wasted D-Bus rather than incorrect — but the
+    // cleanup keeps the pending-batch in lockstep with the live
+    // window set.
+    m_pendingFrameGeometry.remove(closedWindowId);
+    // Symmetric with the `windowDeleted` lambda in `lifecycle.cpp`
+    // (which removes the same key from `m_frameOpacityCache` after the
+    // close-grab unref). Close shaders held via `holdCloseGrab=true`
+    // keep the EffectWindow alive past slotWindowClosed and the
+    // close-path paints can still touch the opacity cache; clearing
+    // here ensures the next windowDeleted has nothing to clean up if
+    // the close shader runs zero frames.
     m_shaderManager.m_frameOpacityCache.remove(w);
 }
 
@@ -801,11 +814,7 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // correctly skip excluded windows instead of operating on a stale
     // m_lastActiveWindowId.
     const QString windowClass = w->windowClass();
-    if (windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
-        || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive)) {
-        return;
-    }
-    if (windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive)) {
+    if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass)) {
         return;
     }
     // Plasma shell surfaces — independent filter chain from shouldHandleWindow()
@@ -900,12 +909,16 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
 
 QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString& windowId) const
 {
-    // Instance ids are unique — "all windows for a given id" is at most one
-    // window. findAllWindowsById exists as an API seam for the (historical)
-    // case where callers wanted every instance of an app class matching a
-    // given composite; that semantic now lives on the daemon's
-    // WindowRegistry::instancesWithAppId() + per-instance lookups. The
-    // single-instance behavior here is the only case that remains.
+    // Two cases:
+    //   1. Exact-instance match (`wId == windowId`): returns a single-
+    //      element vector with just that window — discards any appId
+    //      matches accumulated earlier in the stacking-order walk
+    //      because the instance id is the strictly stronger identifier.
+    //   2. Fuzzy appId match (no exact instance found): accumulates
+    //      every window that shares the composite's appId. Used by
+    //      autotile to disambiguate when multiple windows share an
+    //      appId (e.g. two Firefox instances) — see the header doc on
+    //      `plasmazoneseffect.h::findAllWindowsById`.
     QVector<KWin::EffectWindow*> out;
     if (windowId.isEmpty()) {
         return out;

@@ -344,11 +344,16 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(transientWindowsKey, "TransientWindows")
-    PZ_CONFIG_KEY(notificationsAndOsdKey, "NotificationsAndOsd")
     PZ_CONFIG_KEY(minimumWindowWidthKey, "MinimumWindowWidth")
     PZ_CONFIG_KEY(minimumWindowHeightKey, "MinimumWindowHeight")
-    PZ_CONFIG_KEY(applicationsKey, "Applications")
-    PZ_CONFIG_KEY(windowClassesKey, "WindowClasses")
+    // `notificationsAndOsdKey` is consumed exclusively by the
+    // Animations.WindowFiltering schema (no equivalent in the Exclusions
+    // group), so it is declared with the rest of the animation keys below
+    // rather than here. Note: the per-list `Applications` / `WindowClasses`
+    // leaf-key accessors were retired with the v4 fold of exclusion lists
+    // into Application-subject WindowRules — the migration reads from
+    // `v3ExcludedApplicationsKey` / `v3ExcludedWindowClassesKey` below,
+    // and no live config path remains.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Performance
@@ -388,6 +393,11 @@ public:
     PZ_CONFIG_KEY(minDistanceKey, "MinDistance")
     PZ_CONFIG_KEY(sequenceModeKey, "SequenceMode")
     PZ_CONFIG_KEY(staggerIntervalKey, "StaggerInterval")
+    // Animations.WindowFiltering knob — distinct from the snapping
+    // `Exclusions` group above (which has no equivalent NotificationsAndOsd
+    // axis). Consumed by `Settings::animationExcludeNotificationsAndOsd` and
+    // the Animations.WindowFiltering schema in `settingsschema.cpp`.
+    PZ_CONFIG_KEY(notificationsAndOsdKey, "NotificationsAndOsd")
 
     // Phase 6: ShaderProfileTree JSON blob — per-event shader effect
     // selection layered alongside the motion Profile (separate tree,
@@ -712,6 +722,21 @@ public:
         // silently breaking the protection in the other.
         PZ_CONFIG_KEY(v4DisableStashKey, "_v4DisableStash")
         PZ_CONFIG_KEY(v4AnimationRulesStashKey, "_v4AnimationRulesStash")
+        // Third v4 scratch-root key — set on the root by `migrateV3ToV4` from
+        // the legacy `Exclusions.{Applications,WindowClasses}` lists and
+        // consumed by `finalizeV4Conversion`, which converts each surviving
+        // pattern into an Application-subject `AppId AppIdMatches <pattern>
+        // Exclude` WindowRule. Same purge-protection semantics as the two
+        // sibling stash keys above.
+        PZ_CONFIG_KEY(v4ExclusionStashKey, "_v4ExclusionStash")
+        // Fourth v4 scratch-root key — set on the root by `migrateV3ToV4`
+        // from the legacy `Animations.WindowFiltering.{Applications,WindowClasses}`
+        // lists and consumed by `finalizeV4Conversion`, which converts each
+        // surviving pattern into a `DesktopFile`/`WindowClass Contains
+        // <pattern> → ExcludeAnimations` WindowRule (preserving the
+        // legacy effect-bridge match-field split). Same purge-protection
+        // semantics as the three sibling stash keys above.
+        PZ_CONFIG_KEY(v4AnimationExclusionStashKey, "_v4AnimationExclusionStash")
 
         // v3 frozen group/key accessors — used ONLY by migrateV3ToV4 and
         // finalizeV4Conversion. These mirror the live `displayGroup`,
@@ -724,6 +749,30 @@ public:
         PZ_CONFIG_GROUP(v3SnappingBehaviorWindowHandlingGroup, "Snapping.Behavior.WindowHandling")
         PZ_CONFIG_GROUP(v3TilingAlgorithmGroup, "Tiling.Algorithm")
         PZ_CONFIG_KEY(v3DefaultKey, "Default")
+
+        // v3 Exclusions group + comma-joined pattern keys — frozen at their
+        // v3 literal for the same reason the disable-list group/keys above
+        // are: migrateV3ToV4 reads them from a v3 config on disk, and a
+        // future runtime rename of the live `exclusionsGroup` accessor must
+        // NOT silently retarget the migration to a path no v3 config ever
+        // had on disk. (The per-list `Applications` / `WindowClasses` leaf
+        // accessors were retired with the v4 fold — no live accessor exists
+        // to drift from now, but the v3 literals stay pinned here.)
+        PZ_CONFIG_GROUP(v3ExclusionsGroup, "Exclusions")
+        PZ_CONFIG_KEY(v3ExcludedApplicationsKey, "Applications")
+        PZ_CONFIG_KEY(v3ExcludedWindowClassesKey, "WindowClasses")
+        // The animation exclusion lists live at
+        // `Animations.WindowFiltering.{Applications,WindowClasses}` — same
+        // leaf keys as the snapping Exclusions group above, just under a
+        // different dot-path. The "Animations" segment routes through
+        // `v4AnimationsGroup` above; "WindowFiltering" is the bare leaf
+        // segment frozen here. The live `animationsWindowFilteringGroup()`
+        // accessor returns the FULL dot-path "Animations.WindowFiltering"
+        // (not the bare segment), so it can't be reused by the migration
+        // which walks the path one segment at a time. Freezing the segment
+        // here keeps the migration's read-path symmetric with the other
+        // Legacy:: accessors and gives a future rename a single chokepoint.
+        PZ_CONFIG_KEY(v4WindowFilteringSegment, "WindowFiltering")
 
         // v3 assignments.json field names — frozen literals from the dead
         // v3 assignments.json schema. finalizeV4Conversion is the sole

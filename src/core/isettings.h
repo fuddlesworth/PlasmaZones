@@ -167,10 +167,11 @@ public:
     virtual void setAnimationMinimumWindowWidth(int width) = 0;
     virtual int animationMinimumWindowHeight() const = 0;
     virtual void setAnimationMinimumWindowHeight(int height) = 0;
-    virtual QStringList animationExcludedApplications() const = 0;
-    virtual void setAnimationExcludedApplications(const QStringList& apps) = 0;
-    virtual QStringList animationExcludedWindowClasses() const = 0;
-    virtual void setAnimationExcludedWindowClasses(const QStringList& classes) = 0;
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // virtuals retired in v4 — the lists folded into ExcludeAnimations
+    // WindowRules; the KWin effect now derives its
+    // m_animationExclusionRuleSet from the unified rule store via
+    // PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom.
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -395,8 +396,10 @@ Q_SIGNALS:
     void snapAssistTriggersChanged();
     void defaultLayoutIdChanged();
     void filterLayoutsByAspectRatioChanged();
-    void excludedApplicationsChanged();
-    void excludedWindowClassesChanged();
+    // excludedApplications / excludedWindowClasses signals retired in v4
+    // — see settings_interfaces.h for the rationale (lists folded into
+    // unified Exclude WindowRules; consumers subscribe to the rule store
+    // through PhosphorWindowRule::WindowRuleStore::rulesChanged instead).
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();
@@ -409,8 +412,8 @@ Q_SIGNALS:
     void animationExcludeNotificationsAndOsdChanged();
     void animationMinimumWindowWidthChanged();
     void animationMinimumWindowHeightChanged();
-    void animationExcludedApplicationsChanged();
-    void animationExcludedWindowClassesChanged();
+    // animationExcludedApplicationsChanged / animationExcludedWindowClassesChanged
+    // signals retired in v4 alongside the list virtuals above.
     void zoneSelectorEnabledChanged();
     void zoneSelectorTriggerDistanceChanged();
     void zoneSelectorPositionChanged();

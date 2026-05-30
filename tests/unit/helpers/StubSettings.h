@@ -20,17 +20,18 @@ namespace PlasmaZones {
  *
  * Also inherits PhosphorEngine::ISnapSettings so SnapEngine's
  * dynamic_cast<ISnapSettings*>(engineSettings()) succeeds when a stub is wired
- * via setEngineSettings(). The ISnapSettings methods (excludedApplications,
- * stickyWindowHandling, moveNewWindowsToLastZone, restoreWindowsToZonesOnLogin,
- * autoAssignAllLayouts) are already implemented for ISettings — the multiple
- * inheritance just registers the second base so the cast resolves.
+ * via setEngineSettings(). The remaining ISnapSettings methods
+ * (stickyWindowHandling, moveNewWindowsToLastZone,
+ * restoreWindowsToZonesOnLogin, autoAssignAllLayouts) are already
+ * implemented for ISettings — the multiple inheritance just registers
+ * the second base so the cast resolves.
  *
  * NOTE: This stub does NOT inherit PhosphorEngine::IAutotileSettings —
  * the AutotileEngine fetches its config via a separate code path and
  * no currently-exercised unit test routes through a
  * dynamic_cast<IAutotileSettings*> against the stub. If a future test
  * exercises autotile-engine wiring through ISettings, the stub
- * should grow that base + the 22 IAutotileSettings overrides.
+ * should grow that base + the 26 IAutotileSettings overrides.
  */
 class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
 {
@@ -415,21 +416,8 @@ public:
     {
     }
 
-    // IWindowExclusionSettings
-    QStringList excludedApplications() const override
-    {
-        return {};
-    }
-    void setExcludedApplications(const QStringList&) override
-    {
-    }
-    QStringList excludedWindowClasses() const override
-    {
-        return {};
-    }
-    void setExcludedWindowClasses(const QStringList&) override
-    {
-    }
+    // IWindowExclusionSettings — the per-app / per-class exclusion list
+    // accessors retired in v4 (folded into unified WindowRule store).
     bool excludeTransientWindows() const override
     {
         return false;
@@ -509,32 +497,9 @@ public:
         Q_EMIT animationMinimumWindowHeightChanged();
         Q_EMIT settingsChanged();
     }
-    QStringList animationExcludedApplications() const override
-    {
-        return m_animationExcludedApplications;
-    }
-    void setAnimationExcludedApplications(const QStringList& apps) override
-    {
-        if (m_animationExcludedApplications == apps) {
-            return;
-        }
-        m_animationExcludedApplications = apps;
-        Q_EMIT animationExcludedApplicationsChanged();
-        Q_EMIT settingsChanged();
-    }
-    QStringList animationExcludedWindowClasses() const override
-    {
-        return m_animationExcludedWindowClasses;
-    }
-    void setAnimationExcludedWindowClasses(const QStringList& classes) override
-    {
-        if (m_animationExcludedWindowClasses == classes) {
-            return;
-        }
-        m_animationExcludedWindowClasses = classes;
-        Q_EMIT animationExcludedWindowClassesChanged();
-        Q_EMIT settingsChanged();
-    }
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // overrides retired in v4 alongside the ISettings virtuals — the
+    // lists folded into ExcludeAnimations WindowRules.
 
     // IZoneSelectorSettings
     bool zoneSelectorEnabled() const override
@@ -1089,8 +1054,6 @@ private:
     bool m_animationExcludeNotificationsAndOsd = ConfigDefaults::animationExcludeNotificationsAndOsd();
     int m_animationMinimumWindowWidth = ConfigDefaults::animationMinimumWindowWidth();
     int m_animationMinimumWindowHeight = ConfigDefaults::animationMinimumWindowHeight();
-    QStringList m_animationExcludedApplications;
-    QStringList m_animationExcludedWindowClasses;
     QVariantMap m_autotilePerAlgorithmSettings;
     QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
     QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();

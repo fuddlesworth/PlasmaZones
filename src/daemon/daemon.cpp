@@ -86,6 +86,7 @@
 #include "../dbus/compositorbridgeadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../dbus/windowruleadaptor.h"
+#include <PhosphorWindowRule/ExclusionRules.h>
 #include <PhosphorWindowRule/WindowRuleStore.h>
 #include "enginefactory.h"
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -1085,6 +1086,86 @@ bool Daemon::init()
     m_windowTrackingAdaptor->service()->setSnapState(snapEngine->snapState());
     m_windowTrackingAdaptor->service()->setSnapEngine(snapEngine);
 
+    // Filter the unified rule store down to its Exclude-shaped slice and
+    // hand the address to SnapEngine for its isAppIdExcluded probe. The
+    // filtered slice is held as a stable Daemon member (m_excludeRuleSet)
+    // and refreshed in-place via setRules so the bound RuleEvaluator's
+    // per-revision sort index and resolve cache actually invalidate on
+    // each rules-changed edit (a copy-assigned fresh WindowRuleSet would
+    // re-import revision=1 every cycle, freezing the cache on the next
+    // resolveCached-bearing migration of the call sites). Rebuilt
+    // whenever the unified store emits rulesChanged, so a settings-app
+    // rule edit propagates without a manual refresh.
+    //
+    // Initial wiring happens once below, outside the rulesChanged lambda:
+    //   - `setExcludeRuleSet(&m_excludeRuleSet)` hands SnapEngine the
+    //     stable address. The pointer never changes after this; the
+    //     evaluator picks up subsequent in-place edits through the
+    //     revision counter, so subsequent re-fences would be no-ops.
+    //   - The first `setRules` + `pruneExcludedPendingRestores` priming
+    //     pair seeds the filter and drains any restore queue entries
+    //     populated by WTA::loadState above.
+    snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
+    m_excludeRuleSet.setRules(
+        PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
+    m_windowTrackingAdaptor->pruneExcludedPendingRestores(
+        PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+
+    auto refilterExcludeRules = [this, snapEnginePtr = QPointer(snapEngine)] {
+        // QPointer null-checks defend the rulesChanged subscription
+        // against the shutdown window where m_snapEngine.reset() has
+        // already fired but the subscription has not yet auto-
+        // disconnected via ~Daemon (the connection's `this`-context only
+        // breaks on Daemon destruction, not on a member reset). Mirrors
+        // the QPointer pattern used by the persistence-delegate and
+        // signal-relay lambdas below.
+        if (!snapEnginePtr) {
+            return;
+        }
+        // Symmetric guard for the rule store. `m_windowRuleStore` is a
+        // unique_ptr owned by Daemon, so it currently shares Daemon's
+        // lifetime; the guard exists so a future refactor that drops
+        // and re-creates the store on the fly (or moves ownership
+        // out) can't UAF this lambda.
+        if (!m_windowRuleStore) {
+            return;
+        }
+        // Equality-guard against no-op edits: every rulesChanged emission
+        // (rename, priority change, non-Exclude action edit, …) fires
+        // this lambda, but only changes that affect the Exclude slice
+        // should bump the evaluator's revision and walk the (potentially
+        // long) pending-restore queues. The guard below compares the two
+        // `QList<WindowRule>` slices element-wise (the same semantics as
+        // `WindowRuleSet::operator==`, which delegates to this list compare) —
+        // exactly the rules-list-only comparison we want.
+        const QList<PhosphorWindowRule::WindowRule> newSlice =
+            PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules();
+        if (newSlice == m_excludeRuleSet.rules()) {
+            return;
+        }
+        // Cache invalidation for matched windows happens through the
+        // `setRules` revision bump; the evaluator inside SnapEngine
+        // reads `m_excludeRuleSet`'s revision and drops its per-revision
+        // index / cache automatically. No `setExcludeRuleSet` re-fence
+        // — the pointer was wired once at init above.
+        m_excludeRuleSet.setRules(newSlice);
+        // Prune any pending-restore queues for apps now covered by an
+        // Exclude rule. Snap-engine's resolveWindowRestore already refuses
+        // them at runtime, but stale queue entries spam logs and bloat the
+        // saved state. The autotile-side queues don't exist yet at init
+        // — daemon/signals.cpp's finalizeStartup re-runs the prune once
+        // AutotileEngine::loadState has populated them.
+        if (m_windowTrackingAdaptor) {
+            // Shutdown-window guard, mirrors snapEnginePtr null-check above.
+            m_windowTrackingAdaptor->pruneExcludedPendingRestores(
+                PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+        }
+    };
+    connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
+            [refilterExcludeRules](bool /*persisted*/) {
+                refilterExcludeRules();
+            });
+
     // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     snapEngine->setPersistenceDelegate(
@@ -1769,6 +1850,19 @@ void Daemon::stop()
     // already captured before the router went away.
     m_screenModeRouter.reset();
 
+    // Sever SnapEngine's borrow of m_excludeRuleSet (a daemon-owned value
+    // member) BEFORE m_snapEngine.reset(). Declaration order currently
+    // guarantees lifetime, but a future reorder or ownership move could
+    // silently introduce a dangling pointer through isAppIdExcluded if
+    // a late shutdown call landed; the explicit clear here makes the
+    // teardown contract grep-discoverable and survives that refactor.
+    // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter
+    // lives on the concrete `SnapEngine`. qobject_cast mirrors the
+    // narrowing in the autotile-toggle branch above (~ line 893).
+    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+        concreteSnap->setExcludeRuleSet(nullptr);
+    }
+
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();
     m_autotileEngine.reset();
@@ -1800,13 +1894,17 @@ void Daemon::stop()
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, AutotileAdaptor) all ship no-op destructors —
-    // either explicit `= default` in their headers, an empty body
-    // declared inline, or an empty out-of-line body (`{}`) in their
-    // .cpp (DBusScreenAdaptor + WindowTrackingAdaptor follow that
-    // shape). The substantive safety claim is "no member deref runs
-    // in any of their destructors" — confirmed by inspecting each
-    // header + cpp pair, not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
+    // SnapAdaptor, AutotileAdaptor) all ship destructors that don't
+    // deref any borrowed pointer — most are `= default` / empty-body
+    // (no member access), and the two outliers do only self-cleanup
+    // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
+    // line body, and WindowTrackingAdaptor's `~WindowTrackingAdaptor`
+    // calls `m_service->setShouldTrackPredicate({})` on its Qt-child
+    // m_service to clear a captured-this lambda before the child
+    // tears down (see Pass-3 commit c4e3c5125). The substantive
+    // safety claim is "no borrowed-pointer deref runs in any of their
+    // destructors" — confirmed by inspecting each header + cpp pair,
+    // not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
     // method dispatch to them before we begin tearing down, and Qt's
     // sender-destruction auto-disconnect cleans up signal wiring when the
     // borrowed sender (m_layoutManager, etc.) is destroyed during member

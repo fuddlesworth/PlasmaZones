@@ -303,14 +303,16 @@ private:
      * `Animations.WindowFiltering` cache so the two filter sets can
      * diverge.
      *
-     * A WindowRule carrying any OverrideAnimation* action whose
-     * matcher substring-matches the window's class OVERRIDES the
-     * filter — the existence of even one targeted rule signals
+     * A WindowRule carrying any OverrideAnimation* or SetOpacity
+     * action whose match expression resolves for the window OVERRIDES
+     * the filter — the existence of even one targeted rule signals
      * deliberate user intent to animate this app, regardless of
-     * which event the cascade is firing for. Match is the same
-     * case-insensitive `WindowClass Contains <pattern>` matcher the
-     * shader_resolve cascade walks. Empty windowClass falls through
-     * to the filter (no rule can match an unidentified window).
+     * which event the cascade is firing for. The match expression
+     * walks the full per-window query (AppId / WindowClass / Title /
+     * WindowRole / DesktopFile / WindowType / Pid / state flags) so
+     * a rule pinned to any of those axes triggers the override; a
+     * window with no rule-matchable attributes at all falls through
+     * to the filter.
      */
     bool shouldAnimateWindow(KWin::EffectWindow* w) const;
 
@@ -341,6 +343,18 @@ private:
      * surface. Sharing one substring match keeps both call sites in lockstep.
      */
     static bool isOwnOverlayClass(const QString& windowClass);
+
+    /**
+     * @brief Reject XDG desktop portal surfaces by window class.
+     *
+     * File dialogs / color pickers / screenshot pickers brokered by
+     * `xdg-desktop-portal-*` services arrive with classes like
+     * "xdg-desktop-portal-kde" / "xdg-desktop-portal-gtk". Snapping or
+     * tracking them as user-focus targets pollutes the daemon's
+     * last-active-window state. Shared by `shouldHandleWindow` and
+     * `notifyWindowActivated` so the two filter chains stay in lockstep.
+     */
+    static bool isXdgDesktopPortalSurface(const QString& windowClass);
 
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
@@ -397,10 +411,14 @@ private:
      * receive daemon data keyed by appId should do a linear scan fallback
      * when the exact full ID is not found.
      *
-     * @param filterHandleable If true, only include windows passing shouldHandleWindow()
+     * Always filters to handleable windows (passes shouldHandleWindow()) —
+     * the prior `filterHandleable=false` overload had zero callers and was
+     * removed as dead surface. Add it back as an explicit parameter if a
+     * future caller actually needs the unfiltered map.
+     *
      * @return Hash map of fullWindowId -> EffectWindow*
      */
-    QHash<QString, KWin::EffectWindow*> buildWindowMap(bool filterHandleable = true) const;
+    QHash<QString, KWin::EffectWindow*> buildWindowMap() const;
 
     /**
      * @brief Get the active window if valid, emit navigation feedback on failure
@@ -720,23 +738,16 @@ private:
     // beginDrag is called unconditionally at drag-start; the deferred-send
     // optimization is obsolete now that the daemon always knows about the drag.
 
-    // User-configured exclusion lists — cached from daemon for shouldHandleWindow() gating.
-    // The daemon also enforces these for keyboard navigation, but the effect needs them
-    // for drag operations and window lifecycle reporting (slotWindowAdded, dragTracker).
-    QStringList m_excludedApplications;
-    QStringList m_excludedWindowClasses;
-
-    // Window-rule view of the snapping/tiling exclusion lists. ExclusionListBridge
-    // converts the two QStringLists above into a WindowRuleSet of terminal
-    // Exclude rules; the bound RuleEvaluator drives shouldHandleWindow()'s
-    // exclusion gate. Rebuilt by rebuildSnappingExclusionRuleSet() on every
-    // exclusion-list D-Bus load. Declaration ORDER MATTERS — the rule set
-    // must precede (and outlive) the evaluator that binds a reference to it.
+    // Drag-gate exclusion rule set — the Exclude-shaped slice of the
+    // unified WindowRule store the effect mirrors over D-Bus. Filled by
+    // loadWindowRuleAnimationsFromDbus's parse step (which already
+    // deserialises the full rule set for the animation override path),
+    // via `PhosphorWindowRule::ExclusionRules::excludeRulesFrom`. The
+    // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate.
+    // Declaration ORDER MATTERS — the rule set must precede (and outlive)
+    // the evaluator that binds a reference to it.
     PhosphorWindowRule::WindowRuleSet m_snappingExclusionRuleSet;
     PhosphorWindowRule::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
-
-    /// Rebuild m_snappingExclusionRuleSet from the snapping exclusion lists.
-    void rebuildSnappingExclusionRuleSet();
 
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForAutotileNotify() to prevent small utility
@@ -754,32 +765,33 @@ private:
     // Animation window filtering — separate cache from the snapping/tiling
     // exclusions because the user can opt for divergent filter sets. The
     // filter gates the animation cascade BEFORE rule resolution, but a
-    // class-pattern rule whose pattern matches the window's class
-    // overrides the filter (so a user can disable animations broadly via
-    // an app exclusion AND still keep one class animated through a
-    // targeted rule). Defaults are permissive (no filter) until D-Bus
-    // populates them; matches the per-key defaults in ConfigDefaults.
+    // rule whose match expression resolves for the window overrides the
+    // filter (so a user can disable animations broadly via an app exclusion
+    // AND still keep one app animated through a targeted rule). The match
+    // expression sees the full per-window query (AppId / WindowClass /
+    // Title / WindowRole / DesktopFile / WindowType / Pid / state flags).
+    // Defaults are permissive (no filter) until D-Bus populates them;
+    // matches the per-key defaults in ConfigDefaults.
     bool m_animationExcludeTransientWindows = false;
     // Notification / OSD surfaces — excluded by default (see
-    // ConfigDefaults::animationExcludeNotificationsAndOsd). Initialised
+    // ConfigDefaults::animationExcludeNotificationsAndOsd()). Initialised
     // to the exclude default rather than the permissive value above so
     // a pre-D-Bus window event doesn't flash a shader on a notification.
     bool m_animationExcludeNotificationsAndOsd = true;
     int m_animationMinWindowWidth = 0;
     int m_animationMinWindowHeight = 0;
-    QStringList m_animationExcludedApplications;
-    QStringList m_animationExcludedWindowClasses;
 
-    // Window-rule view of the animation exclusion lists — same bridge as the
-    // snapping exclusions, separate rule set because the user can configure
-    // divergent filter lists. Drives shouldAnimateWindow()'s exclusion gate.
-    // Rebuilt by rebuildAnimationExclusionRuleSet() on every animation
-    // exclusion-list D-Bus load. Declaration ORDER MATTERS (see above).
+    // Animation exclusion rule set — the `ExcludeAnimations`-action slice
+    // of the unified WindowRule store the effect mirrors over D-Bus.
+    // Filled by loadWindowRuleAnimationsFromDbus's parse step (which
+    // already deserialises the full rule set for the animation override
+    // path), via
+    // `PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom`.
+    // The bound RuleEvaluator drives shouldAnimateWindow()'s exclusion
+    // gate. Declaration ORDER MATTERS — the rule set must precede (and
+    // outlive) the evaluator that binds a reference to it.
     PhosphorWindowRule::WindowRuleSet m_animationExclusionRuleSet;
     PhosphorWindowRule::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
-
-    /// Rebuild m_animationExclusionRuleSet from the animation exclusion lists.
-    void rebuildAnimationExclusionRuleSet();
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end

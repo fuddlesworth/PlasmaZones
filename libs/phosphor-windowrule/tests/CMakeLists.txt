@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-# PhosphorWindowRule unit tests. Headless — uses offscreen QPA.
+# PhosphorWindowRule unit tests. Headless — QCoreApplication only;
+# `Qt6::Gui` is intentionally NOT a link dependency (the library itself is
+# Core-only — see ../CMakeLists.txt's `Core only — no Gui` comment), so no
+# `QT_QPA_PLATFORM` env var is needed: there is no QPA layer to choose.
 
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
@@ -20,7 +23,7 @@ function(pwr_add_test _name)
     )
     add_test(NAME ${_name} COMMAND ${_name})
     set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=org.phosphor.windowrule.*=false"
+        ENVIRONMENT "QT_LOGGING_RULES=org.phosphor.windowrule.*=false"
         LABELS "phosphorwindowrule"
     )
 endfunction()
@@ -38,5 +41,14 @@ pwr_add_test(phosphorwindowrule_test_ruleevaluator_cascade test_ruleevaluator_ca
 pwr_add_test(phosphorwindowrule_test_ruleevaluator_benchmark test_ruleevaluator_benchmark.cpp)
 
 # Phase 2 in-memory bridges.
-pwr_add_test(phosphorwindowrule_test_exclusionlistbridge test_exclusionlistbridge.cpp)
 pwr_add_test(phosphorwindowrule_test_contextrulebridge test_contextrulebridge.cpp)
+# Slicers for the `Exclude` / `ExcludeAnimations` rule subsets that the
+# snap-engine, the KWin effect's drag gate, and the effect's
+# `shouldAnimateWindow` gate bind to their evaluators. Covers the disabled-
+# rule skip in `rulesWithAction`, the action-type filter shared by
+# `excludeRulesFrom` / `excludeAnimationsRulesFrom`, and the leaf-shape
+# harvest in `applicationExcludePatternsFrom` (Field::AppId + Operator::
+# AppIdMatches + non-empty pattern, with disabled / non-leaf / non-AppId
+# rules dropped). The v3→v4 migration tests exercise the END-TO-END id
+# derivation; this file covers the helpers in isolation.
+pwr_add_test(phosphorwindowrule_test_exclusionrules test_exclusionrules.cpp)

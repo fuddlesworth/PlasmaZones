@@ -9,10 +9,12 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Dialog for picking from currently running windows
  *
- * Shows a filterable list of running windows with their window class and caption.
- * Emits picked(value) when a window is selected. Used by the Exclusions tab
- * and App Rules card to let users pick window classes without needing
- * to manually type them.
+ * Shows a filterable list of running windows with their window class and
+ * caption. Emits picked(value) when a window is selected. Hosted by the
+ * Window Rules page (WindowRulesPage); MatchLeafEditor calls the
+ * appropriate openFor* helper based on the match leaf's Field so the
+ * user can pick an AppId / WindowClass / DesktopFile / Title without
+ * typing it.
  */
 Kirigami.Dialog {
     id: dialog
@@ -23,16 +25,12 @@ Kirigami.Dialog {
     required property var controller
     /// Picker mode — `"apps"` returns the app's short / desktop-file name,
     /// `"classes"` the X11/Wayland window class, `"desktopFiles"` the full
-    /// `.desktop` basename (filtered to rows that have one), `"titles"`
-    /// the window caption. Drives the title, the row's primary text, and
-    /// the value passed to `picked`.
+    /// `.desktop` basename (rows without a desktop file render as
+    /// disabled placeholders so the user can still see which window the
+    /// row represents — not filtered out), `"titles"` the window caption
+    /// (rows without a caption ARE filtered out). Drives the title, the
+    /// row's primary text, and the value passed to `picked`.
     property string mode: "apps"
-    /// Convenience boolean read by older callers (ExclusionsPage,
-    /// AnimationsGeneralPage) inside their `onPicked` handlers to branch
-    /// between the "application" and "window class" lists. Derived from
-    /// `mode` so the open* helpers don't have to keep two properties in
-    /// sync; new callers should consult `mode` directly.
-    readonly property bool forApps: mode === "apps"
     property var windowList: []
     // Set by the Connections block below when the controller signals a
     // timeout (KWin effect unloaded / unresponsive). Cleared on every
@@ -85,6 +83,24 @@ Kirigami.Dialog {
         refresh();
         open();
         searchField.forceActiveFocus();
+    }
+
+    /// Pre-pruned base list — stable across keystrokes within a single mode.
+    /// Titles mode prunes captionless rows (clicking one would yield an empty
+    /// leaf value with no fallback); other modes keep every row so the
+    /// delegate can grey out unselectable cells (e.g. "(no desktop file)").
+    /// Re-derived only when `windowList` or `mode` changes, NOT on every
+    /// search keystroke — the search filter below already walks the live
+    /// model once per keystroke; without this cache it would walk twice.
+    readonly property var _baseRows: {
+        if (!windowList || windowList.length === 0)
+            return [];
+        if (mode === "titles")
+            return windowList.filter(function (w) {
+                return (w.caption || "").length > 0;
+            });
+
+        return windowList;
     }
 
     /// User-facing title for the current mode. Extracted from the quadruple-
@@ -156,13 +172,21 @@ Kirigami.Dialog {
 
         function onRunningWindowsTimedOut() {
             dialog.requestTimedOut = true;
+            // Drop the stale snapshot the dialog took at refresh()-time
+            // so the PlaceholderMessage's `windowListView.count === 0`
+            // gate flips to true and the user actually sees the
+            // "No response from KWin effect" diagnostic. Without this,
+            // a prior session's cached rows survive on first open after
+            // the daemon went down — picker shows out-of-date windows
+            // with no error indicator until a subsequent open re-reads
+            // a now-empty cache.
+            dialog.windowList = [];
         }
 
-        // Declare `target` BEFORE the signal-handler functions — strict
-        // QML resolves signal names against the target's metaobject at
-        // parse time, so a target listed after the handlers fails the
-        // lookup ("Detected function … but no signal of the target
-        // matches the name").
+        // `target` co-located with the handlers for readability — Qt 6's
+        // `Connections` with a `var` target resolves signal names at bind
+        // time so the ordering is not load-bearing the way it is when the
+        // target type is statically known.
         target: dialog.controller
     }
 
@@ -173,7 +197,8 @@ Kirigami.Dialog {
             id: searchField
 
             Layout.fillWidth: true
-            placeholderText: i18n("Filter...")
+            placeholderText: i18n("Filter…")
+            Accessible.name: i18n("Filter running windows")
         }
 
         Kirigami.Separator {
@@ -188,29 +213,19 @@ Kirigami.Dialog {
             Layout.preferredHeight: Kirigami.Units.gridUnit * 14
             clip: true
             model: {
-                if (!dialog.windowList || dialog.windowList.length === 0)
+                // `_baseRows` is the mode-stable pre-pruned list (titles mode
+                // drops captionless rows; other modes keep everything). It
+                // recomputes only when `windowList` or `mode` changes —
+                // searches below filter against it once per keystroke.
+                const base = dialog._baseRows;
+                if (base.length === 0)
                     return [];
 
-                let base = dialog.windowList;
-                // Titles mode still prunes captionless rows — clicking one
-                // would fill the leaf with an empty string and there is no
-                // sensible fallback. DesktopFile mode does NOT prune: many
-                // X11 apps have no registered .desktop file, and older
-                // KWin-effect builds don't populate the field at all, so
-                // an aggressive prune produces an empty picker. The
-                // delegate flags rows that would yield an empty value
-                // (greyed primary text + "(no desktop file)" subtext) so
-                // the user can still see and search the running windows.
-                if (dialog.mode === "titles")
-                    base = base.filter(function(w) {
-                        return (w.caption || "").length > 0;
-                    });
-
-                let filter = searchField.text.toLowerCase();
+                const filter = searchField.text.toLowerCase();
                 if (filter.length === 0)
                     return base;
 
-                return base.filter(function(w) {
+                return base.filter(function (w) {
                     let primary = dialog.primaryFor(w);
                     if (primary.length === 0)
                         primary = w.appName || dialog.deriveAppName(w.windowClass);
@@ -284,15 +299,9 @@ Kirigami.Dialog {
                             elide: Text.ElideRight
                             visible: secondaryText.length > 0
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

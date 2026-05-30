@@ -103,8 +103,12 @@ public:
     bool saveToFile(const QString& path) const;
 
     /// Equality compares the rule LIST only; @ref revision is intentionally
-    /// ignored so the store's no-op fast path can suppress redundant emits
-    /// when content matches even though revisions have diverged.
+    /// ignored. The store's no-op fast path uses this to skip an in-place
+    /// `setRules(candidate.rules())` (and the revision bump it would
+    /// imply) when the post-validation content has not changed — the
+    /// stored revision stays monotonic because either both sides are
+    /// equal (no bump) or the live `setRules` advances it past the prior
+    /// peak.
     bool operator==(const WindowRuleSet& other) const
     {
         return m_rules == other.m_rules;

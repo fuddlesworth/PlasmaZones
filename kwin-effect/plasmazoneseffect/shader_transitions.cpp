@@ -4,6 +4,7 @@
 #include "../plasmazoneseffect.h"
 #include "shader_internal.h"
 #include "shader_resolve.h"
+#include "window_query.h"
 
 #include "../windowanimator.h"
 
@@ -18,6 +19,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
+#include <PhosphorWindowRule/ExclusionRules.h>
 #include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/WindowRule.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
@@ -279,14 +281,21 @@ inline GLenum wrapStringToEnum(const QString& wrap)
 
 /// Parse a D-Bus setting variant containing a JSON-encoded string and
 /// dispatch to one of two callers based on the document's top-level
-/// shape. Used by the four `load*FromDbus` setting fetchers in
-/// `shader_transitions.cpp` — each loader differs only in (a) which
-/// shape it expects and (b) what it does with the parsed JSON, so
-/// every other piece (UTF-8 decode, document-shape check, malformed-
-/// payload warning text) collapses into a single helper call. The
-/// `name` argument feeds the warning so the failure site is identifiable
-/// in journals; pass the same `SettingProperty` constant the loader
-/// requested.
+/// shape. Used by the three `load*FromDbus` setting fetchers in
+/// `shader_transitions.cpp` — `loadShaderProfileFromDbus`,
+/// `loadMotionProfileTreeFromDbus`, `loadShaderRegistryFromDbus`. Each
+/// loader differs only in (a) which shape it expects and (b) what it
+/// does with the parsed JSON, so every other piece (UTF-8 decode,
+/// document-shape check, malformed-payload warning text) collapses
+/// into a single helper call. `loadWindowRuleAnimationsFromDbus` is the
+/// odd one out — it issues a raw `QDBusMessage::createMethodCall` to
+/// `getAllRules` and parses with `QJsonDocument::fromJson` directly,
+/// because it slices the parsed rules through
+/// `excludeRulesFrom` / `excludeAnimationsRulesFrom` before sinking.
+///
+/// The `name` argument feeds the warning so the failure site is
+/// identifiable in journals; pass the same `SettingProperty` constant
+/// the loader requested.
 ///
 /// `objectSink` runs when the document is a top-level JSON object;
 /// `arraySink` runs when it is a top-level JSON array. Pass a
@@ -1199,12 +1208,16 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (repaintRect.isEmpty()) {
         repaintRect = window->frameGeometry().toAlignedRect();
     }
-    // A surface-extent transition paints across the whole output; the
-    // layer repaint must span the output so the window's damage — and
-    // therefore the per-window present / buffer-copy region KWin derives
-    // from it — covers everything the shader draws. A frame-sized repaint
-    // would leave the off-frame band the shader sweeps showing stale
-    // pixels. See postPaintScreen for the full rationale.
+    // A surface-extent transition paints across the whole output. The
+    // off-frame band the shader sweeps is covered by the unconditional
+    // `effects->addRepaintFull()` immediately below (line 1247) —
+    // `addLayerRepaint` itself clips its argument back to the window-
+    // item's bounding rect via the scene's `mapFromScene` (see
+    // paint_pipeline.cpp's commentary), so widening `repaintRect` to
+    // `output->geometry()` here only enlarges the layer repaint within
+    // the scene-clipped bounds the window already covers — it does NOT
+    // by itself reach the off-frame band. The widening still matters
+    // for the bounded layer-repaint correctness inside that frame.
     //
     // If `screen()` returns null (transient/popup at install time, monitor
     // unplug mid-attach), the surface-extent contract cannot be honoured
@@ -1366,11 +1379,13 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // Window-filtering gate. `shouldAnimateWindow` honours the user's
     // Animations.WindowFiltering exclusions (transient / min-size /
     // app / class) AND lets a WindowRule carrying any OverrideAnimation*
-    // action override the filter when the rule's matcher substring-matches
-    // the window's class. Skipping this for shader transitions only would
-    // leave the motion-side cascade in `applySnapGeometry` doing its own
-    // check; both call sites gate identically so the filter is a single
-    // concept across the two paths.
+    // or SetOpacity action override the filter when the rule's match
+    // expression resolves for the window's full WindowQuery (AppId /
+    // WindowClass / Title / WindowRole / DesktopFile / WindowType / Pid /
+    // state flags). Skipping this for shader transitions only would leave
+    // the motion-side cascade in `applySnapGeometry` doing its own check;
+    // both call sites gate identically so the filter is a single concept
+    // across the two paths.
     if (!shouldAnimateWindow(window)) {
         return;
     }
@@ -1379,7 +1394,14 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // an engaged-empty effectId on the rule deliberately blocks the
     // tree fallthrough (the user's "no animation for this app on this
     // event" sentinel).
-    const QString windowClass = window->windowClass();
+    //
+    // Build the full per-window query once and reuse it for every
+    // resolver call below — same shape `shouldAnimateWindow` already
+    // uses for the rule-override gate, so a rule that passes the gate
+    // also resolves its slot. Caching across resolver calls is built
+    // into the evaluator's `resolveCached(windowId, …)` path; the query
+    // here is only the match input, not the cache key.
+    const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window);
     const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event base duration. The daemon mirrors its motion
@@ -1450,7 +1472,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // rejects non-positive inputs, so `durationMs` here is a safe
     // positive floor.
     const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
-        m_shaderManager.animationRuleEvaluator(), profileTree, windowId, windowClass, profilePath, baseDurationMs);
+        m_shaderManager.animationRuleEvaluator(), profileTree, windowId, query, profilePath, baseDurationMs);
     const auto& profile = resolved.profile;
     int effectiveDurationMs = resolved.durationMs;
     if (effectiveDurationMs <= 0) {
@@ -1636,6 +1658,25 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         m_shaderManager.setWindowRuleAnimationRules(std::move(animationRules));
         qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
                           << "total animation rules to the evaluator";
+
+        // Update the drag-gate exclusion rule set from the same unified
+        // payload — `loadWindowRuleAnimationsFromDbus` is the effect's one
+        // and only rule-store sync point, so the snapping-exclusion gate
+        // refreshes here too rather than chasing a second D-Bus fetch. The
+        // filter keeps only enabled rules with a terminal Exclude action;
+        // setRules bumps the bound rule set's revision so
+        // m_snappingExclusionEvaluator's per-revision sort index rebuilds
+        // on its next walk (these evaluators call uncached `resolve()`, so
+        // there is no per-window match cache to drop — the sort index is
+        // the only revision-keyed artifact).
+        m_snappingExclusionRuleSet.setRules(PhosphorWindowRule::ExclusionRules::excludeRulesFrom(*setOpt).rules());
+
+        // Same refresh for the animation-side exclusion rule set, sliced
+        // for `ExcludeAnimations`-action rules. The two slices stay
+        // independent so a user can have a window excluded from animations
+        // but NOT from snap (or vice versa).
+        m_animationExclusionRuleSet.setRules(
+            PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom(*setOpt).rules());
         // Force a full repaint on EITHER bookend so a user-authored rule
         // applies to static (un-damaged) windows immediately AND so a
         // removed rule reverts previously-dimmed windows immediately, not

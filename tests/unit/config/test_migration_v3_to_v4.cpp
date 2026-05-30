@@ -15,6 +15,10 @@
  *     SetSnappingLayout / SetTilingAlgorithm,
  *   - a provider-default catch-all rule exists at priority 0,
  *   - per-mode disable-list entries become DisableEngine context rules,
+ *   - the v3 window-class/application exclusion lists fold into
+ *     `AppId AppIdMatches` Exclude rules,
+ *   - the v3 animation-application rules fold into animation-override rules
+ *     and the animation exclusion lists fold into `ExcludeAnimations` rules,
  *   - config.json is stamped `_version == 4`,
  *   - the conversion is idempotent (running twice is a no-op).
  *
@@ -154,19 +158,6 @@ private:
         return root.value(QStringLiteral("rules")).toArray();
     }
 
-    /// Returns the first rule at the given @p priority, or an empty object if
-    /// none exists.
-    QJsonObject findRuleByPriority(const QJsonArray& rules, int priority)
-    {
-        for (const QJsonValue& v : rules) {
-            const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("priority")).toInt() == priority) {
-                return r;
-            }
-        }
-        return {};
-    }
-
     QList<QJsonObject> allRulesByPriority(const QJsonArray& rules, int priority)
     {
         QList<QJsonObject> out;
@@ -177,6 +168,41 @@ private:
             }
         }
         return out;
+    }
+
+    // An assignment rule sets an engine mode and does NOT disable an engine.
+    // Disable rules share the assignment cascade priorities (e.g. a
+    // screen+activity disable and a screen+activity assignment both land at
+    // 510), so any priority-keyed lookup that must target the assignment rule
+    // has to filter on this predicate rather than taking the first match.
+    bool isAssignmentRule(const QJsonObject& rule)
+    {
+        const QStringList types = actionTypes(rule);
+        return types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"));
+    }
+
+    bool hasAssignmentAtPriority(const QJsonArray& rules, int priority)
+    {
+        for (const QJsonObject& r : allRulesByPriority(rules, priority)) {
+            if (isAssignmentRule(r)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Returns the assignment rule at @p priority, skipping any same-priority
+    // disable rule. A bare first-match-by-priority lookup would return
+    // whichever rule the migration happened to emit first — an order
+    // dependency the assertion should not rely on.
+    QJsonObject findAssignmentRuleByPriority(const QJsonArray& rules, int priority)
+    {
+        for (const QJsonObject& r : allRulesByPriority(rules, priority)) {
+            if (isAssignmentRule(r)) {
+                return r;
+            }
+        }
+        return {};
     }
 
     /// Collect the action `type` strings of a rule.
@@ -275,9 +301,16 @@ private Q_SLOTS:
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
         QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
 
-        // Both temporary stash keys are stripped from config.json.
+        // All four temporary stash keys are stripped from config.json.
+        // The fixture's `makeV3Config()` doesn't populate the two
+        // exclusion stashes, so they shouldn't exist post-migration
+        // anyway — pinning their absence here catches a future
+        // regression where the migration spuriously creates an empty
+        // stash from absent input.
         QVERIFY(!cfg.contains(QStringLiteral("_v4DisableStash")));
         QVERIFY(!cfg.contains(QStringLiteral("_v4AnimationRulesStash")));
+        QVERIFY(!cfg.contains(QStringLiteral("_v4ExclusionStash")));
+        QVERIFY(!cfg.contains(QStringLiteral("_v4AnimationExclusionStash")));
     }
 
     // ─── Exact cascade priorities ─────────────────────────────────────────
@@ -296,29 +329,18 @@ private Q_SLOTS:
         // present in the migrated rule set.
         //
         // Priorities 410/510 can also carry same-priority disable rules, so we
-        // assert against the assignment cascade explicitly: a rule that sets an
-        // engine mode and does NOT disable an engine.
-        const auto isAssignmentRule = [this](const QJsonObject& rule) {
-            const QStringList types = actionTypes(rule);
-            return types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"));
-        };
-        const auto hasAssignmentAtPriority = [&](int priority) {
-            for (const QJsonObject& r : allRulesByPriority(rules, priority)) {
-                if (isAssignmentRule(r)) {
-                    return true;
-                }
-            }
-            return false;
-        };
+        // assert against the assignment cascade explicitly via the shared
+        // assignment-filtered helper (a rule that sets an engine mode and does
+        // NOT disable an engine).
 
         // Exact (screen+desktop+activity) → 610.
-        QVERIFY(hasAssignmentAtPriority(610));
+        QVERIFY(hasAssignmentAtPriority(rules, 610));
         // Screen + activity → 510 (activity weight beats desktop).
-        QVERIFY(hasAssignmentAtPriority(510));
+        QVERIFY(hasAssignmentAtPriority(rules, 510));
         // Screen + desktop → 410.
-        QVERIFY(hasAssignmentAtPriority(410));
+        QVERIFY(hasAssignmentAtPriority(rules, 410));
         // Screen only → 310.
-        QVERIFY(hasAssignmentAtPriority(310));
+        QVERIFY(hasAssignmentAtPriority(rules, 310));
     }
 
     // ─── Lossless three-action assignment rules ──────────────────────────
@@ -333,23 +355,28 @@ private Q_SLOTS:
         const QJsonArray rules = rulesFromWindowRules();
 
         // The exact rule (610) had Mode=Autotile + snappingLayout + tilingAlgo
-        // — all three actions present.
-        const QJsonObject exact = findRuleByPriority(rules, 610);
+        // — all three actions present. (610 is unique to the exact assignment;
+        // no disable rule collides there, but use the assignment-filtered
+        // lookup uniformly so the three sites stay consistent.)
+        const QJsonObject exact = findAssignmentRuleByPriority(rules, 610);
         QVERIFY(!exact.isEmpty());
         QCOMPARE(actionTypes(exact),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout"),
                               QStringLiteral("setTilingAlgorithm")}));
 
         // The screen+activity rule (510) had snapping mode + a layout, no
-        // tiling algorithm → SetEngineMode + SetSnappingLayout only.
-        const QJsonObject scrAct = findRuleByPriority(rules, 510);
+        // tiling algorithm → SetEngineMode + SetSnappingLayout only. A
+        // screen+activity disable rule (AutotileDisabledActivities) also lands
+        // at 510, so filter to the assignment rule explicitly.
+        const QJsonObject scrAct = findAssignmentRuleByPriority(rules, 510);
         QVERIFY(!scrAct.isEmpty());
         QCOMPARE(actionTypes(scrAct),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout")}));
 
         // The screen-only rule (310) was mode-only autotile (both layout
-        // fields empty) → just SetEngineMode.
-        const QJsonObject scrOnly = findRuleByPriority(rules, 310);
+        // fields empty) → just SetEngineMode. Screen-only monitor disable
+        // rules also land at 310, so filter to the assignment rule explicitly.
+        const QJsonObject scrOnly = findAssignmentRuleByPriority(rules, 310);
         QVERIFY(!scrOnly.isEmpty());
         QCOMPARE(actionTypes(scrOnly), (QStringList{QStringLiteral("setEngineMode")}));
     }
@@ -1350,23 +1377,10 @@ private Q_SLOTS:
         // rule's id would drop the assignment from the rebuilt set; counting
         // every cascade level guards that.
         const QJsonArray allRules = rulesFromWindowRules();
-        const auto isAssignmentRule = [this](const QJsonObject& rule) {
-            const QStringList types = actionTypes(rule);
-            return types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"));
-        };
-        const auto hasAssignmentAtPriority = [&](int priority) {
-            for (const QJsonValue& v : allRules) {
-                const QJsonObject r = v.toObject();
-                if (r.value(QStringLiteral("priority")).toInt() == priority && isAssignmentRule(r)) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        QVERIFY(hasAssignmentAtPriority(610));
-        QVERIFY(hasAssignmentAtPriority(510));
-        QVERIFY(hasAssignmentAtPriority(410));
-        QVERIFY(hasAssignmentAtPriority(310));
+        QVERIFY(hasAssignmentAtPriority(allRules, 610));
+        QVERIFY(hasAssignmentAtPriority(allRules, 510));
+        QVERIFY(hasAssignmentAtPriority(allRules, 410));
+        QVERIFY(hasAssignmentAtPriority(allRules, 310));
 
         // Disable family — count must match testDisableListRules exactly
         // (fixture: 1 + 2 + 1 + 1 = 5). Drift here means an animation rule
@@ -1493,6 +1507,21 @@ private Q_SLOTS:
         animStash.append(
             makeShaderRule(QStringLiteral("firefox"), QStringLiteral("window.open"), QStringLiteral("dissolve")));
         cfg.insert(QStringLiteral("_v4AnimationRulesStash"), animStash);
+        // The exclusion stash uses the same Object-with-string-fields shape as
+        // the disable stash. Plausible content for cleanup-branch coverage —
+        // the actual conversion of these into Exclude rules is covered by
+        // the dedicated testExclusions_* cases below.
+        QJsonObject exclusionStash;
+        exclusionStash.insert(QStringLiteral("Applications"), QStringLiteral("firefox"));
+        exclusionStash.insert(QStringLiteral("WindowClasses"), QStringLiteral("kitty"));
+        cfg.insert(QStringLiteral("_v4ExclusionStash"), exclusionStash);
+        // Plausible animation-exclusion stash content too. Same shape as the
+        // snapping exclusion stash (object with Applications / WindowClasses
+        // string fields).
+        QJsonObject animationExclusionStash;
+        animationExclusionStash.insert(QStringLiteral("Applications"), QStringLiteral("vlc"));
+        animationExclusionStash.insert(QStringLiteral("WindowClasses"), QStringLiteral("mpv"));
+        cfg.insert(QStringLiteral("_v4AnimationExclusionStash"), animationExclusionStash);
         writeJson(ConfigDefaults::configFilePath(), cfg);
 
         // Pre-existing windowrules.json: produced via the production save
@@ -1517,6 +1546,10 @@ private Q_SLOTS:
                  "cleanup-only branch must strip _v4DisableStash");
         QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationRulesStash")),
                  "cleanup-only branch must strip _v4AnimationRulesStash");
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4ExclusionStash")),
+                 "cleanup-only branch must strip _v4ExclusionStash");
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationExclusionStash")),
+                 "cleanup-only branch must strip _v4AnimationExclusionStash");
 
         // windowrules.json is byte-identical — the cleanup branch must NOT
         // rebuild and overwrite user-edited rules.
@@ -1535,6 +1568,399 @@ private Q_SLOTS:
         QVERIFY2(!QFile::exists(assignmentsPath()), "cleanup-only branch must not recreate assignments.json");
         QVERIFY2(!QFile::exists(assignmentsPath() + QStringLiteral(".migrated")),
                  "cleanup-only branch must not produce an assignments.json.migrated artifact");
+    }
+
+    // ─── Exclusions fold ─────────────────────────────────────────────────
+    // The legacy `Exclusions.{Applications,WindowClasses}` comma-joined
+    // lists fold into Application-subject `AppId AppIdMatches <pattern>`
+    // matchers with a terminal `Exclude` action — the same shape the
+    // legacy runtime bridge produced for the daemon's navigation gates
+    // (see git history for `ExclusionListBridge`), so an upgrading
+    // user's runtime exclusion behaviour is preserved.
+
+private:
+    /// A v3 config carrying just an Exclusions group. No disable lists, no
+    /// animation rules — keeps the assertion scope tight to the exclusion
+    /// fold so failures point straight at the offending stash / rule
+    /// builder.
+    QJsonObject makeV3ConfigWithExclusions(const QString& apps, const QString& windowClasses)
+    {
+        QJsonObject root;
+        root.insert(QStringLiteral("_version"), 3);
+        QJsonObject exclusions;
+        if (!apps.isNull()) {
+            exclusions.insert(QStringLiteral("Applications"), apps);
+        }
+        if (!windowClasses.isNull()) {
+            exclusions.insert(QStringLiteral("WindowClasses"), windowClasses);
+        }
+        if (!exclusions.isEmpty()) {
+            root.insert(QStringLiteral("Exclusions"), exclusions);
+        }
+        return root;
+    }
+
+    /// Surface every rule that's an Application-subject Exclude rule (the
+    /// only shape the exclusion fold produces). A v3 fixture with no
+    /// assignments / disable lists / animation rules yields a rule set
+    /// containing exactly the migrated exclusions + the provider-default
+    /// catch-all; the catch-all has no `appId` leaf, so this filter
+    /// targets the exclusion-fold output cleanly.
+    QList<QJsonObject> exclusionRules(const QJsonArray& rules)
+    {
+        QList<QJsonObject> out;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            if (actionTypes(r) != QStringList{QStringLiteral("exclude")}) {
+                continue;
+            }
+            if (matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches")).isEmpty()) {
+                continue;
+            }
+            out.append(r);
+        }
+        return out;
+    }
+
+private Q_SLOTS:
+
+    void testExclusions_applicationsBecomeAppIdMatchesExcludeRules()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithExclusions(QStringLiteral("firefox,konsole"), QString()));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> excl = exclusionRules(rulesFromWindowRules());
+        QCOMPARE(excl.size(), 2);
+        QStringList patterns;
+        for (const QJsonObject& r : excl) {
+            patterns.append(matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches")));
+        }
+        patterns.sort();
+        QCOMPARE(patterns, QStringList{} << QStringLiteral("firefox") << QStringLiteral("konsole"));
+
+        // Schema invariants spelled out so a regression in the builder
+        // (e.g. wrong field, wrong op, multi-action rule) fails here rather
+        // than at runtime in the cascade evaluator.
+        for (const QJsonObject& r : excl) {
+            QVERIFY(r.value(QStringLiteral("enabled")).toBool());
+            QCOMPARE(r.value(QStringLiteral("priority")).toInt(), 0);
+        }
+    }
+
+    void testExclusions_windowClassesBecomeAppIdMatchesExcludeRules()
+    {
+        // The v3 schema split the two lists by intent (one matched against
+        // desktopFileName, one against windowClass) but the daemon's runtime
+        // bridge always folded BOTH against the resolved appId via the
+        // segment-aware AppIdMatches operator. The migration preserves that
+        // bridge-flavoured semantics — so a WindowClasses entry must produce
+        // an AppId AppIdMatches leaf, NOT a WindowClass Contains leaf.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithExclusions(QString(), QStringLiteral("kitty,org.kde.dolphin")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> excl = exclusionRules(rulesFromWindowRules());
+        QCOMPARE(excl.size(), 2);
+        QStringList patterns;
+        for (const QJsonObject& r : excl) {
+            patterns.append(matchLeafValueByOp(r, QStringLiteral("appId"), QStringLiteral("appIdMatches")));
+        }
+        patterns.sort();
+        QCOMPARE(patterns, QStringList{} << QStringLiteral("kitty") << QStringLiteral("org.kde.dolphin"));
+    }
+
+    void testExclusions_emptyAndWhitespacePatternsDropped()
+    {
+        // Empty (",,") and whitespace-only ("  ") entries used to slip into
+        // the legacy bridge as never-matching rules. The migration mirrors
+        // the bridge's trimmed-empty skip so the rule store doesn't grow
+        // inert entries from the conversion.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithExclusions(QStringLiteral(",firefox,  ,,konsole,"), QStringLiteral("   ,,")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> excl = exclusionRules(rulesFromWindowRules());
+        // Only "firefox" and "konsole" survive — the empty / whitespace
+        // entries from BOTH lists are dropped.
+        QCOMPARE(excl.size(), 2);
+    }
+
+    void testExclusions_idempotentRuleIds()
+    {
+        // Mirrors the animation-rule idempotency case: re-running the
+        // migration on the same v3 input produces byte-identical rule ids,
+        // because the id is derived from `(Field::AppId,
+        // Operator::AppIdMatches, pattern)` through a fixed v5-UUID
+        // namespace. A regression in the namespace literal or the
+        // length-prefixed segment encoding would break the dedup guarantee
+        // the legacy runtime bridge relied on — see git history for the
+        // pre-v4 `ExclusionListBridge` builder.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithExclusions(QStringLiteral("firefox"), QString()));
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        const QString firstId = exclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        QVERIFY(!firstId.isEmpty());
+
+        // Golden assertion: re-derive the expected id inline against the
+        // SPEC of the namespace UUID + length-prefixed segment encoding
+        // (mirrors the equivalent guard on the animation rule test). The
+        // migration owns both ends of the v5-UUID derivation, so the
+        // round-trip idempotency check below cannot catch a namespace-UUID
+        // or encoder change — both sides of that compare drift together.
+        // Duplicating the namespace literal AND the segment-encoding
+        // format here means a deliberate change to either forces a
+        // deliberate update to this test.
+        const QUuid kExpectedNamespace(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
+        // Segment encoding: <size>:<bytes> per segment, no separator.
+        //   field = static_cast<int>(Field::AppId) = 0 → "1:0"
+        //   op    = static_cast<int>(Operator::AppIdMatches) = 5 → "1:5"
+        //   pattern = "firefox" → "7:firefox"
+        const QString kExpectedKey = QStringLiteral("1:0") + QStringLiteral("1:5") + QStringLiteral("7:firefox");
+        const QString expectedId = QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString();
+        QCOMPARE(firstId, expectedId);
+
+        // Round-trip: wipe windowrules.json + re-stage same v3 input.
+        QFile::remove(ConfigDefaults::windowRulesFilePath());
+        writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithExclusions(QStringLiteral("firefox"), QString()));
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        const QString secondId = exclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        QCOMPARE(secondId, firstId);
+    }
+
+    void testExclusions_groupAndStashStrippedAfterFinalize()
+    {
+        // The v3 Exclusions group AND the v4 scratch stash key MUST both be
+        // gone from config.json after a successful conversion. A regression
+        // in either site (migrateV3ToV4 forgetting to delete the source
+        // group, or finalizeV4Conversion forgetting to strip the stash)
+        // would leave inert keys on disk that the settings UI would
+        // gladly resurface — re-introducing the exact duplication this
+        // migration is supposed to retire.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithExclusions(QStringLiteral("firefox"), QStringLiteral("kitty")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject cfgAfter = readJson(ConfigDefaults::configFilePath());
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("Exclusions")),
+                 "migrateV3ToV4 must remove the legacy Exclusions group");
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4ExclusionStash")),
+                 "finalizeV4Conversion must strip the _v4ExclusionStash scratch key");
+    }
+
+    void testExclusions_absentSourceProducesNoExclusionRules()
+    {
+        // A clean v3 config with no Exclusions group must not produce any
+        // exclusion stash entry and not contribute any exclusion rule to
+        // the output. The provider-default catch-all rule still appears —
+        // the assertion targets the exclusion-shaped subset exactly.
+        IsolatedConfigGuard guard;
+        // makeV3ConfigWithExclusions with both nulls produces a v3 config
+        // with NO Exclusions group at all.
+        writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithExclusions(QString(), QString()));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QCOMPARE(exclusionRules(rulesFromWindowRules()).size(), 0);
+    }
+
+    // ─── Animation exclusions fold ────────────────────────────────────────
+    // The legacy `Animations.WindowFiltering.{Applications,WindowClasses}`
+    // lists fold into `ExcludeAnimations`-action rules with
+    // `DesktopFile Contains <pattern>` (applications) or
+    // `WindowClass Contains <pattern>` (window classes) leaves — the
+    // same match semantics the legacy effect-side bridge produced for
+    // the animation pipeline, so an upgrading user's "no animations for
+    // firefox" rule keeps the same matching behaviour.
+
+private:
+    QJsonObject makeV3ConfigWithAnimationExclusions(const QString& apps, const QString& windowClasses)
+    {
+        QJsonObject root;
+        root.insert(QStringLiteral("_version"), 3);
+        QJsonObject filtering;
+        if (!apps.isNull()) {
+            filtering.insert(QStringLiteral("Applications"), apps);
+        }
+        if (!windowClasses.isNull()) {
+            filtering.insert(QStringLiteral("WindowClasses"), windowClasses);
+        }
+        if (!filtering.isEmpty()) {
+            QJsonObject animations;
+            animations.insert(QStringLiteral("WindowFiltering"), filtering);
+            root.insert(QStringLiteral("Animations"), animations);
+        }
+        return root;
+    }
+
+    /// Animation-exclude rules are the only ExcludeAnimations-action
+    /// shape the migration produces, so a simple "rules whose actions
+    /// contain excludeAnimations" filter cleanly isolates them.
+    QList<QJsonObject> animationExclusionRules(const QJsonArray& rules)
+    {
+        QList<QJsonObject> out;
+        for (const QJsonValue& v : rules) {
+            const QJsonObject r = v.toObject();
+            if (actionTypes(r) != QStringList{QStringLiteral("excludeAnimations")}) {
+                continue;
+            }
+            out.append(r);
+        }
+        return out;
+    }
+
+private Q_SLOTS:
+
+    void testAnimationExclusions_applicationsBecomeDesktopFileContainsRules()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QStringLiteral("firefox,konsole"), QString()));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> rules = animationExclusionRules(rulesFromWindowRules());
+        QCOMPARE(rules.size(), 2);
+        QStringList patterns;
+        for (const QJsonObject& r : rules) {
+            QCOMPARE(matchLeafValueByOp(r, QStringLiteral("desktopFile"), QStringLiteral("contains")).isEmpty(), false);
+            patterns.append(matchLeafValueByOp(r, QStringLiteral("desktopFile"), QStringLiteral("contains")));
+        }
+        patterns.sort();
+        QCOMPARE(patterns, QStringList{} << QStringLiteral("firefox") << QStringLiteral("konsole"));
+    }
+
+    void testAnimationExclusions_windowClassesBecomeWindowClassContainsRules()
+    {
+        // Unlike the snapping-side fold (which collapsed both lists into
+        // `AppId AppIdMatches` rules to mirror the daemon-bridge semantics),
+        // the animation-side fold preserves the effect-bridge split:
+        // WindowClasses entries produce `WindowClass Contains` leaves,
+        // NOT `DesktopFile Contains`.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QString(), QStringLiteral("kitty,org.kde.dolphin")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QList<QJsonObject> rules = animationExclusionRules(rulesFromWindowRules());
+        QCOMPARE(rules.size(), 2);
+        QStringList patterns;
+        for (const QJsonObject& r : rules) {
+            patterns.append(matchLeafValueByOp(r, QStringLiteral("windowClass"), QStringLiteral("contains")));
+        }
+        patterns.sort();
+        QCOMPARE(patterns, QStringList{} << QStringLiteral("kitty") << QStringLiteral("org.kde.dolphin"));
+    }
+
+    void testAnimationExclusions_emptyAndWhitespacePatternsDropped()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(
+            ConfigDefaults::configFilePath(),
+            makeV3ConfigWithAnimationExclusions(QStringLiteral(",firefox,  ,,konsole,"), QStringLiteral("   ,,")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QCOMPARE(animationExclusionRules(rulesFromWindowRules()).size(), 2);
+    }
+
+    void testAnimationExclusions_idempotentRuleIds()
+    {
+        // Counterpart to `testExclusions_idempotentRuleIds` — the
+        // animation-side fold uses a DIFFERENT segment encoding (4 segments
+        // including the action-type discriminator instead of the snapping
+        // side's 3). The discriminator is what lets a future user-authored
+        // Exclude rule and a migrated ExcludeAnimations rule share the same
+        // (field, op, pattern) tuple without collapsing to the same id.
+        // Pin the namespace + 4-segment shape inline so a future refactor
+        // of either piece (namespace literal, Field/Operator enum value
+        // renumbering, ActionType wire-string rename) has to update this
+        // test deliberately rather than drift silently in both producer
+        // and check.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QString(), QStringLiteral("firefox")));
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        const QString firstId =
+            animationExclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        QVERIFY(!firstId.isEmpty());
+
+        // The namespace UUID is shared with the snapping-side fold — same
+        // `appendExclusionRulesFromStash` / `appendAnimationExclusionRulesFromStash`
+        // namespace constant in `configmigration.cpp::exclusionMigrationNamespace`.
+        const QUuid kExpectedNamespace(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
+        // Segment encoding: <size>:<bytes> per segment, no separator.
+        // The 4-segment shape for an animation WindowClass rule:
+        //   field   = static_cast<int>(Field::WindowClass) = 1     → "1:1"
+        //   op      = static_cast<int>(Operator::Contains) = 1     → "1:1"
+        //   pattern = "firefox"                                    → "7:firefox"
+        //   action  = "excludeAnimations" (17 bytes)               → "17:excludeAnimations"
+        const QString kExpectedKey = QStringLiteral("1:1") + QStringLiteral("1:1") + QStringLiteral("7:firefox")
+            + QStringLiteral("17:excludeAnimations");
+        const QString expectedId = QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString();
+        QCOMPARE(firstId, expectedId);
+
+        // Round-trip: wipe windowrules.json + re-stage same v3 input.
+        // Re-running the migration on identical input must produce the
+        // same id so `WindowRuleStore::addRule`'s id-collision check
+        // collapses the second run to a no-op instead of duplicating.
+        QFile::remove(ConfigDefaults::windowRulesFilePath());
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QString(), QStringLiteral("firefox")));
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        const QString secondId =
+            animationExclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        QCOMPARE(secondId, firstId);
+    }
+
+    void testAnimationExclusions_groupAndStashStrippedAfterFinalize()
+    {
+        // Both the v3 `Animations.WindowFiltering.{Applications,WindowClasses}`
+        // leaf keys AND the `_v4AnimationExclusionStash` scratch root key
+        // MUST be gone from config.json after a successful conversion.
+        // The Animations group itself stays (it carries other v4 settings);
+        // only the two leaf keys under WindowFiltering are stripped.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QStringLiteral("firefox"), QStringLiteral("kitty")));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject cfgAfter = readJson(ConfigDefaults::configFilePath());
+        QVERIFY2(!cfgAfter.contains(QStringLiteral("_v4AnimationExclusionStash")),
+                 "finalizeV4Conversion must strip the _v4AnimationExclusionStash scratch key");
+        // The Animations.WindowFiltering group either disappears entirely
+        // (no other keys lived there in this fixture) or survives without
+        // the two leaf keys. Both are acceptable; the assertion just
+        // requires the leaf keys not survive.
+        const QJsonObject animations = cfgAfter.value(QStringLiteral("Animations")).toObject();
+        const QJsonObject filtering = animations.value(QStringLiteral("WindowFiltering")).toObject();
+        QVERIFY2(!filtering.contains(QStringLiteral("Applications")),
+                 "migrateV3ToV4 must remove Animations.WindowFiltering.Applications");
+        QVERIFY2(!filtering.contains(QStringLiteral("WindowClasses")),
+                 "migrateV3ToV4 must remove Animations.WindowFiltering.WindowClasses");
+    }
+
+    void testAnimationExclusions_absentSourceProducesNoRules()
+    {
+        IsolatedConfigGuard guard;
+        // No Animations.WindowFiltering group at all.
+        writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithAnimationExclusions(QString(), QString()));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QCOMPARE(animationExclusionRules(rulesFromWindowRules()).size(), 0);
     }
 };
 

@@ -191,11 +191,12 @@ public:
     Q_PROPERTY(QStringList tilingAlgorithmOrder READ tilingAlgorithmOrder WRITE setTilingAlgorithmOrder NOTIFY
                    tilingAlgorithmOrderChanged)
 
-    // Exclusions
-    Q_PROPERTY(QStringList excludedApplications READ excludedApplications WRITE setExcludedApplications NOTIFY
-                   excludedApplicationsChanged)
-    Q_PROPERTY(QStringList excludedWindowClasses READ excludedWindowClasses WRITE setExcludedWindowClasses NOTIFY
-                   excludedWindowClassesChanged)
+    // Window filtering — the global knobs. The per-application /
+    // per-class exclusion list Q_PROPERTYs (excludedApplications,
+    // excludedWindowClasses) retired in v4 along with the standalone
+    // Exclusions settings page; the lists folded into Window Rules and
+    // the daemon serves the runtime evaluator from
+    // PhosphorWindowRule::ExclusionRules over the unified rule store.
     Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
                    excludeTransientWindowsChanged)
     Q_PROPERTY(
@@ -213,10 +214,12 @@ public:
                    NOTIFY animationMinimumWindowWidthChanged)
     Q_PROPERTY(int animationMinimumWindowHeight READ animationMinimumWindowHeight WRITE setAnimationMinimumWindowHeight
                    NOTIFY animationMinimumWindowHeightChanged)
-    Q_PROPERTY(QStringList animationExcludedApplications READ animationExcludedApplications WRITE
-                   setAnimationExcludedApplications NOTIFY animationExcludedApplicationsChanged)
-    Q_PROPERTY(QStringList animationExcludedWindowClasses READ animationExcludedWindowClasses WRITE
-                   setAnimationExcludedWindowClasses NOTIFY animationExcludedWindowClassesChanged)
+    // The animationExcludedApplications / animationExcludedWindowClasses
+    // Q_PROPERTYs retired in v4 — the lists folded into `ExcludeAnimations`
+    // WindowRules and the effect's `shouldAnimateWindow` gate now resolves
+    // against the slice
+    // `PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom`
+    // produces from the unified rule store.
 
     // PhosphorZones::Zone Selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
@@ -628,15 +631,9 @@ public:
     QStringList tilingAlgorithmOrder() const override;
     void setTilingAlgorithmOrder(const QStringList& order) override;
 
-    // Exclusions — PhosphorConfig::Store-backed.
-    QStringList excludedApplications() const override;
-    void setExcludedApplications(const QStringList& apps) override;
-    Q_INVOKABLE void addExcludedApplication(const QString& app);
-    Q_INVOKABLE void removeExcludedApplicationAt(int index);
-    QStringList excludedWindowClasses() const override;
-    void setExcludedWindowClasses(const QStringList& classes) override;
-    Q_INVOKABLE void addExcludedWindowClass(const QString& cls);
-    Q_INVOKABLE void removeExcludedWindowClassAt(int index);
+    // Window filtering — PhosphorConfig::Store-backed. The per-app /
+    // per-class exclusion list accessors retired in v4 — see the
+    // Q_PROPERTY block above for the migration notes.
     bool excludeTransientWindows() const override;
     void setExcludeTransientWindows(bool exclude) override;
     int minimumWindowWidth() const override;
@@ -654,14 +651,9 @@ public:
     void setAnimationMinimumWindowWidth(int width) override;
     int animationMinimumWindowHeight() const override;
     void setAnimationMinimumWindowHeight(int height) override;
-    QStringList animationExcludedApplications() const override;
-    void setAnimationExcludedApplications(const QStringList& apps) override;
-    Q_INVOKABLE void addAnimationExcludedApplication(const QString& app);
-    Q_INVOKABLE void removeAnimationExcludedApplicationAt(int index);
-    QStringList animationExcludedWindowClasses() const override;
-    void setAnimationExcludedWindowClasses(const QStringList& classes) override;
-    Q_INVOKABLE void addAnimationExcludedWindowClass(const QString& cls);
-    Q_INVOKABLE void removeAnimationExcludedWindowClassAt(int index);
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // (+ their add*/remove* convenience methods) retired in v4 — see the
+    // Q_PROPERTY block above for the migration notes.
 
     // PhosphorZones::Zone Selector — PhosphorConfig::Store-backed.
     bool zoneSelectorEnabled() const override;
@@ -1090,22 +1082,6 @@ private:
     /// the legacy single-modifier key.
     void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                           TriggerListSignalFn specificSignal);
-
-    /// Member-function-pointer alias for a no-arg NOTIFY signal passed into
-    /// @ref writeCommaList — the canonical setter for comma-joined string-
-    /// list config values.
-    using CommaListSignalFn = void (Settings::*)();
-
-    /// Shared setter for QStringList settings that round-trip through the
-    /// store as a comma-joined QString. Performs the same canonicalisation
-    /// + post-write read-back compare the open-coded list setters use, so
-    /// `addX` / `removeXAt` helpers can reuse the dedupe + signal-on-real-
-    /// change semantics without duplicating the body. New list settings
-    /// should call this; pre-existing list setters (`setExcludedApplications`
-    /// / `setExcludedWindowClasses`, the snap-assist trigger ones) keep
-    /// their open-coded form to avoid touching established code paths.
-    void writeCommaList(const QString& group, const QString& key, const QStringList& list,
-                        CommaListSignalFn specificSignal);
 
     /// Member-function-pointer alias for the three per-mode disable NOTIFY
     /// signals passed into @ref writeDisableEntries. The signals carry the mode

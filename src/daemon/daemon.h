@@ -49,6 +49,13 @@ class ActivityManager;
 class VirtualDesktopManager;
 }
 
+// PhosphorWindowRule::WindowRuleSet is held as a value member below
+// (m_excludeRuleSet) — needs a complete type, so include the header
+// rather than forward-declare. WindowRuleStore stays in the header by
+// pointer only; including WindowRuleSet.h leaves the store forward
+// declared here.
+#include <PhosphorWindowRule/WindowRuleSet.h>
+
 namespace PhosphorWindowRule {
 class WindowRuleStore;
 }
@@ -520,6 +527,22 @@ private:
     // rule-backed assignment cascade — construction order must build the
     // store first. The WindowRuleAdaptor borrows it too.
     std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_windowRuleStore;
+    // Filtered slice of m_windowRuleStore — only rules whose action list
+    // contains a terminal `Exclude`. Built via
+    // `PhosphorWindowRule::ExclusionRules::excludeRulesFrom` and kept in
+    // lockstep with the unified store via the rulesChanged subscription
+    // wired in init(). SnapEngine borrows a pointer into this set for its
+    // `isAppIdExcluded` probe; the WindowTrackingAdaptor's
+    // `pruneExcludedPendingRestores` receives the AppId patterns extracted
+    // from this same filtered slice by the daemon at refilter time. Held
+    // as a member (stable address) rather than rebuilt per access so the
+    // bound RuleEvaluator's per-revision cache stays valid across
+    // back-to-back resolves. Replaces a legacy QStringList-based settings
+    // path that derived the equivalent set from two flat string lists —
+    // see configmigration.cpp::migrateV3ToV4 for the schema fold; the
+    // unified `PhosphorWindowRule::ExclusionRules` namespace now does the
+    // slicing across both the daemon and the kwin-effect.
+    PhosphorWindowRule::WindowRuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is

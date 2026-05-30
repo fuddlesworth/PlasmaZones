@@ -26,17 +26,14 @@
 #include <PhosphorSnapEngine/SnapState.h>
 
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
-#include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorZones/Layout.h>
 
-#include <PhosphorWindowRule/ExclusionListBridge.h>
 #include <PhosphorWindowRule/RuleEvaluator.h>
 #include <PhosphorWindowRule/WindowQuery.h>
 #include <PhosphorWindowRule/WindowRuleSet.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "snapenginelogging.h"
 #include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -71,9 +68,13 @@ QString resolveNavScreen(INavigationStateProvider* navState, const QString& wind
             if (!storedScreen.isEmpty()) {
                 if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
                     const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-                    QScreen* physScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(physId);
-                    if (physScreen) {
-                        auto* mgr = service ? service->screenManager() : nullptr;
+                    // Bare presence checks — the returned QScreen* is
+                    // intentionally unused; the call validates that the
+                    // identifier still resolves on the live screen set.
+                    if (PhosphorScreens::ScreenIdentity::findByIdOrName(physId)) {
+                        // `service` is already non-null per the outer
+                        // guard at line 64; no need to re-check it here.
+                        auto* mgr = service->screenManager();
                         if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
                             return storedScreen;
                         }
@@ -120,44 +121,38 @@ QString effectiveScreenId(const NavigationContext& ctx, INavigationStateProvider
 
 } // namespace
 
-void SnapEngine::ensureExclusionCache() const
+void SnapEngine::setExcludeRuleSet(const PhosphorWindowRule::WindowRuleSet* ruleSet)
 {
-    auto* s = snapSettings();
-    if (!s) {
-        // No settings — drop any stale cache so a later wiring rebuilds it.
-        // A null m_exclusionEvaluator is itself the "cache invalid" signal.
-        m_exclusionRuleSet.reset();
-        m_exclusionEvaluator.reset();
-        m_exclusionCacheAppsKey.clear();
-        m_exclusionCacheClassesKey.clear();
+    if (m_excludeRuleSet == ruleSet) {
         return;
     }
-    const QStringList apps = s->excludedApplications();
-    const QStringList classes = s->excludedWindowClasses();
-    if (m_exclusionEvaluator && apps == m_exclusionCacheAppsKey && classes == m_exclusionCacheClassesKey) {
-        return; // lists unchanged — cached set/evaluator still valid
-    }
-
-    // Rebuild: the daemon-flavour exclusion rule set (AppId AppIdMatches
-    // Exclude rules) and its evaluator. The RuleEvaluator binds a reference
-    // to the WindowRuleSet, so the set is heap-allocated for a stable address
-    // and both are replaced together.
-    m_exclusionRuleSet = std::make_unique<PhosphorWindowRule::WindowRuleSet>(
-        PhosphorWindowRule::ExclusionListBridge::toDaemonRuleSet(apps, classes));
-    m_exclusionEvaluator = std::make_unique<PhosphorWindowRule::RuleEvaluator>(*m_exclusionRuleSet);
-    m_exclusionCacheAppsKey = apps;
-    m_exclusionCacheClassesKey = classes;
+    m_excludeRuleSet = ruleSet;
+    // The cached evaluator binds a reference to the previously-pointed-at
+    // rule set. Dropping it forces the next isAppIdExcluded call to rebind
+    // against the new pointer — a held evaluator with a stale binding would
+    // resolve against the WRONG store. The evaluator's per-revision
+    // internal cache key off the bound rule set's revision counter, so an
+    // in-place edit to the SAME pointer needs no reset here — only the
+    // pointer-changed case does.
+    m_excludeEvaluator.reset();
 }
 
 bool SnapEngine::isAppIdExcluded(const QString& appId) const
 {
-    ensureExclusionCache();
-    if (!m_exclusionEvaluator || !m_exclusionRuleSet || m_exclusionRuleSet->isEmpty()) {
-        return false; // no settings, or no-exclusions fast path
+    // No-wiring fast path: early-init can call isAppIdExcluded before the
+    // daemon hands the rule store over.
+    if (!m_excludeRuleSet) {
+        return false;
+    }
+    if (m_excludeRuleSet->isEmpty()) {
+        return false; // no-exclusions fast path
+    }
+    if (!m_excludeEvaluator) {
+        m_excludeEvaluator.emplace(*m_excludeRuleSet);
     }
     PhosphorWindowRule::WindowQuery query;
     query.appId = appId;
-    return m_exclusionEvaluator->resolve(query).isExcluded();
+    return m_excludeEvaluator->resolve(query).isExcluded();
 }
 
 bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)
@@ -257,6 +252,14 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
 void SnapEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::swapFocusedInDirection:" << direction;
+    // m_snapState is set by SnapEngine's ctor as a Qt-child; the
+    // `m_snapState->screenAssignments()` dereference further down would
+    // otherwise be the first thing to crash if a future refactor moves
+    // m_snapState ownership to a delegated setter that can leave it
+    // null. Asserted unconditionally on entry (mirrors
+    // toggleFocusedFloat) so the invariant fires regardless of which
+    // early-return path runs below.
+    Q_ASSERT(m_snapState);
     if (!m_windowTracker) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("engine_unavailable"), QString(),
                                   QString(), ctx.screenId);
@@ -418,6 +421,7 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
 
 void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
 {
+    Q_ASSERT(m_snapState);
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::toggleFocusedFloat";
     if (!m_windowTracker) {
         Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("engine_unavailable"), QString(),

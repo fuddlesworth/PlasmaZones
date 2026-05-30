@@ -546,6 +546,12 @@ public Q_SLOTS:
     // MOC misparses std::function<void(const QJsonArray&)> as function<const void(QJsonArray&)>,
     // generating code that fails to compile. This method is not a signal/slot, but MOC still
     // processes all public member declarations in Q_OBJECT classes. Guard is required.
+    //
+    // Note: hiding the declarations from MOC ALSO suppresses Qt meta-object
+    // visibility for these methods — they cannot be invoked via
+    // QMetaObject::invokeMethod or bound from QML. Both are internal C++
+    // wiring (the daemon hands its tiling persistence callbacks here at
+    // startup); no external caller should rely on meta-object access.
 #ifndef Q_MOC_RUN
     void setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
                                  std::function<void(const QJsonArray&)> deserializeFn);
@@ -572,37 +578,58 @@ public Q_SLOTS:
      */
     void loadState();
 
+    // handleBatchedResnap moved to SnapAdaptor.
+
+public:
+    // Internal-only members below — declared as plain public methods (NOT
+    // under Q_SLOTS) so QDBusAbstractAdaptor's runtime introspection does
+    // NOT expose them on the bus regardless of XML content. Same pattern as
+    // `WindowDragAdaptor::clearForCompositorReconnect` /
+    // `handleWindowClosed`. Every caller is in-process and reaches them
+    // via direct C++ invocation through the daemon, NOT through D-Bus.
     /**
      * @brief Drop snap and autotile pending-restore queues for excluded appIds.
      *
-     * Reads the current snap-side exclusion lists from m_settings, combines
-     * them, and asks both engines to walk their pending-restore queues and
-     * remove any appId matching a pattern. Marks DirtyPendingRestores or
-     * DirtyAutotilePending as appropriate so the next debounced save persists
-     * the pruned state.
+     * Walks the snap and autotile pending-restore queues and asks both
+     * engines to remove any appId matching one of @p patterns. Marks
+     * DirtyPendingRestores or DirtyAutotilePending as appropriate so the
+     * next debounced save persists the pruned state.
      *
-     * Called from three sites.
-     *   1. WTA's own constructor, right after loadState. The snap queues are
-     *      populated by then but the autotile queue is not.
-     *   2. The excludedApplicationsChanged and excludedWindowClassesChanged signal
-     *      handlers wired in the constructor.
-     *   3. The daemon's finalizeStartup, after AutotileEngine::loadState runs. By
-     *      then the autotile queue has also been deserialized into the engine,
-     *      so it gets pruned too.
+     * Plain `public:` (not Q_SLOTS): the bus surface deliberately
+     * excludes this — every caller is in-process and reaches it via
+     * direct C++ invocation through the daemon. Same pattern as
+     * `WindowDragAdaptor::clearForCompositorReconnect`.
+     *
+     * Called from three daemon-side sites — WTA's own constructor no
+     * longer runs the prune (the snap queues are loaded before the rule
+     * store has been filtered; the daemon kicks the prune from the
+     * init prologue after WTA::loadState completes in init order).
+     *   1. Daemon::init's init-prologue priming call — drains queue
+     *      entries WTA::loadState just populated. Runs once, synchronously,
+     *      before the `rulesChanged` subscription connects. The autotile
+     *      queue is not yet loaded at this point, so the autotile-side
+     *      prune is a no-op here.
+     *   2. Daemon::init's `refilterExcludeRules` lambda, fired on every
+     *      `WindowRuleStore::rulesChanged` whose post-filter Exclude
+     *      slice differs from the cached one — equality-guarded so
+     *      non-Exclude rule edits don't walk the queues unnecessarily.
+     *      Drives live settings-app rule edits into the prune.
+     *   3. Daemon::finalizeStartup, after AutotileEngine::loadState has
+     *      populated the autotile queue, so the autotile-side prune
+     *      actually has something to process.
+     * The daemon derives @p patterns from the unified WindowRule store
+     * via `PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom`.
      *
      * Calling this before either engine is wired is safe. Engines that are
-     * missing contribute zero removals.
+     * missing contribute zero removals. An empty @p patterns short-circuits.
      */
-    void pruneExcludedPendingRestoresFromSettings();
+    void pruneExcludedPendingRestores(const QStringList& patterns);
 
     /**
-     * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles)
-     *
+     * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles).
      * Not a D-Bus method; used internally so the daemon timer can trigger the signal.
      */
     void requestReapplyWindowGeometries();
-
-    // handleBatchedResnap moved to SnapAdaptor.
 
 Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
@@ -741,15 +768,23 @@ public Q_SLOTS:
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);
 
+public:
+    // Internal-only members below — plain `public:` placement (not Q_SLOTS)
+    // to keep QDBusAbstractAdaptor's runtime introspection from exposing
+    // them on the bus when the XML doesn't list them. Same pattern as the
+    // `pruneExcludedPendingRestores` / `requestReapplyWindowGeometries`
+    // pair above.
     /**
-     * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats)
+     * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats).
      * Gets validated geometry, emits applyGeometryRequested if found, clears stored geometry.
      * @return true if geometry was applied, false if none stored
      */
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
 
     /**
-     * @brief Emit moveSpecificWindowToZoneRequested - called when user selects from Snap Assist
+     * @brief Emit moveSpecificWindowToZoneRequested — called when user selects from Snap Assist.
+     * Takes a `QRect` payload; not D-Bus marshallable without a typeName annotation, so
+     * keeping it off the wire entirely is the only safe shape.
      */
     void requestMoveSpecificWindowToZone(const QString& windowId, const QString& zoneId, const QRect& geometry);
 
