@@ -16,7 +16,15 @@ using PhosphorSettingsUi::ApplicationController;
 using PhosphorSettingsUi::PageController;
 using PhosphorSettingsUi::StagingDomain;
 
-namespace {
+// A named namespace (not anonymous) so these helpers have external
+// linkage. Lambdas in the tests below capture StubPage* and are handed
+// to connect() / invokeMethod() as template arguments, which gives the
+// closure types external linkage; an anonymous-namespace (internal
+// linkage) capture member then trips -Wsubobject-linkage. The name is
+// file-specific because each test is its own executable (see
+// tests/CMakeLists.txt), so it cannot collide with another test's
+// helpers.
+namespace ApplicationControllerTest {
 
 class StubPage : public PageController
 {
@@ -162,7 +170,9 @@ public:
     }
 };
 
-} // namespace
+} // namespace ApplicationControllerTest
+
+using namespace ApplicationControllerTest;
 
 class TestApplicationController : public QObject
 {
