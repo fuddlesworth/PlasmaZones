@@ -144,6 +144,8 @@ void SettingsController::buildApplicationController()
 
     regPage(m_snappingZonesPage, QStringLiteral("snapping-visual-cat"), PzI18n::tr("Zones"),
             QStringLiteral("SnappingZonesPage.qml"), QStringLiteral("preferences-desktop-color"));
+    regPage(m_snappingWindowAppearancePage, QStringLiteral("snapping-visual-cat"), PzI18n::tr("Window Appearance"),
+            QStringLiteral("SnappingWindowAppearancePage.qml"), QStringLiteral("preferences-desktop-color"));
     regPage(m_snappingEffectsPage, QStringLiteral("snapping-visual-cat"), PzI18n::tr("Effects"),
             QStringLiteral("SnappingEffectsPage.qml"), QStringLiteral("preferences-desktop-effects"));
     regPage(m_snappingShadersPage.get(), QStringLiteral("snapping-visual-cat"), PzI18n::tr("Shaders"),
@@ -396,6 +398,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // in buildApplicationController() above.
     static const QSet<QString> kSnappingVisualChildren{
         QStringLiteral("snapping-zones"),
+        QStringLiteral("snapping-window-appearance"),
         QStringLiteral("snapping-effects"),
         QStringLiteral("snapping-shaders"),
     };
@@ -461,6 +464,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("overview"),
         QStringLiteral("layouts"),
         QStringLiteral("snapping-zones"),
+        QStringLiteral("snapping-window-appearance"),
         QStringLiteral("snapping-behavior"),
         QStringLiteral("snapping-zoneselector"),
         QStringLiteral("snapping-effects"),

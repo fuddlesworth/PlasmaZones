@@ -78,6 +78,8 @@ set(plasmazones_settings_SRCS
     generalpagecontroller.cpp
     snappingzonescontroller.h
     snappingzonescontroller.cpp
+    snappingwindowappearancecontroller.h
+    snappingwindowappearancecontroller.cpp
     snappingbehaviorcontroller.h
     snappingbehaviorcontroller.cpp
     snappingeffectscontroller.h
@@ -209,6 +211,7 @@ qt_add_qml_module(plasmazones-settings
         qml/KeyboardShortcutOverlay.qml
         qml/GeneralPage.qml
         qml/SnappingZonesPage.qml
+        qml/SnappingWindowAppearancePage.qml
         qml/SnappingEffectsPage.qml
         qml/SnappingBehaviorPage.qml
         qml/SnappingZoneSelectorPage.qml

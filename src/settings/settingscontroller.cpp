@@ -11,6 +11,7 @@
 #include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
 #include "tilingalgorithmcontroller.h"
+#include "snappingwindowappearancecontroller.h"
 #include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
 #include "virtualscreenutils.h"
@@ -334,8 +335,10 @@ SettingsController::SettingsController(QObject* parent)
     connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Effects + Tiling→Appearance pages — CONSTANT-only bounds facades.
+    // Snapping→Effects + Snapping→Window Appearance + Tiling→Appearance pages —
+    // CONSTANT-only bounds facades.
     m_snappingEffectsPage = new SnappingEffectsController(this);
+    m_snappingWindowAppearancePage = new SnappingWindowAppearanceController(this);
     m_tilingAppearancePage = new TilingAppearanceController(this);
 
     // Tiling→Algorithm page sub-controller. Owns 7 slider bounds + the

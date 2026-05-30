@@ -69,6 +69,7 @@ class ShaderRegistry;
 #include "snappingzoneselectorcontroller.h"
 #include "stagingservice.h"
 #include "tilingalgorithmcontroller.h"
+#include "snappingwindowappearancecontroller.h"
 #include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
 #include "windowrulecontroller.h"
@@ -111,6 +112,8 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingZonesController* snappingZonesPage READ snappingZonesPage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
     Q_PROPERTY(SnappingShadersPageController* snappingShadersPage READ snappingShadersPage CONSTANT)
+    Q_PROPERTY(
+        SnappingWindowAppearanceController* snappingWindowAppearancePage READ snappingWindowAppearancePage CONSTANT)
     Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
@@ -347,6 +350,10 @@ public:
     SnappingShadersPageController* snappingShadersPage() const
     {
         return m_snappingShadersPage.get();
+    }
+    SnappingWindowAppearanceController* snappingWindowAppearancePage() const
+    {
+        return m_snappingWindowAppearancePage;
     }
     TilingAppearanceController* tilingAppearancePage() const
     {
@@ -597,6 +604,7 @@ private:
     SnappingZoneSelectorController* m_snappingZoneSelectorPage = nullptr;
     SnappingZonesController* m_snappingZonesPage = nullptr;
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
+    SnappingWindowAppearanceController* m_snappingWindowAppearancePage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
     /// Parented to `this` so Qt manages lifetime; the raw pointer is fine
