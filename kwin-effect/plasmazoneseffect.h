@@ -5,6 +5,7 @@
 
 #include <cstdint>
 
+#include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -573,6 +574,13 @@ private:
 
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
+    // Snapping's own managed-window border state, parallel to
+    // AutotileHandler::m_border. Built on the shared PhosphorCompositor
+    // BorderState + AutotileStateHelpers so snap and autotile share one
+    // standardized border mechanism (and a future mode reuses the same
+    // machinery). Populated at snap commit, cleared on float / unsnap / close.
+    PhosphorCompositor::BorderState m_snapBorder;
+
     // Policy returned from the daemon's beginDrag for the currently-active
     // drag. Async-populated a few ms after the
     // drag starts; until then, conservative defaults apply (snap-path
@@ -600,6 +608,20 @@ private:
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
     void clearAllBorders();
+
+    // ── Snapping border-state tracking (mirrors AutotileHandler's set) ──
+    /// Record @p windowId as snap-committed on @p screenId (idempotent), apply
+    /// title-bar hiding if enabled, and (re)draw its border.
+    void markWindowSnapped(const QString& windowId, const QString& screenId);
+    /// Drop @p windowId from the snap set on every screen, restore its title
+    /// bar if we hid it, and remove its border.
+    void clearWindowSnapped(const QString& windowId);
+    /// Apply/restore title-bar hiding across all currently snap-committed
+    /// windows when the snapWindowHideTitleBars setting toggles.
+    void updateSnapHideTitleBars(bool hide);
+    /// Resolve which mode's BorderState manages @p windowId — autotile first,
+    /// then snap — or nullptr if neither draws a border for it.
+    const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;

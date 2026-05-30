@@ -379,6 +379,13 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
     m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
 
+    // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
+    // the window is being destroyed, so no setNoBorder/removeWindowBorder is
+    // needed here (the border item is removed just below and the title bar
+    // dies with the window).
+    PhosphorCompositor::AutotileStateHelpers::removeFromAllScreens(m_snapBorder, closedWindowId);
+    m_snapBorder.zoneGeometries.remove(closedWindowId);
+
     // Remove the window's border item (parent WindowItem is being destroyed anyway,
     // but clean up our tracking hash to avoid stale entries).
     removeWindowBorder(closedWindowId);

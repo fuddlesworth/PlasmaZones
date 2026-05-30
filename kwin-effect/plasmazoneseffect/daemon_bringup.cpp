@@ -673,6 +673,35 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_autotileHandler->setFocusFollowsMouse(v.toBool());
     });
 
+    // Snapped-window border settings — feed the effect's parallel snap
+    // BorderState (m_snapBorder), mirroring the autotile* block above. When
+    // snapWindowUseSystemBorderColors is on the daemon writes the resolved
+    // accent into the colour keys, so (like autotile) the effect only reads the
+    // resolved colours and never the use-system flag.
+    loadSettingAsync(QStringLiteral("snapWindowHideTitleBars"), [this](const QVariant& v) {
+        updateSnapHideTitleBars(v.toBool());
+    });
+    loadSettingAsync(QStringLiteral("snapWindowShowBorder"), [this](const QVariant& v) {
+        m_snapBorder.showBorder = v.toBool();
+        updateAllBorders();
+    });
+    loadSettingAsync(QStringLiteral("snapWindowBorderWidth"), [this](const QVariant& v) {
+        m_snapBorder.width = qBound(0, v.toInt(), 10);
+        updateAllBorders();
+    });
+    loadSettingAsync(QStringLiteral("snapWindowBorderRadius"), [this](const QVariant& v) {
+        m_snapBorder.radius = qBound(0, v.toInt(), 20);
+        updateAllBorders();
+    });
+    loadSettingAsync(QStringLiteral("snapWindowBorderColor"), [this](const QVariant& v) {
+        m_snapBorder.color = QColor(v.toString());
+        updateAllBorders();
+    });
+    loadSettingAsync(QStringLiteral("snapWindowInactiveBorderColor"), [this](const QVariant& v) {
+        m_snapBorder.inactiveColor = QColor(v.toString());
+        updateAllBorders();
+    });
+
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization
     {
         PhosphorProtocol::ClientHelpers::loadSettingAsync(

@@ -116,6 +116,9 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
                                                        QStringLiteral("recordSnapIntent"),
                                                        {getWindowId(targetWindow), true});
 
+        // Snap-assist placed the window in a zone — record it in snapping's set.
+        markWindowSnapped(getWindowId(targetWindow), screenId);
+
         // Snap Assist continuation: only for manual-mode screens.
         // Autotile screens manage their own window placement; showing snap assist
         // after an autotile resnap is incorrect (the daemon silently ignores the
@@ -153,6 +156,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // not an in-zone resize.
             applySnapGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                               PhosphorAnimation::ProfilePaths::WindowSnapOut);
+            // Drag-out unsnap: the window left zone-managed sizing.
+            clearWindowSnapped(windowId);
         }
         return;
     }
@@ -198,6 +203,14 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     applySnapGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                       zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
                                        : PhosphorAnimation::ProfilePaths::WindowSnapIn);
+    // Track snapping's own border set (mirrors how autotile records at its
+    // tile-apply). Non-empty zoneId = window now occupies a zone; empty zoneId
+    // = float-restore, so it leaves the set.
+    if (zoneId.isEmpty()) {
+        clearWindowSnapped(windowId);
+    } else {
+        markWindowSnapped(windowId, screenId);
+    }
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven
     // navigation, the daemon handles zone bookkeeping internally before emitting
     // applyGeometryRequested. For legacy callers (autotile float restore via
@@ -308,6 +321,16 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             });
             applySnapGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
                               /*skipAnimation=*/false, batchProfilePath);
+            // Snapping owns its border set (mirrors autotile). A batch entry
+            // that lands on a snap-mode screen is a snap commit; autotile
+            // windows live on autotile screens and are tracked by
+            // AutotileHandler, so gate on screen mode. Skip floating windows
+            // (overflow __restore__ entries that the batch floats).
+            const QString batchWid = getWindowId(p.window);
+            const QString batchScr = !p.screenId.isEmpty() ? p.screenId : getWindowScreenId(p.window);
+            if (!batchScr.isEmpty() && !m_autotileHandler->isAutotileScreen(batchScr) && !isWindowFloating(batchWid)) {
+                markWindowSnapped(batchWid, batchScr);
+            }
         },
         [this, savedStack, action]() {
             // Restore z-order after all geometries applied

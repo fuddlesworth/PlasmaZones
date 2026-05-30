@@ -4,11 +4,15 @@
 #include "../plasmazoneseffect.h"
 
 #include <effect/effecthandler.h>
+#include <effect/effectwindow.h>
 #include <scene/borderoutline.h>
 #include <scene/outlinedborderitem.h>
 #include <scene/windowitem.h>
+#include <window.h>
 
 #include "../autotilehandler.h"
+
+#include <PhosphorCompositor/AutotileState.h>
 
 namespace PlasmaZones {
 
@@ -54,7 +58,14 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // Remove existing border for this window first
     removeWindowBorder(windowId);
 
-    const int bw = m_autotileHandler->borderWidth();
+    // Resolve which mode (autotile / snap) manages this window and draw with
+    // that mode's border settings. nullptr → neither mode shows a border for it.
+    const PhosphorCompositor::BorderState* state = resolveBorderStateFor(windowId);
+    if (!state) {
+        return;
+    }
+
+    const int bw = state->width;
     if (bw <= 0) {
         return;
     }
@@ -63,14 +74,10 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    if (!m_autotileHandler->shouldShowBorderForWindow(windowId)) {
-        return;
-    }
-
     // Choose color: active for focused window, inactive for others
     KWin::EffectWindow* active = KWin::effects->activeWindow();
     const bool isFocused = (w == active);
-    const QColor bc = isFocused ? m_autotileHandler->borderColor() : m_autotileHandler->inactiveBorderColor();
+    const QColor bc = isFocused ? state->color : state->inactiveColor;
     if (!bc.isValid() || bc.alpha() == 0) {
         return;
     }
@@ -80,7 +87,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // by borderWidth so the border draws fully inside the frame (no clipping).
     const QRectF frame = w->frameGeometry();
     const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
-    const int br = m_autotileHandler->borderRadius();
+    const int br = state->radius;
     const KWin::BorderOutline outline(bw, bc, KWin::BorderRadius(br));
 
     KWin::WindowItem* windowItem = w->windowItem();
@@ -161,22 +168,127 @@ void PlasmaZonesEffect::updateAllBorders()
 {
     clearAllBorders();
 
-    const int bw = m_autotileHandler->borderWidth();
-    if (bw <= 0) {
-        return;
-    }
-
-    // Iterate all effect windows and create borders for tiled ones
+    // Iterate all effect windows and create borders for any window managed by
+    // a mode (autotile or snap) that currently shows borders. Per-window
+    // resolution lets the two modes carry independent width/colour/radius.
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
             continue;
         }
         const QString wid = getWindowId(w);
-        if (m_autotileHandler->shouldShowBorderForWindow(wid)) {
+        if (resolveBorderStateFor(wid)) {
             updateWindowBorder(wid, w);
         }
     }
+}
+
+const PhosphorCompositor::BorderState* PlasmaZonesEffect::resolveBorderStateFor(const QString& windowId) const
+{
+    using namespace PhosphorCompositor;
+    // Autotile first, then snap. A window is managed by exactly one mode at a
+    // time (a screen is either autotile or snap, and a window lives on one
+    // screen), so the order only matters for a transient mid-transition state.
+    const BorderState& autotile = m_autotileHandler->borderState();
+    if (AutotileStateHelpers::shouldShowBorderForWindow(autotile, windowId)) {
+        return &autotile;
+    }
+    if (AutotileStateHelpers::shouldShowBorderForWindow(m_snapBorder, windowId)) {
+        return &m_snapBorder;
+    }
+    return nullptr;
+}
+
+void PlasmaZonesEffect::markWindowSnapped(const QString& windowId, const QString& screenId)
+{
+    using namespace PhosphorCompositor;
+    if (windowId.isEmpty()) {
+        return;
+    }
+    // A window can only be snap-managed by one screen at a time. Strip stale
+    // tracking from any other screen before recording the new owner (mirrors
+    // the autotile cross-screen-transfer cleanup in tiling.cpp).
+    for (auto it = m_snapBorder.tiledWindowsByScreen.begin(); it != m_snapBorder.tiledWindowsByScreen.end();) {
+        if (it.key() != screenId) {
+            it.value().remove(windowId);
+        }
+        if (it.value().isEmpty() && it.key() != screenId) {
+            it = m_snapBorder.tiledWindowsByScreen.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    AutotileStateHelpers::addTiledOnScreen(m_snapBorder, screenId, windowId);
+
+    KWin::EffectWindow* w = findWindowById(windowId);
+    // Title-bar hiding mirrors AutotileHandler::setWindowBorderless: skip CSD
+    // windows (no server-side decoration) and only call setNoBorder once.
+    if (m_snapBorder.hideTitleBars && w && w->hasDecoration()) {
+        const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
+        AutotileStateHelpers::addBorderlessOnScreen(m_snapBorder, screenId, windowId);
+        if (!wasBorderless) {
+            if (KWin::Window* kw = w->window()) {
+                kw->setNoBorder(true);
+            }
+        }
+    }
+    if (w) {
+        updateWindowBorder(windowId, w);
+    }
+}
+
+void PlasmaZonesEffect::clearWindowSnapped(const QString& windowId)
+{
+    using namespace PhosphorCompositor;
+    if (windowId.isEmpty()) {
+        return;
+    }
+    const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
+    AutotileStateHelpers::removeFromAllScreens(m_snapBorder, windowId);
+    m_snapBorder.zoneGeometries.remove(windowId);
+    // Restore the title bar only if snap had hidden it.
+    if (wasBorderless) {
+        if (KWin::EffectWindow* w = findWindowById(windowId)) {
+            if (KWin::Window* kw = w->window()) {
+                kw->setNoBorder(false);
+            }
+        }
+    }
+    removeWindowBorder(windowId);
+}
+
+void PlasmaZonesEffect::updateSnapHideTitleBars(bool hide)
+{
+    using namespace PhosphorCompositor;
+    m_snapBorder.hideTitleBars = hide;
+    if (hide) {
+        // Hide on every currently snap-committed window.
+        const auto pairs = AutotileStateHelpers::allTiledPairs(m_snapBorder);
+        for (const auto& p : pairs) {
+            KWin::EffectWindow* w = findWindowById(p.first);
+            if (!w || !w->hasDecoration()) {
+                continue;
+            }
+            if (!AutotileStateHelpers::isBorderlessWindow(m_snapBorder, p.first)) {
+                AutotileStateHelpers::addBorderlessOnScreen(m_snapBorder, p.second, p.first);
+                if (KWin::Window* kw = w->window()) {
+                    kw->setNoBorder(true);
+                }
+            }
+        }
+    } else {
+        // Restore every window snap had made borderless.
+        const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_snapBorder);
+        for (const auto& p : pairs) {
+            AutotileStateHelpers::removeBorderlessOnScreen(m_snapBorder, p.second, p.first);
+            if (KWin::EffectWindow* w = findWindowById(p.first)) {
+                if (KWin::Window* kw = w->window()) {
+                    kw->setNoBorder(false);
+                }
+            }
+        }
+    }
+    updateAllBorders();
 }
 
 } // namespace PlasmaZones

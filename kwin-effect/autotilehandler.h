@@ -205,6 +205,13 @@ public:
     {
         m_border.radius = r;
     }
+    /// Read-only view of the autotile border state. The effect's mode-aware
+    /// border resolution reads this alongside the parallel snap BorderState so
+    /// each window draws with the settings of the mode that manages it.
+    const BorderState& borderState() const
+    {
+        return m_border;
+    }
     QRect applyBorderInset(const QRect& geo) const
     {
         return AutotileStateHelpers::applyBorderInset(geo, m_border.width);
