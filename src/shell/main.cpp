@@ -80,13 +80,12 @@ int main(int argc, char* argv[])
     // instead of throwing) if a pre-condition fails; the others register
     // only types and have nothing to fail on. There is intentionally no
     // failure surface to inspect, which is why this loop doesn't check
-    // return values. If
-    // any future service grows
-    // environment-dependent registration logic (e.g. needs to fail hard
-    // when a required platform feature is absent, or needs to surface
-    // a registration error to the shell launcher), this loop MUST be
-    // revisited: the wrappers will need to start returning success
-    // status and the loop will need to handle a partial-init scenario.
+    // return values. If any future service grows environment-dependent
+    // registration logic (e.g. needs to fail hard when a required platform
+    // feature is absent, or needs to surface a registration error to the
+    // shell launcher), this loop must change accordingly: the wrappers will
+    // need to start returning success status and the loop will need to
+    // handle a partial-init scenario.
     PhosphorServiceSni::registerQmlTypes();
     PhosphorServiceIconTheme::registerQmlTypes();
     PhosphorServiceUPower::registerQmlTypes();

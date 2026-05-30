@@ -267,10 +267,17 @@ int cmdConnect(const QString& ssid, const QString& passphrase)
 
     host.connectToAccessPoint(wifi, match, passphrase);
     pump(4000); // give NetworkManager time to add + activate the profile
+    const NetworkDevice::DeviceState state = wifi->state();
     out() << "activation requested for '" << ssid
           << "' (security: " << (match->secured() ? match->security() : QStringLiteral("open")) << ")\n";
-    out() << "device state: " << stateName(wifi->state()) << "\n";
+    out() << "device state: " << stateName(state) << "\n";
     out().flush();
+    // connectToAccessPoint is fire-and-forget, so surface a non-zero exit
+    // when the device settled into a terminal failure/auth state. This lets
+    // callers scripting against the exit code detect a rejected profile
+    // (wrong passphrase, auth failure) rather than always reporting success.
+    if (state == NetworkDevice::Failed || state == NetworkDevice::NeedAuth)
+        return 1;
     return 0;
 }
 

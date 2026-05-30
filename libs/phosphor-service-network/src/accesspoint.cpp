@@ -24,13 +24,14 @@ constexpr uint kSecKeyMgmtSae = 0x400; // WPA3-Personal
 
 // Derive a human-readable security label from the AP's flag triple. Order
 // matters: SAE (WPA3) and 802.1X (enterprise) are checked before the
-// generic RSN/WPA buckets so the most specific label wins. Both key-mgmt
-// checks look at the RSN and WPA flag words: SAE is RSN-native, but a
-// WPA2/WPA3 transition AP can surface it in either word, so mirror the
-// dual-word test used for 802.1X rather than risk mislabelling it WPA2.
+// generic RSN/WPA buckets so the most specific label wins. SAE is an RSN
+// key-management flag that NetworkManager only ever reports in RsnFlags
+// (the legacy WPA word never carries it), so it is tested there alone.
+// 802.1X, by contrast, can be advertised under either word, so it keeps
+// the dual-word test.
 QString securityLabel(uint flags, uint wpaFlags, uint rsnFlags)
 {
-    if ((rsnFlags & kSecKeyMgmtSae) || (wpaFlags & kSecKeyMgmtSae))
+    if (rsnFlags & kSecKeyMgmtSae)
         return QStringLiteral("WPA3");
     if ((rsnFlags & kSecKeyMgmt8021x) || (wpaFlags & kSecKeyMgmt8021x))
         return QStringLiteral("802.1X");

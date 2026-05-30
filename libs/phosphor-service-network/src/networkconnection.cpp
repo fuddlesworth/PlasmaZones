@@ -31,7 +31,8 @@ public:
     QString uuid;
     QString connectionType;
 
-    void setField(QString& field, const QString& val, void (NetworkConnection::*signal)())
+    template<typename T, typename Signal>
+    void setField(T& field, T val, Signal signal)
     {
         if (field == val)
             return;
@@ -85,6 +86,10 @@ public:
                 setField(uuid, dict.value(QStringLiteral("uuid")).toString(), &NetworkConnection::uuidChanged);
                 setField(connectionType, dict.value(QStringLiteral("type")).toString(),
                          &NetworkConnection::connectionTypeChanged);
+                // The "connection" group is the only one we read; stop here
+                // rather than demarshalling the remaining (often large)
+                // ipv4/ipv6/security dicts only to discard them.
+                break;
             }
         }
         arg.endMap();

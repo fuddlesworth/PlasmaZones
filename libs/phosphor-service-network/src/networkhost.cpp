@@ -327,6 +327,17 @@ void NetworkHost::connectToAccessPoint(NetworkDevice* device, AccessPoint* acces
         qCDebug(lcNetworkHost) << "connectToAccessPoint: refusing AP with empty SSID/path" << accessPoint->dbusPath();
         return;
     }
+    // An empty passphrase is the open-network case (no security block is
+    // attached below). A non-empty one is treated as WPA-PSK, which accepts
+    // an 8-63 character ASCII passphrase or a 64-character hex pre-shared
+    // key; anything outside that range marshals a profile NetworkManager
+    // rejects asynchronously with no result surface here, so reject it at
+    // the boundary rather than fire a doomed call.
+    if (!passphrase.isEmpty() && (passphrase.size() < 8 || passphrase.size() > 64)) {
+        qCDebug(lcNetworkHost) << "connectToAccessPoint: refusing out-of-range WPA-PSK passphrase length"
+                               << passphrase.size();
+        return;
+    }
     ensureConnectionSettingsRegistered();
 
     // Minimal Wi-Fi profile. NM fills in uuid + the rest of the defaults;
