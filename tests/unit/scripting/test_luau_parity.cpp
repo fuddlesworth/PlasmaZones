@@ -138,6 +138,11 @@ private Q_SLOTS:
     {
         compareAlgorithm(QStringLiteral("tatami"));
     }
+    // Batch 10
+    void spiral()
+    {
+        compareAlgorithm(QStringLiteral("spiral"));
+    }
 };
 
 void TestLuauParity::compareAlgorithm(const QString& name)
