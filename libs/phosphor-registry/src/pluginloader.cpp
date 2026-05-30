@@ -39,6 +39,16 @@ namespace PhosphorRegistry {
 // be honoured without re-using the prior dlopen mapping.
 struct PluginLoader::LoadedPlugin
 {
+    // Member ORDER is load-bearing — do NOT reorder.
+    //
+    // Members destruct in reverse declaration order, so on ~LoadedPlugin
+    // the factory shared_ptr drops FIRST (running the factory's vtable-
+    // backed destructor while the .so is still mapped), then the
+    // QLibrary unique_ptr drops. If the QLibrary were declared after
+    // the factory, the unmap would race the factory's vtable lookup
+    // and crash. The destructorWithoutPriorRescanDoesNotCrash test
+    // pins this ordering; a future field-reorder sweep would silently
+    // break process-shutdown safety.
     Manifest manifest;
     std::unique_ptr<QLibrary> library;
     std::shared_ptr<IBarWidgetFactory> factory;

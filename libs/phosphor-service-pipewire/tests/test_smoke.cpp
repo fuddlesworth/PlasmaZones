@@ -36,6 +36,12 @@ private Q_SLOTS:
         PhosphorServicePipeWire::PipeWireConnection conn;
         QSignalSpy connSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged);
         QSignalSpy availSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::daemonAvailableChanged);
+        // Also spy on `error`: a pw_loop_invoke queue-side failure on
+        // disconnectFromDaemon's dispatch path would fire an error()
+        // signal (lifecycle.cpp's dispatch-failure branch), and the
+        // previous test missed that contract — the no-op disconnect
+        // must produce NO observable signals of any kind.
+        QSignalSpy errorSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::error);
 
         conn.disconnectFromDaemon();
         // Process any queued events from the loop thread to make sure
@@ -47,6 +53,7 @@ private Q_SLOTS:
 
         QCOMPARE(connSpy.count(), 0);
         QCOMPARE(availSpy.count(), 0);
+        QCOMPARE(errorSpy.count(), 0);
     }
 
     /// Multiple connectToDaemon() calls collapse into one effective
@@ -69,12 +76,15 @@ private Q_SLOTS:
         conn.connectToDaemon();
         conn.connectToDaemon();
         // Poll for either a successful connect (the one legitimate flip
-        // landed) or the 2000ms budget elapsing. 2000ms matches
-        // kDefaultConnectTimeoutMs so a connected daemon has the full
-        // handshake budget to land its one flip; on a no-daemon host the
-        // loop exits at the first 200ms tick with isConnected() still
-        // false, instead of burning the full 2000ms. The previous fixed
-        // qWait(2000) wasted the entire budget on every no-daemon CI run.
+        // landed) or the 2000ms test-side budget elapsing. 2000ms is a
+        // generous test-only budget — the library itself does NOT
+        // enforce a connect timeout, PipeWire's connect is non-blocking
+        // and lifetime is owned by the caller — so this value is purely
+        // how long the test will wait for a daemon handshake before
+        // declaring no-daemon. On a no-daemon host the loop exits at
+        // the first 200ms tick with isConnected() still false, instead
+        // of burning the full 2000ms. The previous fixed qWait(2000)
+        // wasted the entire budget on every no-daemon CI run.
         QElapsedTimer timer;
         timer.start();
         while (!conn.isConnected() && timer.elapsed() < 2000) {
@@ -446,8 +456,9 @@ private Q_SLOTS:
         // changes without reaching for `.connection.connected`.
         QSignalSpy connSpy(&host, &PhosphorServicePipeWire::PipeWireHost::connectedChanged);
         QSignalSpy availSpy(&host, &PhosphorServicePipeWire::PipeWireHost::daemonAvailableChanged);
-        // Host construction kicked off connectToDaemon() — give it the
-        // full connect-timeout budget (matching kDefaultConnectTimeoutMs)
+        // Host construction kicked off connectToDaemon() — give it a
+        // 2000ms test-side budget (the library itself does not enforce
+        // a connect timeout; this is purely how long the test waits)
         // so the handshake has every chance to land before we decide a
         // daemon isn't present. The previous 250ms was tight enough that
         // a slow-boot host could race the wait boundary and flip the
@@ -473,11 +484,12 @@ private Q_SLOTS:
         // handshake.
         const int reconnectBaseline = connSpy.count();
         host.reconnect();
-        // Wait up to kDefaultConnectTimeoutMs (2000ms) for the reconnect
-        // cycle to surface a connectedChanged emission. 150ms was tight
-        // enough on slow hosts that the reconnect was still in-flight
-        // when the isConnected() guard ran, silently skipping the
-        // post-reconnect spy-count assertion.
+        // Wait up to 2000ms for the reconnect cycle to surface a
+        // connectedChanged emission (test-side budget; no library-side
+        // timeout enforces this). 150ms was tight enough on slow hosts
+        // that the reconnect was still in-flight when the isConnected()
+        // guard ran, silently skipping the post-reconnect spy-count
+        // assertion.
         connSpy.wait(2000);
         QVERIFY(host.connection() != nullptr);
         if (host.isConnected())

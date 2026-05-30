@@ -102,7 +102,7 @@ import QtQuick.Controls
 import Phosphor.Popout
 
 ToolButton {
-    text: qsTr("Toggle calendar")
+    text: i18nc("@action:button", "Toggle calendar")
 
     Component {
         id: calendarComponent

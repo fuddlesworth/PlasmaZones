@@ -128,7 +128,10 @@ public:
     void rescanNow();
 
     // Currently-loaded plugin ids (the same ids registered with the
-    // Registry). Useful for diagnostic UIs.
+    // Registry). Useful for diagnostic UIs. Order is unspecified
+    // (QHash iteration) and not stable across rescans or Qt versions;
+    // sort if you need deterministic display, the way the BarController
+    // example in the README does.
     [[nodiscard]] QStringList loadedPluginIds() const;
 
     // Number of live widgets produced by the named plugin. Phase
@@ -221,7 +224,11 @@ private:
     QHash<QString, std::shared_ptr<LoadedPlugin>> m_plugins;
     // QLibrary instances retained from prior unregisters. Pinned for
     // the PluginLoader's lifetime so old widgets whose vtables live
-    // inside the .so keep working. Drains at ~PluginLoader.
+    // inside the .so keep working. ~PluginLoader releases each
+    // QLibrary wrapper; the underlying dlopen mapping persists until
+    // process exit (QLibrary's default destructor does NOT call
+    // unload() — that's intentional here, keeping vtables alive for
+    // any stragglers Qt has not yet deleted).
     //
     // Known bounded leak: this vector grows monotonically across the
     // process lifetime — each plugin removed at runtime adds one

@@ -88,7 +88,11 @@ public:
     explicit WarningCapture(QStringList& sink)
         : m_sink(&sink)
     {
-        Q_ASSERT(s_activeCapture == nullptr);
+        // The save/restore in m_priorActiveCapture (line below) +
+        // ~WarningCapture's restoration makes nesting structurally
+        // safe — the previous Q_ASSERT that forbade nesting in debug
+        // builds contradicted that contract. Removed so debug and
+        // release both follow the same documented nesting semantics.
         m_priorActiveCapture = s_activeCapture;
         s_activeCapture = this;
         m_priorHandler = qInstallMessageHandler(warningCapturingHandler);
