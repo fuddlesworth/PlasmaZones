@@ -764,12 +764,15 @@ public:
         // The animation exclusion lists live at
         // `Animations.WindowFiltering.{Applications,WindowClasses}` — same
         // leaf keys as the snapping Exclusions group above, just under a
-        // different dot-path. The two segments ("Animations" and
-        // "WindowFiltering") aren't wrapped in their own frozen accessors
-        // because migrateV3ToV4 walks the path inline; the segment
-        // literals are spelled out next to v4AnimationsGroup's freeze
-        // comment in the migration body for the same forensic-readability
-        // reason.
+        // different dot-path. The "Animations" segment routes through
+        // `v4AnimationsGroup` above; "WindowFiltering" is the bare leaf
+        // segment frozen here. The live `animationsWindowFilteringGroup()`
+        // accessor returns the FULL dot-path "Animations.WindowFiltering"
+        // (not the bare segment), so it can't be reused by the migration
+        // which walks the path one segment at a time. Freezing the segment
+        // here keeps the migration's read-path symmetric with the other
+        // Legacy:: accessors and gives a future rename a single chokepoint.
+        PZ_CONFIG_KEY(v4WindowFilteringSegment, "WindowFiltering")
 
         // v3 assignments.json field names — frozen literals from the dead
         // v3 assignments.json schema. finalizeV4Conversion is the sole

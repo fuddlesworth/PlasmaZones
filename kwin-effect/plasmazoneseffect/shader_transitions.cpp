@@ -281,14 +281,21 @@ inline GLenum wrapStringToEnum(const QString& wrap)
 
 /// Parse a D-Bus setting variant containing a JSON-encoded string and
 /// dispatch to one of two callers based on the document's top-level
-/// shape. Used by the four `load*FromDbus` setting fetchers in
-/// `shader_transitions.cpp` — each loader differs only in (a) which
-/// shape it expects and (b) what it does with the parsed JSON, so
-/// every other piece (UTF-8 decode, document-shape check, malformed-
-/// payload warning text) collapses into a single helper call. The
-/// `name` argument feeds the warning so the failure site is identifiable
-/// in journals; pass the same `SettingProperty` constant the loader
-/// requested.
+/// shape. Used by the three `load*FromDbus` setting fetchers in
+/// `shader_transitions.cpp` — `loadShaderProfileFromDbus`,
+/// `loadMotionProfileTreeFromDbus`, `loadShaderRegistryFromDbus`. Each
+/// loader differs only in (a) which shape it expects and (b) what it
+/// does with the parsed JSON, so every other piece (UTF-8 decode,
+/// document-shape check, malformed-payload warning text) collapses
+/// into a single helper call. `loadWindowRuleAnimationsFromDbus` is the
+/// odd one out — it issues a raw `QDBusMessage::createMethodCall` to
+/// `getAllRules` and parses with `QJsonDocument::fromJson` directly,
+/// because it slices the parsed rules through
+/// `excludeRulesFrom` / `excludeAnimationsRulesFrom` before sinking.
+///
+/// The `name` argument feeds the warning so the failure site is
+/// identifiable in journals; pass the same `SettingProperty` constant
+/// the loader requested.
 ///
 /// `objectSink` runs when the document is a top-level JSON object;
 /// `arraySink` runs when it is a top-level JSON array. Pass a

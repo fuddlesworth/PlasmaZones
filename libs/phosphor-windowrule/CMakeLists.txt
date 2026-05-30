@@ -67,10 +67,12 @@ set(phosphorwindowrule_public_HDRS
     include/PhosphorWindowRule/RuleEvaluator.h
     include/PhosphorWindowRule/WindowRuleStore.h
     include/PhosphorWindowRule/WindowRuleLogging.h
-    # Header-only in-memory bridges — public API, installed via the
-    # install(DIRECTORY) glob below. Listed here so the target carries them
-    # as sources (IDE visibility, install-intent parity with the rest of
-    # the public headers above).
+    # In-memory bridges — public API, installed via the install(DIRECTORY)
+    # glob below. Listed here so the target carries them as sources (IDE
+    # visibility, install-intent parity with the rest of the public
+    # headers above). `ExclusionRules` has its body in `src/` (link edge,
+    # not header inline); `ContextRuleBridge` and `IdentityKey` are still
+    # header-only.
     include/PhosphorWindowRule/ContextRuleBridge.h
     include/PhosphorWindowRule/ExclusionRules.h
     include/PhosphorWindowRule/IdentityKey.h
@@ -85,6 +87,7 @@ set(phosphorwindowrule_SRCS
     src/windowruleset.cpp
     src/ruleevaluator.cpp
     src/windowrulestore.cpp
+    src/exclusionrules.cpp
 )
 
 add_library(PhosphorWindowRule SHARED

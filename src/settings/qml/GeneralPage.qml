@@ -180,6 +180,7 @@ SettingsFlickable {
                     Button {
                         text: i18n("Export Settings")
                         icon.name: "document-export"
+                        Accessible.name: text
                         onClicked: exportConfigDialog.open()
                     }
                 }
@@ -193,6 +194,7 @@ SettingsFlickable {
                     Button {
                         text: i18n("Import Settings")
                         icon.name: "document-import"
+                        Accessible.name: text
                         onClicked: importConfigDialog.open()
                     }
                 }
@@ -206,6 +208,7 @@ SettingsFlickable {
                     Button {
                         text: i18n("Reset to Defaults")
                         icon.name: "document-revert"
+                        Accessible.name: text
                         // Reach the chrome-owned confirmation dialog through
                         // the `window.defaultsConfirmDialog` alias declared
                         // in Main.qml. A bare `defaultsConfirmDialog.open()`

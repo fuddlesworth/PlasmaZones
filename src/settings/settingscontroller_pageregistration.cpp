@@ -212,8 +212,22 @@ void SettingsController::buildApplicationController()
             return;
         }
         const QString id = m_app->currentPageId();
-        if (!id.isEmpty() && id != m_activePage) {
-            setActivePage(id);
+        if (id.isEmpty() || id == m_activePage) {
+            return;
+        }
+        const QString previousActive = m_activePage;
+        setActivePage(id);
+        // setActivePage rejects unknown ids (e.g. a stale CLI
+        // --page=exclusions invocation after the page was folded
+        // out) with a warning and returns early — m_activePage
+        // stays at previousActive. The framework's m_app side has
+        // ALREADY accepted the invalid id from its own setter, so
+        // without a snap-back the two would diverge silently
+        // (m_app->currentPageId() == "exclusions" while
+        // m_activePage == "general"). Restore the authoritative
+        // controller-side id whenever validation failed.
+        if (m_activePage == previousActive && id != previousActive) {
+            m_app->setCurrentPageId(m_activePage);
         }
     });
 }

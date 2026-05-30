@@ -497,6 +497,17 @@ public:
     /// See the comment block on the private members and the impl in
     /// navigation_actions.cpp for the lifetime contract — the pointer is
     /// borrowed and the cached evaluator drops on a pointer change.
+    ///
+    /// The borrowed rule set MUST outlive every subsequent
+    /// `isAppIdExcluded` call. The Daemon currently guarantees this
+    /// through member-declaration order (`m_excludeRuleSet` is declared
+    /// before `m_snapEngine` so reverse-order destruction tears the
+    /// engine down first), AND additionally clears the borrow
+    /// symmetrically by calling `setExcludeRuleSet(nullptr)` in
+    /// `Daemon::stop()` before `m_snapEngine.reset()` — that explicit
+    /// teardown survives a future reordering or ownership move that
+    /// would otherwise silently introduce a dangling pointer.
+    ///
     /// Declared OUTSIDE the Q_SIGNALS section below: MOC treats every
     /// declaration in `Q_SIGNALS:` as a signal and generates a stub body
     /// for it, so placing this setter inside that section makes the
@@ -599,16 +610,35 @@ private:
     /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
-    /// True if @p appId is excluded by any user-authored or migrated
-    /// `Exclude`-action WindowRule. The daemon hands a pre-filtered
-    /// `WindowRuleSet` containing only Exclude rules (built via
-    /// `PhosphorWindowRule::ExclusionRules::excludeRulesFrom` over the
-    /// unified `WindowRuleStore::ruleSet()`) into @ref setExcludeRuleSet;
-    /// the snap engine binds a `RuleEvaluator` to that set on first
-    /// access and evaluates a `query.appId = @p appId` against it.
+    /// True if @p appId matches an enabled `Exclude`-action WindowRule
+    /// **whose match leaf targets the `AppId` field** (any operator —
+    /// the engine builds a `WindowQuery` with only `query.appId`
+    /// populated and feeds it to the bound `RuleEvaluator`).
+    ///
+    /// **Limitation:** a user-authored Exclude rule whose match leaf
+    /// targets a non-`AppId` field (`WindowClass Contains "steam"`,
+    /// `Title Regex …`, a composite match, …) silently evaluates to
+    /// false here because those leaves never resolve against a
+    /// query that only knows the appId. Migration-produced rules are
+    /// all `AppId AppIdMatches <pattern>` so the legacy v3 behaviour
+    /// is preserved exactly; the gap only opens for hand-authored
+    /// rules with broader match leaves. A more thorough check would
+    /// require the caller to pass the full `WindowQuery` it can
+    /// build from the WTS registry's per-window attributes, instead
+    /// of just the appId.
+    ///
     /// Returns false when the rule set hasn't been wired (early-init
     /// paths) or when the filtered set is empty.
     bool isAppIdExcluded(const QString& appId) const;
+
+    // These two members are daemon-main-thread-only — every access path
+    // runs on the daemon's main thread (rulesChanged signal delivery,
+    // navigation slot dispatch, and the in-thread isAppIdExcluded call
+    // chain). The cache is intentionally unsynchronised: `setExcludeRuleSet`
+    // writes the raw pointer non-atomically, and `RuleEvaluator::resolve`
+    // mutates a lazy priority-order index that must be externally
+    // serialised (see RuleEvaluator.h's thread-safety note). Do not
+    // access from another thread without adding locking.
 
     /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
     /// in early-init paths (before the daemon wires the store) — the

@@ -5,7 +5,6 @@
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
-#include <PhosphorWindowRule/ExclusionRules.h>
 
 #include <effect/effecthandler.h>
 #include <window.h>

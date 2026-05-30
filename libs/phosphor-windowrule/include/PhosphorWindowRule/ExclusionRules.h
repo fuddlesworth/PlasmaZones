@@ -3,152 +3,92 @@
 
 #pragma once
 
-#include "MatchExpression.h"
-#include "MatchTypes.h"
-#include "RuleAction.h"
-#include "WindowRule.h"
-#include "WindowRuleSet.h"
-
 #include <QList>
 #include <QString>
 #include <QStringList>
 
+#include "phosphorwindowrule_export.h"
+
 /**
  * @file ExclusionRules.h
- * @brief Header-only helpers that slice a unified `WindowRuleSet` down to
- *        the `Exclude`- or `ExcludeAnimations`-action rules that the
- *        snap-engine, the KWin effect's drag gate, and the effect's
- *        `shouldAnimateWindow` gate respectively bind to their
- *        evaluators.
+ * @brief Slicers that pull the `Exclude`- or `ExcludeAnimations`-action
+ *        rules out of a unified `WindowRuleSet`. The snap-engine and the
+ *        KWin effect's drag gate bind the Exclude slice to their match
+ *        evaluators; the KWin effect's `shouldAnimateWindow` gate binds
+ *        the ExcludeAnimations slice. The flat-string variant
+ *        (`applicationExcludePatternsFrom`) extracts the bare AppId
+ *        patterns the WTA pending-restore prune walks.
  *
  * After v4 (configmigration.cpp), exclusion rules live exclusively in
- * the unified WindowRule store — the legacy
- * `(animation)excludedApplications` / `(animation)excludedWindowClasses`
- * QStringList settings retired along with the bridge that derived rules
+ * the unified WindowRule store — the legacy `excludedApplications` /
+ * `excludedWindowClasses` and their animation-side siblings
+ * `animationExcludedApplications` / `animationExcludedWindowClasses`
+ * QStringList settings retired alongside the bridge that derived rules
  * from them. Consumers ask THIS header "give me the Exclude- or
  * ExcludeAnimations-shaped slice of the user's unified rule store".
  *
- * Header-only so consumers take only an include-time dependency on
- * phosphor-windowrule — there is no link edge added by using these
- * helpers.
+ * Declarations only — bodies live in `src/exclusionrules.cpp` so
+ * consumers pay one link edge (not a per-TU inline cost) and the
+ * internal `ruleHasAction` / `rulesWithAction` predicates stay
+ * file-local. A previous shape had bodies inline in this header; that
+ * forced every consumer TU through the full transitive include chain
+ * (`MatchExpression.h`, `RuleAction.h`, `WindowRule.h`, …) and
+ * instantiated three function bodies under hidden visibility per TU.
+ * The slicers are not on a perf-critical path — the daemon calls them
+ * once per `WindowRuleStore::rulesChanged` emission, not per
+ * resolution — so the inline win was zero and the include cost was
+ * real.
  */
 
 namespace PhosphorWindowRule {
 
+class WindowRuleSet;
+
 namespace ExclusionRules {
 
-/// True iff @p rule carries at least one action whose `type` matches
-/// @p actionType. The two `*RulesFrom` helpers below build on this; it
-/// is exposed so callers that want the same predicate without
-/// re-deriving a slice get the canonical shape.
-inline bool ruleHasAction(const WindowRule& rule, QLatin1StringView actionType)
-{
-    for (const RuleAction& action : rule.actions) {
-        // Compare via Qt6's `QString::operator==(QLatin1StringView)` overload
-        // — wrapping in `QString(actionType)` would heap-allocate per rule
-        // for a comparison the overload performs without allocation.
-        if (action.type == actionType) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/// True iff @p rule carries at least one terminal `Exclude` action.
-/// Thin alias over @ref ruleHasAction for the snapping / drag-gate
-/// call sites that don't need to spell the action type explicitly.
-inline bool ruleIsExclude(const WindowRule& rule)
-{
-    return ruleHasAction(rule, ActionType::Exclude);
-}
-
-/// Walk @p source and return a derived `WindowRuleSet` containing only
-/// the ENABLED rules whose action list includes @p actionType. Rule ids,
-/// priorities and matches are copied verbatim — the derived set gets
-/// bound to a `RuleEvaluator` downstream and has to preserve the
-/// source rule's resolution semantics exactly. An empty match yields
-/// an empty set so callers keep a `!set.isEmpty()` fast path.
-///
-/// Disabled rules are skipped at slicing time so the derived set is the
-/// minimum admitted by the user. The `RuleEvaluator` already gates on
-/// `enabled` at resolve time, so functionally this is a no-op — but
-/// carrying disabled rules in the derived set bloats the priority-order
-/// index and inflates the `!isEmpty()` fast-path cost for users who
-/// have disabled all of one shape (e.g. all snapping Exclude rules off).
-inline WindowRuleSet rulesWithAction(const WindowRuleSet& source, QLatin1StringView actionType)
-{
-    QList<WindowRule> kept;
-    kept.reserve(source.count());
-    for (const WindowRule& rule : source.rules()) {
-        if (rule.enabled && ruleHasAction(rule, actionType)) {
-            kept.append(rule);
-        }
-    }
-    WindowRuleSet derived;
-    derived.setRules(kept);
-    return derived;
-}
-
 /// Slice @p source down to rules with a terminal `Exclude` action.
-/// Used by SnapEngine and the KWin effect's drag gate.
-inline WindowRuleSet excludeRulesFrom(const WindowRuleSet& source)
-{
-    return rulesWithAction(source, ActionType::Exclude);
-}
+/// Used by SnapEngine and the KWin effect's drag gate. Disabled rules
+/// are skipped at slicing time so the derived set is the minimum
+/// admitted by the user — carrying disabled rules through the slice
+/// would inflate the downstream `RuleEvaluator`'s priority-order index
+/// and would lie to `!isEmpty()` fast-path callers (e.g. users who
+/// have disabled all of one shape — all snapping Excludes off).
+/// Rule ids, priorities, and matches are preserved verbatim.
+PHOSPHORWINDOWRULE_EXPORT WindowRuleSet excludeRulesFrom(const WindowRuleSet& source);
 
 /// Slice @p source down to rules with a terminal `ExcludeAnimations`
 /// action — the action the v4 fold introduced for the legacy
 /// animationExcludedApplications / animationExcludedWindowClasses
 /// lists. Used by the KWin effect's `shouldAnimateWindow` gate to
-/// suppress animation overrides on matched windows.
-inline WindowRuleSet excludeAnimationsRulesFrom(const WindowRuleSet& source)
-{
-    return rulesWithAction(source, ActionType::ExcludeAnimations);
-}
+/// suppress animation overrides on matched windows. Same disabled-skip
+/// + verbatim-preservation contract as @ref excludeRulesFrom.
+PHOSPHORWINDOWRULE_EXPORT WindowRuleSet excludeAnimationsRulesFrom(const WindowRuleSet& source);
 
 /// Return the AppId pattern of every `AppId AppIdMatches <pattern>` leaf
-/// that lives on an `Exclude`-action rule in @p source. Mirrors what the
-/// legacy bridge's daemon-flavour builder used to feed into the
-/// snap-engine's exclusion cache, so a consumer that still needs a flat
-/// string list of patterns (the WTA pending-restore prune) can derive one
-/// from the unified store.
+/// that lives on an enabled `Exclude`-action rule in @p source. Mirrors
+/// the deleted runtime bridge's flat-string output so a consumer that
+/// needs a flat list of patterns (the WTA pending-restore prune) can
+/// derive one from the unified store.
 ///
-/// Only the simple shape "single AppId AppIdMatches leaf" is recognised
-/// — the v4 migration produces exactly that shape, and a hand-authored
-/// composite rule has no single canonical pattern to harvest. Composite
-/// rules are silently skipped; the caller's existing semantics were that
-/// the pattern list could only express bare-leaf rules anyway.
-inline QStringList applicationExcludePatternsFrom(const WindowRuleSet& source)
-{
-    QStringList patterns;
-    for (const WindowRule& rule : source.rules()) {
-        // Skip disabled rules — the daemon's pending-restore prune
-        // consumes the returned patterns to discard queued restores for
-        // matching apps, so harvesting from a disabled rule would prune
-        // restores the user explicitly opted into keeping. Mirrors the
-        // disabled-rule skip in `rulesWithAction` above for symmetry,
-        // since callers may hand this helper an unfiltered set
-        // (e.g. straight from the unified store) rather than the
-        // already-sliced exclude set.
-        if (!rule.enabled || !ruleIsExclude(rule)) {
-            continue;
-        }
-        const MatchExpression& match = rule.match;
-        if (match.kind() != MatchExpression::Kind::Leaf) {
-            continue;
-        }
-        const MatchExpression::Predicate& leaf = match.predicate();
-        if (leaf.field != Field::AppId || leaf.op != Operator::AppIdMatches) {
-            continue;
-        }
-        const QString pattern = leaf.value.toString().trimmed();
-        if (pattern.isEmpty()) {
-            continue;
-        }
-        patterns.append(pattern);
-    }
-    return patterns;
-}
+/// **Only the simple shape "single AppId AppIdMatches leaf" is
+/// recognised** — the v4 migration produces exactly that shape, and a
+/// hand-authored Exclude rule with a different match (`WindowClass
+/// Contains "steam"`, a composite, an AppId Equals leaf) cannot map to
+/// a single canonical AppId pattern and is silently skipped. The
+/// snap-engine and drag gate still fire on the rule (they bind the
+/// full Exclude slice to a RuleEvaluator, not the harvested string
+/// list), but the pending-restore prune cannot see it. Practical
+/// consequence: a user authoring a `WindowClass Contains "steam"`
+/// Exclude rule keeps Steam windows out of layouts (good), but stale
+/// queued pending-restores for Steam on disk are NOT pruned (the
+/// queue keeps growing slowly across daemon restarts until a real
+/// snap-engine matching cycle re-checks them and discards them as
+/// excluded). A future widening of this harvest, or a switch to
+/// evaluating the WindowRuleSet directly against each queued
+/// WindowQuery, would close that gap.
+///
+/// Empty / whitespace-only / disabled rules are dropped.
+PHOSPHORWINDOWRULE_EXPORT QStringList applicationExcludePatternsFrom(const WindowRuleSet& source);
 
 } // namespace ExclusionRules
 

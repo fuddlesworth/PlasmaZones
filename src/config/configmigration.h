@@ -35,8 +35,10 @@ namespace PlasmaZones {
 ///     comma-joined pattern lists) folds into the same windowrules.json: each
 ///     surviving pattern becomes an Application-subject `AppId AppIdMatches
 ///     <pattern>` matcher with a terminal `Exclude` action, matching the
-///     shape `ExclusionListBridge::toDaemonRuleSet` produced at runtime so an
-///     upgrading user's exclusion behaviour is preserved. The standalone
+///     shape the legacy runtime bridge produced (see
+///     `appendExclusionRulesFromStash` in configmigration.cpp for the
+///     builder) so an upgrading user's exclusion behaviour is preserved.
+///     The standalone
 ///     "Exclusions" settings page disappears; the three global window-filtering
 ///     knobs (excludeTransientWindows / minimumWindowWidth /
 ///     minimumWindowHeight) move to the General page. See

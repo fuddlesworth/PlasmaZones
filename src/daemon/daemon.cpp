@@ -1096,6 +1096,21 @@ bool Daemon::init()
     // resolveCached-bearing migration of the call sites). Rebuilt
     // whenever the unified store emits rulesChanged, so a settings-app
     // rule edit propagates without a manual refresh.
+    //
+    // Initial wiring happens once below, outside the rulesChanged lambda:
+    //   - `setExcludeRuleSet(&m_excludeRuleSet)` hands SnapEngine the
+    //     stable address. The pointer never changes after this; the
+    //     evaluator picks up subsequent in-place edits through the
+    //     revision counter, so subsequent re-fences would be no-ops.
+    //   - The first `setRules` + `pruneExcludedPendingRestores` priming
+    //     pair seeds the filter and drains any restore queue entries
+    //     populated by WTA::loadState above.
+    snapEngine->setExcludeRuleSet(&m_excludeRuleSet);
+    m_excludeRuleSet.setRules(
+        PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
+    m_windowTrackingAdaptor->pruneExcludedPendingRestores(
+        PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
+
     auto refilterExcludeRules = [this, snapEnginePtr = QPointer(snapEngine)] {
         // QPointer null-checks defend the rulesChanged subscription
         // against the shutdown window where m_snapEngine.reset() has
@@ -1115,17 +1130,23 @@ bool Daemon::init()
         if (!m_windowRuleStore) {
             return;
         }
-        m_excludeRuleSet.setRules(
-            PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules());
-        // SnapEngine's pointer back-reference never changes after the
-        // first wiring — calling `setExcludeRuleSet` every refresh is an
-        // intentional idempotent fence so a future hot-reload that
-        // swaps `m_excludeRuleSet` for a different member is observed.
+        // Equality-guard against no-op edits: every rulesChanged emission
+        // (rename, priority change, non-Exclude action edit, …) fires
+        // this lambda, but only changes that affect the Exclude slice
+        // should bump the evaluator's revision and walk the (potentially
+        // long) pending-restore queues. `WindowRuleSet::operator==`
+        // compares the rules-list only — exactly the semantics we want.
+        const QList<PhosphorWindowRule::WindowRule> newSlice =
+            PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules();
+        if (newSlice == m_excludeRuleSet.rules()) {
+            return;
+        }
         // Cache invalidation for matched windows happens through the
-        // `setRules` revision bump above; the evaluator inside SnapEngine
+        // `setRules` revision bump; the evaluator inside SnapEngine
         // reads `m_excludeRuleSet`'s revision and drops its per-revision
-        // index / cache automatically.
-        snapEnginePtr->setExcludeRuleSet(&m_excludeRuleSet);
+        // index / cache automatically. No `setExcludeRuleSet` re-fence
+        // — the pointer was wired once at init above.
+        m_excludeRuleSet.setRules(newSlice);
         // Prune any pending-restore queues for apps now covered by an
         // Exclude rule. Snap-engine's resolveWindowRestore already refuses
         // them at runtime, but stale queue entries spam logs and bloat the
@@ -1138,13 +1159,6 @@ bool Daemon::init()
                 PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
         }
     };
-    // Prime the rule set + cache once: the first call seeds the revision
-    // counter, hands SnapEngine its non-null pointer, and triggers the
-    // first prune of any restore queues populated by the WTA loadState
-    // above. Without this priming call the snapping side stays at
-    // revision=0 with a null exclude set until the user (or migration)
-    // edits a rule — masking any default-state exclusion until then.
-    refilterExcludeRules();
     connect(m_windowRuleStore.get(), &PhosphorWindowRule::WindowRuleStore::rulesChanged, this,
             [refilterExcludeRules](bool /*persisted*/) {
                 refilterExcludeRules();
@@ -1833,6 +1847,19 @@ void Daemon::stop()
     // navigatorForShortcut path completes with the engine pointers it
     // already captured before the router went away.
     m_screenModeRouter.reset();
+
+    // Sever SnapEngine's borrow of m_excludeRuleSet (a daemon-owned value
+    // member) BEFORE m_snapEngine.reset(). Declaration order currently
+    // guarantees lifetime, but a future reorder or ownership move could
+    // silently introduce a dangling pointer through isAppIdExcluded if
+    // a late shutdown call landed; the explicit clear here makes the
+    // teardown contract grep-discoverable and survives that refactor.
+    // `m_snapEngine` is base-typed `PlacementEngineBase*`; the setter
+    // lives on the concrete `SnapEngine`. qobject_cast mirrors the
+    // narrowing in the autotile-toggle branch above (~ line 893).
+    if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
+        concreteSnap->setExcludeRuleSet(nullptr);
+    }
 
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();

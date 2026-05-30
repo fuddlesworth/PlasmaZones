@@ -275,9 +275,16 @@ private Q_SLOTS:
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
         QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
 
-        // Both temporary stash keys are stripped from config.json.
+        // All four temporary stash keys are stripped from config.json.
+        // The fixture's `makeV3Config()` doesn't populate the two
+        // exclusion stashes, so they shouldn't exist post-migration
+        // anyway — pinning their absence here catches a future
+        // regression where the migration spuriously creates an empty
+        // stash from absent input.
         QVERIFY(!cfg.contains(QStringLiteral("_v4DisableStash")));
         QVERIFY(!cfg.contains(QStringLiteral("_v4AnimationRulesStash")));
+        QVERIFY(!cfg.contains(QStringLiteral("_v4ExclusionStash")));
+        QVERIFY(!cfg.contains(QStringLiteral("_v4AnimationExclusionStash")));
     }
 
     // ─── Exact cascade priorities ─────────────────────────────────────────
@@ -1559,10 +1566,10 @@ private Q_SLOTS:
     // ─── Exclusions fold ─────────────────────────────────────────────────
     // The legacy `Exclusions.{Applications,WindowClasses}` comma-joined
     // lists fold into Application-subject `AppId AppIdMatches <pattern>`
-    // matchers with a terminal `Exclude` action — the same shape
-    // `ExclusionListBridge::toDaemonRuleSet` produced for the daemon's
-    // navigation gates, so an upgrading user's runtime exclusion
-    // behaviour is preserved.
+    // matchers with a terminal `Exclude` action — the same shape the
+    // legacy runtime bridge produced for the daemon's navigation gates
+    // (see git history for `ExclusionListBridge`), so an upgrading
+    // user's runtime exclusion behaviour is preserved.
 
 private:
     /// A v3 config carrying just an Exclusions group. No disable lists, no
@@ -1686,9 +1693,8 @@ private Q_SLOTS:
         // Operator::AppIdMatches, pattern)` through a fixed v5-UUID
         // namespace. A regression in the namespace literal or the
         // length-prefixed segment encoding would break the dedup guarantee
-        // ExclusionListBridge::toDaemonRuleSet relied on — and would let
-        // a user who had hand-authored the equivalent rule pre-migration
-        // see a duplicate post-migration.
+        // the legacy runtime bridge relied on — see git history for the
+        // pre-v4 `ExclusionListBridge` builder.
         IsolatedConfigGuard guard;
         writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithExclusions(QStringLiteral("firefox"), QString()));
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -1859,6 +1865,56 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QCOMPARE(animationExclusionRules(rulesFromWindowRules()).size(), 2);
+    }
+
+    void testAnimationExclusions_idempotentRuleIds()
+    {
+        // Counterpart to `testExclusions_idempotentRuleIds` — the
+        // animation-side fold uses a DIFFERENT segment encoding (4 segments
+        // including the action-type discriminator instead of the snapping
+        // side's 3). The discriminator is what lets a future user-authored
+        // Exclude rule and a migrated ExcludeAnimations rule share the same
+        // (field, op, pattern) tuple without collapsing to the same id.
+        // Pin the namespace + 4-segment shape inline so a future refactor
+        // of either piece (namespace literal, Field/Operator enum value
+        // renumbering, ActionType wire-string rename) has to update this
+        // test deliberately rather than drift silently in both producer
+        // and check.
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QString(), QStringLiteral("firefox")));
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        const QString firstId =
+            animationExclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        QVERIFY(!firstId.isEmpty());
+
+        // The namespace UUID is shared with the snapping-side fold — same
+        // `appendExclusionRulesFromStash` / `appendAnimationExclusionRulesFromStash`
+        // namespace constant in `configmigration.cpp::exclusionMigrationNamespace`.
+        const QUuid kExpectedNamespace(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
+        // Segment encoding: <size>:<bytes> per segment, no separator.
+        // The 4-segment shape for an animation WindowClass rule:
+        //   field   = static_cast<int>(Field::WindowClass) = 1     → "1:1"
+        //   op      = static_cast<int>(Operator::Contains) = 1     → "1:1"
+        //   pattern = "firefox"                                    → "7:firefox"
+        //   action  = "excludeAnimations" (17 bytes)               → "17:excludeAnimations"
+        const QString kExpectedKey = QStringLiteral("1:1") + QStringLiteral("1:1") + QStringLiteral("7:firefox")
+            + QStringLiteral("17:excludeAnimations");
+        const QString expectedId = QUuid::createUuidV5(kExpectedNamespace, kExpectedKey).toString();
+        QCOMPARE(firstId, expectedId);
+
+        // Round-trip: wipe windowrules.json + re-stage same v3 input.
+        // Re-running the migration on identical input must produce the
+        // same id so `WindowRuleStore::addRule`'s id-collision check
+        // collapses the second run to a no-op instead of duplicating.
+        QFile::remove(ConfigDefaults::windowRulesFilePath());
+        writeJson(ConfigDefaults::configFilePath(),
+                  makeV3ConfigWithAnimationExclusions(QString(), QStringLiteral("firefox")));
+        ConfigMigration::resetMigrationGuardForTesting();
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+        const QString secondId =
+            animationExclusionRules(rulesFromWindowRules()).first().value(QStringLiteral("id")).toString();
+        QCOMPARE(secondId, firstId);
     }
 
     void testAnimationExclusions_groupAndStashStrippedAfterFinalize()

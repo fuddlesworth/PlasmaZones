@@ -1653,6 +1653,14 @@ PZ_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, f
 // evaluators in SnapEngine, the KWin effect, and the WTA
 // pending-restore prune route through `PhosphorWindowRule::ExclusionRules`
 // over the unified store.
+//
+// The on-disk group name `"Exclusions"` is INTENTIONALLY kept after the
+// UI moved these knobs into a card relabeled "Window filtering" on the
+// General page (see src/settings/qml/GeneralPage.qml). Renaming the
+// group would require a v4→v5 schema migration to remap every existing
+// user config without losing the three preserved knobs — disproportionate
+// for a label change. The accessor name `exclusionsGroup()` keeps the
+// disk shape, and the runtime UI label is independent.
 
 PZ_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
 PZ_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)

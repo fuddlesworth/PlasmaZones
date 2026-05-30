@@ -33,6 +33,7 @@
 #include <array>
 #include <atomic>
 #include <optional>
+#include <string_view>
 
 namespace PlasmaZones {
 
@@ -1588,7 +1589,9 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // Exclusions stash: the legacy `Exclusions.Applications` and
     // `Exclusions.WindowClasses` keys hold comma-joined pattern lists that the
     // runtime previously folded into terminal `Exclude` rules at evaluation
-    // time via `ExclusionListBridge::toDaemonRuleSet`. v4 promotes those into
+    // time via the (now-deleted) legacy bridge — see git history for
+    // `ExclusionListBridge` if forensics on the pre-v4 builder are needed.
+    // v4 promotes those into
     // first-class WindowRules: finalizeV4Conversion appends one
     // `AppId AppIdMatches <pattern> → Exclude` rule per surviving pattern to
     // windowrules.json, so the daemon's runtime exclusion behaviour for an
@@ -1644,29 +1647,23 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // QStringList settings and the per-effect rebuild. Same shape as the
     // snapping-side stash above — read raw, surface non-string disk
     // values, strip the keys, and drop the (dot-path) group if it's now
-    // empty. Group access routes through `Legacy::v4AnimationsGroup()`
-    // so this block stays in lockstep with the AnimationAppRules block
-    // above; a future rename of the frozen accessor flows through both.
-    // The "WindowFiltering" subgroup segment is spelled inline because no
-    // frozen v4 accessor exists for it — the live `animationsWindowFilteringGroup()`
-    // accessor returns the full dot-path `Animations.WindowFiltering`, not
-    // the bare leaf segment, so reusing it here would not match the v3
-    // on-disk shape this migration needs to read. If a future schema bump
-    // calls for routing this segment through a frozen accessor too, add a
-    // dedicated `Legacy::v4WindowFilteringSegment()` and replace the inline
-    // literal here AND in the matching `animationsForFiltering[…]` write
-    // below in lockstep.
+    // empty. The "Animations" parent segment routes through
+    // `Legacy::v4AnimationsGroup()` and the "WindowFiltering" leaf segment
+    // routes through `Legacy::v4WindowFilteringSegment()` so this block
+    // stays in lockstep with the AnimationAppRules block above; a future
+    // rename of either frozen accessor flows through every site.
     QJsonObject animationsForFiltering = root.value(ConfigKeys::Legacy::v4AnimationsGroup()).toObject();
-    QJsonObject animationFiltering = animationsForFiltering.value(QStringLiteral("WindowFiltering")).toObject();
+    QJsonObject animationFiltering =
+        animationsForFiltering.value(ConfigKeys::Legacy::v4WindowFilteringSegment()).toObject();
     QJsonObject animationExclusionStash;
     stashListEntry(animationFiltering, animationExclusionStash, ConfigKeys::Legacy::v3ExcludedApplicationsKey(),
                    "Animations.WindowFiltering");
     stashListEntry(animationFiltering, animationExclusionStash, ConfigKeys::Legacy::v3ExcludedWindowClassesKey(),
                    "Animations.WindowFiltering");
     if (animationFiltering.isEmpty()) {
-        animationsForFiltering.remove(QStringLiteral("WindowFiltering"));
+        animationsForFiltering.remove(ConfigKeys::Legacy::v4WindowFilteringSegment());
     } else {
-        animationsForFiltering[QStringLiteral("WindowFiltering")] = animationFiltering;
+        animationsForFiltering[ConfigKeys::Legacy::v4WindowFilteringSegment()] = animationFiltering;
     }
     if (animationsForFiltering.isEmpty()) {
         root.remove(ConfigKeys::Legacy::v4AnimationsGroup());
@@ -1993,17 +1990,18 @@ void appendAnimationRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
 /// here as the canonical SSoT since the helper layer's
 /// `ExclusionRules::detail::namespaceUuid` retired alongside the legacy
 /// list-builder. The constant is byte-identical to the one the legacy
-/// helper used so a daemon that bridge-built a rule from the same
-/// `(field, op, pattern)` tuple at runtime (pre-v4) produces the same id
-/// post-migration. Two consequences of the deterministic derivation:
+/// runtime bridge used (deleted alongside the v4 fold — see git history
+/// for `ExclusionListBridge`) so a daemon that bridge-built a rule from
+/// the same `(field, op, pattern)` tuple at runtime (pre-v4) produces
+/// the same id post-migration. Two consequences of the deterministic
+/// derivation:
 ///   - re-runs of the migration on the same v3 inputs produce
 ///     byte-identical rule ids, so `WindowRuleStore::addRule`'s id-
 ///     collision check collapses the second run to a no-op rather than
 ///     duplicating every rule on every startup, and
 ///   - the LEGACY runtime bridge's id (pre-v4 daemons that built the
-///     same rule from the same lists via `ExclusionListBridge::
-///     toDaemonRuleSet`) matches the migration's id, so a v4 store that
-///     somehow saw both producers stays consistent.
+///     same rule from the same lists at runtime) matches the migration's
+///     id, so a v4 store that somehow saw both producers stays consistent.
 /// This is NOT a dedup against hand-authored rules: a user authoring an
 /// `AppId AppIdMatches firefox → Exclude` rule through the Window Rules
 /// page receives a fresh `QUuid::createUuid()` random id at allocation
@@ -2041,9 +2039,12 @@ void appendExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
                 continue;
             }
             WindowRule rule;
-            // Deterministic id keyed off `(field, op, pattern)` — same shape
-            // and same namespace as the legacy `ExclusionListBridge` so a
-            // user upgrading carries the same UUIDs across the migration.
+            // Deterministic id keyed off `(field, op, pattern)` — byte-
+            // identical namespace + segment encoding to the (now-retired)
+            // legacy runtime bridge so any pre-v4 daemon that bridge-built
+            // a rule from the same `(field, op, pattern)` tuple produced
+            // the same id, and an upgrading user carries the same UUIDs
+            // across the migration.
             rule.id = QUuid::createUuidV5(
                 exclusionMigrationNamespace(),
                 Detail::encodeSegment(QString::number(static_cast<int>(Field::AppId)))
@@ -2079,6 +2080,25 @@ void appendExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
 void appendAnimationExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules, const QJsonObject& stash)
 {
     using namespace PhosphorWindowRule;
+    // Pin the wire-string for ExcludeAnimations against a future rename.
+    // The animation-exclusion rule id is derived as
+    // `UUIDv5(namespace, "<field>" + "<op>" + "<pattern>" + "<actionType>")`
+    // — so renaming the wire-string from "excludeAnimations" to anything
+    // else would silently change every existing migrated rule's id and
+    // break the migration's collision-with-self idempotency guarantee.
+    // The same rule's `RuleAction::type` field below also stores the wire-
+    // string verbatim, so any rename has to update both producers AND the
+    // testAnimationExclusions_idempotentRuleIds golden hash in lockstep.
+    // QLatin1StringView's operator== is not constexpr in this Qt minimum;
+    // the std::string_view bridge IS constexpr-comparable and gives a
+    // build-break at compile time on rename.
+    static_assert(std::string_view(ActionType::ExcludeAnimations.data(),
+                                   static_cast<std::size_t>(ActionType::ExcludeAnimations.size()))
+                      == std::string_view("excludeAnimations"),
+                  "Renaming the ExcludeAnimations wire-string is a migration-breaking "
+                  "change — every previously-migrated animation-exclude rule id is derived "
+                  "from this exact byte sequence. Bump the schema version and write a "
+                  "v4→v5 migration if you really need to rename.");
     const auto appendOne = [&rules](const QString& rawCsv, Field field) {
         for (const QString& part : rawCsv.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
             const QString pattern = part.trimmed();
@@ -2474,9 +2494,10 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // first-class WindowRules so the runtime no longer needs the bridge that
     // re-built them on every settings change. Each surviving pattern becomes
     // an Application-subject `AppId AppIdMatches <pattern>` matcher with a
-    // terminal `Exclude` action — the same shape
-    // `ExclusionListBridge::toDaemonRuleSet` produced for the daemon's
-    // navigation gates, so behaviour is preserved for an upgrading user.
+    // terminal `Exclude` action — the same shape the legacy runtime bridge
+    // produced for the daemon's navigation gates (see
+    // `appendExclusionRulesFromStash` for the builder), so behaviour is
+    // preserved for an upgrading user.
     appendExclusionRulesFromStash(rules, exclusionStash);
 
     // ── Animation exclusions → WindowRules ────────────────────────────────

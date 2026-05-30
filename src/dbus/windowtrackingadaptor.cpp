@@ -187,16 +187,9 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
     // Load persisted window tracking state from previous session
     loadState();
 
-    // Prune any pending-restore queues for appIds excluded by the unified
-    // WindowRule store. Snap-engine's resolveWindowRestore already refuses
-    // to honor them at runtime, but they live on disk until pruned and
-    // spam one "pending snap:" log line per entry at every startup. The
-    // pattern derivation + live wiring now live on the daemon (it owns
-    // the rule store and the rulesChanged subscription); the one-shot
-    // catch-up here happens on the rulesChanged kick after init from
-    // Daemon::init, NOT here. The autotile-side prune happens again from
-    // the daemon's finalizeStartup after AutotileEngine::loadState
-    // populates m_pendingAutotileRestores.
+    // Exclude-pattern pruning is now driven from `Daemon::init` (and again
+    // from `Daemon::finalizeStartup` once AutotileEngine::loadState has
+    // populated the autotile queue) — see WTA::pruneExcludedPendingRestores.
 
     // If we have pending restores but missed activeLayoutChanged (layout was set before we
     // connected), set the flag so tryEmitPendingRestoresAvailable will emit when panel
