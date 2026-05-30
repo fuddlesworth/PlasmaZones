@@ -4,6 +4,7 @@
 #include <PhosphorServiceBluetooth/BluetoothAdapter.h>
 #include <PhosphorServiceBluetooth/BluetoothAdapterModel.h>
 #include <PhosphorServiceBluetooth/BluetoothDevice.h>
+#include <PhosphorServiceBluetooth/BluetoothDeviceModel.h>
 #include <PhosphorServiceBluetooth/BluetoothHost.h>
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 
@@ -247,6 +248,64 @@ private Q_SLOTS:
         adapter.setDiscoverable(true);
         adapter.startDiscovery();
         adapter.stopDiscovery();
+        QVERIFY(true);
+    }
+
+    void testDeviceModelTracksHostAndFilters()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected())
+            QSKIP("no session bus available");
+        if (!bus.registerService(QLatin1String(kService)))
+            QSKIP("could not own the test service name");
+
+        constexpr auto kSecondDevicePath = "/org/bluez/hci1/dev_11_22_33_44_55_66";
+        QVariantMap deviceB = deviceProps();
+        deviceB[QStringLiteral("Address")] = QStringLiteral("11:22:33:44:55:66");
+        deviceB[QStringLiteral("Adapter")] = QVariant::fromValue(QDBusObjectPath(QStringLiteral("/org/bluez/hci1")));
+
+        FakeBluez fake;
+        fake.objects.insert(QDBusObjectPath(QLatin1String(kAdapterPath)),
+                            InterfaceMap{{QLatin1String(kAdapterIface), adapterProps()}});
+        fake.objects.insert(QDBusObjectPath(QLatin1String(kDevicePath)),
+                            InterfaceMap{{QLatin1String(kDeviceIface), deviceProps()}});
+        fake.objects.insert(QDBusObjectPath(QLatin1String(kSecondDevicePath)),
+                            InterfaceMap{{QLatin1String(kDeviceIface), deviceB}});
+        QVERIFY(bus.registerObject(QStringLiteral("/"), &fake,
+                                   QDBusConnection::ExportAdaptors | QDBusConnection::ExportAllContents));
+
+        BluetoothHost host(bus, QLatin1String(kService));
+        BluetoothDeviceModel model;
+        model.setHost(&host);
+
+        // Unfiltered: both devices (under hci0 and hci1) show up.
+        QTRY_COMPARE(model.rowCount(), 2);
+
+        // Filter to the hci0 adapter: only its device (dev_AA) remains.
+        QVERIFY(host.adapterAt(0));
+        model.setAdapter(host.adapterAt(0));
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(model.data(model.index(0), BluetoothDeviceModel::AddressRole).toString(),
+                 QStringLiteral("AA:BB:CC:DD:EE:FF"));
+
+        // Clearing the filter restores the full list.
+        model.setAdapter(nullptr);
+        QCOMPARE(model.rowCount(), 2);
+        QCOMPARE(model.roleNames().value(BluetoothDeviceModel::ConnectedRole), QByteArrayLiteral("connected"));
+
+        bus.unregisterObject(QStringLiteral("/"));
+        bus.unregisterService(QLatin1String(kService));
+    }
+
+    void testDeviceWriteMethodsAreSafe()
+    {
+        // Fire-and-forget Device1 calls (Connect/Disconnect methods, Trusted/
+        // Blocked Properties.Set) must dispatch without crashing.
+        BluetoothDevice device(QDBusConnection::sessionBus(), QLatin1String(kDevicePath), deviceProps());
+        device.connectDevice();
+        device.disconnectDevice();
+        device.setTrusted(true);
+        device.setBlocked(false);
         QVERIFY(true);
     }
 };

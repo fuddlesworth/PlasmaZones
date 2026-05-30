@@ -9,6 +9,7 @@
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusVariant>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcBluetoothDevice, "phosphor.service.bluetooth.device")
@@ -73,6 +74,27 @@ public:
             }
             applyProps(reply.value());
         });
+    }
+
+    // Fire-and-forget Properties.Set on the Device1 interface. The cached
+    // value is not touched here; it moves only on the PropertiesChanged echo.
+    void setDeviceProperty(const QString& property, const QVariant& value)
+    {
+        if (!bus.isConnected())
+            return;
+        PhosphorDBus::Client client(bus, QLatin1String(kService), path, &lcBluetoothDevice());
+        client.fireAndForget(owner, QLatin1String(kPropsIface), QStringLiteral("Set"),
+                             {QString::fromLatin1(kDeviceIface), property, QVariant::fromValue(QDBusVariant(value))},
+                             QStringLiteral("setDeviceProperty"));
+    }
+
+    // Fire-and-forget no-argument method call on the Device1 interface.
+    void callDeviceMethod(const QString& method)
+    {
+        if (!bus.isConnected())
+            return;
+        PhosphorDBus::Client client(bus, QLatin1String(kService), path, &lcBluetoothDevice());
+        client.fireAndForget(owner, QLatin1String(kDeviceIface), method, {}, method);
     }
 
     // Applies a Device1 property map. Works for both the initial map from the
@@ -178,6 +200,26 @@ QString BluetoothDevice::adapter() const
 QStringList BluetoothDevice::uuids() const
 {
     return d->uuids;
+}
+
+void BluetoothDevice::connectDevice()
+{
+    d->callDeviceMethod(QStringLiteral("Connect"));
+}
+
+void BluetoothDevice::disconnectDevice()
+{
+    d->callDeviceMethod(QStringLiteral("Disconnect"));
+}
+
+void BluetoothDevice::setTrusted(bool trusted)
+{
+    d->setDeviceProperty(QStringLiteral("Trusted"), trusted);
+}
+
+void BluetoothDevice::setBlocked(bool blocked)
+{
+    d->setDeviceProperty(QStringLiteral("Blocked"), blocked);
 }
 
 void BluetoothDevice::_q_onPropertiesChanged(const QString& interfaceName, const QVariantMap& changed,

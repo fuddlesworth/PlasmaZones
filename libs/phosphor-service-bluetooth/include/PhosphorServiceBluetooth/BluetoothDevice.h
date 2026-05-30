@@ -63,6 +63,20 @@ public:
     [[nodiscard]] QString adapter() const;
     [[nodiscard]] QStringList uuids() const;
 
+    /// Establish / tear down a connection to this device
+    /// (`org.bluez.Device1.Connect` / `Disconnect`). Fire-and-forget;
+    /// `connected` reflects the outcome via PropertiesChanged. Named
+    /// `*Device` to avoid shadowing the static `QObject::connect` /
+    /// `disconnect`.
+    Q_INVOKABLE void connectDevice();
+    Q_INVOKABLE void disconnectDevice();
+
+    /// Mark the device (un)trusted / (un)blocked (`org.bluez.Device1`
+    /// Properties.Set). Fire-and-forget; the cached value moves only on the
+    /// PropertiesChanged echo, never optimistically.
+    Q_INVOKABLE void setTrusted(bool trusted);
+    Q_INVOKABLE void setBlocked(bool blocked);
+
 Q_SIGNALS:
     void addressChanged();
     void nameChanged();

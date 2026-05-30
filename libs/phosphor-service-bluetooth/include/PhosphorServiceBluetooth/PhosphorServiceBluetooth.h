@@ -30,5 +30,6 @@
 #include <PhosphorServiceBluetooth/BluetoothAdapter.h>
 #include <PhosphorServiceBluetooth/BluetoothAdapterModel.h>
 #include <PhosphorServiceBluetooth/BluetoothDevice.h>
+#include <PhosphorServiceBluetooth/BluetoothDeviceModel.h>
 #include <PhosphorServiceBluetooth/BluetoothHost.h>
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
