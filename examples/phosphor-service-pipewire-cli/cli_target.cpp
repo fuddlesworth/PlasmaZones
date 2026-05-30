@@ -35,6 +35,14 @@ PhosphorServicePipeWire::PwNode* resolveTarget(PhosphorServicePipeWire::PipeWire
     // not be detected, but a narrow space/tab-only check would silently
     // let the BMP cases through.
     const QString trimmed = spec.trimmed();
+    // Diagnose an empty spec here rather than letting it fall through to
+    // the silent `name.isEmpty()` return below — that keeps the empty
+    // case as verbose as the whitespace case above instead of failing
+    // mutely.
+    if (trimmed.isEmpty()) {
+        err() << "target spec is empty\n";
+        return nullptr;
+    }
     for (const QChar ch : trimmed) {
         if (ch.isSpace()) {
             err() << "target '" << spec << "' contains whitespace\n";

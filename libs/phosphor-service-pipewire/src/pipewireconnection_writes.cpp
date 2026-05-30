@@ -70,8 +70,20 @@ void PipeWireConnection::Private::doDefaultWrite(const DefaultWriteRequest& req)
     QJsonObject obj;
     obj.insert(QStringLiteral("name"), req.nodeName);
     const QByteArray payload = QJsonDocument(obj).toJson(QJsonDocument::Compact);
-    pw_metadata_set_property(reinterpret_cast<pw_metadata*>(defaultMetadata), 0, req.key.toUtf8().constData(),
-                             "Spa:String:JSON", payload.constData());
+    // Hold the key's UTF-8 bytes in a named local: passing
+    // req.key.toUtf8().constData() inline would dangle if a future edit
+    // ever hoisted the call out of this full-expression.
+    const QByteArray keyUtf8 = req.key.toUtf8();
+    const int rc = pw_metadata_set_property(reinterpret_cast<pw_metadata*>(defaultMetadata), 0, keyUtf8.constData(),
+                                            "Spa:String:JSON", payload.constData());
+    // Fire-and-forget per the public contract (the result surfaces via
+    // the metadata-property echo signal, not a return), but a negative
+    // errno means the write never reached the daemon — log it at debug
+    // for parity with the loop-dispatch failure path so a dropped
+    // default-write isn't completely invisible.
+    if (rc < 0) {
+        qCDebug(lcPipeWire) << "pw_metadata_set_property failed for key" << req.key << "rc" << rc;
+    }
 }
 
 template<typename Req>
@@ -214,7 +226,14 @@ void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
         qCWarning(lcPipeWire) << "spa_pod_builder_pop returned null for node" << req.nodeId;
         return;
     }
-    pw_node_set_param(node, SPA_PARAM_Props, 0, pod);
+    const int rc = pw_node_set_param(node, SPA_PARAM_Props, 0, pod);
+    // Fire-and-forget per the public contract (the result surfaces via
+    // propsChanged once the daemon echoes the param), but a negative
+    // errno means the param never landed — log it at debug so a write
+    // rejected by a stale proxy or busy daemon isn't completely silent.
+    if (rc < 0) {
+        qCDebug(lcPipeWire) << "pw_node_set_param failed for node" << req.nodeId << "rc" << rc;
+    }
 }
 
 void PipeWireConnection::writeVolumes(quint32 nodeId, const QList<qreal>& volumes)
@@ -277,26 +296,10 @@ void PipeWireConnection::setDefaultSource(const QString& nodeName)
     d->submitLoopRequest(std::move(req), &Private::dispatchDefaultWrite, "setDefaultSource");
 }
 
-// Forward-compatibility instantiations only. Every current caller
-// (writeVolumes / writeMuted / setDefaultSink / setDefaultSource)
-// lives in this TU, so the compiler already instantiates
-// submitLoopRequest implicitly for ParamWriteRequest and
-// DefaultWriteRequest from the call sites above; these explicit
-// instantiations are functionally dead code today.
-//
-// They are kept (not deleted) so a later refactor that moves a caller
-// into a different TU — e.g. splitting writeVolumes/writeMuted out
-// into a dedicated nodewrite TU — surfaces the now-needed
-// instantiation as already-present here rather than as a confusing
-// undefined-reference link error. Cost: two emitted symbol bodies;
-// benefit: a refactor-time landmine defused. If a future cleanup
-// audits truly-dead-code aggressively, drop these and accept that the
-// refactorer will get a link error pointing them at this file.
-template bool PipeWireConnection::Private::submitLoopRequest<PipeWireConnection::Private::ParamWriteRequest>(
-    std::unique_ptr<PipeWireConnection::Private::ParamWriteRequest>,
-    int (*)(struct spa_loop*, bool, uint32_t, const void*, size_t, void*), const char*);
-template bool PipeWireConnection::Private::submitLoopRequest<PipeWireConnection::Private::DefaultWriteRequest>(
-    std::unique_ptr<PipeWireConnection::Private::DefaultWriteRequest>,
-    int (*)(struct spa_loop*, bool, uint32_t, const void*, size_t, void*), const char*);
+// submitLoopRequest is instantiated implicitly for ParamWriteRequest
+// and DefaultWriteRequest from the four call sites above (writeVolumes,
+// writeMuted, setDefaultSink, setDefaultSource), all in this TU, so no
+// explicit instantiation is needed. If a future refactor moves a caller
+// into a different TU, add the instantiation there at that time.
 
 } // namespace PhosphorServicePipeWire

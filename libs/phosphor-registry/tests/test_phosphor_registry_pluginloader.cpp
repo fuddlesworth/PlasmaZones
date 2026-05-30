@@ -42,6 +42,8 @@ private Q_SLOTS:
     void rejectsFactoryIdManifestMismatch();
     void rejectsAbiVersionMismatch();
     void rejectsPathTraversalId();
+    void rejectsSymlinkedSoEscapingRoot();
+    void rejectsGroupOrWorldWritableSo();
     void rejectsNullFactoryReturn();
     void rejectsPluginWithoutEntryPoint();
     void rejectsCorruptSoFile();
@@ -237,6 +239,85 @@ void TestPluginLoader::rejectsPathTraversalId()
     loader.scanAndLoad();
 
     QCOMPARE(registry.size(), 0);
+}
+
+void TestPluginLoader::rejectsSymlinkedSoEscapingRoot()
+{
+    // A plugin directory is user-writable, so a symlinked `<id>.so`
+    // pointing at a payload OUTSIDE the plugin root would smuggle
+    // arbitrary code past the containment boundary if the loader
+    // followed it. The .so enumeration uses QDir::NoSymLinks, so the
+    // symlink is never a load candidate; the directory then looks like
+    // a manifest-only plugin and is refused.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QTemporaryDir externalDir; // deliberately OUTSIDE the plugin root
+    QVERIFY(externalDir.isValid());
+
+    // Stage a real, loadable .so outside the plugin root.
+    const QString fixtureSo = QDir(QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR))
+                                  .absoluteFilePath(QStringLiteral("libphosphor_registry_test_fake_plugin.so"));
+    QVERIFY(QFileInfo::exists(fixtureSo));
+    const QString externalSo = QDir(externalDir.path()).absoluteFilePath(QStringLiteral("smuggled.so"));
+    QVERIFY(QFile::copy(fixtureSo, externalSo));
+
+    const QString pluginRoot = tempDir.path();
+    const QString pluginDir = QDir(pluginRoot).absoluteFilePath(QStringLiteral("evil-plugin"));
+    QVERIFY(QDir().mkpath(pluginDir));
+    QFile mf(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
+    QVERIFY(mf.open(QIODevice::WriteOnly | QIODevice::Text));
+    mf.write(
+        QStringLiteral("{\"id\":\"evil-plugin\",\"displayName\":\"Evil\",\"abi\":%1}").arg(PluginAbiVersion).toUtf8());
+    mf.close();
+
+    // The only .so reachable from the plugin dir is a symlink to the
+    // out-of-root payload.
+    const QString symlinkSo = QDir(pluginDir).absoluteFilePath(QStringLiteral("evil-plugin.so"));
+    QVERIFY(QFile::link(externalSo, symlinkSo));
+    QVERIFY(QFileInfo(symlinkSo).isSymLink());
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("no \\.so under")));
+    loader.scanAndLoad();
+
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+}
+
+void TestPluginLoader::rejectsGroupOrWorldWritableSo()
+{
+    // A .so any local user or group member can overwrite between scans
+    // is a code-execution vector inside the shell process. Install a
+    // valid plugin, loosen the .so's mode, and confirm the StrictModes
+    // guard refuses it.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+
+    const QString destSo = QDir(installedDir).absoluteFilePath(QStringLiteral("fake-plugin.so"));
+    QVERIFY(QFileInfo::exists(destSo));
+    // Owner rwx plus group + other write — the exact bit pattern the
+    // guard refuses. (The plugin directory itself stays at its mkpath
+    // mode, which a default umask leaves without group/other write, so
+    // the .so is the deterministic trigger.)
+    QFile soFile(destSo);
+    QVERIFY(soFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
+                                  | QFileDevice::WriteGroup | QFileDevice::WriteOther));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("group/world-writable")));
+    loader.scanAndLoad();
+
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
 }
 
 void TestPluginLoader::rejectsNullFactoryReturn()

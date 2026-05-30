@@ -253,16 +253,41 @@ bool PluginLoader::ensurePluginRootExists() const
     return true;
 }
 
+bool PluginLoader::shouldWarnForPluginDir(const QString& pluginDir)
+{
+    // Warn-once-per-directory gate. loadPluginFromDir and the
+    // invalid-manifest path in performScanCycle re-run for every
+    // not-yet-loaded plugin on each rescan, so an unconditional
+    // qWarning on a persistently-broken plugin floods the journal on
+    // every debounced watcher tick. Return true at most once per
+    // pluginDir; the latch is cleared on a successful load (see
+    // loadPluginFromDir) so a later regression re-warns. GUI-thread-
+    // only like the rest of the loader, so the QSet is unguarded.
+    if (m_warnedPluginDirs.contains(pluginDir)) {
+        return false;
+    }
+    m_warnedPluginDirs.insert(pluginDir);
+    return true;
+}
+
 QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanOrder)
 {
     // For each plugin root, enumerate immediate subdirectories. A
     // subdirectory is a plugin candidate iff it contains a
     // manifest.json. Plugins live under exactly one directory per
     // scan; XDG layering is not relevant for the bundle case.
-    // QHash rather than QSet so we can name the first-seen directory
-    // when warning about the second-and-later colliding plugins (the
-    // QSet version dropped the first path's identity on the floor).
-    QHash<QString, QString> discoveredIds; // id → first-seen pluginDir this cycle
+    //
+    // QSet (not QHash<id,dir>): within a single root, Manifest::parse
+    // enforces that the plugin directory basename equals its manifest
+    // id, and two sibling directories cannot share a basename, so ids
+    // are unique per cycle and there is nothing to disambiguate. When
+    // multi-root XDG layering lands, the collision-resolution policy
+    // (IScanStrategy hands directoriesInScanOrder lowest-to-highest
+    // priority, so consumers reverse-iterate and let the user's
+    // ~/.local override win over /usr/share) gets implemented then,
+    // against a live multi-root caller that can actually exercise it —
+    // not carried here as untested, known-inverted dead code.
+    QSet<QString> discoveredIds; // ids seen this cycle (for removal detection)
     QStringList watchedFiles; // returned to the watcher for per-file re-arm
 
     for (const QString& root : directoriesInScanOrder) {
@@ -270,7 +295,14 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
         if (!rootDir.exists()) {
             continue;
         }
-        const QStringList subdirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        // NoSymLinks: a plugin subdirectory must be a real directory
+        // under the scan root. The plugin root is user-writable, so a
+        // symlinked subdir pointing outside the root would smuggle a
+        // plugin tree from an arbitrary location past the
+        // manifest-basename==id containment check, which only compares
+        // basenames and never the symlink target. Refuse symlinked
+        // entries outright.
+        const QStringList subdirs = rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::Name);
         for (const QString& subdir : subdirs) {
             const QString pluginDir = rootDir.absoluteFilePath(subdir);
             const QString manifestPath = QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json"));
@@ -280,47 +312,12 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             watchedFiles.append(manifestPath);
             const Manifest m = Manifest::parse(manifestPath, pluginDir);
             if (!m.isValid) {
-                qWarning().noquote() << "PluginLoader: refusing" << pluginDir << "—" << m.parseError;
+                if (shouldWarnForPluginDir(pluginDir)) {
+                    qWarning().noquote() << "PluginLoader: refusing" << pluginDir << "—" << m.parseError;
+                }
                 continue;
             }
-            // Duplicate-id detection within this rescan cycle.
-            //
-            // PHASE-X: this branch is UNREACHABLE today because
-            // Manifest::parse enforces that the plugin's directory
-            // basename equals its manifest id, and two sibling
-            // directories cannot share a basename on any sane
-            // filesystem. The check matters once PluginLoader scans
-            // MULTIPLE roots (XDG layering: /usr/share/phosphor/plugins/foo
-            // AND ~/.local/share/phosphor/plugins/foo can both ship
-            // manifest id "foo"), at which point performScanCycle
-            // iterates a non-singleton `directoriesInScanOrder`.
-            //
-            // IMPORTANT for the Phase-X implementer: the "first wins"
-            // tie-break this branch encodes is INVERTED relative to
-            // standard XDG override semantics. IScanStrategy's contract
-            // (see phosphor-fsloader/IScanStrategy.h) hands
-            // directoriesInScanOrder in [lowest-priority, ...,
-            // highest-priority] order, and consumers are expected to
-            // reverse-iterate so the user's ~/.local override wins
-            // over the system /usr/share entry. The current forward
-            // iteration with first-wins would silently drop the
-            // user's override — that is wrong for any XDG-shaped
-            // layering. Either reverse the outer loop and keep
-            // first-wins, OR keep forward iteration and switch this
-            // branch to last-wins (overwrite the existing entry +
-            // unload the prior). Verify against the sibling pattern
-            // in phosphor-fsloader's MetadataPackScanStrategy /
-            // DirectoryLoader before shipping multi-root.
-            //
-            // The warning names both directories so a triager can
-            // spot the collision instead of guessing.
-            const auto existing = discoveredIds.constFind(m.id);
-            if (existing != discoveredIds.constEnd()) {
-                qWarning().noquote() << "PluginLoader: duplicate manifest id" << m.id << "in" << pluginDir
-                                     << "— already loaded from" << existing.value() << "this rescan; skipping";
-                continue;
-            }
-            discoveredIds.insert(m.id, pluginDir);
+            discoveredIds.insert(m.id);
 
             // Already loaded from a previous rescan? Phase 1.3 does NOT
             // honour in-place .so replacement (see LoadedPlugin's
@@ -436,21 +433,62 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     // in inode-allocation order on most ext4 setups, which makes
     // the choice of .so depend on the order the files were
     // created — a fragile invariant for tests and packaging.
-    const QStringList soFiles =
-        dir.entryList(QStringList() << QStringLiteral("*.so"), QDir::Files | QDir::Readable, QDir::Name);
+    //
+    // NoSymLinks closes the symlink-escape vector: a plugin directory
+    // is user-writable, so a symlinked `X.so` pointing at an arbitrary
+    // path (e.g. /tmp/evil.so) would otherwise be dlopen'd, defeating
+    // the "code only loads from the controlled plugin root" boundary.
+    // Only a real .so file living inside the plugin directory is a
+    // load candidate.
+    const QStringList soFiles = dir.entryList(QStringList() << QStringLiteral("*.so"),
+                                              QDir::Files | QDir::Readable | QDir::NoSymLinks, QDir::Name);
     if (soFiles.isEmpty()) {
-        qWarning() << "PluginLoader: no .so under" << pluginDir;
+        // Warn-once per directory: a manifest-only plugin dir never
+        // loads (no .so → never inserted into m_plugins), so
+        // performScanCycle re-enters loadPluginFromDir for it on every
+        // rescan. Without the latch the same line floods the journal on
+        // each debounced watcher tick.
+        if (shouldWarnForPluginDir(pluginDir)) {
+            qWarning() << "PluginLoader: no .so under" << pluginDir;
+        }
         return;
     }
     if (soFiles.size() > 1) {
         // Multiple .so files in one plugin directory is almost
         // certainly a packaging mistake. Surface it so the author
         // notices instead of silently picking the lexicographically
-        // first match.
+        // first match. (Not latched: this path proceeds to load and
+        // the plugin is inserted into m_plugins, so the directory is
+        // skipped on subsequent rescans and the warning fires once.)
         qWarning().noquote() << "PluginLoader:" << pluginDir << "contains" << soFiles.size() << ".so files; picking"
                              << soFiles.first() << "(deterministic by lexicographic order)";
     }
     const QString libraryPath = dir.absoluteFilePath(soFiles.first());
+
+    // Refuse to dlopen a .so (or a .so living in a directory) that is
+    // group- or world-writable. The plugin root lives under the user's
+    // data dir, but a permissive umask — or a deliberately loosened
+    // mode — would let any local process sharing the group, or any
+    // local user when world-writable, overwrite the .so between scans
+    // and gain code execution inside the shell process. OpenSSH and
+    // sudo enforce the same StrictModes discipline on the files they
+    // trust. Checking the directory too closes the delete-and-recreate
+    // path a 0644 .so in a 0777 dir would still allow. Signature /
+    // origin verification is Phase 5 (see the class doc); this is the
+    // floor until then. Residual: an attacker who can already loosen a
+    // parent directory's mode is outside this check's reach.
+    const auto isGroupOrWorldWritable = [](const QString& path) {
+        const QFileDevice::Permissions perms = QFileInfo(path).permissions();
+        return perms.testAnyFlags(QFileDevice::WriteGroup | QFileDevice::WriteOther);
+    };
+    if (isGroupOrWorldWritable(libraryPath) || isGroupOrWorldWritable(pluginDir)) {
+        if (shouldWarnForPluginDir(pluginDir)) {
+            qWarning().noquote() << "PluginLoader: refusing group/world-writable plugin" << libraryPath
+                                 << "— tighten its permissions (chmod go-w on the .so and its directory) before "
+                                    "it will load";
+        }
+        return;
+    }
 
     // performScanCycle has already validated the manifest before
     // reaching us — the only caller — so an invalid one here would
@@ -460,8 +498,10 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     // performScanCycle doesn't know about (it discovers the .so
     // here), so populate it onto a local copy before storing.
     if (!parsedManifest.isValid) {
-        qWarning().noquote() << "PluginLoader: refusing" << pluginDir
-                             << "— manifest invalid:" << parsedManifest.parseError;
+        if (shouldWarnForPluginDir(pluginDir)) {
+            qWarning().noquote() << "PluginLoader: refusing" << pluginDir
+                                 << "— manifest invalid:" << parsedManifest.parseError;
+        }
         return;
     }
     Manifest manifest = parsedManifest;
@@ -469,13 +509,17 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
 
     auto library = std::make_unique<QLibrary>(libraryPath);
     if (!library->load()) {
-        qWarning().noquote() << "PluginLoader: failed to load" << libraryPath << "—" << library->errorString();
+        if (shouldWarnForPluginDir(pluginDir)) {
+            qWarning().noquote() << "PluginLoader: failed to load" << libraryPath << "—" << library->errorString();
+        }
         return;
     }
     auto entryFn = reinterpret_cast<PluginFactoryEntry>(library->resolve(PluginEntryPointSymbol));
     if (!entryFn) {
-        qWarning().noquote() << "PluginLoader: plugin" << libraryPath << "missing entry point"
-                             << PluginEntryPointSymbol;
+        if (shouldWarnForPluginDir(pluginDir)) {
+            qWarning().noquote() << "PluginLoader: plugin" << libraryPath << "missing entry point"
+                                 << PluginEntryPointSymbol;
+        }
         // QLibrary::unload() can return false (refcount held elsewhere,
         // page-unmap failure). Surface the unload-failure case so a
         // triager seeing a stuck plugin can correlate it with a follow-up
@@ -497,7 +541,9 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
         delete p;
     });
     if (!factory) {
-        qWarning().noquote() << "PluginLoader: entry point returned null for" << libraryPath;
+        if (shouldWarnForPluginDir(pluginDir)) {
+            qWarning().noquote() << "PluginLoader: entry point returned null for" << libraryPath;
+        }
         if (!library->unload()) {
             qDebug().noquote() << "PluginLoader: unload() returned false for" << libraryPath;
         }
@@ -509,8 +555,10 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
         // mismatches with the offending file. The factory's own id
         // string may be empty if the plugin author left it blank,
         // making the libraryPath the only stable identifier.
-        qWarning().noquote() << "PluginLoader: factory id" << factory->id() << "does not match manifest id"
-                             << manifest.id << "from" << libraryPath;
+        if (shouldWarnForPluginDir(pluginDir)) {
+            qWarning().noquote() << "PluginLoader: factory id" << factory->id() << "does not match manifest id"
+                                 << manifest.id << "from" << libraryPath;
+        }
         factory.reset(); // runs custom deleter before .so unmap
         if (!library->unload()) {
             qDebug().noquote() << "PluginLoader: unload() returned false for" << libraryPath;
@@ -522,6 +570,11 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     entryRecord->manifest = manifest;
     entryRecord->library = std::move(library);
     entryRecord->factory = factory;
+
+    // Successful load clears any warn-once latch for this directory so
+    // a future regression (the .so goes missing, the manifest breaks,
+    // permissions loosen) warns afresh rather than staying silent.
+    m_warnedPluginDirs.remove(pluginDir);
 
     const QString pluginId = manifest.id;
     m_plugins.insert(pluginId, entryRecord);

@@ -110,6 +110,11 @@ QHash<QString, QString> propsFromDict(const struct spa_dict* dict)
     {
         if (!item || !item->key)
             continue;
+        // Duplicate keys in a spa_dict are legal; QHash::insert keeps
+        // the last value seen, which matches PipeWire's own
+        // last-property-wins reading of a dict. A null value maps to an
+        // empty string so a present-but-valueless key is distinguishable
+        // from an absent one only by membership, not by value.
         out.insert(QString::fromUtf8(item->key), item->value ? QString::fromUtf8(item->value) : QString());
     }
     return out;

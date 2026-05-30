@@ -232,7 +232,14 @@ private:
     /// available without reading the file. loadFromFile bypasses this
     /// helper to avoid the TOCTOU window between its preflight read
     /// and a re-read.
-    ApplyResult readParseAndApply(const QString& absolutePath);
+    ///
+    /// Returns void: the sole caller has nothing to surface a status
+    /// to, and every failure mode (I/O, parse, shape, no-usable-tokens)
+    /// is already reported through the loadError signal — the only
+    /// observable side-channel. An ApplyResult here would have had to
+    /// overload one of the parse-shape variants onto I/O failures,
+    /// which the enum does not model.
+    void readParseAndApply(const QString& absolutePath);
     /// Disarms the active filesystem watch (file + parent directory),
     /// cancels any pending debounced reload, and clears m_sourcePath
     /// (emitting sourcePathChanged if it was non-empty). The

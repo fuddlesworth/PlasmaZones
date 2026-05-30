@@ -367,7 +367,15 @@ PipeWireConnection::~PipeWireConnection()
         qCCritical(lcPipeWire) << "PipeWire loop thread did not exit within 5s; terminating "
                                   "(libpipewire state leaked; only acceptable at process shutdown)";
         d->thread.terminate();
-        d->thread.wait();
+        // Bound the post-terminate join too. terminate() is advisory on
+        // some platforms (it can be a no-op), so an unbounded wait here
+        // would undercut the 5s budget above and risk hanging process
+        // exit on a truly wedged thread. Give it a short budget and move
+        // on — the OS reaps the thread with the address space regardless.
+        if (!d->thread.wait(2000)) {
+            qCCritical(lcPipeWire) << "PipeWire loop thread still alive after terminate(); "
+                                      "abandoning at shutdown (address space reaped by the OS)";
+        }
     }
     // The loop thread's final doDisconnect — and every other loop-side
     // callback that ran before quit — posts QMetaObject::invokeMethod

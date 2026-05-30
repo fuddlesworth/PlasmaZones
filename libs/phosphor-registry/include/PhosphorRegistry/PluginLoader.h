@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QLibrary>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QtCore/qtclasshelpermacros.h>
@@ -185,6 +186,13 @@ private:
     [[nodiscard]] QString resolveDefaultPluginRoot() const;
     bool ensurePluginRootExists() const;
 
+    // Warn-once-per-directory gate for the load-failure paths. Returns
+    // true at most once per pluginDir until a successful load clears
+    // its latch, so a persistently-broken plugin (missing/extra .so,
+    // invalid manifest, group/world-writable .so, missing entry point,
+    // factory-id mismatch) doesn't re-log on every debounced rescan.
+    [[nodiscard]] bool shouldWarnForPluginDir(const QString& pluginDir);
+
     // Drive a single scan cycle. Called by the scan strategy after
     // WatchedDirectorySet finds the plugin subdirectories. The
     // strategy returns the manifest paths the WatchedDirectorySet
@@ -261,6 +269,11 @@ private:
     // need latching. See ensurePluginRootExists in pluginloader.cpp
     // for the GUI-thread-only thread-safety rationale.
     mutable bool m_loggedPluginRootFailure = false;
+    // Directories already warned about this process. Keyed by plugin
+    // directory path; an entry is removed when that directory loads
+    // successfully. GUI-thread-only (same contract as the rest of the
+    // loader), so it needs no synchronisation. See shouldWarnForPluginDir.
+    QSet<QString> m_warnedPluginDirs;
     // Idempotency guard for scanAndLoad. The first successful call
     // hands the plugin root to WatchedDirectorySet::registerDirectory,
     // which arms hot-reload + drives an initial scan. Subsequent

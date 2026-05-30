@@ -103,10 +103,14 @@ private Q_SLOTS:
     /// rather than a watchdog-killed process.
     void destructionWhileConnectInFlightIsSafe()
     {
-        QElapsedTimer timer;
-        timer.start();
         auto conn = std::make_unique<PhosphorServicePipeWire::PipeWireConnection>();
         conn->connectToDaemon();
+        // Time only the teardown — construction and the non-blocking
+        // connect dispatch are not what this bound is about. Start the
+        // clock immediately before the drop so the asserted budget
+        // measures the ~PipeWireConnection join in isolation.
+        QElapsedTimer timer;
+        timer.start();
         // Drop the unique_ptr without waiting; ~PipeWireConnection has
         // to win the race against the loop thread's pw_context_connect.
         conn.reset();

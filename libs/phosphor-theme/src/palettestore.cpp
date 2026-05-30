@@ -166,11 +166,11 @@ QColor PaletteStore::token(const QString& name) const
     // applyPalette normalises every stored value to QColor before
     // insert, so a non-QColor variant here is a contract violation
     // (direct map mutation, deserialisation skipping the normaliser,
-    // or memory corruption). Q_ASSERT catches it loudly in debug; the
-    // qCWarning + default-return are belt-and-braces for release
-    // builds where the assert compiles out.
+    // or memory corruption). Assert the invariant loudly in debug; the
+    // qCWarning + default-return below are the belt-and-braces release
+    // path where the assert compiles out.
+    Q_ASSERT(it.value().userType() == QMetaType::QColor);
     if (it.value().userType() != QMetaType::QColor) {
-        Q_ASSERT(it.value().userType() == QMetaType::QColor);
         qCWarning(lcPhosphorTheme).noquote()
             << "phosphor-theme: PaletteStore::token(" << name << ") expected QColor but stored variant has typeId"
             << it.value().userType() << "; returning default QColor()";
@@ -573,7 +573,7 @@ PaletteStore::ApplyResult PaletteStore::applyParsedDocWithLoadError(const QStrin
     Q_UNREACHABLE_RETURN(result);
 }
 
-PaletteStore::ApplyResult PaletteStore::readParseAndApply(const QString& absolutePath)
+void PaletteStore::readParseAndApply(const QString& absolutePath)
 {
     // Hot-reload file-read-parse-apply path. Only
     // reloadFromCurrentPath calls here now: loadFromFile threads
@@ -581,11 +581,12 @@ PaletteStore::ApplyResult PaletteStore::readParseAndApply(const QString& absolut
     // applyParsedDocWithLoadError to avoid the TOCTOU window
     // between path commit and a second read. The hot-reload path
     // must re-read because the watcher only signals "something
-    // changed" without handing back the new bytes.
+    // changed" without handing back the new bytes. Every failure mode
+    // reports through loadError; there is no status to return.
     QFile file(absolutePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         Q_EMIT loadError(absolutePath, file.errorString());
-        return ApplyResult::NoUsableTokens;
+        return;
     }
     const auto data = file.readAll();
     if (file.error() != QFileDevice::NoError) {
@@ -597,7 +598,7 @@ PaletteStore::ApplyResult PaletteStore::readParseAndApply(const QString& absolut
         // for what is actually an I/O failure. Mirrors the check in
         // TemplateEngine::renderFile.
         Q_EMIT loadError(absolutePath, file.errorString());
-        return ApplyResult::NoUsableTokens;
+        return;
     }
     file.close();
 
@@ -605,9 +606,9 @@ PaletteStore::ApplyResult PaletteStore::readParseAndApply(const QString& absolut
     const auto doc = QJsonDocument::fromJson(data, &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject()) {
         Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON"));
-        return ApplyResult::NoUsableTokens;
+        return;
     }
-    return applyParsedDocWithLoadError(absolutePath, doc);
+    applyParsedDocWithLoadError(absolutePath, doc);
 }
 
 void PaletteStore::applyTokens(const QVariantMap& tokens)
@@ -741,11 +742,11 @@ void PaletteStore::reloadFromCurrentPath()
     // failure mode matches loadFromFile exactly — the user must see
     // the same "invalid JSON" / "tokens key must be a JSON object"
     // / "no usable color tokens" string whether they triggered the
-    // load explicitly or via a hot-reload tick. The return value is
-    // ignored: reloadFromCurrentPath has no caller to surface
+    // load explicitly or via a hot-reload tick. readParseAndApply
+    // returns void: reloadFromCurrentPath has no caller to surface
     // success/failure to; the loadError signal is the only
     // observable side-channel.
-    (void)readParseAndApply(m_sourcePath);
+    readParseAndApply(m_sourcePath);
 }
 
 void PaletteStore::armWatchesFor(const QString& absolutePath)

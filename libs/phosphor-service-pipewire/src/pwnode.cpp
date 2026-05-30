@@ -30,9 +30,12 @@ PwNode::PwNode(quint32 id, QString mediaClass, PipeWireConnection* parent)
     // header doc on the ctor). The only legal caller is
     // PipeWireConnection::Private's loop→GUI bounce, which always
     // hands `this` as the parent — a null parent would orphan the
-    // node and let it outlive the connection that vended it. Assert
-    // up front so any future caller that drops the contract crashes
-    // immediately rather than leaking the node.
+    // node and let it outlive the connection that vended it. The
+    // assertion makes a future caller that drops the contract crash
+    // loudly in debug builds; in release it compiles out, and the
+    // write slots' `connection()` guards (they no-op when parent() is
+    // not a PipeWireConnection) keep a wrongly-parented node inert
+    // rather than crashing.
     Q_ASSERT(parent);
     d->id = id;
     d->mediaClass = std::move(mediaClass);
@@ -195,12 +198,18 @@ void PwNode::applyProps(int channelCount, QList<qreal> volumes, bool muted)
     // traversal, so size mismatch here implies a wiring bug on the
     // producer side. A QML binding that does `Repeater { model:
     // node.channelCount }` and indexes `node.volumes[i]` would OOB on
-    // mismatch — make the violation loud in debug. Compare against the
-    // post-clamp value so the contract reads as "volumes.size() matches
-    // the published channelCount", which is what consumers observe.
+    // mismatch — make the violation loud in debug.
     Q_ASSERT(static_cast<quint32>(volumes.size()) == newChannelCount);
-    if (d->channelCount != newChannelCount) {
-        d->channelCount = newChannelCount;
+    // Release builds must stay OOB-safe even when the assertion above
+    // compiles out: never publish a channelCount larger than the volume
+    // array consumers actually index, or `volumes[i]` for i in
+    // [0, channelCount) reads past the end. Clamp to the real array size
+    // so the two properties consumers observe can never desync into an
+    // out-of-bounds shape; a too-small published count degrades to
+    // showing fewer channels, which is safe.
+    const quint32 safeChannelCount = qMin(newChannelCount, static_cast<quint32>(volumes.size()));
+    if (d->channelCount != safeChannelCount) {
+        d->channelCount = safeChannelCount;
         moved = true;
     }
     if (d->volumes != volumes) {
