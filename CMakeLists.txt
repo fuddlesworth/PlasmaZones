@@ -106,9 +106,10 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
 # module resource prefix. Set at the top level so every qt_add_qml_module
 # call across libs/ examples/ src/ inherits it; without this, each
 # qt_add_qml_module emits a QTP0001 dev warning on every configure.
-if(COMMAND qt_policy)
-    qt_policy(SET QTP0001 NEW)
-endif()
+# Unguarded: QT_MIN_VERSION 6.6 (line 73 above) guarantees qt_policy
+# exists. The src/CMakeLists.txt sibling QTP0004 call follows the same
+# unguarded pattern.
+qt_policy(SET QTP0001 NEW)
 # GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay.
 # Some distros (Fedora) create these targets inside Qt6GuiConfig.cmake rather than providing
 # standalone config files, so only call find_package if the target doesn't already exist.
@@ -220,6 +221,9 @@ file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/*.cpp
     ${CMAKE_SOURCE_DIR}/src/*.h
     ${CMAKE_SOURCE_DIR}/src/*.hpp
+    ${CMAKE_SOURCE_DIR}/cli/*.cpp
+    ${CMAKE_SOURCE_DIR}/cli/*.h
+    ${CMAKE_SOURCE_DIR}/cli/*.hpp
     ${CMAKE_SOURCE_DIR}/kcm/*.cpp
     ${CMAKE_SOURCE_DIR}/kcm/*.h
     ${CMAKE_SOURCE_DIR}/kcm/*.hpp
@@ -242,6 +246,7 @@ kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
 find_program(QMLFORMAT qmlformat)
 file(GLOB_RECURSE ALL_QML_FILES
     ${CMAKE_SOURCE_DIR}/src/*.qml
+    ${CMAKE_SOURCE_DIR}/cli/*.qml
     ${CMAKE_SOURCE_DIR}/kcm/*.qml
     ${CMAKE_SOURCE_DIR}/libs/*.qml
     ${CMAKE_SOURCE_DIR}/examples/*.qml
@@ -262,99 +267,11 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# Translations (Qt Linguist)
-#
-# Daemon and editor use Qt Linguist (.ts/.qm).  lupdate scans source files
-# directly - i18n()/i18nc() are backed by Q_DECLARE_TR_FUNCTIONS(plasmazones)
-# in pz_i18n.h, so lupdate recognizes them as tr() calls.
-#
-#   make update-ts   - run lupdate to refresh .ts from source
-#   make (default)   - compiles translations/*/*.ts → .qm
+# Translations (Qt Linguist). Extracted to cmake/PhosphorTranslations.cmake
+# (included in this scope) to keep this file under the 800-line cap. See
+# that file for the update-ts / lrelease detail.
 # ---------------------------------------------------------------------------
-find_package(Qt6LinguistTools QUIET)
-
-# Source files for lupdate string extraction (daemon + autotile + editor)
-set(PLASMAZONESD_I18N_SOURCES
-    ${CMAKE_SOURCE_DIR}/src/daemon/main.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/daemon.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/daemon/osd.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
-    ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor.cpp
-    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/drag.cpp
-)
-file(GLOB PLASMAZONESD_AUTOTILE_SOURCES
-    "${CMAKE_SOURCE_DIR}/src/autotile/algorithms/*.cpp"
-)
-list(APPEND PLASMAZONESD_I18N_SOURCES ${PLASMAZONESD_AUTOTILE_SOURCES})
-file(GLOB PLASMAZONESD_QML "${CMAKE_SOURCE_DIR}/src/ui/*.qml")
-
-file(GLOB PLASMAZONES_EDITOR_I18N_SOURCES
-    "${CMAKE_SOURCE_DIR}/src/editor/main.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/EditorController.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/gaps.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/shader.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/layout.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/selection.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/multiselect.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/visibility.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/clipboard.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/zones.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/zoneops.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/controller/settings.cpp"
-    "${CMAKE_SOURCE_DIR}/src/editor/undo/commands/*.cpp"
-)
-file(GLOB PLASMAZONES_EDITOR_QML "${CMAKE_SOURCE_DIR}/src/editor/qml/*.qml")
-
-# KCM QML sources (also covered by lupdate now)
-file(GLOB_RECURSE KCM_PLASMAZONES_QML "${CMAKE_SOURCE_DIR}/kcm/*.qml")
-list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml)
-list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml)
-
-# All sources for lupdate (daemon + editor + KCM - same translation context)
-set(_all_i18n_sources
-    ${PLASMAZONESD_I18N_SOURCES} ${PLASMAZONESD_QML}
-    ${PLASMAZONES_EDITOR_I18N_SOURCES} ${PLASMAZONES_EDITOR_QML}
-    ${KCM_PLASMAZONES_QML}
-)
-
-# Collect per-language .ts files (plasmazones_de.ts, plasmazones_fr.ts, etc.)
-# Flat layout: translations/plasmazones_<lang>.ts → plasmazones_<lang>.qm
-file(GLOB TRANSLATION_TS_FILES "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
-# Exclude the English source template from compilation (it has no translations)
-list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
-
-# --- update-ts target: lupdate scans source directly ---
-# PzI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) - lupdate
-# recognizes tr() natively.  No custom scripts or intermediate files.
-if(Qt6LinguistTools_FOUND)
-    # All .ts files to update (en template + per-language)
-    file(GLOB _all_ts_files "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.ts")
-
-    add_custom_target(update-ts
-        COMMENT "Updating .ts translation files from source (lupdate)"
-        COMMAND Qt6::lupdate
-            -I ${CMAKE_SOURCE_DIR}/src
-            ${_all_i18n_sources}
-            -ts ${_all_ts_files}
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-else()
-    add_custom_target(update-ts
-        COMMAND ${CMAKE_COMMAND} -E echo "Qt6LinguistTools not found; install qt6-tools-dev"
-    )
-endif()
-
-# --- Compile .ts → .qm and install ---
-# Output: plasmazones_de.qm, plasmazones_fr.qm, etc.
-# QTranslator::load(locale, "plasmazones", "_", dir) finds these by name.
-if(Qt6LinguistTools_FOUND AND TRANSLATION_TS_FILES)
-    qt_add_lrelease(plasmazones_translations
-        TS_FILES ${TRANSLATION_TS_FILES}
-        QM_FILES_OUTPUT_VARIABLE QM_FILES
-    )
-    install(FILES ${QM_FILES} DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/translations)
-endif()
+include(cmake/PhosphorTranslations.cmake)
 
 
 # Generate version header with compile-time version info
@@ -386,10 +303,27 @@ add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shell-patterns) # UI-pattern recipes (axis 2) built on PhosphorLayer::Role
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
-# PlasmaZones consumes the org.phosphor.animation QML module for shell
-# UI animations. PHOSPHOR_ANIMATION_QUICK is enabled before
-# add_subdirectory picks up the option() default so QtQuickClock builds.
-set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by QML animation module)")
+# PlasmaZones consumes the org.phosphor.animation QML module via the
+# daemon, the editor, and the phosphor-shell binary. The QML plugin's
+# QtQuickClockManager directly constructs QtQuickClock, which is gated
+# behind PHOSPHOR_ANIMATION_QUICK in phosphor-animation's CMakeLists.
+# Without it, the QML plugin emits an unresolved-symbol link error in
+# every PlasmaZones binary.
+#
+# FORCE so a stale cached OFF (from a prior standalone configure of
+# libs/phosphor-animation in this build directory, or an explicit
+# -DPHOSPHOR_ANIMATION_QUICK=OFF on the parent build) cannot silently
+# turn into a broken build. Surface the override loudly so a user who
+# DID pass -DPHOSPHOR_ANIMATION_QUICK=OFF understands their request
+# was rejected — and why.
+if(DEFINED CACHE{PHOSPHOR_ANIMATION_QUICK} AND NOT PHOSPHOR_ANIMATION_QUICK)
+    message(WARNING
+        "PHOSPHOR_ANIMATION_QUICK=OFF was requested but every PlasmaZones binary "
+        "links the org.phosphor.animation QML plugin which requires QtQuickClock. "
+        "Forcing PHOSPHOR_ANIMATION_QUICK=ON for this configure. "
+        "To build without QtQuickClock, configure libs/phosphor-animation standalone.")
+endif()
+set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by every PlasmaZones binary linking PhosphorAnimationQmlplugin)" FORCE)
 add_subdirectory(libs/phosphor-animation)   # unified animation library: motion runtime, QML module, shaders, layer
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)
@@ -425,10 +359,20 @@ add_subdirectory(cli/phosphorctl)           # phosphorctl call / list / schema /
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
-add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (INTERFACE)
+add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
+
+# Canonical list of engine library target names. Consumed by the
+# engine QML firewall below; declared here next to the engine
+# subdirs so the list moves with the targets it gates.
+set(PHOSPHOR_ENGINE_TARGETS
+    PhosphorZones
+    PhosphorSnapEngine
+    PhosphorTileEngine
+    PhosphorEngine
+)
 
 # ─── Engine QML firewall ─────────────────────────────────────────────────────
 #
@@ -444,8 +388,17 @@ add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine
 # Refuse to configure if any engine target ever picks up a Qml/Quick
 # link. Cheap guardrail; failures here mean someone added a dependency
 # that drags Qml in transitively or wired a target up wrong.
-foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine PhosphorEngine)
+#
+# Track whether ANY entry matched a real target so the firewall can't
+# silently degrade to a no-op if PHOSPHOR_ENGINE_TARGETS goes stale
+# (e.g. an engine lib gets renamed but the list doesn't follow). A
+# zero-match firewall would let a future Qml link through unnoticed,
+# which is exactly the failure mode the rationale above is designed
+# to prevent.
+set(_pz_engine_matched_any FALSE)
+foreach(_pz_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
     if(TARGET ${_pz_engine_lib})
+        set(_pz_engine_matched_any TRUE)
         get_target_property(_pz_engine_links ${_pz_engine_lib} LINK_LIBRARIES)
         if(_pz_engine_links)
             foreach(_pz_link IN LISTS _pz_engine_links)
@@ -470,6 +423,18 @@ foreach(_pz_engine_lib PhosphorZones PhosphorSnapEngine PhosphorTileEngine Phosp
         endif()
     endif()
 endforeach()
+if(NOT _pz_engine_matched_any)
+    message(FATAL_ERROR
+        "Engine QML firewall matched zero targets from PHOSPHOR_ENGINE_TARGETS "
+        "(${PHOSPHOR_ENGINE_TARGETS}). The firewall is a no-op in this state, "
+        "which defeats its purpose. Either an engine lib was renamed without "
+        "updating the list, the add_subdirectory order changed so engines "
+        "haven't been declared yet at this point, or every engine subdir got "
+        "gated behind an option that's currently OFF. Update "
+        "PHOSPHOR_ENGINE_TARGETS to match the real engine target names, or "
+        "move this firewall block below the add_subdirectory calls that "
+        "declare the engines.")
+endif()
 
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
@@ -483,6 +448,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-sni)       # StatusNotifierItem host + watcher + dbusmenu
     add_subdirectory(libs/phosphor-service-upower)    # UPower battery / power-supply readouts
     add_subdirectory(libs/phosphor-service-mpris)     # MPRIS2 media-player discovery + control
+    add_subdirectory(libs/phosphor-service-pipewire)  # PipeWire mixer (Phase 2.1, shipped)
 endif()
 
 # Source directories
@@ -691,6 +657,18 @@ add_subdirectory(examples/phosphor-ipc-demo)
 # hot-plug a display → window appears.
 add_subdirectory(examples/phosphor-perscreen-demo)
 
+# phosphor-service-pipewire-cli. Acceptance harness for the
+# phosphor-service-pipewire library (Phase 2.1). Headless driver
+# exercising the read paths (list sinks/sources/streams, default),
+# write paths (set-volume, mute/unmute), and metadata writes
+# (set-default-sink/source) against a live PipeWire + WirePlumber
+# daemon. Gated to match libs/phosphor-service-pipewire itself: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the
+# CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-pipewire-cli)
+endif()
+
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third
 # (CPU-meter) widget builds as a separate .so + manifest.json and
@@ -735,53 +713,18 @@ add_custom_target(uninstall
 # Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
-# Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support).
-# OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages -
-# the Vulkan backend simply won't be available at runtime.
-# All Vulkan-specific C++ code is guarded with #if QT_CONFIG(vulkan).
-# Note: packaging specs (PKGBUILD, debian/control, rpm .spec, nix) list Vulkan as a
-# hard BuildRequires to ensure the backend is always available in distribution packages.
-set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
-
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)
+# (Vulkan is still used at runtime via QVulkanInstance — see
+# src/daemon/vulkan_support.cpp and the QVulkanInstance owners in
+# src/daemon/main.cpp + src/editor/main.cpp. There is no
+# find_package(Vulkan) at configure time because Qt Wayland loads the
+# Vulkan loader via QLibrary at runtime, so a build-time package check
+# would only false-positive on systems missing the runtime loader. The
+# previous `set_package_properties(WrapVulkanHeaders ...)` block here
+# was orphaned (no corresponding find_package(Vulkan) ever ran), so it
+# never appeared in feature_summary; removed in PR #546.)
 feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                      OPTIONAL_PACKAGES_FOUND OPTIONAL_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CPack: source tarball generation (`cpack --config CPackSourceConfig.cmake`
-# or `make package_source`). Distro builds in release.yml still hand-roll
-# tarballs for filename-control reasons; this exists so a release engineer
-# can also bootstrap a tarball locally without the workflow.
-# ═══════════════════════════════════════════════════════════════════════════════
-set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_VENDOR "fuddlesworth")
-set(CPACK_PACKAGE_CONTACT "fuddlesworth <fuddlesworth@users.noreply.github.com>")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Window tiling and autotiling for KDE Plasma")
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-set(CPACK_SOURCE_GENERATOR "TXZ;TGZ")
-set(CPACK_SOURCE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}")
-set(CPACK_SOURCE_IGNORE_FILES
-    "/\\\\.git/"
-    "/\\\\.github/"
-    "/\\\\.claude/"
-    "/\\\\.zed/"
-    "/\\\\.ccache/"
-    "/build/"
-    "/build-.*/"
-    "/install/"
-    "/dist/"
-    "/node_modules/"
-    "/\\\\.cache/"
-    "/\\\\.idea/"
-    "/\\\\.vscode/"
-    "/\\\\.DS_Store"
-    "/CMakeUserPresets\\\\.json$"
-    "/CMakeLists\\\\.txt\\\\.user"
-    "/compile_commands\\\\.json$"
-    "\\\\.qm$"
-    "\\\\.swp$"
-    "~$"
-)
-include(CPack)
+include(cmake/PhosphorCPack.cmake)

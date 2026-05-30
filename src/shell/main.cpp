@@ -3,6 +3,7 @@
 
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
 #include <PhosphorServiceMpris/QmlRegistration.h>
+#include <PhosphorServicePipeWire/QmlRegistration.h>
 #include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorShell/ShellEngine.h>
@@ -20,6 +21,14 @@ Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
 
 int main(int argc, char* argv[])
 {
+    // MUST run before QGuiApplication is constructed: selects the
+    // phosphorwayland Wayland shell-integration plugin (via the
+    // QT_WAYLAND_SHELL_INTEGRATION env var that Qt Wayland's
+    // QWaylandIntegration consults during platform init). Inserting any
+    // QGuiApplication-touching call between this line and the
+    // QGuiApplication ctor would let Qt pick the default xdg-shell
+    // integration without the layer-shell hooks, silently disabling
+    // overlay positioning across the whole shell.
     PhosphorWayland::registerLayerShellPlugin();
 
     QGuiApplication app(argc, argv);
@@ -34,6 +43,15 @@ int main(int argc, char* argv[])
     //   IconTheme Phosphor.Service.IconTheme 1.0 (IconThemeResolver singleton)
     //   UPower    Phosphor.Service.UPower 1.0    (UPowerHost, devices, model)
     //   Mpris     Phosphor.Service.Mpris 1.0     (MprisHost, players, model)
+    //   PipeWire  Phosphor.Service.PipeWire 1.0  (PipeWireHost, node
+    //                                            models PwSinkModel /
+    //                                            PwSourceModel /
+    //                                            PwStreamModel, plus
+    //                                            PwNode and
+    //                                            PipeWireConnection
+    //                                            registered as
+    //                                            uncreatable for type
+    //                                            visibility)
     // One call per lib here at startup is sufficient. The wrapper
     // functions are idempotent (each lib guards its registration with
     // std::call_once internally), so a future hot-reload hook that
@@ -41,10 +59,24 @@ int main(int argc, char* argv[])
     // primitive qmlRegisterType is NOT idempotent (Qt warns and
     // overwrites on second registration), which is the reason the
     // per-lib guard exists.
+    //
+    // Each registerQmlTypes() returns void on purpose: by current design
+    // every service's registration is idempotent AND infallible —
+    // std::call_once gates the body to a one-shot, and the inner
+    // QCoreApplication guard returns silently if pre-conditions fail
+    // (logging a warning instead of throwing). There is intentionally
+    // no failure surface to inspect, which is why this loop doesn't
+    // check return values. If any future service grows
+    // environment-dependent registration logic (e.g. needs to fail hard
+    // when a required platform feature is absent, or needs to surface
+    // a registration error to the shell launcher), this loop MUST be
+    // revisited: the wrappers will need to start returning success
+    // status and the loop will need to handle a partial-init scenario.
     PhosphorServiceSni::registerQmlTypes();
     PhosphorServiceIconTheme::registerQmlTypes();
     PhosphorServiceUPower::registerQmlTypes();
     PhosphorServiceMpris::registerQmlTypes();
+    PhosphorServicePipeWire::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();
@@ -68,19 +100,39 @@ int main(int argc, char* argv[])
         // produced "  Searched:     /home/..." (double space) and a
         // trailing space at every line break. Cosmetic on stderr but
         // visible in log-scraping tools that key on the layout.
+        //
+        // The path list mirrors what ShellLoader::resolve() actually
+        // probes (GenericConfigLocation + GenericDataLocation), not a
+        // simplified subset — a user with their shell installed under
+        // XDG_DATA_HOME or XDG_CONFIG_DIRS needs to see those classes
+        // listed too. The hard-coded /usr/share path in the recovery
+        // hint matches the default CMake prefix; packagers building
+        // against a non-default CMAKE_INSTALL_PREFIX should patch the
+        // hint in their downstream tree (or we plumb the prefix through
+        // a generated header in a follow-up — see ShellLoader::resolve).
         const QString message = QStringLiteral(
                                     "No shell.qml found.\n"
                                     "  Searched:    %1\n"
+                                    "               and ${XDG_CONFIG_DIRS}/phosphor-shell/\n"
+                                    "               and ${XDG_DATA_HOME}/phosphor-shell/\n"
                                     "               and ${XDG_DATA_DIRS}/phosphor-shell/\n\n"
                                     "  To get started, copy the bundled example:\n"
                                     "    mkdir -p %1\n"
-                                    "    cp -r /usr/share/phosphor-shell/* %1")
+                                    "    cp -r ${CMAKE_INSTALL_PREFIX}/share/phosphor-shell/* %1\n"
+                                    "  (replace ${CMAKE_INSTALL_PREFIX} with the prefix used at install; "
+                                    "/usr or /usr/local for distro packages.)")
                                     .arg(configDir);
         qCCritical(lcShell).noquote() << message;
         return 1;
     }
 
-    qCInfo(lcShell) << "Loading shell from:" << shellUrl.toLocalFile();
+    // Use toString() rather than toLocalFile(): toLocalFile() returns
+    // an empty string for non-file URLs (qrc:, http:, etc.), which
+    // would produce an uninformative "Loading shell from: " log line
+    // when ShellLoader resolves to a bundled qrc resource. toString()
+    // always yields the full URL form, so the log entry is meaningful
+    // regardless of the URL scheme.
+    qCInfo(lcShell) << "Loading shell from:" << shellUrl.toString();
 
     PhosphorShell::ShellEngine engine(
         PhosphorShell::ShellEngine::Deps{

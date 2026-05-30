@@ -5,6 +5,14 @@
 // (see tests/fake_plugin/ and tests/fake_plugin_idmismatch/). Each
 // test sets up its own temporary plugin root, copies a fixture in,
 // exercises the loader, and tears down.
+//
+// Lifecycle / rescan-reentry / destructor-pin slots live in the
+// sibling TU test_phosphor_registry_pluginloader_lifecycle.cpp to
+// keep both files under the project's 800-line cap. Both TUs share
+// the WarningCapture instrumentation + plugin-fixture install
+// helpers via test_pluginloader_helpers.h.
+
+#include "test_pluginloader_helpers.h"
 
 #include <PhosphorRegistry/IBarWidgetFactory.h>
 #include <PhosphorRegistry/PluginLoader.h>
@@ -15,23 +23,12 @@
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
 
-#ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR
-#error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR must be defined by tests/CMakeLists.txt"
-#endif
-#ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR
-#error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR must be defined by tests/CMakeLists.txt"
-#endif
-#ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR
-#error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR must be defined by tests/CMakeLists.txt"
-#endif
-#ifndef PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR
-#error "PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR must be defined by tests/CMakeLists.txt"
-#endif
-
 using namespace PhosphorRegistry;
+using namespace PhosphorRegistryTestHelpers;
 
 class TestPluginLoader : public QObject
 {
@@ -45,6 +42,11 @@ private Q_SLOTS:
     void rejectsFactoryIdManifestMismatch();
     void rejectsAbiVersionMismatch();
     void rejectsPathTraversalId();
+    void rejectsSymlinkedSoEscapingRoot();
+    void rejectsSymlinkedSubdirEscapingRoot();
+    void rejectsGroupOrWorldWritableSo();
+    void warnsOnceForMultipleSoFilesThenLoads();
+    void multipleSoFailureStillReportsFailureReason();
     void rejectsNullFactoryReturn();
     void rejectsPluginWithoutEntryPoint();
     void rejectsCorruptSoFile();
@@ -54,87 +56,15 @@ private Q_SLOTS:
     void liveWidgetCountReturnsMinusOneForUnknownPlugin();
     void pluginRootReturnsConfiguredPath();
     void pluginRootResolvesXdgWhenEmpty();
-    void destructorPinsLibraryBeforeFactoryDestruction();
-
-private:
-    // Helper: install one of the templated fake-plugin fixtures into
-    // pluginRoot/<subdir>. fixtureDir is the build-tree path to the
-    // pre-built .so + manifest.json (defined by tests/CMakeLists.txt
-    // PHOSPHOR_REGISTRY_FAKE_PLUGIN_*_DIR macros). soBasename is
-    // the .so's filename WITHOUT extension (e.g.
-    // "libphosphor_registry_test_fake_plugin"). The .so is copied
-    // into the destination as <subdir>.so so the loader's manifest-
-    // id-vs-directory-basename rule resolves cleanly. Returns the
-    // installed plugin directory path.
-    QString installPluginFixture(const QString& pluginRoot, const QString& subdir, const QString& fixtureDir,
-                                 const QString& soBasename) const;
-
-    QString installFakePlugin(const QString& pluginRoot, const QString& subdir) const
-    {
-        return installPluginFixture(pluginRoot, subdir, QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR),
-                                    QStringLiteral("libphosphor_registry_test_fake_plugin"));
-    }
-
-    QString installFakePluginIdMismatch(const QString& pluginRoot) const
-    {
-        return installPluginFixture(pluginRoot, QStringLiteral("id-mismatch-plugin"),
-                                    QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR),
-                                    QStringLiteral("libphosphor_registry_test_fake_plugin_idmismatch"));
-    }
-
-    QString installFakePluginNullFactory(const QString& pluginRoot) const
-    {
-        return installPluginFixture(pluginRoot, QStringLiteral("null-factory-plugin"),
-                                    QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_NULLFACTORY_DIR),
-                                    QStringLiteral("libphosphor_registry_test_fake_plugin_nullfactory"));
-    }
-
-    QString installFakePluginNoEntry(const QString& pluginRoot) const
-    {
-        return installPluginFixture(pluginRoot, QStringLiteral("no-entry-plugin"),
-                                    QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_NOENTRY_DIR),
-                                    QStringLiteral("libphosphor_registry_test_fake_plugin_noentry"));
-    }
 };
-
-QString TestPluginLoader::installPluginFixture(const QString& pluginRoot, const QString& subdir,
-                                               const QString& fixtureDir, const QString& soBasename) const
-{
-    const QString destDir = QDir(pluginRoot).absoluteFilePath(subdir);
-    [&] {
-        QVERIFY(QDir().mkpath(destDir));
-    }();
-    const QString fixtureSo = QDir(fixtureDir).absoluteFilePath(soBasename + QStringLiteral(".so"));
-    const QString fixtureManifest = QDir(fixtureDir).absoluteFilePath(QStringLiteral("manifest.json"));
-    [&] {
-        QVERIFY2(QFileInfo::exists(fixtureSo), qPrintable(QStringLiteral("missing fixture .so: %1").arg(fixtureSo)));
-        QVERIFY2(QFileInfo::exists(fixtureManifest),
-                 qPrintable(QStringLiteral("missing fixture manifest: %1").arg(fixtureManifest)));
-    }();
-
-    const QString destSo = QDir(destDir).absoluteFilePath(subdir + QStringLiteral(".so"));
-    const QString destManifest = QDir(destDir).absoluteFilePath(QStringLiteral("manifest.json"));
-
-    // Surface QFile::copy failures as test failures with a clear
-    // message instead of silently proceeding and tripping a downstream
-    // "loadedSpy.count() == 0" assertion that gives no clue what went
-    // wrong.
-    [&] {
-        QVERIFY2(QFile::copy(fixtureSo, destSo),
-                 qPrintable(QStringLiteral("failed to copy %1 -> %2").arg(fixtureSo, destSo)));
-        QVERIFY2(QFile::copy(fixtureManifest, destManifest),
-                 qPrintable(QStringLiteral("failed to copy %1 -> %2").arg(fixtureManifest, destManifest)));
-    }();
-
-    return destDir;
-}
 
 void TestPluginLoader::loadsPluginAtScan()
 {
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -159,7 +89,8 @@ void TestPluginLoader::unloadsRemovedPluginOnRescan()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    const QString installedDir = installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -207,7 +138,12 @@ void TestPluginLoader::ignoresPluginWithoutSo()
     QDir().mkpath(pluginDir);
     QFile mf(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
     QVERIFY(mf.open(QIODevice::WriteOnly | QIODevice::Text));
-    mf.write(QStringLiteral("{\"id\":\"manifest-only\",\"displayName\":\"Bad\",\"abi\":1}").toUtf8());
+    // ABI value follows the build-time constant so the test pins the
+    // "no .so under" rejection path regardless of future ABI bumps.
+    // Hardcoding `1` would silently shift the test to the abi-mismatch
+    // path if PluginAbiVersion were ever incremented to 2.
+    mf.write(
+        QStringLiteral("{\"id\":\"manifest-only\",\"displayName\":\"Bad\",\"abi\":%1}").arg(PluginAbiVersion).toUtf8());
     mf.close();
 
     Registry<IBarWidgetFactory> registry;
@@ -223,7 +159,8 @@ void TestPluginLoader::duplicateIdAcrossRescansNoOp()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -243,7 +180,8 @@ void TestPluginLoader::rejectsFactoryIdManifestMismatch()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePluginIdMismatch(pluginRoot);
+    QString installedDir;
+    QVERIFY(installFakePluginIdMismatch(pluginRoot, installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -265,7 +203,12 @@ void TestPluginLoader::rejectsAbiVersionMismatch()
     QDir().mkpath(pluginDir);
     QFile mf(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
     QVERIFY(mf.open(QIODevice::WriteOnly | QIODevice::Text));
-    mf.write(QStringLiteral("{\"id\":\"future-plugin\",\"displayName\":\"Future\",\"abi\":99}").toUtf8());
+    // PluginAbiVersion + 99 guarantees a mismatch across any future
+    // bump of the constant, mirroring parseObject_rejectsAbiMismatch
+    // in test_phosphor_registry_manifest.cpp.
+    mf.write(QStringLiteral("{\"id\":\"future-plugin\",\"displayName\":\"Future\",\"abi\":%1}")
+                 .arg(PluginAbiVersion + 99)
+                 .toUtf8());
     mf.close();
 
     Registry<IBarWidgetFactory> registry;
@@ -301,6 +244,189 @@ void TestPluginLoader::rejectsPathTraversalId()
     QCOMPARE(registry.size(), 0);
 }
 
+void TestPluginLoader::rejectsSymlinkedSoEscapingRoot()
+{
+    // A plugin directory is user-writable, so a symlinked `<id>.so`
+    // pointing at a payload OUTSIDE the plugin root would smuggle
+    // arbitrary code past the containment boundary if the loader
+    // followed it. The .so enumeration uses QDir::NoSymLinks, so the
+    // symlink is never a load candidate; the directory then looks like
+    // a manifest-only plugin and is refused.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QTemporaryDir externalDir; // deliberately OUTSIDE the plugin root
+    QVERIFY(externalDir.isValid());
+
+    // Stage a real, loadable .so outside the plugin root.
+    const QString fixtureSo = QDir(QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_DIR))
+                                  .absoluteFilePath(QStringLiteral("libphosphor_registry_test_fake_plugin.so"));
+    QVERIFY(QFileInfo::exists(fixtureSo));
+    const QString externalSo = QDir(externalDir.path()).absoluteFilePath(QStringLiteral("smuggled.so"));
+    QVERIFY(QFile::copy(fixtureSo, externalSo));
+
+    const QString pluginRoot = tempDir.path();
+    const QString pluginDir = QDir(pluginRoot).absoluteFilePath(QStringLiteral("evil-plugin"));
+    QVERIFY(QDir().mkpath(pluginDir));
+    QFile mf(QDir(pluginDir).absoluteFilePath(QStringLiteral("manifest.json")));
+    QVERIFY(mf.open(QIODevice::WriteOnly | QIODevice::Text));
+    mf.write(
+        QStringLiteral("{\"id\":\"evil-plugin\",\"displayName\":\"Evil\",\"abi\":%1}").arg(PluginAbiVersion).toUtf8());
+    mf.close();
+
+    // The only .so reachable from the plugin dir is a symlink to the
+    // out-of-root payload.
+    const QString symlinkSo = QDir(pluginDir).absoluteFilePath(QStringLiteral("evil-plugin.so"));
+    QVERIFY(QFile::link(externalSo, symlinkSo));
+    QVERIFY(QFileInfo(symlinkSo).isSymLink());
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("no \\.so under")));
+    loader.scanAndLoad();
+
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+}
+
+void TestPluginLoader::rejectsSymlinkedSubdirEscapingRoot()
+{
+    // The plugin root is user-writable; a symlinked plugin *directory*
+    // pointing at a tree outside the root would smuggle a whole plugin
+    // past the containment boundary if the loader followed it. The
+    // subdirectory enumeration uses QDir::NoSymLinks, so the symlinked
+    // directory is never even a discovery candidate.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QTemporaryDir externalRoot; // deliberately OUTSIDE the plugin root
+    QVERIFY(externalRoot.isValid());
+
+    // A complete, valid plugin staged outside the plugin root.
+    QString externalPluginDir;
+    QVERIFY(installFakePlugin(externalRoot.path(), QStringLiteral("fake-plugin"), externalPluginDir));
+
+    // Symlink <root>/fake-plugin -> <external>/fake-plugin. Its basename
+    // matches the manifest id, so it WOULD load if symlinks were followed.
+    const QString pluginRoot = tempDir.path();
+    const QString linkPath = QDir(pluginRoot).absoluteFilePath(QStringLiteral("fake-plugin"));
+    QVERIFY(QFile::link(externalPluginDir, linkPath));
+    QVERIFY(QFileInfo(linkPath).isSymLink());
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    loader.scanAndLoad();
+
+    // The guarded skip is silent (the symlinked dir is never a
+    // discovery candidate); lock that contract — no warning should fire.
+    QStringList captured;
+    {
+        WarningCapture capture(captured);
+        loader.rescanNow();
+    }
+    QVERIFY2(captured.isEmpty(), qPrintable(captured.join(QLatin1Char('\n'))));
+}
+
+void TestPluginLoader::rejectsGroupOrWorldWritableSo()
+{
+    // A .so any local user or group member can overwrite between scans
+    // is a code-execution vector inside the shell process. Install a
+    // valid plugin, loosen the .so's mode, and confirm the StrictModes
+    // guard refuses it.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+
+    const QString destSo = QDir(installedDir).absoluteFilePath(QStringLiteral("fake-plugin.so"));
+    QVERIFY(QFileInfo::exists(destSo));
+    // Owner rwx plus group + other write — the exact bit pattern the
+    // guard refuses. (The plugin directory itself stays at its mkpath
+    // mode, which a default umask leaves without group/other write, so
+    // the .so is the deterministic trigger.)
+    QFile soFile(destSo);
+    QVERIFY(soFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner
+                                  | QFileDevice::WriteGroup | QFileDevice::WriteOther));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("group/world-writable")));
+    loader.scanAndLoad();
+
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+}
+
+void TestPluginLoader::warnsOnceForMultipleSoFilesThenLoads()
+{
+    // Two .so files in one plugin directory is a packaging mistake; the
+    // loader warns, picks the lexicographically-first, and (when it
+    // loads) succeeds. The advisory fires exactly once.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+
+    // A second copy of the SAME valid binary, named lexicographically
+    // first so it is the one picked. Its factory id is still
+    // "fake-plugin", so it matches the manifest and loads.
+    const QString existingSo = QDir(installedDir).absoluteFilePath(QStringLiteral("fake-plugin.so"));
+    const QString extraSo = QDir(installedDir).absoluteFilePath(QStringLiteral("aaa-extra.so"));
+    QVERIFY(QFile::copy(existingSo, extraSo));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("contains 2 \\.so files")));
+    loader.scanAndLoad();
+
+    QCOMPARE(registry.size(), 1);
+    QCOMPARE(loader.loadedPluginIds(), QStringList{QStringLiteral("fake-plugin")});
+
+    // Second rescan: the plugin is already loaded, so the directory is
+    // skipped and the advisory does NOT re-fire (a re-fire would trip an
+    // unexpected-message failure here).
+    loader.rescanNow();
+    QCOMPARE(registry.size(), 1);
+}
+
+void TestPluginLoader::multipleSoFailureStillReportsFailureReason()
+{
+    // When the picked .so of a multi-.so directory fails, the multi-.so
+    // advisory must NOT mask the failure reason: both warnings surface
+    // (separate warn-once latches). QTest::ignoreMessage fails the test
+    // if either expected warning is missing.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+
+    // Lexicographically-first .so is the id-mismatch binary (its factory
+    // id != "fake-plugin"), so the picked .so fails the id check.
+    const QString mismatchSo =
+        QDir(QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR))
+            .absoluteFilePath(QStringLiteral("libphosphor_registry_test_fake_plugin_idmismatch.so"));
+    QVERIFY(QFileInfo::exists(mismatchSo));
+    const QString firstSo = QDir(installedDir).absoluteFilePath(QStringLiteral("aaa-mismatch.so"));
+    QVERIFY(QFile::copy(mismatchSo, firstSo));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    // Emission order matches code order: the advisory fires before the
+    // load is attempted, the id-mismatch fires during the load.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("contains 2 \\.so files")));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("factory id.*does not match manifest id")));
+    loader.scanAndLoad();
+
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+}
+
 void TestPluginLoader::rejectsNullFactoryReturn()
 {
     // Plugin entry point returns nullptr (e.g. construction failed
@@ -309,7 +435,8 @@ void TestPluginLoader::rejectsNullFactoryReturn()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePluginNullFactory(pluginRoot);
+    QString installedDir;
+    QVERIFY(installFakePluginNullFactory(pluginRoot, installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -330,7 +457,8 @@ void TestPluginLoader::rejectsPluginWithoutEntryPoint()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePluginNoEntry(pluginRoot);
+    QString installedDir;
+    QVERIFY(installFakePluginNoEntry(pluginRoot, installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -387,7 +515,8 @@ void TestPluginLoader::loadsNewPluginAddedOnRescan()
     QCOMPARE(registry.size(), 0);
 
     // Drop a plugin into the watched root.
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
     loader.rescanNow();
 
     QCOMPARE(loadedSpy.count(), 1);
@@ -400,7 +529,8 @@ void TestPluginLoader::emitsRescanCompletedSignal()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -423,7 +553,8 @@ void TestPluginLoader::liveWidgetCountReturnsMinusOneForLoadedPlugin()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
     const QString pluginRoot = tempDir.path();
-    installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
 
     Registry<IBarWidgetFactory> registry;
     PluginLoader loader(&registry, pluginRoot);
@@ -461,37 +592,6 @@ void TestPluginLoader::pluginRootResolvesXdgWhenEmpty()
     const QString resolved = loader.pluginRoot();
     QVERIFY(!resolved.isEmpty());
     QVERIFY(resolved.endsWith(QStringLiteral("phosphor/plugins")));
-}
-
-void TestPluginLoader::destructorPinsLibraryBeforeFactoryDestruction()
-{
-    // Smoke test for the library-pin-before-factory-destroy invariant
-    // documented in pluginloader.cpp's performScanCycle unload block.
-    // Sequence: load a plugin → remove its directory → rescan
-    // (loader moves the QLibrary into m_pinnedLibraries) → drop the
-    // PluginLoader. If a future refactor reversed the move-then-
-    // destroy ordering, the factory destructor would dispatch through
-    // a vtable in a freshly-unmapped .so and segfault under
-    // QTEST_MAIN's exit path. Today the test simply asserting "no
-    // crash" suffices.
-    QTemporaryDir tempDir;
-    QVERIFY(tempDir.isValid());
-    const QString pluginRoot = tempDir.path();
-    const QString installedDir = installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"));
-
-    {
-        Registry<IBarWidgetFactory> registry;
-        PluginLoader loader(&registry, pluginRoot);
-        loader.scanAndLoad();
-        QCOMPARE(registry.size(), 1);
-
-        QDir(installedDir).removeRecursively();
-        loader.rescanNow();
-        QCOMPARE(registry.size(), 0);
-        // loader + registry destruct here; m_pinnedLibraries holds
-        // the .so until ~PluginLoader runs, and only after the
-        // pinned-library destructor unmaps does the test exit.
-    }
 }
 
 QTEST_MAIN(TestPluginLoader)

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# PhosphorRegistry — generic factory-by-name registry + plugin loader
+# PhosphorRegistry: generic factory-by-name registry + plugin loader
 # for the phosphor-shell UI extension seams (bar widgets, control-center
 # tiles, launcher providers, OSDs, desktop widgets).
 #
@@ -34,7 +34,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
 # WatchedDirectorySet + IScanStrategy live in phosphor-fsloader. The
 # plugin loader hot-reload path consumes both directly. REQUIRED is
 # load-bearing: target_link_libraries below names the imported target
@@ -42,9 +42,31 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml)
 # than fail link with a confusing "target not found" error. The
 # `if(NOT TARGET)` guard handles the in-tree case where phosphor-
 # fsloader is built as a sibling subdir and the target is already in
-# scope — there the find_package call is skipped, not silenced.
+# scope (there the find_package call is skipped, not silenced).
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader CONFIG REQUIRED)
+endif()
+
+# Surface the PhosphorFsLoader dependency in the top-level
+# feature_summary (mirrors the WrapVulkanHeaders pattern in the project
+# root CMakeLists.txt). Guarded so a standalone configure of this
+# subproject (which does not include(FeatureSummary)) stays valid.
+# PhosphorFsLoader is REQUIRED here because the plugin-loader hot-reload
+# path consumes WatchedDirectorySet + IScanStrategy unconditionally.
+if(COMMAND set_package_properties)
+    set_package_properties(PhosphorFsLoader PROPERTIES
+        TYPE REQUIRED
+        PURPOSE "WatchedDirectorySet + IScanStrategy for phosphor-registry's plugin hot-reload path")
+endif()
+if(COMMAND add_feature_info)
+    set(_phosphor_registry_fsloader_found FALSE)
+    if(TARGET PhosphorFsLoader::PhosphorFsLoader)
+        set(_phosphor_registry_fsloader_found TRUE)
+    endif()
+    add_feature_info("PhosphorFsLoader"
+                     _phosphor_registry_fsloader_found
+                     "Filesystem watcher backing phosphor-registry's plugin hot-reload")
+    unset(_phosphor_registry_fsloader_found)
 endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -89,6 +111,7 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
     set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
 
 target_include_directories(PhosphorRegistry
@@ -108,7 +131,6 @@ target_compile_definitions(PhosphorRegistry
 target_link_libraries(PhosphorRegistry
     PUBLIC
         Qt6::Core
-        Qt6::Gui
         Qt6::Qml
     PRIVATE
         PhosphorFsLoader::PhosphorFsLoader
@@ -125,11 +147,6 @@ set_target_properties(PhosphorRegistry PROPERTIES
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
-
-if(NOT DEFINED KDE_INSTALL_BINDIR)
-    include(GNUInstallDirs)
-    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
-endif()
 
 install(TARGETS PhosphorRegistry
     EXPORT PhosphorRegistryTargets
@@ -173,9 +190,15 @@ install(FILES
 # Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
-if(CMAKE_PROJECT_NAME STREQUAL "PhosphorRegistry" OR BUILD_TESTING)
-    enable_testing()
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
-        add_subdirectory(tests)
-    endif()
+# Shared standalone-or-tests gate. Lives in the repo's cmake/ helpers so
+# every phosphor library can drop the boilerplate. The relative path
+# resolves under both an in-tree configure (root CMakeLists.txt drives
+# us) and a standalone configure of this subproject (the lib's own
+# project() takes effect; the helper still resolves via the two-level-
+# up cmake/ dir in the repo checkout). EXISTS-guarded so a tarball
+# missing the helper still builds the library itself (just without the
+# tests gate).
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../../cmake/PhosphorLibTesting.cmake")
+    include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/PhosphorLibTesting.cmake)
+    phosphor_lib_enable_tests(PhosphorRegistry)
 endif()
