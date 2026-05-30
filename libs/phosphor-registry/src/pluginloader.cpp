@@ -453,15 +453,17 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
         }
         return;
     }
-    if (soFiles.size() > 1 && shouldWarnForPluginDir(pluginDir)) {
+    if (soFiles.size() > 1 && !m_warnedMultiSoDirs.contains(pluginDir)) {
         // Multiple .so files in one plugin directory is almost
         // certainly a packaging mistake. Surface it so the author
         // notices instead of silently picking the lexicographically
-        // first match. Latched: on a successful load the directory is
-        // skipped on later rescans anyway (m_plugins.contains), but if
-        // the picked .so fails downstream (corrupt, missing entry,
-        // id mismatch) the plugin is never inserted, so without the
-        // latch this would re-fire on every rescan.
+        // first match. This advisory uses its OWN warn-once latch (not
+        // shouldWarnForPluginDir): the picked .so may still fail to load
+        // downstream, and that failure must get its own one-shot warning
+        // rather than being masked by this advisory having already
+        // consumed the shared load-failure token. Both latches clear on
+        // a successful load so a regression re-warns.
+        m_warnedMultiSoDirs.insert(pluginDir);
         qWarning().noquote() << "PluginLoader:" << pluginDir << "contains" << soFiles.size() << ".so files; picking"
                              << soFiles.first() << "(deterministic by lexicographic order)";
     }
@@ -573,10 +575,12 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     entryRecord->library = std::move(library);
     entryRecord->factory = factory;
 
-    // Successful load clears any warn-once latch for this directory so
+    // Successful load clears the warn-once latches for this directory so
     // a future regression (the .so goes missing, the manifest breaks,
-    // permissions loosen) warns afresh rather than staying silent.
+    // permissions loosen, a second .so appears) warns afresh rather than
+    // staying silent.
     m_warnedPluginDirs.remove(pluginDir);
+    m_warnedMultiSoDirs.remove(pluginDir);
 
     const QString pluginId = manifest.id;
     m_plugins.insert(pluginId, entryRecord);

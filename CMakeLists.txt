@@ -359,7 +359,7 @@ add_subdirectory(cli/phosphorctl)           # phosphorctl call / list / schema /
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-shell)   # shell infrastructure and QML types (BUILD_PHOSPHOR_SHELL gate)
 endif()
-add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts (INTERFACE)
+add_subdirectory(libs/phosphor-engine)  # unified placement engine contracts + window registry (SHARED lib)
 add_subdirectory(libs/phosphor-workspaces)  # virtual desktop / workspace management
 add_subdirectory(libs/phosphor-tile-engine) # autotile placement engine (IAutotileSettings + engine code)
 add_subdirectory(libs/phosphor-snap-engine) # zone-based snap placement engine

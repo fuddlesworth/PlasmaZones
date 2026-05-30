@@ -45,6 +45,8 @@ private Q_SLOTS:
     void rejectsSymlinkedSoEscapingRoot();
     void rejectsSymlinkedSubdirEscapingRoot();
     void rejectsGroupOrWorldWritableSo();
+    void warnsOnceForMultipleSoFilesThenLoads();
+    void multipleSoFailureStillReportsFailureReason();
     void rejectsNullFactoryReturn();
     void rejectsPluginWithoutEntryPoint();
     void rejectsCorruptSoFile();
@@ -316,9 +318,14 @@ void TestPluginLoader::rejectsSymlinkedSubdirEscapingRoot()
     QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
     loader.scanAndLoad();
 
-    QCOMPARE(loadedSpy.count(), 0);
-    QCOMPARE(registry.size(), 0);
-    QVERIFY(loader.loadedPluginIds().isEmpty());
+    // The guarded skip is silent (the symlinked dir is never a
+    // discovery candidate); lock that contract — no warning should fire.
+    QStringList captured;
+    {
+        WarningCapture capture(captured);
+        loader.rescanNow();
+    }
+    QVERIFY2(captured.isEmpty(), qPrintable(captured.join(QLatin1Char('\n'))));
 }
 
 void TestPluginLoader::rejectsGroupOrWorldWritableSo()
@@ -350,6 +357,72 @@ void TestPluginLoader::rejectsGroupOrWorldWritableSo()
     loader.scanAndLoad();
 
     QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+}
+
+void TestPluginLoader::warnsOnceForMultipleSoFilesThenLoads()
+{
+    // Two .so files in one plugin directory is a packaging mistake; the
+    // loader warns, picks the lexicographically-first, and (when it
+    // loads) succeeds. The advisory fires exactly once.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+
+    // A second copy of the SAME valid binary, named lexicographically
+    // first so it is the one picked. Its factory id is still
+    // "fake-plugin", so it matches the manifest and loads.
+    const QString existingSo = QDir(installedDir).absoluteFilePath(QStringLiteral("fake-plugin.so"));
+    const QString extraSo = QDir(installedDir).absoluteFilePath(QStringLiteral("aaa-extra.so"));
+    QVERIFY(QFile::copy(existingSo, extraSo));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("contains 2 \\.so files")));
+    loader.scanAndLoad();
+
+    QCOMPARE(registry.size(), 1);
+    QCOMPARE(loader.loadedPluginIds(), QStringList{QStringLiteral("fake-plugin")});
+
+    // Second rescan: the plugin is already loaded, so the directory is
+    // skipped and the advisory does NOT re-fire (a re-fire would trip an
+    // unexpected-message failure here).
+    loader.rescanNow();
+    QCOMPARE(registry.size(), 1);
+}
+
+void TestPluginLoader::multipleSoFailureStillReportsFailureReason()
+{
+    // When the picked .so of a multi-.so directory fails, the multi-.so
+    // advisory must NOT mask the failure reason: both warnings surface
+    // (separate warn-once latches). QTest::ignoreMessage fails the test
+    // if either expected warning is missing.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    const QString pluginRoot = tempDir.path();
+    QString installedDir;
+    QVERIFY(installFakePlugin(pluginRoot, QStringLiteral("fake-plugin"), installedDir));
+
+    // Lexicographically-first .so is the id-mismatch binary (its factory
+    // id != "fake-plugin"), so the picked .so fails the id check.
+    const QString mismatchSo =
+        QDir(QStringLiteral(PHOSPHOR_REGISTRY_FAKE_PLUGIN_IDMISMATCH_DIR))
+            .absoluteFilePath(QStringLiteral("libphosphor_registry_test_fake_plugin_idmismatch.so"));
+    QVERIFY(QFileInfo::exists(mismatchSo));
+    const QString firstSo = QDir(installedDir).absoluteFilePath(QStringLiteral("aaa-mismatch.so"));
+    QVERIFY(QFile::copy(mismatchSo, firstSo));
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    // Emission order matches code order: the advisory fires before the
+    // load is attempted, the id-mismatch fires during the load.
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("contains 2 \\.so files")));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("factory id.*does not match manifest id")));
+    loader.scanAndLoad();
+
     QCOMPARE(registry.size(), 0);
     QVERIFY(loader.loadedPluginIds().isEmpty());
 }

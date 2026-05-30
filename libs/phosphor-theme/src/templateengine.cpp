@@ -47,12 +47,18 @@ QString renderToken(const QString& name, const QString& field, const QVariantMap
 
     const QColor c = it.value().value<QColor>();
     if (!c.isValid()) {
-        // Token is in the palette but its value isn't a valid color
-        // (PaletteStore::applyPalette normally normalises to QColor; if
-        // we still get here a custom IThemeService stored something
-        // odd). Leave the placeholder in place via ok=false so the
-        // template surfaces the problem instead of injecting an empty
-        // string the user has to debug.
+        // Token is in the map but its value isn't a QColor. render()
+        // consumes a pre-normalised token map: PaletteStore (via
+        // applyPalette / extractValidTokens) converts hex strings and
+        // named colors to QColor before storing, so a non-QColor here
+        // means the caller passed a map that skipped that normalisation.
+        // Leave the placeholder in place via ok=false (graceful
+        // degradation) AND warn — symmetric with the unknown-field path
+        // below, which also warns + degrades, so the miss is never
+        // silent.
+        qCWarning(lcPhosphorTheme).noquote()
+            << "phosphor-theme: template token" << name
+            << "has a non-color value; render() expects a QColor-normalised token map. Leaving placeholder in place";
         return {};
     }
     ok = true;
@@ -107,10 +113,14 @@ QString TemplateEngine::render(const QString& templateSource, const QVariantMap&
         QStringLiteral(R"(\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\.\s*([A-Za-z]+))?\s*\}\})"));
 
     QString result;
-    // Reserve a generous bound: every expanded token typically renders
-    // to 7-16 chars (e.g. "#RRGGBBAA" or "255, 200, 100, 1.000") which
-    // is longer than the source placeholder. Avoid the per-append
-    // realloc storm by pre-reserving source + 16 × token-map size.
+    // Pre-reserve to damp the per-append realloc storm. This is a coarse
+    // hint, not a precise prediction: output size is driven by how many
+    // placeholders the template contains (not knowable without scanning
+    // it twice) and how each renders (7-16 chars, e.g. "#RRGGBBAA" or
+    // "255, 200, 100, 1.000"). `tokens.size() * 16` is just a cheap
+    // proxy for "expect roughly token-count expansions"; reserve only
+    // hints capacity, so an over- or under-estimate costs at most a
+    // realloc, never correctness.
     result.reserve(templateSource.size() + tokens.size() * 16);
 
     qsizetype cursor = 0;

@@ -94,7 +94,7 @@ and exclusivity policy across every transient surface in the shell.
 - [x] Only one cooperative popout open per scope (test + demo verified)
 - [x] Modal popout suppresses cooperative popouts on every screen (test + demo verified)
 - [x] Popouts dismiss on focus loss when configured (`dismissOnFocusLoss` flag plumbs through to the transport's click-outside MouseArea)
-- [x] Open/close animations use M3 emphasized curves from `phosphor-theme` (PopoutHost.qml's Behaviors bind `Motion.easing_emphasized`)
+- [x] Open/close animations use M3 emphasized curves from `phosphor-theme` (PopoutHost.qml's Behaviors bind `Motion.emphasized`)
 
 **Effort:** M (estimated ~2 weeks; actual ~1 session for the arbitration core + in-window transport. LayerPopoutTransport deferred until the shell binary needs it.)
 

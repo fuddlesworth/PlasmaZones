@@ -276,6 +276,12 @@ private:
     // successfully. GUI-thread-only (same contract as the rest of the
     // loader), so it needs no synchronisation. See shouldWarnForPluginDir.
     QSet<QString> m_warnedPluginDirs;
+    // Separate warn-once latch for the "multiple .so files" advisory.
+    // Kept distinct from m_warnedPluginDirs so the advisory (emitted
+    // before the load is attempted) cannot consume the shared
+    // load-failure token and mask the actual failure reason when the
+    // picked .so then fails to load. Cleared on a successful load.
+    QSet<QString> m_warnedMultiSoDirs;
     // Idempotency guard for scanAndLoad. The first successful call
     // hands the plugin root to WatchedDirectorySet::registerDirectory,
     // which arms hot-reload + drives an initial scan. Subsequent

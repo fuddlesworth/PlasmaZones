@@ -94,9 +94,13 @@ void TestPaletteStore::loadFromJson_acceptsWrappedShape()
 void TestPaletteStore::loadFromJson_acceptsFlatShape()
 {
     PaletteStore s;
+    QSignalSpy spy(&s, &PaletteStore::paletteChanged);
     const QByteArray payload = R"({"primary": "#aabbcc"})";
     QVERIFY(s.loadFromJson(payload));
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#aabbcc"));
+    // Parity with the wrapped-shape test: a successful flat-shape load
+    // must emit paletteChanged exactly once.
+    QCOMPARE(spy.count(), 1);
 }
 
 void TestPaletteStore::loadFromJson_mergesNotReplaces()

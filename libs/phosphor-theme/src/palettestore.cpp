@@ -214,9 +214,9 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
     // identical bytes by construction — no second QColor-parse pass.
     //
     // Contract dependency: when extractValidTokens returns Ok, the
-    // optional is guaranteed engaged (see its declaration). Skip
-    // the .has_value() guard here — the only error escape is the
-    // outError-driven branch above.
+    // optional is guaranteed engaged (see its declaration). The
+    // extractErr != Ok check just below guards the only error escape,
+    // so the parsed-> dereference afterwards needs no .has_value() guard.
     ApplyResult extractErr = ApplyResult::Ok;
     const auto parsed = extractValidTokens(doc, extractErr);
     if (extractErr != ApplyResult::Ok) {
@@ -337,16 +337,17 @@ void PaletteStore::dropWatcherAndClearSourcePath()
 
 PaletteStore::ApplyResult PaletteStore::applyParsedJson(const QJsonDocument& doc)
 {
-    // Route through extractValidTokens (the single source of truth
-    // for the wrapped-vs-flat shape rules AND the QColor accept
-    // set). loadFromJson also calls extractValidTokens directly and
-    // reuses the cached map, so the JSON-blob path and the file-load
-    // path observe identical accept-set behaviour without going
-    // through this function twice.
+    // Route through extractValidTokens (the single source of truth for
+    // the wrapped-vs-flat shape rules AND the QColor accept set).
+    // loadFromJson performs its own inline extractValidTokens + commit;
+    // this function is the file-load / hot-reload entry that routes
+    // through the same helper, so every path observes identical
+    // accept-set behaviour.
+    //
     // Contract dependency: when extractValidTokens returns Ok, the
-    // optional is guaranteed engaged (see its declaration). Skip
-    // the .has_value() guard here — the only error escape is the
-    // err-driven branch above.
+    // optional is guaranteed engaged (see its declaration). The
+    // err != Ok check just below guards the only error escape, so the
+    // parsed-> dereference afterwards needs no .has_value() guard.
     ApplyResult err = ApplyResult::Ok;
     auto parsed = extractValidTokens(doc, err);
     if (err != ApplyResult::Ok) {
