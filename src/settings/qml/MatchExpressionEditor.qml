@@ -140,10 +140,13 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
 
-                // Indentation guide proportional to depth.
+                // Indentation guide proportional to depth — horizontal only.
+                // No Layout.fillHeight: the spacer exists purely to offset the
+                // row horizontally, and a zero-implicit-height item asked to
+                // fill height only adds noise to the host Dialog's content-sized
+                // height solve.
                 Item {
                     Layout.preferredWidth: matchEditor.depth * Kirigami.Units.largeSpacing
-                    Layout.fillHeight: true
                 }
 
                 WideComboBox {
