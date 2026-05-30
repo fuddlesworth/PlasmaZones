@@ -157,6 +157,70 @@ private Q_SLOTS:
         compareAlgorithm(QStringLiteral("dwindle-memory"));
     }
 
+    // cluster with no window context → its evenSplit fallback.
+    void cluster()
+    {
+        compareAlgorithm(QStringLiteral("cluster"));
+    }
+
+    // cluster's clustering path: vary appId patterns, focus, and orientation.
+    void clusterWithWindows()
+    {
+        ScriptedAlgorithm js(jsPath(QStringLiteral("cluster")), m_jsWatchdog);
+        QVERIFY(js.isValid());
+        LuauTileAlgorithm lua(luaPath(QStringLiteral("cluster")), m_luaWatchdog);
+        QVERIFY(lua.isValid());
+
+        const QList<QStringList> patterns = {
+            {QStringLiteral("firefox"), QStringLiteral("firefox"), QStringLiteral("dolphin"), QStringLiteral("konsole"),
+             QStringLiteral("firefox"), QStringLiteral("kate")},
+            {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d"), QStringLiteral("e"),
+             QStringLiteral("f")},
+            {QStringLiteral("x"), QStringLiteral("x"), QStringLiteral("x"), QStringLiteral("x"), QStringLiteral("x"),
+             QStringLiteral("x")},
+            {QStringLiteral("p"), QStringLiteral("q"), QStringLiteral("p"), QStringLiteral("q"), QStringLiteral("p"),
+             QStringLiteral("q")},
+        };
+        const QList<QRect> areas = {QRect(0, 0, 1920, 1080), QRect(0, 0, 800, 1280)};
+        for (const QRect& area : areas) {
+            for (int gap : {0, 8}) {
+                for (int count : {1, 2, 3, 4, 5, 6}) {
+                    for (const QStringList& pat : patterns) {
+                        for (bool portrait : {false, true}) {
+                            for (int focused : {-1, 0, 2}) {
+                                TilingState state(QStringLiteral("s"));
+                                TilingParams p;
+                                p.windowCount = count;
+                                p.screenGeometry = area;
+                                p.state = &state;
+                                p.innerGap = gap;
+                                p.outerGaps = EdgeGaps::uniform(0);
+                                for (int w = 0; w < count; ++w) {
+                                    WindowInfo wi;
+                                    wi.appId = pat.at(w % pat.size());
+                                    wi.focused = (w == focused);
+                                    p.windowInfos.append(wi);
+                                }
+                                p.focusedIndex = focused;
+                                p.screenInfo.id = QStringLiteral("S1");
+                                p.screenInfo.portrait = portrait;
+
+                                const QVector<QRect> jz = js.calculateZones(p);
+                                const QVector<QRect> lz = lua.calculateZones(p);
+                                if (jz != lz) {
+                                    qWarning().noquote()
+                                        << "CLUSTER MISMATCH count=" << count << "portrait=" << portrait
+                                        << "focused=" << focused << pat << "\n  js  =" << jz << "\n  luau=" << lz;
+                                }
+                                QCOMPARE(lz, jz);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Structural validation of the Luau dwindle-memory TREE path (which the JS
     // engine can't reach). Builds a known split tree and asserts the tree
     // geometry is used — distinguished from the stateless fallback by min-sizes,
