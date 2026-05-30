@@ -134,6 +134,16 @@ target_compile_definitions(test_split_tree PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SO
 pz_add_test(test_scripted_algorithm_loader autotile/test_scripted_algorithm_loader.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# scripting/ - PhosphorScripting (embedded Luau host)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Manual target: a library unit test that links only PhosphorScripting, not the
+# app core (plasmazones_core).
+add_executable(test_luau_engine scripting/test_luau_engine.cpp)
+set_target_properties(test_luau_engine PROPERTIES AUTOMOC ON)
+target_link_libraries(test_luau_engine PRIVATE Qt6::Test Qt6::Core PhosphorScripting::PhosphorScripting)
+add_test(NAME test_luau_engine COMMAND test_luau_engine)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile Engine Tests (core, master, minsize, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_autotile_engine_core autotile/test_autotile_engine_core.cpp)
