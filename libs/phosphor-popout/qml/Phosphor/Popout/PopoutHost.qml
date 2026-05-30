@@ -12,13 +12,6 @@ import Phosphor.Theme
 import QtQuick
 
 Item {
-    // Tracks whether dismissed has already fired for the current
-    // open cycle. The signal is edge-triggered per cycle: the timer
-    // fires it after the close animation, then opening again resets
-    // the latch so the next close fires it once more. The flag also
-    // guards against a double fire from Component.onDestruction
-    // running after the timer's own emission.
-
     id: root
 
     // The popout's content. The host accepts either a pre-built Item
@@ -210,9 +203,12 @@ Item {
     QtObject {
         id: dismissLatch
 
-        // Set by Component.onDestruction (or the dismissEmitter
-        // timer) to suppress a double-fire of dismissed when both
-        // paths could run for the same close cycle.
+        // Tracks whether dismissed has already fired for the current
+        // open cycle. The signal is edge-triggered per cycle: the
+        // dismissEmitter timer fires it after the close animation, then
+        // opening again resets the latch so the next close fires it
+        // once more. Also guards against a double-fire from
+        // Component.onDestruction running after the timer's emission.
         property bool dismissedFired: false
         // Set on the first open=true transition. Used by
         // Component.onDestruction to distinguish a destroy-without-

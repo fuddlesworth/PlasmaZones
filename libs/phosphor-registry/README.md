@@ -215,6 +215,16 @@ loader enforces this so on-disk layout and registry keys stay aligned.
   factory's `id()` against the manifest's `id` field; mismatch is a
   refused load with a clear log message. This prevents a renamed
   plugin from quietly taking over another's slot.
+- **Symlinks are not followed.** Plugin subdirectories and `.so` files
+  are enumerated with `QDir::NoSymLinks`, so a symlinked entry pointing
+  outside the (user-writable) plugin root cannot smuggle a plugin tree
+  or shared object past the basename-equals-id containment rule.
+- **Group/world-writable plugins refused.** Before `dlopen`, the loader
+  refuses any `.so` (or plugin directory) that is group- or
+  world-writable, the same StrictModes discipline OpenSSH and sudo
+  apply to files they trust: a permissive mode would let another local
+  process overwrite the code the shell is about to run. Signature /
+  origin verification is reserved for Phase 5's sandbox.
 - **Unload is registry-drop only in Phase 1.3.** Removing a plugin from
   disk unregisters its factory from the registry but pins the `QLibrary`
   mapping for the loader's lifetime. Widgets the now-gone plugin

@@ -213,7 +213,7 @@ private:
     /// QVariantMap (empty if no usable colors were found — callers
     /// map that to NoUsableTokens).
     static std::optional<QVariantMap> extractValidTokens(const QJsonDocument& doc, ApplyResult& outError);
-    ApplyResult applyParsedJson(const QJsonDocument& doc);
+    [[nodiscard]] ApplyResult applyParsedJson(const QJsonDocument& doc);
     /// Apply an already-parsed document and emit `loadError` on the
     /// shape-failure variants with the same wording readParseAndApply
     /// surfaces. Used by loadFromFile to thread the preflight
