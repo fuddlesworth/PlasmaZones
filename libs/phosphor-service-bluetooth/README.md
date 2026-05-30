@@ -80,7 +80,7 @@ Connections {
 - **Async-only D-Bus.** The initial walk, per-object `PropertiesChanged` tracking, and every write (`Properties.Set`, `StartDiscovery`, `Connect`, `Pair`, `RemoveDevice`) go through `QDBusPendingCallWatcher` / `PhosphorDBus::Client`. The GUI thread is never blocked. Initial properties arrive in the ObjectManager enumeration, so domain objects need no construction-time round-trip.
 - **No optimistic writes.** `setPowered` / `setDiscoverable` / `setTrusted` / `setBlocked` issue `Properties.Set` and let BlueZ echo the change back through `PropertiesChanged`; the cached value (and its NOTIFY) moves only once the daemon actually applied it, so the property never lies about daemon state.
 - **The agent is a D-Bus server.** `BluetoothAgent` implements `org.bluez.Agent1` directly on the QObject (`ExportAllSlots` + `QDBusContext`) rather than via a generated adaptor, so `setDelayedReply` applies to its calls: the interactive callbacks defer their reply, emit a request signal with a `requestId`, and are answered later by a consumer. Replies are sent exactly once (value / empty accept / `org.bluez.Error.Rejected`); `Cancel` answers every in-flight request with `Canceled`.
-- **Best-effort default agent.** The host registers the agent with `AgentManager1.RegisterAgent` (KeyboardDisplay) and requests default-agent status; `RequestDefaultAgent` failing (another agent holds the slot) is non-fatal — pairing still works as a non-default agent.
+- **Best-effort default agent.** The host registers the agent with `AgentManager1.RegisterAgent` (KeyboardDisplay) and requests default-agent status; `RequestDefaultAgent` failing (another agent holds the slot) is non-fatal; pairing still works as a non-default agent.
 
 ## Dependencies
 

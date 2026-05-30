@@ -124,6 +124,12 @@ void wireAgent(BluetoothHost& host)
         const QString answer = prompt(QStringLiteral("Authorize pairing with %1? [y/N] ").arg(device));
         agent->respondConfirmation(id, answer.trimmed().compare(QStringLiteral("y"), Qt::CaseInsensitive) == 0);
     });
+    QObject::connect(
+        agent, &BluetoothAgent::serviceAuthorizationRequested,
+        [agent](const QString& device, const QString& uuid, quint64 id) {
+            const QString answer = prompt(QStringLiteral("Authorize service %1 on %2? [y/N] ").arg(uuid, device));
+            agent->respondConfirmation(id, answer.trimmed().compare(QStringLiteral("y"), Qt::CaseInsensitive) == 0);
+        });
     QObject::connect(agent, &BluetoothAgent::passkeyDisplayed,
                      [](const QString& device, quint32 passkey, quint16 entered) {
                          out() << "Passkey for " << device << ": " << passkey << " (entered " << entered << ")\n";
@@ -345,7 +351,9 @@ int main(int argc, char** argv)
         if (args.size() > 2) {
             bool ok = false;
             seconds = args.at(2).toInt(&ok);
-            if (!ok || seconds <= 0)
+            // Cap at an hour: keeps `seconds * 1000` well inside int range in
+            // pump(), and an unbounded scan makes no sense for a demo harness.
+            if (!ok || seconds <= 0 || seconds > 3600)
                 return usage();
         }
         return cmdScan(seconds);

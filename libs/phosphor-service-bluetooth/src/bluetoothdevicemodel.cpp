@@ -205,6 +205,9 @@ void BluetoothDeviceModel::connectDevice(BluetoothDevice* device)
     connect(device, &BluetoothDevice::rssiChanged, this, [this, device]() {
         onDeviceDataChanged(device, {RssiRole});
     });
+    connect(device, &BluetoothDevice::adapterChanged, this, [this, device]() {
+        onDeviceDataChanged(device, {AdapterRole});
+    });
     connect(device, &BluetoothDevice::uuidsChanged, this, [this, device]() {
         onDeviceDataChanged(device, {UuidsRole});
     });
