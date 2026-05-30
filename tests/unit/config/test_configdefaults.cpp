@@ -206,6 +206,13 @@ private Q_SLOTS:
         // snapWindowInactiveBorderColor mirrors the inactive zone color.
         QCOMPARE(ConfigDefaults::snapWindowBorderColor(), ConfigDefaults::highlightColor());
         QCOMPARE(ConfigDefaults::snapWindowInactiveBorderColor(), ConfigDefaults::inactiveColor());
+        // The numeric border defaults delegate to the same source the
+        // autotile* border defaults use (ZoneDefaults::BorderWidth and a
+        // literal 0 radius). Assert against the autotile accessors rather than
+        // hardcoded magic numbers so a shared-default change moves both in
+        // lockstep without staling the test.
+        QCOMPARE(ConfigDefaults::snapWindowBorderWidth(), ConfigDefaults::autotileBorderWidth());
+        QCOMPARE(ConfigDefaults::snapWindowBorderRadius(), ConfigDefaults::autotileBorderRadius());
     }
 };
 

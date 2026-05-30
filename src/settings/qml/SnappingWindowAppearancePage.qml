@@ -101,8 +101,6 @@ SettingsFlickable {
                     description: i18n("Remove window title bars while snapped, restored when floating")
 
                     SettingsSwitch {
-                        id: hideTitleBarsSwitch
-
                         checked: appSettings.snapWindowHideTitleBars
                         accessibleName: i18n("Hide title bars on snapped windows")
                         onToggled: function (newValue) {

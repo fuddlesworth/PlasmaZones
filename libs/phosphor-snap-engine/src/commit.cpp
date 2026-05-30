@@ -18,6 +18,9 @@ void SnapEngine::commitSnapImpl(const QString& windowId, const QStringList& zone
                                 SnapIntent intent)
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return;
+    }
     Q_ASSERT(!zoneIds.isEmpty());
     if (Q_UNLIKELY(zoneIds.isEmpty())) {
         qCWarning(PhosphorSnapEngine::lcSnapEngine) << "commitSnapImpl: empty zoneIds for" << windowId;
@@ -81,6 +84,9 @@ void SnapEngine::commitMultiZoneSnap(const QString& windowId, const QStringList&
 void SnapEngine::uncommitSnap(const QString& windowId)
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return;
+    }
     if (windowId.isEmpty()) {
         return;
     }
@@ -176,6 +182,9 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
             if (nearest) {
                 screenId = PhosphorScreens::ScreenIdentity::identifierFor(nearest);
             }
+            qCWarning(PhosphorSnapEngine::lcSnapEngine)
+                << "applyBatchAssignments: last-resort nearest-screen heuristic fired for" << entry.windowId
+                << "center=" << center << "resolved screen=" << screenId;
         }
 
         if (entry.targetZoneIds.size() > 1) {

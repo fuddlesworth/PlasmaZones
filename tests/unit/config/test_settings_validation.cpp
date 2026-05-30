@@ -132,6 +132,31 @@ private Q_SLOTS:
         QCOMPARE(settings.snapWindowBorderColor(), ConfigDefaults::snapWindowBorderColor());
     }
 
+    /**
+     * Sibling to the active-color test above: the validColorOr validator on the
+     * snapped-window INACTIVE border color (Snapping.Appearance.Colors/Inactive)
+     * must fall back to its schema default for an unparseable string. It shares
+     * the active color's KeyDef shape but can regress independently, so it gets
+     * its own coverage. useSystemBorderColors is disabled so Settings::load()
+     * doesn't overwrite the validated value with the accent-derived color.
+     */
+    void testReadValidatedColor_snapWindowInactiveBorderColor_invalidColor_returnsDefault()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+            colors->writeBool(ConfigDefaults::useSystemKey(), false);
+            colors->writeString(ConfigDefaults::inactiveKey(), QStringLiteral("not-a-color"));
+            colors.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.snapWindowInactiveBorderColor(), ConfigDefaults::snapWindowInactiveBorderColor());
+    }
+
     // =========================================================================
     // Schema validColorOr validator (invalid color string)
     // =========================================================================

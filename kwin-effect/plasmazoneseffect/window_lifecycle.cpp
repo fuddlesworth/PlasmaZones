@@ -727,6 +727,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowFullScreenChanged);
 
+    // Snap mode: clear snap-border tracking + restore the title bar snapping
+    // hid when a snap-managed window goes fullscreen. Sibling to the autotile
+    // hookup above (which only clears m_border); clearWindowSnapped() handles
+    // m_snapBorder. Only act going INTO fullscreen — re-marking on fullscreen
+    // exit is driven by the daemon snap-commit path, same as autotile.
+    connect(w, &KWin::EffectWindow::windowFullScreenChanged, this, [this](KWin::EffectWindow* window) {
+        if (!window || !window->isFullScreen()) {
+            return;
+        }
+        clearWindowSnapped(getWindowId(window));
+    });
+
     // Autotile: center undersized Wayland windows as soon as they commit constrained size
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowFrameGeometryChanged);

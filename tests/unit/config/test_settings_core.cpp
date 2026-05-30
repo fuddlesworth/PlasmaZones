@@ -116,6 +116,44 @@ private Q_SLOTS:
     }
 
     /**
+     * reset() must restore every snapped-window appearance setting
+     * (Snapping.Appearance.{Borders,Decorations,Colors}) to its ConfigDefaults
+     * value. These are hand-wired into Settings::reset() separately from the
+     * macro-generated settings, so they get dedicated reset coverage.
+     */
+    void testReset_restoresSnapWindowAppearanceDefaults()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        // Drive every snapWindow* setting away from its default.
+        settings.setSnapWindowHideTitleBars(!ConfigDefaults::snapWindowHideTitleBars());
+        settings.setSnapWindowShowBorder(!ConfigDefaults::snapWindowShowBorder());
+        settings.setSnapWindowUseSystemBorderColors(!ConfigDefaults::snapWindowUseSystemBorderColors());
+        settings.setSnapWindowBorderWidth(ConfigDefaults::snapWindowBorderWidth() + 1);
+        settings.setSnapWindowBorderRadius(ConfigDefaults::snapWindowBorderRadius() + 1);
+        settings.setSnapWindowBorderColor(QColor(10, 20, 30));
+        settings.setSnapWindowInactiveBorderColor(QColor(40, 50, 60));
+
+        settings.reset();
+
+        QCOMPARE(settings.snapWindowHideTitleBars(), ConfigDefaults::snapWindowHideTitleBars());
+        QCOMPARE(settings.snapWindowShowBorder(), ConfigDefaults::snapWindowShowBorder());
+        QCOMPARE(settings.snapWindowUseSystemBorderColors(), ConfigDefaults::snapWindowUseSystemBorderColors());
+        QCOMPARE(settings.snapWindowBorderWidth(), ConfigDefaults::snapWindowBorderWidth());
+        QCOMPARE(settings.snapWindowBorderRadius(), ConfigDefaults::snapWindowBorderRadius());
+        // The default snapWindowUseSystemBorderColors is true, so reset()'s
+        // reload drives the snap border colors to the (also-reset) zone
+        // highlight/inactive colors via applySnapWindowBorderSystemColor().
+        // Assert against the live zone colors — the actual contract when
+        // system colors are enabled — rather than the static ConfigDefaults
+        // border colors, which only apply when system colors are off.
+        QCOMPARE(settings.snapWindowBorderColor(), settings.highlightColor());
+        QCOMPARE(settings.snapWindowInactiveBorderColor(), settings.inactiveColor());
+    }
+
+    /**
      * After save() then load(), every property must equal what was set.
      * This validates the full round-trip for a representative subset of settings
      * across all config groups.
@@ -251,6 +289,22 @@ private Q_SLOTS:
             QCOMPARE(QColor(colors->readString(ConfigDefaults::activeKey(), QString())), QColor(10, 20, 30));
             QCOMPARE(QColor(colors->readString(ConfigDefaults::inactiveKey(), QString())), QColor(40, 50, 60));
         }
+
+        {
+            // Load-side getter round-trip: a freshly-constructed Settings must
+            // read every snapWindow* value back through its OWN getter. The
+            // on-disk assertions above only prove save() wrote the right keys;
+            // a getter wired to the wrong group/key would still pass them.
+            // Reading through the getters pins the read path too.
+            Settings reloaded;
+            QCOMPARE(reloaded.snapWindowShowBorder(), false);
+            QCOMPARE(reloaded.snapWindowHideTitleBars(), false);
+            QCOMPARE(reloaded.snapWindowBorderWidth(), 4);
+            QCOMPARE(reloaded.snapWindowBorderRadius(), 8);
+            QCOMPARE(reloaded.snapWindowUseSystemBorderColors(), false);
+            QCOMPARE(reloaded.snapWindowBorderColor(), QColor(10, 20, 30));
+            QCOMPARE(reloaded.snapWindowInactiveBorderColor(), QColor(40, 50, 60));
+        }
     }
 
     // =========================================================================
@@ -314,6 +368,41 @@ private Q_SLOTS:
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
+    }
+
+    /**
+     * The hand-written setSnapWindowUseSystemBorderColors setter (not
+     * macro-generated) must emit both its specific
+     * snapWindowUseSystemBorderColorsChanged signal and settingsChanged() on a
+     * real change, and stay silent on a no-op (set to the same value twice).
+     */
+    void testSetSnapWindowUseSystemBorderColors_emitsAndGuards()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const bool current = settings.snapWindowUseSystemBorderColors();
+        const bool toggled = !current;
+        settings.setSnapWindowUseSystemBorderColors(current); // force known value
+
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QSignalSpy specificSpy(&settings, &Settings::snapWindowUseSystemBorderColorsChanged);
+        QVERIFY(generalSpy.isValid());
+        QVERIFY(specificSpy.isValid());
+
+        // Real change emits both signals.
+        settings.setSnapWindowUseSystemBorderColors(toggled);
+        QCOMPARE(specificSpy.count(), 1);
+        QVERIFY(generalSpy.count() >= 1);
+
+        const int specificBefore = specificSpy.count();
+        const int generalBefore = generalSpy.count();
+
+        // No-op (same value again) emits nothing.
+        settings.setSnapWindowUseSystemBorderColors(toggled);
+        QCOMPARE(specificSpy.count(), specificBefore);
+        QCOMPARE(generalSpy.count(), generalBefore);
     }
 
     /**

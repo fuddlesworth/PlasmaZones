@@ -13,8 +13,6 @@ SettingsFlickable {
     // Page-scoped bounds + color-import actions live on the sub-controller.
     readonly property var settingsBridge: settingsController.snappingZonesPage
     readonly property int opacitySliderMax: 100
-    readonly property int borderWidthMax: root.settingsBridge.borderWidthMax
-    readonly property int borderRadiusMax: root.settingsBridge.borderRadiusMax
 
     contentHeight: content.implicitHeight
     clip: true
@@ -227,7 +225,7 @@ SettingsFlickable {
 
                         SettingsSpinBox {
                             from: root.settingsBridge.borderWidthMin
-                            to: root.borderWidthMax
+                            to: root.settingsBridge.borderWidthMax
                             value: appSettings.borderWidth
                             onValueModified: value => {
                                 return appSettings.borderWidth = value;
@@ -243,7 +241,7 @@ SettingsFlickable {
 
                         SettingsSpinBox {
                             from: root.settingsBridge.borderRadiusMin
-                            to: root.borderRadiusMax
+                            to: root.settingsBridge.borderRadiusMax
                             value: appSettings.borderRadius
                             onValueModified: value => {
                                 return appSettings.borderRadius = value;
