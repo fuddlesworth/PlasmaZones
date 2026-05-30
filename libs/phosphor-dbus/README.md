@@ -24,6 +24,7 @@ plugin, or tool can reuse this library directly with its own endpoints.
 | Type | Purpose |
 |------|---------|
 | `PhosphorDBus::Client`           | Value-type method-call client bound to a `(connection, service, objectPath)` triple. Provides `fireAndForget`, `sendOneWay`, `asyncCall`, `syncCall`, `createCall`. |
+| `PhosphorDBus::ObjectManager`    | Service-agnostic observer for `org.freedesktop.DBus.ObjectManager`. Issues `GetManagedObjects`, tracks `InterfacesAdded` / `InterfacesRemoved`, and emits raw `(path, interfaces)` payloads for consumers to materialise their own typed objects. |
 | `PhosphorDBus::HasDBusStreaming` | Compile-time check that a type has `QDBusArgument` `operator<<` / `operator>>`. Use in `static_assert` to catch a missing marshaller at build time. |
 | `PhosphorDBus::lcPhosphorDBus`   | Default logging category for call-failure warnings. |
 
@@ -69,6 +70,13 @@ static_assert(PhosphorDBus::HasDBusStreaming<MyEntry>::value,
 - **Errors route through a caller-supplied category.** `Client` takes an
   optional `QLoggingCategory*`; consumers see failures under their own
   category rather than a category buried in this library.
+- **`ObjectManager` stays un-typed.** It hand-demarshals the
+  `a{oa{sa{sv}}}` / `a{sa{sv}}` payloads (no nested-container metatype to
+  register) and emits the raw `(path, interfaces)` maps, leaving each
+  service to build its own domain objects. Its `ready()` signal fires once,
+  after the initial `GetManagedObjects` round-trip completes (success or
+  error), giving consumers a deterministic "initial snapshot delivered"
+  edge before they rely on incremental signals.
 
 ## Dependencies
 

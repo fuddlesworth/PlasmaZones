@@ -40,11 +40,13 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus)
 set(phosphordbus_SRCS
     src/client.cpp
     src/logging.cpp
+    src/objectmanager.cpp
 )
 
 set(phosphordbus_public_HDRS
     include/PhosphorDBus/Client.h
     include/PhosphorDBus/Logging.h
+    include/PhosphorDBus/ObjectManager.h
     include/PhosphorDBus/Streaming.h
 )
 

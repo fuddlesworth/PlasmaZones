@@ -450,6 +450,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-mpris)     # MPRIS2 media-player discovery + control
     add_subdirectory(libs/phosphor-service-pipewire)  # PipeWire mixer (Phase 2.1, shipped)
     add_subdirectory(libs/phosphor-service-network)   # NetworkManager devices / connectivity (Phase 2.2)
+    add_subdirectory(libs/phosphor-service-bluetooth) # BlueZ adapters / devices / pairing (Phase 2.3)
 endif()
 
 # Source directories
@@ -679,6 +680,16 @@ endif()
 # can't link.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-network-cli)
+endif()
+
+# phosphor-service-bluetooth-cli. Acceptance harness for the
+# phosphor-service-bluetooth library (Phase 2.3). Headless driver exercising
+# the read paths (status, list-adapters, list-devices) and write paths
+# (power, scan, pair, connect, trust, remove) against a live org.bluez, with
+# an interactive pairing agent. Gated like the lib: when BUILD_PHOSPHOR_SHELL
+# is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-bluetooth-cli)
 endif()
 
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo

@@ -313,6 +313,65 @@ This section is the post-implementation record of the shape that landed on `feat
 
 ---
 
+### 2.3: `phosphor-service-bluetooth` *(shipped)*
+
+Shipped on `feat/phase-2.3-bluetooth-service` (milestones 0-9), in the shape of the §2.1 narrative. Backend is pure D-Bus `org.bluez` on the **system bus** via `phosphor-dbus`, with no `libbluetooth` / QtConnectivity dependency (keeps the wire contract direct; unlike 2.2 there is no optional native backend). Namespace `PhosphorServiceBluetooth`, export macro `PHOSPHORSERVICEBLUETOOTH_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Bluetooth 1.0`.
+
+Two structural firsts versus 2.2:
+
+- BlueZ is **ObjectManager-rooted** (`/` → `GetManagedObjects` returning `a{oa{sa{sv}}}`, plus `InterfacesAdded` / `InterfacesRemoved`), not the per-interface add/remove signals NetworkManager exposes.
+- This is the first service lib to act as a **D-Bus server**: it *exports* an `org.bluez.Agent1` object that bluez calls back into during pairing. (2.5 notifications is the only other server-side lib.) The agent is implemented directly on the `QObject` (`Q_CLASSINFO` interface + `ExportAllSlots` + `QDBusContext`), NOT via a generated `qt6_add_dbus_adaptor` adaptor: an interactive agent needs `setDelayedReply`, which only applies when the agent object is itself QtDBus's dispatch target; a generated `QDBusAbstractAdaptor` would intercept dispatch and break it. That direct-registration pattern is the precedent for 2.5.
+
+**Design decisions taken up front** (see Unknowns for the rest):
+
+- **ObjectManager support lands in `phosphor-dbus`** (foundation tier), not in the bluetooth lib, so 2.5 (notifications) and 2.10 (session/logind) reuse it rather than re-implementing the `a{oa{sa{sv}}}` walk.
+- **Full `org.bluez.Agent1`**: every callback implemented (not a Just-Works-only or minimal agent), with interactive callbacks using delayed D-Bus replies driven by a consumer (CLI now, pairing dialog in Phase 3/4).
+
+**Milestones**
+
+0. **`phosphor-dbus` ObjectManager observer (M, ~3-4 days).** *Foundation prerequisite: lands in `phosphor-dbus`, not the bluetooth lib.* New service-agnostic `PhosphorDBus::ObjectManager`: binds `(connection, service, rootPath)`, issues `GetManagedObjects` async, subscribes to `InterfacesAdded` / `InterfacesRemoved`, and emits raw-map signals `interfacesAdded(QString path, QMap<QString, QVariantMap>)` / `interfacesRemoved(QString path, QStringList)` plus a `ready()` once the initial walk lands. Owns the `a{oa{sa{sv}}}` demarshalling decision once (hand-iterated `QDBusArgument`, as `NetworkConnection` did for `a{sa{sv}}`). Its own smoke test pins the demarshalling + add/remove contract against a synthetic reply. Kept deliberately un-typed so each consumer materialises its own typed objects.
+1. **Skeleton + CMake plumbing (S, ~1 day).** `libs/phosphor-service-bluetooth/` mirroring the 2.2 shape (`CMakeLists.txt`, `PhosphorServiceBluetoothConfig.cmake.in`, `include/PhosphorServiceBluetooth/`, `src/`, `tests/`, `examples/phosphor-service-bluetooth-cli/`). Imperative `qmlregistration.cpp`, `std::call_once`-guarded, called from `src/shell/main.cpp` alongside the six existing services. `BUILD_PHOSPHOR_SHELL`-gated.
+2. **`BluetoothHost` facade + ObjectManager wiring (M, ~3 days).** Central facade (like `NetworkHost`) built on the milestone-0 observer pointed at `org.bluez` `/`. Materialises typed `BluetoothAdapter` (per `Adapter1`) and `BluetoothDevice` (per `Device1`), parented to the host, vended via `adapterAdded` / `adapterRemoved` + `deviceAdded` / `deviceRemoved` (+ count signals). Inert when bluez is absent. Handles adapter removal cascading to its child devices.
+3. **`BluetoothAdapter` + `BluetoothAdapterModel` (M, ~2-3 days).** Properties Address / Name / Alias / Powered / Discoverable / Pairable / Discovering (`Q_PROPERTY`, emit-on-change `setField` pattern). Writes: `setPowered` / `setDiscoverable` via `Properties.Set`; `startDiscovery()` / `stopDiscovery()` (with an optional `SetDiscoveryFilter`). `QAbstractListModel` over the host's adapters.
+4. **`BluetoothDevice` + `BluetoothDeviceModel` (M, ~3-4 days).** Properties Address / Name / Alias / Icon / Paired / Trusted / Blocked / Connected / RSSI / UUIDs / adapter-path. (Class / Appearance are not surfaced in this phase.) Writes: `connectDevice()` / `disconnectDevice()` (fire-and-forget `Device1.Connect` / `Disconnect`, named to avoid shadowing `QObject::connect`), `setTrusted` / `setBlocked`. `QAbstractListModel` with an adapter-path filter (mirrors `AccessPointModel`'s device-scoped subscription). Derived display name: Alias → Name → Address.
+5. **`Agent1` + `AgentManager1` registration, full agent (L, ~5-6 days).** The load-bearing milestone. `org.bluez.Agent1` implemented directly on a `QObject` (`Q_CLASSINFO("D-Bus Interface", "org.bluez.Agent1")` + `ExportAllSlots` + `QDBusContext`, not a generated adaptor; see the structural-firsts note above); export on a fixed path, `RegisterAgent(path, "KeyboardDisplay")` + best-effort `RequestDefaultAgent`. Implement every callback: `Release`, `RequestPinCode` → `s`, `DisplayPinCode`, `RequestPasskey` → `u`, `DisplayPasskey`, `RequestConfirmation`, `RequestAuthorization`, `AuthorizeService`, `Cancel`. Interactive callbacks use **delayed D-Bus replies**: the agent emits a Qt request signal (e.g. `confirmationRequested(device, passkey, requestId)`) and a consumer calls `respondConfirmation(id, accept)` / `respondPasskey(...)` / `rejectRequest(id)`, which sends the held reply or `org.bluez.Error.Rejected` / `Canceled`. Requests are keyed by an id (BlueZ pairs one device at a time, so effectively single in-flight); `Cancel` answers every in-flight request with `Canceled` and BlueZ owns the pairing timeout. `BluetoothDevice::pair()` calls `Device1.Pair()`; agent callbacks fire during the handshake.
+6. **QML registration + facade (S, ~1 day).** `BluetoothHost` as `qmlRegisterType` (instantiable, **not** a singleton, following 2.2's `NetworkHost` and the no-singletons direction); both models `qmlRegisterType`; `BluetoothAdapter` / `BluetoothDevice` `qmlRegisterUncreatableType`. Agent request signals surfaced on the host so a Phase-3 pairing dialog can bind them. Idempotent via `std::call_once`.
+7. **CLI demo: `examples/phosphor-service-bluetooth-cli/` (M, ~3 days).** phosphorctl-style, system bus, sysexits codes (0 ok / 64 usage / 1 runtime). Subcommands covering the gate: `status`, `list-adapters`, `list-devices [adapter]`, `power <on|off>`, `scan [secs]`, `pair <address>`, `connect <address>`, `disconnect <address>`, `trust` / `untrust`, `remove <address>`. The `pair` flow makes the CLI the interactive responder: prints the passkey and reads y/n for `RequestConfirmation`, prompts for PIN / passkey on the request callbacks.
+8. **Tests: smoke + role pinning (S-M, ~1-2 days).** No live bluez on CI. Pin: inert host construction (empty models, no crash), role names + enum integers for both models, adapter / device property surfaces, agent-registration safety with the bus absent, and the agent callback → signal → delayed-reply wiring exercised with a synthetic `QDBusMessage` (deterministic, no daemon). `QSKIP` the daemon-dependent paths. (The milestone-0 ObjectManager smoke test lives in `phosphor-dbus`.)
+9. **README + Status (S, half a day).** Match the Phase-2.0 sibling convention; Status leads with `Phase 2.3: shipped.` on gate pass; cross-reference §2.1 for the shared milestone narrative and note the `phosphor-dbus` ObjectManager addition.
+
+**Total effort:** M-L (≈ 3 weeks solo). The table's original **M** assumed a lighter agent; full `Agent1` + the reusable ObjectManager push milestones 0 and 5, which hold most of the wall-clock. Milestones 1, 6, 8, 9 are mechanical given the 2.1 / 2.2 templates.
+
+**Dependencies**
+
+- BlueZ ≥ 5.x runtime (`org.bluez` system service). No build-time `libbluetooth`.
+- `phosphor-dbus` (now including the milestone-0 ObjectManager observer). Qt6 ≥ 6.6 Core / Qml / DBus. No QtGui dependency (state is non-visual).
+- System-bus access; pairing needs the agent registered (default-agent acquisition is best-effort).
+
+**Risks**
+
+- **Default-agent conflict.** Only one default agent at a time; gnome-bluetooth / `bluetoothctl` may already hold it. Mitigation: always register the agent; `RequestDefaultAgent` is best-effort with a logged warning (pairing still works as a non-default agent).
+- **Delayed-reply correctness.** Each interactive callback must reply exactly once (a value, or `Rejected` / `Canceled`); a dropped or double reply hangs bluez's pairing state machine or trips its timeout. Mitigation: requests keyed by id, replied exactly once, with explicit `Cancel` handling; BlueZ owns the pairing timeout.
+- **ObjectManager foundation API churn.** The observer will be consumed by 2.5 / 2.10; get the signal surface right once (raw maps, conservative; per-service typed materialisation).
+- **`a{oa{sa{sv}}}` demarshalling.** Deeply nested; decide metatype-registration vs hand-iteration once, inside the observer.
+- **System-bus policy.** bluez D-Bus policy may gate pairing / agent operations to specific users / groups; the CLI surfaces `AccessDenied` cleanly.
+- **CI without bluez.** Inert construction, empty models, no crash (same shape as 2.2 and the SNI `modelWithoutHostIsEmpty` pattern).
+
+**Unknowns to resolve before / during implementation**
+
+| # | Question | Resolution |
+|---|----------|------------|
+| U1 | ObjectManager observer surface: typed callbacks or raw maps? | **Resolved: raw-map signals.** `interfacesAdded(QString path, QMap<QString, QVariantMap>)` / `interfacesRemoved(QString path, QStringList)`; each service materialises its own typed objects. Keeps the foundation lib service-agnostic. |
+| U2 | Agent capability string? | **Resolved: `KeyboardDisplay`.** Most capable; exercises the full callback set the full-agent decision calls for; bluez selects the right flow per device. |
+| U3 | Agent path + single vs multiple in-flight requests? | **Resolved: single agent, fixed path, one in-flight request.** bluez pairs one device per agent at a time. |
+| U4 | Discovery filter or plain `StartDiscovery`? | **Resolved: plain `StartDiscovery` for the gate**, with an optional `SetDiscoveryFilter({Transport: auto})`; a transport argument on `scan` can land later. |
+| U5 | Device list scope? | **Resolved: all `Device1` objects** bluez reports (paired + discovered); expose Paired / Connected / RSSI so consumers filter (RSSI is absent on cached, out-of-range devices). |
+| U6 | Surface `Battery1` / `MediaControl1` interfaces? | **Resolved: out of scope for 2.3** (device-level pair / connect only); land as sibling typed objects later, exactly as ports / links were deferred in 2.1. |
+
+**Out of scope for 2.3.** GATT / profiles (BLE characteristic access), `Battery1` / `MediaControl1` / `MediaPlayer1`, OBEX file transfer, and the pairing **UI** (Phase 3 / 4: the agent only surfaces the request signals a dialog will bind). Multi-adapter selection UI is likewise deferred.
+
+---
+
 ## Phase 3: UI primitives + first visible examples
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
