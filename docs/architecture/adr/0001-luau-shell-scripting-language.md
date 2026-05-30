@@ -132,7 +132,7 @@ marshalling/setup); watchdog ≈ wash but safer.
 
 The full phased breakdown lives in the
 [implementation plan](../luau-migration-impl-plan.md) (one `feat/luau-scripting`
-branch, per-phase commits; PRs target `main`). In summary:
+branch off `v3.1`, per-phase commits; PRs target `v3.1`). In summary:
 
 1. **Decide & document** — this ADR + the implementation plan.
 2. **Build `phosphor-scripting`** — the generic Luau host (engine, sandbox,

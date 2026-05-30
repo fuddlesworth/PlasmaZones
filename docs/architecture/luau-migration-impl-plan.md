@@ -9,7 +9,7 @@
 | **Date** | 2026-05-30 |
 | **Decision** | [ADR-0001](adr/0001-luau-shell-scripting-language.md) |
 | **Spike** | `spike/luau-autotile-embed` (`spikes/luau-autotile-embed/`, all green) |
-| **Branch** | `feat/luau-scripting` (one branch, per-phase commits) |
+| **Branch** | `feat/luau-scripting`, branched off `v3.1` (next-version staging); one branch, per-phase commits; PRs target `v3.1` |
 
 Implementation plan for moving the scripted autotiling engine from Qt's
 QJSEngine to **Luau**, by way of a new generic **`phosphor-scripting`** library.
