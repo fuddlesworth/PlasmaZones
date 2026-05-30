@@ -782,6 +782,14 @@ void TestWindowRuleController::curveLabelResolverBridgesQmlNaming()
     controller.setCurveLabelResolver(resolver);
     QCOMPARE(summary(), QStringLiteral("Curve: Standard (Cubic)"));
 
+    // A callable resolver that returns an empty string must fall back to the
+    // raw wire value, not render an empty "Curve: " — the isEmpty() guard in
+    // the bridge lambda.
+    QJSValue emptyResolver = engine.evaluate(QStringLiteral("(function(c){ return ''; })"));
+    QVERIFY(emptyResolver.isCallable());
+    controller.setCurveLabelResolver(emptyResolver);
+    QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
+
     // A non-callable value clears the resolver — the summary falls back to raw.
     controller.setCurveLabelResolver(QJSValue());
     QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));

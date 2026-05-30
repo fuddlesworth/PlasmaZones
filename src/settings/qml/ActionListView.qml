@@ -140,20 +140,11 @@ ColumnLayout {
             return rawStr;
         }
         if (kind === "curveEditor") {
-            // Spring encoding: `spring:omega,zeta`. Numeric form mirrors
-            // the editor's spring preset card when no preset matches.
-            if (rawStr.indexOf("spring:") === 0) {
-                var parts = rawStr.substring(7).split(",");
-                var omega = parseFloat(parts[0]);
-                var zeta = parseFloat(parts[1]);
-                if (isFinite(omega) && isFinite(zeta))
-                    return i18n("Spring (%1, %2)", omega.toFixed(2), zeta.toFixed(2));
-
-                return rawStr;
-            }
-            // Named easing / cubic-bezier — CurvePresets owns the
-            // canonical display-name table the editor uses.
-            return CurvePresets.curveDisplayName(rawStr);
+            // CurvePresets.curveLabel is the single source of truth for the
+            // spring (`spring:omega,zeta`) + easing display name, shared with
+            // the editor's curve button (ActionRow) and the C++ list resolver,
+            // so this summary can't drift from them on the same wire value.
+            return CurvePresets.curveLabel(rawStr);
         }
         if (kind === "percent") {
             var f = parseFloat(raw);

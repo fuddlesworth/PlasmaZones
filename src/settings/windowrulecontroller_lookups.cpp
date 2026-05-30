@@ -55,9 +55,10 @@ void WindowRuleController::setTilingAlgorithmLookup(WindowRuleModel::LabelLookup
 void WindowRuleController::setShaderEffectLookup(WindowRuleModel::LabelLookup fn)
 {
     // Not part of the AllLookups readiness gate: the gate tracks the four
-    // match/placement lookups that must all land before the first rich
-    // render. Shader/curve are action-summary enhancements — a rule whose
-    // resolver isn't wired yet falls back to the raw id, then refreshes.
+    // screen / activity / snapping-layout / tiling-algorithm lookups that must
+    // all land before the first rich render. Shader/curve are action-summary
+    // enhancements — a rule whose resolver isn't wired yet falls back to the
+    // raw id, then refreshes.
     m_model.setShaderEffectLabelLookup(std::move(fn));
 }
 

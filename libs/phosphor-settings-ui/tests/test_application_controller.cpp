@@ -813,7 +813,7 @@ private Q_SLOTS:
         ApplicationController app;
         app.setAsyncBatchTimeoutMs(60'000);
 
-        // SilentDiscardDomain (file-scope, defined in the anonymous
+        // SilentDiscardDomain (defined in the ApplicationControllerTest
         // namespace at top of TU) never emits discardResult, so the
         // discard batch stays pending until force-reset.
         auto* silent = new SilentDiscardDomain();

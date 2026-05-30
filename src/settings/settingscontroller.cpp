@@ -116,6 +116,10 @@ SettingsController::~SettingsController()
         m_windowRulesPage->setActivityLookup({});
         m_windowRulesPage->setSnappingLayoutLookup({});
         m_windowRulesPage->setTilingAlgorithmLookup({});
+        // The shader resolver captures `this` and reaches m_animationShaderRegistry;
+        // clear it for the same teardown-safety reason and to keep the cleared set
+        // symmetric with every lookup this controller installs.
+        m_windowRulesPage->setShaderEffectLookup({});
         // Drain any in-flight `dataChanged` emissions queued against
         // the cleared lookups before the model captures the now-
         // empty resolvers. refreshLabels walks every row once and

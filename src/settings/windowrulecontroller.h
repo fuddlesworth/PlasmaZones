@@ -355,8 +355,8 @@ Q_SIGNALS:
     /// "window-rules" entry to its dirty-pages set when revert failed during
     /// the `setNeedsSave(false)` blanket-clear it does for every other page.
     void revertFinished(bool success);
-    /// Emitted exactly once when ALL three label resolvers
-    /// (screen / activity / snapping-layout + tiling-algorithm) have
+    /// Emitted exactly once when ALL four label resolvers
+    /// (screen / activity / snapping-layout / tiling-algorithm) have
     /// been wired by the parent SettingsController. QML pages (notably
     /// WindowRulesPage and monitorOverview consumers) gate "show raw
     /// model" on this signal so the brief startup window where
