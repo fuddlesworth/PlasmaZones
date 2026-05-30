@@ -289,8 +289,16 @@ SettingsFlickable {
                         to: settingsController.generalPage.animationMinDistanceMax
                         stepSize: 5
                         value: page.appSettings.animationMinDistance
+                        // Match the "zero = disabled, otherwise px" treatment used
+                        // by the Minimum window width / height spinboxes below so
+                        // the user sees a consistent "Off" / "%1 px" rendering
+                        // across every threshold-with-disable spinbox on the page.
+                        unitText: ""
                         onValueModified: value => {
                             page.appSettings.animationMinDistance = value;
+                        }
+                        textFromValue: function (value) {
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
                         }
                     }
                 }

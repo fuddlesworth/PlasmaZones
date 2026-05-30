@@ -62,7 +62,7 @@ void Daemon::initializeAutotile()
                     // change is irrelevant in that case.
                     if (m_running && m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
                         && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
-                        auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
+                        auto* algo = m_algorithmRegistry->algorithm(algorithmId);
                         QString displayName = algo ? algo->name() : algorithmId;
                         QString screenId;
                         if (m_autotileEngine) {

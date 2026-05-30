@@ -307,8 +307,9 @@ SettingsFlickable {
             text: i18n("The window rules changed on disk while you were editing — saving now will overwrite those changes. Review your edits before saving, or discard them to reload.")
             // Escape hatch — the controller's normal commit() refuses
             // when daemonChangedWhileDirty is set so the user doesn't
-            // silently overwrite. forceCommit() bypasses the guard for
-            // the "I know, save anyway" path; mirrors the SettingsCard
+            // silently overwrite. `asyncCommit(true)` (the QML-callable
+            // force variant on WindowRuleController) bypasses the guard
+            // for the "I know, save anyway" path; mirrors the SettingsCard
             // confirm-prompt UX so the user has to acknowledge the
             // overwrite explicitly.
             actions: [

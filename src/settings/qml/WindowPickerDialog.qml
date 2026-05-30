@@ -170,6 +170,15 @@ Kirigami.Dialog {
 
         function onRunningWindowsTimedOut() {
             dialog.requestTimedOut = true;
+            // Drop the stale snapshot the dialog took at refresh()-time
+            // so the PlaceholderMessage's `windowListView.count === 0`
+            // gate flips to true and the user actually sees the
+            // "No response from KWin effect" diagnostic. Without this,
+            // a prior session's cached rows survive on first open after
+            // the daemon went down — picker shows out-of-date windows
+            // with no error indicator until a subsequent open re-reads
+            // a now-empty cache.
+            dialog.windowList = [];
         }
 
         // `target` co-located with the handlers for readability — Qt 6's

@@ -206,7 +206,21 @@ SettingsFlickable {
                     Button {
                         text: i18n("Reset to Defaults")
                         icon.name: "document-revert"
-                        onClicked: defaultsConfirmDialog.open()
+                        // Reach the chrome-owned confirmation dialog through
+                        // the `window.defaultsConfirmDialog` alias declared
+                        // in Main.qml. A bare `defaultsConfirmDialog.open()`
+                        // would resolve against this page's scope — Loader
+                        // breaks file-id lookup so the id from Main.qml is
+                        // unreachable here — and throw `ReferenceError`
+                        // at runtime. The `typeof window` guard mirrors the
+                        // same defensive shape used elsewhere in the file
+                        // for cross-host (KCM / preview) compatibility,
+                        // where `window` may be undeclared.
+                        onClicked: {
+                            if (typeof window !== "undefined" && window && window.defaultsConfirmDialog) {
+                                window.defaultsConfirmDialog.open();
+                            }
+                        }
                     }
                 }
             }

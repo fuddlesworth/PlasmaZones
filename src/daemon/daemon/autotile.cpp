@@ -131,8 +131,8 @@ void Daemon::updateAutotileScreens()
                 // without a per-screen override. The override here is an optimization.
                 const QString globalAlgo = m_autotileEngine->algorithmId();
                 if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows)) {
-                    auto* screenAlgoPtr = m_algorithmRegistry.get()->algorithm(screenAlgo);
-                    auto* globalAlgoPtr = m_algorithmRegistry.get()->algorithm(globalAlgo);
+                    auto* screenAlgoPtr = m_algorithmRegistry->algorithm(screenAlgo);
+                    auto* globalAlgoPtr = m_algorithmRegistry->algorithm(globalAlgo);
                     if (screenAlgoPtr) {
                         if (!globalAlgoPtr) {
                             qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm" << globalAlgo

@@ -269,7 +269,10 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                               reply.argumentAt<3>());
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
                     if (storePreSnap)
-                        ensurePreSnapGeometryStored(window, windowId, window ? window->frameGeometry() : QRectF());
+                        // `window` is non-null inside this branch (guarded by the
+                        // `reply.argumentAt<4>() && window` check above), so the
+                        // ternary fall-through to QRectF() is unreachable.
+                        ensurePreSnapGeometryStored(window, windowId, window->frameGeometry());
                     applySnapGeometry(window, geo, false, skipAnimation);
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {

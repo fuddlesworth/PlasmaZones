@@ -607,16 +607,31 @@ public Q_SLOTS:
      * Calling this before either engine is wired is safe. Engines that are
      * missing contribute zero removals. An empty @p patterns short-circuits.
      */
+    // handleBatchedResnap moved to SnapAdaptor.
+
+public:
+    // Internal-only members below — declared as plain public methods (NOT
+    // under Q_SLOTS) so QDBusAbstractAdaptor's runtime introspection does
+    // NOT expose them on the bus regardless of XML content. Same pattern as
+    // `WindowDragAdaptor::clearForCompositorReconnect` /
+    // `handleWindowClosed`. Every caller is in-process and reaches them
+    // via direct C++ invocation through the daemon, NOT through D-Bus.
+    /**
+     * @brief Filter the snap and autotile pending-restore queues against
+     *        the daemon's current Exclude rule patterns. Same call-shape
+     *        documented above; see the docstring on the original
+     *        Q_SLOTS-placed declaration that now lives next to the
+     *        comment block referencing it. Plain `public:` placement
+     *        keeps the in-process function-pointer-`connect()` target
+     *        reachable while the bus surface excludes it.
+     */
     void pruneExcludedPendingRestores(const QStringList& patterns);
 
     /**
-     * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles)
-     *
+     * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles).
      * Not a D-Bus method; used internally so the daemon timer can trigger the signal.
      */
     void requestReapplyWindowGeometries();
-
-    // handleBatchedResnap moved to SnapAdaptor.
 
 Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
@@ -755,15 +770,23 @@ public Q_SLOTS:
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);
 
+public:
+    // Internal-only members below — plain `public:` placement (not Q_SLOTS)
+    // to keep QDBusAbstractAdaptor's runtime introspection from exposing
+    // them on the bus when the XML doesn't list them. Same pattern as the
+    // `pruneExcludedPendingRestores` / `requestReapplyWindowGeometries`
+    // pair above.
     /**
-     * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats)
+     * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats).
      * Gets validated geometry, emits applyGeometryRequested if found, clears stored geometry.
      * @return true if geometry was applied, false if none stored
      */
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
 
     /**
-     * @brief Emit moveSpecificWindowToZoneRequested - called when user selects from Snap Assist
+     * @brief Emit moveSpecificWindowToZoneRequested — called when user selects from Snap Assist.
+     * Takes a `QRect` payload; not D-Bus marshallable without a typeName annotation, so
+     * keeping it off the wire entirely is the only safe shape.
      */
     void requestMoveSpecificWindowToZone(const QString& windowId, const QString& zoneId, const QRect& geometry);
 

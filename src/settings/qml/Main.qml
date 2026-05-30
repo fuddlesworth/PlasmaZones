@@ -29,6 +29,15 @@ PhosphorUi.SettingsAppWindow {
     // ── Public API used by per-page QML files ───────────────────────
     // Pages reach the layout-context popup via window.layoutContextMenu.
     readonly property alias layoutContextMenu: layoutContextMenu
+    // GeneralPage's "Reset to Defaults" button reaches the chrome-owned
+    // confirmation dialog through this alias. The dialog lives in Main.qml
+    // because `_navShortcutsEnabled` (line 283 below) consults its
+    // visibility to gate Ctrl+PgUp/PgDown; without the alias, the
+    // GeneralPage button's `defaultsConfirmDialog.open()` would resolve
+    // against the page's own scope (Loader breaks file-id lookup),
+    // throwing `ReferenceError: defaultsConfirmDialog is not defined`
+    // at runtime and leaving the user with no path to reset defaults.
+    readonly property alias defaultsConfirmDialog: defaultsConfirmDialog
     // Kept as an object literal for back-compat with any QML reader that
     // expects index-by-key access (a Repeater iterates the keys / a
     // delegate looks up by aspect-ratio key). Reading any value here
