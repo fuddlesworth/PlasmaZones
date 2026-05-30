@@ -137,9 +137,23 @@ bool isAudioMediaClass(const QString& mc)
     return false;
 }
 
+QSet<QString> kindToMediaClasses(const QString& kind)
+{
+    if (kind == QLatin1String("sinks")) {
+        return {QLatin1String(kAudioMediaClasses[0])};
+    }
+    if (kind == QLatin1String("sources")) {
+        return {QLatin1String(kAudioMediaClasses[1])};
+    }
+    if (kind == QLatin1String("streams")) {
+        return {QLatin1String(kAudioMediaClasses[2]), QLatin1String(kAudioMediaClasses[3])};
+    }
+    return {};
+}
+
 bool isKnownListKind(const QString& kind)
 {
-    return kind == QLatin1String("sinks") || kind == QLatin1String("sources") || kind == QLatin1String("streams");
+    return !kindToMediaClasses(kind).isEmpty();
 }
 
 } // namespace PhosphorPipeWireCli

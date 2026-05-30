@@ -460,11 +460,17 @@ private Q_SLOTS:
         // 2000ms test-side budget (the library itself does not enforce
         // a connect timeout; this is purely how long the test waits)
         // so the handshake has every chance to land before we decide a
-        // daemon isn't present. The previous 250ms was tight enough that
-        // a slow-boot host could race the wait boundary and flip the
-        // test into the QSKIP branch even though the daemon was just
-        // about to answer.
-        QTest::qWait(2000);
+        // daemon isn't present. Poll-with-budget rather than a fixed
+        // qWait so a no-daemon CI run exits at the first 200ms tick
+        // instead of burning the full budget (matches the
+        // connectIdempotent test's polling shape).
+        {
+            QElapsedTimer timer;
+            timer.start();
+            while (!host.isConnected() && timer.elapsed() < 2000) {
+                QTest::qWait(200);
+            }
+        }
         if (!host.isConnected()) {
             // Surface a real skip in the CI dashboard rather than a
             // silent fallthrough; a "no-daemon" run looks identical to a

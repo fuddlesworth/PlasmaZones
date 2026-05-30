@@ -391,14 +391,27 @@ add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shell-patterns) # UI-pattern recipes (axis 2) built on PhosphorLayer::Role
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
-# PlasmaZones consumes the org.phosphor.animation QML module for shell
-# UI animations. PHOSPHOR_ANIMATION_QUICK is enabled before
-# add_subdirectory picks up the option() default so QtQuickClock builds.
+# PlasmaZones consumes the org.phosphor.animation QML module via the
+# daemon, the editor, and the phosphor-shell binary. The QML plugin's
+# QtQuickClockManager directly constructs QtQuickClock, which is gated
+# behind PHOSPHOR_ANIMATION_QUICK in phosphor-animation's CMakeLists.
+# Without it, the QML plugin emits an unresolved-symbol link error in
+# every PlasmaZones binary.
+#
 # FORCE so a stale cached OFF (from a prior standalone configure of
-# libs/phosphor-animation in the same build dir, or an explicit
+# libs/phosphor-animation in this build directory, or an explicit
 # -DPHOSPHOR_ANIMATION_QUICK=OFF on the parent build) cannot silently
-# disable the QML module the shell links against.
-set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by QML animation module)" FORCE)
+# turn into a broken build. Surface the override loudly so a user who
+# DID pass -DPHOSPHOR_ANIMATION_QUICK=OFF understands their request
+# was rejected — and why.
+if(DEFINED CACHE{PHOSPHOR_ANIMATION_QUICK} AND NOT PHOSPHOR_ANIMATION_QUICK)
+    message(WARNING
+        "PHOSPHOR_ANIMATION_QUICK=OFF was requested but every PlasmaZones binary "
+        "links the org.phosphor.animation QML plugin which requires QtQuickClock. "
+        "Forcing PHOSPHOR_ANIMATION_QUICK=ON for this configure. "
+        "To build without QtQuickClock, configure libs/phosphor-animation standalone.")
+endif()
+set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by every PlasmaZones binary linking PhosphorAnimationQmlplugin)" FORCE)
 add_subdirectory(libs/phosphor-animation)   # unified animation library: motion runtime, QML module, shaders, layer
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)

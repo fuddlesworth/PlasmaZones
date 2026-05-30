@@ -285,19 +285,35 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             }
             // Duplicate-id detection within this rescan cycle.
             //
-            // Today this branch is UNREACHABLE because Manifest::parse
-            // enforces that the plugin's directory basename equals its
-            // manifest id, and two sibling directories cannot share a
-            // basename on any sane filesystem. The check matters once
-            // PluginLoader scans MULTIPLE roots (Phase-X XDG layering:
-            // /usr/share/phosphor/plugins/foo AND
-            // ~/.local/share/phosphor/plugins/foo can both ship
+            // PHASE-X: this branch is UNREACHABLE today because
+            // Manifest::parse enforces that the plugin's directory
+            // basename equals its manifest id, and two sibling
+            // directories cannot share a basename on any sane
+            // filesystem. The check matters once PluginLoader scans
+            // MULTIPLE roots (XDG layering: /usr/share/phosphor/plugins/foo
+            // AND ~/.local/share/phosphor/plugins/foo can both ship
             // manifest id "foo"), at which point performScanCycle
-            // iterates a non-singleton `directoriesInScanOrder` and
-            // the second-root hit lands here. The "first wins" tie-
-            // break matches the Registry's first-registration-wins
-            // contract; the warning names both directories so a
-            // triager can spot the collision instead of guessing.
+            // iterates a non-singleton `directoriesInScanOrder`.
+            //
+            // IMPORTANT for the Phase-X implementer: the "first wins"
+            // tie-break this branch encodes is INVERTED relative to
+            // standard XDG override semantics. IScanStrategy's contract
+            // (see phosphor-fsloader/IScanStrategy.h) hands
+            // directoriesInScanOrder in [lowest-priority, ...,
+            // highest-priority] order, and consumers are expected to
+            // reverse-iterate so the user's ~/.local override wins
+            // over the system /usr/share entry. The current forward
+            // iteration with first-wins would silently drop the
+            // user's override — that is wrong for any XDG-shaped
+            // layering. Either reverse the outer loop and keep
+            // first-wins, OR keep forward iteration and switch this
+            // branch to last-wins (overwrite the existing entry +
+            // unload the prior). Verify against the sibling pattern
+            // in phosphor-fsloader's MetadataPackScanStrategy /
+            // DirectoryLoader before shipping multi-root.
+            //
+            // The warning names both directories so a triager can
+            // spot the collision instead of guessing.
             const auto existing = discoveredIds.constFind(m.id);
             if (existing != discoveredIds.constEnd()) {
                 qWarning().noquote() << "PluginLoader: duplicate manifest id" << m.id << "in" << pluginDir

@@ -3,20 +3,24 @@
 
 #include <PhosphorTheme/TemplateEngine.h>
 
+#include "phosphortheme_logging.h"
+
 #include <QColor>
 #include <QDebug>
 #include <QFile>
 #include <QLatin1String>
-#include <QLoggingCategory>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
 #include <QSaveFile>
 #include <QString>
 #include <QVariant>
 
-namespace PhosphorTheme {
-
+// Definition of the library-wide logging category declared in
+// phosphortheme_logging.h. Lives here (any one TU works) so the
+// QLoggingCategory storage exists exactly once.
 Q_LOGGING_CATEGORY(lcPhosphorTheme, "phosphor.theme")
+
+namespace PhosphorTheme {
 
 namespace {
 

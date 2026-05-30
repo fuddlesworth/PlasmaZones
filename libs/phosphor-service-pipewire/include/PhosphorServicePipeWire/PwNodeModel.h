@@ -111,7 +111,13 @@ public Q_SLOTS:
     /// row and re-seeds from the current connection's snapshot through
     /// the new filter; if no connection is attached, just records the
     /// filter for the next `setConnection(non-null)` call. Idempotent
-    /// on the current filter list (no signals, no rebuild). The
+    /// on the current filter list (no signals, no rebuild). If the
+    /// previously-attached connection was destroyed externally (the
+    /// QPointer auto-nulled silently), this slot ALSO emits
+    /// `connectionChanged` as a catch-up NOTIFY for the implicit
+    /// non-null → null transition; bindings on the `connection`
+    /// property therefore re-evaluate even when the user only meant
+    /// to change the filter. The
     /// `mediaClassesChanged` notification is emitted AFTER the rebuild
     /// for the same row-invariant reason as `setConnection` — bindings
     /// awakened by the signal see `mediaClasses()` returning the new

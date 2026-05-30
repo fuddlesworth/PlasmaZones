@@ -77,15 +77,8 @@ int usage()
 
 int cmdList(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& kind)
 {
-    QSet<QString> wanted;
-    if (kind == QLatin1String("sinks")) {
-        wanted = {QLatin1String(PhosphorPipeWireCli::kAudioMediaClasses[0])};
-    } else if (kind == QLatin1String("sources")) {
-        wanted = {QLatin1String(PhosphorPipeWireCli::kAudioMediaClasses[1])};
-    } else if (kind == QLatin1String("streams")) {
-        wanted = {QLatin1String(PhosphorPipeWireCli::kAudioMediaClasses[2]),
-                  QLatin1String(PhosphorPipeWireCli::kAudioMediaClasses[3])};
-    } else {
+    const QSet<QString> wanted = PhosphorPipeWireCli::kindToMediaClasses(kind);
+    if (wanted.isEmpty()) {
         // Already filtered out in main() before connect; keep this as a
         // belt-and-suspenders guard so the function is safe to call
         // standalone.

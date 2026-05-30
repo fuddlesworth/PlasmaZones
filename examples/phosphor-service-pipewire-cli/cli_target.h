@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QSet>
 #include <QString>
 
 namespace PhosphorServicePipeWire {
@@ -59,12 +60,17 @@ inline constexpr const char* kAudioMediaClasses[] = {
 /// printNode / any future call stays in lock-step with the table.
 bool isAudioMediaClass(const QString& mc);
 
-// Known list kinds. Used both for the pre-connect validation in main()
-// (so a typo'd kind fails fast) and inside cmdList() for the actual
-// filter. The kind → kAudioMediaClasses index mapping lives in cmdList()
-// (main.cpp), not here — isKnownListKind just validates the kind token.
-// When adding a new kind: extend BOTH the list literal in
-// isKnownListKind's body AND the switch in cmdList() in lock-step.
+/// Map a `list` subcommand kind ("sinks" | "sources" | "streams") to
+/// the matching set of media-class strings. Returns an empty set for
+/// any unrecognised kind — callers should treat that as "unknown kind"
+/// and either reject pre-connect (main) or emit a diagnostic
+/// (cmdList). Centralises the kind→media-class mapping so adding a
+/// new kind is a single-site edit instead of a lock-step pair across
+/// isKnownListKind + cmdList's switch.
+QSet<QString> kindToMediaClasses(const QString& kind);
+
+/// True iff `kind` maps to a non-empty media-class set. Thin wrapper
+/// around kindToMediaClasses for the pre-connect typo-check path.
 bool isKnownListKind(const QString& kind);
 
 } // namespace PhosphorPipeWireCli

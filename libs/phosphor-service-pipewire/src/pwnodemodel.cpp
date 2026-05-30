@@ -128,8 +128,18 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
     // to a consistent empty state. Mirrors setMediaClasses's
     // dangling-pointer-detection path (which uses beginResetModel for
     // the same reason).
-    if (d->connection.isNull() && connection == nullptr && !d->nodes.isEmpty()) {
-        beginResetModel();
+    // Evidence-of-prior-connection check: nodes OR connectionWires.
+    // `connectionWires` is populated whenever a non-null connection
+    // was attached, regardless of whether any node matched the
+    // mediaClasses filter. Checking nodes alone misses the case where
+    // the prior connection had no matching rows AND was then
+    // externally destroyed — the QPointer auto-null would leave both
+    // bindings stale (the auto-null itself never fires NOTIFY).
+    if (d->connection.isNull() && connection == nullptr && (!d->nodes.isEmpty() || !d->connectionWires.isEmpty())) {
+        const bool hadRows = !d->nodes.isEmpty();
+        if (hadRows) {
+            beginResetModel();
+        }
         // Drop wire bookkeeping without disconnect (wires point at
         // already-destroyed sender QObjects; QMetaObject::Connection
         // releases internally as the sender's destructor unhooks
@@ -138,15 +148,16 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
         d->nodeWires.clear();
         d->nodes.clear();
         d->rowIndex.clear();
-        endResetModel();
-        Q_EMIT countChanged();
+        if (hadRows) {
+            endResetModel();
+            Q_EMIT countChanged();
+        }
         // Fire connectionChanged at the acknowledgement boundary so
         // bindings observing the property get a NOTIFY for the implicit
         // non-null → null transition that happened when the QPointer
         // auto-nulled. Without this, any binding wired solely through
         // connectionChanged stays pinned to the prior non-null value
-        // in its dependency graph (dereferencing it would crash;
-        // bindings should re-evaluate to nullptr).
+        // in its dependency graph.
         Q_EMIT connectionChanged();
         return;
     }
@@ -385,23 +396,31 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
     auto* current = d->connection.data();
     if (current) {
         d->rebuildFromConnection();
-    } else if (!d->nodes.isEmpty()) {
+    } else if (!d->nodes.isEmpty() || !d->connectionWires.isEmpty()) {
         // QPointer guards against an external PipeWireConnection
         // destruction that bypassed setConnection(nullptr): the
-        // tracked pointer has gone null but our rows still hold the
-        // (now-dangling) PwNode*s the connection owned. Drop them
-        // with a full model reset so views invalidate any cached
-        // index handles in one go, and clear the wire bookkeeping —
-        // every QMetaObject::Connection has already been
-        // auto-released by Qt when its source died, but the QHash
-        // entries themselves are stale and must be flushed.
-        beginResetModel();
+        // tracked pointer has gone null but our rows / wires still
+        // hold the (now-dangling) state the connection owned. Drop
+        // them with a model reset (if we had rows) and clear the
+        // wire bookkeeping — every QMetaObject::Connection has
+        // already been auto-released by Qt when its source died, but
+        // the QHash entries themselves are stale and must be
+        // flushed. The connectionWires-but-no-rows case (the prior
+        // connection's nodes didn't match this model's filter) is
+        // included so the catch-up connectionChanged below fires
+        // even when there are no rows to reset.
+        const bool hadRows = !d->nodes.isEmpty();
+        if (hadRows) {
+            beginResetModel();
+        }
         d->nodes.clear();
         d->rowIndex.clear();
         d->nodeWires.clear();
         d->connectionWires.clear();
-        endResetModel();
-        Q_EMIT countChanged();
+        if (hadRows) {
+            endResetModel();
+            Q_EMIT countChanged();
+        }
         // Fire connectionChanged at the acknowledgement boundary so
         // bindings see the implicit non-null → null transition that
         // happened when the QPointer auto-nulled (no prior NOTIFY

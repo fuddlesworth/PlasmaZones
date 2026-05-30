@@ -35,6 +35,7 @@
 #include <PhosphorTheme/PaletteStore.h>
 
 #include "defaultpalette.h"
+#include "phosphortheme_logging.h"
 
 #include <QColor>
 #include <QDebug>
@@ -165,18 +166,14 @@ QColor PaletteStore::token(const QString& name) const
     // applyPalette normalises every stored value to QColor before
     // insert, so a non-QColor variant here is a contract violation
     // (direct map mutation, deserialisation skipping the normaliser,
-    // or a memory corruption indicator). Q_ASSERT for a loud debug-
-    // build catch so the contract violation surfaces during dev /
-    // test rather than slipping into a silent qWarning trail. The
-    // qWarning + default-return remain as belt-and-braces for
-    // release builds where the assert compiles out — a downstream
-    // QML binding silently rendering against QColor() is still less
-    // bad than a process crash from a deref'd half-state.
+    // or memory corruption). Q_ASSERT catches it loudly in debug; the
+    // qCWarning + default-return are belt-and-braces for release
+    // builds where the assert compiles out.
     if (it.value().userType() != QMetaType::QColor) {
         Q_ASSERT(it.value().userType() == QMetaType::QColor);
-        qWarning().noquote() << "phosphor-theme: PaletteStore::token(" << name
-                             << ") expected QColor but stored variant has typeId" << it.value().userType()
-                             << "; returning default QColor()";
+        qCWarning(lcPhosphorTheme).noquote()
+            << "phosphor-theme: PaletteStore::token(" << name << ") expected QColor but stored variant has typeId"
+            << it.value().userType() << "; returning default QColor()";
         return QColor();
     }
     return it.value().value<QColor>();
