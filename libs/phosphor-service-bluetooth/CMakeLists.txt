@@ -45,6 +45,7 @@ set(phosphorservicebluetooth_public_HDRS
     include/PhosphorServiceBluetooth/PhosphorServiceBluetooth.h
     include/PhosphorServiceBluetooth/QmlRegistration.h
     include/PhosphorServiceBluetooth/BluetoothAdapter.h
+    include/PhosphorServiceBluetooth/BluetoothAdapterModel.h
     include/PhosphorServiceBluetooth/BluetoothDevice.h
     include/PhosphorServiceBluetooth/BluetoothHost.h
 )
@@ -52,6 +53,7 @@ set(phosphorservicebluetooth_public_HDRS
 set(phosphorservicebluetooth_SRCS
     src/qmlregistration.cpp
     src/bluetoothadapter.cpp
+    src/bluetoothadaptermodel.cpp
     src/bluetoothdevice.cpp
     src/bluetoothhost.cpp
 )

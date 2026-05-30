@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorServiceBluetooth/BluetoothAdapter.h>
+#include <PhosphorServiceBluetooth/BluetoothAdapterModel.h>
 #include <PhosphorServiceBluetooth/BluetoothDevice.h>
 #include <PhosphorServiceBluetooth/BluetoothHost.h>
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 
+#include <QAbstractItemModel>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusMetaType>
@@ -198,6 +200,54 @@ private Q_SLOTS:
 
         bus.unregisterObject(QStringLiteral("/"));
         bus.unregisterService(QLatin1String(kService));
+    }
+
+    void testAdapterModelTracksHost()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected())
+            QSKIP("no session bus available");
+        if (!bus.registerService(QLatin1String(kService)))
+            QSKIP("could not own the test service name");
+
+        FakeBluez fake;
+        fake.objects.insert(QDBusObjectPath(QLatin1String(kAdapterPath)),
+                            InterfaceMap{{QLatin1String(kAdapterIface), adapterProps()}});
+        QVERIFY(bus.registerObject(QStringLiteral("/"), &fake,
+                                   QDBusConnection::ExportAdaptors | QDBusConnection::ExportAllContents));
+
+        BluetoothHost host(bus, QLatin1String(kService));
+        BluetoothAdapterModel model;
+        model.setHost(&host);
+        QCOMPARE(model.host(), &host);
+
+        // The host enumerates asynchronously; the model mirrors the adapter
+        // via adapterAdded.
+        QSignalSpy insertedSpy(&model, &QAbstractItemModel::rowsInserted);
+        QVERIFY(insertedSpy.wait(3000));
+        QCOMPARE(model.rowCount(), 1);
+
+        const QModelIndex idx = model.index(0);
+        QCOMPARE(model.data(idx, BluetoothAdapterModel::NameRole).toString(), QStringLiteral("hci-test"));
+        QVERIFY(model.data(idx, BluetoothAdapterModel::PoweredRole).toBool());
+        QVERIFY(model.data(idx, BluetoothAdapterModel::AdapterRole).value<QObject*>() != nullptr);
+        QCOMPARE(model.roleNames().value(BluetoothAdapterModel::NameRole), QByteArrayLiteral("name"));
+
+        bus.unregisterObject(QStringLiteral("/"));
+        bus.unregisterService(QLatin1String(kService));
+    }
+
+    void testAdapterWriteMethodsAreSafe()
+    {
+        // The write methods are fire-and-forget; against a path with no live
+        // peer they must construct + dispatch the call (Properties.Set with a
+        // QDBusVariant payload, StartDiscovery/StopDiscovery) without crashing.
+        BluetoothAdapter adapter(QDBusConnection::sessionBus(), QLatin1String(kAdapterPath), adapterProps());
+        adapter.setPowered(true);
+        adapter.setDiscoverable(true);
+        adapter.startDiscovery();
+        adapter.stopDiscovery();
+        QVERIFY(true);
     }
 };
 

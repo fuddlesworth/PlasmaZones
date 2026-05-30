@@ -51,6 +51,21 @@ public:
     [[nodiscard]] bool pairable() const;
     [[nodiscard]] bool discovering() const;
 
+    /// Power the adapter on/off (`org.bluez.Adapter1.Powered`). Fire-and-
+    /// forget: the cached `powered` updates when BlueZ echoes
+    /// PropertiesChanged, never optimistically.
+    Q_INVOKABLE void setPowered(bool powered);
+
+    /// Toggle inbound discoverability (`org.bluez.Adapter1.Discoverable`).
+    /// Fire-and-forget, same echo semantics as setPowered.
+    Q_INVOKABLE void setDiscoverable(bool discoverable);
+
+    /// Begin/end scanning for nearby devices (`StartDiscovery` /
+    /// `StopDiscovery`). `discovering` reflects the live state via
+    /// PropertiesChanged; new devices surface through BluetoothHost.
+    Q_INVOKABLE void startDiscovery();
+    Q_INVOKABLE void stopDiscovery();
+
 Q_SIGNALS:
     void addressChanged();
     void nameChanged();

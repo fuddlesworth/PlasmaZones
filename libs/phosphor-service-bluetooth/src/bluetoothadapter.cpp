@@ -8,6 +8,7 @@
 #include <QDBusConnection>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusVariant>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcBluetoothAdapter, "phosphor.service.bluetooth.adapter")
@@ -68,6 +69,28 @@ public:
             }
             applyProps(reply.value());
         });
+    }
+
+    // Fire-and-forget Properties.Set on the Adapter1 interface. The cached
+    // value is NOT updated here; it moves only when BlueZ echoes the change
+    // via PropertiesChanged, so the surface never reports an un-acked write.
+    void setAdapterProperty(const QString& property, const QVariant& value)
+    {
+        if (!bus.isConnected())
+            return;
+        PhosphorDBus::Client client(bus, QLatin1String(kService), path, &lcBluetoothAdapter());
+        client.fireAndForget(owner, QLatin1String(kPropsIface), QStringLiteral("Set"),
+                             {QString::fromLatin1(kAdapterIface), property, QVariant::fromValue(QDBusVariant(value))},
+                             QStringLiteral("setAdapterProperty"));
+    }
+
+    // Fire-and-forget no-argument method call on the Adapter1 interface.
+    void callAdapterMethod(const QString& method)
+    {
+        if (!bus.isConnected())
+            return;
+        PhosphorDBus::Client client(bus, QLatin1String(kService), path, &lcBluetoothAdapter());
+        client.fireAndForget(owner, QLatin1String(kAdapterIface), method, {}, method);
     }
 
     // Applies an Adapter1 property map. Works for both the initial map from
@@ -149,6 +172,26 @@ bool BluetoothAdapter::pairable() const
 bool BluetoothAdapter::discovering() const
 {
     return d->discovering;
+}
+
+void BluetoothAdapter::setPowered(bool powered)
+{
+    d->setAdapterProperty(QStringLiteral("Powered"), powered);
+}
+
+void BluetoothAdapter::setDiscoverable(bool discoverable)
+{
+    d->setAdapterProperty(QStringLiteral("Discoverable"), discoverable);
+}
+
+void BluetoothAdapter::startDiscovery()
+{
+    d->callAdapterMethod(QStringLiteral("StartDiscovery"));
+}
+
+void BluetoothAdapter::stopDiscovery()
+{
+    d->callAdapterMethod(QStringLiteral("StopDiscovery"));
 }
 
 void BluetoothAdapter::_q_onPropertiesChanged(const QString& interfaceName, const QVariantMap& changed,
