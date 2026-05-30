@@ -186,13 +186,14 @@ private:
     [[nodiscard]] QString resolveDefaultPluginRoot() const;
     bool ensurePluginRootExists() const;
 
-    // Warn-once-per-directory gate for every load-failure path (missing
-    // .so, multiple .so, invalid manifest, group/world-writable .so or
-    // dir, failed dlopen / corrupt .so, missing entry point, null
-    // factory, factory-id mismatch). Returns true at most once per
-    // pluginDir until a successful load clears its latch, so a
-    // persistently-broken plugin doesn't re-log on every debounced
-    // rescan.
+    // Warn-once-per-directory gate for every load-FAILURE path (missing
+    // .so, invalid manifest, group/world-writable .so or dir, failed
+    // dlopen / corrupt .so, missing entry point, null factory,
+    // factory-id mismatch). Returns true at most once per pluginDir
+    // until a successful load clears its latch, so a persistently-broken
+    // plugin doesn't re-log on every debounced rescan. NOTE: the
+    // "multiple .so files" advisory is NOT a failure (it proceeds to
+    // load) and uses its own m_warnedMultiSoDirs latch instead.
     [[nodiscard]] bool shouldWarnForPluginDir(const QString& pluginDir);
 
     // Drive a single scan cycle. Called by the scan strategy after

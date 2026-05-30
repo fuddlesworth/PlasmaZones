@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Shape-traversal contract — `extractValidTokens` is the single
-// source of truth, called by both loadFromJson (validation arm of
-// the JSON-blob path, discards the cached map) and applyParsedJson
-// (merge), so the wrapped-vs-flat JSON layout rules AND the QColor
-// accept set cannot drift between any pair of callers that inspect
-// a parsed payload.
+// source of truth, called by both loadFromJson (the JSON-blob path)
+// and applyParsedJson (the file-load / hot-reload path). Each consumes
+// the returned validated map directly for its merge step, so the
+// wrapped-vs-flat JSON layout rules AND the QColor accept set cannot
+// drift between any pair of callers that inspect a parsed payload.
 //
 // extractValidTokens wraps extractTokensOrEmpty (shape probe) and
 // adds the QColor-parse pass, returning the normalised QVariantMap
