@@ -56,8 +56,9 @@ public:
 
     /// The pairing agent registered with BlueZ (KeyboardDisplay capability).
     /// Connect to its request signals and answer via its respond* slots to
-    /// drive an interactive pairing flow. Null only when the bus is
-    /// unavailable. Owned by the host.
+    /// drive an interactive pairing flow. Null when the bus is unavailable or
+    /// the agent object could not be exported (it would be unusable either
+    /// way). Owned by the host.
     [[nodiscard]] BluetoothAgent* agent() const;
 
     /// Adapter / device at @p index, or nullptr when out of range.

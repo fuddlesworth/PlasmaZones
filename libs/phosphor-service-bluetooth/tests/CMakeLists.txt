@@ -18,9 +18,9 @@ function(_phosphorservicebluetooth_test target source)
     )
 endfunction()
 
-# Smoke test: skeleton-level contract (QML type registration is callable and
-# idempotent). Grows to cover model role names + enum wire-constant pins +
-# lifecycle on an idle host as those land. CI runners have no BlueZ on the
-# bus, so the host/model coverage is deterministic-without-a-daemon; live
-# D-Bus coverage requires a fake org.bluez fixture and is its own follow-up.
+# Smoke test: QML registration idempotency, adapter/device read surfaces,
+# model role-name pins, inert-host lifecycle, the agent request/response state
+# machine, and a delayed-reply round-trip. The bus-dependent cases run against
+# an in-process fake org.bluez over a session-bus loopback (QSKIP'd when no
+# session bus), so coverage is deterministic without a real BlueZ daemon.
 _phosphorservicebluetooth_test(test_phosphorservicebluetooth_smoke test_smoke.cpp)

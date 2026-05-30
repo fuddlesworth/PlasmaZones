@@ -82,6 +82,9 @@ public:
             call->deleteLater();
             const QDBusPendingReply<> reply = *call;
             if (reply.isError()) {
+                // Debug, not warning: an absent service (e.g. the daemon isn't
+                // running) is an expected steady state, not an operator-visible
+                // fault. The observer simply surfaces nothing until it appears.
                 qCDebug(*log) << "GetManagedObjects failed for" << service << ":" << reply.error().message();
             } else {
                 applyManagedObjects(reply.reply());
@@ -174,7 +177,7 @@ ObjectManager::ObjectManager(QDBusConnection connection, QString service, QStrin
     });
 
     if (!d->bus.isConnected()) {
-        qCWarning(*d->log) << "system bus unavailable; ObjectManager inert for" << d->service;
+        qCWarning(*d->log) << "bus unavailable; ObjectManager inert for" << d->service;
         return;
     }
 

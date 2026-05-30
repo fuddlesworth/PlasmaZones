@@ -159,6 +159,11 @@ public:
         agent = new BluetoothAgent(owner);
         if (!bus.registerObject(BluetoothAgent::agentPath(), agent, QDBusConnection::ExportAllSlots)) {
             qCWarning(lcBluetoothHost) << "failed to export the pairing agent at" << BluetoothAgent::agentPath();
+            // An agent that isn't exported can never be driven by BlueZ, so drop
+            // it: agent() then returns null, matching its documented contract
+            // (present only when the agent is actually usable).
+            delete agent;
+            agent = nullptr;
             return;
         }
         // Register with BlueZ and request default-agent status. Both are

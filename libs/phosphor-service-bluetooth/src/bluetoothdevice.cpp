@@ -268,7 +268,12 @@ void BluetoothDevice::_q_onPropertiesChanged(const QString& interfaceName, const
     d->applyProps(changed);
     if (!invalidated.isEmpty()) {
         d->clearInvalidated(invalidated);
-        d->requestAll();
+        // A bare RSSI drop is the common discovery case and is already handled
+        // by clearInvalidated; re-fetching only to find RSSI still absent is
+        // pure overhead, so re-fetch only when something else was invalidated.
+        const bool onlyRssi = invalidated.size() == 1 && invalidated.contains(QLatin1String("RSSI"));
+        if (!onlyRssi)
+            d->requestAll();
     }
 }
 
