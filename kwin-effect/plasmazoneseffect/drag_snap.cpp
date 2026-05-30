@@ -190,10 +190,16 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         }
                     }
                     applySnapGeometry(safeWindow, snapGeometry);
-                    // Drag-drop snap committed — record in snapping's border set.
-                    markWindowSnapped(windowId,
-                                      !outcome.targetScreenId.isEmpty() ? outcome.targetScreenId
-                                                                        : getWindowScreenId(safeWindow));
+                    // Drag-drop snap committed — record in snapping's border set,
+                    // but only for a resolved snap-mode screen. An empty
+                    // (unresolved) or autotile-managed screen is owned by
+                    // AutotileHandler, so recording it here would double-track the
+                    // window — same discriminator as the other snap-commit paths.
+                    if (const QString scr =
+                            !outcome.targetScreenId.isEmpty() ? outcome.targetScreenId : getWindowScreenId(safeWindow);
+                        !scr.isEmpty() && !m_autotileHandler->isAutotileScreen(scr)) {
+                        markWindowSnapped(windowId, scr);
+                    }
                     break;
                 }
 

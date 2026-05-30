@@ -152,12 +152,29 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
             // batch entry as the float/restore marker (only the RestoreSentinel
             // branch above legitimately emits empty), so a real commit that
             // resolved to nothing here would be misclassified as a float and
-            // lose its snap border/title-bar tracking. Fall back to the primary
-            // screen — covers a window whose center lands on no known screen
-            // (off-screen, pre-attach) and the case where no fallbackScreenResolver
-            // was supplied.
-            if (QScreen* primary = QGuiApplication::primaryScreen()) {
-                screenId = PhosphorScreens::ScreenIdentity::identifierFor(primary);
+            // lose its snap border/title-bar tracking. Pick the screen whose
+            // geometry sits nearest the target center (the window's intended
+            // position) — a better heuristic than an arbitrary primary screen
+            // when the center lands on no known screen (off-screen, pre-attach)
+            // and no fallbackScreenResolver was supplied. Falls back to the
+            // primary screen only if there are no screens to measure against.
+            QScreen* nearest = nullptr;
+            qint64 bestDistSq = -1;
+            for (QScreen* screen : QGuiApplication::screens()) {
+                const QRect g = screen->geometry();
+                const qint64 dx = qMax(0, qMax(g.left() - center.x(), center.x() - g.right()));
+                const qint64 dy = qMax(0, qMax(g.top() - center.y(), center.y() - g.bottom()));
+                const qint64 distSq = dx * dx + dy * dy;
+                if (bestDistSq < 0 || distSq < bestDistSq) {
+                    bestDistSq = distSq;
+                    nearest = screen;
+                }
+            }
+            if (!nearest) {
+                nearest = QGuiApplication::primaryScreen();
+            }
+            if (nearest) {
+                screenId = PhosphorScreens::ScreenIdentity::identifierFor(nearest);
             }
         }
 

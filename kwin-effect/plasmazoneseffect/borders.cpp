@@ -202,7 +202,12 @@ const PhosphorCompositor::BorderState* PlasmaZonesEffect::resolveBorderStateFor(
 void PlasmaZonesEffect::markWindowSnapped(const QString& windowId, const QString& screenId)
 {
     using namespace PhosphorCompositor;
-    if (windowId.isEmpty()) {
+    // An empty screenId is never a valid snap owner: the per-screen buckets are
+    // keyed by screenId, so recording under "" would pollute the set with an
+    // entry that the per-screen stripOtherScreens cleanup can never reclaim.
+    // Callers route unresolved/float windows through clearWindowSnapped instead;
+    // this guard is defensive depth for any path that slips an empty screen in.
+    if (windowId.isEmpty() || screenId.isEmpty()) {
         return;
     }
     // A window can only be snap-managed by one screen at a time. Strip stale
@@ -285,10 +290,17 @@ void PlasmaZonesEffect::updateSnapHideTitleBars(bool hide)
             }
         }
     } else {
-        // Restore every window snap had made borderless.
+        // Restore every window snap had made borderless, except one autotile
+        // still wants borderless. A window mid-transition between modes can be in
+        // both sets briefly; un-hiding here would fight autotile's authoritative
+        // borderless management and flash the title bar (mirrors the guard in
+        // clearWindowSnapped / restoreAllSnapBorderless).
         const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_snapBorder);
         for (const auto& p : pairs) {
             AutotileStateHelpers::removeBorderlessOnScreen(m_snapBorder, p.second, p.first);
+            if (m_autotileHandler->isBorderlessWindow(p.first)) {
+                continue;
+            }
             if (KWin::EffectWindow* w = findWindowById(p.first)) {
                 if (KWin::Window* kw = w->window()) {
                     kw->setNoBorder(false);
@@ -306,8 +318,12 @@ void PlasmaZonesEffect::restoreAllSnapBorderless()
     // effect teardown the authoritative snap state is gone, so restore every
     // title bar snapping hid and drop the whole snap border set. Without this,
     // snap-hidden windows would keep their title bars hidden until a new snap
-    // event or app restart. Don't un-hide a window autotile still wants
-    // borderless (autotile runs its own restore at the same teardown sites).
+    // event or app restart. The isBorderlessWindow guard below is the live
+    // protection in the per-window path (clearWindowSnapped); at the teardown
+    // call sites AutotileHandler::restoreAllBorderless() runs first and clears
+    // its set, so the guard is a belt-and-braces no-op here (a window autotile
+    // shares is already un-hidden by then, and a second setNoBorder(false) is
+    // harmless/idempotent).
     const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_snapBorder);
     for (const auto& p : pairs) {
         if (m_autotileHandler->isBorderlessWindow(p.first)) {

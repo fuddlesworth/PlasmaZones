@@ -69,6 +69,69 @@ private Q_SLOTS:
         QCOMPARE(settings.zonePadding(), ConfigDefaults::zonePaddingMax());
     }
 
+    /**
+     * The clampInt validators wired into the new snapped-window border KeyDefs
+     * (Snapping.Appearance.Borders/Width and /Radius) must coerce an
+     * out-of-range value to the schema bound. These keys share the same KeyDef
+     * shape as the autotile border keys but can regress independently, so they
+     * get their own coverage.
+     */
+    void testReadValidatedInt_snapWindowBorderWidth_outOfRange_returnsMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
+            borders->writeInt(ConfigDefaults::widthKey(), 999); // clamp max is snapWindowBorderWidthMax()
+            borders.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.snapWindowBorderWidth(), ConfigDefaults::snapWindowBorderWidthMax());
+    }
+
+    void testReadValidatedInt_snapWindowBorderRadius_outOfRange_returnsMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
+            borders->writeInt(ConfigDefaults::radiusKey(), 999); // clamp max is snapWindowBorderRadiusMax()
+            borders.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.snapWindowBorderRadius(), ConfigDefaults::snapWindowBorderRadiusMax());
+    }
+
+    /**
+     * The validColorOr validator on the snapped-window border color
+     * (Snapping.Appearance.Colors/Active) must fall back to the schema default
+     * for an unparseable string. useSystemBorderColors is disabled so
+     * Settings::load() doesn't overwrite the validated value with the
+     * accent-derived system color.
+     */
+    void testReadValidatedColor_snapWindowBorderColor_invalidColor_returnsDefault()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+            colors->writeBool(ConfigDefaults::useSystemKey(), false);
+            colors->writeString(ConfigDefaults::activeKey(), QStringLiteral("not-a-color"));
+            colors.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.snapWindowBorderColor(), ConfigDefaults::snapWindowBorderColor());
+    }
+
     // =========================================================================
     // Schema validColorOr validator (invalid color string)
     // =========================================================================

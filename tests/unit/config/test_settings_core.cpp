@@ -20,6 +20,7 @@
  */
 
 #include <QTest>
+#include <QColor>
 #include <QSignalSpy>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -147,6 +148,16 @@ private Q_SLOTS:
         settings.setAnimationDuration(300);
         settings.setAnimationSequenceMode(0);
         settings.setLabelFontWeight(400);
+        // Snapped-window appearance (Snapping.Appearance.{Borders,Decorations,Colors}).
+        // useSystemBorderColors=false so the explicit colors persist instead of
+        // being overwritten by the accent-derived system colors on load.
+        settings.setSnapWindowShowBorder(false);
+        settings.setSnapWindowHideTitleBars(false);
+        settings.setSnapWindowBorderWidth(4);
+        settings.setSnapWindowBorderRadius(8);
+        settings.setSnapWindowUseSystemBorderColors(false);
+        settings.setSnapWindowBorderColor(QColor(10, 20, 30));
+        settings.setSnapWindowInactiveBorderColor(QColor(40, 50, 60));
 
         settings.save();
 
@@ -217,6 +228,28 @@ private Q_SLOTS:
             const QJsonObject obj = doc.object();
             QCOMPARE(obj.value(QLatin1String("duration")).toInt(), 300);
             QCOMPARE(obj.value(QLatin1String("sequenceMode")).toInt(), 0);
+        }
+
+        {
+            // Snapped-window border decoration (Snapping.Appearance.Borders).
+            auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
+            QCOMPARE(borders->readBool(ConfigDefaults::showBorderKey(), true), false);
+            QCOMPARE(borders->readInt(ConfigDefaults::widthKey(), 0), 4);
+            QCOMPARE(borders->readInt(ConfigDefaults::radiusKey(), 0), 8);
+        }
+        {
+            // Snapped-window title-bar decoration (Snapping.Appearance.Decorations).
+            auto decorations = backend->group(ConfigDefaults::snappingAppearanceDecorationsGroup());
+            QCOMPARE(decorations->readBool(ConfigDefaults::hideTitleBarsKey(), true), false);
+        }
+        {
+            // Snapped-window border colors (Snapping.Appearance.Colors). Read the
+            // stored strings back through QColor so the on-disk serialization
+            // format is irrelevant to the comparison.
+            auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+            QCOMPARE(colors->readBool(ConfigDefaults::useSystemKey(), true), false);
+            QCOMPARE(QColor(colors->readString(ConfigDefaults::activeKey(), QString())), QColor(10, 20, 30));
+            QCOMPARE(QColor(colors->readString(ConfigDefaults::inactiveKey(), QString())), QColor(40, 50, 60));
         }
     }
 

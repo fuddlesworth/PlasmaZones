@@ -116,8 +116,14 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
                                                        QStringLiteral("recordSnapIntent"),
                                                        {getWindowId(targetWindow), true});
 
-        // Snap-assist placed the window in a zone — record it in snapping's set.
-        markWindowSnapped(getWindowId(targetWindow), screenId);
+        // Snap-assist placed the window in a zone — record it in snapping's
+        // border set, but only for a resolved snap-mode screen. An empty
+        // (unresolved) or autotile-managed screen is owned by AutotileHandler,
+        // so recording it here would double-track the window — same
+        // discriminator as slotApplyGeometryRequested / the async snap path.
+        if (!screenId.isEmpty() && !m_autotileHandler->isAutotileScreen(screenId)) {
+            markWindowSnapped(getWindowId(targetWindow), screenId);
+        }
 
         // Snap Assist continuation: only for manual-mode screens.
         // Autotile screens manage their own window placement; showing snap assist
@@ -204,9 +210,14 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
                       zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
                                        : PhosphorAnimation::ProfilePaths::WindowSnapIn);
     // Track snapping's own border set (mirrors how autotile records at its
-    // tile-apply). Non-empty zoneId = window now occupies a zone; empty zoneId
-    // = float-restore, so it leaves the set.
-    if (zoneId.isEmpty()) {
+    // tile-apply) using the same discriminator as the batch path
+    // (slotApplyGeometriesBatch), so a window can never land in both the snap
+    // and autotile border sets:
+    //   - empty zoneId         → float-restore: leave snapping's set
+    //   - empty/autotile screen → autotile-managed or unresolved: leave the set
+    //                             (AutotileHandler tracks autotile-screen windows)
+    //   - snap-mode screen      → snap commit
+    if (zoneId.isEmpty() || screenId.isEmpty() || m_autotileHandler->isAutotileScreen(screenId)) {
         clearWindowSnapped(windowId);
     } else {
         markWindowSnapped(windowId, screenId);

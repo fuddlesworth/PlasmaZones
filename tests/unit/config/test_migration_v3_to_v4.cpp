@@ -19,6 +19,9 @@
  *     `AppId AppIdMatches` Exclude rules,
  *   - the v3 animation-application rules fold into animation-override rules
  *     and the animation exclusion lists fold into `ExcludeAnimations` rules,
+ *   - the zone-overlay appearance groups are renamed from
+ *     `Snapping.Appearance.*` to `Snapping.Zones.*` (key-for-key move,
+ *     absent-source no-op, idempotent, coexisting with the folds above),
  *   - config.json is stamped `_version == 4`,
  *   - the conversion is idempotent (running twice is a no-op).
  *

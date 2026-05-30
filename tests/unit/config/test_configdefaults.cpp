@@ -7,12 +7,6 @@
  *
  * Tests verify that ConfigDefaults accessors return the expected values and
  * that all numeric defaults fall within their declared min/max bounds.
- *
- * CMake target (not yet added to CMakeLists.txt):
- *   add_executable(test_configdefaults test_configdefaults.cpp)
- *   target_link_libraries(test_configdefaults PRIVATE Qt6::Test Qt6::Core KF6::ConfigCore plasmazones_core)
- *   add_test(NAME ConfigDefaults COMMAND test_configdefaults)
- *   set_tests_properties(ConfigDefaults PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
  */
 
 #include <QTest>
@@ -194,6 +188,24 @@ private Q_SLOTS:
     void testAutotileMasterCount_default_is1()
     {
         QCOMPARE(ConfigDefaults::autotileMasterCount(), 1);
+    }
+
+    /**
+     * The snapped-window appearance defaults must mirror the autotile* border
+     * defaults (they share the same UX semantics). Pinning each value here
+     * catches silent drift between the snap-window and autotile defaults, and
+     * the colors are compared against the zone color accessors rather than
+     * hardcoded RGB so a palette change can't make the test stale.
+     */
+    void testSnapWindowAppearance_defaults()
+    {
+        QCOMPARE(ConfigDefaults::snapWindowHideTitleBars(), true);
+        QCOMPARE(ConfigDefaults::snapWindowShowBorder(), true);
+        QCOMPARE(ConfigDefaults::snapWindowUseSystemBorderColors(), true);
+        // snapWindowBorderColor mirrors the highlight (active) zone color and
+        // snapWindowInactiveBorderColor mirrors the inactive zone color.
+        QCOMPARE(ConfigDefaults::snapWindowBorderColor(), ConfigDefaults::highlightColor());
+        QCOMPARE(ConfigDefaults::snapWindowInactiveBorderColor(), ConfigDefaults::inactiveColor());
     }
 };
 
