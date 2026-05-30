@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorServiceNetwork/AccessPoint.h>
+#include <PhosphorServiceNetwork/AccessPointModel.h>
 #include <PhosphorServiceNetwork/NetworkDevice.h>
 #include <PhosphorServiceNetwork/NetworkDeviceModel.h>
 #include <PhosphorServiceNetwork/NetworkHost.h>
@@ -143,6 +145,68 @@ private Q_SLOTS:
         QCOMPARE(static_cast<int>(NetworkHost::Portal), 2);
         QCOMPARE(static_cast<int>(NetworkHost::Limited), 3);
         QCOMPARE(static_cast<int>(NetworkHost::Full), 4);
+    }
+
+    void apModelWithoutDeviceIsEmpty()
+    {
+        AccessPointModel model;
+        QCOMPARE(model.rowCount(), 0);
+        QVERIFY(!model.device());
+        QVERIFY(!model.data(model.index(0), AccessPointModel::SsidRole).isValid());
+    }
+
+    void apModelExposesContractRoles()
+    {
+        AccessPointModel model;
+        const auto roles = model.roleNames();
+        QVERIFY(roles.contains(AccessPointModel::AccessPointRole));
+        QVERIFY(roles.contains(AccessPointModel::SsidRole));
+        QVERIFY(roles.contains(AccessPointModel::StrengthRole));
+        QVERIFY(roles.contains(AccessPointModel::FrequencyRole));
+        QVERIFY(roles.contains(AccessPointModel::BssidRole));
+        QVERIFY(roles.contains(AccessPointModel::SecurityRole));
+        QVERIFY(roles.contains(AccessPointModel::SecuredRole));
+        QCOMPARE(roles[AccessPointModel::AccessPointRole], QByteArrayLiteral("accessPoint"));
+        QCOMPARE(roles[AccessPointModel::SsidRole], QByteArrayLiteral("ssid"));
+        QCOMPARE(roles[AccessPointModel::StrengthRole], QByteArrayLiteral("strength"));
+        QCOMPARE(roles[AccessPointModel::FrequencyRole], QByteArrayLiteral("frequency"));
+        QCOMPARE(roles[AccessPointModel::BssidRole], QByteArrayLiteral("bssid"));
+        QCOMPARE(roles[AccessPointModel::SecurityRole], QByteArrayLiteral("security"));
+        QCOMPARE(roles[AccessPointModel::SecuredRole], QByteArrayLiteral("secured"));
+    }
+
+    void apModelAttachesAndDetachesDevice()
+    {
+        // On a CI runner with no NetworkManager the device is inert and
+        // GetAllAccessPoints errors out (ignored), so the model stays
+        // empty; what we pin here is the attach/detach bookkeeping and that
+        // binding a device doesn't crash.
+        AccessPointModel model;
+        NetworkDevice device(QStringLiteral("/org/freedesktop/NetworkManager/Devices/0"));
+        QSignalSpy deviceSpy(&model, &AccessPointModel::deviceChanged);
+        model.setDevice(&device);
+        QCOMPARE(model.device(), &device);
+        QCOMPARE(deviceSpy.count(), 1);
+        QCOMPARE(model.rowCount(), 0);
+
+        model.setDevice(nullptr);
+        QCOMPARE(model.device(), nullptr);
+        QCOMPARE(deviceSpy.count(), 2);
+    }
+
+    void apModelSurvivesDeviceDestruction()
+    {
+        AccessPointModel model;
+        QSignalSpy deviceSpy(&model, &AccessPointModel::deviceChanged);
+        {
+            NetworkDevice device(QStringLiteral("/org/freedesktop/NetworkManager/Devices/0"));
+            model.setDevice(&device);
+            QCOMPARE(model.device(), &device);
+        }
+        QCOMPARE(model.device(), nullptr);
+        QCOMPARE(model.rowCount(), 0);
+        // attach emitted deviceChanged once; destroyed-lambda emits it again.
+        QCOMPARE(deviceSpy.count(), 2);
     }
 };
 

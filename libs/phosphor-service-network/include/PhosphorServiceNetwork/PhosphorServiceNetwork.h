@@ -19,6 +19,8 @@
  * generic `PhosphorDBus::Client` async helper.
  */
 
+#include <PhosphorServiceNetwork/AccessPoint.h>
+#include <PhosphorServiceNetwork/AccessPointModel.h>
 #include <PhosphorServiceNetwork/NetworkDevice.h>
 #include <PhosphorServiceNetwork/NetworkHost.h>
 #include <PhosphorServiceNetwork/NetworkDeviceModel.h>

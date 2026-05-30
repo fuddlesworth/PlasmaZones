@@ -3,6 +3,8 @@
 
 #include <PhosphorServiceNetwork/QmlRegistration.h>
 
+#include <PhosphorServiceNetwork/AccessPoint.h>
+#include <PhosphorServiceNetwork/AccessPointModel.h>
 #include <PhosphorServiceNetwork/NetworkDevice.h>
 #include <PhosphorServiceNetwork/NetworkDeviceModel.h>
 #include <PhosphorServiceNetwork/NetworkHost.h>
@@ -35,14 +37,17 @@ void registerQmlTypes()
         // single connectivity indicator).
         qmlRegisterType<NetworkHost>(kModule, kModuleVersionMajor, kModuleVersionMinor, "NetworkHost");
         qmlRegisterType<NetworkDeviceModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "NetworkDeviceModel");
+        qmlRegisterType<AccessPointModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "AccessPointModel");
 
-        // Pointer-receivable type. Exposed as Q_PROPERTY / role values from
-        // the host or model, never directly constructed in QML; its
-        // metatype needs to be known so QML can read interfaceName /
-        // deviceType / state off it.
+        // Pointer-receivable types. Exposed as Q_PROPERTY / role values from
+        // the host or model, never directly constructed in QML; their
+        // metatype needs to be known so QML can read the properties off them.
         qmlRegisterUncreatableType<NetworkDevice>(
             kModule, kModuleVersionMajor, kModuleVersionMinor, "NetworkDevice",
             QStringLiteral("NetworkDevice is owned by NetworkHost; bind via the host or model"));
+        qmlRegisterUncreatableType<AccessPoint>(
+            kModule, kModuleVersionMajor, kModuleVersionMinor, "AccessPoint",
+            QStringLiteral("AccessPoint is owned by AccessPointModel; bind via the model"));
     });
 }
 

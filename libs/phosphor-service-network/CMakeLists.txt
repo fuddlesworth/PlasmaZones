@@ -48,6 +48,8 @@ set(phosphorservicenetwork_public_HDRS
     include/PhosphorServiceNetwork/NetworkDevice.h
     include/PhosphorServiceNetwork/NetworkHost.h
     include/PhosphorServiceNetwork/NetworkDeviceModel.h
+    include/PhosphorServiceNetwork/AccessPoint.h
+    include/PhosphorServiceNetwork/AccessPointModel.h
 )
 
 set(phosphorservicenetwork_SRCS
@@ -55,6 +57,8 @@ set(phosphorservicenetwork_SRCS
     src/networkdevice.cpp
     src/networkhost.cpp
     src/networkdevicemodel.cpp
+    src/accesspoint.cpp
+    src/accesspointmodel.cpp
 )
 
 add_library(PhosphorServiceNetwork SHARED
