@@ -150,11 +150,12 @@ Each step is its own branch with per-phase commits; PRs target `main`.
 
 ## Open follow-ups
 
-- **Competitor architecture study** — how Hyprland structured its full Lua move
-  (embedding, sandboxing, any declarative layer kept) and how Noctalia/Quickshell
-  handle the QML↔Lua split. They have already solved the bridge problem; copy a
-  proven structure before finalizing ours.
 - **Host library placement & license** — LGPL `phosphor-luau` vs. inside
   `phosphor-tiles`.
 - **Memory-cap allocator** and the **`luau-analyze` import gate** — designed in
   the spike, not yet built.
+
+A competitor-architecture study (how Hyprland / Noctalia-Quickshell structure
+their Lua and QML↔Lua boundaries) was considered and **deliberately skipped** —
+the QML↔Luau bridge will be validated directly via the incremental rollout
+(migration step 3), not by pre-studying other projects.
