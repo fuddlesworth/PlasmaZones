@@ -3,6 +3,7 @@
 
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
 #include <PhosphorServiceMpris/QmlRegistration.h>
+#include <PhosphorServiceNetwork/QmlRegistration.h>
 #include <PhosphorServicePipeWire/QmlRegistration.h>
 #include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
@@ -52,6 +53,11 @@ int main(int argc, char* argv[])
     //                                            registered as
     //                                            uncreatable for type
     //                                            visibility)
+    //   Network   Phosphor.Service.Network 1.0   (NetworkHost,
+    //                                            NetworkDeviceModel, plus
+    //                                            NetworkDevice registered
+    //                                            as uncreatable for type
+    //                                            visibility)
     // One call per lib here at startup is sufficient. The wrapper
     // functions are idempotent (each lib guards its registration with
     // std::call_once internally), so a future hot-reload hook that
@@ -77,6 +83,7 @@ int main(int argc, char* argv[])
     PhosphorServiceUPower::registerQmlTypes();
     PhosphorServiceMpris::registerQmlTypes();
     PhosphorServicePipeWire::registerQmlTypes();
+    PhosphorServiceNetwork::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();
