@@ -212,7 +212,7 @@ public:
     virtual QVariantMap autotilePerAlgorithmSettings() const = 0;
     virtual void setAutotilePerAlgorithmSettings(const QVariantMap& settings) = 0;
 
-    // Color-import helper used by SnappingAppearanceController. Returns
+    // Color-import helper used by SnappingZonesController. Returns
     // an empty string on success, a user-readable error message
     // otherwise. The signature mirrors Settings::loadColorsFromFile
     // exactly so its existing Q_INVOKABLE annotation overrides this.

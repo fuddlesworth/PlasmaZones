@@ -6,7 +6,7 @@
 #include "editorpagecontroller.h"
 #include "generalpagecontroller.h"
 #include "kzonesimporter.h"
-#include "snappingappearancecontroller.h"
+#include "snappingzonescontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
 #include "snappingzoneselectorcontroller.h"
@@ -327,11 +327,11 @@ SettingsController::SettingsController(QObject* parent)
     // facade over ConfigDefaults — no Settings wiring required.
     m_snappingZoneSelectorPage = new SnappingZoneSelectorController(this);
 
-    // Snapping→Appearance page sub-controller. Owns border bounds plus the
-    // color-import action surface; its changed() signal drives dirty
-    // tracking on successful imports.
-    m_snappingAppearancePage = new SnappingAppearanceController(m_settings, this);
-    connect(m_snappingAppearancePage, &SnappingAppearanceController::changed, this,
+    // Snapping→Zones page sub-controller (the drag-time zone overlay). Owns
+    // border bounds plus the color-import action surface; its changed() signal
+    // drives dirty tracking on successful imports.
+    m_snappingZonesPage = new SnappingZonesController(m_settings, this);
+    connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
             &SettingsController::onSettingsPropertyChanged);
 
     // Snapping→Effects + Tiling→Appearance pages — CONSTANT-only bounds facades.
@@ -646,7 +646,7 @@ SettingsController::SettingsController(QObject* parent)
 
 void SettingsController::setActivePage(const QString& page)
 {
-    // Resolve parent category names (e.g. "snapping" → "snapping-appearance")
+    // Resolve parent category names (e.g. "snapping" → "snapping-zones")
     const QString resolved = parentPageRedirects().value(page, page);
 
     if (!validPageNames().contains(resolved)) {

@@ -62,7 +62,7 @@ class ShaderRegistry;
 #include "editorpagecontroller.h"
 #include "externaleditscope.h"
 #include "generalpagecontroller.h"
-#include "snappingappearancecontroller.h"
+#include "snappingzonescontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
 #include "snappingshaderspagecontroller.h"
@@ -108,7 +108,7 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingBehaviorController* snappingBehaviorPage READ snappingBehaviorPage CONSTANT)
     Q_PROPERTY(TilingBehaviorController* tilingBehaviorPage READ tilingBehaviorPage CONSTANT)
     Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
-    Q_PROPERTY(SnappingAppearanceController* snappingAppearancePage READ snappingAppearancePage CONSTANT)
+    Q_PROPERTY(SnappingZonesController* snappingZonesPage READ snappingZonesPage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
     Q_PROPERTY(SnappingShadersPageController* snappingShadersPage READ snappingShadersPage CONSTANT)
     Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
@@ -336,9 +336,9 @@ public:
     {
         return m_snappingZoneSelectorPage;
     }
-    SnappingAppearanceController* snappingAppearancePage() const
+    SnappingZonesController* snappingZonesPage() const
     {
-        return m_snappingAppearancePage;
+        return m_snappingZonesPage;
     }
     SnappingEffectsController* snappingEffectsPage() const
     {
@@ -595,7 +595,7 @@ private:
     SnappingBehaviorController* m_snappingBehaviorPage = nullptr;
     TilingBehaviorController* m_tilingBehaviorPage = nullptr;
     SnappingZoneSelectorController* m_snappingZoneSelectorPage = nullptr;
-    SnappingAppearanceController* m_snappingAppearancePage = nullptr;
+    SnappingZonesController* m_snappingZonesPage = nullptr;
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;

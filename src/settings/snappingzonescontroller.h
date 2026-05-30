@@ -11,7 +11,8 @@ namespace PlasmaZones {
 
 class ISettings;
 
-/// Q_PROPERTY surface for the "Snapping → Appearance" settings page.
+/// Q_PROPERTY surface for the "Snapping → Zones" settings page (the
+/// drag-time zone overlay).
 ///
 /// Exposed as a child Q_PROPERTY on SettingsController. Two responsibilities:
 ///   1. Expose border-width / border-radius slider bounds as CONSTANTs
@@ -24,7 +25,7 @@ class ISettings;
 ///      Q_PROPERTY on Settings and mark dirty through the meta-loop, but
 ///      the top-level load path needs the explicit signal to cover any
 ///      batched writes that don't individually trip a NOTIFY.
-class SnappingAppearanceController : public PhosphorSettingsUi::PageController
+class SnappingZonesController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -34,7 +35,7 @@ class SnappingAppearanceController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
 
 public:
-    explicit SnappingAppearanceController(ISettings& settings, QObject* parent = nullptr);
+    explicit SnappingZonesController(ISettings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {

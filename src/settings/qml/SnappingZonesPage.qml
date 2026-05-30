@@ -11,7 +11,7 @@ SettingsFlickable {
     id: root
 
     // Page-scoped bounds + color-import actions live on the sub-controller.
-    readonly property var settingsBridge: settingsController.snappingAppearancePage
+    readonly property var settingsBridge: settingsController.snappingZonesPage
     readonly property int opacitySliderMax: 100
     readonly property int borderWidthMax: root.settingsBridge.borderWidthMax
     readonly property int borderRadiusMax: root.settingsBridge.borderRadiusMax
@@ -51,15 +51,13 @@ SettingsFlickable {
 
                             checked: appSettings.useSystemColors
                             accessibleName: i18n("Use system accent color")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 appSettings.useSystemColors = newValue;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         visible: !useSystemColorsSwitch.checked
@@ -73,7 +71,6 @@ SettingsFlickable {
                                 highlightColorDialog.open();
                             }
                         }
-
                     }
 
                     SettingsSeparator {
@@ -92,7 +89,6 @@ SettingsFlickable {
                                 inactiveColorDialog.open();
                             }
                         }
-
                     }
 
                     SettingsSeparator {
@@ -111,7 +107,6 @@ SettingsFlickable {
                                 borderColorDialog.open();
                             }
                         }
-
                     }
 
                     SettingsSeparator {
@@ -137,9 +132,7 @@ SettingsFlickable {
                                 icon.name: "document-open"
                                 onClicked: colorFileDialog.open()
                             }
-
                         }
-
                     }
 
                     Kirigami.InlineMessage {
@@ -157,11 +150,8 @@ SettingsFlickable {
                         interval: 3000
                         onTriggered: colorImportMessage.visible = false
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -189,15 +179,13 @@ SettingsFlickable {
                             from: 0
                             to: root.opacitySliderMax
                             value: appSettings.activeOpacity * root.opacitySliderMax
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return appSettings.activeOpacity = value / root.opacitySliderMax;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Inactive opacity")
@@ -207,17 +195,13 @@ SettingsFlickable {
                             from: 0
                             to: root.opacitySliderMax
                             value: appSettings.inactiveOpacity * root.opacitySliderMax
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return appSettings.inactiveOpacity = value / root.opacitySliderMax;
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -245,15 +229,13 @@ SettingsFlickable {
                             from: root.settingsBridge.borderWidthMin
                             to: root.borderWidthMax
                             value: appSettings.borderWidth
-                            onValueModified: (value) => {
+                            onValueModified: value => {
                                 return appSettings.borderWidth = value;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Border radius")
@@ -263,17 +245,13 @@ SettingsFlickable {
                             from: root.settingsBridge.borderRadiusMin
                             to: root.borderRadiusMax
                             value: appSettings.borderRadius
-                            onValueModified: (value) => {
+                            onValueModified: value => {
                                 return appSettings.borderRadius = value;
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -305,7 +283,6 @@ SettingsFlickable {
                                 labelFontColorDialog.open();
                             }
                         }
-
                     }
 
                     SettingsSeparator {
@@ -348,13 +325,10 @@ SettingsFlickable {
                                     appSettings.labelFontStrikeout = false;
                                 }
                             }
-
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Label scale")
@@ -365,19 +339,14 @@ SettingsFlickable {
                             to: 300
                             stepSize: 5
                             value: appSettings.labelFontSizeScale * 100
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return appSettings.labelFontSizeScale = value / 100;
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // =====================================================================
@@ -457,5 +426,4 @@ SettingsFlickable {
 
         target: root.settingsBridge
     }
-
 }

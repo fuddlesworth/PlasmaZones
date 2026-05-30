@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "snappingappearancecontroller.h"
+#include "snappingzonescontroller.h"
 
 #include "../config/configdefaults.h"
 #include "../core/isettings.h"
@@ -13,33 +13,33 @@
 
 namespace PlasmaZones {
 
-SnappingAppearanceController::SnappingAppearanceController(ISettings& settings, QObject* parent)
-    : PhosphorSettingsUi::PageController(QStringLiteral("snapping-appearance"), parent)
+SnappingZonesController::SnappingZonesController(ISettings& settings, QObject* parent)
+    : PhosphorSettingsUi::PageController(QStringLiteral("snapping-zones"), parent)
     , m_settings(&settings)
 {
 }
 
-int SnappingAppearanceController::borderWidthMin() const
+int SnappingZonesController::borderWidthMin() const
 {
     return ConfigDefaults::borderWidthMin();
 }
 
-int SnappingAppearanceController::borderWidthMax() const
+int SnappingZonesController::borderWidthMax() const
 {
     return ConfigDefaults::borderWidthMax();
 }
 
-int SnappingAppearanceController::borderRadiusMin() const
+int SnappingZonesController::borderRadiusMin() const
 {
     return ConfigDefaults::borderRadiusMin();
 }
 
-int SnappingAppearanceController::borderRadiusMax() const
+int SnappingZonesController::borderRadiusMax() const
 {
     return ConfigDefaults::borderRadiusMax();
 }
 
-void SnappingAppearanceController::loadColorsFromPywal()
+void SnappingZonesController::loadColorsFromPywal()
 {
     // Honour $XDG_CACHE_HOME via QStandardPaths rather than hardcoding
     // ~/.cache/wal — pywal itself follows XDG, so hardcoded ~/.cache skips
@@ -54,7 +54,7 @@ void SnappingAppearanceController::loadColorsFromPywal()
     loadColorsFromFile(pywalPath);
 }
 
-void SnappingAppearanceController::loadColorsFromFile(const QString& filePath)
+void SnappingZonesController::loadColorsFromFile(const QString& filePath)
 {
     // QML-callable entry point — `filePath` is untrusted input. Reject
     // empty / non-existent / non-regular / non-.json paths before
