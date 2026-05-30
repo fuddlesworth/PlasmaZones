@@ -88,6 +88,15 @@ private Q_SLOTS:
     {
         compareAlgorithm(QStringLiteral("stair"));
     }
+    // Batch 4
+    void zen()
+    {
+        compareAlgorithm(QStringLiteral("zen"));
+    }
+    void focusSidebar()
+    {
+        compareAlgorithm(QStringLiteral("focus-sidebar"));
+    }
 };
 
 void TestLuauParity::compareAlgorithm(const QString& name)

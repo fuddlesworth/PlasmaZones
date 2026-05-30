@@ -465,6 +465,45 @@ local function applyPerWindowMinSize(w, h, minSizes, i)
     return { w = w, h = h }
 end
 
+-- Port of distributeEvenly.js (returns { {pos=,size=}, ... })
+local function distributeEvenly(start, total, count, gap)
+    gap = math.max(0, gap)
+    if count <= 0 then return {} end
+    if total <= 0 then
+        local r = {}
+        for i = 1, count do r[i] = { pos = start, size = 1 } end
+        return r
+    end
+    if count == 1 then return { { pos = start, size = total } } end
+    local totalGaps = (count - 1) * gap
+    if totalGaps >= total then
+        local shrinkRatio = (total > 0) and (total / (totalGaps + count)) or 0
+        local itemSize = math.max(1, math.floor(shrinkRatio))
+        local shrunkGap = math.max(0, math.floor(gap * shrinkRatio))
+        local r = {}
+        local pos = start
+        for i = 0, count - 1 do
+            if i == count - 1 then
+                pos = math.min(pos, start + total - 1)
+                local clampedSize = math.max(1, math.min(itemSize, start + total - pos))
+                r[#r + 1] = { pos = pos, size = clampedSize }
+            else
+                r[#r + 1] = { pos = pos, size = itemSize }
+            end
+            pos = pos + itemSize + shrunkGap
+        end
+        return r
+    end
+    local tileSize = math.max(1, math.floor((total - totalGaps) / count))
+    local result = {}
+    for i = 0, count - 1 do
+        local pos = start + i * (tileSize + gap)
+        local size = (i == count - 1) and math.max(1, start + total - pos) or tileSize
+        result[#result + 1] = { pos = pos, size = size }
+    end
+    return result
+end
+
 -- ── Module wrapper ─────────────────────────────────────────────────────────
 local function algorithm(def)
     local userTile = def.tile
@@ -503,4 +542,5 @@ pz = {
     masterStackLayout = masterStackLayout,
     deckLayout = deckLayout,
     applyPerWindowMinSize = applyPerWindowMinSize,
+    distributeEvenly = distributeEvenly,
 }
