@@ -52,7 +52,7 @@ enum class ActionDomain : int {
  */
 struct PHOSPHORWINDOWRULE_EXPORT RuleAction
 {
-    QString type; ///< registered action type id (e.g. "setEngineMode")
+    QString type; ///< registered action type id (e.g. `ActionType::SetEngineMode`)
     /// Action-specific payload. NOTE: `"type"` is a **reserved param key** —
     /// `toJson()` writes `type` inline alongside `params`, so a `params`
     /// entry keyed `"type"` is clobbered on serialization (and stripped on

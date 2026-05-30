@@ -344,13 +344,16 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(transientWindowsKey, "TransientWindows")
-    PZ_CONFIG_KEY(notificationsAndOsdKey, "NotificationsAndOsd")
     PZ_CONFIG_KEY(minimumWindowWidthKey, "MinimumWindowWidth")
     PZ_CONFIG_KEY(minimumWindowHeightKey, "MinimumWindowHeight")
-    // Note: the per-list `Applications` / `WindowClasses` leaf-key accessors
-    // were retired with the v4 fold of exclusion lists into Application-
-    // subject WindowRules — the migration reads from `v3ExcludedApplicationsKey`
-    // / `v3ExcludedWindowClassesKey` below, and no live config path remains.
+    // `notificationsAndOsdKey` is consumed exclusively by the
+    // Animations.WindowFiltering schema (no equivalent in the Exclusions
+    // group), so it is declared with the rest of the animation keys below
+    // rather than here. Note: the per-list `Applications` / `WindowClasses`
+    // leaf-key accessors were retired with the v4 fold of exclusion lists
+    // into Application-subject WindowRules — the migration reads from
+    // `v3ExcludedApplicationsKey` / `v3ExcludedWindowClassesKey` below,
+    // and no live config path remains.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Performance
@@ -390,6 +393,11 @@ public:
     PZ_CONFIG_KEY(minDistanceKey, "MinDistance")
     PZ_CONFIG_KEY(sequenceModeKey, "SequenceMode")
     PZ_CONFIG_KEY(staggerIntervalKey, "StaggerInterval")
+    // Animations.WindowFiltering knob — distinct from the snapping
+    // `Exclusions` group above (which has no equivalent NotificationsAndOsd
+    // axis). Consumed by `Settings::animationExcludeNotificationsAndOsd` and
+    // the Animations.WindowFiltering schema in `settingsschema.cpp`.
+    PZ_CONFIG_KEY(notificationsAndOsdKey, "NotificationsAndOsd")
 
     // Phase 6: ShaderProfileTree JSON blob — per-event shader effect
     // selection layered alongside the motion Profile (separate tree,

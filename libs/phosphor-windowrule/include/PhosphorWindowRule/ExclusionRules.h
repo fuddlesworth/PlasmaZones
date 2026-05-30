@@ -122,7 +122,15 @@ inline QStringList applicationExcludePatternsFrom(const WindowRuleSet& source)
 {
     QStringList patterns;
     for (const WindowRule& rule : source.rules()) {
-        if (!ruleIsExclude(rule)) {
+        // Skip disabled rules — the daemon's pending-restore prune
+        // consumes the returned patterns to discard queued restores for
+        // matching apps, so harvesting from a disabled rule would prune
+        // restores the user explicitly opted into keeping. Mirrors the
+        // disabled-rule skip in `rulesWithAction` above for symmetry,
+        // since callers may hand this helper an unfiltered set
+        // (e.g. straight from the unified store) rather than the
+        // already-sliced exclude set.
+        if (!rule.enabled || !ruleIsExclude(rule)) {
             continue;
         }
         const MatchExpression& match = rule.match;

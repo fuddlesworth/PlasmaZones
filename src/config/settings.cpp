@@ -1452,9 +1452,16 @@ void Settings::writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, in
         // know. Surface it on the settings-side log too so users
         // grepping `lcConfig` see the failure, and skip the aggregate
         // `settingsChanged()` emit so dirty-state trackers don't
-        // believe the write made it to disk.
+        // believe the write made it to disk. Roll the in-memory store
+        // back to its on-disk state (mirrors the reset() rollback
+        // below) so subsequent reads through this Settings instance
+        // return the same view as cross-process consumers reading the
+        // unmodified file — without this, the in-memory state would
+        // diverge from disk indefinitely until the next save/load
+        // cycle.
         qCWarning(lcConfig) << "writeDisableEntries: failed to persist window-rule store for mode" << mode << "axis"
                             << axisInt;
+        m_windowRuleStore->load();
         Q_EMIT(this->*signalFn)(mode);
         return;
     }
@@ -1636,15 +1643,16 @@ PZ_STORE_GET(bool, filterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, fil
 PZ_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey,
                   filterLayoutsByAspectRatioChanged)
 
-// ── Window filtering (PhosphorConfig::Store-backed) ────────────────────────
+// ── Global exclusion knobs (PhosphorConfig::Store-backed) ──────────────────
 //
-// The legacy per-app / per-class exclusion lists
-// (excludedApplications / excludedWindowClasses) folded into the unified
-// WindowRule store in v4 — the migration in src/config/configmigration.cpp
-// drains the Exclusions group on first start, and the runtime evaluators
-// in SnapEngine, the KWin effect, and the WTA pending-restore prune all
-// route through PhosphorWindowRule::ExclusionRules over the store. Only
-// the three GLOBAL knobs below survive here.
+// Three global behavioural knobs survive in the `Exclusions` group:
+// `excludeTransientWindows` (boolean), `minimumWindowWidth` (int px),
+// `minimumWindowHeight` (int px). Per-app / per-class exclusion lists
+// retired in v4 — the migration in src/config/configmigration.cpp drains
+// the legacy lists into Application-subject WindowRules, and runtime
+// evaluators in SnapEngine, the KWin effect, and the WTA
+// pending-restore prune route through `PhosphorWindowRule::ExclusionRules`
+// over the unified store.
 
 PZ_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
 PZ_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)
@@ -1655,12 +1663,13 @@ PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey
 
 // ── Animation Window Filtering (PhosphorConfig::Store-backed) ──────────────
 //
-// Mirrors the Exclusions block above but lives in
-// `Animations.WindowFiltering` so animation-time filtering is independent
-// of snapping/tiling exclusions. Four scalar accessors using the same
-// PZ_STORE_GET / PZ_STORE_SET_{BOOL,INT} macros — no QStringList
-// accessors remain after the v4 fold drained the per-app /per-class
-// lists into ExcludeAnimations WindowRules.
+// Four global animation-filtering knobs in `Animations.WindowFiltering`:
+// `animationExcludeTransientWindows`, `animationExcludeNotificationsAndOsd`,
+// `animationMinimumWindowWidth`, `animationMinimumWindowHeight`. Mirrors
+// the Exclusions block above (plus a NotificationsAndOsd knob), stored
+// independently so a user can disable animations for an app while still
+// snapping it (or vice versa). Per-app / per-class animation exclusion
+// lists retired in v4 — they fold into ExcludeAnimations WindowRules.
 
 PZ_STORE_GET(bool, animationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey, bool)
 PZ_STORE_SET_BOOL(setAnimationExcludeTransientWindows, animationsWindowFilteringGroup, transientWindowsKey,
@@ -2468,7 +2477,6 @@ void Settings::reset()
                 kept.append(rule); // not a DisableEngine rule — preserve
             }
         }
-        bool rulesPersistOk = true;
         if (kept.size() != m_windowRuleStore->count()) {
             if (!m_windowRuleStore->setAllRules(kept)) {
                 // Persistence failed — the in-memory store advanced but the
@@ -2479,15 +2487,16 @@ void Settings::reset()
                 // (which reloads its own copy); the borrowed-store path
                 // (daemon) skips reloading the rules in load() and would
                 // otherwise leave the in-memory store advanced — explicitly
-                // reload via the store's own load() to roll back.
+                // reload via the store's own load() to roll back. The
+                // settings load() below also re-snapshots disable rules
+                // from the post-rollback store, so a follow-up flag was
+                // unnecessary.
                 qCWarning(lcConfig)
                     << "reset: failed to persist window-rule store — rolling back in-memory state; disable "
                        "rules will reappear on next launch";
                 m_windowRuleStore->load();
-                rulesPersistOk = false;
             }
         }
-        (void)rulesPersistOk; // load() below already covers signal correctness
     }
 
     load();

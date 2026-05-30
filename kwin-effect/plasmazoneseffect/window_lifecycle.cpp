@@ -801,11 +801,7 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // correctly skip excluded windows instead of operating on a stale
     // m_lastActiveWindowId.
     const QString windowClass = w->windowClass();
-    if (windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
-        || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive)) {
-        return;
-    }
-    if (windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive)) {
+    if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass)) {
         return;
     }
     // Plasma shell surfaces — independent filter chain from shouldHandleWindow()

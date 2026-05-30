@@ -79,7 +79,7 @@ void SettingsController::buildApplicationController()
                QStringLiteral("view-split-left-right"));
     regVirtual(QStringLiteral("tiling"), QString(), PzI18n::tr("Tiling"), QString(), QStringLiteral("window-duplicate"),
                /*collapsible=*/false, /*divider=*/true);
-    // FIXME(audit): m_animationsPage carries PageController id "animations"
+    // DESIGN-NOTE: m_animationsPage carries PageController id "animations"
     // (see AnimationsPageController ctor — animationspagecontroller.cpp:159)
     // which is ALSO the navigation-parent id we redirect to
     // "animations-general" via parentPageRedirects(). The round-trip works

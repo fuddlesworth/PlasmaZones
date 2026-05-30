@@ -56,12 +56,6 @@
             </arg>
         </method>
 
-        <!-- Legacy dragStarted/dragMoved/dragStopped removed in phase 3f.
-             The canonical drag protocol is beginDrag / updateDragCursor /
-             endDrag. Internal C++ helpers with those names still exist in
-             the adaptor (called from drag_protocol.cpp) but they're no
-             longer exposed to D-Bus. -->
-
         <method name="selectorScrollWheel">
             <annotation name="org.gtk.GDBus.DocString" value="Forward scroll delta to the zone selector during drag. Reserved for future use when KWin exposes pointer axis events to effects."/>
             <arg name="angleDeltaY" type="i" direction="in">
@@ -107,7 +101,7 @@
             <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon detected a policy flip mid-drag (typically because the cursor crossed a virtual-screen boundary that changes autotile↔snap routing). Plugin reacts by applying the transition: entering/exiting autotile bypass, canceling snap overlay, calling handleDragToFloat, etc. Replaces the effect-side cross-VS flip loop that used a stale local cache."/>
             <arg name="windowId" type="s"/>
             <arg name="newPolicy" type="(bbbbbss)">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="PhosphorProtocol::DragPolicy"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="PhosphorProtocol::DragPolicy"/>
             </arg>
         </signal>
         <signal name="snapAssistReady">
@@ -115,7 +109,7 @@
             <arg name="windowId" type="s"/>
             <arg name="releaseScreenId" type="s"/>
             <arg name="emptyZones" type="a(siiiiiibsssdd)">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="PhosphorProtocol::EmptyZoneList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PhosphorProtocol::EmptyZoneList"/>
             </arg>
         </signal>
     </interface>

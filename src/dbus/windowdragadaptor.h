@@ -226,6 +226,7 @@ public Q_SLOTS:
      */
     void cancelSnap();
 
+public:
     /**
      * Clear any drag state the daemon is still holding. Called when the
      * compositor bridge re-registers (e.g. KWin reloaded the effect, the
@@ -234,10 +235,16 @@ public Q_SLOTS:
      * abandoned: the new effect has no knowledge of it and the next
      * dragStarted from the fresh connection must land on a clean slate.
      * Also hides any leftover overlay so stale visuals don't linger.
+     *
+     * Plain public member (NOT under Q_SLOTS) for the same reason
+     * `handleWindowClosed` below uses that placement —
+     * QDBusAbstractAdaptor's runtime introspection exposes every public
+     * scriptable slot on the wire regardless of the XML, and this method
+     * is only invoked in-process from `Daemon::init` via the
+     * `bridgeRegistered` signal. No external D-Bus caller exists.
      */
     void clearForCompositorReconnect();
 
-public:
     /**
      * Called when a window is closed during or after a drag operation.
      * Connected to WindowTrackingAdaptor::windowClosedNotification — the

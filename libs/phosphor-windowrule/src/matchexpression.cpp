@@ -130,7 +130,20 @@ bool MatchExpression::isContextOnly() const
             return false;
         }
     }
-    // A composite is context-only iff every child is.
+    // A composite is context-only iff every child is context-only AND the
+    // composite carries at least one child. An empty `Any{}` is always-false
+    // (vacuous OR over zero terms), an empty `None{}` is always-true
+    // (vacuous NOT-any), and an empty `All{}` is the catch-all the default
+    // ctor builds. The first two are not "context-only" in any useful
+    // sense — they encode rule shapes that fire (or fail to fire) based on
+    // no window context at all. The catch-all is genuinely context-only
+    // by the same vacuous semantics but we keep `isAlwaysTrue()` as the
+    // narrow accessor for it (header line 110-112); returning false here
+    // for empty Any/None lets `validationIssues()` flag those shapes as
+    // sus rather than coercing them into context-only behaviour.
+    if (m_children.isEmpty()) {
+        return m_kind == Kind::All;
+    }
     for (const auto& child : m_children) {
         if (!child.isContextOnly()) {
             return false;
@@ -193,8 +206,16 @@ bool MatchExpression::isValid() const
     }
     // A Regex pattern must compile. The program was compiled eagerly by
     // ensureRegex() at construction — reuse it rather than recompiling.
+    // Also reject an empty pattern: QRegularExpression("") is a valid
+    // empty regex that matches at every position, turning the leaf into
+    // an unintentional "match anything" rule. The sibling `stringMatch`
+    // branches (Contains / StartsWith / EndsWith) reject empty patterns
+    // for the same reason; the Regex path closes the symmetric door.
     if (op == Operator::Regex) {
         if (!m_compiledRegex || !m_compiledRegex->isValid()) {
+            return false;
+        }
+        if (m_predicate.value.toString().isEmpty()) {
             return false;
         }
     }
@@ -455,6 +476,17 @@ std::optional<MatchExpression> MatchExpression::fromJsonAtDepth(const QJsonObjec
 
     if (compositeCount > 1) {
         qCWarning(lcWindowRule) << "Match node carries more than one composite key — dropping expression.";
+        return std::nullopt;
+    }
+    // Strict-key discipline — a composite must not also carry leaf keys
+    // (`field`/`op`/`value`). A hand-edited or stale-schema object like
+    // `{"all":[…], "field":"appId"}` would otherwise silently behave as a
+    // composite while the leaf keys are dropped — masking the authoring
+    // mistake. RuleAction::fromJson uses the same strict-key shape; this
+    // loader mirrors it.
+    if (compositeCount == 1 && (obj.contains(kKeyField) || obj.contains(kKeyOp) || obj.contains(kKeyValue))) {
+        qCWarning(lcWindowRule)
+            << "Match node mixes a composite key with leaf keys (`field`/`op`/`value`) — dropping expression.";
         return std::nullopt;
     }
     if (hasAll) {

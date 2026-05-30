@@ -220,7 +220,7 @@ SettingsFlickable {
         nameFilters: [i18n("PlasmaZones Config (*.json)"), i18n("All files (*)")]
         defaultSuffix: "json"
         fileMode: FileDialog.SaveFile
-        onAccepted: settingsController.exportAllSettings(decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/")))
+        onAccepted: settingsController.exportAllSettings(settingsController.urlToLocalFile(selectedFile))
     }
 
     FileDialog {
@@ -229,6 +229,6 @@ SettingsFlickable {
         title: i18n("Import Settings")
         nameFilters: [i18n("PlasmaZones Config (*.json *.conf *.ini *.rc)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
-        onAccepted: settingsController.importAllSettings(decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/")))
+        onAccepted: settingsController.importAllSettings(settingsController.urlToLocalFile(selectedFile))
     }
 }

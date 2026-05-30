@@ -537,11 +537,11 @@ private:
     // from this same filtered slice by the daemon at refilter time. Held
     // as a member (stable address) rather than rebuilt per access so the
     // bound RuleEvaluator's per-revision cache stays valid across
-    // back-to-back resolves. Replaces the legacy `ExclusionListBridge` +
-    // `ExcludeRuleFilter` path that derived the equivalent set from two
-    // flat QStringList settings — the v4 schema folded those into
-    // Application-subject WindowRules and the unified
-    // `PhosphorWindowRule::ExclusionRules` namespace now does the slicing.
+    // back-to-back resolves. Replaces a legacy QStringList-based settings
+    // path that derived the equivalent set from two flat string lists —
+    // see configmigration.cpp::migrateV3ToV4 for the schema fold; the
+    // unified `PhosphorWindowRule::ExclusionRules` namespace now does the
+    // slicing across both the daemon and the kwin-effect.
     PhosphorWindowRule::WindowRuleSet m_excludeRuleSet;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old

@@ -173,9 +173,9 @@ bool prevalidateLegacyAssignmentsFile(const QString& assignmentsPath)
 /// stub-rule write happens. Mirrors the assignments.json contract.
 ///
 /// Returns true if the file is absent, empty, parses as a v4 rule set, or
-/// parses as a JSON object the rule loader will inspect downstream. The
-/// only false case is "parses but is NOT JSON" — that's the data-loss
-/// trigger we exist to prevent.
+/// parses as any JSON object the rule loader will inspect downstream. The
+/// only false case is a file that exists, is non-empty, but fails to parse
+/// as a JSON object — that's the data-loss trigger we exist to prevent.
 bool prevalidateWindowRulesFile(const QString& windowRulesPath)
 {
     if (!QFile::exists(windowRulesPath)) {

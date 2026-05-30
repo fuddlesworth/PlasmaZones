@@ -244,11 +244,13 @@ SettingsFlickable {
     // state.
     Connections {
         function onApplyResult(ok, error) {
-            if (!ok && window && window.showToast) {
-                // Match the defensive shape used throughout LayoutsPage:
-                // when this page is hosted outside Main.qml (KCM / preview
-                // host), `window.showToast` is undefined and an unguarded
-                // call would raise.
+            if (!ok && typeof window !== "undefined" && window && window.showToast) {
+                // Match the defensive shape used by `onAnyModalOpenChanged` /
+                // `Component.onDestruction` above so every cross-host write
+                // through this file uses the same `typeof window !== "undefined"`
+                // pre-check. When this page is hosted outside Main.qml
+                // (KCM / preview host), `window.showToast` is undefined and
+                // an unguarded call would raise.
                 window.showToast(error.length > 0 ? error : i18n("Failed to save window rules."));
             }
         }

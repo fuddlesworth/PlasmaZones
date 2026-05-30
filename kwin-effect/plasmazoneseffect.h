@@ -344,6 +344,18 @@ private:
      */
     static bool isOwnOverlayClass(const QString& windowClass);
 
+    /**
+     * @brief Reject XDG desktop portal surfaces by window class.
+     *
+     * File dialogs / color pickers / screenshot pickers brokered by
+     * `xdg-desktop-portal-*` services arrive with classes like
+     * "xdg-desktop-portal-kde" / "xdg-desktop-portal-gtk". Snapping or
+     * tracking them as user-focus targets pollutes the daemon's
+     * last-active-window state. Shared by `shouldHandleWindow` and
+     * `notifyWindowActivated` so the two filter chains stay in lockstep.
+     */
+    static bool isXdgDesktopPortalSurface(const QString& windowClass);
+
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
     void updateWindowStickyState(KWin::EffectWindow* w);
@@ -758,7 +770,7 @@ private:
     // matches the per-key defaults in ConfigDefaults.
     bool m_animationExcludeTransientWindows = false;
     // Notification / OSD surfaces — excluded by default (see
-    // ConfigDefaults::animationExcludeNotificationsAndOsd). Initialised
+    // ConfigDefaults::animationExcludeNotificationsAndOsd()). Initialised
     // to the exclude default rather than the permissive value above so
     // a pre-D-Bus window event doesn't flash a shader on a notification.
     bool m_animationExcludeNotificationsAndOsd = true;

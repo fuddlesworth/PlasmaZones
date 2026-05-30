@@ -32,6 +32,16 @@ WindowRuleStore::WindowRuleStore(const QString& filePath, QObject* parent)
             << "must pass an absolute path.";
         return;
     }
+    // Relative paths resolve against the process CWD, which can change via
+    // chdir(); the resulting save() location would silently move with the
+    // process. The header doc says "absolute path" — flag the misuse loudly
+    // so the caller hears about it on the first construction rather than
+    // discovering it later when a config write lands in the wrong tree.
+    if (!QFileInfo(m_filePath).isAbsolute()) {
+        qCWarning(lcWindowRule) << "WindowRuleStore: filePath" << m_filePath
+                                << "is relative — load() / save() will resolve against the process CWD"
+                                << "which may change at runtime. Pass an absolute path.";
+    }
     // QSaveFile (inside WindowRuleSet::saveToFile) needs the parent directory
     // to exist. The path is fixed for the store's lifetime, so create the
     // directory once here rather than on every mutating save().
@@ -61,21 +71,37 @@ void WindowRuleStore::load()
     } else {
         auto loaded = WindowRuleSet::loadFromFile(m_filePath);
         if (!loaded) {
-            // Malformed file / version mismatch — WindowRuleSet already logged
-            // the diagnostic. Fall back to an empty set rather than crashing
-            // the daemon; the user can re-author rules from the settings UI.
-            qCWarning(lcWindowRule) << "WindowRuleStore: failed to load" << m_filePath << "— using an empty rule set";
-        } else {
-            candidate = std::move(*loaded);
-            qCInfo(lcWindowRule) << "WindowRuleStore: loaded" << candidate.count() << "rules from" << m_filePath;
+            // Malformed file / version mismatch / size-cap rejection /
+            // transient read failure. PRESERVE the in-memory set rather
+            // than falling back to empty — a settings-app reload that
+            // races the daemon mid-write would otherwise blank a live
+            // rule list on a transient read race. The user can re-author
+            // rules from the settings UI if the on-disk corruption is
+            // permanent; in either case the in-memory view stays usable
+            // until either save() rewrites the file or the loader
+            // succeeds on a subsequent retry.
+            qCCritical(lcWindowRule) << "WindowRuleStore: failed to load" << m_filePath
+                                     << "— keeping the prior in-memory rule set (count:" << m_ruleSet.count()
+                                     << ", revision:" << m_ruleSet.revision()
+                                     << "). Save / load may resync on the next mutation.";
+            return;
         }
+        candidate = std::move(*loaded);
+        qCInfo(lcWindowRule) << "WindowRuleStore: loaded" << candidate.count() << "rules from" << m_filePath;
     }
 
     if (candidate == m_ruleSet) {
         // Idempotent re-load — content unchanged, do not emit.
         return;
     }
-    m_ruleSet = std::move(candidate);
+    // Apply the loaded list through the live `setRules` so the store's
+    // monotonic revision counter advances past its prior peak. A move-
+    // assignment would adopt the candidate's freshly-loaded revision
+    // (`fromJson` starts a loaded set at revision 0), regressing the
+    // store's counter — RuleEvaluator caches keyed `(windowId, revision)`
+    // would re-hit on the next mutation that cycles the counter back to
+    // a previously-used value and return stale ResolvedActions.
+    m_ruleSet.setRules(candidate.rules());
     // Load reflects the on-disk state — the in-memory set is by definition
     // already "persisted" from this side, so the flag is unconditionally true.
     Q_EMIT rulesChanged(/*persisted=*/true);
@@ -95,15 +121,26 @@ bool WindowRuleStore::save()
 
 bool WindowRuleStore::setAllRules(const QList<WindowRule>& rules)
 {
-    // Build the candidate set first (setRules drops invalid rules) so a no-op
-    // replacement can be detected against the post-validation shape — this
-    // skips the persist + emit and returns true, per the header contract.
+    // Build a throw-away candidate first so the no-op fast path can compare
+    // against the POST-validation shape (setRules drops invalid + duplicate
+    // ids; an unsanitised list could differ from the live store on paper
+    // yet collapse to the same set after validation).
     WindowRuleSet candidate;
     candidate.setRules(rules);
     if (candidate == m_ruleSet) {
         return true;
     }
-    m_ruleSet = std::move(candidate);
+    // Mutate the live store in place rather than move-assigning the candidate.
+    // A move-assignment would reset `m_ruleSet.revision()` to the candidate's
+    // freshly-bumped value (1 after a single setRules call), regressing the
+    // store's monotonic counter. RuleEvaluator's match cache and
+    // priority-order index are keyed `(windowId, revision)` and
+    // `(revision, rules.size())` — a stale (windowId, 1) cache entry that
+    // happens to predate the regression would re-hit when the counter
+    // cycles back to its prior values, returning a non-current
+    // ResolvedActions for the same window. Calling the live `setRules` on
+    // the existing instance bumps its own revision past the prior peak.
+    m_ruleSet.setRules(candidate.rules());
     const bool persisted = save();
     Q_EMIT rulesChanged(persisted);
     return persisted;

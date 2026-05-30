@@ -397,9 +397,11 @@ void SettingsController::requestRunningWindows()
     // If the daemon isn't running, dispatching the call would still go
     // through D-Bus auto-start machinery (or fail outright) and the user
     // would see an empty list for the full timeout window with no
-    // indication the request never made it out. Keep the cached list
-    // and surface the empty-reply via an immediate timeout so the QML
-    // page can render a sensible "daemon not running" state instead.
+    // indication the request never made it out. Drop the cached list so
+    // a subsequent cachedRunningWindows() read reflects the daemon-down
+    // state (rather than a stale snapshot), then surface the empty-reply
+    // via an immediate timeout so the QML page renders the requestTimedOut
+    // placeholder state instead of a generic "no windows" message.
     if (!m_daemonController.isRunning()) {
         m_cachedRunningWindows.clear();
         m_runningWindowsTimeout.stop();

@@ -29,6 +29,16 @@ bool WindowRule::isValid() const
     if (!match.isValid()) {
         return false;
     }
+    // Reject zero-action rules — `WindowRule::fromJson` already drops them
+    // on load (a rule with no actions cannot fill any slot, so it is dead
+    // weight in the priority-order walk). Mirroring the loader's predicate
+    // here closes the door on a programmatic path that could put a
+    // zero-action rule into the store via `setRules`/`addRule`; without
+    // the check the rule lives in memory until the next save/load
+    // round-trip silently drops it.
+    if (actions.isEmpty()) {
+        return false;
+    }
     for (const RuleAction& action : actions) {
         if (!ActionRegistry::instance().validate(action)) {
             return false;

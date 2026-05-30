@@ -82,15 +82,22 @@ SettingsFlickable {
     }
 
     function _writeSpring(omega, zeta) {
-        var encoded = page._springPrefix + omega.toFixed(2) + "," + zeta.toFixed(2);
+        var omegaRounded = parseFloat(omega.toFixed(2));
+        var zetaRounded = parseFloat(zeta.toFixed(2));
+        var encoded = page._springPrefix + omegaRounded + "," + zetaRounded;
         // No-op-guard before mutating cache so a re-selection of the
         // already-active mode/values doesn't churn bindings even though
         // the underlying setter would no-op.
         if (page.appSettings.animationEasingCurve === encoded)
             return;
 
-        page._lastSpringOmega = omega;
-        page._lastSpringZeta = zeta;
+        // Cache the ROUNDED values — the encoded string is the canonical
+        // on-disk form (2-decimal precision), so caching the raw inputs
+        // would briefly leave `_lastSpringOmega` / `_lastSpringZeta` a
+        // sub-precision tick off the value the next reload sees, until
+        // `_syncCachedValues()` re-parses the encoded string.
+        page._lastSpringOmega = omegaRounded;
+        page._lastSpringZeta = zetaRounded;
         page.appSettings.animationEasingCurve = encoded;
     }
 

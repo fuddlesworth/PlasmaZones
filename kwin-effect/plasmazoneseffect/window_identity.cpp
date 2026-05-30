@@ -176,6 +176,14 @@ bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)
         || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive);
 }
 
+bool PlasmaZonesEffect::isXdgDesktopPortalSurface(const QString& windowClass)
+{
+    // Substring match on "xdg-desktop-portal" covers every brokered portal
+    // variant (kde / gtk / lxqt). Case-insensitive because the same class
+    // appears differently between Wayland appId and X11 resource name.
+    return windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive);
+}
+
 PhosphorEngine::WindowKind PlasmaZonesEffect::classifyWindowKind(KWin::EffectWindow* w) const
 {
     if (!w) {

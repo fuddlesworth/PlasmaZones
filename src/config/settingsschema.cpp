@@ -494,10 +494,15 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
     };
 }
 
-// ─── Exclusions ─────────────────────────────────────────────────────────────
-// Apps and window classes to exclude from snapping + minimum-size filters
-// + the transient-window toggle. List keys use canonicalCommaList to
-// normalize formatting; ints are clamped.
+// ─── Exclusions + Animation Window Filtering ────────────────────────────────
+// Two distinct schema groups declared together:
+//   1. `Exclusions` — snapping/tiling minimum-size + transient-window
+//      globals.
+//   2. `Animations.WindowFiltering` — animation-side equivalents plus a
+//      NotificationsAndOsd knob.
+// Both retired their per-app / per-class string lists in v4 (folded into
+// Application-subject WindowRules); only the global behavioural knobs
+// survive. Ints are clamped via schema validators.
 
 void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 {
