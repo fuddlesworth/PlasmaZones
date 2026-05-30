@@ -252,9 +252,15 @@ private Q_SLOTS:
         NetworkConnection connection(QStringLiteral("/org/freedesktop/NetworkManager/Settings/0"));
         AccessPoint ap(QStringLiteral("/org/freedesktop/NetworkManager/AccessPoints/0"));
         host.activateConnection(&connection, &device);
+        // Without a daemon the AccessPoint's GetAll never lands, so its SSID
+        // stays empty and connectToAccessPoint refuses it at the empty-SSID
+        // guard (a hidden-network AP behaves the same way). Both calls are
+        // therefore exercised up to that guard; what we pin is that they
+        // no-op without crashing and without mutating observable state.
+        QVERIFY(ap.ssid().isEmpty());
         host.connectToAccessPoint(&device, &ap, QStringLiteral("hunter2"));
         host.connectToAccessPoint(&device, &ap); // open network (no passphrase)
-        QVERIFY(true);
+        QCOMPARE(device.state(), NetworkDevice::UnknownState);
     }
 };
 
