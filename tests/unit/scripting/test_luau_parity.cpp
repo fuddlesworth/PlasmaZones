@@ -163,6 +163,12 @@ private Q_SLOTS:
         compareAlgorithm(QStringLiteral("cluster"));
     }
 
+    // Batch 13
+    void bsp()
+    {
+        compareAlgorithm(QStringLiteral("bsp"));
+    }
+
     // cluster's clustering path: vary appId patterns, focus, and orientation.
     void clusterWithWindows()
     {
