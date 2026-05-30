@@ -573,6 +573,128 @@ local function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidt
     return zones
 end
 
+-- Port of computeCumulativeMinDims.js (minW/minH are keyed 0..windowCount)
+local function computeCumulativeMinDims(windowCount, minSizes, innerGap)
+    local minW = {}
+    local minH = {}
+    for i = 0, windowCount do
+        minW[i] = 0
+        minH[i] = 0
+    end
+    if not minSizes or #minSizes == 0 then return { minW = minW, minH = minH } end
+    for i = windowCount - 1, 0, -1 do
+        local entry = minSizes[i + 1] -- JS minSizes[i] (0-based)
+        local mw = (i < #minSizes and entry and entry.w and entry.w > 0) and entry.w or 0
+        local mh = (i < #minSizes and entry and entry.h and entry.h > 0) and entry.h or 0
+        local splitV = (i % 2 == 0)
+        if splitV then
+            minW[i] = mw + ((i < windowCount - 1 and minW[i + 1] > 0) and (innerGap + minW[i + 1]) or 0)
+            minH[i] = math.max(mh, minH[i + 1])
+        else
+            minH[i] = mh + ((i < windowCount - 1 and minH[i + 1] > 0) and (innerGap + minH[i + 1]) or 0)
+            minW[i] = math.max(mw, minW[i + 1])
+        end
+    end
+    return { minW = minW, minH = minH }
+end
+
+-- Port of appendGracefulDegradation.js (mutates `zones` in place)
+local function appendGracefulDegradation(zones, remaining, leftover, innerGap)
+    if #zones == 0 then return end
+    if leftover <= 0 then return end
+
+    local function degradeAxis(primarySize, primaryPos, buildZone)
+        if primarySize <= 0 then return end
+        local maxFit = math.max(1, math.floor(primarySize / MIN_ZONE_SIZE))
+        local fitCount = math.min(leftover + 1, maxFit)
+        local sizes = distributeWithGaps(primarySize, fitCount, innerGap)
+        if #sizes == 0 then return end
+        zones[#zones] = buildZone(primaryPos, sizes[1])
+        local cursor = primaryPos + sizes[1] + innerGap
+        for k = 2, fitCount do -- JS j=1..fitCount-1 ↔ Lua sizes[k], k=j+1
+            zones[#zones + 1] = buildZone(cursor, sizes[k])
+            cursor = cursor + sizes[k] + innerGap
+        end
+        for _ = fitCount, leftover do
+            local last = zones[#zones]
+            zones[#zones + 1] = { x = last.x, y = last.y, width = last.width, height = last.height }
+        end
+    end
+
+    if remaining.width >= remaining.height then
+        degradeAxis(remaining.width, remaining.x, function(pos, size)
+            return { x = pos, y = remaining.y, width = size, height = remaining.height }
+        end)
+    else
+        degradeAxis(remaining.height, remaining.y, function(pos, size)
+            return { x = remaining.x, y = pos, width = remaining.width, height = size }
+        end)
+    end
+end
+
+-- Port of dwindleLayout.js (alternating V/H splits + graceful degradation)
+local function dwindleLayout(area, count, splitRatio, innerGap, minSizes)
+    if count <= 0 then return {} end
+    splitRatio = math.min(math.max(splitRatio, MIN_SPLIT), MAX_SPLIT)
+    local cumMinDims = computeCumulativeMinDims(count, minSizes, innerGap)
+    local remainingMinW = cumMinDims.minW
+    local remainingMinH = cumMinDims.minH
+    local remaining = { x = area.x, y = area.y, width = area.width, height = area.height }
+    local splitVertical = true
+    local zones = {}
+
+    local function trySplit(axis, i)
+        local isWidth = (axis == "w")
+        local totalDim = isWidth and remaining.width or remaining.height
+        local contentDim = totalDim - innerGap
+        if contentDim < 2 then return nil end
+        local windowDim = math.floor(contentDim * splitRatio)
+        local minDimArr = isWidth and remainingMinW or remainingMinH
+        local minProp = isWidth and "w" or "h"
+        local entry = minSizes and minSizes[i + 1]
+        if minSizes and #minSizes > 0 and i < #minSizes and entry and entry[minProp] and entry[minProp] > 0 then
+            windowDim = math.max(windowDim, entry[minProp])
+        end
+        if minSizes and #minSizes > 0 and minDimArr and minDimArr[i + 1] and minDimArr[i + 1] > 0 then
+            windowDim = math.min(windowDim, contentDim - minDimArr[i + 1])
+        end
+        windowDim = math.max(1, math.min(windowDim, contentDim - 1))
+        local zone, newRemaining
+        if isWidth then
+            zone = { x = remaining.x, y = remaining.y, width = windowDim, height = remaining.height }
+            newRemaining = { x = remaining.x + windowDim + innerGap, y = remaining.y,
+                width = contentDim - windowDim, height = remaining.height }
+        else
+            zone = { x = remaining.x, y = remaining.y, width = remaining.width, height = windowDim }
+            newRemaining = { x = remaining.x, y = remaining.y + windowDim + innerGap,
+                width = remaining.width, height = contentDim - windowDim }
+        end
+        return { zone = zone, newRemaining = newRemaining }
+    end
+
+    for i = 0, count - 1 do
+        if i == count - 1 or remaining.width < MIN_ZONE_SIZE or remaining.height < MIN_ZONE_SIZE
+            or (splitVertical and remaining.width <= innerGap)
+            or ((not splitVertical) and remaining.height <= innerGap) then
+            zones[#zones + 1] = { x = remaining.x, y = remaining.y, width = remaining.width, height = remaining.height }
+            appendGracefulDegradation(zones, remaining, count - i - 1, innerGap)
+            break
+        else
+            local result = trySplit(splitVertical and "w" or "h", i)
+            if not result then
+                zones[#zones + 1] = { x = remaining.x, y = remaining.y,
+                    width = remaining.width, height = remaining.height }
+                appendGracefulDegradation(zones, remaining, count - i - 1, innerGap)
+                break
+            end
+            zones[#zones + 1] = result.zone
+            remaining = result.newRemaining
+            splitVertical = not splitVertical
+        end
+    end
+    return zones
+end
+
 -- ── Module wrapper ─────────────────────────────────────────────────────────
 local function algorithm(def)
     local userTile = def.tile
@@ -613,4 +735,7 @@ pz = {
     applyPerWindowMinSize = applyPerWindowMinSize,
     distributeEvenly = distributeEvenly,
     lShapeLayout = lShapeLayout,
+    computeCumulativeMinDims = computeCumulativeMinDims,
+    appendGracefulDegradation = appendGracefulDegradation,
+    dwindleLayout = dwindleLayout,
 }

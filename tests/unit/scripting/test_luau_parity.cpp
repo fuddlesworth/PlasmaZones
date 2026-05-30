@@ -106,6 +106,11 @@ private Q_SLOTS:
     {
         compareAlgorithm(QStringLiteral("corner-master"));
     }
+    // Batch 6
+    void dwindle()
+    {
+        compareAlgorithm(QStringLiteral("dwindle"));
+    }
 };
 
 void TestLuauParity::compareAlgorithm(const QString& name)
