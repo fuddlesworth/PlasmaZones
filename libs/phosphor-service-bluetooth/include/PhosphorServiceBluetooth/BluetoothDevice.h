@@ -20,10 +20,11 @@ namespace PhosphorServiceBluetooth {
  * @brief One BlueZ device (`org.bluez.Device1`), e.g.
  * `/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF`.
  *
- * Read-only view of the device's state. Initial properties are supplied by
- * `BluetoothHost` from the ObjectManager enumeration; subsequent changes
- * arrive via `PropertiesChanged`. The pair / connect / trust write surface
- * lands on this class in a later milestone.
+ * Initial properties are supplied by `BluetoothHost` from the ObjectManager
+ * enumeration; subsequent changes arrive via `PropertiesChanged`. The write
+ * surface is exposed via connectDevice / disconnectDevice / setTrusted /
+ * setBlocked / pair / cancelPairing (fire-and-forget; cached state moves on
+ * the PropertiesChanged echo).
  *
  * `rssi` is only reported by BlueZ for devices currently in range (during
  * discovery): it is 0 for a never-seen / cached device, and is reset to 0

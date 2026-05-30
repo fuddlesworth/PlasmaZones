@@ -29,8 +29,8 @@ class BluetoothDevice;
  * are dropped too (cascade), independent of BlueZ's own per-device removals.
  *
  * Inert when the bus is unavailable (no daemon → empty lists, no crash).
- * The discovery / pairing / connect write surface and the pairing agent land
- * in later milestones.
+ * The discovery / pairing / connect write surface lives on the adapter and
+ * device objects; the pairing agent is exposed via agent().
  */
 class PHOSPHORSERVICEBLUETOOTH_EXPORT BluetoothHost : public QObject
 {

@@ -18,10 +18,12 @@ namespace PhosphorServiceBluetooth {
 /**
  * @brief One BlueZ adapter (`org.bluez.Adapter1`), e.g. `/org/bluez/hci0`.
  *
- * Read-only view of the adapter's state. Initial properties are supplied by
- * `BluetoothHost` from the ObjectManager enumeration (no construction-time
- * round-trip); subsequent changes arrive via `PropertiesChanged`. The
- * discovery / power write surface lands on this class in a later milestone.
+ * Initial properties are supplied by `BluetoothHost` from the ObjectManager
+ * enumeration (no construction-time round-trip); subsequent changes arrive via
+ * `PropertiesChanged`. The power / discoverable / discovery write surface is
+ * exposed via setPowered / setDiscoverable / startDiscovery / stopDiscovery /
+ * removeDevice (fire-and-forget; cached state moves on the PropertiesChanged
+ * echo).
  *
  * Owned by `BluetoothHost`; never constructed from QML.
  */
