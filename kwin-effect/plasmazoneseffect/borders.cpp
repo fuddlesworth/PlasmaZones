@@ -206,18 +206,23 @@ void PlasmaZonesEffect::markWindowSnapped(const QString& windowId, const QString
         return;
     }
     // A window can only be snap-managed by one screen at a time. Strip stale
-    // tracking from any other screen before recording the new owner (mirrors
-    // the autotile cross-screen-transfer cleanup in tiling.cpp).
-    for (auto it = m_snapBorder.tiledWindowsByScreen.begin(); it != m_snapBorder.tiledWindowsByScreen.end();) {
-        if (it.key() != screenId) {
-            it.value().remove(windowId);
+    // tracking from any OTHER screen — both the tiled and borderless buckets —
+    // before recording the new owner (mirrors the autotile cross-screen-transfer
+    // cleanup in tiling.cpp).
+    const auto stripOtherScreens = [&](QHash<QString, QSet<QString>>& byScreen) {
+        for (auto it = byScreen.begin(); it != byScreen.end();) {
+            if (it.key() != screenId) {
+                it.value().remove(windowId);
+            }
+            if (it.value().isEmpty() && it.key() != screenId) {
+                it = byScreen.erase(it);
+            } else {
+                ++it;
+            }
         }
-        if (it.value().isEmpty() && it.key() != screenId) {
-            it = m_snapBorder.tiledWindowsByScreen.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    };
+    stripOtherScreens(m_snapBorder.tiledWindowsByScreen);
+    stripOtherScreens(m_snapBorder.borderlessWindowsByScreen);
     AutotileStateHelpers::addTiledOnScreen(m_snapBorder, screenId, windowId);
 
     KWin::EffectWindow* w = findWindowById(windowId);
@@ -246,8 +251,11 @@ void PlasmaZonesEffect::clearWindowSnapped(const QString& windowId)
     const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
     AutotileStateHelpers::removeFromAllScreens(m_snapBorder, windowId);
     m_snapBorder.zoneGeometries.remove(windowId);
-    // Restore the title bar only if snap had hidden it.
-    if (wasBorderless) {
+    // Restore the title bar only if snap had hidden it AND autotile doesn't
+    // still want it borderless. A window mid-transition between modes can be in
+    // both sets briefly; un-hiding here would fight autotile's authoritative
+    // borderless management and flash the title bar.
+    if (wasBorderless && !m_autotileHandler->isBorderlessWindow(windowId)) {
         if (KWin::EffectWindow* w = findWindowById(windowId)) {
             if (KWin::Window* kw = w->window()) {
                 kw->setNoBorder(false);
@@ -289,6 +297,31 @@ void PlasmaZonesEffect::updateSnapHideTitleBars(bool hide)
         }
     }
     updateAllBorders();
+}
+
+void PlasmaZonesEffect::restoreAllSnapBorderless()
+{
+    using namespace PhosphorCompositor;
+    // Symmetric with AutotileHandler::restoreAllBorderless: on daemon loss or
+    // effect teardown the authoritative snap state is gone, so restore every
+    // title bar snapping hid and drop the whole snap border set. Without this,
+    // snap-hidden windows would keep their title bars hidden until a new snap
+    // event or app restart. Don't un-hide a window autotile still wants
+    // borderless (autotile runs its own restore at the same teardown sites).
+    const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_snapBorder);
+    for (const auto& p : pairs) {
+        if (m_autotileHandler->isBorderlessWindow(p.first)) {
+            continue;
+        }
+        if (KWin::EffectWindow* w = findWindowById(p.first)) {
+            if (KWin::Window* kw = w->window()) {
+                kw->setNoBorder(false);
+            }
+        }
+    }
+    m_snapBorder.borderlessWindowsByScreen.clear();
+    m_snapBorder.tiledWindowsByScreen.clear();
+    m_snapBorder.zoneGeometries.clear();
 }
 
 } // namespace PlasmaZones

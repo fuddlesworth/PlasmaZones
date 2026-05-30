@@ -619,6 +619,10 @@ private:
     /// Apply/restore title-bar hiding across all currently snap-committed
     /// windows when the snapWindowHideTitleBars setting toggles.
     void updateSnapHideTitleBars(bool hide);
+    /// Restore every snap-hidden title bar and drop the snap border set.
+    /// Called on daemon loss / effect teardown (symmetric with
+    /// AutotileHandler::restoreAllBorderless).
+    void restoreAllSnapBorderless();
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.
     const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;

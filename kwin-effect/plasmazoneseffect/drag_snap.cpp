@@ -288,8 +288,14 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         ensurePreSnapGeometryStored(window, windowId, window->frameGeometry());
                     applySnapGeometry(window, geo, false, skipAnimation);
                     // Async snap (keyboard / empty-zone / last-zone / auto-fill)
-                    // committed — record in snapping's border set.
-                    markWindowSnapped(windowId, getWindowScreenId(window));
+                    // committed — record in snapping's border set, but only for
+                    // a resolved snap-mode screen (autotile windows are tracked
+                    // by AutotileHandler; an empty screen is left untracked,
+                    // mirroring the batch path's discriminator).
+                    if (const QString asyncScr = getWindowScreenId(window);
+                        !asyncScr.isEmpty() && !m_autotileHandler->isAutotileScreen(asyncScr)) {
+                        markWindowSnapped(windowId, asyncScr);
+                    }
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {
                         onSnapSuccess(windowId, args[1].toString());

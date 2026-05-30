@@ -1683,14 +1683,18 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
     // drag-time zone overlay). Move its config groups Snapping.Appearance.* ->
     // Snapping.Zones.* so the freed Snapping.Appearance.* namespace can hold the
     // new snapped-window appearance settings (mirroring Tiling.Appearance.*).
+    // Both source and destination use FROZEN Legacy accessors — never the live
+    // ConfigDefaults::snappingZones*Group() accessors — so a future rename of
+    // those live group names can't silently retarget this historical step to a
+    // path no migrated config ever produced (same freeze policy as v2→v3).
     moveGroupAtPath(root, ConfigKeys::Legacy::v3SnappingAppearanceColorsGroup(),
-                    ConfigDefaults::snappingZonesColorsGroup());
+                    ConfigKeys::Legacy::v4SnappingZonesColorsGroup());
     moveGroupAtPath(root, ConfigKeys::Legacy::v3SnappingAppearanceOpacityGroup(),
-                    ConfigDefaults::snappingZonesOpacityGroup());
+                    ConfigKeys::Legacy::v4SnappingZonesOpacityGroup());
     moveGroupAtPath(root, ConfigKeys::Legacy::v3SnappingAppearanceBorderGroup(),
-                    ConfigDefaults::snappingZonesBorderGroup());
+                    ConfigKeys::Legacy::v4SnappingZonesBorderGroup());
     moveGroupAtPath(root, ConfigKeys::Legacy::v3SnappingAppearanceLabelsGroup(),
-                    ConfigDefaults::snappingZonesLabelsGroup());
+                    ConfigKeys::Legacy::v4SnappingZonesLabelsGroup());
 
     // Stamp literal 4 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
     root[ConfigKeys::versionKey()] = 4;

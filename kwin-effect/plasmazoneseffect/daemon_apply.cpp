@@ -321,15 +321,21 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             });
             applySnapGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
                               /*skipAnimation=*/false, batchProfilePath);
-            // Snapping owns its border set (mirrors autotile). A batch entry
-            // that lands on a snap-mode screen is a snap commit; autotile
-            // windows live on autotile screens and are tracked by
-            // AutotileHandler, so gate on screen mode. Skip floating windows
-            // (overflow __restore__ entries that the batch floats).
+            // Snapping owns its border set (mirrors autotile). The daemon
+            // supplies a non-empty authoritative screenId only for real
+            // placements; an EMPTY screenId marks a float/restore entry
+            // (overflow __restore__, autotile float-restore) — never a snap
+            // commit. Use p.screenId directly: a current-screen fallback would
+            // misclassify a float-restore as a snap and leave a stale border.
+            //   - empty screenId      → float/restore: leave snapping's set
+            //   - autotile-mode screen → now autotile-managed: leave snap set
+            //                            (AutotileHandler tracks it)
+            //   - snap-mode screen     → snap commit (unless floating)
             const QString batchWid = getWindowId(p.window);
-            const QString batchScr = !p.screenId.isEmpty() ? p.screenId : getWindowScreenId(p.window);
-            if (!batchScr.isEmpty() && !m_autotileHandler->isAutotileScreen(batchScr) && !isWindowFloating(batchWid)) {
-                markWindowSnapped(batchWid, batchScr);
+            if (p.screenId.isEmpty() || m_autotileHandler->isAutotileScreen(p.screenId)) {
+                clearWindowSnapped(batchWid);
+            } else if (!isWindowFloating(batchWid)) {
+                markWindowSnapped(batchWid, p.screenId);
             }
         },
         [this, savedStack, action]() {
@@ -605,6 +611,13 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     // because m_dragFloatedWindowIds still has the entry from the original drag.
     if (!isFloating) {
         m_dragFloatedWindowIds.remove(windowId);
+    } else {
+        // Backstop: a window that becomes floating is no longer snap-managed.
+        // Covers float paths that don't emit applyGeometryRequested with an
+        // empty zoneId (e.g. a float toggle when no pre-tile geometry is
+        // stored, so applyGeometryForFloat sends nothing). Idempotent — a
+        // no-op if the window wasn't snap-tracked.
+        clearWindowSnapped(windowId);
     }
 }
 

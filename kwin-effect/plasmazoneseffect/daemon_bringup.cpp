@@ -678,28 +678,49 @@ void PlasmaZonesEffect::loadCachedSettings()
     // snapWindowUseSystemBorderColors is on the daemon writes the resolved
     // accent into the colour keys, so (like autotile) the effect only reads the
     // resolved colours and never the use-system flag.
+    // Each setter guards on a changed value before re-walking the stacking
+    // order in updateAllBorders / re-toggling title bars — matching the
+    // "only act on change" convention the autotile width/radius setters use.
     loadSettingAsync(QStringLiteral("snapWindowHideTitleBars"), [this](const QVariant& v) {
-        updateSnapHideTitleBars(v.toBool());
+        const bool hide = v.toBool();
+        if (m_snapBorder.hideTitleBars != hide) {
+            updateSnapHideTitleBars(hide);
+        }
     });
     loadSettingAsync(QStringLiteral("snapWindowShowBorder"), [this](const QVariant& v) {
-        m_snapBorder.showBorder = v.toBool();
-        updateAllBorders();
+        const bool show = v.toBool();
+        if (m_snapBorder.showBorder != show) {
+            m_snapBorder.showBorder = show;
+            updateAllBorders();
+        }
     });
     loadSettingAsync(QStringLiteral("snapWindowBorderWidth"), [this](const QVariant& v) {
-        m_snapBorder.width = qBound(0, v.toInt(), 10);
-        updateAllBorders();
+        const int bw = qBound(0, v.toInt(), 10);
+        if (m_snapBorder.width != bw) {
+            m_snapBorder.width = bw;
+            updateAllBorders();
+        }
     });
     loadSettingAsync(QStringLiteral("snapWindowBorderRadius"), [this](const QVariant& v) {
-        m_snapBorder.radius = qBound(0, v.toInt(), 20);
-        updateAllBorders();
+        const int br = qBound(0, v.toInt(), 20);
+        if (m_snapBorder.radius != br) {
+            m_snapBorder.radius = br;
+            updateAllBorders();
+        }
     });
     loadSettingAsync(QStringLiteral("snapWindowBorderColor"), [this](const QVariant& v) {
-        m_snapBorder.color = QColor(v.toString());
-        updateAllBorders();
+        const QColor c(v.toString());
+        if (m_snapBorder.color != c) {
+            m_snapBorder.color = c;
+            updateAllBorders();
+        }
     });
     loadSettingAsync(QStringLiteral("snapWindowInactiveBorderColor"), [this](const QVariant& v) {
-        m_snapBorder.inactiveColor = QColor(v.toString());
-        updateAllBorders();
+        const QColor c(v.toString());
+        if (m_snapBorder.inactiveColor != c) {
+            m_snapBorder.inactiveColor = c;
+            updateAllBorders();
+        }
     });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization

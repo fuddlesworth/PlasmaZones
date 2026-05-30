@@ -75,10 +75,10 @@ private Q_SLOTS:
 
     /**
      * The validColorOr validator must fall back to the schema default when
-     * the stored string fails to parse as a valid QColor. Seeds at the v2
-     * location (Snapping.Appearance.Colors/Highlight) and disables
-     * useSystemColors so Settings::load() doesn't call applySystemColorScheme
-     * and overwrite the validated value with a palette-derived tint.
+     * the stored string fails to parse as a valid QColor. Seeds at
+     * Snapping.Zones.Colors/Highlight and disables useSystemColors so
+     * Settings::load() doesn't call applySystemColorScheme and overwrite the
+     * validated value with a palette-derived tint.
      */
     void testReadValidatedColor_invalidColor_returnsDefault()
     {

@@ -692,11 +692,21 @@ public:
         PZ_CONFIG_GROUP(v3modeTrackingGroup, "ModeTracking")
 
         // v3 zone-overlay groups — renamed to Snapping.Zones.* by
-        // migrateV3ToV4; frozen old paths the migration reads from.
+        // migrateV3ToV4; frozen OLD paths the migration reads from.
         PZ_CONFIG_GROUP(v3SnappingAppearanceColorsGroup, "Snapping.Appearance.Colors")
         PZ_CONFIG_GROUP(v3SnappingAppearanceOpacityGroup, "Snapping.Appearance.Opacity")
         PZ_CONFIG_GROUP(v3SnappingAppearanceBorderGroup, "Snapping.Appearance.Border")
         PZ_CONFIG_GROUP(v3SnappingAppearanceLabelsGroup, "Snapping.Appearance.Labels")
+
+        // v4 zone-overlay destination paths — frozen NEW paths migrateV3ToV4
+        // writes to. Frozen (not the live ConfigDefaults::snappingZones*Group()
+        // accessors) so a future rename of those live accessors can't silently
+        // retarget this historical migration step to a path no migrated config
+        // ever had on disk — same freeze policy as the v2→v3 step's write site.
+        PZ_CONFIG_GROUP(v4SnappingZonesColorsGroup, "Snapping.Zones.Colors")
+        PZ_CONFIG_GROUP(v4SnappingZonesOpacityGroup, "Snapping.Zones.Opacity")
+        PZ_CONFIG_GROUP(v4SnappingZonesBorderGroup, "Snapping.Zones.Border")
+        PZ_CONFIG_GROUP(v4SnappingZonesLabelsGroup, "Snapping.Zones.Labels")
 
         // v4 legacy keys/groups — used ONLY by migration code.
         //

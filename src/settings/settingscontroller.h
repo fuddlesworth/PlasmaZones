@@ -150,13 +150,10 @@ public:
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
-    /// Parent name → set of leaf child page names. Covers top-level
-    /// sidebar parents (snapping / tiling / animations) AND mid-level
-    /// virtual parents (animations-surfaces / animations-library)
-    /// whose children don't share their name prefix. Drives the
-    /// dirty-state propagation in `isPageDirty` via direct-membership
-    /// lookup. Keep in sync with the QML `_childItems` buckets in
-    /// Main.qml.
+    /// Parent name → set of leaf child page names. Covers top-level sidebar
+    /// parents (snapping / tiling / animations) AND mid-level virtual parents
+    /// (animations-surfaces / animations-library) whose children don't share
+    /// their name prefix. Drives dirty-state propagation in `isPageDirty`.
     static const QHash<QString, QSet<QString>>& pageGroupChildren();
 
     bool needsSave() const
@@ -339,10 +336,7 @@ public:
     {
         return m_snappingZoneSelectorPage;
     }
-    SnappingZonesController* snappingZonesPage() const
-    {
-        return m_snappingZonesPage;
-    }
+    SnappingZonesController* snappingZonesPage() const;
     SnappingEffectsController* snappingEffectsPage() const
     {
         return m_snappingEffectsPage;
@@ -351,10 +345,7 @@ public:
     {
         return m_snappingShadersPage.get();
     }
-    SnappingWindowAppearanceController* snappingWindowAppearancePage() const
-    {
-        return m_snappingWindowAppearancePage;
-    }
+    SnappingWindowAppearanceController* snappingWindowAppearancePage() const;
     TilingAppearanceController* tilingAppearancePage() const
     {
         return m_tilingAppearancePage;

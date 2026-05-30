@@ -647,6 +647,18 @@ SettingsController::SettingsController(QObject* parent)
     m_updateChecker.checkForUpdates();
 }
 
+// Out-of-line page getters (kept here rather than inline in the header to hold
+// settingscontroller.h under the 800-line cap).
+SnappingZonesController* SettingsController::snappingZonesPage() const
+{
+    return m_snappingZonesPage;
+}
+
+SnappingWindowAppearanceController* SettingsController::snappingWindowAppearancePage() const
+{
+    return m_snappingWindowAppearancePage;
+}
+
 void SettingsController::setActivePage(const QString& page)
 {
     // Resolve parent category names (e.g. "snapping" → "snapping-zones")
