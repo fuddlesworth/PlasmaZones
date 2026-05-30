@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# extern/ holds the vendored Luau runtime as a committed source tarball
+# (pinned 0.723), extracted at configure time. Mark it vendored so GitHub
+# Linguist excludes it from language statistics, and binary so git never
+# attempts to diff or merge the archive.
+extern/** linguist-vendored
+extern/*.tar.gz binary
