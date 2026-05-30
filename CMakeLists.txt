@@ -449,6 +449,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-upower)    # UPower battery / power-supply readouts
     add_subdirectory(libs/phosphor-service-mpris)     # MPRIS2 media-player discovery + control
     add_subdirectory(libs/phosphor-service-pipewire)  # PipeWire mixer (Phase 2.1, shipped)
+    add_subdirectory(libs/phosphor-service-network)   # NetworkManager devices / connectivity (Phase 2.2)
 endif()
 
 # Source directories
@@ -667,6 +668,17 @@ add_subdirectory(examples/phosphor-perscreen-demo)
 # CLI can't link.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-pipewire-cli)
+endif()
+
+# phosphor-service-network-cli. Acceptance harness for the
+# phosphor-service-network library (Phase 2.2). Headless driver
+# exercising the read paths (status, list-devices, list-connections,
+# list-aps) and write paths (scan, connect) against a live
+# org.freedesktop.NetworkManager. Gated like the lib: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI
+# can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-network-cli)
 endif()
 
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo

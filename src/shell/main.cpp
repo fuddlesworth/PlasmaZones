@@ -3,6 +3,7 @@
 
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
 #include <PhosphorServiceMpris/QmlRegistration.h>
+#include <PhosphorServiceNetwork/QmlRegistration.h>
 #include <PhosphorServicePipeWire/QmlRegistration.h>
 #include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
@@ -52,6 +53,16 @@ int main(int argc, char* argv[])
     //                                            registered as
     //                                            uncreatable for type
     //                                            visibility)
+    //   Network   Phosphor.Service.Network 1.0   (NetworkHost +
+    //                                            NetworkDeviceModel /
+    //                                            AccessPointModel /
+    //                                            NetworkConnectionModel,
+    //                                            plus NetworkDevice /
+    //                                            AccessPoint /
+    //                                            NetworkConnection
+    //                                            registered as
+    //                                            uncreatable for type
+    //                                            visibility)
     // One call per lib here at startup is sufficient. The wrapper
     // functions are idempotent (each lib guards its registration with
     // std::call_once internally), so a future hot-reload hook that
@@ -62,21 +73,25 @@ int main(int argc, char* argv[])
     //
     // Each registerQmlTypes() returns void on purpose: by current design
     // every service's registration is idempotent AND infallible —
-    // std::call_once gates the body to a one-shot, and the inner
-    // QCoreApplication guard returns silently if pre-conditions fail
-    // (logging a warning instead of throwing). There is intentionally
-    // no failure surface to inspect, which is why this loop doesn't
-    // check return values. If any future service grows
-    // environment-dependent registration logic (e.g. needs to fail hard
-    // when a required platform feature is absent, or needs to surface
-    // a registration error to the shell launcher), this loop MUST be
-    // revisited: the wrappers will need to start returning success
-    // status and the loop will need to handle a partial-init scenario.
+    // std::call_once gates each body to a one-shot. Services that
+    // register a QML singleton (e.g. IconTheme's IconThemeResolver and
+    // PipeWire's PipeWireHost) additionally guard on
+    // QCoreApplication::instance() and return silently (logging a warning
+    // instead of throwing) if a pre-condition fails; the others register
+    // only types and have nothing to fail on. There is intentionally no
+    // failure surface to inspect, which is why this loop doesn't check
+    // return values. If any future service grows environment-dependent
+    // registration logic (e.g. needs to fail hard when a required platform
+    // feature is absent, or needs to surface a registration error to the
+    // shell launcher), this loop must change accordingly: the wrappers will
+    // need to start returning success status and the loop will need to
+    // handle a partial-init scenario.
     PhosphorServiceSni::registerQmlTypes();
     PhosphorServiceIconTheme::registerQmlTypes();
     PhosphorServiceUPower::registerQmlTypes();
     PhosphorServiceMpris::registerQmlTypes();
     PhosphorServicePipeWire::registerQmlTypes();
+    PhosphorServiceNetwork::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();

@@ -499,6 +499,7 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorServiceUPower::PhosphorServiceUPower
             PhosphorServiceMpris::PhosphorServiceMpris
             PhosphorServicePipeWire::PhosphorServicePipeWire
+            PhosphorServiceNetwork::PhosphorServiceNetwork
             PhosphorLayer::PhosphorLayer
             PhosphorWayland::PhosphorWayland
             PhosphorRendering::PhosphorRendering
