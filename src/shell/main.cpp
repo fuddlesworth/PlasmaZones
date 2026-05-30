@@ -74,12 +74,13 @@ int main(int argc, char* argv[])
     // Each registerQmlTypes() returns void on purpose: by current design
     // every service's registration is idempotent AND infallible —
     // std::call_once gates each body to a one-shot. Services that
-    // register a QML singleton (currently only PipeWire, for its
-    // PipeWireHost) additionally guard on QCoreApplication::instance()
-    // and return silently (logging a warning instead of throwing) if a
-    // pre-condition fails; the others register only types and have
-    // nothing to fail on. There is intentionally no failure surface to
-    // inspect, which is why this loop doesn't check return values. If
+    // register a QML singleton (e.g. IconTheme's IconThemeResolver and
+    // PipeWire's PipeWireHost) additionally guard on
+    // QCoreApplication::instance() and return silently (logging a warning
+    // instead of throwing) if a pre-condition fails; the others register
+    // only types and have nothing to fail on. There is intentionally no
+    // failure surface to inspect, which is why this loop doesn't check
+    // return values. If
     // any future service grows
     // environment-dependent registration logic (e.g. needs to fail hard
     // when a required platform feature is absent, or needs to surface

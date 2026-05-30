@@ -112,7 +112,13 @@ void AccessPointModel::rebuild()
             qCDebug(lcAccessPointModel) << "GetAllAccessPoints failed:" << reply.error().message();
             return;
         }
-        if (m_device != queried)
+        // Drop the reply if the model detached or swapped devices since the
+        // query. The explicit !m_device check matters in addition to the
+        // QPointer compare: if the queried device was destroyed, both
+        // m_device and `queried` are null, and `m_device != queried` alone
+        // would be false — without this guard a late non-error reply could
+        // populate a model that no longer has a device bound.
+        if (!m_device || m_device != queried)
             return;
         const auto paths = reply.value();
         for (const QDBusObjectPath& p : paths)

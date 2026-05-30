@@ -41,8 +41,13 @@ private Q_SLOTS:
     {
         NetworkHost host;
         host.scanWifi(); // no wifi devices -> no-op
-        host.setWirelessEnabled(true); // no-op when bus unavailable / echoed later
-        QVERIFY(true);
+        // setWirelessEnabled is NOT optimistic: the cached flag only flips
+        // when NetworkManager echoes WirelessEnabled back via
+        // PropertiesChanged, which cannot happen synchronously here (no
+        // event-loop spin). Pin that contract instead of just asserting
+        // the call did not crash.
+        host.setWirelessEnabled(true);
+        QCOMPARE(host.wirelessEnabled(), false);
     }
 
     void modelWithoutHostIsEmpty()
