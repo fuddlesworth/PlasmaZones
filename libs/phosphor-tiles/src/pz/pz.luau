@@ -934,6 +934,54 @@ local function threeColumnLayout(area, count, gap, splitRatio, masterCount, minS
     return zones
 end
 
+-- Port of applyTreeGeometry.js. NOTE: reads the host's marshalled tree keys
+-- (splitRatio/splitHorizontal/first/second/windowId), not the JS engine's
+-- (ratio/horizontal) — the geometry is identical because the underlying tree is.
+local function applyTreeGeometry(node, rect, gap, depth)
+    depth = depth or 0
+    if depth > MAX_TREE_DEPTH then return {} end
+    if not node then return {} end
+    if node.windowId and node.windowId ~= "" then
+        return { { x = rect.x, y = rect.y, width = math.max(1, rect.width), height = math.max(1, rect.height) } }
+    end
+    if not node.first or not node.second then
+        return { { x = rect.x, y = rect.y, width = math.max(1, rect.width), height = math.max(1, rect.height) } }
+    end
+    local ratio = math.max(MIN_SPLIT, math.min(MAX_SPLIT, node.splitRatio or 0.5))
+    local zones = {}
+    local function append(t)
+        for i = 1, #t do zones[#zones + 1] = t[i] end
+    end
+    if node.splitHorizontal then
+        local content = rect.height - gap
+        if content <= 0 then
+            append(applyTreeGeometry(node.first, rect, 0, depth + 1))
+            append(applyTreeGeometry(node.second, rect, 0, depth + 1))
+        else
+            local h1 = math.floor(content * ratio)
+            local h2 = content - h1
+            append(applyTreeGeometry(node.first,
+                { x = rect.x, y = rect.y, width = rect.width, height = h1 }, gap, depth + 1))
+            append(applyTreeGeometry(node.second,
+                { x = rect.x, y = rect.y + h1 + gap, width = rect.width, height = h2 }, gap, depth + 1))
+        end
+    else
+        local content = rect.width - gap
+        if content <= 0 then
+            append(applyTreeGeometry(node.first, rect, 0, depth + 1))
+            append(applyTreeGeometry(node.second, rect, 0, depth + 1))
+        else
+            local w1 = math.floor(content * ratio)
+            local w2 = content - w1
+            append(applyTreeGeometry(node.first,
+                { x = rect.x, y = rect.y, width = w1, height = rect.height }, gap, depth + 1))
+            append(applyTreeGeometry(node.second,
+                { x = rect.x + w1 + gap, y = rect.y, width = w2, height = rect.height }, gap, depth + 1))
+        end
+    end
+    return zones
+end
+
 -- ── Module wrapper ─────────────────────────────────────────────────────────
 local function algorithm(def)
     local userTile = def.tile
@@ -979,4 +1027,5 @@ pz = {
     dwindleLayout = dwindleLayout,
     solveThreeColumn = solveThreeColumn,
     threeColumnLayout = threeColumnLayout,
+    applyTreeGeometry = applyTreeGeometry,
 }

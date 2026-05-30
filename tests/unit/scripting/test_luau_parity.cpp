@@ -14,6 +14,7 @@
 #include <PhosphorTiles/LuauTileAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
+#include <PhosphorTiles/SplitTree.h>
 #include <PhosphorTiles/TilingParams.h>
 #include <PhosphorTiles/TilingState.h>
 
@@ -143,6 +144,64 @@ private Q_SLOTS:
     {
         compareAlgorithm(QStringLiteral("spiral"));
     }
+    // Batch 11
+    void floatingCenter()
+    {
+        compareAlgorithm(QStringLiteral("floating-center"));
+    }
+    // dwindle-memory: only the stateless fallback is parity-tested. The JS
+    // engine's tree path is dead (frozen-root leafCount bug), so the Luau tree
+    // path is validated structurally in test_luau_tile_algorithm instead.
+    void dwindleMemory()
+    {
+        compareAlgorithm(QStringLiteral("dwindle-memory"));
+    }
+
+    // Structural validation of the Luau dwindle-memory TREE path (which the JS
+    // engine can't reach). Builds a known split tree and asserts the tree
+    // geometry is used — distinguished from the stateless fallback by min-sizes,
+    // which the tree path ignores by design.
+    void dwindleMemoryTreePath()
+    {
+        LuauTileAlgorithm lua(luaPath(QStringLiteral("dwindle-memory")), m_luaWatchdog);
+        QVERIFY(lua.isValid());
+        QVERIFY(lua.supportsMemory());
+
+        TilingState state(QStringLiteral("s"));
+        for (int w = 0; w < 3; ++w) {
+            state.addWindow(QStringLiteral("w%1").arg(w));
+        }
+        state.setSplitRatio(0.5);
+        auto tree = std::make_unique<SplitTree>();
+        for (int w = 0; w < 3; ++w) {
+            tree->insertAtEnd(QStringLiteral("w%1").arg(w), 0.5);
+        }
+        QCOMPARE(tree->leafCount(), 3);
+        state.setSplitTree(std::move(tree));
+
+        TilingParams p;
+        p.windowCount = 3;
+        p.screenGeometry = QRect(0, 0, 1920, 1080);
+        p.state = &state;
+        p.innerGap = 0;
+        p.outerGaps = EdgeGaps::uniform(0);
+        // Window 0 asks for min width 1000. The stateless fallback would clamp the
+        // first split up to 1000; the tree path ignores min sizes, so the 0.5
+        // split (960) must survive — proving the tree path executed.
+        p.minSizes = {QSize(1000, 100), QSize(100, 100), QSize(100, 100)};
+
+        const QVector<QRect> zones = lua.calculateZones(p);
+        QCOMPARE(zones.size(), 3);
+        QCOMPARE(zones[0].width(), 960);
+        // Zones tile the area without overlap.
+        const QRect area(0, 0, 1920, 1080);
+        for (int i = 0; i < zones.size(); ++i) {
+            QVERIFY(area.contains(zones[i]));
+            for (int j = i + 1; j < zones.size(); ++j) {
+                QVERIFY(!zones[i].intersects(zones[j]));
+            }
+        }
+    }
 };
 
 void TestLuauParity::compareAlgorithm(const QString& name)
@@ -175,6 +234,11 @@ void TestLuauParity::compareAlgorithm(const QString& name)
                             }
                             state.setSplitRatio(ratio);
                             state.setMasterCount(masterCount);
+                            // addWindow lazily creates a split tree; drop it. The JS
+                            // engine never reads a tree anyway (its leafCount is set on
+                            // an already-frozen root and silently dropped), so a
+                            // tree-free state is the only state JS and Luau agree on.
+                            state.clearSplitTree();
 
                             TilingParams p;
                             p.windowCount = count;
