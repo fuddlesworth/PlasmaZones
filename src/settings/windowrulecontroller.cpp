@@ -119,9 +119,9 @@ void WindowRuleController::unsubscribeRulesChanged()
 }
 
 // Label-lookup setters (setScreenLookup, setActivityLookup, setLayoutLookup,
-// setSnappingLayoutLookup, setTilingAlgorithmLookup) and the
-// `markLookupWired` completion gate live in windowrulecontroller_lookups.cpp
-// so this TU stays under the project's 800-line cap.
+// setSnappingLayoutLookup, setTilingAlgorithmLookup, setShaderEffectLookup,
+// setCurveLabelResolver) live in windowrulecontroller_lookups.cpp so this TU
+// stays under the project's 800-line cap.
 
 bool WindowRuleController::isDirty() const
 {

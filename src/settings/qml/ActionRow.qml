@@ -582,7 +582,11 @@ ColumnLayout {
                 return isFinite(z) ? z : CurvePresets.defaultSpringZeta;
             }
             readonly property string _easingCurve: _isSpring ? CurvePresets.defaultEasingCurve : (_stored || CurvePresets.defaultEasingCurve)
-            readonly property string _displayName: _isSpring ? i18n("Spring (%1, %2)", _springOmega.toFixed(2), _springZeta.toFixed(2)) : CurvePresets.curveDisplayName(_easingCurve)
+            // Shared naming with the rule-list summary — CurvePresets.curveLabel
+            // formats the spring case and defers easing to curveDisplayName.
+            // Pass the spring wire value through verbatim; otherwise the resolved
+            // easing curve (stored, or the default for a not-yet-set action).
+            readonly property string _displayName: CurvePresets.curveLabel(_isSpring ? _stored : _easingCurve)
 
             implicitHeight: curveButton.implicitHeight
             implicitWidth: curveButton.implicitWidth

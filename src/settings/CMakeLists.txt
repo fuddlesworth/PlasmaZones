@@ -7,6 +7,15 @@
 
 find_package(KF6Kirigami REQUIRED)
 
+# Suppress -Wmissing-include-dirs for Qt-managed AUTOMOC scratch dirs.
+# KDECompilerSettings enables the warning globally, and qt_add_qml_module
+# adds `<target>_autogen/include` to each generated sub-target's -I list;
+# the no-Q_OBJECT sub-targets (qmltyperegistration, resource init) leave
+# that dir empty or — after `--clean-first` — missing, so cc1plus fires
+# before AUTOMOC recreates it. DIRECTORY level so every implicitly-named
+# sub-target inherits it. Mirrors src/shared/CMakeLists.txt.
+set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
+
 set(plasmazones_settings_SRCS
     main.cpp
     settingscontroller.h

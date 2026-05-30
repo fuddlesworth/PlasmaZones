@@ -646,6 +646,17 @@ set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
     QT_QML_SKIP_QMLDIR_ENTRY TRUE
 )
 
+# Suppress -Wmissing-include-dirs for the QML module's Qt-managed AUTOMOC
+# scratch dirs. KDECompilerSettings enables the warning globally, and
+# qt_add_qml_module adds `<target>_autogen/include` to each generated
+# sub-target's -I list; the no-Q_OBJECT sub-targets (qmltyperegistration,
+# resource init) leave it empty or — after `--clean-first` — missing, so
+# cc1plus fires before AUTOMOC recreates it. Set here (after the core /
+# rendering / daemon targets above, which are unaffected) so only the
+# editor QML sub-targets created just below inherit it. Mirrors
+# src/shared/CMakeLists.txt.
+set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
+
 # Add QML module to the executable
 qt_add_qml_module(plasmazones-editor
     URI org.plasmazones.editor

@@ -19,6 +19,7 @@
  *   - the field / operator / action authoring metadata is well-formed.
  */
 
+#include <QJSEngine>
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
@@ -27,9 +28,12 @@
 #include "settings/windowrulecontroller.h"
 #include "settings/windowrulemodel.h"
 
+#include <PhosphorWindowRule/MatchExpression.h>
 #include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/WindowRule.h>
 
 using namespace PlasmaZones;
+using namespace PhosphorWindowRule;
 
 class TestWindowRuleController : public QObject
 {
@@ -52,6 +56,7 @@ private Q_SLOTS:
     void validationIssuesForJsonFlags();
     void defaultPayloadForSeedsParams();
     void forceCommitIsInvokable();
+    void curveLabelResolverBridgesQmlNaming();
 };
 
 void TestWindowRuleController::newEmptyRuleShapesBySubject()
@@ -742,6 +747,51 @@ void TestWindowRuleController::forceCommitIsInvokable()
     const QMetaObject* mo = controller.metaObject();
     QVERIFY2(mo->indexOfMethod("asyncCommit(bool)") >= 0,
              "WindowRuleController::asyncCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
+}
+
+void TestWindowRuleController::curveLabelResolverBridgesQmlNaming()
+{
+    // The rule-list summary resolves OverrideAnimationCurve wire strings to
+    // friendly names through a QML-supplied JS resolver (CurvePresets.curveLabel
+    // in production). Exercise the actual QJSValue bridge end-to-end: install a
+    // real engine-backed resolver and confirm the summary renders its output,
+    // and that a non-callable value clears the resolver back to the raw value.
+    WindowRuleController controller;
+
+    WindowRule curveRule;
+    curveRule.id = QUuid::createUuid();
+    curveRule.priority = 100;
+    curveRule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+    RuleAction curve;
+    curve.type = QString(ActionType::OverrideAnimationCurve);
+    curve.params.insert(ActionParam::Curve, QStringLiteral("0.33,1.00,0.68,1.00"));
+    curveRule.actions = {curve};
+    controller.model()->setRules({curveRule});
+
+    const auto summary = [&]() {
+        return controller.model()->data(controller.model()->index(0, 0), WindowRuleModel::ActionSummaryRole).toString();
+    };
+
+    // No resolver wired yet → the raw wire string round-trips behind the label.
+    QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
+
+    QJSEngine engine;
+    QJSValue resolver = engine.evaluate(
+        QStringLiteral("(function(c){ return c === '0.33,1.00,0.68,1.00' ? 'Standard (Cubic)' : c; })"));
+    QVERIFY(resolver.isCallable());
+    controller.setCurveLabelResolver(resolver);
+    QCOMPARE(summary(), QStringLiteral("Curve: Standard (Cubic)"));
+
+    // A callable resolver returning an empty string falls back to the raw wire
+    // value (the bridge's isEmpty() guard), not an empty "Curve: ".
+    QJSValue emptyResolver = engine.evaluate(QStringLiteral("(function(c){ return ''; })"));
+    QVERIFY(emptyResolver.isCallable());
+    controller.setCurveLabelResolver(emptyResolver);
+    QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
+
+    // A non-callable value clears the resolver — the summary falls back to raw.
+    controller.setCurveLabelResolver(QJSValue());
+    QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
 }
 
 QTEST_MAIN(TestWindowRuleController)
