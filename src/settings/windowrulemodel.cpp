@@ -256,7 +256,7 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return PzI18n::tr("Disable: %1").arg(label);
     }
     if (action.type == ActionType::Exclude) {
-        return PzI18n::tr("Excluded — not managed");
+        return PzI18n::tr("Excluded");
     }
     if (action.type == ActionType::Float) {
         return PzI18n::tr("Float");
@@ -279,19 +279,19 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         if (!ok || v < 0.0 || v > 1.0) {
             return PzI18n::tr("Opacity (invalid)");
         }
-        return PzI18n::tr("Opacity %1%").arg(static_cast<int>(v * 100.0 + 0.5));
+        return PzI18n::tr("Opacity: %1%").arg(static_cast<int>(v * 100.0 + 0.5));
     }
     if (action.type == ActionType::OverrideAnimationShader) {
         const QString id = action.params.value(PhosphorWindowRule::ActionParam::EffectId).toString();
-        return id.isEmpty() ? PzI18n::tr("Block animation shader") : PzI18n::tr("Shader \"%1\"").arg(id);
+        return id.isEmpty() ? PzI18n::tr("Block animation shader") : PzI18n::tr("Shader: %1").arg(id);
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
         const int ms = action.params.value(PhosphorWindowRule::ActionParam::DurationMs).toInt();
-        return ms > 0 ? PzI18n::tr("Duration %1 ms").arg(ms) : PzI18n::tr("Animation duration");
+        return ms > 0 ? PzI18n::tr("Duration: %1 ms").arg(ms) : PzI18n::tr("Animation duration");
     }
     if (action.type == ActionType::OverrideAnimationCurve) {
         const QString curve = action.params.value(PhosphorWindowRule::ActionParam::Curve).toString();
-        return curve.isEmpty() ? PzI18n::tr("Animation curve") : PzI18n::tr("Curve %1").arg(curve);
+        return curve.isEmpty() ? PzI18n::tr("Animation curve") : PzI18n::tr("Curve: %1").arg(curve);
     }
     return WindowRuleModel::actionTypeFallbackLabel(action.type);
 }
