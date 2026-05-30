@@ -229,6 +229,17 @@ private:
     // ensurePluginRootExists in pluginloader.cpp for the GUI-thread-
     // only thread-safety rationale.
     mutable QSet<QString> m_loggedPluginRoots;
+    // Idempotency guard for scanAndLoad. The first successful call
+    // hands the plugin root to WatchedDirectorySet::registerDirectory,
+    // which arms hot-reload + drives an initial scan. Subsequent
+    // calls must NOT re-register the same directory — that would
+    // either silently no-op (best case, wasted work) or, in a
+    // future WatchedDirectorySet revision that treats re-register
+    // as "drop + re-add", briefly disarm the watch. Route repeat
+    // calls to rescanNow() so the caller gets the synchronous
+    // rescan they almost certainly wanted without touching the
+    // registration state.
+    bool m_initialScanDone = false;
 };
 
 } // namespace PhosphorRegistry

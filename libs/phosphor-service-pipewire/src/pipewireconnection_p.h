@@ -93,11 +93,11 @@ public:
     /// constructed loop or null — never a half-published pointer.
     std::atomic<pw_main_loop*> loop{nullptr};
 
-    /// Loop-thread mutex guarding the lifetime of `loop`. The worker
-    /// destroys the loop and stores nullptr under this lock; the GUI
-    /// destructor acquires the same lock before reading-and-using the
-    /// pointer, so a self-exit race cannot leave the destructor with a
-    /// stale dangling pointer.
+    /// Mutex guarding the lifetime of `loop`. The worker destroys the
+    /// loop and stores nullptr under this lock; every GUI-thread path
+    /// that uses the loaded pointer to call into libpipewire acquires
+    /// the same lock across the load AND the use, so a self-exit race
+    /// cannot hand a destroyed loop pointer to libpipewire.
     ///
     /// Why the std::atomic above is not sufficient on its own: the
     /// atomic ensures the GUI thread reads either null or a fully
@@ -106,11 +106,25 @@ public:
     /// worker's destroy+store sequence. If `pw_main_loop_run` exits on
     /// its own (libpipewire-internal error, daemon kill mid-run), the
     /// worker can race ahead through `doDisconnect` +
-    /// `pw_main_loop_destroy(createdLoop)` between the destructor's
-    /// load and its `pw_main_loop_quit` call, producing a use-after-
-    /// free on the freshly-destroyed loop. This mutex closes that
-    /// TOCTOU window: the worker holds it across destroy+store-null,
-    /// and the destructor holds it across load+quit.
+    /// `pw_main_loop_destroy(createdLoop)` between a GUI-thread
+    /// caller's load and its subsequent `pw_main_loop_quit` /
+    /// `pw_main_loop_get_loop` / `pw_loop_invoke` call, producing a
+    /// use-after-free on the freshly-destroyed loop. This mutex closes
+    /// that TOCTOU window: the worker holds it across destroy+store-
+    /// null, and every GUI-thread caller holds it across load+use.
+    ///
+    /// Contract: ANY GUI-thread path that uses the loaded `loop`
+    /// pointer to call `pw_main_loop_get_loop`, `pw_main_loop_quit`,
+    /// `pw_loop_invoke`, or any other libpipewire entry point MUST
+    /// hold `loopMutex` across the load AND the use. Today that is
+    /// four sites: the destructor (quit), connectToDaemon and
+    /// disconnectFromDaemon (get_loop + invoke), and
+    /// submitLoopRequest (get_loop + invoke). Loop-thread code
+    /// (LoopThread::run, doConnect, doDisconnect, every spa_hook
+    /// callback) runs by definition before `pw_main_loop_destroy`
+    /// returns and so does not need the lock — only the worker
+    /// destroys the loop, and it destroys exactly once, after the run
+    /// loop has already exited.
     QMutex loopMutex;
 
     pw_context* context = nullptr;

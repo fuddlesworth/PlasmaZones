@@ -141,20 +141,23 @@ private Q_SLOTS:
                          qPrintable(QStringLiteral("unexpected mediaClass: %1").arg(mc)));
             }
             // disconnectFromDaemon() should fire a nodeRemoved for at
-            // least every node we observed. Use >= rather than ==
-            // because the daemon may add or remove nodes mid-shutdown
-            // (a hot-plugged USB sink, a Firefox stream ending) and
-            // exact-equality would flake on a live host.
+            // least every node still tracked at disconnect time. Use >=
+            // rather than == because the daemon may add or remove nodes
+            // mid-shutdown (a hot-plugged USB sink, a Firefox stream
+            // ending) and exact-equality would flake on a live host.
             //
-            // Snapshot the spy count BEFORE the disconnect so the
-            // post-disconnect delta isn't inflated (or masked) by any
-            // pre-disconnect removals: a node that legitimately
-            // disappeared during the handshake (USB sink unplugged
-            // between connect and disconnect) would otherwise count
-            // toward expectedRemovals, hiding a regression where the
-            // disconnect path fired one fewer than expected.
-            const int expectedRemovals = nodes.size();
+            // Snapshot the spy count FIRST, then re-fetch the tracked
+            // node count for expectedRemovals. The opposite order (or
+            // reusing the stale `nodes` snapshot from the media-class
+            // loop) leaves a window where a spurious nodeRemoved
+            // arriving between the two reads would simultaneously drop
+            // a node from the tracked snapshot AND get folded into
+            // removedBeforeDisconnect, masking the disconnect-driven
+            // removal count. Reading the spy first ensures any
+            // spurious removal counted in the baseline is also
+            // reflected in the tracked snapshot we compare against.
             const int removedBeforeDisconnect = removedSpy.count();
+            const int expectedRemovals = conn.nodes().size();
             conn.disconnectFromDaemon();
             QTest::qWait(150);
             const int disconnectDrivenRemovals = removedSpy.count() - removedBeforeDisconnect;

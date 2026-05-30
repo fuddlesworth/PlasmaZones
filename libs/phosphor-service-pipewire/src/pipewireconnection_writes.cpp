@@ -74,8 +74,7 @@ bool PipeWireConnection::Private::submitLoopRequest(std::unique_ptr<Req> req,
     // or loop already destroyed → silently drop. The public API
     // contract is fire-and-forget; surfacing these as errors would
     // produce noise during shutdown ordering.
-    pw_main_loop* mainLoop = loop.load(std::memory_order_acquire);
-    if (!thread.isRunning() || !mainLoop)
+    if (!thread.isRunning())
         return false;
     // pw_loop_invoke returns a sequence number (>= 0) on async
     // success or the dispatcher's return value on sync; only a
@@ -83,7 +82,27 @@ bool PipeWireConnection::Private::submitLoopRequest(std::unique_ptr<Req> req,
     // dispatcher won't fire. Release ownership to the dispatcher on
     // success, log + drop on failure (unique_ptr cleans up on
     // scope exit).
-    const int rc = pw_loop_invoke(pw_main_loop_get_loop(mainLoop), dispatcher, 0, nullptr, 0, false, req.get());
+    //
+    // loopMutex scope: hold the lock across the load AND the
+    // pw_loop_invoke so a spontaneous worker-thread loop exit
+    // (libpipewire-internal error, daemon kill mid-run) cannot
+    // destroy the loop between our load and our invoke. The worker
+    // holds the same mutex across its destroy+null-store in
+    // LoopThread::run, so either we see a live loop and the invoke
+    // races safely against the eventual teardown, or we see null
+    // and bail. Release ownership is intentionally OUTSIDE the lock
+    // — pw_loop_invoke has already returned by the time we get rc,
+    // and req.release() touches only local stack state. See the
+    // destructor (pipewireconnection_lifecycle.cpp) for the
+    // canonical statement of the TOCTOU window this closes.
+    int rc;
+    {
+        QMutexLocker locker(&loopMutex);
+        pw_main_loop* mainLoop = loop.load(std::memory_order_acquire);
+        if (!mainLoop)
+            return false;
+        rc = pw_loop_invoke(pw_main_loop_get_loop(mainLoop), dispatcher, 0, nullptr, 0, false, req.get());
+    }
     if (rc < 0) {
         qCWarning(lcPipeWire) << "pw_loop_invoke failed for" << label << "rc" << rc;
         return false;

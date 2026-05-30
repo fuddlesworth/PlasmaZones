@@ -123,10 +123,26 @@ void PluginLoader::scanAndLoad()
         // unwound". Cheap to guard, expensive to debug if missed.
         return;
     }
+    // Idempotency: a second scanAndLoad must NOT call
+    // registerDirectory again on the same root. WatchedDirectorySet's
+    // contract is "register the directory once; subsequent
+    // registrations are unspecified" — at best a no-op, at worst
+    // a transient unwatched window if a future revision treats
+    // re-register as drop+re-add. The almost-certain caller intent
+    // ("rescan now please") is what rescanNow() does, so route
+    // there. The guard latches on first successful registerDirectory
+    // — if ensurePluginRootExists fails (mkpath rejected), the
+    // latch stays false so a follow-up scanAndLoad after the
+    // operator fixes the root retries registration cleanly.
+    if (m_initialScanDone) {
+        rescanNow();
+        return;
+    }
     if (!ensurePluginRootExists()) {
         return;
     }
     m_watcher->registerDirectory(m_pluginRoot, PhosphorFsLoader::LiveReload::On);
+    m_initialScanDone = true;
 }
 
 void PluginLoader::rescanNow()

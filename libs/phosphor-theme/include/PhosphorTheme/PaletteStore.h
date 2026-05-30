@@ -99,9 +99,16 @@ public:
     // (malformed JSON) still leave sourcePath untouched because
     // the parse runs before any commit. Outright I/O failures
     // (cannot open, short read) also leave sourcePath untouched
-    // for the same reason. Callers that need atomic-commit
-    // semantics across every failure mode should validate the
-    // file out-of-band and route through loadFromJson instead.
+    // for the same reason — loadFromFile performs ONE read of
+    // the file (preflight), parses the bytes into a
+    // QJsonDocument, then threads that document directly into
+    // the apply step. There is no second open/read after
+    // sourcePath is committed, so an unlink-or-truncate race
+    // between the preflight close and the apply step cannot
+    // surface an I/O failure with sourcePath already mutated.
+    // Callers that need atomic-commit semantics across every
+    // failure mode should validate the file out-of-band and
+    // route through loadFromJson instead.
     //
     // Note: on shape-failure paths (TokensKeyNotObject /
     // NoUsableTokens) the new sourcePath is still committed before
@@ -175,14 +182,24 @@ private:
     /// map that to NoUsableTokens).
     static std::optional<QVariantMap> extractValidTokens(const QJsonDocument& doc, ApplyResult& outError);
     ApplyResult applyParsedJson(const QJsonDocument& doc);
-    /// Post-path-resolution pipeline shared by loadFromFile and
-    /// reloadFromCurrentPath: open + short-read guard + close +
-    /// parse + applyParsedJson with identical error wording on
-    /// every failure mode. The caller (loadFromFile or the
-    /// debounce-driven reloadFromCurrentPath) handles watcher and
-    /// sourcePath management around this; this helper is a pure
-    /// "read these bytes off disk, push them through the apply
-    /// pipeline, surface the typed result" operation.
+    /// Apply an already-parsed document and emit `loadError` on the
+    /// shape-failure variants with the same wording readParseAndApply
+    /// surfaces. Used by loadFromFile to thread the preflight
+    /// QJsonDocument directly into the apply step — no second file
+    /// read between path commit and apply, so a delete/replace/truncate
+    /// race between preflight close and apply cannot surface an I/O
+    /// failure with sourcePath already mutated. (TOCTOU window
+    /// closed: one read, one parse, one apply.)
+    ApplyResult applyParsedDocWithLoadError(const QString& absolutePath, const QJsonDocument& doc);
+    /// Post-path-resolution pipeline shared by reloadFromCurrentPath
+    /// (and only reloadFromCurrentPath now): open + short-read guard
+    /// + close + parse + applyParsedDocWithLoadError with identical
+    /// error wording on every failure mode. The hot-reload path
+    /// re-reads the file because the watcher only signals "something
+    /// changed" — the bytes that triggered the event are not
+    /// available without reading the file. loadFromFile bypasses this
+    /// helper to avoid the TOCTOU window between its preflight read
+    /// and a re-read.
     ApplyResult readParseAndApply(const QString& absolutePath);
     /// Disarms the active filesystem watch (file + parent directory),
     /// cancels any pending debounced reload, and clears m_sourcePath

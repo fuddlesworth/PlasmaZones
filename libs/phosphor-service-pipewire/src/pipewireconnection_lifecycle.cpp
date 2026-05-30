@@ -367,31 +367,52 @@ PipeWireConnection::~PipeWireConnection()
 
 // connectToDaemon / disconnectFromDaemon bypass submitLoopRequest because
 // they carry no payload (no heap request, no ownership handoff), so the
-// 2-line direct pw_loop_invoke call is clearer than constructing an
-// empty request struct and routing it through the template. A negative
-// rc means the loop refused the post; surface it as a warning so the
+// direct pw_loop_invoke call is clearer than constructing an empty
+// request struct and routing it through the template. A negative rc
+// means the loop refused the post; surface it as a warning so the
 // failure isn't silently dropped, but keep the call shape simple. See
 // pipewireconnection_writes.cpp:80-90 for the rc < 0 rationale (it's the
 // same: pw_loop_invoke returns a non-negative seq on success or a
 // negative errno when the loop queue refuses the post).
+//
+// loopMutex scope: same TOCTOU window the destructor closes — a
+// spontaneous loop exit (libpipewire-internal error, daemon kill
+// mid-run) can race LoopThread::run's doDisconnect +
+// pw_main_loop_destroy in between our load and our pw_loop_invoke, so
+// we'd hand a destroyed loop pointer to pw_loop_invoke. Hold loopMutex
+// across the load AND the invoke so the worker's destroy+null-store
+// stays serialised with us. No deadlock: the worker only acquires
+// loopMutex during post-pw_main_loop_run teardown, well outside this
+// path.
 void PipeWireConnection::connectToDaemon()
 {
-    pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
-    if (!d->thread.isRunning() || !mainLoop)
+    if (!d->thread.isRunning())
         return;
-    const int rc =
-        pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchConnect, 0, nullptr, 0, false, d.get());
+    int rc;
+    {
+        QMutexLocker locker(&d->loopMutex);
+        pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
+        if (!mainLoop)
+            return;
+        rc = pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchConnect, 0, nullptr, 0, false, d.get());
+    }
     if (rc < 0)
         qCWarning(lcPipeWire) << "pw_loop_invoke failed for connectToDaemon rc" << rc;
 }
 
 void PipeWireConnection::disconnectFromDaemon()
 {
-    pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
-    if (!d->thread.isRunning() || !mainLoop)
+    if (!d->thread.isRunning())
         return;
-    const int rc =
-        pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchDisconnect, 0, nullptr, 0, false, d.get());
+    int rc;
+    {
+        QMutexLocker locker(&d->loopMutex);
+        pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
+        if (!mainLoop)
+            return;
+        rc = pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchDisconnect, 0, nullptr, 0, false,
+                            d.get());
+    }
     if (rc < 0)
         qCWarning(lcPipeWire) << "pw_loop_invoke failed for disconnectFromDaemon rc" << rc;
 }

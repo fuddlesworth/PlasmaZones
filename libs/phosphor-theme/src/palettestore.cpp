@@ -392,13 +392,19 @@ bool PaletteStore::loadFromFile(const QString& path)
     // observably mutate sourcePath / the watcher. The previous order
     // (set m_sourcePath, parse, roll back on failure) emitted
     // sourcePathChanged twice (new → old) for a single failed load,
-    // which QML bindings would see as two transient states. We
-    // re-read the same file inside readParseAndApply below — that
-    // duplicates one file open but keeps the shape-failure paths
-    // (TokensKeyNotObject / NoUsableTokens) able to commit
-    // sourcePath BEFORE surfacing the error so editor-driven fix-
-    // ups can hot-reload without re-triggering load. The cost is a
-    // single re-open of a file the kernel just had in cache.
+    // which QML bindings would see as two transient states.
+    //
+    // Single-read TOCTOU closure: we KEEP the parsed
+    // QJsonDocument from this preflight and thread it directly
+    // into applyParsedDocWithLoadError below. A previous version
+    // re-read the file inside readParseAndApply after committing
+    // sourcePath, which opened a delete/replace/truncate race: if
+    // the file vanished between preflight close and the second
+    // open, an I/O-failure branch would fire loadError with
+    // sourcePath already committed — violating the header
+    // contract "Outright I/O failures (cannot open, short read)
+    // also leave sourcePath untouched". One read, one parse, one
+    // apply: no second I/O step after sourcePath is mutated.
     //
     // Path-equality below uses a canonicalFilePath round-trip on
     // both sides so case-insensitive mounts (HFS+ bind-mount,
@@ -410,6 +416,7 @@ bool PaletteStore::loadFromFile(const QString& path)
     // and the watcher must not churn when a path arrives differing
     // only in case from the currently-loaded one. The canonical
     // round-trip also folds in any post-load symlink chain change.
+    QJsonDocument preflightDoc;
     {
         QFile preflight(absolutePath);
         if (!preflight.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -423,7 +430,7 @@ bool PaletteStore::loadFromFile(const QString& path)
         }
         preflight.close();
         QJsonParseError err{};
-        const auto preflightDoc = QJsonDocument::fromJson(preflightData, &err);
+        preflightDoc = QJsonDocument::fromJson(preflightData, &err);
         if (err.error != QJsonParseError::NoError || !preflightDoc.isObject()) {
             Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON"));
             return false;
@@ -460,20 +467,32 @@ bool PaletteStore::loadFromFile(const QString& path)
         m_sourcePath = absolutePath;
     }
 
-    // Only swap the watcher when the source path actually changed.
-    // Re-loading the same path (a refresh from the demo / KCM)
-    // would otherwise drop and re-add the same file watch + parent-
-    // directory watch — wasted inotify churn and a transient window
-    // where neither watch is armed if the watcher is mid-rescan.
-    // When the path hasn't moved the watch is already correct;
-    // leave it in place.
+    // Two-mode watcher arming:
+    //
+    //   Path moved: swap the watcher — drop the prior file +
+    //   parent-directory watches, re-add for the new path.
+    //
+    //   Path NOT moved: the watcher is NORMALLY still armed for
+    //   this path, but a silent drop is possible. The classic case
+    //   is `rm -rf <parent>; mkdir <parent>` between loads on the
+    //   same logical path: QFileSystemWatcher silently drops both
+    //   the file and the parent-directory watches when their
+    //   inodes vanish, and the directoryChanged handler that
+    //   normally re-arms on recreation only fires while the
+    //   process is actually receiving inotify events for the
+    //   recreated parent — if the recreation happened while the
+    //   PaletteStore was otherwise idle, the watcher silently
+    //   stays disarmed. A subsequent same-path loadFromFile would
+    //   then leave us with no hot-reload. Defend by always
+    //   checking the expected entries are present and re-adding
+    //   any missing ones. addPath is idempotent on already-tracked
+    //   paths, so this is also safe in the steady "watcher is
+    //   fine" case.
+    //
+    // Either way the watcher swap happens BEFORE applyParsedDocWithLoadError
+    // so any user slot wired to paletteChanged that reads the
+    // watcher observes the NEW state, not the stale one.
     if (sourcePathMoved) {
-        // Swap the watcher BEFORE running applyParsedJson so any user
-        // slot wired to paletteChanged that reads the watcher observes
-        // the NEW state, not the stale one. Pair the file watch with a
-        // parent-directory watch so atomic-rename saves still trigger a
-        // reload after the unlink + create cycle drops the file watch
-        // (see the constructor's directoryChanged handler).
         if (!m_watcher->files().isEmpty()) {
             m_watcher->removePaths(m_watcher->files());
         }
@@ -483,6 +502,20 @@ bool PaletteStore::loadFromFile(const QString& path)
         m_watcher->addPath(absolutePath);
         const QString parentDir = QFileInfo(absolutePath).absolutePath();
         if (!parentDir.isEmpty()) {
+            m_watcher->addPath(parentDir);
+        }
+    } else {
+        // Same logical path — re-add any silently-dropped entries
+        // (rm-rf-then-mkdir of the parent directory while the
+        // PaletteStore was idle, NFS server bounce dropping
+        // inotify state, etc.). No removePaths first: the watcher
+        // either already tracks the path (addPath is a no-op then)
+        // or had silently dropped it (addPath re-arms).
+        if (QFileInfo::exists(absolutePath) && !m_watcher->files().contains(absolutePath)) {
+            m_watcher->addPath(absolutePath);
+        }
+        const QString parentDir = QFileInfo(absolutePath).absolutePath();
+        if (!parentDir.isEmpty() && QFileInfo::exists(parentDir) && !m_watcher->directories().contains(parentDir)) {
             m_watcher->addPath(parentDir);
         }
     }
@@ -496,20 +529,60 @@ bool PaletteStore::loadFromFile(const QString& path)
         Q_EMIT sourcePathChanged();
     }
 
-    // Route through the shared file-read-parse-apply pipeline so
-    // loadFromFile and reloadFromCurrentPath surface identical
-    // diagnostic wording for every failure mode. The pipeline
-    // emits loadError itself on every non-Ok path.
-    return readParseAndApply(absolutePath) == ApplyResult::Ok;
+    // Apply the preflight-parsed document directly — NO second
+    // file read. Re-reading here would re-open the TOCTOU window:
+    // if the file were unlinked/replaced/truncated between
+    // preflight close and the second open, the I/O-failure branch
+    // would fire loadError after sourcePath was already committed,
+    // violating the header contract that I/O failures leave
+    // sourcePath untouched. applyParsedDocWithLoadError emits the
+    // same shape-failure diagnostics readParseAndApply would
+    // (TokensKeyNotObject / NoUsableTokens) so the hot-reload and
+    // fresh-load error wording remains identical.
+    return applyParsedDocWithLoadError(absolutePath, preflightDoc) == ApplyResult::Ok;
+}
+
+PaletteStore::ApplyResult PaletteStore::applyParsedDocWithLoadError(const QString& absolutePath,
+                                                                    const QJsonDocument& doc)
+{
+    // Apply an already-parsed document, fanning the typed
+    // ApplyResult into the same user-visible loadError wording
+    // readParseAndApply would have emitted. The split lets
+    // loadFromFile thread its preflight QJsonDocument directly
+    // into apply without a second file read (TOCTOU window closed)
+    // while reloadFromCurrentPath still goes through
+    // readParseAndApply (which has to re-read because the
+    // watcher only signals "something changed" — not what).
+    const ApplyResult result = applyParsedJson(doc);
+    // Exhaustive switch — every ApplyResult variant has an explicit
+    // arm. Adding a new variant surfaces a -Wswitch warning here
+    // (clang/gcc emit it for an unscoped enum-class switch missing
+    // a case), which is the structural enforcement the prior
+    // Q_UNREACHABLE tried to provide at runtime. The trailing
+    // `return result;` keeps gcc-without-Werror builds happy without
+    // adding a runtime branch the warning already prevents.
+    switch (result) {
+    case ApplyResult::Ok:
+        return ApplyResult::Ok;
+    case ApplyResult::TokensKeyNotObject:
+        Q_EMIT loadError(absolutePath, QStringLiteral("tokens key must be a JSON object"));
+        return result;
+    case ApplyResult::NoUsableTokens:
+        Q_EMIT loadError(absolutePath, QStringLiteral("no usable color tokens"));
+        return result;
+    }
+    return result;
 }
 
 PaletteStore::ApplyResult PaletteStore::readParseAndApply(const QString& absolutePath)
 {
-    // Shared file-read-parse-apply path. Both loadFromFile (after
-    // its watcher/path bookkeeping) and reloadFromCurrentPath (from
-    // the debounce timer) call here so the error messages a fresh
-    // load surfaces are identical to the messages a hot-reload
-    // surfaces.
+    // Hot-reload file-read-parse-apply path. Only
+    // reloadFromCurrentPath calls here now: loadFromFile threads
+    // its preflight QJsonDocument directly into
+    // applyParsedDocWithLoadError to avoid the TOCTOU window
+    // between path commit and a second read. The hot-reload path
+    // must re-read because the watcher only signals "something
+    // changed" without handing back the new bytes.
     QFile file(absolutePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         Q_EMIT loadError(absolutePath, file.errorString());
@@ -535,25 +608,7 @@ PaletteStore::ApplyResult PaletteStore::readParseAndApply(const QString& absolut
         Q_EMIT loadError(absolutePath, QStringLiteral("invalid JSON"));
         return ApplyResult::NoUsableTokens;
     }
-    const ApplyResult result = applyParsedJson(doc);
-    // Exhaustive switch — every ApplyResult variant has an explicit
-    // arm. Adding a new variant surfaces a -Wswitch warning here
-    // (clang/gcc emit it for an unscoped enum-class switch missing
-    // a case), which is the structural enforcement the prior
-    // Q_UNREACHABLE tried to provide at runtime. The trailing
-    // `return result;` keeps gcc-without-Werror builds happy without
-    // adding a runtime branch the warning already prevents.
-    switch (result) {
-    case ApplyResult::Ok:
-        return ApplyResult::Ok;
-    case ApplyResult::TokensKeyNotObject:
-        Q_EMIT loadError(absolutePath, QStringLiteral("tokens key must be a JSON object"));
-        return result;
-    case ApplyResult::NoUsableTokens:
-        Q_EMIT loadError(absolutePath, QStringLiteral("no usable color tokens"));
-        return result;
-    }
-    return result;
+    return applyParsedDocWithLoadError(absolutePath, doc);
 }
 
 void PaletteStore::applyTokens(const QVariantMap& tokens)
