@@ -794,6 +794,55 @@ public:
     void setAutotileUseSystemBorderColors(bool) override
     {
     }
+    bool snapWindowHideTitleBars() const override
+    {
+        return false;
+    }
+    void setSnapWindowHideTitleBars(bool) override
+    {
+    }
+    bool snapWindowShowBorder() const override
+    {
+        return false;
+    }
+    void setSnapWindowShowBorder(bool) override
+    {
+    }
+    int snapWindowBorderWidth() const override
+    {
+        return 2;
+    }
+    void setSnapWindowBorderWidth(int) override
+    {
+    }
+    int snapWindowBorderRadius() const override
+    {
+        return 0;
+    }
+    void setSnapWindowBorderRadius(int) override
+    {
+    }
+    QColor snapWindowBorderColor() const override
+    {
+        return Qt::white;
+    }
+    void setSnapWindowBorderColor(const QColor&) override
+    {
+    }
+    QColor snapWindowInactiveBorderColor() const override
+    {
+        return {};
+    }
+    void setSnapWindowInactiveBorderColor(const QColor&) override
+    {
+    }
+    bool snapWindowUseSystemBorderColors() const override
+    {
+        return false;
+    }
+    void setSnapWindowUseSystemBorderColors(bool) override
+    {
+    }
     StickyWindowHandling autotileStickyWindowHandling() const override
     {
         return StickyWindowHandling::TreatAsNormal;

@@ -156,6 +156,10 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::autotileBorderWidth() <= ConfigDefaults::autotileBorderWidthMax());
         QVERIFY(ConfigDefaults::autotileBorderRadius() >= ConfigDefaults::autotileBorderRadiusMin());
         QVERIFY(ConfigDefaults::autotileBorderRadius() <= ConfigDefaults::autotileBorderRadiusMax());
+        QVERIFY(ConfigDefaults::snapWindowBorderWidth() >= ConfigDefaults::snapWindowBorderWidthMin());
+        QVERIFY(ConfigDefaults::snapWindowBorderWidth() <= ConfigDefaults::snapWindowBorderWidthMax());
+        QVERIFY(ConfigDefaults::snapWindowBorderRadius() >= ConfigDefaults::snapWindowBorderRadiusMin());
+        QVERIFY(ConfigDefaults::snapWindowBorderRadius() <= ConfigDefaults::snapWindowBorderRadiusMax());
         QVERIFY(ConfigDefaults::autotileOuterGapTop() >= ConfigDefaults::autotileOuterGapTopMin());
         QVERIFY(ConfigDefaults::autotileOuterGapTop() <= ConfigDefaults::autotileOuterGapTopMax());
         QVERIFY(ConfigDefaults::autotileOuterGapBottom() >= ConfigDefaults::autotileOuterGapBottomMin());

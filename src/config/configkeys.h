@@ -68,6 +68,13 @@ public:
     PZ_CONFIG_GROUP(snappingZonesOpacityGroup, "Snapping.Zones.Opacity")
     PZ_CONFIG_GROUP(snappingZonesBorderGroup, "Snapping.Zones.Border")
     PZ_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
+    // Snapping window appearance — the post-snap window's border / title-bar
+    // decoration (parallel to Tiling.Appearance.*, distinct from the
+    // Snapping.Zones.* drag-time zone overlay above).
+    PZ_CONFIG_GROUP(snappingAppearanceGroup, "Snapping.Appearance")
+    PZ_CONFIG_GROUP(snappingAppearanceColorsGroup, "Snapping.Appearance.Colors")
+    PZ_CONFIG_GROUP(snappingAppearanceDecorationsGroup, "Snapping.Appearance.Decorations")
+    PZ_CONFIG_GROUP(snappingAppearanceBordersGroup, "Snapping.Appearance.Borders")
     PZ_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     PZ_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
     PZ_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
@@ -314,19 +321,19 @@ public:
     PZ_CONFIG_KEY(lockedScreensKey, "LockedScreens")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Colors
+    // Config Keys — Tiling.Appearance.Colors + Snapping.Appearance.Colors
     // ═══════════════════════════════════════════════════════════════════════════
 
     // (uses useSystemKey, activeKey, inactiveKey)
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Decorations
+    // Config Keys — Tiling.Appearance.Decorations + Snapping.Appearance.Decorations
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(hideTitleBarsKey, "HideTitleBars")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Borders
+    // Config Keys — Tiling.Appearance.Borders + Snapping.Appearance.Borders
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(showBorderKey, "ShowBorder")

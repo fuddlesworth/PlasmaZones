@@ -1043,6 +1043,53 @@ public:
     {
         return true;
     }
+
+    // Snapping window appearance — defaults mirror autotile* (the snapped
+    // window's border / title-bar decoration; stored under Snapping.Appearance.*).
+    static bool snapWindowHideTitleBars()
+    {
+        return true;
+    }
+    static bool snapWindowShowBorder()
+    {
+        return true;
+    }
+    static int snapWindowBorderWidth()
+    {
+        return ::PhosphorZones::ZoneDefaults::BorderWidth;
+    }
+    static constexpr int snapWindowBorderWidthMin()
+    {
+        return 0;
+    }
+    static constexpr int snapWindowBorderWidthMax()
+    {
+        return 10;
+    }
+    static int snapWindowBorderRadius()
+    {
+        return 0;
+    }
+    static constexpr int snapWindowBorderRadiusMin()
+    {
+        return 0;
+    }
+    static constexpr int snapWindowBorderRadiusMax()
+    {
+        return 20;
+    }
+    static QColor snapWindowBorderColor()
+    {
+        return ::PhosphorZones::ZoneDefaults::HighlightColor;
+    }
+    static QColor snapWindowInactiveBorderColor()
+    {
+        return ::PhosphorZones::ZoneDefaults::InactiveColor;
+    }
+    static bool snapWindowUseSystemBorderColors()
+    {
+        return true;
+    }
     static int autotileStickyWindowHandling()
     {
         return 0;

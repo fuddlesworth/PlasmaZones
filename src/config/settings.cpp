@@ -205,6 +205,9 @@ void Settings::load()
     if (autotileUseSystemBorderColors()) {
         applyAutotileBorderSystemColor();
     }
+    if (snapWindowUseSystemBorderColors()) {
+        applySnapWindowBorderSystemColor();
+    }
 
     qCInfo(lcConfig) << "Settings loaded";
 
@@ -2437,6 +2440,38 @@ PZ_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey,
 PZ_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
 PZ_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
 
+// Snapping.Appearance — the snapped window's border / title-bar (parallel to
+// Tiling.Appearance above; distinct from the Snapping.Zones.* drag overlay).
+PZ_STORE_GET(QColor, snapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
+PZ_STORE_SET_COLOR(setSnapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, snapWindowBorderColorChanged)
+PZ_STORE_GET(QColor, snapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
+PZ_STORE_SET_COLOR(setSnapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
+                   snapWindowInactiveBorderColorChanged)
+
+PZ_STORE_GET(bool, snapWindowUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
+void Settings::setSnapWindowUseSystemBorderColors(bool use)
+{
+    if (snapWindowUseSystemBorderColors() == use) {
+        return;
+    }
+    m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
+    if (use) {
+        applySnapWindowBorderSystemColor();
+    }
+    Q_EMIT snapWindowUseSystemBorderColorsChanged();
+    Q_EMIT settingsChanged();
+}
+
+PZ_STORE_GET(bool, snapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
+PZ_STORE_SET_BOOL(setSnapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
+                  snapWindowHideTitleBarsChanged)
+PZ_STORE_GET(bool, snapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
+PZ_STORE_SET_BOOL(setSnapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, snapWindowShowBorderChanged)
+PZ_STORE_GET(int, snapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
+PZ_STORE_SET_INT(setSnapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, snapWindowBorderWidthChanged)
+PZ_STORE_GET(int, snapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
+PZ_STORE_SET_INT(setSnapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, snapWindowBorderRadiusChanged)
+
 // ── reset / color helpers ────────────────────────────────────────────────────
 
 void Settings::reset()
@@ -2863,6 +2898,16 @@ void Settings::applyAutotileBorderSystemColor()
     // truth (and the NOTIFY signals fire as a side effect).
     setAutotileBorderColor(highlightColor());
     setAutotileInactiveBorderColor(inactiveColor());
+}
+
+void Settings::applySnapWindowBorderSystemColor()
+{
+    // Mirror applyAutotileBorderSystemColor: adopt the zone highlight/inactive
+    // colors (which themselves track the system accent) so the snapped-window
+    // border follows the system accent. Route through the setters so the Store
+    // stays the source of truth and NOTIFY signals fire.
+    setSnapWindowBorderColor(highlightColor());
+    setSnapWindowInactiveBorderColor(inactiveColor());
 }
 
 #undef PZ_STORE_GET

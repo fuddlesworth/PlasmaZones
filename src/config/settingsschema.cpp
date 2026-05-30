@@ -168,7 +168,9 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 // Four sub-groups under Snapping.Zones.*: Colors (system toggle + 3
 // zone colors), Labels (font family/color/scale/weight + italic/underline/
 // strikeout toggles), Opacity (active + inactive), Border (width + radius),
-// plus Effects.Blur which shares the load function.
+// plus Effects.Blur which shares the load function. Also declares the
+// Snapping.Appearance.{Colors,Decorations,Borders} snapped-window decoration
+// groups (parallel to Tiling.Appearance.*).
 
 void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
@@ -223,6 +225,41 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
     // Effects.Blur lives in the Effects group alongside the display-OSD keys;
     // the whole Effects group is declared in one shot by appendDisplaySchema
     // below to avoid split-across-two-call-sites ordering bugs.
+
+    // Snapping.Appearance.* — the snapped window's border / title-bar
+    // decoration (parallel to Tiling.Appearance.* in appendAutotilingSchema;
+    // defaults via snapWindow* in ConfigDefaults).
+    schema.groups[CD::snappingAppearanceColorsGroup()] = {
+        {CD::activeKey(),
+         CD::snapWindowBorderColor(),
+         QMetaType::QColor,
+         {},
+         validColorOr(CD::snapWindowBorderColor())},
+        {CD::inactiveKey(),
+         CD::snapWindowInactiveBorderColor(),
+         QMetaType::QColor,
+         {},
+         validColorOr(CD::snapWindowInactiveBorderColor())},
+        {CD::useSystemKey(), CD::snapWindowUseSystemBorderColors(), QMetaType::Bool},
+    };
+
+    schema.groups[CD::snappingAppearanceDecorationsGroup()] = {
+        {CD::hideTitleBarsKey(), CD::snapWindowHideTitleBars(), QMetaType::Bool},
+    };
+
+    schema.groups[CD::snappingAppearanceBordersGroup()] = {
+        {CD::showBorderKey(), CD::snapWindowShowBorder(), QMetaType::Bool},
+        {CD::widthKey(),
+         CD::snapWindowBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::snapWindowBorderWidthMin(), CD::snapWindowBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::snapWindowBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::snapWindowBorderRadiusMin(), CD::snapWindowBorderRadiusMax())},
+    };
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
