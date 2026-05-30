@@ -263,16 +263,13 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
     // wouldn't echo) so the diagnostic stays self-consistent alongside
     // the "node removed during wait" message that
     // waitForPropsEchoAndVerify already emitted.
-    // Default to the requested value so a future refactor that drops
-    // one of the three assignment branches leaves echoedMuted at a
-    // safe ("show requested") fallback rather than an indeterminate
-    // bool. Each branch below overwrites this with the correct value.
+    // Default to the requested value so the two "show requested"
+    // branches (echo confirmed OR node removed mid-wait) need no
+    // explicit assignment. Only the timeout-with-live-node case
+    // overwrites with the daemon's current live state.
     bool echoedMuted = muted;
-    if (echoed)
-        echoedMuted = muted;
-    else if (nodePtr)
+    if (!echoed && nodePtr)
         echoedMuted = nodePtr->muted();
-    // else: stay at default (`muted`), matching the prior else-branch.
     out() << "set node " << nodeId << " (" << nodeName << ") muted = " << (muted ? "true" : "false")
           << ", echoed = " << (echoedMuted ? "true" : "false") << "\n";
     // On timeout, waitForPropsEchoAndVerify already logged the timeout

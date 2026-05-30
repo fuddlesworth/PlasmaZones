@@ -126,8 +126,10 @@ QString TemplateEngine::render(const QString& templateSource, const QVariantMap&
         } else {
             // Unknown token, keep the placeholder so the failure is
             // visible in the rendered output. Loud warning to stderr so
-            // the user can spot rename mistakes.
-            qWarning().noquote() << "phosphor-theme: unknown token in template:" << name;
+            // the user can spot rename mistakes. Routed through the
+            // shared lcPhosphorTheme category so a filter that mutes
+            // the unknown-field warning above also catches this one.
+            qCWarning(lcPhosphorTheme).noquote() << "phosphor-theme: unknown token in template:" << name;
             result.append(match.captured(0));
         }
         cursor = match.capturedEnd();
@@ -140,7 +142,8 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
 {
     QFile in(templatePath);
     if (!in.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning().noquote() << "phosphor-theme: cannot open template" << templatePath << ", " << in.errorString();
+        qCWarning(lcPhosphorTheme).noquote()
+            << "phosphor-theme: cannot open template" << templatePath << ", " << in.errorString();
         return false;
     }
     const auto raw = in.readAll();
@@ -150,7 +153,8 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
         // Without this check we'd silently render a partial template
         // and atomically commit a half-rendered output, which is
         // exactly the failure mode QSaveFile is supposed to prevent.
-        qWarning().noquote() << "phosphor-theme: short read on template" << templatePath << ", " << in.errorString();
+        qCWarning(lcPhosphorTheme).noquote()
+            << "phosphor-theme: short read on template" << templatePath << ", " << in.errorString();
         return false;
     }
     const auto src = QString::fromUtf8(raw);
@@ -177,19 +181,20 @@ bool TemplateEngine::renderFile(const QString& templatePath, const QString& outP
     // filesystem that supports it.
     out.setDirectWriteFallback(true);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        qWarning().noquote() << "phosphor-theme: cannot write rendered output" << outPath << ", " << out.errorString();
+        qCWarning(lcPhosphorTheme).noquote()
+            << "phosphor-theme: cannot write rendered output" << outPath << ", " << out.errorString();
         return false;
     }
     const qint64 written = out.write(payload);
     if (written != payload.size()) {
-        qWarning().noquote() << "phosphor-theme: short write on rendered output" << outPath << ", "
-                             << out.errorString();
+        qCWarning(lcPhosphorTheme).noquote()
+            << "phosphor-theme: short write on rendered output" << outPath << ", " << out.errorString();
         out.cancelWriting();
         return false;
     }
     if (!out.commit()) {
-        qWarning().noquote() << "phosphor-theme: commit failed on rendered output" << outPath << ", "
-                             << out.errorString();
+        qCWarning(lcPhosphorTheme).noquote()
+            << "phosphor-theme: commit failed on rendered output" << outPath << ", " << out.errorString();
         return false;
     }
     return true;

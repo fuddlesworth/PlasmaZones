@@ -394,7 +394,11 @@ add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-
 # PlasmaZones consumes the org.phosphor.animation QML module for shell
 # UI animations. PHOSPHOR_ANIMATION_QUICK is enabled before
 # add_subdirectory picks up the option() default so QtQuickClock builds.
-set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by QML animation module)")
+# FORCE so a stale cached OFF (from a prior standalone configure of
+# libs/phosphor-animation in the same build dir, or an explicit
+# -DPHOSPHOR_ANIMATION_QUICK=OFF on the parent build) cannot silently
+# disable the QML module the shell links against.
+set(PHOSPHOR_ANIMATION_QUICK ON CACHE BOOL "Build QtQuickClock (required by QML animation module)" FORCE)
 add_subdirectory(libs/phosphor-animation)   # unified animation library: motion runtime, QML module, shaders, layer
 add_subdirectory(libs/phosphor-audio)       # audio spectrum provider (CAVA backend)
 add_subdirectory(libs/phosphor-surfaces)    # managed surface lifecycle (engine, keep-alive, scope gen)

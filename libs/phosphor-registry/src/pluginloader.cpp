@@ -259,7 +259,10 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
     // subdirectory is a plugin candidate iff it contains a
     // manifest.json. Plugins live under exactly one directory per
     // scan; XDG layering is not relevant for the bundle case.
-    QSet<QString> discoveredIds;
+    // QHash rather than QSet so we can name the first-seen directory
+    // when warning about the second-and-later colliding plugins (the
+    // QSet version dropped the first path's identity on the floor).
+    QHash<QString, QString> discoveredIds; // id → first-seen pluginDir this cycle
     QStringList watchedFiles; // returned to the watcher for per-file re-arm
 
     for (const QString& root : directoriesInScanOrder) {
@@ -280,21 +283,28 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
                 qWarning().noquote() << "PluginLoader: refusing" << pluginDir << "—" << m.parseError;
                 continue;
             }
-            // Duplicate-id detection within this rescan cycle. Two
-            // distinct plugin directories shipping the same manifest id
-            // is a packaging-collision bug (typical cause: a user
-            // copied a plugin dir without renaming the id). The
-            // Registry-side warning only fires on registerFactory,
-            // which the second plugin never reaches because of the
-            // contains() short-circuit below — surface it here so a
-            // triager sees BOTH conflicting paths in the log instead of
-            // just the surviving one.
-            if (discoveredIds.contains(m.id)) {
+            // Duplicate-id detection within this rescan cycle.
+            //
+            // Today this branch is UNREACHABLE because Manifest::parse
+            // enforces that the plugin's directory basename equals its
+            // manifest id, and two sibling directories cannot share a
+            // basename on any sane filesystem. The check matters once
+            // PluginLoader scans MULTIPLE roots (Phase-X XDG layering:
+            // /usr/share/phosphor/plugins/foo AND
+            // ~/.local/share/phosphor/plugins/foo can both ship
+            // manifest id "foo"), at which point performScanCycle
+            // iterates a non-singleton `directoriesInScanOrder` and
+            // the second-root hit lands here. The "first wins" tie-
+            // break matches the Registry's first-registration-wins
+            // contract; the warning names both directories so a
+            // triager can spot the collision instead of guessing.
+            const auto existing = discoveredIds.constFind(m.id);
+            if (existing != discoveredIds.constEnd()) {
                 qWarning().noquote() << "PluginLoader: duplicate manifest id" << m.id << "in" << pluginDir
-                                     << "— a sibling directory already shipped this id this rescan; skipping";
+                                     << "— already loaded from" << existing.value() << "this rescan; skipping";
                 continue;
             }
-            discoveredIds.insert(m.id);
+            discoveredIds.insert(m.id, pluginDir);
 
             // Already loaded from a previous rescan? Phase 1.3 does NOT
             // honour in-place .so replacement (see LoadedPlugin's

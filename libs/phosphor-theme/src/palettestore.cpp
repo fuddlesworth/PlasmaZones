@@ -791,11 +791,9 @@ void PaletteStore::rearmDirIfMissing(const QString& path)
 
 void PaletteStore::setDebounceIntervalForTest(int ms)
 {
-    // Test-only seam used by test_palettestore_hotreload.cpp to shrink
-    // the 80ms hot-reload debounce window so QTRY-style polling
-    // resolves quickly. Clamped to >= 1ms because QTimer treats 0ms
-    // as "fire on the next event-loop tick" which is observationally
-    // useful but defeats the burst-coalescing the test is exercising.
+    // Test-only seam: shrink the 80ms debounce so tests resolve fast.
+    // Clamp to >= 1ms because QTimer treats 0ms as "fire next tick"
+    // which defeats the burst-coalescing under test.
     m_reloadDebounce->setInterval(ms < 1 ? 1 : ms);
 }
 

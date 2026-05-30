@@ -41,15 +41,6 @@ Item {
         if (panelPopupHost)
             panelPopupHost.toggle(kind);
     }
-    // Reset the router's togglePopup back to its no-op default before
-    // the host tears down. Without this, the closure above keeps
-    // panelPopupHost captured across a hot-reload, and on reload the
-    // new shellRouter (rebuilt by PersistentProperties) would inherit
-    // a closure pointing at the destroyed prior host — a stale-binding
-    // landmine. The reset wins the race even on abrupt teardown
-    // because Component.onDestruction fires on the root Item before
-    // its declarative children's onDestruction handlers.
-    Component.onDestruction: shellRouter.togglePopup = function (kind) {}
 
     // Single source of truth for battery presence + a finite percentage.
     // Hoisted onto root so both batteryPercent and batteryVisible bind

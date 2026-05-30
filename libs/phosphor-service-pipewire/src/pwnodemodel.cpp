@@ -140,6 +140,14 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
         d->rowIndex.clear();
         endResetModel();
         Q_EMIT countChanged();
+        // Fire connectionChanged at the acknowledgement boundary so
+        // bindings observing the property get a NOTIFY for the implicit
+        // non-null → null transition that happened when the QPointer
+        // auto-nulled. Without this, any binding wired solely through
+        // connectionChanged stays pinned to the prior non-null value
+        // in its dependency graph (dereferencing it would crash;
+        // bindings should re-evaluate to nullptr).
+        Q_EMIT connectionChanged();
         return;
     }
     if (d->connection == connection)
@@ -394,6 +402,11 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
         d->connectionWires.clear();
         endResetModel();
         Q_EMIT countChanged();
+        // Fire connectionChanged at the acknowledgement boundary so
+        // bindings see the implicit non-null → null transition that
+        // happened when the QPointer auto-nulled (no prior NOTIFY
+        // would have been emitted for the external destruction).
+        Q_EMIT connectionChanged();
     }
     Q_EMIT mediaClassesChanged();
 }
