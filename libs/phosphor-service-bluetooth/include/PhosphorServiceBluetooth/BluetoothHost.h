@@ -40,7 +40,7 @@ class PHOSPHORSERVICEBLUETOOTH_EXPORT BluetoothHost : public QObject
     Q_PROPERTY(PhosphorServiceBluetooth::BluetoothAgent* agent READ agent CONSTANT)
 
 public:
-    /// Observes the system bus's `org.bluez` — the production wiring.
+    /// Observes the system bus's `org.bluez` (the production wiring).
     explicit BluetoothHost(QObject* parent = nullptr);
 
     /// Observes @p service on @p connection. Lets a consumer (or a test

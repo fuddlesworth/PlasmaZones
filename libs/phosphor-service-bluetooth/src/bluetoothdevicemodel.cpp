@@ -205,6 +205,11 @@ void BluetoothDeviceModel::connectDevice(BluetoothDevice* device)
     connect(device, &BluetoothDevice::rssiChanged, this, [this, device]() {
         onDeviceDataChanged(device, {RssiRole});
     });
+    // A device's adapter is fixed for its lifetime: BlueZ binds each Device1
+    // object to the adapter under whose path it was created and never reparents
+    // it (the same physical device seen by another adapter is a distinct
+    // object), so this only ever refreshes the displayed role, never changes
+    // filter membership. accepts() is therefore evaluated once at insertion.
     connect(device, &BluetoothDevice::adapterChanged, this, [this, device]() {
         onDeviceDataChanged(device, {AdapterRole});
     });
@@ -215,9 +220,11 @@ void BluetoothDeviceModel::connectDevice(BluetoothDevice* device)
 
 bool BluetoothDeviceModel::accepts(BluetoothDevice* device) const
 {
+    if (!device)
+        return false;
     if (!m_adapterFilter)
         return true;
-    return device && device->adapter() == m_adapterFilter->dbusPath();
+    return device->adapter() == m_adapterFilter->dbusPath();
 }
 
 } // namespace PhosphorServiceBluetooth

@@ -14,11 +14,11 @@
  * as a D-Bus server for the pairing agent (`org.bluez.Agent1`).
  *
  * Shells consume:
- *   - `BluetoothHost` — the facade: adapter / device enumeration plus the
+ *   - `BluetoothHost`: the facade for adapter / device enumeration plus the
  *     pairing-agent request signals.
- *   - `BluetoothAdapter` + `BluetoothAdapterModel` — per-adapter state and
+ *   - `BluetoothAdapter` + `BluetoothAdapterModel`: per-adapter state and
  *     the discovery / power write surface.
- *   - `BluetoothDevice` + `BluetoothDeviceModel` — per-device state and the
+ *   - `BluetoothDevice` + `BluetoothDeviceModel`: per-device state and the
  *     pair / connect / trust write surface.
  * and render however they like.
  *

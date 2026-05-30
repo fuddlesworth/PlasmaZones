@@ -16,13 +16,13 @@ class QDBusObjectPath;
 namespace PhosphorServiceBluetooth {
 
 /**
- * @brief Implements `org.bluez.Agent1` — the pairing agent BlueZ calls back
+ * @brief Implements `org.bluez.Agent1`, the pairing agent BlueZ calls back
  * into during a Pair() handshake.
  *
  * Registered by `BluetoothHost` with `KeyboardDisplay` capability, this is the
  * library's only D-Bus *server* object. The interactive callbacks
  * (RequestPinCode / RequestPasskey / RequestConfirmation / RequestAuthorization
- * / AuthorizeService) cannot answer BlueZ synchronously — they need the user.
+ * / AuthorizeService) cannot answer BlueZ synchronously: they need the user.
  * Each therefore takes a delayed D-Bus reply (`QDBusContext::setDelayedReply`)
  * and emits a Qt request signal carrying a `requestId`; a consumer (the CLI
  * now, a pairing dialog later) answers via `respondPinCode` / `respondPasskey`
@@ -64,7 +64,7 @@ public:
     Q_INVOKABLE void rejectRequest(quint64 requestId);
 
 public Q_SLOTS:
-    // org.bluez.Agent1 — exported to BlueZ via ExportAllSlots. Signatures
+    // org.bluez.Agent1, exported to BlueZ via ExportAllSlots. Signatures
     // mirror the BlueZ spec exactly; the interactive ones defer their reply.
     //
     // SECURITY: ONLY org.bluez.Agent1 methods may live in this slot block.

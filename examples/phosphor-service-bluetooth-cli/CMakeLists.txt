@@ -24,5 +24,5 @@ target_link_libraries(phosphor-service-bluetooth-cli
 
 # Intentionally no `install(TARGETS ...)` rule. This CLI is the acceptance
 # harness + worked example for phosphor-service-bluetooth, not a user-facing
-# tool — `bluetoothctl` already covers that role on shipped systems. Keeping
+# tool. `bluetoothctl` already covers that role on shipped systems. Keeping
 # it build-tree-only avoids polluting distro paths with a developer binary.

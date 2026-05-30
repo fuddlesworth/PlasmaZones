@@ -23,7 +23,7 @@
 using namespace PhosphorServiceBluetooth;
 
 // The `a{sa{sv}}` / `a{oa{sa{sv}}}` payloads, registered on the *server* side
-// (the fake) only — BluetoothHost's ObjectManager hand-demarshals.
+// (the fake) only; BluetoothHost's ObjectManager hand-demarshals.
 using InterfaceMap = QMap<QString, QVariantMap>;
 using ManagedObjectMap = QMap<QDBusObjectPath, InterfaceMap>;
 Q_DECLARE_METATYPE(InterfaceMap)
