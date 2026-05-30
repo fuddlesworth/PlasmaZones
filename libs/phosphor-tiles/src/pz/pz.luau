@@ -306,6 +306,155 @@ local function equalColumnsLayout(area, count, gap, minSizes)
     return zones
 end
 
+-- Port of clampSplitRatio.js
+local function clampSplitRatio(ratio)
+    return math.max(MIN_SPLIT, math.min(MAX_SPLIT, ratio))
+end
+
+-- Port of extractRegionMaxMin.js
+local function extractRegionMaxMin(minSizes, startIdx, endIdx, axis)
+    startIdx = math.max(0, startIdx)
+    local maxVal = 0
+    if not minSizes or #minSizes == 0 then return 0 end
+    local i = startIdx -- 0-based source index
+    while i < endIdx and i < #minSizes do
+        local entry = minSizes[i + 1]
+        local v = (entry[axis] and entry[axis] > 0) and entry[axis] or 0
+        if v > maxVal then maxVal = v end
+        i = i + 1
+    end
+    return maxVal
+end
+
+-- Port of solveTwoPart.js
+local function solveTwoPart(contentDim, firstDim, secondDim, minFirst, minSecond)
+    local totalMin = math.max(minFirst, 0) + math.max(minSecond, 0)
+    if totalMin > contentDim and totalMin > 0 then
+        firstDim = math.floor(contentDim * math.max(minFirst, 1) / totalMin)
+        secondDim = contentDim - firstDim
+    else
+        if minFirst > 0 and firstDim < minFirst then
+            firstDim = minFirst
+            secondDim = contentDim - firstDim
+        end
+        if minSecond > 0 and secondDim < minSecond then
+            secondDim = minSecond
+            firstDim = contentDim - secondDim
+        end
+    end
+    firstDim = math.max(1, firstDim)
+    secondDim = math.max(1, secondDim)
+    return { first = firstDim, second = secondDim }
+end
+
+-- Port of masterStackLayout.js (horizontal=false → left/right, true → top/bottom)
+local function masterStackLayout(area, count, gap, splitRatio, masterCount, minSizes, horizontal)
+    if count <= 0 then return {} end
+    if area.width < MIN_ZONE_SIZE or area.height < MIN_ZONE_SIZE then
+        return fillArea(area, count)
+    end
+    masterCount = math.max(1, math.min(masterCount, count))
+    local stackCount = count - masterCount
+    splitRatio = math.max(MIN_SPLIT, math.min(splitRatio, MAX_SPLIT))
+
+    local primaryAxis = horizontal and "h" or "w"
+    local primarySize = horizontal and area.height or area.width
+    local secondarySize = horizontal and area.width or area.height
+
+    local minMasterPrimary = extractRegionMaxMin(minSizes, 0, masterCount, primaryAxis)
+    local minStackPrimary = extractRegionMaxMin(minSizes, masterCount, count, primaryAxis)
+
+    local masterPrimary, stackPrimary
+    if stackCount == 0 then
+        masterPrimary = primarySize
+        stackPrimary = 0
+    else
+        local contentPrimary = primarySize - gap
+        if contentPrimary <= 0 then
+            return fillArea(area, count)
+        end
+        masterPrimary = math.floor(contentPrimary * splitRatio)
+        stackPrimary = contentPrimary - masterPrimary
+        local solved = solveTwoPart(contentPrimary, masterPrimary, stackPrimary, minMasterPrimary, minStackPrimary)
+        masterPrimary = solved.first
+        stackPrimary = solved.second
+    end
+
+    local masterMinSec = horizontal and extractMinWidths(minSizes, masterCount)
+        or extractMinHeights(minSizes, masterCount)
+    local stackMinSec = horizontal and extractMinWidths(minSizes, stackCount, masterCount)
+        or extractMinHeights(minSizes, stackCount, masterCount)
+
+    if secondarySize <= 0 then
+        return fillArea(area, count)
+    end
+
+    local masterSecondary = distributeWithOptionalMins(secondarySize, masterCount, gap, masterMinSec)
+
+    local zones = {}
+    local primaryPos = horizontal and area.y or area.x
+    local secondaryPos = horizontal and area.x or area.y
+    local cursor = secondaryPos
+
+    for i = 1, masterCount do
+        if horizontal then
+            zones[#zones + 1] = { x = cursor, y = primaryPos, width = masterSecondary[i], height = masterPrimary }
+        else
+            zones[#zones + 1] = { x = primaryPos, y = cursor, width = masterPrimary, height = masterSecondary[i] }
+        end
+        cursor = cursor + masterSecondary[i] + gap
+    end
+
+    if stackCount > 0 then
+        local stackSecondary = distributeWithOptionalMins(secondarySize, stackCount, gap, stackMinSec)
+        local stackStart = primaryPos + masterPrimary + gap
+        cursor = secondaryPos
+        for i = 1, stackCount do
+            if horizontal then
+                zones[#zones + 1] = { x = cursor, y = stackStart, width = stackSecondary[i], height = stackPrimary }
+            else
+                zones[#zones + 1] = { x = stackStart, y = cursor, width = stackPrimary, height = stackSecondary[i] }
+            end
+            cursor = cursor + stackSecondary[i] + gap
+        end
+    end
+
+    return zones
+end
+
+-- Port of deckLayout.js (focused window + peeking background windows)
+local function deckLayout(area, count, focusedFraction, horizontal)
+    if count <= 0 then return {} end
+    if area.width <= 0 or area.height <= 0 then
+        return fillArea(area, count)
+    end
+    local axisSize = horizontal and area.height or area.width
+    local bgCount = count - 1
+    local focusedSize = math.max(1, math.floor(axisSize * focusedFraction))
+    local peekTotal = axisSize - focusedSize
+    local peekSize = (bgCount > 0) and math.max(1, math.floor(math.max(0, peekTotal) / bgCount)) or 0
+
+    local zones = {}
+    if horizontal then
+        zones[1] = { x = area.x, y = area.y, width = area.width, height = focusedSize }
+    else
+        zones[1] = { x = area.x, y = area.y, width = focusedSize, height = area.height }
+    end
+    for i = 0, bgCount - 1 do
+        local peekOffset = math.min(focusedSize + i * peekSize, axisSize - 1)
+        if horizontal then
+            local peekY = area.y + peekOffset
+            zones[#zones + 1] = { x = area.x, y = math.min(peekY, area.y + area.height - 1),
+                width = area.width, height = math.max(1, area.y + area.height - peekY) }
+        else
+            local peekX = area.x + peekOffset
+            zones[#zones + 1] = { x = math.min(peekX, area.x + area.width - 1), y = area.y,
+                width = math.max(1, area.x + area.width - peekX), height = area.height }
+        end
+    end
+    return zones
+end
+
 -- ── Module wrapper ─────────────────────────────────────────────────────────
 local function algorithm(def)
     local userTile = def.tile
@@ -338,4 +487,9 @@ pz = {
     fillRegion = fillRegion,
     fillArea = fillArea,
     equalColumnsLayout = equalColumnsLayout,
+    clampSplitRatio = clampSplitRatio,
+    extractRegionMaxMin = extractRegionMaxMin,
+    solveTwoPart = solveTwoPart,
+    masterStackLayout = masterStackLayout,
+    deckLayout = deckLayout,
 }

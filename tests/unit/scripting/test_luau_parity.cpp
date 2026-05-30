@@ -49,6 +49,7 @@ private Q_SLOTS:
         m_luaWatchdog = std::make_shared<PhosphorScripting::LuauWatchdog>();
     }
 
+    // Batch 1
     void columns()
     {
         compareAlgorithm(QStringLiteral("columns"));
@@ -60,6 +61,23 @@ private Q_SLOTS:
     void monocle()
     {
         compareAlgorithm(QStringLiteral("monocle"));
+    }
+    // Batch 2
+    void deck()
+    {
+        compareAlgorithm(QStringLiteral("deck"));
+    }
+    void horizontalDeck()
+    {
+        compareAlgorithm(QStringLiteral("horizontal-deck"));
+    }
+    void masterStack()
+    {
+        compareAlgorithm(QStringLiteral("master-stack"));
+    }
+    void wide()
+    {
+        compareAlgorithm(QStringLiteral("wide"));
     }
 };
 
@@ -73,6 +91,8 @@ void TestLuauParity::compareAlgorithm(const QString& name)
     const QList<QRect> areas = {QRect(0, 0, 1920, 1080), QRect(0, 0, 1366, 768), QRect(0, 0, 800, 1280)};
     const QList<int> gaps = {0, 8, 20};
     const QList<int> counts = {1, 2, 3, 4, 5, 6};
+    const QList<qreal> ratios = {0.35, 0.6}; // master/stack split + deck focused fraction
+    const QList<int> masterCounts = {1, 2};
 
     // Min-size variants: none, and a per-window set (truncated to count by the algos).
     const QVector<QSize> someMins = {QSize(200, 150), QSize(250, 120), QSize(180, 200),
@@ -82,25 +102,36 @@ void TestLuauParity::compareAlgorithm(const QString& name)
     for (const QRect& area : areas) {
         for (int gap : gaps) {
             for (int count : counts) {
-                for (const QVector<QSize>& mins : minVariants) {
-                    TilingState state(QStringLiteral("screen-1"));
-                    TilingParams p;
-                    p.windowCount = count;
-                    p.screenGeometry = area;
-                    p.state = &state;
-                    p.innerGap = gap;
-                    p.outerGaps = EdgeGaps::uniform(0);
-                    p.minSizes = mins;
+                for (qreal ratio : ratios) {
+                    for (int masterCount : masterCounts) {
+                        for (const QVector<QSize>& mins : minVariants) {
+                            TilingState state(QStringLiteral("screen-1"));
+                            for (int w = 0; w < count; ++w) {
+                                state.addWindow(QStringLiteral("w%1").arg(w));
+                            }
+                            state.setSplitRatio(ratio);
+                            state.setMasterCount(masterCount);
 
-                    const QVector<QRect> jsZones = js.calculateZones(p);
-                    const QVector<QRect> luaZones = lua.calculateZones(p);
+                            TilingParams p;
+                            p.windowCount = count;
+                            p.screenGeometry = area;
+                            p.state = &state;
+                            p.innerGap = gap;
+                            p.outerGaps = EdgeGaps::uniform(0);
+                            p.minSizes = mins;
 
-                    if (jsZones != luaZones) {
-                        qWarning().noquote()
-                            << "PARITY MISMATCH" << name << "area=" << area << "gap=" << gap << "count=" << count
-                            << "mins=" << mins.size() << "\n  js  =" << jsZones << "\n  luau=" << luaZones;
+                            const QVector<QRect> jsZones = js.calculateZones(p);
+                            const QVector<QRect> luaZones = lua.calculateZones(p);
+
+                            if (jsZones != luaZones) {
+                                qWarning().noquote()
+                                    << "PARITY MISMATCH" << name << "area=" << area << "gap=" << gap
+                                    << "count=" << count << "ratio=" << ratio << "mc=" << masterCount
+                                    << "mins=" << mins.size() << "\n  js  =" << jsZones << "\n  luau=" << luaZones;
+                            }
+                            QCOMPARE(luaZones, jsZones);
+                        }
                     }
-                    QCOMPARE(luaZones, jsZones);
                 }
             }
         }
