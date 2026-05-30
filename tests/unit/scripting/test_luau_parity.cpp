@@ -111,6 +111,15 @@ private Q_SLOTS:
     {
         compareAlgorithm(QStringLiteral("dwindle"));
     }
+    // Batch 7
+    void spread()
+    {
+        compareAlgorithm(QStringLiteral("spread"));
+    }
+    void grid()
+    {
+        compareAlgorithm(QStringLiteral("grid"));
+    }
 };
 
 void TestLuauParity::compareAlgorithm(const QString& name)
