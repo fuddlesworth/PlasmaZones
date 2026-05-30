@@ -67,21 +67,31 @@ void SettingsController::buildApplicationController()
         m_app->registerPage(adapter, parentId, title, source, icon, collapsible, divider);
     };
 
-    // Top-level entries — matches the legacy _mainItems in Main.qml.
-    // Divider placements mirror the legacy `hasDividerAfter: true` flags
-    // on overview/display/tiling/window-rules so the rail's visual
-    // rhythm is preserved across the migration. (The legacy parent
-    // virtual "rules" was retired when its only child was promoted to
-    // the top-level "window-rules" entry; the divider semantics moved
-    // with the promotion.)
+    // Top-level entries. The rail reads top → bottom as three blocks split by
+    // two dividers: (1) top/global — Overview (status dashboard) + General
+    // (global settings); (2) per-feature configuration — Display, Placement,
+    // Animations, Window Rules; (3) tools & meta — Editor, About.
+    // `divider` flags mark only those two seams (after General, after Window
+    // Rules) plus one inside the feature block (after Placement, to set the
+    // placement categories apart from Animations/Window Rules).
+
+    // ── Block 1: top / global ──
     regVirtual(QStringLiteral("overview"), QString(), PzI18n::tr("Overview"), QStringLiteral("MonitorStatePage.qml"),
-               QStringLiteral("monitor"), /*collapsible=*/false, /*divider=*/true);
+               QStringLiteral("monitor"));
+    // General leads near the top (mirrors the Animations section leading with
+    // its own "General" child). Divider after it closes the top/global block.
+    regPage(m_generalPage, QString(), PzI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
+            QStringLiteral("configure"), /*collapsible=*/false, /*divider=*/true);
+
+    // ── Block 2: per-feature configuration ──
     regVirtual(QStringLiteral("display"), QString(), PzI18n::tr("Display"), QString(),
-               QStringLiteral("preferences-desktop-display"), /*collapsible=*/true, /*divider=*/true);
-    regVirtual(QStringLiteral("snapping"), QString(), PzI18n::tr("Snapping"), QString(),
-               QStringLiteral("view-split-left-right"));
-    regVirtual(QStringLiteral("tiling"), QString(), PzI18n::tr("Tiling"), QString(), QStringLiteral("window-duplicate"),
-               /*collapsible=*/false, /*divider=*/true);
+               QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
+    // Placement groups the two placement modes (Snapping / Tiling) as an
+    // inline-collapsible category, matching Display. Divider after it (i.e.
+    // above Animations) sets the placement categories apart from the
+    // Animations / Window Rules pages that follow.
+    regVirtual(QStringLiteral("placement"), QString(), PzI18n::tr("Placement"), QString(),
+               QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
     // DESIGN-NOTE: m_animationsPage carries PageController id "animations"
     // (see the AnimationsPageController ctor in animationspagecontroller.cpp)
     // which is ALSO the navigation-parent id we redirect to
@@ -94,23 +104,26 @@ void SettingsController::buildApplicationController()
     // rename the controller id to something like "animations-staging" so
     // the two surfaces are independent.
     regPage(m_animationsPage, QString(), PzI18n::tr("Animations"), QString(), QStringLiteral("media-playback-start"));
-    // Window Rules sits at the top level — it used to live under a
-    // collapsible "Rules" category alongside Exclusions, but after the v4
-    // fold there is only one rule surface left, so the parent category
-    // would add navigation without organising anything. Promoting it
-    // gets the page one click closer too. Divider after it closes the
-    // feature-configuration block (Display / Snapping / Tiling /
-    // Animations / Window Rules) and separates it from the tools-and-
-    // meta block below (Editor / General / About) so the rail's visual
-    // rhythm has a clear seam where the per-feature pages end.
+    // Window Rules is a top-level leaf (its old "Rules" parent retired after
+    // the v4 fold left a single rule surface). Divider after it closes the
+    // feature block and opens the tools-and-meta block below.
     regPage(m_windowRulesPage, QString(), PzI18n::tr("Window Rules"), QStringLiteral("WindowRulesPage.qml"),
             QStringLiteral("view-list-details"), /*collapsible=*/false, /*divider=*/true);
+
+    // ── Block 3: tools & meta ──
     regPage(m_editorPage, QString(), PzI18n::tr("Editor"), QStringLiteral("EditorPage.qml"),
             QStringLiteral("document-edit"));
-    regPage(m_generalPage, QString(), PzI18n::tr("General"), QStringLiteral("GeneralPage.qml"),
-            QStringLiteral("configure"));
     regVirtual(QStringLiteral("about"), QString(), PzI18n::tr("About"), QStringLiteral("AboutPage.qml"),
                QStringLiteral("help-about"));
+
+    // Placement children — the two placement modes. They keep their own
+    // drill-down behaviour (collapsible=false) and their inline enable toggles
+    // (keyed by pageId "snapping"/"tiling" in Main.qml's trailing delegate);
+    // only their parent changed from top-level to "placement".
+    regVirtual(QStringLiteral("snapping"), QStringLiteral("placement"), PzI18n::tr("Snapping"), QString(),
+               QStringLiteral("view-split-left-right"));
+    regVirtual(QStringLiteral("tiling"), QStringLiteral("placement"), PzI18n::tr("Tiling"), QString(),
+               QStringLiteral("window-duplicate"));
 
     // Display children
     regVirtual(QStringLiteral("virtualscreens"), QStringLiteral("display"), PzI18n::tr("Virtual Screens"),
@@ -306,6 +319,10 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     // the generic "Unknown settings page" warning.
     static const QHash<QString, QString> redirects{
         {QStringLiteral("display"), QStringLiteral("virtualscreens")},
+        // "placement" is the inline-collapsible parent of snapping/tiling; it
+        // has no page of its own, so a --page=placement / D-Bus call lands on
+        // the first leaf of its first child (snapping → snapping-appearance).
+        {QStringLiteral("placement"), QStringLiteral("snapping-appearance")},
         {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
         {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
         {QStringLiteral("animations"), QStringLiteral("animations-general")},
@@ -336,11 +353,13 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 {
     // Single source of truth: parent name → set of leaf child page
     // names. Used by `isPageDirty` to propagate dirty state from a
-    // leaf to any group it belongs to. Covers both top-level parents
-    // (snapping / tiling / animations) AND mid-level virtual parents
-    // (animations-surfaces / animations-library) whose children don't
-    // share their name prefix — the explicit set sidesteps the
-    // asymmetry between prefix-walk and direct membership lookup.
+    // leaf to any group it belongs to. Covers parents at every level:
+    // top-level categories (placement / display / animations) AND the
+    // mid-level virtual parents nested beneath them (snapping / tiling
+    // under placement; animations-surfaces / animations-library; the
+    // *-cat headers) whose children don't share their name prefix — the
+    // explicit set sidesteps the asymmetry between prefix-walk and
+    // direct membership lookup.
     //
     // The "animations" entry is built at static-init by unioning the
     // virtual sub-buckets (`animations-surfaces`, `animations-library`)
@@ -366,8 +385,8 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QSet<QString> kAnimationsDirectChildren{QStringLiteral("animations-general")};
     static const QSet<QString> kAnimationsAllLeaves =
         kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
-    // Mid-level *-cat collapsible category headers under the top-level
-    // snapping / tiling parents. Sidebar.qml renders these as collapsible
+    // Mid-level *-cat collapsible category headers under the snapping /
+    // tiling drill-down parents. Sidebar.qml renders these as collapsible
     // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
     // Main.qml calls isPageDirty(<*-cat>) to decide whether to light the
     // badge. Without these entries that lookup would always
@@ -402,6 +421,12 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingVisualChildren + kSnappingBehaviorChildren + kSnappingConfigChildren},
         {QStringLiteral("tiling"), kTilingVisualChildren + kTilingBehaviorChildren + kTilingConfigChildren},
+        // "placement" is the inline-collapsible parent of snapping + tiling;
+        // when collapsed its dirty badge must light if any snapping OR tiling
+        // leaf is dirty, so its leaf set is the union of both modes' leaves.
+        {QStringLiteral("placement"),
+         kSnappingVisualChildren + kSnappingBehaviorChildren + kSnappingConfigChildren + kTilingVisualChildren
+             + kTilingBehaviorChildren + kTilingConfigChildren},
         {QStringLiteral("snapping-visual-cat"), kSnappingVisualChildren},
         {QStringLiteral("snapping-behavior-cat"), kSnappingBehaviorChildren},
         {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
