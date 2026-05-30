@@ -31,8 +31,8 @@ PhosphorUi.SettingsAppWindow {
     readonly property alias layoutContextMenu: layoutContextMenu
     // GeneralPage's "Reset to Defaults" button reaches the chrome-owned
     // confirmation dialog through this alias. The dialog lives in Main.qml
-    // because `_navShortcutsEnabled` (line 283 below) consults its
-    // visibility to gate Ctrl+PgUp/PgDown; without the alias, the
+    // because `_navShortcutsEnabled` (declared later in this file) consults
+    // its visibility to gate Ctrl+PgUp/PgDown; without the alias, the
     // GeneralPage button's `defaultsConfirmDialog.open()` would resolve
     // against the page's own scope (Loader breaks file-id lookup),
     // throwing `ReferenceError: defaultsConfirmDialog is not defined`

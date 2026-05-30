@@ -393,11 +393,19 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_windowIdReverse.remove(closedWindowId);
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
-    // Symmetric with the windowDeleted handler (lifecycle.cpp:483). Close
-    // shaders held via `holdCloseGrab=true` keep the EffectWindow alive
-    // past slotWindowClosed and the close-path paints can still touch the
-    // opacity cache; clearing here ensures the next windowDeleted has
-    // nothing to clean up if the close shader runs zero frames.
+    // Drop any pending-but-not-yet-flushed frame geometry for the
+    // closing window. Daemon would discard a setFrameGeometry call
+    // for a no-longer-tracked windowId anyway, so the leak was
+    // wasted D-Bus rather than incorrect — but the cleanup keeps
+    // the pending-batch in lockstep with the live window set.
+    m_pendingFrameGeometry.remove(closedWindowId);
+    // Symmetric with the `windowDeleted` lambda in `lifecycle.cpp`
+    // (which removes the same key from `m_frameOpacityCache` after the
+    // close-grab unref). Close shaders held via `holdCloseGrab=true`
+    // keep the EffectWindow alive past slotWindowClosed and the
+    // close-path paints can still touch the opacity cache; clearing
+    // here ensures the next windowDeleted has nothing to clean up if
+    // the close shader runs zero frames.
     m_shaderManager.m_frameOpacityCache.remove(w);
 }
 

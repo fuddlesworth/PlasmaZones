@@ -592,20 +592,19 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     }
     const QString windowId = getWindowId(w);
     const QString screenId = getWindowScreenId(w);
-
-    // Autotile handler handles its own screens — only handle snap-mode here
-    if (m_autotileHandler->isAutotileScreen(screenId)) {
-        return;
-    }
-
     const bool minimized = w->isMinimized();
 
-    // window.minimize shader transition. We only fire on UN-minimize
-    // (forward 0→1, "appear"). The going-to-minimized direction is
-    // intentionally not a shader event on the kwin-effect path: KWin
-    // pulls the surface (collapses frame geometry to 0×0 / sets
-    // isMinimized=true) BEFORE this signal fires, and
-    // beginShaderTransition's collapsed-surface guard rejects the
+    // window.minimize shader transition fires for BOTH snap and autotile
+    // screens — the shader event is screen-mode-independent and the
+    // autotile handler's own minimised-change slot does not fire it
+    // (which would otherwise be asymmetric per-screen UX for the same
+    // user-configured "WindowMinimize" event).
+    //
+    // We only fire on UN-minimize (forward 0→1, "appear"). The
+    // going-to-minimized direction is intentionally not a shader event
+    // on the kwin-effect path: KWin pulls the surface (collapses frame
+    // geometry to 0×0 / sets isMinimized=true) BEFORE this signal fires,
+    // and beginShaderTransition's collapsed-surface guard rejects the
     // install — the FBO allocation aborts on a 0×0 redirect target.
     // A genuine "going away" minimise animation would need an
     // unredirect-time hook that captures the last live frame before
@@ -613,6 +612,12 @@ void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     if (!minimized) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowMinimize, animationDurationMs(),
                                /*reverse=*/false);
+    }
+
+    // Snap-mode-only float bookkeeping below: the autotile handler runs
+    // its own snap-state / float-state machine for autotile screens.
+    if (m_autotileHandler->isAutotileScreen(screenId)) {
+        return;
     }
 
     if (minimized) {

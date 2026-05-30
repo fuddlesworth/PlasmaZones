@@ -1892,13 +1892,17 @@ void Daemon::stop()
     // The other nine raw-Qt-parented adaptors (LayoutAdaptor,
     // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
     // DBusScreenAdaptor, WindowDragAdaptor, CompositorBridgeAdaptor,
-    // SnapAdaptor, AutotileAdaptor) all ship no-op destructors —
-    // either explicit `= default` in their headers, an empty body
-    // declared inline, or an empty out-of-line body (`{}`) in their
-    // .cpp (DBusScreenAdaptor + WindowTrackingAdaptor follow that
-    // shape). The substantive safety claim is "no member deref runs
-    // in any of their destructors" — confirmed by inspecting each
-    // header + cpp pair, not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
+    // SnapAdaptor, AutotileAdaptor) all ship destructors that don't
+    // deref any borrowed pointer — most are `= default` / empty-body
+    // (no member access), and the two outliers do only self-cleanup
+    // on a Qt-child member: DBusScreenAdaptor ships an empty out-of-
+    // line body, and WindowTrackingAdaptor's `~WindowTrackingAdaptor`
+    // calls `m_service->setShouldTrackPredicate({})` on its Qt-child
+    // m_service to clear a captured-this lambda before the child
+    // tears down (see Pass-3 commit c4e3c5125). The substantive
+    // safety claim is "no borrowed-pointer deref runs in any of their
+    // destructors" — confirmed by inspecting each header + cpp pair,
+    // not header alone. QDBusConnection::unregisterObject (invoked above) blocks new
     // method dispatch to them before we begin tearing down, and Qt's
     // sender-destruction auto-disconnect cleans up signal wiring when the
     // borrowed sender (m_layoutManager, etc.) is destroyed during member

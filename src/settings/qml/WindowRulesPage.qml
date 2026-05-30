@@ -169,9 +169,16 @@ SettingsFlickable {
     // filtering, summary cards). A dataChanged that only touches OTHER roles
     // (Name / Enabled / Priority — the row delegate's inline bindings) must
     // NOT trigger a full sectionModel rebuild: doing so re-walks every rule
-    // on every per-row enable toggle. Mirrors the role enum in
-    // src/settings/windowrulemodel.h — kept in sync by hand because QML can't
-    // reference the C++ enum integers without yet another exposure surface.
+    // on every per-row enable toggle. This is a deliberately curated
+    // SUBSET of the full role enum in src/settings/windowrulemodel.h —
+    // WindowRuleModel is exposed to QML via QML_ELEMENT in CMakeLists.txt
+    // and the binding below references the role symbols directly, so the
+    // list isn't tracking the C++ enum's NAMES (those resolve at runtime),
+    // it's tracking which roles are STRUCTURAL versus row-inline. Adding
+    // a new structural role means appending it here AND walking every
+    // dataChanged emitter to ensure it includes the role in its `roles`
+    // arg. Adding a row-inline role (Name / Enabled / Priority) means
+    // deliberately leaving it OUT.
     readonly property var _summaryRoles: [WindowRuleModel.SectionRole, WindowRuleModel.MatchSummaryRole, WindowRuleModel.ActionSummaryRole, WindowRuleModel.ScreenIdsRole, WindowRuleModel.ConditionCountRole, WindowRuleModel.ActionCountRole, WindowRuleModel.IsCompositeRole, WindowRuleModel.ValidationIssueCountRole]
 
     contentHeight: mainCol.implicitHeight

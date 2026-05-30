@@ -324,11 +324,19 @@ inline constexpr QLatin1StringView Opacity{"opacity"};
 inline constexpr QLatin1StringView AnimShaderPrefix{"anim-shader:"};
 inline constexpr QLatin1StringView AnimTimingPrefix{"anim-timing:"};
 inline constexpr QLatin1StringView AnimCurvePrefix{"anim-curve:"};
-/// Window-scoped, event-agnostic — the effect's shouldAnimateWindow
-/// surfaces ANY rule whose action fills this slot as "don't animate
-/// this window, regardless of event or other rules". One slot per
-/// window's full animation surface, not per event, so a single rule
-/// suppresses every animation path.
+/// Window-scoped, event-agnostic. Declared for ActionDescriptor
+/// completeness — ExcludeAnimations carries `.slotFor =
+/// constantSlot(ActionSlot::AnimExclude)`. NOT actually filled at
+/// resolve time: ExcludeAnimations is `.terminal = true`, so
+/// `RuleEvaluator::resolve` calls `markExcluded()` and breaks
+/// BEFORE `fillSlot()` runs. The effect's `shouldAnimateWindow`
+/// gates on `ResolvedActions::isExcluded()` (the dedicated
+/// `m_animationExclusionEvaluator`), never on `hasSlot("anim-exclude")`
+/// — so no consumer queries this slot id at runtime. Kept to satisfy
+/// the action-registry invariant that every non-terminal slot id is
+/// referenced; a future change that makes ExcludeAnimations non-
+/// terminal (e.g. composing with override actions) would start
+/// filling the slot, so the id stays load-bearing for that path.
 inline constexpr QLatin1StringView AnimExclude{"anim-exclude"};
 } // namespace ActionSlot
 

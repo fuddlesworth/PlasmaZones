@@ -66,11 +66,16 @@ public:
                         QObject* parent = nullptr);
     ~SnapEngine() override;
 
-    /// Current virtual desktop (1-based; 0 when no virtual-desktop manager is
-    /// wired) and activity, forwarded from the injected managers. Exposed so
-    /// daemon adaptors that gate on disabled context (see isContextDisabled)
-    /// can read the same values the engine's own restore logic uses, without
-    /// each adaptor wiring its own managers.
+    /// Current virtual desktop (1-based; 0 when no virtual-desktop manager
+    /// is wired) and activity, forwarded from the injected managers.
+    /// Public for symmetry with AutotileEngine's analogous accessors and
+    /// to keep the engine's "current context" surface coherent — the
+    /// daemon uses `Daemon::currentDesktop()` / `Daemon::currentActivity()`
+    /// directly rather than going through the engine. The only current
+    /// in-tree caller of these two is `lifecycle.cpp` (snap-engine-
+    /// internal restore logic); kept public so a future adaptor that
+    /// wants the engine's own view (e.g. for a per-engine OSD) doesn't
+    /// have to wire its own VDM.
     int currentVirtualDesktop() const;
     QString currentActivity() const;
 

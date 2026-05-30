@@ -73,13 +73,13 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
     qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
 }
 
-QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap(bool filterHandleable) const
+QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap() const
 {
     const auto windows = KWin::effects->stackingOrder();
     QHash<QString, KWin::EffectWindow*> windowMap;
     windowMap.reserve(windows.size());
     for (KWin::EffectWindow* w : windows) {
-        if (w && (!filterHandleable || shouldHandleWindow(w))) {
+        if (w && shouldHandleWindow(w)) {
             windowMap[getWindowId(w)] = w;
         }
     }

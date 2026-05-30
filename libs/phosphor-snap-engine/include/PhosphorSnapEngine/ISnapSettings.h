@@ -44,4 +44,10 @@ public:
 
 } // namespace PhosphorEngine
 
+// Q_DECLARE_INTERFACE is REQUIRED at moc time for any QObject that uses
+// `Q_INTERFACES(PhosphorEngine::ISnapSettings)` to declare that it
+// implements this interface — Settings does so in src/config/settings.h.
+// No `qobject_cast<ISnapSettings*>(...)` callers exist today (the daemon
+// reaches in through the typed pointer it already holds), but the moc
+// pairing is structural, not driven by runtime IID dispatch.
 Q_DECLARE_INTERFACE(PhosphorEngine::ISnapSettings, "org.plasmazones.ISnapSettings")

@@ -1083,20 +1083,30 @@ private Q_SLOTS:
         // resolve result without requiring a setExcludeRuleSet re-fence
         // (which the Pass 1 init-prologue refactor explicitly dropped).
         //
-        // Fixture shape matters: the swap MUST be non-empty → non-empty
-        // so that (a) the evaluator gets constructed on the first
-        // isAppIdExcluded call (the `isEmpty()` fast path at
-        // navigation_actions.cpp:143 skips evaluator construction
-        // entirely for an empty set, so an `add → query → setRules({})
-        // → query` sequence would pass trivially via the empty-set
-        // short-circuit on the second half without ever exercising the
-        // revision-bump cache invalidation), and (b) swapping rule A
-        // for rule B forces the cached evaluator to re-evaluate the
-        // priorityOrder + matchCache against the new revision —
-        // without per-revision invalidation, the cached resolve for
-        // "appA" would return true after rule A is gone (stale match
-        // cache) AND the resolve for "appB" would return false
-        // (stale priorityOrder index missing the new rule).
+        // Fixture shape matters along two axes:
+        //
+        //   (a) The first non-empty step MUST construct the evaluator
+        //       (otherwise the `isEmpty()` fast path in
+        //       `SnapEngine::isAppIdExcluded` short-circuits to false
+        //       without ever touching the bound set's priority-order
+        //       index — see the `m_excludeRuleSet->isEmpty()` early
+        //       return in navigation_actions.cpp). Step 1's
+        //       `setRules({A})` + query primes it.
+        //
+        //   (b) The follow-up step MUST change the rule LIST in a way
+        //       that the cached `m_priorityOrder` permutation cannot
+        //       coincidentally still satisfy. For a SAME-SIZE swap
+        //       (1 → 1), the cached permutation `[0]` would coincidentally
+        //       still indexes the only rule slot post-swap — the walk
+        //       evaluates the freshly-set rule's match regardless of
+        //       whether `priorityOrder()` rebuilds. So the test must
+        //       GROW the list (size mismatch is the only check that
+        //       reliably fires in the small-fixture case) AND match the
+        //       NEW rule's appId. If the priority-order cache is stale
+        //       at size N, the broken walk only visits rules[0..N-1]
+        //       and the rule added at the next index would never be
+        //       evaluated — producing a false-negative `isAppIdExcluded`
+        //       for the new pattern.
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
 
         PhosphorWindowRule::WindowRuleSet set;
@@ -1118,29 +1128,48 @@ private Q_SLOTS:
             return r;
         };
 
-        // Step 1: rule A exists. Querying primes the cached evaluator
-        // against the bound set at its current revision.
+        // Step 1: rule A exists (size 1). Querying primes the cached
+        // evaluator against the bound set at its current revision; the
+        // resolved priority-order index is `[0]`.
         set.setRules({excludeRule(QStringLiteral("appA"))});
         QVERIFY(engine.isAppIdExcluded(QStringLiteral("appA")));
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appB")));
 
-        // Step 2: swap rule A out for rule B via in-place setRules. Same
-        // bound pointer; bumped revision. The cached evaluator MUST
-        // notice the revision bump and re-evaluate — without
-        // per-revision invalidation, "appA" would still resolve as
-        // excluded (stale match cache) and "appB" would still resolve
-        // as not-excluded (stale priorityOrder index missing the new
-        // rule).
+        // Step 2: swap rule A for rule B at the SAME size (1 → 1).
+        // Verifies that the new rule's match is picked up — the
+        // priorityOrder cache happens to remain `[0]` which still
+        // indexes the only post-swap rule, so this step alone does
+        // NOT discriminate revision-bump invalidation from a stale
+        // cache (the broken walk visits rules[0] which IS the new
+        // rule). It does verify that the engine doesn't latch onto
+        // the OLD rule's pattern, which is the load-bearing user-
+        // facing property.
         set.setRules({excludeRule(QStringLiteral("appB"))});
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
         QVERIFY(engine.isAppIdExcluded(QStringLiteral("appB")));
 
-        // Step 3: clear via empty setRules. This goes through the
-        // `isEmpty()` fast path (not the evaluator), but verifies the
-        // bound pointer survives the mutation cleanly.
+        // Step 3: GROW the list (1 → 2). This is the step that
+        // discriminates a working `priorityOrder()` rebuild from a
+        // broken one. The cached permutation from Step 2 has size 1;
+        // the new set has size 2. Without per-revision invalidation,
+        // the cached `[0]` walk would only visit rules[0] (the
+        // already-known "appB" rule) — rules[1] ("appC") would never
+        // be evaluated and `isAppIdExcluded("appC")` would return
+        // false (false-negative). The pass verdict requires BOTH
+        // pre-existing AND newly-appended rules to resolve correctly.
+        set.setRules({excludeRule(QStringLiteral("appB")), excludeRule(QStringLiteral("appC"))});
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appB")));
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appC")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
+
+        // Step 4: clear via empty setRules. This goes through the
+        // `isEmpty()` fast path in `SnapEngine::isAppIdExcluded` (not
+        // the evaluator), but verifies the bound pointer survives the
+        // mutation cleanly.
         set.setRules({});
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appB")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appC")));
     }
 };
 

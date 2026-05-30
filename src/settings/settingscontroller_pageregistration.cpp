@@ -69,8 +69,11 @@ void SettingsController::buildApplicationController()
 
     // Top-level entries — matches the legacy _mainItems in Main.qml.
     // Divider placements mirror the legacy `hasDividerAfter: true` flags
-    // on overview/display/tiling/rules so the rail's visual rhythm is
-    // preserved across the migration.
+    // on overview/display/tiling/window-rules so the rail's visual
+    // rhythm is preserved across the migration. (The legacy parent
+    // virtual "rules" was retired when its only child was promoted to
+    // the top-level "window-rules" entry; the divider semantics moved
+    // with the promotion.)
     regVirtual(QStringLiteral("overview"), QString(), PzI18n::tr("Overview"), QStringLiteral("MonitorStatePage.qml"),
                QStringLiteral("monitor"), /*collapsible=*/false, /*divider=*/true);
     regVirtual(QStringLiteral("display"), QString(), PzI18n::tr("Display"), QString(),
@@ -365,9 +368,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         kAnimationsDirectChildren + kAnimationsSurfacesChildren + kAnimationsLibraryChildren;
     // Mid-level *-cat collapsible category headers under the top-level
     // snapping / tiling parents. Sidebar.qml renders these as collapsible
-    // section headers; when COLLAPSED the trailing-row delegate at
-    // Main.qml:836-840 calls isPageDirty(<*-cat>) to decide whether to
-    // light the badge. Without these entries that lookup would always
+    // section headers; when COLLAPSED the `sidebar.trailingDelegate` in
+    // Main.qml calls isPageDirty(<*-cat>) to decide whether to light the
+    // badge. Without these entries that lookup would always
     // return false even when a leaf inside the collapsed section is
     // dirty (mirrors the snapping/tiling parent entries above, just one
     // level deeper). Keep in sync with the regVirtual *-cat registrations

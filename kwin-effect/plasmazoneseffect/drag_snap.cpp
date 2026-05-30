@@ -519,15 +519,30 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             // for matching windows; engaged-empty rule effectId blocks
             // the tree fallthrough. Reuse the `query` local from the
             // motion-cascade above instead of rebuilding the WindowQuery.
-            // Note: the snap shader path leaves durationMs at zero on
-            // purpose (see ShaderTransition docstring in types.h:126-136
-            // and paint_pipeline.cpp:155-170) — paintWindow rides the
-            // WindowAnimator's timeline. The Timing-rule duration
-            // override is honoured transitively via `motionProfile`
-            // above (driving the animator's duration), so the shader
-            // still terminates with the rule-overridden snap motion.
-            const auto shaderProfile = PlasmaZones::resolveAnimationShaderProfile(
-                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), query, profilePath);
+            //
+            // Route through `resolveAnimationShaderAndDuration` (which
+            // uses `evaluator.resolveCached(windowId, query)`) rather
+            // than the standalone `resolveAnimationShaderProfile` (which
+            // uses uncached `evaluator.resolve(query)`). The sister
+            // `resolveAnimationMotionProfile` call above already
+            // populated the per-window cache slot for this query, so
+            // the second cached read is a hit. Without this, every
+            // non-empty-rule-set snap paid two priority-order walks for
+            // the same window+query — same regression the shim was
+            // introduced to fix for `tryBeginShaderForEvent` (see
+            // shader_resolve.cpp:111-117 commentary).
+            //
+            // The duration field is intentionally discarded: the snap
+            // shader path leaves durationMs at zero on purpose —
+            // paintWindow rides the WindowAnimator's timeline. The
+            // Timing-rule duration override is honoured transitively
+            // via `motionProfile` above (driving the animator's
+            // duration), so the shader still terminates with the
+            // rule-overridden snap motion.
+            const auto shaderProfile = PlasmaZones::resolveAnimationShaderAndDuration(
+                                           m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(),
+                                           getWindowId(window), query, profilePath, /*defaultDurationMs=*/0)
+                                           .profile;
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
             }

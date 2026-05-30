@@ -411,10 +411,14 @@ private:
      * receive daemon data keyed by appId should do a linear scan fallback
      * when the exact full ID is not found.
      *
-     * @param filterHandleable If true, only include windows passing shouldHandleWindow()
+     * Always filters to handleable windows (passes shouldHandleWindow()) —
+     * the prior `filterHandleable=false` overload had zero callers and was
+     * removed as dead surface. Add it back as an explicit parameter if a
+     * future caller actually needs the unfiltered map.
+     *
      * @return Hash map of fullWindowId -> EffectWindow*
      */
-    QHash<QString, KWin::EffectWindow*> buildWindowMap(bool filterHandleable = true) const;
+    QHash<QString, KWin::EffectWindow*> buildWindowMap() const;
 
     /**
      * @brief Get the active window if valid, emit navigation feedback on failure

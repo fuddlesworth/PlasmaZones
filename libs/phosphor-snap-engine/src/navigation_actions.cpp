@@ -68,9 +68,13 @@ QString resolveNavScreen(INavigationStateProvider* navState, const QString& wind
             if (!storedScreen.isEmpty()) {
                 if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
                     const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-                    QScreen* physScreen = PhosphorScreens::ScreenIdentity::findByIdOrName(physId);
-                    if (physScreen) {
-                        auto* mgr = service ? service->screenManager() : nullptr;
+                    // Bare presence checks — the returned QScreen* is
+                    // intentionally unused; the call validates that the
+                    // identifier still resolves on the live screen set.
+                    if (PhosphorScreens::ScreenIdentity::findByIdOrName(physId)) {
+                        // `service` is already non-null per the outer
+                        // guard at line 64; no need to re-check it here.
+                        auto* mgr = service->screenManager();
                         if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
                             return storedScreen;
                         }

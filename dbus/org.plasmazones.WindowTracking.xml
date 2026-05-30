@@ -192,9 +192,9 @@
         </method>
         <method name="getUpdatedWindowGeometries">
             <annotation name="org.gtk.GDBus.DocString" value="Return updated window geometries after resolution change."/>
-            <arg name="geometries" type="a(siiii)" direction="out">
+            <arg name="geometries" type="a(siiiis)" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::WindowGeometryList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height)."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId). Matches the marshalling format in libs/phosphor-protocol/src/marshalling.cpp — the trailing screenId field was added alongside applyGeometriesBatch's (siiiis) signature so the effect can route the geometry to the correct screen on multi-monitor setups."/>
             </arg>
         </method>
         <method name="getPendingRestoreGeometries">
@@ -388,6 +388,24 @@
             </arg>
             <arg name="sticky" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+        </method>
+        <method name="windowScreenChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Record that a window moved to a different screen. The daemon compares the new screen against the window's stored snap assignment and unsnaps if they differ — heuristic for distinguishing a user-initiated cross-screen drag from a programmatic resnap (programmatic moves assign the zone first, so the stored screen matches and no unsnap occurs)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="newScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Identifier of the screen the window moved to."/>
+            </arg>
+        </method>
+        <method name="queryWindowFloating">
+            <annotation name="org.gtk.GDBus.DocString" value="Query the daemon's authoritative floating state for a window. The effect uses this on bringup to reconcile its local cache against persisted state across daemon restarts."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="floating" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the daemon currently has the window marked as floating."/>
             </arg>
         </method>
         <signal name="snapAllWindowsRequested">

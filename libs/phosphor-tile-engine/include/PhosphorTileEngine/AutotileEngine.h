@@ -149,10 +149,14 @@ public:
      * numbers.
      *
      * Callers that need the raw state map should add a purpose-built
-     * query method rather than iterating private state. The intent here
-     * is that external consumers can't iterate or mutate PhosphorTiles::TilingState
-     * objects through any public accessor — that's why screenStates()
-     * is private.
+     * query method rather than iterating private state. The
+     * `screenStates()` map-iteration accessor stays private; per-screen
+     * lookup is available through `tilingStateForScreen(screenId)`
+     * which returns a (non-const) `PhosphorTiles::TilingState*` for
+     * the read/mutate sites that explicitly key off one screen.
+     * Mutation through that accessor is gated by convention to
+     * `friend` classes (PerScreenConfigResolver) and the engine's own
+     * call paths; external read-only access by tests is accepted.
      */
     QSet<int> desktopsWithActiveState() const override;
 
