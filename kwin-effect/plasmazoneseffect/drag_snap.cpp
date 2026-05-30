@@ -521,16 +521,15 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             // motion-cascade above instead of rebuilding the WindowQuery.
             //
             // Route through `resolveAnimationShaderAndDuration` (which
-            // uses `evaluator.resolveCached(windowId, query)`) rather
-            // than the standalone `resolveAnimationShaderProfile` (which
-            // uses uncached `evaluator.resolve(query)`). The sister
-            // `resolveAnimationMotionProfile` call above already
+            // uses `evaluator.resolveCached(windowId, query)`). The
+            // sister `resolveAnimationMotionProfile` call above already
             // populated the per-window cache slot for this query, so
-            // the second cached read is a hit. Without this, every
-            // non-empty-rule-set snap paid two priority-order walks for
-            // the same window+query — same regression the shim was
-            // introduced to fix for `tryBeginShaderForEvent` (see
-            // shader_resolve.cpp:111-117 commentary).
+            // this cached read is a hit. The earlier shape called a
+            // standalone uncached shader-profile resolver here, which
+            // paid an extra priority-order walk per snap on every
+            // non-empty rule set — same regression the shim was
+            // introduced to fix for `tryBeginShaderForEvent` (see the
+            // historical-pair note in shader_resolve.cpp).
             //
             // The duration field is intentionally discarded: the snap
             // shader path leaves durationMs at zero on purpose —

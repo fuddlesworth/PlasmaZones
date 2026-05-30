@@ -1208,12 +1208,16 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
     if (repaintRect.isEmpty()) {
         repaintRect = window->frameGeometry().toAlignedRect();
     }
-    // A surface-extent transition paints across the whole output; the
-    // layer repaint must span the output so the window's damage — and
-    // therefore the per-window present / buffer-copy region KWin derives
-    // from it — covers everything the shader draws. A frame-sized repaint
-    // would leave the off-frame band the shader sweeps showing stale
-    // pixels. See postPaintScreen for the full rationale.
+    // A surface-extent transition paints across the whole output. The
+    // off-frame band the shader sweeps is covered by the unconditional
+    // `effects->addRepaintFull()` immediately below (line 1247) —
+    // `addLayerRepaint` itself clips its argument back to the window-
+    // item's bounding rect via the scene's `mapFromScene` (see
+    // paint_pipeline.cpp's commentary), so widening `repaintRect` to
+    // `output->geometry()` here only enlarges the layer repaint within
+    // the scene-clipped bounds the window already covers — it does NOT
+    // by itself reach the off-frame band. The widening still matters
+    // for the bounded layer-repaint correctness inside that frame.
     //
     // If `screen()` returns null (transient/popup at install time, monitor
     // unplug mid-attach), the surface-extent contract cannot be honoured

@@ -63,37 +63,6 @@ QString curveSlotFor(const QString& eventPath)
 
 } // namespace
 
-PhosphorAnimationShaders::ShaderProfile
-resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                              const PhosphorAnimationShaders::ShaderProfileTree& tree,
-                              const PhosphorWindowRule::WindowQuery& query, const QString& eventPath)
-{
-    // Empty-input short-circuit — mirrors the standalone resolver's header
-    // contract for both a windowless query and an empty eventPath. An empty
-    // eventPath also maps to no slot — the v3→v4 migration in
-    // configmigration.cpp::animationAppRuleToWindowRule drops rules with empty
-    // event paths, and live rules authored via the settings UI must carry one
-    // through the OverrideAnimation* action validators — so the lookup below
-    // would fall through anyway; the explicit guard keeps the documented
-    // short-circuit pinned independent of any upstream invariant drift.
-    if (query.hasWindow() && !eventPath.isEmpty()) {
-        const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolve(query);
-        const auto action = resolved.slot(shaderSlotFor(eventPath));
-        if (action) {
-            // A filled slot — a Shader rule matched. effectId is taken
-            // verbatim: an engaged-empty effectId is the rule's "block the
-            // per-event default for matching windows" sentinel, and
-            // ShaderProfile's own engaged-empty contract preserves it.
-            PhosphorAnimationShaders::ShaderProfile profile;
-            profile.effectId = action->params.value(ActionParam::EffectId).toString();
-            profile.parameters = action->params.value(ActionParam::Params).toObject().toVariantMap();
-            return profile;
-        }
-    }
-    // No rule matched (slot unfilled) — fall through to the per-event tree.
-    return tree.resolve(eventPath);
-}
-
 ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                                             const PhosphorAnimationShaders::ShaderProfileTree& tree,
                                                             const QString& windowId,
@@ -107,13 +76,13 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
     if (!query.hasWindow() || eventPath.isEmpty()) {
         return ResolvedShaderAndDuration{tree.resolve(eventPath), defaultDurationMs};
     }
-    // ONE cached evaluator walk feeds both slot lookups. The standalone
-    // resolveAnimationShaderProfile + resolveAnimationDuration pair did two
+    // ONE cached evaluator walk feeds both slot lookups. The historical
+    // pair of standalone shader-profile + duration resolvers did two
     // independent `resolve()` walks per shader event — same query, same
-    // priority-order traversal, both bypassing the per-window match cache.
-    // `resolveCached` keyed by the composite windowId reuses the result
-    // across both slot reads AND across subsequent shader events for the
-    // same window until the rule set's revision changes.
+    // priority-order traversal, both bypassing the per-window match
+    // cache. `resolveCached` keyed by the composite windowId reuses the
+    // result across both slot reads AND across subsequent shader events
+    // for the same window until the rule set's revision changes.
     const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
 
     // Shader slot: rule wins verbatim (engaged-empty effectId is the

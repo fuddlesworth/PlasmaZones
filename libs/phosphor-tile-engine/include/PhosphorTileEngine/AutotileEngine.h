@@ -150,8 +150,9 @@ public:
      *
      * Callers that need the raw state map should add a purpose-built
      * query method rather than iterating private state. The
-     * `screenStates()` map-iteration accessor stays private; per-screen
-     * lookup is available through `tilingStateForScreen(screenId)`
+     * `m_screenStates` map itself stays private (no public map
+     * accessor exists); per-screen lookup is available through
+     * `tilingStateForScreen(screenId)`
      * which returns a (non-const) `PhosphorTiles::TilingState*` for
      * the read/mutate sites that explicitly key off one screen.
      * Mutation through that accessor is gated by convention to

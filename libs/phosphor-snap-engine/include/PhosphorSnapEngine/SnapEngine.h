@@ -673,9 +673,12 @@ private:
     QString m_lastActiveScreenId;
 
     // Auto-snap entry gate. Empty until the daemon wires it; while empty
-    // the engine treats every (screen, desktop) as active — preserving the
-    // historical default that unit tests rely on. See ShouldRestorePredicate
-    // doc above and discussion #461 item 7.
+    // the engine treats every screen as active — preserving the
+    // historical default that unit tests rely on. (The predicate's
+    // signature is `bool(const QString& screenId)` — the desktop and
+    // activity dimensions are resolved by the daemon-side closure at
+    // call time, not passed in here; see ShouldRestorePredicate doc
+    // above and discussion #461 item 7.)
     ShouldRestorePredicate m_shouldRestorePredicate{};
 };
 

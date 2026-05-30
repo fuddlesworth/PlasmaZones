@@ -48,21 +48,6 @@ namespace PlasmaZones {
  */
 
 /**
- * @brief Cascade resolver: per-window rule → per-event tree.
- *
- * If an enabled animation rule's match expression resolves for @p query and
- * the rule fills the `anim-shader:<eventPath>` slot, returns a `ShaderProfile`
- * whose `effectId` / `parameters` come verbatim from the rule (an
- * engaged-empty `effectId` is preserved as the "block the per-event default"
- * sentinel). Otherwise — including for a windowless @p query (`hasWindow()`
- * false) or an empty @p eventPath — falls through to `tree.resolve(eventPath)`.
- */
-PhosphorAnimationShaders::ShaderProfile
-resolveAnimationShaderProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,
-                              const PhosphorAnimationShaders::ShaderProfileTree& tree,
-                              const PhosphorWindowRule::WindowQuery& query, const QString& eventPath);
-
-/**
  * @brief Combined shader-profile + duration cascade for the per-window-event
  *        hot path, sharing a single cached evaluator walk.
  *

@@ -1074,39 +1074,27 @@ private Q_SLOTS:
         QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
     }
 
-    void testExcludeWiring_inPlaceSetRulesInvalidatesEvalCache()
+    // Honest scope of this test (renamed from the earlier
+    // `…InvalidatesEvalCache` name): exercises that across in-place
+    // `WindowRuleSet::setRules` edits at the SAME bound pointer, the
+    // evaluator surfaces the post-edit rule set (not stale results
+    // from the pre-edit rule set). `WindowRuleSet::setRules`
+    // unconditionally bumps the revision counter, so the evaluator's
+    // revision-equality guard
+    // (`m_priorityOrderRevision == revision`) catches every transition
+    // here independently of the also-present size guard
+    // (`m_priorityOrderRulesSize == rules.size()`) — the size guard
+    // only fires under a quint64 revision wraparound the production
+    // path effectively never hits (~5.85 billion years of one-per-
+    // second edits, see RuleEvaluator's own commentary). This test
+    // doesn't pin the size guard in isolation; a fixture that did
+    // would need test-only hooks to force a revision collision. The
+    // grow-the-list (1 → 2) step is kept because it makes
+    // false-negative regressions in the priority-order rebuild
+    // visible (cached `[0]` walk would skip rules[1]), even though
+    // the revision guard catches it first in the current code.
+    void testExcludeWiring_inPlaceSetRulesRespectsRevisionBump()
     {
-        // Same pointer, different rules-list — the daemon's refilter
-        // lambda's expected hot path. The evaluator's per-revision
-        // index + match cache key off the bound set's revision counter,
-        // so a `WindowRuleSet::setRules` edit must invalidate the cached
-        // resolve result without requiring a setExcludeRuleSet re-fence
-        // (which the Pass 1 init-prologue refactor explicitly dropped).
-        //
-        // Fixture shape matters along two axes:
-        //
-        //   (a) The first non-empty step MUST construct the evaluator
-        //       (otherwise the `isEmpty()` fast path in
-        //       `SnapEngine::isAppIdExcluded` short-circuits to false
-        //       without ever touching the bound set's priority-order
-        //       index — see the `m_excludeRuleSet->isEmpty()` early
-        //       return in navigation_actions.cpp). Step 1's
-        //       `setRules({A})` + query primes it.
-        //
-        //   (b) The follow-up step MUST change the rule LIST in a way
-        //       that the cached `m_priorityOrder` permutation cannot
-        //       coincidentally still satisfy. For a SAME-SIZE swap
-        //       (1 → 1), the cached permutation `[0]` would coincidentally
-        //       still indexes the only rule slot post-swap — the walk
-        //       evaluates the freshly-set rule's match regardless of
-        //       whether `priorityOrder()` rebuilds. So the test must
-        //       GROW the list (size mismatch is the only check that
-        //       reliably fires in the small-fixture case) AND match the
-        //       NEW rule's appId. If the priority-order cache is stale
-        //       at size N, the broken walk only visits rules[0..N-1]
-        //       and the rule added at the next index would never be
-        //       evaluated — producing a false-negative `isAppIdExcluded`
-        //       for the new pattern.
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
 
         PhosphorWindowRule::WindowRuleSet set;

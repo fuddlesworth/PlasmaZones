@@ -25,9 +25,11 @@ Kirigami.Dialog {
     required property var controller
     /// Picker mode — `"apps"` returns the app's short / desktop-file name,
     /// `"classes"` the X11/Wayland window class, `"desktopFiles"` the full
-    /// `.desktop` basename (filtered to rows that have one), `"titles"`
-    /// the window caption. Drives the title, the row's primary text, and
-    /// the value passed to `picked`.
+    /// `.desktop` basename (rows without a desktop file render as
+    /// disabled placeholders so the user can still see which window the
+    /// row represents — not filtered out), `"titles"` the window caption
+    /// (rows without a caption ARE filtered out). Drives the title, the
+    /// row's primary text, and the value passed to `picked`.
     property string mode: "apps"
     property var windowList: []
     // Set by the Connections block below when the controller signals a

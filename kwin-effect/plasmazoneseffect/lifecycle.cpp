@@ -495,6 +495,17 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         if (m_windowIdCache.contains(w)) {
             const QString cachedId = m_windowIdCache.take(w);
             m_windowIdReverse.remove(cachedId);
+            // Mirror the m_pendingFrameGeometry cleanup that
+            // slotWindowClosed runs (window_lifecycle.cpp). A
+            // windowFrameGeometryChanged emission between
+            // slotWindowClosed and windowDeleted (possible for
+            // windows held alive via WindowClosedGrabRole) would
+            // re-insert into the pending map; without this belt-
+            // and-suspenders cleanup the entry would leak for the
+            // rest of the session. Keyed by `cachedId` (composite
+            // appId|uuid) which is the same key the pending map
+            // uses on the push side.
+            m_pendingFrameGeometry.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);

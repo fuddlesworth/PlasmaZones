@@ -408,6 +408,13 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True if the daemon currently has the window marked as floating."/>
             </arg>
         </method>
+        <method name="getPreTileGeometries">
+            <annotation name="org.gtk.GDBus.DocString" value="Return every persisted pre-tile geometry (windowId → rect + screen). The effect pre-populates its local cache from this on bringup so it can teleport restoring windows to their pre-tile geometry without a round-trip on every restore. Each entry carries the appId, the geometry rect (x,y,w,h), and the screen the geometry was captured on."/>
+            <arg name="geometries" type="a(siiiis)" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::PreTileGeometryList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, screenId) — the same marshalling shape as applyGeometriesBatch and getUpdatedWindowGeometries."/>
+            </arg>
+        </method>
         <signal name="snapAllWindowsRequested">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when snap-all-windows shortcut is triggered. KWin effect should collect unsnapped windows and call calculateSnapAllWindows (on org.plasmazones.Snap)."/>
             <arg name="screenId" type="s">

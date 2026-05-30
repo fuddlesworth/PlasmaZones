@@ -597,8 +597,10 @@ bool SettingsController::importAllSettings(const QString& filePath)
         // too: revertPending() emits pendingChangesChanged synchronously
         // and revert() schedules a daemon fetch whose reply could
         // re-fire dirtyChanged before the trailing setNeedsSave(false)
-        // runs. Both connect-side handlers (around settingscontroller
-        // .cpp:428 and :449) early-return when m_loading is true.
+        // runs. Both connect-side handlers (the
+        // m_animationsPage::pendingChangesChanged and
+        // m_windowRulesPage::dirtyChanged connect lambdas in
+        // settingscontroller.cpp) early-return when m_loading is true.
         m_loading = true;
         m_settings.load();
         // Page controllers with their own on-disk staging surfaces
