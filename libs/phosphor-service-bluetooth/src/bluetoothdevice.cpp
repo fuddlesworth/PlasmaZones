@@ -222,6 +222,16 @@ void BluetoothDevice::setBlocked(bool blocked)
     d->setDeviceProperty(QStringLiteral("Blocked"), blocked);
 }
 
+void BluetoothDevice::pair()
+{
+    d->callDeviceMethod(QStringLiteral("Pair"));
+}
+
+void BluetoothDevice::cancelPairing()
+{
+    d->callDeviceMethod(QStringLiteral("CancelPairing"));
+}
+
 void BluetoothDevice::_q_onPropertiesChanged(const QString& interfaceName, const QVariantMap& changed,
                                              const QStringList& invalidated)
 {

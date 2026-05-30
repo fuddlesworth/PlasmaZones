@@ -4,11 +4,14 @@
 #include <PhosphorServiceBluetooth/BluetoothHost.h>
 
 #include <PhosphorServiceBluetooth/BluetoothAdapter.h>
+#include <PhosphorServiceBluetooth/BluetoothAgent.h>
 #include <PhosphorServiceBluetooth/BluetoothDevice.h>
 
+#include <PhosphorDBus/Client.h>
 #include <PhosphorDBus/ObjectManager.h>
 
 #include <QDBusConnection>
+#include <QDBusObjectPath>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcBluetoothHost, "phosphor.service.bluetooth.host")
@@ -16,8 +19,11 @@ Q_LOGGING_CATEGORY(lcBluetoothHost, "phosphor.service.bluetooth.host")
 namespace {
 constexpr auto kService = "org.bluez";
 constexpr auto kRootPath = "/";
+constexpr auto kManagerPath = "/org/bluez";
+constexpr auto kAgentManagerIface = "org.bluez.AgentManager1";
 constexpr auto kAdapterIface = "org.bluez.Adapter1";
 constexpr auto kDeviceIface = "org.bluez.Device1";
+constexpr auto kAgentCapability = "KeyboardDisplay";
 } // namespace
 
 namespace PhosphorServiceBluetooth {
@@ -29,6 +35,7 @@ public:
     QDBusConnection bus;
     QString service;
     PhosphorDBus::ObjectManager* objectManager = nullptr;
+    BluetoothAgent* agent = nullptr;
 
     QList<BluetoothAdapter*> adapters;
     QList<BluetoothDevice*> devices;
@@ -144,6 +151,27 @@ public:
                          [this](const QString& path, const QStringList& interfaces) {
                              handleInterfacesRemoved(path, interfaces);
                          });
+        registerAgent();
+    }
+
+    void registerAgent()
+    {
+        agent = new BluetoothAgent(owner);
+        if (!bus.registerObject(BluetoothAgent::agentPath(), agent, QDBusConnection::ExportAllSlots)) {
+            qCWarning(lcBluetoothHost) << "failed to export the pairing agent at" << BluetoothAgent::agentPath();
+            return;
+        }
+        // Register with BlueZ and request default-agent status. Both are
+        // fire-and-forget and best-effort: RequestDefaultAgent fails when
+        // another agent (e.g. bluetoothctl, gnome-bluetooth) already holds the
+        // default slot, but pairing still works as a non-default agent.
+        PhosphorDBus::Client manager(bus, service, QLatin1String(kManagerPath), &lcBluetoothHost());
+        const QDBusObjectPath agentPath{BluetoothAgent::agentPath()};
+        manager.fireAndForget(owner, QLatin1String(kAgentManagerIface), QStringLiteral("RegisterAgent"),
+                              {QVariant::fromValue(agentPath), QString::fromLatin1(kAgentCapability)},
+                              QStringLiteral("RegisterAgent"));
+        manager.fireAndForget(owner, QLatin1String(kAgentManagerIface), QStringLiteral("RequestDefaultAgent"),
+                              {QVariant::fromValue(agentPath)}, QStringLiteral("RequestDefaultAgent"));
     }
 };
 
@@ -186,6 +214,11 @@ int BluetoothHost::adapterCount() const
 int BluetoothHost::deviceCount() const
 {
     return static_cast<int>(d->devices.size());
+}
+
+BluetoothAgent* BluetoothHost::agent() const
+{
+    return d->agent;
 }
 
 BluetoothAdapter* BluetoothHost::adapterAt(int index) const

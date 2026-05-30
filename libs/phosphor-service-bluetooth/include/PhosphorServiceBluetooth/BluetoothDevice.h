@@ -77,6 +77,13 @@ public:
     Q_INVOKABLE void setTrusted(bool trusted);
     Q_INVOKABLE void setBlocked(bool blocked);
 
+    /// Begin / abort pairing (`org.bluez.Device1.Pair` / `CancelPairing`).
+    /// Fire-and-forget; during Pair() BlueZ drives the registered
+    /// BluetoothAgent's callbacks, and `paired` reflects the outcome via
+    /// PropertiesChanged.
+    Q_INVOKABLE void pair();
+    Q_INVOKABLE void cancelPairing();
+
 Q_SIGNALS:
     void addressChanged();
     void nameChanged();

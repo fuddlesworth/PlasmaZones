@@ -16,6 +16,7 @@ class QDBusConnection;
 namespace PhosphorServiceBluetooth {
 
 class BluetoothAdapter;
+class BluetoothAgent;
 class BluetoothDevice;
 
 /**
@@ -36,6 +37,7 @@ class PHOSPHORSERVICEBLUETOOTH_EXPORT BluetoothHost : public QObject
     Q_OBJECT
     Q_PROPERTY(int adapterCount READ adapterCount NOTIFY adapterCountChanged)
     Q_PROPERTY(int deviceCount READ deviceCount NOTIFY deviceCountChanged)
+    Q_PROPERTY(PhosphorServiceBluetooth::BluetoothAgent* agent READ agent CONSTANT)
 
 public:
     /// Observes the system bus's `org.bluez` — the production wiring.
@@ -51,6 +53,12 @@ public:
     [[nodiscard]] QList<BluetoothDevice*> devices() const;
     [[nodiscard]] int adapterCount() const;
     [[nodiscard]] int deviceCount() const;
+
+    /// The pairing agent registered with BlueZ (KeyboardDisplay capability).
+    /// Connect to its request signals and answer via its respond* slots to
+    /// drive an interactive pairing flow. Null only when the bus is
+    /// unavailable. Owned by the host.
+    [[nodiscard]] BluetoothAgent* agent() const;
 
     /// Adapter / device at @p index, or nullptr when out of range.
     [[nodiscard]] Q_INVOKABLE PhosphorServiceBluetooth::BluetoothAdapter* adapterAt(int index) const;

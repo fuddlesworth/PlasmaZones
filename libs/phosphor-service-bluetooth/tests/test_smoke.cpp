@@ -3,6 +3,7 @@
 
 #include <PhosphorServiceBluetooth/BluetoothAdapter.h>
 #include <PhosphorServiceBluetooth/BluetoothAdapterModel.h>
+#include <PhosphorServiceBluetooth/BluetoothAgent.h>
 #include <PhosphorServiceBluetooth/BluetoothDevice.h>
 #include <PhosphorServiceBluetooth/BluetoothDeviceModel.h>
 #include <PhosphorServiceBluetooth/BluetoothHost.h>
@@ -300,13 +301,85 @@ private Q_SLOTS:
     void testDeviceWriteMethodsAreSafe()
     {
         // Fire-and-forget Device1 calls (Connect/Disconnect methods, Trusted/
-        // Blocked Properties.Set) must dispatch without crashing.
+        // Blocked Properties.Set, Pair/CancelPairing) must dispatch without
+        // crashing.
         BluetoothDevice device(QDBusConnection::sessionBus(), QLatin1String(kDevicePath), deviceProps());
         device.connectDevice();
         device.disconnectDevice();
         device.setTrusted(true);
         device.setBlocked(false);
+        device.pair();
+        device.cancelPairing();
         QVERIFY(true);
+    }
+
+    void testAgentConfirmationLifecycle()
+    {
+        BluetoothAgent agent;
+        QSignalSpy requestSpy(&agent, &BluetoothAgent::confirmationRequested);
+
+        // Invoked directly (not via D-Bus): no delayed reply is held, but the
+        // request bookkeeping + signal still fire so the state machine is
+        // exercised deterministically without a daemon.
+        agent.RequestConfirmation(QDBusObjectPath(QLatin1String(kDevicePath)), 123456U);
+        QCOMPARE(requestSpy.count(), 1);
+        QCOMPARE(requestSpy.at(0).at(0).toString(), QLatin1String(kDevicePath));
+        QCOMPARE(requestSpy.at(0).at(1).toUInt(), 123456U);
+        QCOMPARE(agent.pendingRequestCount(), 1);
+
+        const quint64 id = requestSpy.at(0).at(2).toULongLong();
+        agent.respondConfirmation(id, true);
+        QCOMPARE(agent.pendingRequestCount(), 0);
+
+        // A stale id is ignored.
+        agent.respondConfirmation(id, true);
+        QCOMPARE(agent.pendingRequestCount(), 0);
+    }
+
+    void testAgentPasskeyRejectAndCancel()
+    {
+        BluetoothAgent agent;
+        QSignalSpy passkeySpy(&agent, &BluetoothAgent::passkeyRequested);
+
+        agent.RequestPasskey(QDBusObjectPath(QLatin1String(kDevicePath)));
+        QCOMPARE(agent.pendingRequestCount(), 1);
+        const quint64 id = passkeySpy.at(0).at(1).toULongLong();
+        // Wrong-kind response is ignored; the correct reject clears it.
+        agent.respondConfirmation(id, true);
+        QCOMPARE(agent.pendingRequestCount(), 1);
+        agent.rejectRequest(id);
+        QCOMPARE(agent.pendingRequestCount(), 0);
+
+        // Cancel withdraws everything in flight and notifies any open prompt.
+        QSignalSpy cancelledSpy(&agent, &BluetoothAgent::requestCancelled);
+        agent.RequestConfirmation(QDBusObjectPath(QLatin1String(kDevicePath)), 42U);
+        agent.RequestAuthorization(QDBusObjectPath(QLatin1String(kDevicePath)));
+        QCOMPARE(agent.pendingRequestCount(), 2);
+        agent.Cancel();
+        QCOMPARE(agent.pendingRequestCount(), 0);
+        QCOMPARE(cancelledSpy.count(), 1);
+    }
+
+    void testAgentDisplayCallbacksEmitWithoutPending()
+    {
+        BluetoothAgent agent;
+        QSignalSpy passkeyShown(&agent, &BluetoothAgent::passkeyDisplayed);
+        QSignalSpy pinShown(&agent, &BluetoothAgent::pinCodeDisplayed);
+        agent.DisplayPasskey(QDBusObjectPath(QLatin1String(kDevicePath)), 654321U, 3);
+        agent.DisplayPinCode(QDBusObjectPath(QLatin1String(kDevicePath)), QStringLiteral("0000"));
+        QCOMPARE(passkeyShown.count(), 1);
+        QCOMPARE(passkeyShown.at(0).at(1).toUInt(), 654321U);
+        QCOMPARE(pinShown.count(), 1);
+        QCOMPARE(agent.pendingRequestCount(), 0);
+    }
+
+    void testHostExposesAgentWhenBusConnected()
+    {
+        // The session bus is connected even though no org.bluez peer exists,
+        // so the host sets up (and exports) its agent.
+        BluetoothHost host(QDBusConnection::sessionBus(), QStringLiteral("org.phosphor.test.AbsentBluez2"));
+        QVERIFY(host.agent() != nullptr);
+        QCOMPARE(host.agent()->pendingRequestCount(), 0);
     }
 };
 
