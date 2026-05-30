@@ -3,7 +3,8 @@
 
 // Page-registration + sidebar topology methods for SettingsController:
 //   * buildApplicationController() — wires the PhosphorSettingsUi
-//     PageRegistry with PlasmaZones' 30 settings pages.
+//     PageRegistry with PlasmaZones' settings pages and sidebar categories
+//     (the navigable leaf pages are enumerated in validPageNames()).
 //   * What's-New dismissal + last-seen-version state.
 //   * Static accessors for the sidebar's parent/child topology
 //     (parentPageRedirects, pageGroupChildren, validPageNames) used by

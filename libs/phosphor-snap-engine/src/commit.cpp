@@ -146,6 +146,20 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
         if (screenId.isEmpty() && fallbackScreenResolver) {
             screenId = fallbackScreenResolver();
         }
+        if (screenId.isEmpty()) {
+            // Last resort: a real (non-restore) snap commit MUST carry a
+            // non-empty screenId. The compositor treats an empty screenId on a
+            // batch entry as the float/restore marker (only the RestoreSentinel
+            // branch above legitimately emits empty), so a real commit that
+            // resolved to nothing here would be misclassified as a float and
+            // lose its snap border/title-bar tracking. Fall back to the primary
+            // screen — covers a window whose center lands on no known screen
+            // (off-screen, pre-attach) and the case where no fallbackScreenResolver
+            // was supplied.
+            if (QScreen* primary = QGuiApplication::primaryScreen()) {
+                screenId = PhosphorScreens::ScreenIdentity::identifierFor(primary);
+            }
+        }
 
         if (entry.targetZoneIds.size() > 1) {
             commitMultiZoneSnap(entry.windowId, entry.targetZoneIds, screenId, intent);
