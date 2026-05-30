@@ -48,6 +48,17 @@ SettingsFlickable {
         if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
             window._pageOwnedModalOpen = anyModalOpen;
     }
+    Component.onCompleted: {
+        // Hand the controller the canonical curve-naming function so the
+        // rule-list action summary renders "Curve: Standard (Cubic)" /
+        // "Curve: Spring (12.00, 1.00)" like the editor's curve button,
+        // instead of the raw wire string. The naming logic + i18n labels
+        // live only in CurvePresets, so the C++ model resolves through this
+        // JS resolver rather than duplicating the easing tables.
+        page.controller.setCurveLabelResolver(function (curve) {
+            return CurvePresets.curveLabel(curve);
+        });
+    }
     Component.onDestruction: {
         // Clear the flag on page swap — the destructor fires when the
         // PageHost Loader swaps source, and a stale `true` would

@@ -229,6 +229,15 @@ public:
     void setSnappingLayoutLabelLookup(LabelLookup fn);
     /// Resolver for `SetTilingAlgorithm` action params (algorithm tokens like "bsp").
     void setTilingAlgorithmLabelLookup(LabelLookup fn);
+    /// Resolver for `OverrideAnimationShader` action params (effect ids like
+    /// "dissolve") so the summary renders "Dissolve" rather than the raw id.
+    void setShaderEffectLabelLookup(LabelLookup fn);
+    /// Resolver for `OverrideAnimationCurve` action params (curve wire strings
+    /// like "0.33,1.00,0.68,1.00" / "spring:12,1") so the summary renders the
+    /// friendly preset name ("Standard (Cubic)", "Spring (12, 1)", "Custom")
+    /// the rule editor shows. The canonical naming lives in QML CurvePresets,
+    /// so the settings layer wires this from a QML-supplied resolver.
+    void setCurveLabelLookup(LabelLookup fn);
 
     /// Re-emit dataChanged for every row across every label-derived role,
     /// so the view rebinds resolved screen / activity / layout names. The
@@ -273,6 +282,8 @@ private:
     // can't cross-resolve through the wrong lookup.
     LabelLookup m_snappingLayoutLookup;
     LabelLookup m_tilingAlgorithmLookup;
+    LabelLookup m_shaderEffectLookup;
+    LabelLookup m_curveLookup;
 };
 
 } // namespace PlasmaZones
