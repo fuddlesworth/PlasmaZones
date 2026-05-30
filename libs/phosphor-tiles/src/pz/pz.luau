@@ -695,6 +695,245 @@ local function dwindleLayout(area, count, splitRatio, innerGap, minSizes)
     return zones
 end
 
+-- Port of solveThreeColumn.js
+local function solveThreeColumn(areaX, contentWidth, innerGap, splitRatio, minL, minC, minR)
+    if contentWidth < 3 then
+        local cw = math.max(1, contentWidth - 2)
+        return { leftWidth = 1, centerWidth = cw, rightWidth = 1,
+            leftX = areaX, centerX = areaX + 1, rightX = areaX + 1 + cw }
+    end
+    local effMinLeft = math.max(MIN_ZONE_SIZE, minL)
+    local effMinRight = math.max(MIN_ZONE_SIZE, minR)
+    local maxCenter = math.min(MAX_SPLIT, 1.0 - (effMinLeft + effMinRight) / contentWidth)
+    local centerRatio = math.min(math.max(splitRatio, MIN_SPLIT), math.max(MIN_SPLIT, maxCenter))
+    if minC > 0 then
+        local minCenterRatio = minC / contentWidth
+        centerRatio = math.max(centerRatio, math.min(minCenterRatio, maxCenter))
+    end
+    local sideRatio = (1.0 - centerRatio) / 2.0
+    local leftWidth = math.floor(contentWidth * sideRatio)
+    local centerWidth = math.floor(contentWidth * centerRatio)
+    local rightWidth = contentWidth - leftWidth - centerWidth
+    local totalColumnMin = math.max(minL, 0) + math.max(minC, 0) + math.max(minR, 0)
+    if totalColumnMin > contentWidth and totalColumnMin > 0 then
+        local eL = math.max(minL, 1)
+        local eC = math.max(minC, 1)
+        local eR = math.max(minR, 1)
+        local eT = eL + eC + eR
+        leftWidth = math.floor(contentWidth * eL / eT)
+        centerWidth = math.floor(contentWidth * eC / eT)
+        rightWidth = contentWidth - leftWidth - centerWidth
+    else
+        if minL > 0 and leftWidth < minL then
+            local deficit = minL - leftWidth
+            leftWidth = minL
+            local fromCenter = math.max(0, math.min(deficit, centerWidth - math.max(minC, 1)))
+            centerWidth = centerWidth - fromCenter
+            rightWidth = contentWidth - leftWidth - centerWidth
+        end
+        if minR > 0 and rightWidth < minR then
+            local deficit = minR - rightWidth
+            rightWidth = minR
+            local fromCenter = math.max(0, math.min(deficit, centerWidth - math.max(minC, 1)))
+            centerWidth = centerWidth - fromCenter
+            leftWidth = contentWidth - rightWidth - centerWidth
+            leftWidth = math.max(1, leftWidth)
+        end
+        if minC > 0 and centerWidth < minC then
+            local deficit = minC - centerWidth
+            centerWidth = minC
+            if leftWidth >= rightWidth then
+                local take = math.min(deficit, leftWidth - 1)
+                leftWidth = leftWidth - take
+                deficit = deficit - take
+                if deficit > 0 then rightWidth = math.max(1, rightWidth - deficit) end
+            else
+                local take = math.min(deficit, rightWidth - 1)
+                rightWidth = rightWidth - take
+                deficit = deficit - take
+                if deficit > 0 then leftWidth = math.max(1, leftWidth - deficit) end
+            end
+        end
+        leftWidth = math.max(1, leftWidth)
+        centerWidth = math.max(1, centerWidth)
+        rightWidth = math.max(1, rightWidth)
+        if (minL > 0 and leftWidth < minL) or (minR > 0 and rightWidth < minR) or (minC > 0 and centerWidth < minC) then
+            local totalMin = minL + minR + minC
+            if totalMin > 0 then
+                leftWidth = math.max(1, math.floor(contentWidth * minL / totalMin))
+                rightWidth = math.max(1, math.floor(contentWidth * minR / totalMin))
+                centerWidth = math.max(1, contentWidth - leftWidth - rightWidth)
+            else
+                leftWidth = math.max(1, math.floor(contentWidth / 3))
+                rightWidth = math.max(1, math.floor(contentWidth / 3))
+                centerWidth = math.max(1, contentWidth - leftWidth - rightWidth)
+            end
+        end
+    end
+    leftWidth = math.max(1, leftWidth)
+    centerWidth = math.max(1, centerWidth)
+    rightWidth = math.max(1, rightWidth)
+    local colSum = leftWidth + centerWidth + rightWidth
+    while colSum > contentWidth do
+        local excess = colSum - contentWidth
+        if excess <= 0 then break end
+        if centerWidth >= leftWidth and centerWidth >= rightWidth and centerWidth > 1 then
+            centerWidth = centerWidth - math.min(excess, centerWidth - 1)
+        elseif leftWidth >= rightWidth and leftWidth > 1 then
+            leftWidth = leftWidth - math.min(excess, leftWidth - 1)
+        elseif rightWidth > 1 then
+            rightWidth = rightWidth - math.min(excess, rightWidth - 1)
+        else
+            break
+        end
+        colSum = leftWidth + centerWidth + rightWidth
+    end
+    return { leftWidth = leftWidth, centerWidth = centerWidth, rightWidth = rightWidth,
+        leftX = areaX, centerX = areaX + leftWidth + innerGap,
+        rightX = areaX + leftWidth + innerGap + centerWidth + innerGap }
+end
+
+-- Ports of interleaveStacks.js (stackIsLeft is 1-indexed; JS [i] ↔ Lua [i+1])
+local function buildStackIsLeft(stackCount, leftCount, rightCount)
+    local stackIsLeft = {}
+    local li, ri = 0, 0
+    for i = 0, stackCount - 1 do
+        if i % 2 == 0 and li < leftCount then
+            stackIsLeft[#stackIsLeft + 1] = true
+            li = li + 1
+        elseif ri < rightCount then
+            stackIsLeft[#stackIsLeft + 1] = false
+            ri = ri + 1
+        elseif li < leftCount then
+            stackIsLeft[#stackIsLeft + 1] = true
+            li = li + 1
+        elseif ri < rightCount then
+            stackIsLeft[#stackIsLeft + 1] = false
+            ri = ri + 1
+        else
+            stackIsLeft[#stackIsLeft + 1] = true
+        end
+    end
+    return stackIsLeft
+end
+
+local function interleaveMinWidths(minSizes, stackIsLeft, stackCount, masterOffset)
+    local minLeftWidth, minRightWidth = 0, 0
+    for i = 0, stackCount - 1 do
+        local zoneIdx = masterOffset + i
+        if zoneIdx < #minSizes then
+            local entry = minSizes[zoneIdx + 1]
+            local mw = (entry.w and entry.w > 0) and entry.w or 0
+            if stackIsLeft[i + 1] then
+                if mw > minLeftWidth then minLeftWidth = mw end
+            else
+                if mw > minRightWidth then minRightWidth = mw end
+            end
+        end
+    end
+    return { minLeftWidth = minLeftWidth, minRightWidth = minRightWidth }
+end
+
+local function interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, rightCount, masterOffset)
+    local leftMinH, rightMinH = {}, {}
+    for i = 1, leftCount do leftMinH[i] = 0 end
+    for i = 1, rightCount do rightMinH[i] = 0 end
+    local li, ri = 0, 0
+    for i = 0, stackCount - 1 do
+        local zoneIdx = masterOffset + i
+        local entry = minSizes[zoneIdx + 1]
+        local mh = (zoneIdx < #minSizes and entry and entry.h and entry.h > 0) and entry.h or 0
+        if stackIsLeft[i + 1] and li < leftCount then
+            leftMinH[li + 1] = mh
+            li = li + 1
+        elseif (not stackIsLeft[i + 1]) and ri < rightCount then
+            rightMinH[ri + 1] = mh
+            ri = ri + 1
+        end
+    end
+    return { leftMinH = leftMinH, rightMinH = rightMinH }
+end
+
+local function assignInterleavedStacks(zones, stackIsLeft, stackCount, leftX, rightX, leftWidth, rightWidth,
+                                       leftHeights, rightHeights, areaY, gap)
+    local leftIdx, rightIdx = 0, 0
+    local leftY, rightY = areaY, areaY
+    for i = 0, stackCount - 1 do
+        if stackIsLeft[i + 1] and leftIdx < #leftHeights then
+            zones[#zones + 1] = { x = leftX, y = leftY, width = leftWidth, height = leftHeights[leftIdx + 1] }
+            leftY = leftY + leftHeights[leftIdx + 1] + gap
+            leftIdx = leftIdx + 1
+        elseif (not stackIsLeft[i + 1]) and rightIdx < #rightHeights then
+            zones[#zones + 1] = { x = rightX, y = rightY, width = rightWidth, height = rightHeights[rightIdx + 1] }
+            rightY = rightY + rightHeights[rightIdx + 1] + gap
+            rightIdx = rightIdx + 1
+        else
+            if leftIdx < #leftHeights then
+                zones[#zones + 1] = { x = leftX, y = leftY, width = leftWidth, height = leftHeights[leftIdx + 1] }
+                leftY = leftY + leftHeights[leftIdx + 1] + gap
+                leftIdx = leftIdx + 1
+            elseif rightIdx < #rightHeights then
+                zones[#zones + 1] = { x = rightX, y = rightY, width = rightWidth, height = rightHeights[rightIdx + 1] }
+                rightY = rightY + rightHeights[rightIdx + 1] + gap
+                rightIdx = rightIdx + 1
+            else
+                zones[#zones + 1] = { x = leftX, y = leftY, width = leftWidth, height = 1 }
+            end
+        end
+    end
+end
+
+-- Port of threeColumnLayout.js
+local function threeColumnLayout(area, count, gap, splitRatio, masterCount, minSizes)
+    local stackCount = count - masterCount
+    local leftCount = math.ceil(stackCount / 2)
+    local rightCount = stackCount - leftCount
+
+    local contentWidth = area.width - 2 * gap
+    if contentWidth < 3 * MIN_ZONE_SIZE then
+        return fillArea(area, count)
+    end
+
+    local stackIsLeft = buildStackIsLeft(stackCount, leftCount, rightCount)
+
+    local minCenterWidth = extractRegionMaxMin(minSizes, 0, masterCount, "w")
+    local sideMinW
+    if #minSizes > 0 then
+        sideMinW = interleaveMinWidths(minSizes, stackIsLeft, stackCount, masterCount)
+    else
+        sideMinW = { minLeftWidth = 0, minRightWidth = 0 }
+    end
+
+    local cols = solveThreeColumn(area.x, contentWidth, gap, splitRatio,
+        sideMinW.minLeftWidth, minCenterWidth, sideMinW.minRightWidth)
+
+    local masterMinH = extractMinHeights(minSizes, masterCount)
+    local sideMinH
+    if #minSizes > 0 then
+        sideMinH = interleaveMinHeights(minSizes, stackIsLeft, stackCount, leftCount, rightCount, masterCount)
+    else
+        sideMinH = { leftMinH = {}, rightMinH = {} }
+    end
+
+    local masterHeights = distributeWithOptionalMins(area.height, masterCount, gap, masterMinH)
+    local leftHeights = (leftCount > 0)
+        and distributeWithOptionalMins(area.height, leftCount, gap, sideMinH.leftMinH) or {}
+    local rightHeights = (rightCount > 0)
+        and distributeWithOptionalMins(area.height, rightCount, gap, sideMinH.rightMinH) or {}
+
+    local zones = {}
+    local currentY = area.y
+    for i = 1, masterCount do
+        zones[#zones + 1] = { x = cols.centerX, y = currentY, width = cols.centerWidth, height = masterHeights[i] }
+        currentY = currentY + masterHeights[i] + gap
+    end
+
+    assignInterleavedStacks(zones, stackIsLeft, stackCount, cols.leftX, cols.rightX,
+        cols.leftWidth, cols.rightWidth, leftHeights, rightHeights, area.y, gap)
+
+    return zones
+end
+
 -- ── Module wrapper ─────────────────────────────────────────────────────────
 local function algorithm(def)
     local userTile = def.tile
@@ -738,4 +977,6 @@ pz = {
     computeCumulativeMinDims = computeCumulativeMinDims,
     appendGracefulDegradation = appendGracefulDegradation,
     dwindleLayout = dwindleLayout,
+    solveThreeColumn = solveThreeColumn,
+    threeColumnLayout = threeColumnLayout,
 }

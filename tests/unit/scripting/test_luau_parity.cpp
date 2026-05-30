@@ -120,6 +120,15 @@ private Q_SLOTS:
     {
         compareAlgorithm(QStringLiteral("grid"));
     }
+    // Batch 8
+    void threeColumn()
+    {
+        compareAlgorithm(QStringLiteral("three-column"));
+    }
+    void centeredMaster()
+    {
+        compareAlgorithm(QStringLiteral("centered-master"));
+    }
 };
 
 void TestLuauParity::compareAlgorithm(const QString& name)
