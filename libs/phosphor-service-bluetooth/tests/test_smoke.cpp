@@ -14,6 +14,9 @@
 #include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusObjectPath>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -380,6 +383,124 @@ private Q_SLOTS:
         BluetoothHost host(QDBusConnection::sessionBus(), QStringLiteral("org.phosphor.test.AbsentBluez2"));
         QVERIFY(host.agent() != nullptr);
         QCOMPARE(host.agent()->pendingRequestCount(), 0);
+    }
+
+    void testAgentRemainingCallbacks()
+    {
+        BluetoothAgent agent;
+
+        // PIN code path.
+        QSignalSpy pinSpy(&agent, &BluetoothAgent::pinCodeRequested);
+        agent.RequestPinCode(QDBusObjectPath(QLatin1String(kDevicePath)));
+        QCOMPARE(pinSpy.count(), 1);
+        agent.respondPinCode(pinSpy.at(0).at(1).toULongLong(), QStringLiteral("0000"));
+        QCOMPARE(agent.pendingRequestCount(), 0);
+
+        // Service-authorization path (answered via respondConfirmation).
+        QSignalSpy svcSpy(&agent, &BluetoothAgent::serviceAuthorizationRequested);
+        agent.AuthorizeService(QDBusObjectPath(QLatin1String(kDevicePath)),
+                               QStringLiteral("0000110b-0000-1000-8000-00805f9b34fb"));
+        QCOMPARE(svcSpy.count(), 1);
+        QCOMPARE(svcSpy.at(0).at(1).toString(), QStringLiteral("0000110b-0000-1000-8000-00805f9b34fb"));
+        agent.respondConfirmation(svcSpy.at(0).at(2).toULongLong(), true);
+        QCOMPARE(agent.pendingRequestCount(), 0);
+
+        // Release drops anything still pending.
+        QSignalSpy releasedSpy(&agent, &BluetoothAgent::released);
+        agent.RequestAuthorization(QDBusObjectPath(QLatin1String(kDevicePath)));
+        QCOMPARE(agent.pendingRequestCount(), 1);
+        agent.Release();
+        QCOMPARE(agent.pendingRequestCount(), 0);
+        QCOMPARE(releasedSpy.count(), 1);
+    }
+
+    void testAllModelRoleNames()
+    {
+        BluetoothAdapterModel adapters;
+        const auto a = adapters.roleNames();
+        QCOMPARE(a.value(BluetoothAdapterModel::AdapterRole), QByteArrayLiteral("adapter"));
+        QCOMPARE(a.value(BluetoothAdapterModel::AddressRole), QByteArrayLiteral("address"));
+        QCOMPARE(a.value(BluetoothAdapterModel::NameRole), QByteArrayLiteral("name"));
+        QCOMPARE(a.value(BluetoothAdapterModel::AliasRole), QByteArrayLiteral("alias"));
+        QCOMPARE(a.value(BluetoothAdapterModel::PoweredRole), QByteArrayLiteral("powered"));
+        QCOMPARE(a.value(BluetoothAdapterModel::DiscoverableRole), QByteArrayLiteral("discoverable"));
+        QCOMPARE(a.value(BluetoothAdapterModel::PairableRole), QByteArrayLiteral("pairable"));
+        QCOMPARE(a.value(BluetoothAdapterModel::DiscoveringRole), QByteArrayLiteral("discovering"));
+        QCOMPARE(a.size(), 8);
+
+        BluetoothDeviceModel devices;
+        const auto d = devices.roleNames();
+        QCOMPARE(d.value(BluetoothDeviceModel::DeviceRole), QByteArrayLiteral("device"));
+        QCOMPARE(d.value(BluetoothDeviceModel::AddressRole), QByteArrayLiteral("address"));
+        QCOMPARE(d.value(BluetoothDeviceModel::NameRole), QByteArrayLiteral("name"));
+        QCOMPARE(d.value(BluetoothDeviceModel::AliasRole), QByteArrayLiteral("alias"));
+        QCOMPARE(d.value(BluetoothDeviceModel::IconRole), QByteArrayLiteral("icon"));
+        QCOMPARE(d.value(BluetoothDeviceModel::PairedRole), QByteArrayLiteral("paired"));
+        QCOMPARE(d.value(BluetoothDeviceModel::TrustedRole), QByteArrayLiteral("trusted"));
+        QCOMPARE(d.value(BluetoothDeviceModel::BlockedRole), QByteArrayLiteral("blocked"));
+        QCOMPARE(d.value(BluetoothDeviceModel::ConnectedRole), QByteArrayLiteral("connected"));
+        QCOMPARE(d.value(BluetoothDeviceModel::RssiRole), QByteArrayLiteral("rssi"));
+        QCOMPARE(d.value(BluetoothDeviceModel::AdapterRole), QByteArrayLiteral("adapter"));
+        QCOMPARE(d.value(BluetoothDeviceModel::UuidsRole), QByteArrayLiteral("uuids"));
+        QCOMPARE(d.size(), 12);
+    }
+
+    // Proves the delayed-reply mechanism end-to-end: a live D-Bus caller hits
+    // the agent's exported Agent1 methods, and the reply arrives only after the
+    // consumer answers (never the suppressed auto-reply). The reject + value
+    // cases are discriminating: without setDelayedReply the caller would see an
+    // immediate success / 0 instead.
+    void testAgentDelayedReplyOverDBus()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected())
+            QSKIP("no session bus available");
+        const QString service = QStringLiteral("org.phosphor.test.Agent");
+        if (!bus.registerService(service))
+            QSKIP("could not own the test service name");
+
+        BluetoothAgent agent;
+        QVERIFY(bus.registerObject(BluetoothAgent::agentPath(), &agent, QDBusConnection::ExportAllSlots));
+
+        // Passkey: respond with a value; the caller must receive exactly it.
+        QObject::connect(&agent, &BluetoothAgent::passkeyRequested, [&agent](const QString&, quint64 id) {
+            agent.respondPasskey(id, 424242U);
+        });
+        QDBusMessage passkeyCall = QDBusMessage::createMethodCall(
+            service, BluetoothAgent::agentPath(), QStringLiteral("org.bluez.Agent1"), QStringLiteral("RequestPasskey"));
+        passkeyCall << QVariant::fromValue(QDBusObjectPath(QLatin1String(kDevicePath)));
+        QDBusPendingReply<uint> passkeyReply = bus.asyncCall(passkeyCall);
+        {
+            QDBusPendingCallWatcher watcher(passkeyReply);
+            QSignalSpy finished(&watcher, &QDBusPendingCallWatcher::finished);
+            QVERIFY(finished.wait(3000));
+        }
+        passkeyReply.waitForFinished();
+        QVERIFY(!passkeyReply.isError());
+        QCOMPARE(passkeyReply.value(), 424242U);
+
+        // Confirmation rejected: the caller must receive org.bluez.Error.Rejected,
+        // not the suppressed empty success reply.
+        QObject::connect(&agent, &BluetoothAgent::confirmationRequested, [&agent](const QString&, quint32, quint64 id) {
+            agent.rejectRequest(id);
+        });
+        QDBusMessage confirmCall =
+            QDBusMessage::createMethodCall(service, BluetoothAgent::agentPath(), QStringLiteral("org.bluez.Agent1"),
+                                           QStringLiteral("RequestConfirmation"));
+        confirmCall << QVariant::fromValue(QDBusObjectPath(QLatin1String(kDevicePath)))
+                    << QVariant::fromValue<uint>(123456U);
+        QDBusPendingReply<> confirmReply = bus.asyncCall(confirmCall);
+        {
+            QDBusPendingCallWatcher watcher(confirmReply);
+            QSignalSpy finished(&watcher, &QDBusPendingCallWatcher::finished);
+            QVERIFY(finished.wait(3000));
+        }
+        confirmReply.waitForFinished();
+        QVERIFY(confirmReply.isError());
+        QCOMPARE(confirmReply.error().name(), QStringLiteral("org.bluez.Error.Rejected"));
+
+        bus.unregisterObject(BluetoothAgent::agentPath());
+        bus.unregisterService(service);
     }
 };
 
