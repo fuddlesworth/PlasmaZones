@@ -97,6 +97,15 @@ private Q_SLOTS:
     {
         compareAlgorithm(QStringLiteral("focus-sidebar"));
     }
+    // Batch 5
+    void quadrantPriority()
+    {
+        compareAlgorithm(QStringLiteral("quadrant-priority"));
+    }
+    void cornerMaster()
+    {
+        compareAlgorithm(QStringLiteral("corner-master"));
+    }
 };
 
 void TestLuauParity::compareAlgorithm(const QString& name)

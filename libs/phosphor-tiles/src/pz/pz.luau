@@ -504,6 +504,75 @@ local function distributeEvenly(start, total, count, gap)
     return result
 end
 
+-- Port of lShapeLayout.js (master corner + right column + bottom row)
+local function lShapeLayout(area, count, gap, splitRatio, distribute, bottomWidth, rightHeight)
+    distribute = distribute or "alternate"
+    bottomWidth = bottomWidth or "master"
+    rightHeight = rightHeight or "master"
+    if count <= 0 then return {} end
+    if area.width < MIN_ZONE_SIZE or area.height < MIN_ZONE_SIZE then
+        return fillArea(area, count)
+    end
+    splitRatio = math.max(MIN_SPLIT, math.min(MAX_SPLIT, splitRatio))
+    local masterW = math.max(1, math.floor(area.width * splitRatio - gap / 2))
+    local masterH = math.max(1, math.floor(area.height * splitRatio - gap / 2))
+    local zones = { { x = area.x, y = area.y, width = masterW, height = masterH } }
+    if count <= 1 then return zones end
+
+    local rH = (rightHeight == "master") and masterH or area.height
+    if type(rightHeight) == "number" then rH = rightHeight end
+    if count == 2 then
+        zones[#zones + 1] = { x = area.x + masterW + gap, y = area.y,
+            width = math.max(1, area.x + area.width - (area.x + masterW + gap)), height = rH }
+        return zones
+    end
+
+    local rightCount, bottomCount
+    if distribute == "alternate" then
+        rightCount = 0
+        bottomCount = 0
+        for i = 1, count - 1 do
+            if (i - 1) % 2 == 0 then rightCount = rightCount + 1 else bottomCount = bottomCount + 1 end
+        end
+    else
+        local remaining = count - 1
+        rightCount = math.ceil(remaining / 2)
+        bottomCount = math.floor(remaining / 2)
+    end
+
+    local rightX = area.x + masterW + gap
+    local rightW = math.max(1, area.x + area.width - rightX)
+    if rightHeight == "master" and bottomCount > 0 then rH = masterH end
+    local btmW = (bottomWidth == "full") and area.width or masterW
+    if type(bottomWidth) == "number" then btmW = bottomWidth end
+    local rightTotalGaps = (rightCount - 1) * gap
+    local bottomTotalGaps = (bottomCount - 1) * gap
+    if (rightCount > 0 and rH - rightTotalGaps <= 0) or (bottomCount > 0 and btmW - bottomTotalGaps <= 0) then
+        for _ = 1, count - 1 do
+            zones[#zones + 1] = { x = area.x, y = area.y, width = area.width, height = area.height }
+        end
+        return zones
+    end
+
+    local rightTileH = (rightCount > 0) and math.max(1, math.floor((rH - rightTotalGaps) / rightCount)) or 0
+    for r = 0, rightCount - 1 do
+        local ry = math.min(area.y + r * (rightTileH + gap), area.y + rH - 1)
+        local rh = math.max(1, (r == rightCount - 1) and (area.y + rH - ry) or rightTileH)
+        zones[#zones + 1] = { x = rightX, y = ry, width = rightW, height = rh }
+    end
+    if bottomCount > 0 then
+        local bottomY = area.y + masterH + gap
+        local bottomH = math.max(1, area.y + area.height - bottomY)
+        local bottomTileW = math.max(1, math.floor((btmW - bottomTotalGaps) / bottomCount))
+        for b = 0, bottomCount - 1 do
+            local bx = math.min(area.x + b * (bottomTileW + gap), area.x + btmW - 1)
+            local bw = math.max(1, (b == bottomCount - 1) and (area.x + btmW - bx) or bottomTileW)
+            zones[#zones + 1] = { x = bx, y = bottomY, width = bw, height = bottomH }
+        end
+    end
+    return zones
+end
+
 -- ── Module wrapper ─────────────────────────────────────────────────────────
 local function algorithm(def)
     local userTile = def.tile
@@ -543,4 +612,5 @@ pz = {
     deckLayout = deckLayout,
     applyPerWindowMinSize = applyPerWindowMinSize,
     distributeEvenly = distributeEvenly,
+    lShapeLayout = lShapeLayout,
 }
