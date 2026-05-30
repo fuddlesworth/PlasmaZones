@@ -170,8 +170,12 @@ int cmdListDevices(const QString& adapterFilter)
     const auto devices = host.devices();
     int shown = 0;
     for (auto* device : devices) {
-        if (!adapterFilter.isEmpty() && !device->adapter().endsWith(adapterFilter))
+        // Accept a full adapter path or a bare adapter name (e.g. "hci0").
+        // Anchor the suffix on '/' so "hci1" does not match "hci11".
+        if (!adapterFilter.isEmpty() && device->adapter() != adapterFilter
+            && !device->adapter().endsWith(QLatin1Char('/') + adapterFilter)) {
             continue;
+        }
         printDevice(device);
         ++shown;
     }
@@ -336,8 +340,16 @@ int main(int argc, char** argv)
             return usage();
         return cmdPower(args.at(2));
     }
-    if (command == QLatin1String("scan"))
-        return cmdScan(args.size() > 2 ? args.at(2).toInt() : 8);
+    if (command == QLatin1String("scan")) {
+        int seconds = 8;
+        if (args.size() > 2) {
+            bool ok = false;
+            seconds = args.at(2).toInt(&ok);
+            if (!ok || seconds <= 0)
+                return usage();
+        }
+        return cmdScan(seconds);
+    }
     if (command == QLatin1String("pair")) {
         if (args.size() < 3)
             return usage();

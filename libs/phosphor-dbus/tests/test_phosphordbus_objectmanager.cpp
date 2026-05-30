@@ -165,6 +165,23 @@ private Q_SLOTS:
         QVERIFY(om.isReady());
         QCOMPARE(addedSpy.count(), 0);
     }
+
+    void testInertWhenBusDisconnected()
+    {
+        // A disconnected bus: the observer issues no call, never becomes ready,
+        // and surfaces nothing — it must not crash or hang.
+        QDBusConnection bad = QDBusConnection::connectToBus(QStringLiteral("unix:path=/phosphor-nonexistent-bus"),
+                                                            QStringLiteral("phosphor-om-inert"));
+        QVERIFY(!bad.isConnected());
+        ObjectManager om(bad, QStringLiteral("org.example.Svc"), QStringLiteral("/"));
+        QSignalSpy readySpy(&om, &ObjectManager::ready);
+        QSignalSpy addedSpy(&om, &ObjectManager::interfacesAdded);
+        QTest::qWait(200);
+        QVERIFY(!om.isReady());
+        QCOMPARE(readySpy.count(), 0);
+        QCOMPARE(addedSpy.count(), 0);
+        QDBusConnection::disconnectFromBus(QStringLiteral("phosphor-om-inert"));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestPhosphorDBusObjectManager)

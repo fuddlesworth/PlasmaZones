@@ -66,6 +66,15 @@ public:
 public Q_SLOTS:
     // org.bluez.Agent1 — exported to BlueZ via ExportAllSlots. Signatures
     // mirror the BlueZ spec exactly; the interactive ones defer their reply.
+    //
+    // SECURITY: ONLY org.bluez.Agent1 methods may live in this slot block.
+    // ExportAllSlots publishes every public slot on the Agent1 interface, so
+    // adding an unrelated slot here would expose it to any bus peer. The
+    // consumer-facing respond*/rejectRequest methods are deliberately
+    // Q_INVOKABLE (above), NOT slots, so a remote can never answer its own
+    // pairing prompt. Every interactive request MUST be answered (respond* /
+    // rejectRequest) or BlueZ's Pair() blocks until its own timeout; the
+    // host's consumer wires all of the request signals below.
     void Release();
     QString RequestPinCode(const QDBusObjectPath& device);
     void DisplayPinCode(const QDBusObjectPath& device, const QString& pincode);

@@ -26,7 +26,8 @@ namespace PhosphorServiceBluetooth {
  * lands on this class in a later milestone.
  *
  * `rssi` is only reported by BlueZ for devices currently in range (during
- * discovery); for cached, out-of-range devices it stays 0. Owned by
+ * discovery): it is 0 for a never-seen / cached device, and is reset to 0
+ * when BlueZ invalidates it as the device goes out of range. Owned by
  * `BluetoothHost`; never constructed from QML.
  */
 class PHOSPHORSERVICEBLUETOOTH_EXPORT BluetoothDevice : public QObject

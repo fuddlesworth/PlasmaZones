@@ -64,6 +64,15 @@ int main(int argc, char* argv[])
     //                                            registered as
     //                                            uncreatable for type
     //                                            visibility)
+    //   Bluetooth Phosphor.Service.Bluetooth 1.0 (BluetoothHost +
+    //                                            BluetoothAdapterModel /
+    //                                            BluetoothDeviceModel,
+    //                                            plus BluetoothAdapter /
+    //                                            BluetoothDevice /
+    //                                            BluetoothAgent
+    //                                            registered as
+    //                                            uncreatable for type
+    //                                            visibility)
     // One call per lib here at startup is sufficient. The wrapper
     // functions are idempotent (each lib guards its registration with
     // std::call_once internally), so a future hot-reload hook that

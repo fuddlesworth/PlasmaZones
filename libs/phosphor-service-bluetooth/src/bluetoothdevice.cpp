@@ -5,6 +5,7 @@
 
 #include <PhosphorDBus/Client.h>
 
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
@@ -127,7 +128,34 @@ public:
         if ((v = val("Adapter")).isValid())
             setField(adapter, v.value<QDBusObjectPath>().path(), &BluetoothDevice::adapterChanged);
         if ((v = val("UUIDs")).isValid())
-            setField(uuids, v.toStringList(), &BluetoothDevice::uuidsChanged);
+            setField(uuids, extractStringList(v), &BluetoothDevice::uuidsChanged);
+    }
+
+    // BlueZ exposes a device's UUIDs as `as`. Over the wire that nests inside
+    // the `a{sv}` property dict as a QDBusArgument-wrapped variant, NOT a
+    // QStringList, so QVariant::toStringList() would silently yield an empty
+    // list; demarshal it by hand in that case. (The in-process initial map can
+    // carry a real QStringList, which the fast path handles.)
+    static QStringList extractStringList(const QVariant& value)
+    {
+        if (value.canConvert<QStringList>())
+            return value.toStringList();
+        if (value.canConvert<QDBusArgument>()) {
+            QStringList list;
+            value.value<QDBusArgument>() >> list;
+            return list;
+        }
+        return {};
+    }
+
+    // Reset fields BlueZ reports as invalidated (no inline value). RSSI is the
+    // one tracked property BlueZ drops when a device goes out of range during
+    // discovery; clear it to 0 so `rssi` matches the documented out-of-range
+    // value rather than going stale at the last-seen reading.
+    void clearInvalidated(const QStringList& invalidated)
+    {
+        if (invalidated.contains(QLatin1String("RSSI")))
+            setField(rssi, 0, &BluetoothDevice::rssiChanged);
     }
 };
 
@@ -238,8 +266,10 @@ void BluetoothDevice::_q_onPropertiesChanged(const QString& interfaceName, const
     if (interfaceName != QLatin1String(kDeviceIface))
         return;
     d->applyProps(changed);
-    if (!invalidated.isEmpty())
+    if (!invalidated.isEmpty()) {
+        d->clearInvalidated(invalidated);
         d->requestAll();
+    }
 }
 
 } // namespace PhosphorServiceBluetooth

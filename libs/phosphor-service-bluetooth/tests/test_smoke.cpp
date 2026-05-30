@@ -183,6 +183,10 @@ private Q_SLOTS:
         QCOMPARE(adapter->name(), QStringLiteral("hci-test"));
         QCOMPARE(device->address(), QStringLiteral("AA:BB:CC:DD:EE:FF"));
         QVERIFY(!device->connected());
+        // UUIDs (`as`) survive the wire round-trip: over D-Bus the value nests
+        // as a QDBusArgument inside the a{sv}, so this would be empty if the
+        // demarshalling fell back to QVariant::toStringList().
+        QCOMPARE(device->uuids(), QStringList{QStringLiteral("0000110b-0000-1000-8000-00805f9b34fb")});
 
         // A live PropertiesChanged updates the device.
         QSignalSpy connectedSpy(device, &BluetoothDevice::connectedChanged);

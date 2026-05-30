@@ -7,11 +7,8 @@
 #include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QHash>
-#include <QLoggingCategory>
 
 #include <optional>
-
-Q_LOGGING_CATEGORY(lcBluetoothAgent, "phosphor.service.bluetooth.agent")
 
 namespace {
 constexpr auto kAgentPath = "/org/phosphor/bluetooth/agent";

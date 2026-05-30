@@ -13,6 +13,9 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
+#include <QMetaType>
+
+#include <mutex>
 
 namespace {
 constexpr auto kObjectManagerIface = "org.freedesktop.DBus.ObjectManager";
@@ -83,8 +86,12 @@ public:
             } else {
                 applyManagedObjects(reply.reply());
             }
-            // ready fires once the round-trip terminates, success or error, so
-            // a consumer has a deterministic edge after the initial snapshot.
+            // ready fires exactly once, the first time the round-trip
+            // terminates (success or error), so a consumer has a deterministic
+            // edge after the initial snapshot. The guard makes the contract
+            // code-enforced rather than relying on a single call site.
+            if (ready)
+                return;
             ready = true;
             Q_EMIT owner->ready();
         });
@@ -99,6 +106,10 @@ public:
             qCDebug(*log) << "GetManagedObjects returned an unexpected reply shape for" << service;
             return;
         }
+        // The outer arg type is guarded above; the per-entry walk then trusts
+        // the `a{oa{sa{sv}}}` signature (QtDBus offers no per-entry signature
+        // inspection mid-stream). A peer returning a different entry shape
+        // yields default-constructed values here, never a crash.
         const QDBusArgument arg = args.at(0).value<QDBusArgument>();
         arg.beginMap();
         while (!arg.atEnd()) {
@@ -131,8 +142,16 @@ public:
             qCDebug(*log) << "InterfacesRemoved with an unexpected shape from" << service;
             return;
         }
-        const QString path = args.at(0).value<QDBusObjectPath>().path();
-        Q_EMIT owner->interfacesRemoved(path, interfaceNames(args.at(1)));
+        const QStringList interfaces = interfaceNames(args.at(1));
+        if (interfaces.isEmpty()) {
+            // A removal carrying no interface names is either malformed or a
+            // no-op; emitting interfacesRemoved(path, {}) would be a signal
+            // with no state transition behind it, so drop it.
+            qCDebug(*log) << "InterfacesRemoved with no interface names from" << service << "for"
+                          << args.at(0).value<QDBusObjectPath>().path();
+            return;
+        }
+        Q_EMIT owner->interfacesRemoved(args.at(0).value<QDBusObjectPath>().path(), interfaces);
     }
 };
 
@@ -145,6 +164,14 @@ ObjectManager::ObjectManager(QDBusConnection connection, QString service, QStrin
     d->service = std::move(service);
     d->rootPath = std::move(rootPath);
     d->log = log ? log : &lcPhosphorDBus();
+
+    // interfacesAdded carries an InterfaceMap; register it so the signal can
+    // also cross a queued (cross-thread) connection. Harmless and idempotent
+    // for the common same-thread direct-connection consumer.
+    static std::once_flag metaTypeOnce;
+    std::call_once(metaTypeOnce, [] {
+        qRegisterMetaType<InterfaceMap>("PhosphorDBus::InterfaceMap");
+    });
 
     if (!d->bus.isConnected()) {
         qCWarning(*d->log) << "system bus unavailable; ObjectManager inert for" << d->service;
