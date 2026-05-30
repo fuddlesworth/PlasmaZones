@@ -10,6 +10,7 @@
 
 #include <QCoreApplication>
 #include <QLoggingCategory>
+#include <QPointer>
 #include <QQmlEngine>
 #include <QThread>
 
@@ -132,18 +133,19 @@ void registerQmlTypes()
                 // (which is the documented Phosphor shell contract —
                 // engines are constructed in PhosphorShell::ShellEngine
                 // on the GUI thread).
-                Q_ASSERT(QThread::currentThread() == app->thread());
-                static PipeWireHost* hostPtr = nullptr;
-                // Defend against the app-recreation hot-reload path:
-                // if the previous QCoreApplication has been destroyed
-                // and a fresh one constructed, the cached hostPtr is
-                // dangling (its parent was the old app, which deleted
-                // it on shutdown). The parent() check spots that
-                // mismatch and forces a fresh construction. Using
-                // std::call_once here would pin the first-ever app's
-                // host forever; we keep the lazy-init guard but base
-                // the "do we need a new one?" decision on the parent
-                // identity rather than a one-shot flag.
+                if (QThread::currentThread() != app->thread()) {
+                    qCWarning(lcPipeWireQml) << "PipeWireHost factory invoked off the GUI thread; refusing to register";
+                    return static_cast<QObject*>(nullptr);
+                }
+                // QPointer auto-nulls when the tracked QObject is destroyed.
+                // The previous raw-pointer cache UB'd on app re-creation:
+                // when the prior QCoreApplication was destroyed, the cached
+                // host (its child) was deleted, and the raw pointer dangled.
+                // Reading hostPtr->parent() to detect the mismatch then
+                // dereferenced freed memory. QPointer decays to false in
+                // bool context once the tracked object is gone, so the
+                // mismatch test below is safe across app-recreation.
+                static QPointer<PipeWireHost> hostPtr;
                 if (!hostPtr || hostPtr->parent() != app) {
                     // Parent to the app inline so the host is never
                     // briefly parentless between `new` and a follow-up
@@ -151,6 +153,8 @@ void registerQmlTypes()
                     // parent-child link atomically.
                     hostPtr = new PipeWireHost(app);
                 }
+                // QPointer::operator-> still works fine here; the parent-
+                // check above already proved hostPtr is non-null.
                 // setObjectOwnership lives OUTSIDE the construction
                 // guard: it is a per-engine policy registered against
                 // the engine-private QML metadata table, not against

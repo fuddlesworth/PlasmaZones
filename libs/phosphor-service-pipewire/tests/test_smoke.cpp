@@ -136,9 +136,15 @@ private Q_SLOTS:
             // Daemon present — registry should have surfaced at least
             // the system's default audio sink. Don't assert the count
             // (varies by host) but every node we received must have a
-            // valid audio media class.
+            // valid audio media class. The non-empty check guards the
+            // registry-walk regression: a live PipeWire daemon ALWAYS
+            // has at least one audio node (the default sink), so an
+            // empty nodes() under a connected daemon means the registry
+            // observer is broken — accepting the empty case here would
+            // silently swallow that breakage.
             QVERIFY(connectedSpy.count() >= 1);
             const auto nodes = conn.nodes();
+            QVERIFY2(!nodes.empty(), "connected daemon surfaced zero audio nodes — registry walk likely broken");
             for (auto* node : nodes) {
                 QVERIFY(node != nullptr);
                 const QString mc = node->mediaClass();
@@ -174,9 +180,12 @@ private Q_SLOTS:
             QCOMPARE(conn.nodes().size(), 0);
         } else {
             // No daemon — confirm the absence is graceful: no nodes,
-            // no spurious adds.
+            // no spurious adds. QSKIP after the negative checks so CI
+            // dashboards distinguish the no-daemon path from a real
+            // pass on the live-handshake branch.
             QCOMPARE(addedSpy.count(), 0);
             QCOMPARE(conn.nodes().size(), 0);
+            QSKIP("no PipeWire daemon present; live-handshake branch not exercised");
         }
     }
 
@@ -412,9 +421,12 @@ private Q_SLOTS:
             // synthesise a fake assertion.
         } else {
             // No daemon: the writes early-out without a registry; we
-            // only assert no crash and the disconnected state.
+            // only assert no crash and the disconnected state, then
+            // QSKIP so CI dashboards distinguish the no-daemon path
+            // from a real pass against a live daemon.
             QCOMPARE(conn.isConnected(), false);
             QCOMPARE(errorSpy.count(), 0);
+            QSKIP("no PipeWire daemon present; live-write branch not exercised");
         }
     }
 

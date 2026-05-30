@@ -220,6 +220,9 @@ file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/*.cpp
     ${CMAKE_SOURCE_DIR}/src/*.h
     ${CMAKE_SOURCE_DIR}/src/*.hpp
+    ${CMAKE_SOURCE_DIR}/cli/*.cpp
+    ${CMAKE_SOURCE_DIR}/cli/*.h
+    ${CMAKE_SOURCE_DIR}/cli/*.hpp
     ${CMAKE_SOURCE_DIR}/kcm/*.cpp
     ${CMAKE_SOURCE_DIR}/kcm/*.h
     ${CMAKE_SOURCE_DIR}/kcm/*.hpp
@@ -242,6 +245,7 @@ kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
 find_program(QMLFORMAT qmlformat)
 file(GLOB_RECURSE ALL_QML_FILES
     ${CMAKE_SOURCE_DIR}/src/*.qml
+    ${CMAKE_SOURCE_DIR}/cli/*.qml
     ${CMAKE_SOURCE_DIR}/kcm/*.qml
     ${CMAKE_SOURCE_DIR}/libs/*.qml
     ${CMAKE_SOURCE_DIR}/examples/*.qml
@@ -779,15 +783,13 @@ add_custom_target(uninstall
 # Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
-# Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support).
-# OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages -
-# the Vulkan backend simply won't be available at runtime.
-# All Vulkan-specific C++ code is guarded with #if QT_CONFIG(vulkan).
-# Note: packaging specs (PKGBUILD, debian/control, rpm .spec, nix) list Vulkan as a
-# hard BuildRequires to ensure the backend is always available in distribution packages.
-set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
-
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)
+# (Vulkan was previously plumbed via QVulkanInstance with a
+# `set_package_properties(WrapVulkanHeaders ...)` block here. The
+# corresponding `find_package(Vulkan)` and the QVulkanInstance call sites
+# were removed when the backend was descoped; the orphan property block
+# never showed up in feature_summary because no find_package had
+# registered it. Removed in PR #546.)
 feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                      OPTIONAL_PACKAGES_FOUND OPTIONAL_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)

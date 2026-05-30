@@ -120,6 +120,20 @@ void PwNodeModel::setConnection(PipeWireConnection* connection)
 {
     if (d->connection == connection)
         return;
+    // QPointer-cleared recovery: when the prior connection was destroyed
+    // externally, d->connection.data() reads as null but our row caches
+    // (d->nodes, d->rowIndex, d->nodeWires) still hold the dangling
+    // PwNode* pointers from that connection. A caller that flips back
+    // through setConnection(nullptr) → setConnection(nullptr) would
+    // early-return on equality and leave the stale state in place,
+    // letting any subsequent data(idx, role) dereference a freed PwNode.
+    // Force a clean rebuild whenever we observe the QPointer-cleared
+    // case so the model is back in a consistent empty state before the
+    // (no-op) setter returns.
+    if (d->connection.isNull() && connection == nullptr && !d->nodes.isEmpty()) {
+        d->rebuildFromConnection();
+        return;
+    }
     // Assign the new connection FIRST so connection() reports the
     // post-mutation pointer for the rebuild duration, then run
     // rebuildFromConnection so every row event (beginRemoveRows /
@@ -429,7 +443,12 @@ QVariant PwNodeModel::data(const QModelIndex& index, int role) const
 
 QHash<int, QByteArray> PwNodeModel::roleNames() const
 {
-    return {
+    // Cache the map in a function-local static: the role table is
+    // immutable per-class, but QAbstractItemModel may call roleNames()
+    // repeatedly during view setup and dataChanged-driven refresh, and
+    // every call previously reallocated a fresh QHash. Function-local
+    // statics in C++11+ are thread-safe via magic-statics.
+    static const QHash<int, QByteArray> kRoles = {
         {NodeRole, QByteArrayLiteral("node")},
         {IdRole, QByteArrayLiteral("id")},
         {NameRole, QByteArrayLiteral("name")},
@@ -441,6 +460,7 @@ QHash<int, QByteArray> PwNodeModel::roleNames() const
         {MutedRole, QByteArrayLiteral("muted")},
         {Qt::DisplayRole, QByteArrayLiteral("display")},
     };
+    return kRoles;
 }
 
 // The pinned subclasses seed `mediaClasses` directly into Private

@@ -241,9 +241,9 @@ Item {
         //
         // The 0.01 threshold defends against trivial-alpha colors that
         // are visually invisible (e.g. "#01000000" with alpha 1/255 ≈
-        // 0.0039) being mistaken for an intentional backdrop. Use
-        // Phosphor.Theme.transparent or explicitly set backdropColor to
-        // a sentinel value if you want to disable the backdrop.
+        // 0.0039) being mistaken for an intentional backdrop. Set
+        // backdropColor: "transparent" (the literal) to disable the
+        // backdrop entirely.
         readonly property bool backdropShown: root.backdropColor.a > 0.01 || root.dismissOnClickOutside
 
         anchors.fill: parent
@@ -274,7 +274,7 @@ Item {
             // restore, transport callback, telemetry) applies to the
             // click-outside path too.
             onClicked: root.dismiss()
-            Accessible.name: qsTr("Dismiss popout")
+            Accessible.name: i18nc("@action accessibility", "Dismiss popout")
         }
 
         Behavior on opacity {

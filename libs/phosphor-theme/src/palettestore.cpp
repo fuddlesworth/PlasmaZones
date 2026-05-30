@@ -119,9 +119,7 @@ PaletteStore::PaletteStore(QObject* parent)
         if (path != m_sourcePath) {
             return;
         }
-        if (QFileInfo::exists(path) && !m_watcher->files().contains(path)) {
-            m_watcher->addPath(path);
-        }
+        rearmFileIfMissing(path);
         m_reloadDebounce->start();
     });
     connect(m_watcher.get(), &QFileSystemWatcher::directoryChanged, this, [this](const QString&) {
@@ -138,14 +136,9 @@ PaletteStore::PaletteStore(QObject* parent)
         // recreated directory would never trigger any further
         // events. Re-arm covers both this case and the rename-over
         // case the constructor's original comment focused on.
-        const QString parentDir = QFileInfo(m_sourcePath).absolutePath();
-        if (!parentDir.isEmpty() && QFileInfo::exists(parentDir) && !m_watcher->directories().contains(parentDir)) {
-            m_watcher->addPath(parentDir);
-        }
+        rearmDirIfMissing(QFileInfo(m_sourcePath).absolutePath());
         if (QFileInfo::exists(m_sourcePath)) {
-            if (!m_watcher->files().contains(m_sourcePath)) {
-                m_watcher->addPath(m_sourcePath);
-            }
+            rearmFileIfMissing(m_sourcePath);
             m_reloadDebounce->start();
         }
     });
@@ -772,12 +765,21 @@ void PaletteStore::armWatchesFor(const QString& absolutePath)
     // fails (and QFileSystemWatcher logs a warning to stderr), so the
     // guard keeps the diagnostic noise off the user's journal in the
     // unlink-race case.
-    if (QFileInfo::exists(absolutePath) && !m_watcher->files().contains(absolutePath)) {
-        m_watcher->addPath(absolutePath);
+    rearmFileIfMissing(absolutePath);
+    rearmDirIfMissing(QFileInfo(absolutePath).absolutePath());
+}
+
+void PaletteStore::rearmFileIfMissing(const QString& path)
+{
+    if (QFileInfo::exists(path) && !m_watcher->files().contains(path)) {
+        m_watcher->addPath(path);
     }
-    const QString parentDir = QFileInfo(absolutePath).absolutePath();
-    if (!parentDir.isEmpty() && QFileInfo::exists(parentDir) && !m_watcher->directories().contains(parentDir)) {
-        m_watcher->addPath(parentDir);
+}
+
+void PaletteStore::rearmDirIfMissing(const QString& path)
+{
+    if (!path.isEmpty() && QFileInfo::exists(path) && !m_watcher->directories().contains(path)) {
+        m_watcher->addPath(path);
     }
 }
 

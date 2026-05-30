@@ -39,9 +39,12 @@ endfunction()
 # not fail.
 #
 # Opt-out env var:
-#   PHOSPHOR_PW_TESTS_ALLOW_WRITE  default 1 (write path runs)
-#                                  set to 0 to skip the live-write
-#                                  half of writeAPIsAreSafeForUnknownTargets.
+#   PHOSPHOR_PW_TESTS_ALLOW_WRITE  live-write runs unless set to literal `0`
+#                                  (the implementation treats any value
+#                                  except `0` — including unset — as
+#                                  enable, matching the dev-default
+#                                  "exercise the full write path on
+#                                  developer hosts" contract).
 #
 # Headless / CI runners are unaffected — the live-write branch only
 # fires when a daemon is reachable AND a sink is present. The opt-out

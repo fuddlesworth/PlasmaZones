@@ -407,7 +407,13 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     if (!entryFn) {
         qWarning().noquote() << "PluginLoader: plugin" << libraryPath << "missing entry point"
                              << PluginEntryPointSymbol;
-        library->unload();
+        // QLibrary::unload() can return false (refcount held elsewhere,
+        // page-unmap failure). Surface the unload-failure case so a
+        // triager seeing a stuck plugin can correlate it with a follow-up
+        // load attempt that still finds the old code mapped in.
+        if (!library->unload()) {
+            qDebug().noquote() << "PluginLoader: unload() returned false for" << libraryPath;
+        }
         return;
     }
     // Wrap entryFn()'s raw pointer into the shared_ptr ON THE SAME
@@ -423,7 +429,9 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
     });
     if (!factory) {
         qWarning().noquote() << "PluginLoader: entry point returned null for" << libraryPath;
-        library->unload();
+        if (!library->unload()) {
+            qDebug().noquote() << "PluginLoader: unload() returned false for" << libraryPath;
+        }
         return;
     }
     if (factory->id() != manifest.id) {
@@ -435,7 +443,9 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
         qWarning().noquote() << "PluginLoader: factory id" << factory->id() << "does not match manifest id"
                              << manifest.id << "from" << libraryPath;
         factory.reset(); // runs custom deleter before .so unmap
-        library->unload();
+        if (!library->unload()) {
+            qDebug().noquote() << "PluginLoader: unload() returned false for" << libraryPath;
+        }
         return;
     }
 

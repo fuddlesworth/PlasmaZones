@@ -48,7 +48,15 @@ function(phosphor_lib_enable_tests standaloneProjectName)
     if(CMAKE_PROJECT_NAME STREQUAL "${standaloneProjectName}" OR BUILD_TESTING)
         enable_testing()
         if(EXISTS "${_pl_tests_dir}/CMakeLists.txt")
-            if(_pl_tests_dir MATCHES "^${CMAKE_CURRENT_SOURCE_DIR}/")
+            # Detect inside-tree vs outside-tree by literal-prefix match.
+            # The previous MATCHES regex broke if CMAKE_CURRENT_SOURCE_DIR
+            # contained characters with regex meaning (+, ., (, etc.) —
+            # a project under e.g. /home/foo/dev+notes/ would silently take
+            # the outside-tree branch. string(FIND) is a literal substring
+            # check with no regex semantics.
+            string(LENGTH "${CMAKE_CURRENT_SOURCE_DIR}/" _pl_src_prefix_len)
+            string(FIND "${_pl_tests_dir}" "${CMAKE_CURRENT_SOURCE_DIR}/" _pl_prefix_match)
+            if(_pl_prefix_match EQUAL 0)
                 # Inside-tree path: add_subdirectory infers a binary dir
                 # by mirroring the source layout. Pass the source path
                 # alone so the build-tree layout matches the existing

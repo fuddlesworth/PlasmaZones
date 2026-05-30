@@ -324,12 +324,14 @@ PipeWireConnection::~PipeWireConnection()
     // Loud guard for accidental cross-thread destruction. The
     // destructor's QCoreApplication::sendPostedEvents / removePostedEvents
     // drain at the bottom only works correctly when invoked from the
-    // GUI thread that the QObject lives on; tearing down from the
-    // worker thread (or any other) would dispatch queued lambdas
-    // against a partially-destroyed object. Catch the misuse in debug
-    // builds; release builds skip the check and silently degrade to
-    // the existing teardown ordering rather than abort.
-    Q_ASSERT(thread() == QThread::currentThread());
+    // GUI thread that the QObject lives on; calling either of those
+    // from a non-owner thread is undefined per Qt's documented event-
+    // dispatcher contract. Catch the misuse loudly in debug; in release
+    // log the violation and skip the cross-thread-unsafe drain so we
+    // don't induce UB silently. The loop quit + thread wait above are
+    // already MT-safe and run unconditionally.
+    const bool ownerThread = (thread() == QThread::currentThread());
+    Q_ASSERT(ownerThread);
     // Short-circuit when the worker has already self-exited: with
     // isRunning() == false we know LoopThread::run has progressed past
     // its mutex-guarded destroy+null-store and there's no live loop to
@@ -390,8 +392,14 @@ PipeWireConnection::~PipeWireConnection()
     // wired via Qt::QueuedConnection) are the supported pattern. See
     // the matching note in pipewireconnection.cpp's "Cross-thread
     // invariants" block.
-    QCoreApplication::sendPostedEvents(this, 0);
-    QCoreApplication::removePostedEvents(this);
+    if (ownerThread) {
+        QCoreApplication::sendPostedEvents(this, 0);
+        QCoreApplication::removePostedEvents(this);
+    } else {
+        qCCritical(lcPipeWire) << "PipeWireConnection destroyed from non-owner thread; "
+                                  "skipping queued-event drain to avoid UB. Observers may miss the "
+                                  "final nodeAdded/nodeRemoved batch.";
+    }
 }
 
 // connectToDaemon / disconnectFromDaemon bypass submitLoopRequest because
@@ -438,7 +446,8 @@ void PipeWireConnection::connectToDaemon()
         QMetaObject::invokeMethod(
             this,
             [dd, rcCopy]() {
-                Q_EMIT dd->q->error(QStringLiteral("pw_loop_invoke failed for connectToDaemon: %1").arg(rcCopy));
+                Q_EMIT dd->q->error(
+                    QStringLiteral("dispatch: pw_loop_invoke failed for connectToDaemon: %1").arg(rcCopy));
             },
             Qt::QueuedConnection);
     }
@@ -467,7 +476,8 @@ void PipeWireConnection::disconnectFromDaemon()
         QMetaObject::invokeMethod(
             this,
             [dd, rcCopy]() {
-                Q_EMIT dd->q->error(QStringLiteral("pw_loop_invoke failed for disconnectFromDaemon: %1").arg(rcCopy));
+                Q_EMIT dd->q->error(
+                    QStringLiteral("dispatch: pw_loop_invoke failed for disconnectFromDaemon: %1").arg(rcCopy));
             },
             Qt::QueuedConnection);
     }

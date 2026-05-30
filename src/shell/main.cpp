@@ -21,6 +21,13 @@ Q_LOGGING_CATEGORY(lcShell, "phosphorshell.main")
 
 int main(int argc, char* argv[])
 {
+    // MUST run before QGuiApplication is constructed: registers a Qt
+    // platform-integration plugin that the platform-plugin selector
+    // consults during QGuiApplication's static-init phase. Inserting any
+    // QGuiApplication-touching call between this line and the
+    // QGuiApplication ctor would let Qt pick the default integration
+    // without the layer-shell hooks, silently disabling overlay
+    // positioning across the whole shell.
     PhosphorWayland::registerLayerShellPlugin();
 
     QGuiApplication app(argc, argv);
@@ -92,13 +99,27 @@ int main(int argc, char* argv[])
         // produced "  Searched:     /home/..." (double space) and a
         // trailing space at every line break. Cosmetic on stderr but
         // visible in log-scraping tools that key on the layout.
+        //
+        // The path list mirrors what ShellLoader::resolve() actually
+        // probes (GenericConfigLocation + GenericDataLocation), not a
+        // simplified subset — a user with their shell installed under
+        // XDG_DATA_HOME or XDG_CONFIG_DIRS needs to see those classes
+        // listed too. The hard-coded /usr/share path in the recovery
+        // hint matches the default CMake prefix; packagers building
+        // against a non-default CMAKE_INSTALL_PREFIX should patch the
+        // hint in their downstream tree (or we plumb the prefix through
+        // a generated header in a follow-up — see ShellLoader::resolve).
         const QString message = QStringLiteral(
                                     "No shell.qml found.\n"
                                     "  Searched:    %1\n"
+                                    "               and ${XDG_CONFIG_DIRS}/phosphor-shell/\n"
+                                    "               and ${XDG_DATA_HOME}/phosphor-shell/\n"
                                     "               and ${XDG_DATA_DIRS}/phosphor-shell/\n\n"
                                     "  To get started, copy the bundled example:\n"
                                     "    mkdir -p %1\n"
-                                    "    cp -r /usr/share/phosphor-shell/* %1")
+                                    "    cp -r ${CMAKE_INSTALL_PREFIX}/share/phosphor-shell/* %1\n"
+                                    "  (replace ${CMAKE_INSTALL_PREFIX} with the prefix used at install; "
+                                    "/usr or /usr/local for distro packages.)")
                                     .arg(configDir);
         qCCritical(lcShell).noquote() << message;
         return 1;

@@ -96,6 +96,19 @@ void PipeWireConnection::Private::bindAudioNode(uint32_t id, const char* type, c
     // Bind the proxy on the loop thread so we can subscribe to its
     // info + param events. Track it in loopNodes for cleanup on
     // global_remove.
+    // Defensive: PipeWire's protocol guarantees one global per id between
+    // global / global_remove pairs, but a buggy daemon (or a future
+    // protocol extension that fires `global` before `global_remove` on
+    // an existing id) would have us emplace into a key that is already
+    // occupied. std::unordered_map::emplace would destroy the moved-from
+    // unique_ptr's allocation and leave entryPtr (captured below)
+    // dangling — and we'd then wire a libpipewire listener pointing at
+    // freed memory. Reject up-front before the bind so we don't leak a
+    // proxy either.
+    if (loopNodes.count(id) != 0) {
+        qCWarning(lcPipeWire) << "duplicate node global; ignoring id" << id;
+        return;
+    }
     auto* proxy = static_cast<pw_proxy*>(pw_registry_bind(registry, id, type, PW_VERSION_NODE, 0));
     if (!proxy) {
         qCWarning(lcPipeWire) << "pw_registry_bind failed for node" << id;

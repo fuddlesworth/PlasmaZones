@@ -11,6 +11,7 @@
 #include <spa/pod/builder.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace PhosphorServicePipeWire {
@@ -51,6 +52,15 @@ void PipeWireConnection::Private::doDefaultWrite(const DefaultWriteRequest& req)
 {
     if (!defaultMetadata) {
         qCDebug(lcPipeWire) << "default-write before metadata bind; dropping" << req.key;
+        return;
+    }
+    // Reject empty-string node names: WirePlumber's interpretation of
+    // {"name": ""} is undocumented (some versions treat it as "clear
+    // default", others reject the payload). Callers wanting an explicit
+    // "no default" should land their own clear-API once we define one;
+    // until then, drop the malformed write rather than guess.
+    if (req.nodeName.isEmpty()) {
+        qCDebug(lcPipeWire) << "default-write with empty node name; dropping" << req.key;
         return;
     }
     // WirePlumber stores defaults as Spa:String:JSON values shaped
@@ -184,8 +194,13 @@ void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
             // amplitude domain. Values > 1.0 are valid (boosts)
             // but uncommon; we leave that to the caller and only
             // refuse negatives so a stray -0 doesn't poison the
-            // pod.
-            values[i] = static_cast<float>(std::max<qreal>(0.0, req.volumes[i]));
+            // pod. NaN/Inf coerced to 0.0: std::max(0.0, NaN) is
+            // implementation-defined (commonly returns NaN), and a
+            // NaN amplitude reaching the daemon produces undefined
+            // mixing behavior (silence on some backends, glitches
+            // on others).
+            const qreal raw = req.volumes[i];
+            values[i] = std::isfinite(raw) ? static_cast<float>(std::max<qreal>(0.0, raw)) : 0.0f;
         }
         spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
         spa_pod_builder_array(&b, sizeof(float), SPA_TYPE_Float, static_cast<uint32_t>(volumeCount), values);

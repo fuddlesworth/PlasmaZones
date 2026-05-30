@@ -254,6 +254,19 @@ private:
     /// dropping inotify state). The helper itself does not remove
     /// prior entries — callers handle the swap when they need it.
     void armWatchesFor(const QString& absolutePath);
+    /// Re-arm the watcher's tracked-files list for `path` iff `path`
+    /// exists on disk AND is not already tracked. Used from the
+    /// fileChanged/directoryChanged handlers and from armWatchesFor to
+    /// converge the three sites that previously duplicated the
+    /// exists()+contains()+addPath triple inline. The existence guard
+    /// keeps QFileSystemWatcher's "addPath against missing file"
+    /// stderr warning off the user's journal.
+    void rearmFileIfMissing(const QString& path);
+    /// Same as rearmFileIfMissing but for parent-directory watches
+    /// (m_watcher->directories()). Empty paths are silently ignored
+    /// since QFileInfo::absolutePath of an empty source path is
+    /// itself empty.
+    void rearmDirIfMissing(const QString& path);
 
     QVariantMap m_palette;
     QString m_sourcePath;

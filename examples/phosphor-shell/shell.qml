@@ -9,6 +9,16 @@ import QtQuick
 // wires them into the panel/popup/window components living in
 // sibling .qml files. Sibling components are auto-discovered by Qt
 // from this file's directory.
+//
+// Phase 2.1 PipeWire surface is registered process-globally by
+// src/shell/main.cpp (Phosphor.Service.PipeWire 1.0). It is NOT
+// imported here because the example shell is intentionally minimal
+// (panel + clock + battery + workspace switcher). The dedicated
+// CLI example `examples/phosphor-service-pipewire-cli/` is the
+// shipped acceptance test for the PipeWire library; a per-app
+// volume tray panel-widget that consumes PwSinkModel / PipeWireHost
+// will land alongside the sibling SNI / UPower panel widgets in
+// the Phase 4 panel-widgets fan-out.
 Item {
     id: root
 

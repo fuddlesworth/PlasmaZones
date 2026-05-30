@@ -187,6 +187,13 @@ void PwNode::applyProps(int channelCount, QList<qreal> volumes, bool muted)
     // defensive clamp is cheaper than tracking down a phantom
     // multi-billion-channel node downstream.
     const quint32 newChannelCount = channelCount < 0 ? 0u : static_cast<quint32>(channelCount);
+    // Contract: caller (always pipewireconnection.cpp's onNodeParam path)
+    // derives both `channelCount` and `volumes` from the SAME pod
+    // traversal, so size mismatch here implies a wiring bug on the
+    // producer side. A QML binding that does `Repeater { model:
+    // node.channelCount }` and indexes `node.volumes[i]` would OOB on
+    // mismatch — make the violation loud in debug.
+    Q_ASSERT(volumes.size() == channelCount || (channelCount == 0 && volumes.isEmpty()));
     if (d->channelCount != newChannelCount) {
         d->channelCount = newChannelCount;
         moved = true;
