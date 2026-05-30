@@ -79,6 +79,15 @@ private Q_SLOTS:
     {
         compareAlgorithm(QStringLiteral("wide"));
     }
+    // Batch 3
+    void paper()
+    {
+        compareAlgorithm(QStringLiteral("paper"));
+    }
+    void stair()
+    {
+        compareAlgorithm(QStringLiteral("stair"));
+    }
 };
 
 void TestLuauParity::compareAlgorithm(const QString& name)

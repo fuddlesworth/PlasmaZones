@@ -455,6 +455,16 @@ local function deckLayout(area, count, focusedFraction, horizontal)
     return zones
 end
 
+-- Port of applyPerWindowMinSize.js
+local function applyPerWindowMinSize(w, h, minSizes, i)
+    if minSizes and i < #minSizes then
+        local entry = minSizes[i + 1] -- i is 0-based
+        if entry.w and entry.w > 0 then w = math.max(w, entry.w) end
+        if entry.h and entry.h > 0 then h = math.max(h, entry.h) end
+    end
+    return { w = w, h = h }
+end
+
 -- ── Module wrapper ─────────────────────────────────────────────────────────
 local function algorithm(def)
     local userTile = def.tile
@@ -492,4 +502,5 @@ pz = {
     solveTwoPart = solveTwoPart,
     masterStackLayout = masterStackLayout,
     deckLayout = deckLayout,
+    applyPerWindowMinSize = applyPerWindowMinSize,
 }
