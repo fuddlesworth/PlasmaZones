@@ -41,6 +41,25 @@ QTextStream& err()
     return s;
 }
 
+// WPA-PSK accepts an 8-63 character ASCII passphrase or a 64-character hex
+// pre-shared key. Mirrors NetworkHost's boundary so the CLI rejects the same
+// inputs the library would silently drop.
+bool isValidWpaPassphrase(const QString& passphrase)
+{
+    const auto length = passphrase.size();
+    if (length >= 8 && length <= 63)
+        return true;
+    if (length != 64)
+        return false;
+    for (const QChar ch : passphrase) {
+        const bool isHexDigit = (ch >= QLatin1Char('0') && ch <= QLatin1Char('9'))
+            || (ch >= QLatin1Char('a') && ch <= QLatin1Char('f')) || (ch >= QLatin1Char('A') && ch <= QLatin1Char('F'));
+        if (!isHexDigit)
+            return false;
+    }
+    return true;
+}
+
 // Run the event loop for `ms` so the lib's async D-Bus replies can land.
 void pump(int ms)
 {
@@ -240,9 +259,9 @@ int cmdConnect(const QString& ssid, const QString& passphrase)
 {
     // Mirror the library's WPA-PSK boundary (an 8-63 character passphrase or
     // a 64-character hex PSK). connectToAccessPoint silently drops an
-    // out-of-range secret, so reject it here with a clear message rather
-    // than pump for 4s and falsely report "activation requested".
-    if (!passphrase.isEmpty() && (passphrase.size() < 8 || passphrase.size() > 64)) {
+    // invalid secret, so reject it here with a clear message rather than
+    // pump for 4s and falsely report "activation requested".
+    if (!passphrase.isEmpty() && !isValidWpaPassphrase(passphrase)) {
         err() << "passphrase must be 8-63 characters (or a 64-character hex PSK)\n";
         err().flush();
         return 64;

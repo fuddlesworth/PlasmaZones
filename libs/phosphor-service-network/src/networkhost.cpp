@@ -44,6 +44,25 @@ bool isValidDevicePath(const QString& path)
     return path.size() > kPrefix.size() && path.startsWith(kPrefix);
 }
 
+// WPA-PSK accepts either an 8-63 character ASCII passphrase or a 64-character
+// hexadecimal pre-shared key. A 64-character non-hex value is NOT a valid PSK,
+// so it must be rejected too rather than marshalled into a profile NM drops.
+bool isValidWpaPassphrase(const QString& passphrase)
+{
+    const auto length = passphrase.size();
+    if (length >= 8 && length <= 63)
+        return true;
+    if (length != 64)
+        return false;
+    for (const QChar ch : passphrase) {
+        const bool isHexDigit = (ch >= QLatin1Char('0') && ch <= QLatin1Char('9'))
+            || (ch >= QLatin1Char('a') && ch <= QLatin1Char('f')) || (ch >= QLatin1Char('A') && ch <= QLatin1Char('F'));
+        if (!isHexDigit)
+            return false;
+    }
+    return true;
+}
+
 // Register the a{sa{sv}} connection-settings marshaller exactly once.
 void ensureConnectionSettingsRegistered()
 {
@@ -330,12 +349,12 @@ void NetworkHost::connectToAccessPoint(NetworkDevice* device, AccessPoint* acces
     // An empty passphrase is the open-network case (no security block is
     // attached below). A non-empty one is treated as WPA-PSK, which accepts
     // an 8-63 character ASCII passphrase or a 64-character hex pre-shared
-    // key; anything outside that range marshals a profile NetworkManager
-    // rejects asynchronously with no result surface here, so reject it at
-    // the boundary rather than fire a doomed call.
-    if (!passphrase.isEmpty() && (passphrase.size() < 8 || passphrase.size() > 64)) {
-        qCDebug(lcNetworkHost) << "connectToAccessPoint: refusing out-of-range WPA-PSK passphrase length"
-                               << passphrase.size();
+    // key; anything else marshals a profile NetworkManager rejects
+    // asynchronously with no result surface here, so reject it at the
+    // boundary rather than fire a doomed call.
+    if (!passphrase.isEmpty() && !isValidWpaPassphrase(passphrase)) {
+        qCDebug(lcNetworkHost) << "connectToAccessPoint: refusing invalid WPA-PSK passphrase (length"
+                               << passphrase.size() << ")";
         return;
     }
     ensureConnectionSettingsRegistered();
