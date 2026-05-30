@@ -386,7 +386,6 @@ Item {
                     actionCount: delegateRoot.modelData.actionCount
                     isComposite: delegateRoot.modelData.isComposite
                     validationIssueCount: delegateRoot.modelData.validationIssueCount
-                    section: delegateRoot.modelData.section
                     priority: delegateRoot.modelData.priority
                     controller: root.controller
                     matchFieldOptions: root.matchFieldOptions

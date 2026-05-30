@@ -165,21 +165,26 @@ SettingsFlickable {
     // unchanged), leaving the tile caption stale. Listening to the change
     // signals directly invalidates on any structural OR content change.
     property int tilesRevision: 0
-    // Roles whose value feeds the sectionModel computation (bucketing,
-    // filtering, summary cards). A dataChanged that only touches OTHER roles
-    // (Name / Enabled / Priority — the row delegate's inline bindings) must
-    // NOT trigger a full sectionModel rebuild: doing so re-walks every rule
-    // on every per-row enable toggle. This is a deliberately curated
-    // SUBSET of the full role enum in src/settings/windowrulemodel.h —
-    // WindowRuleModel is exposed to QML via QML_ELEMENT in CMakeLists.txt
-    // and the binding below references the role symbols directly, so the
-    // list isn't tracking the C++ enum's NAMES (those resolve at runtime),
-    // it's tracking which roles are STRUCTURAL versus row-inline. Adding
-    // a new structural role means appending it here AND walking every
-    // dataChanged emitter to ensure it includes the role in its `roles`
-    // arg. Adding a row-inline role (Name / Enabled / Priority) means
-    // deliberately leaving it OUT.
-    readonly property var _summaryRoles: [WindowRuleModel.SectionRole, WindowRuleModel.MatchSummaryRole, WindowRuleModel.ActionSummaryRole, WindowRuleModel.ScreenIdsRole, WindowRuleModel.ConditionCountRole, WindowRuleModel.ActionCountRole, WindowRuleModel.IsCompositeRole, WindowRuleModel.ValidationIssueCountRole]
+    // Roles the sectionModel reads (bucketing, filtering, summary cards, and
+    // the per-row badges including Priority). The sectionModel is built from
+    // `rulesSnapshot()` — a frozen QVariantList — so a row only reflects a role
+    // change once the snapshot is rebuilt. The onDataChanged handler below
+    // bumps modelRevision (→ rebuild) when EITHER:
+    //   (a) the dataChanged roles vector is empty — Qt's "any role" convention,
+    //       which every updateRule() mutation uses, so enabled / name / match /
+    //       action / in-place-priority edits already rebuild this way; OR
+    //   (b) a changed role is in this list — which catches the model's only two
+    //       TARGETED emitters: setPriorities() → {PriorityRole} and
+    //       refreshLabels() → {NameRole, MatchSummaryRole, ActionSummaryRole}.
+    // PriorityRole MUST be listed: a drag-reorder runs renormalizePriorities()
+    // → setPriorities(), whose targeted dataChanged({PriorityRole}) the
+    // empty-roles fallback never sees — omitting it left the reordered rows'
+    // Priority badges showing their stale pre-move numbers. The remaining
+    // entries (Section / ScreenIds / ConditionCount / ActionCount / IsComposite
+    // / ValidationIssueCount) are also read by the sectionModel but currently
+    // change only through the roles-less updateRule path; they're kept so a
+    // future targeted emitter carrying them rebuilds without a second edit here.
+    readonly property var _summaryRoles: [WindowRuleModel.SectionRole, WindowRuleModel.MatchSummaryRole, WindowRuleModel.ActionSummaryRole, WindowRuleModel.ScreenIdsRole, WindowRuleModel.ConditionCountRole, WindowRuleModel.ActionCountRole, WindowRuleModel.IsCompositeRole, WindowRuleModel.ValidationIssueCountRole, WindowRuleModel.PriorityRole]
 
     contentHeight: mainCol.implicitHeight
     clip: true

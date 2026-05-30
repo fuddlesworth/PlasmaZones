@@ -43,13 +43,9 @@ ItemDelegate {
     /// knows the rule never fires (the picker now prevents the combination
     /// for new rules, but a hand-edited JSON store keeps the offending rule).
     required property int validationIssueCount
-    /// The rule's section bucket (`WindowRuleModel::Section` int). Drives the
-    /// Advanced-only `priority N` label — only Advanced rules surface their
-    /// raw priority in the row because their priority is the user-controlled
-    /// ordering dimension (other sections derive priority from cascade bands).
-    required property int section
     /// The rule's raw priority integer — surfaced as a `Priority N` badge in
-    /// the badge cluster on Advanced-section rows only.
+    /// the badge cluster on every row, so each rule's effective ordering
+    /// priority is visible regardless of section.
     required property int priority
     /// WindowRuleController — needed to resolve a rule's match JSON
     /// on-demand for the expansion view (`controller.ruleJson(ruleId).match`).
@@ -234,14 +230,11 @@ ItemDelegate {
             }
 
             // Priority badge — sits with the other metadata badges (Composite,
-            // Conditions, Actions). Shown only for Advanced-section rules where
-            // the raw priority integer is the user-controlled ordering dimension.
-            // Other sections derive priority from cascade bands so the raw number
-            // adds noise rather than information. Uses the C++ Section enum
-            // exposed via QML_NAMED_ELEMENT(WindowRuleModel) so the integer
-            // value isn't hardcoded.
+            // Conditions, Actions). Shown on every row so each rule's effective
+            // ordering priority is visible across all sections, not just
+            // Advanced (other sections derive their priority from cascade bands,
+            // but surfacing the resolved number is still informative).
             Rectangle {
-                visible: row.section === WindowRuleModel.Advanced
                 Layout.alignment: Qt.AlignVCenter
                 implicitWidth: priorityLabel.implicitWidth + Kirigami.Units.largeSpacing
                 implicitHeight: priorityLabel.implicitHeight + Kirigami.Units.smallSpacing
