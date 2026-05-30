@@ -196,6 +196,7 @@ Kirigami.Dialog {
 
             Layout.fillWidth: true
             placeholderText: i18n("Filter…")
+            Accessible.name: i18n("Filter running windows")
         }
 
         Kirigami.Separator {

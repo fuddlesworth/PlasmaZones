@@ -521,8 +521,20 @@ public:
     /// revision-bump invalidation on in-place setRules edits) without
     /// staging the heavy navigation fixture every public navigation
     /// method needs. Pure const observer — no side effects beyond the
-    /// `mutable` evaluator cache. See the limitation note on
-    /// `m_excludeEvaluator` below for the AppId-only matching contract.
+    /// `mutable` evaluator cache.
+    ///
+    /// **Limitation:** the engine builds a `WindowQuery` with only
+    /// `query.appId` populated and feeds it to the bound `RuleEvaluator`.
+    /// A user-authored Exclude rule whose match leaf targets a non-
+    /// `AppId` field (`WindowClass Contains "steam"`, `Title Regex …`,
+    /// a composite match) silently evaluates to false here because
+    /// those leaves never resolve against a query that only knows the
+    /// appId. Migration-produced rules are all `AppId AppIdMatches
+    /// <pattern>` so legacy v3 behaviour is preserved exactly; the gap
+    /// only opens for hand-authored rules with broader match leaves.
+    /// A more thorough check would require the caller to pass the full
+    /// `WindowQuery` it can build from the WTS registry's per-window
+    /// attributes, instead of just the appId.
     bool isAppIdExcluded(const QString& appId) const;
 
 Q_SIGNALS:
@@ -621,20 +633,9 @@ private:
     /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
-    // isAppIdExcluded is declared in the public section above so the
-    // unit tests can drive the wiring directly. The matching contract
-    // is: build a `WindowQuery` with only `query.appId` populated and
-    // evaluate it against the bound `RuleEvaluator`. A user-authored
-    // Exclude rule whose match leaf targets a non-`AppId` field
-    // (`WindowClass Contains "steam"`, `Title Regex …`, a composite
-    // match) silently evaluates to false here because those leaves
-    // never resolve against a query that only knows the appId.
-    // Migration-produced rules are all `AppId AppIdMatches <pattern>`
-    // so legacy v3 behaviour is preserved exactly; the gap only opens
-    // for hand-authored rules with broader match leaves. A more
-    // thorough check would require the caller to pass the full
-    // `WindowQuery` it can build from the WTS registry's per-window
-    // attributes, instead of just the appId.
+    // `isAppIdExcluded` is declared in the public section above (so the
+    // unit tests can drive the wiring directly); full docstring + the
+    // AppId-only matching limitation live with that declaration.
 
     /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
     /// in early-init paths (before the daemon wires the store) — the

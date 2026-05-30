@@ -149,13 +149,15 @@ public:
     /// rebuild PROVIDED config.json has reached
     /// `_version == ConfigSchemaVersion`. When assignments.json is absent
     /// the rebuild still runs and writes a rule set carrying only the
-    /// provider-default catch-all (plus any disable-list / animation-rule
-    /// stash entries from config.json). If the migration chain stalled
-    /// below v4 (e.g. a chain step's side-effect write failed),
-    /// finalizeV4Conversion refuses to commit a stub windowrules.json so
-    /// the next run can retry the chain without masking the stall. The
-    /// rebuild-vs-no-op decision keys off the windowrules.json probe alone;
-    /// the config-version gate is layered on top to refuse the stub case.
+    /// provider-default catch-all (plus any disable-list, animation-rule,
+    /// exclusion, and animation-exclusion stash entries from
+    /// config.json). If the migration chain stalled below v4 (e.g. a
+    /// chain step's side-effect write failed), finalizeV4Conversion
+    /// refuses to commit a stub windowrules.json so the next run can
+    /// retry the chain without masking the stall. The
+    /// rebuild-vs-cleanup-only decision keys off the windowrules.json
+    /// probe alone; the config-version gate is layered on top to refuse
+    /// the stub case.
     ///
     /// Degraded path under config corruption: if config.json is corrupt (or
     /// absent) with no INI fallback, the rebuild proceeds with an empty

@@ -248,18 +248,19 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
 void SnapEngine::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::swapFocusedInDirection:" << direction;
+    // m_snapState is set by SnapEngine's ctor as a Qt-child; the
+    // `m_snapState->screenAssignments()` dereference further down would
+    // otherwise be the first thing to crash if a future refactor moves
+    // m_snapState ownership to a delegated setter that can leave it
+    // null. Asserted unconditionally on entry (mirrors
+    // toggleFocusedFloat) so the invariant fires regardless of which
+    // early-return path runs below.
+    Q_ASSERT(m_snapState);
     if (!m_windowTracker) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("engine_unavailable"), QString(),
                                   QString(), ctx.screenId);
         return;
     }
-    // m_snapState is set by SnapEngine's ctor as a Qt-child; the
-    // de-reference at line ~285 (`m_snapState->screenAssignments()`)
-    // would otherwise be the first thing to crash if a future refactor
-    // moves m_snapState ownership to a delegated setter that can leave
-    // it null. The Q_ASSERT documents the invariant so a future code
-    // change has to acknowledge it.
-    Q_ASSERT(m_snapState);
     if (direction.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_direction"), QString(),
                                   QString(), ctx.screenId);

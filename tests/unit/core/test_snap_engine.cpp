@@ -1082,6 +1082,21 @@ private Q_SLOTS:
         // so a `WindowRuleSet::setRules` edit must invalidate the cached
         // resolve result without requiring a setExcludeRuleSet re-fence
         // (which the Pass 1 init-prologue refactor explicitly dropped).
+        //
+        // Fixture shape matters: the swap MUST be non-empty → non-empty
+        // so that (a) the evaluator gets constructed on the first
+        // isAppIdExcluded call (the `isEmpty()` fast path at
+        // navigation_actions.cpp:143 skips evaluator construction
+        // entirely for an empty set, so an `add → query → setRules({})
+        // → query` sequence would pass trivially via the empty-set
+        // short-circuit on the second half without ever exercising the
+        // revision-bump cache invalidation), and (b) swapping rule A
+        // for rule B forces the cached evaluator to re-evaluate the
+        // priorityOrder + matchCache against the new revision —
+        // without per-revision invalidation, the cached resolve for
+        // "appA" would return true after rule A is gone (stale match
+        // cache) AND the resolve for "appB" would return false
+        // (stale priorityOrder index missing the new rule).
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
 
         PhosphorWindowRule::WindowRuleSet set;
@@ -1090,25 +1105,42 @@ private Q_SLOTS:
         // (setExcludeRuleSet wired once at init, edits happen via
         // setRules from the rulesChanged subscription).
         engine.setExcludeRuleSet(&set);
-        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
 
-        PhosphorWindowRule::WindowRule rule;
-        rule.id = QUuid::createUuid();
-        rule.enabled = true;
-        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
-            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("firefox"));
-        PhosphorWindowRule::RuleAction action;
-        action.type = QString(PhosphorWindowRule::ActionType::Exclude);
-        rule.actions.append(action);
+        const auto excludeRule = [](const QString& pattern) {
+            PhosphorWindowRule::WindowRule r;
+            r.id = QUuid::createUuid();
+            r.enabled = true;
+            r.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+                PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, pattern);
+            PhosphorWindowRule::RuleAction a;
+            a.type = QString(PhosphorWindowRule::ActionType::Exclude);
+            r.actions.append(a);
+            return r;
+        };
 
-        set.setRules({rule});
-        QVERIFY(engine.isAppIdExcluded(QStringLiteral("firefox")));
+        // Step 1: rule A exists. Querying primes the cached evaluator
+        // against the bound set at its current revision.
+        set.setRules({excludeRule(QStringLiteral("appA"))});
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appA")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appB")));
 
-        // Remove every rule via in-place setRules — same pointer, empty
-        // list. The cached evaluator MUST notice the revision bump or
-        // this assertion fails (stale match cache returns true).
+        // Step 2: swap rule A out for rule B via in-place setRules. Same
+        // bound pointer; bumped revision. The cached evaluator MUST
+        // notice the revision bump and re-evaluate — without
+        // per-revision invalidation, "appA" would still resolve as
+        // excluded (stale match cache) and "appB" would still resolve
+        // as not-excluded (stale priorityOrder index missing the new
+        // rule).
+        set.setRules({excludeRule(QStringLiteral("appB"))});
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appB")));
+
+        // Step 3: clear via empty setRules. This goes through the
+        // `isEmpty()` fast path (not the evaluator), but verifies the
+        // bound pointer survives the mutation cleanly.
         set.setRules({});
-        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appB")));
     }
 };
 

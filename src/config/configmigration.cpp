@@ -2571,19 +2571,30 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
         qWarning("ConfigMigration: failed to write %s — aborting v4 conversion", qPrintable(windowRulesPath));
         return false;
     }
-    // Log the input-vs-stored delta whenever setRules dedups: identical
-    // `(Field::AppId, Operator::AppIdMatches, "firefox")` tuples in BOTH
-    // Exclusions.Applications AND Exclusions.WindowClasses collapse to
-    // one rule (same UUIDv5 namespace + segment encoding), and a parallel
-    // case exists for animation-side `(field, op, pattern, action)`
-    // tuples. The dedup is semantically correct (the rules are identical)
-    // but silent in the bare-count message; surfacing the delta makes the
-    // collapse forensically visible.
+    // Log the input-vs-stored delta whenever setRules drops candidates.
+    // Two drop classes feed this delta:
+    //   1. UUIDv5 dedup. On the snapping side, identical `(Field::AppId,
+    //      Operator::AppIdMatches, "firefox")` tuples in BOTH
+    //      Exclusions.Applications AND Exclusions.WindowClasses collapse
+    //      to one rule — same 3-segment UUIDv5 key because both lists
+    //      encode their patterns under `AppId AppIdMatches`. The
+    //      animation side does NOT have this cross-list collapse
+    //      property (its encoding includes the field discriminator, so
+    //      DesktopFile vs WindowClass entries hash distinctly); dedup
+    //      only fires there for literal within-list duplicates
+    //      ("firefox,firefox" in one list).
+    //   2. Validator rejection. WindowRuleSet::setRules silently drops
+    //      rules whose `WindowRule::isValid()` returns false (null id,
+    //      invalid match, zero actions, or action-validator failure).
+    //      The migration's builders should never produce such rules
+    //      today; a non-zero delta with no UUIDv5 collision in the
+    //      preceding setRules warnings points at a builder regression.
+    // Surfacing the delta makes either case forensically visible.
     if (storedRuleCount != inputRuleCount) {
         qInfo(
-            "ConfigMigration: wrote %d window rules to %s (deduplicated from %d candidates — identical "
-            "(field,op,pattern[,action]) tuples collapsed on UUIDv5)",
-            storedRuleCount, qPrintable(windowRulesPath), inputRuleCount);
+            "ConfigMigration: wrote %d window rules to %s (dropped %d of %d candidates — UUIDv5 collision OR "
+            "validator rejection; see preceding setRules warnings to discriminate)",
+            storedRuleCount, qPrintable(windowRulesPath), inputRuleCount - storedRuleCount, inputRuleCount);
     } else {
         qInfo("ConfigMigration: wrote %d window rules to %s", storedRuleCount, qPrintable(windowRulesPath));
     }
