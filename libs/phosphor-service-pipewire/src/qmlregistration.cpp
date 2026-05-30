@@ -92,26 +92,50 @@ void registerQmlTypes()
         // lifetime.
         qmlRegisterSingletonType<PipeWireHost>(
             kQmlModuleName, kQmlModuleMajor, kQmlModuleMinor, "PipeWireHost", [](QQmlEngine*, QJSEngine*) -> QObject* {
+                // Re-check QCoreApplication inside the factory: the
+                // outer guard at registerQmlTypes() runs once at type
+                // registration, but the factory itself is invoked
+                // lazily on first QML access — which may happen after
+                // the app instance has gone (release-build teardown
+                // ordering, hot-reload tearing the app down between
+                // registration and first use). Without this guard, the
+                // next `QCoreApplication::instance()->thread()`
+                // dereferences a nullptr.
+                auto* app = QCoreApplication::instance();
+                if (!app) {
+                    qCWarning(lcPipeWireQml)
+                        << "PipeWireHost factory: no QCoreApplication instance — skipping registration";
+                    return static_cast<QObject*>(nullptr);
+                }
                 // The QObject inherits the calling thread's affinity
                 // on first construction; we assume the QQmlEngine that
                 // triggers this factory lives on the main thread
                 // (which is the documented Phosphor shell contract —
                 // engines are constructed in PhosphorShell::ShellEngine
                 // on the GUI thread).
-                Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
+                Q_ASSERT(QThread::currentThread() == app->thread());
                 static PipeWireHost* hostPtr = nullptr;
-                static std::once_flag hostOnce;
-                std::call_once(hostOnce, [] {
+                // Defend against the app-recreation hot-reload path:
+                // if the previous QCoreApplication has been destroyed
+                // and a fresh one constructed, the cached hostPtr is
+                // dangling (its parent was the old app, which deleted
+                // it on shutdown). The parent() check spots that
+                // mismatch and forces a fresh construction. Using
+                // std::call_once here would pin the first-ever app's
+                // host forever; we keep the lazy-init guard but base
+                // the "do we need a new one?" decision on the parent
+                // identity rather than a one-shot flag.
+                if (!hostPtr || hostPtr->parent() != app) {
                     // Parent to the app inline so the host is never
                     // briefly parentless between `new` and a follow-up
                     // setParent — the QObject ctor wires the
                     // parent-child link atomically.
-                    hostPtr = new PipeWireHost(QCoreApplication::instance());
-                });
-                // setObjectOwnership lives OUTSIDE call_once: it is a
-                // per-engine policy registered against the
-                // engine-private QML metadata table, not against the
-                // QObject itself. The first engine's call_once-only
+                    hostPtr = new PipeWireHost(app);
+                }
+                // setObjectOwnership lives OUTSIDE the construction
+                // guard: it is a per-engine policy registered against
+                // the engine-private QML metadata table, not against
+                // the QObject itself. The first engine's one-shot
                 // pinning would leave any subsequent engine (think
                 // hot-reload spawning a fresh QQmlEngine) treating the
                 // shared host as JavaScriptOwnership — which would

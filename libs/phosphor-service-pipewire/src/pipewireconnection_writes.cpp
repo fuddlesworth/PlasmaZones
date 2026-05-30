@@ -79,9 +79,24 @@ bool PipeWireConnection::Private::submitLoopRequest(std::unique_ptr<Req> req,
     // pw_loop_invoke returns a sequence number (>= 0) on async
     // success or the dispatcher's return value on sync; only a
     // negative value signals a queue-side failure where the
-    // dispatcher won't fire. Release ownership to the dispatcher on
-    // success, log + drop on failure (unique_ptr cleans up on
-    // scope exit).
+    // dispatcher won't fire.
+    //
+    // Sync-dispatch double-free hazard: pw_loop_invoke called with
+    // block=false from a thread that IS the loop's own thread runs
+    // the dispatcher SYNCHRONOUSLY before returning. The dispatcher
+    // takes ownership via its own unique_ptr from `user_data` and
+    // deletes the request when it returns. If we still held the
+    // unique_ptr across the invoke (via req.get() and a later
+    // req.release()), the local unique_ptr would also try to delete
+    // the same pointer on scope exit, producing a double-free. Our
+    // public contract documents GUI-thread-only callers, but a
+    // misuse — or a future reentrant call path — must not corrupt
+    // memory. Release ownership to a raw pointer BEFORE the invoke
+    // and reclaim ONLY on the queue-failure path (rc < 0), which
+    // signals the dispatcher will not fire. Once rc >= 0, ownership
+    // belongs to the dispatcher regardless of sync vs async
+    // delivery; the local raw pointer is intentionally leaked from
+    // this stack frame's point of view.
     //
     // loopMutex scope: hold the lock across the load AND the
     // pw_loop_invoke so a spontaneous worker-thread loop exit
@@ -90,24 +105,32 @@ bool PipeWireConnection::Private::submitLoopRequest(std::unique_ptr<Req> req,
     // holds the same mutex across its destroy+null-store in
     // LoopThread::run, so either we see a live loop and the invoke
     // races safely against the eventual teardown, or we see null
-    // and bail. Release ownership is intentionally OUTSIDE the lock
-    // — pw_loop_invoke has already returned by the time we get rc,
-    // and req.release() touches only local stack state. See the
+    // and bail. The reclaim-on-failure happens OUTSIDE the lock —
+    // pw_loop_invoke has already returned by the time we get rc,
+    // and the delete touches only local heap state. See the
     // destructor (pipewireconnection_lifecycle.cpp) for the
     // canonical statement of the TOCTOU window this closes.
+    Req* raw = req.release();
     int rc;
     {
         QMutexLocker locker(&loopMutex);
         pw_main_loop* mainLoop = loop.load(std::memory_order_acquire);
-        if (!mainLoop)
+        if (!mainLoop) {
+            // No live loop — reclaim and drop. The dispatcher will
+            // never fire, so we own the request.
+            delete raw;
             return false;
-        rc = pw_loop_invoke(pw_main_loop_get_loop(mainLoop), dispatcher, 0, nullptr, 0, false, req.get());
+        }
+        rc = pw_loop_invoke(pw_main_loop_get_loop(mainLoop), dispatcher, 0, nullptr, 0, false, raw);
     }
     if (rc < 0) {
+        // Queue-side failure: dispatcher did not fire and never
+        // will. Reclaim ownership and drop. On rc >= 0 (sync or
+        // async), ownership has transferred to the dispatcher.
         qCWarning(lcPipeWire) << "pw_loop_invoke failed for" << label << "rc" << rc;
+        delete raw;
         return false;
     }
-    (void)req.release();
     return true;
 }
 
@@ -117,6 +140,17 @@ void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
     // Skip the entire pod build instead of emitting an empty Props
     // pod that the daemon would have to parse and ignore.
     const int volumeCount = req.writeVolumes ? std::min<int>(req.volumes.size(), SPA_AUDIO_MAX_CHANNELS) : 0;
+    // Surface truncation explicitly: a caller handing us more
+    // channels than SPA can carry is almost certainly a bug at the
+    // call site (wrong channel count, swapped sink, stale cached
+    // layout) and silently dropping the tail would let it ship. The
+    // pod build still proceeds with the truncated array so the
+    // observable channels still update; the qCDebug just makes the
+    // truncation visible to anyone running with the category enabled.
+    if (req.writeVolumes && req.volumes.size() > SPA_AUDIO_MAX_CHANNELS) {
+        qCDebug(lcPipeWire) << "writeVolumes truncating channel count from" << req.volumes.size() << "to"
+                            << SPA_AUDIO_MAX_CHANNELS << "for node" << req.nodeId;
+    }
     if (volumeCount == 0 && !req.writeMuted)
         return;
 

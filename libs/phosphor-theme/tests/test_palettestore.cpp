@@ -1,18 +1,35 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+// Tests for PaletteStore. Covers the in-process API surface:
+//   - canonical defaults / static defaultPalette() accessor
+//   - loadFromJson (wrapped + flat shapes, merge contract, validation)
+//   - applyTokens (normalisation + no-op contracts)
+//   - resetToDefaults (clears source path, drops extra tokens, signal
+//     ordering)
+//
+// loadFromFile + watcher-arming slots live in
+// test_palettestore_files.cpp. Hot-reload + the white-box
+// resetToDefaults_releasesDirectoryWatch slot live in
+// test_palettestore_hotreload.cpp. The split keeps every TU under the
+// project's 800-line cap and lets the three files share the
+// QTemporaryDir + QFile fixture-write scaffolding via
+// test_palettestore_helpers.h.
+
+#include "test_palettestore_helpers.h"
+
 #include <PhosphorTheme/PaletteStore.h>
 
 #include <QColor>
-#include <QFile>
 #include <QFileSystemWatcher>
 #include <QSignalSpy>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
-#include <QTimer>
 #include <QVariantMap>
 
 using namespace PhosphorTheme;
+using namespace PhosphorThemeTestHelpers;
 
 class TestPaletteStore : public QObject
 {
@@ -28,22 +45,11 @@ private Q_SLOTS:
     void loadFromJson_failedAfterFileLoadPreservesSourcePath();
     void loadFromJson_signalOrderIsSourceBeforePalette();
     void loadFromJson_rejectsWrappedTokensWithNonObjectValue();
-    void loadFromFile_persistsSourcePath();
-    void loadFromFile_emitsErrorOnMissingFile();
-    void loadFromFile_malformedJsonLeavesSourcePathUntouched();
-    void loadFromFile_tokensKeyNotObjectKeepsWatcherArmed();
-    void loadFromFile_noUsableTokensKeepsWatcherArmed();
     void applyTokens_emptyIsNoOp();
     void applyTokens_normalisesStringHexToColor();
     void resetToDefaults_clearsSourcePath();
     void resetToDefaults_dropsExtraUserTokens();
     void resetToDefaults_signalOrderIsSourceBeforePalette();
-    void resetToDefaults_releasesDirectoryWatch();
-    void hotReload_picksUpInPlaceEdit();
-    void hotReload_survivesConsecutiveInPlaceEdits();
-    void hotReload_picksUpAtomicRename();
-    void hotReload_debouncesBurstOfFileChanges();
-    void hotReload_resetCancelsPendingDebounce();
 };
 
 void TestPaletteStore::defaults_loadsCanonicalPhosphorTokens()
@@ -56,6 +62,22 @@ void TestPaletteStore::defaults_loadsCanonicalPhosphorTokens()
     QCOMPARE(s.token(QStringLiteral("brand_stop_3")), QColor("#F43F5E"));
     // Unknown token → invalid color.
     QVERIFY(!s.token(QStringLiteral("nonexistent")).isValid());
+}
+
+void TestPaletteStore::defaultPalette_staticAccessorMatchesInstance()
+{
+    // Static accessor must return the canonical built-in dark palette
+    // without requiring any PaletteStore instance. Calling it before any
+    // instance exists confirms it is truly stateless.
+    const auto defaults = PaletteStore::defaultPalette();
+    QVERIFY(!defaults.isEmpty());
+    QCOMPARE(defaults.value(QStringLiteral("primary")).value<QColor>(), QColor("#3B82F6"));
+    QCOMPARE(defaults.value(QStringLiteral("background")).value<QColor>(), QColor("#050916"));
+    QCOMPARE(defaults.value(QStringLiteral("brand_stop_3")).value<QColor>(), QColor("#F43F5E"));
+
+    // A freshly constructed PaletteStore holds the same palette.
+    PaletteStore s;
+    QCOMPARE(s.palette(), defaults);
 }
 
 void TestPaletteStore::loadFromJson_acceptsWrappedShape()
@@ -125,13 +147,8 @@ void TestPaletteStore::loadFromJson_failedAfterFileLoadPreservesSourcePath()
     // loadFromFile), and the watcher remains armed on the file +
     // parent directory.
     QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString goodPath = tmp.filePath(QStringLiteral("good.json"));
-    {
-        QFile f(goodPath);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#112233"}})");
-    }
+    QString goodPath;
+    QVERIFY(seedTempJsonFile(tmp, QStringLiteral("good.json"), goodPath));
 
     PaletteStore s;
     QSignalSpy pathSpy(&s, &PaletteStore::sourcePathChanged);
@@ -197,13 +214,8 @@ void TestPaletteStore::loadFromJson_signalOrderIsSourceBeforePalette()
     // emitted the signals in the opposite order: a regression here
     // would resurface that bug.
     QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#abcdef"}})");
-    }
+    QString path;
+    QVERIFY(seedTempJsonFile(tmp, QStringLiteral("p.json"), defaultWrappedPayload("#abcdef"), path));
     PaletteStore s;
     QVERIFY(s.loadFromFile(path));
 
@@ -225,185 +237,16 @@ void TestPaletteStore::loadFromJson_signalOrderIsSourceBeforePalette()
     QCOMPARE(signalOrder, (QStringList{QStringLiteral("sourcePathChanged"), QStringLiteral("paletteChanged")}));
 }
 
-void TestPaletteStore::loadFromFile_persistsSourcePath()
-{
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    QFile f(path);
-    QVERIFY(f.open(QIODevice::WriteOnly));
-    f.write(R"({"tokens": {"primary": "#cafe00"}})");
-    f.close();
-
-    PaletteStore s;
-    QSignalSpy pathSpy(&s, &PaletteStore::sourcePathChanged);
-    QVERIFY(s.loadFromFile(path));
-    QCOMPARE(s.sourcePath(), path);
-    QCOMPARE(pathSpy.count(), 1);
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#cafe00"));
-}
-
-void TestPaletteStore::loadFromFile_emitsErrorOnMissingFile()
+void TestPaletteStore::loadFromJson_rejectsWrappedTokensWithNonObjectValue()
 {
     PaletteStore s;
-    QSignalSpy errSpy(&s, &PaletteStore::loadError);
-    QVERIFY(!s.loadFromFile(QStringLiteral("/definitely/does/not/exist.json")));
-    QCOMPARE(errSpy.count(), 1);
-}
-
-void TestPaletteStore::loadFromFile_malformedJsonLeavesSourcePathUntouched()
-{
-    // PaletteStore.h documents that outright parse failures DO NOT
-    // commit sourcePath (asymmetric with the shape-failure paths,
-    // which DO commit). This pins that half of the contract: load
-    // a good file first to arm the watcher + populate sourcePath,
-    // then attempt loadFromFile against a file with non-JSON bytes.
-    // The malformed load must:
-    //   1. Return false.
-    //   2. Emit loadError exactly once.
-    //   3. Leave sourcePath pointing at the FIRST (good) file —
-    //      sourcePathChanged must not fire a second time.
-    //   4. Leave the watcher still tracking the FIRST file +
-    //      its parent directory.
-    // A regression that committed sourcePath before the parse step
-    // would be visible by either watcher inspection or pathSpy count.
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString goodPath = tmp.filePath(QStringLiteral("good.json"));
-    const QString badPath = tmp.filePath(QStringLiteral("malformed.json"));
-    {
-        QFile f(goodPath);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#112233"}})");
-    }
-    {
-        QFile f(badPath);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write("this is not json at all { ]]} ");
-    }
-
-    PaletteStore s;
-    QSignalSpy pathSpy(&s, &PaletteStore::sourcePathChanged);
-    QSignalSpy errSpy(&s, &PaletteStore::loadError);
-
-    QVERIFY(s.loadFromFile(goodPath));
-    const QString sourceAfterGood = s.sourcePath();
-    QVERIFY(!sourceAfterGood.isEmpty());
-    QCOMPARE(pathSpy.count(), 1);
-
-    // White-box: pin the watcher's tracked paths BEFORE the bad
-    // load so we can compare them post-failure. See
-    // resetToDefaults_releasesDirectoryWatch for the rationale
-    // — a behavioural test would miss a watcher drop because
-    // sourcePath alone could be restored on rollback while the
-    // underlying watch stayed dropped.
-    const auto watchers = s.findChildren<QFileSystemWatcher*>();
-    QCOMPARE(watchers.size(), 1);
-    QFileSystemWatcher* watcher = watchers.first();
-    const QStringList filesBefore = watcher->files();
-    const QStringList dirsBefore = watcher->directories();
-    QVERIFY(!filesBefore.isEmpty());
-    QVERIFY(!dirsBefore.isEmpty());
-
-    // Attempt the malformed load.
-    QVERIFY(!s.loadFromFile(badPath));
-
-    // loadError fires (carries the malformed-JSON message), but
-    // sourcePathChanged stays at its post-good-load count.
-    QCOMPARE(errSpy.count(), 1);
-    QCOMPARE(errSpy.first().at(1).toString(), QStringLiteral("invalid JSON"));
-    QCOMPARE(s.sourcePath(), sourceAfterGood);
-    QCOMPARE(pathSpy.count(), 1);
-
-    // Watcher is unchanged: still pointed at the first file +
-    // its parent directory.
-    QCOMPARE(watcher->files(), filesBefore);
-    QCOMPARE(watcher->directories(), dirsBefore);
-
-    // The good file's palette tokens still apply.
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
-}
-
-void TestPaletteStore::loadFromFile_tokensKeyNotObjectKeepsWatcherArmed()
-{
-    // Pins the documented asymmetry between loadFromJson (atomic on
-    // shape failure) and loadFromFile (commits sourcePath + watcher
-    // BEFORE shape check). When the wrapped layout's `tokens` key is
-    // not an object the apply step returns TokensKeyNotObject; the
-    // header contract says the new source + watcher are retained so
-    // the user can fix the shape in-editor and trigger an automatic
-    // reload. This test pins both halves: (1) loadError fires with
-    // the precise message text, (2) sourcePath holds the new file's
-    // path, (3) the watcher still tracks the file + parent directory.
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("bad-tokens.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": "see other.json"})");
-    }
-
-    PaletteStore s;
-    QSignalSpy errSpy(&s, &PaletteStore::loadError);
-    QSignalSpy pathSpy(&s, &PaletteStore::sourcePathChanged);
-
-    QVERIFY(!s.loadFromFile(path));
-
-    QCOMPARE(errSpy.count(), 1);
-    QCOMPARE(errSpy.first().at(1).toString(), QStringLiteral("tokens key must be a JSON object"));
-
-    // sourcePath was committed (asymmetric with loadFromJson).
-    QCOMPARE(s.sourcePath(), path);
-    QCOMPARE(pathSpy.count(), 1);
-
-    // Watcher remains armed against the new file + parent directory.
-    const auto watchers = s.findChildren<QFileSystemWatcher*>();
-    QCOMPARE(watchers.size(), 1);
-    QFileSystemWatcher* watcher = watchers.first();
-    QVERIFY(watcher->files().contains(path));
-    QVERIFY(!watcher->directories().isEmpty());
-
-    // Active palette is unchanged (still defaults).
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
-}
-
-void TestPaletteStore::loadFromFile_noUsableTokensKeepsWatcherArmed()
-{
-    // Companion to the TokensKeyNotObject test: same asymmetry, but
-    // the JSON is shaped fine and only the contents are unusable.
-    // The wrapped tokens map contains entries that aren't valid
-    // colors (numeric value here) so applyParsedJson short-circuits
-    // with NoUsableTokens. Same retention contract: sourcePath +
-    // watcher stay committed, loadError carries the precise message,
-    // active palette unchanged.
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("no-tokens.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": 42}})");
-    }
-
-    PaletteStore s;
-    QSignalSpy errSpy(&s, &PaletteStore::loadError);
-    QSignalSpy pathSpy(&s, &PaletteStore::sourcePathChanged);
-
-    QVERIFY(!s.loadFromFile(path));
-
-    QCOMPARE(errSpy.count(), 1);
-    QCOMPARE(errSpy.first().at(1).toString(), QStringLiteral("no usable color tokens"));
-
-    QCOMPARE(s.sourcePath(), path);
-    QCOMPARE(pathSpy.count(), 1);
-
-    const auto watchers = s.findChildren<QFileSystemWatcher*>();
-    QCOMPARE(watchers.size(), 1);
-    QFileSystemWatcher* watcher = watchers.first();
-    QVERIFY(watcher->files().contains(path));
-    QVERIFY(!watcher->directories().isEmpty());
-
+    QSignalSpy spy(&s, &PaletteStore::paletteChanged);
+    // `tokens` key present but value is a string. The caller's intent
+    // is unambiguously the wrapped layout, but the payload is malformed.
+    // Falling through to flat-map parsing would silently treat the
+    // string "see other.json" as if it were a token, which is wrong.
+    QVERIFY(!s.loadFromJson(R"({"tokens": "see other.json"})"));
+    QCOMPARE(spy.count(), 0);
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
 }
 
@@ -445,12 +288,8 @@ void TestPaletteStore::applyTokens_normalisesStringHexToColor()
 void TestPaletteStore::resetToDefaults_clearsSourcePath()
 {
     QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    QFile f(path);
-    QVERIFY(f.open(QIODevice::WriteOnly));
-    f.write(R"({"primary": "#abcdef"})");
-    f.close();
+    QString path;
+    QVERIFY(seedTempJsonFile(tmp, QStringLiteral("p.json"), QByteArray(R"({"primary": "#abcdef"})"), path));
 
     PaletteStore s;
     QVERIFY(s.loadFromFile(path));
@@ -527,13 +366,8 @@ void TestPaletteStore::resetToDefaults_signalOrderIsSourceBeforePalette()
     // loop tick between the two, so the order on the wire is the
     // order the slots run, full stop.)
     QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#abcdef"}})");
-    }
+    QString path;
+    QVERIFY(seedTempJsonFile(tmp, QStringLiteral("p.json"), defaultWrappedPayload("#abcdef"), path));
     PaletteStore s;
     QVERIFY(s.loadFromFile(path));
 
@@ -550,292 +384,5 @@ void TestPaletteStore::resetToDefaults_signalOrderIsSourceBeforePalette()
     QCOMPARE(signalOrder, (QStringList{QStringLiteral("sourcePathChanged"), QStringLiteral("paletteChanged")}));
 }
 
-void TestPaletteStore::hotReload_picksUpInPlaceEdit()
-{
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#112233"}})");
-    }
-
-    PaletteStore s;
-    QVERIFY(s.loadFromFile(path));
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
-
-    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
-
-    // Edit in place (truncate + rewrite, the same syscall pattern most
-    // editors use when configured for in-place save).
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        f.write(R"({"tokens": {"primary": "#445566"}})");
-    }
-
-    // QFileSystemWatcher is asynchronous: pump the event loop until it
-    // fires or the deadline expires. 5s ceiling matches sibling tests.
-    QVERIFY(palSpy.wait(5000));
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#445566"));
-}
-
-void TestPaletteStore::hotReload_survivesConsecutiveInPlaceEdits()
-{
-    // Regression for the Pass-2 PaletteStore::reloadFromCurrentPath
-    // bug: a successful hot-reload was routing through the public
-    // loadFromJson, which dropped the watcher + cleared m_sourcePath
-    // every time, silently breaking the next on-disk edit. This test
-    // performs TWO consecutive edits and asserts both are picked up,
-    // pinning the no-watcher-drop routing in reloadFromCurrentPath
-    // (the only watcher-tearing path is dropWatcherAndClearSourcePath,
-    // which only loadFromJson + resetToDefaults call).
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#101010"}})");
-    }
-
-    PaletteStore s;
-    QVERIFY(s.loadFromFile(path));
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#101010"));
-    const QString sourceAfterLoad = s.sourcePath();
-    QVERIFY(!sourceAfterLoad.isEmpty());
-
-    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
-
-    // First edit.
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        f.write(R"({"tokens": {"primary": "#202020"}})");
-    }
-    QVERIFY(palSpy.wait(5000));
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#202020"));
-    // Watcher must still be armed after the first reload.
-    QCOMPARE(s.sourcePath(), sourceAfterLoad);
-
-    palSpy.clear();
-
-    // Second edit. Without routing reloadFromCurrentPath through
-    // readParseAndApply (instead of the public loadFromJson, which
-    // tears down the watcher), this edit never fires paletteChanged
-    // because the watcher was disarmed during the first reload.
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        f.write(R"({"tokens": {"primary": "#303030"}})");
-    }
-    QVERIFY(palSpy.wait(5000));
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#303030"));
-    QCOMPARE(s.sourcePath(), sourceAfterLoad);
-}
-
-void TestPaletteStore::hotReload_picksUpAtomicRename()
-{
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#112233"}})");
-    }
-
-    PaletteStore s;
-    QVERIFY(s.loadFromFile(path));
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
-
-    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
-
-    // Simulate vim's default save flow: write to a temp file, then
-    // rename(2) over the destination. This unlinks the watched inode
-    // and creates a new one, which drops QFileSystemWatcher's file
-    // watch silently. The parent-directory watch armed in the ctor
-    // is what catches the rename and re-arms the file watch.
-    const QString tmpFile = path + QStringLiteral(".tmp");
-    {
-        QFile f(tmpFile);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#445566"}})");
-    }
-    QVERIFY(QFile::remove(path));
-    QVERIFY(QFile::rename(tmpFile, path));
-
-    QVERIFY(palSpy.wait(5000));
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#445566"));
-}
-
-void TestPaletteStore::defaultPalette_staticAccessorMatchesInstance()
-{
-    // Static accessor must return the canonical built-in dark palette
-    // without requiring any PaletteStore instance. Calling it before any
-    // instance exists confirms it is truly stateless.
-    const auto defaults = PaletteStore::defaultPalette();
-    QVERIFY(!defaults.isEmpty());
-    QCOMPARE(defaults.value(QStringLiteral("primary")).value<QColor>(), QColor("#3B82F6"));
-    QCOMPARE(defaults.value(QStringLiteral("background")).value<QColor>(), QColor("#050916"));
-    QCOMPARE(defaults.value(QStringLiteral("brand_stop_3")).value<QColor>(), QColor("#F43F5E"));
-
-    // A freshly constructed PaletteStore holds the same palette.
-    PaletteStore s;
-    QCOMPARE(s.palette(), defaults);
-}
-
-void TestPaletteStore::loadFromJson_rejectsWrappedTokensWithNonObjectValue()
-{
-    PaletteStore s;
-    QSignalSpy spy(&s, &PaletteStore::paletteChanged);
-    // `tokens` key present but value is a string. The caller's intent
-    // is unambiguously the wrapped layout, but the payload is malformed.
-    // Falling through to flat-map parsing would silently treat the
-    // string "see other.json" as if it were a token, which is wrong.
-    QVERIFY(!s.loadFromJson(R"({"tokens": "see other.json"})"));
-    QCOMPARE(spy.count(), 0);
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
-}
-
-void TestPaletteStore::resetToDefaults_releasesDirectoryWatch()
-{
-    // Direct white-box assertion against the watcher's tracked paths.
-    // A behavioural test would route through directoryChanged, but the
-    // handler short-circuits when m_sourcePath.isEmpty() (which reset
-    // makes true), so a leaked watch would still emit no paletteChanged
-    // and the test would falsely pass.
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#112233"}})");
-    }
-
-    PaletteStore s;
-    QVERIFY(s.loadFromFile(path));
-
-    // The watcher is constructed with `this` as parent, so findChildren
-    // surfaces it. Confirm both file and directory watches were armed.
-    const auto watchers = s.findChildren<QFileSystemWatcher*>();
-    QCOMPARE(watchers.size(), 1);
-    QFileSystemWatcher* watcher = watchers.first();
-    QVERIFY(!watcher->files().isEmpty());
-    QVERIFY(!watcher->directories().isEmpty());
-
-    s.resetToDefaults();
-
-    // Both lists must be cleared. A leaked directory entry would mean
-    // an inotify slot stayed held for the program lifetime.
-    QVERIFY(watcher->files().isEmpty());
-    QVERIFY(watcher->directories().isEmpty());
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
-}
-
-void TestPaletteStore::hotReload_debouncesBurstOfFileChanges()
-{
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#112233"}})");
-    }
-
-    PaletteStore s;
-    QVERIFY(s.loadFromFile(path));
-
-    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
-    QSignalSpy errSpy(&s, &PaletteStore::loadError);
-
-    // Burst of rapid in-place rewrites. Each one fires fileChanged
-    // synchronously. The 80ms debounce window is INTENDED to collapse
-    // them into a single reload, but on slow CI (a stuck scheduler,
-    // an IO-bound runner) the writes themselves can take long enough
-    // that two separate debounce windows fire and we observe two
-    // paletteChanged emissions. The hot-reload contract that matters
-    // to a user is "after a burst settles, the active palette
-    // reflects the FINAL write" — we assert that explicitly. We also
-    // assert at least one paletteChanged fired (debounce can't be a
-    // full swallow) and zero loadErrors (every intermediate payload
-    // is a syntactically valid token map). The strict "exactly one
-    // emit" assertion is intentionally relaxed because the unit-test
-    // contract should not depend on scheduler quanta the production
-    // code doesn't observe.
-    for (int i = 0; i < 5; ++i) {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        if (i == 4) {
-            f.write(R"({"tokens": {"primary": "#ffeedd"}})");
-        } else {
-            f.write(QStringLiteral(R"({"tokens": {"primary": "#11223%1"}})").arg(i).toUtf8());
-        }
-    }
-
-    // 5s ceiling matches the rest of the hot-reload suite — a 2s
-    // window flakes on IO-bound CI runners.
-    QVERIFY(palSpy.wait(5000));
-    QTest::qWait(150); // let any stragglers fire so we catch them
-    QVERIFY(palSpy.count() >= 1);
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#ffeedd"));
-    QCOMPARE(errSpy.count(), 0);
-}
-
-void TestPaletteStore::hotReload_resetCancelsPendingDebounce()
-{
-    QTemporaryDir tmp;
-    QVERIFY(tmp.isValid());
-    const QString path = tmp.filePath(QStringLiteral("p.json"));
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({"tokens": {"primary": "#112233"}})");
-    }
-
-    PaletteStore s;
-    QVERIFY(s.loadFromFile(path));
-
-    // The debounce timer is parented to the store. We need it to verify
-    // the timer is actually armed before we call resetToDefaults; without
-    // this check the test passes even if reset never stops the timer
-    // (the fileChanged event would deliver later and re-arm the timer
-    // anyway, then short-circuit on empty m_sourcePath).
-    const auto timers = s.findChildren<QTimer*>();
-    QCOMPARE(timers.size(), 1);
-    QTimer* debounce = timers.first();
-    QVERIFY(!debounce->isActive());
-
-    // Edit the file. The watcher schedules a reload via the debounce
-    // timer. fileChanged is delivered asynchronously, so spin the event
-    // loop until the timer arms (or until a short deadline) before
-    // attempting to cancel it.
-    {
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        f.write(R"({"tokens": {"primary": "#ff0000"}})");
-    }
-    QTRY_VERIFY_WITH_TIMEOUT(debounce->isActive(), 2000);
-
-    // Reset with a debounce known to be armed. resetToDefaults must
-    // stop the timer. Without that fix the timer would fire 80ms later,
-    // run reloadFromCurrentPath against the now-empty sourcePath, and
-    // no-op (clean short-circuit) — but the timer leaking is still a
-    // contract violation we want pinned.
-    QSignalSpy palSpy(&s, &PaletteStore::paletteChanged);
-    s.resetToDefaults();
-    QCOMPARE(palSpy.count(), 1); // reset itself
-    QVERIFY(!debounce->isActive());
-
-    // Even after waiting past the debounce window, no additional
-    // paletteChanged fires.
-    QTest::qWait(200);
-    QCOMPARE(palSpy.count(), 1);
-    QCOMPARE(s.token(QStringLiteral("primary")), QColor("#3B82F6"));
-}
-
-QTEST_MAIN(TestPaletteStore)
+QTEST_GUILESS_MAIN(TestPaletteStore)
 #include "test_palettestore.moc"

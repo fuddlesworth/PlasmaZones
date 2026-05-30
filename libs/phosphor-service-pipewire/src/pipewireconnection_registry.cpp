@@ -105,6 +105,28 @@ void PipeWireConnection::Private::bindAudioNode(uint32_t id, const char* type, c
     LoopNode* entryPtr = entry.get();
     loopNodes.emplace(id, std::move(entry));
     pw_node_add_listener(reinterpret_cast<pw_node*>(proxy), &entryPtr->nodeListener, &kNodeEvents, entryPtr);
+
+    // Queue guiNodeAdded BEFORE pw_node_enum_params /
+    // pw_node_subscribe_params. The libpipewire listener can
+    // synchronously fire onNodeInfo / onNodeParam from inside the
+    // enum/subscribe call for cached state on the proxy, and those
+    // callbacks queue their own GUI-thread lambdas onto the same
+    // target (`q`) via Qt::QueuedConnection. Qt's queued post
+    // delivery on a single target is strictly FIFO, so a
+    // guiNodeInfo / applyProps lambda queued before guiNodeAdded
+    // would land first and silently early-return on
+    // `guiNodes.find(id) == end()` — the node would appear in the
+    // model without its initial info or props, and observers
+    // wiring infoChanged via nodeAdded would never see the first
+    // batch. Queue the create-event first to guarantee the GUI
+    // node exists before any info/param drain.
+    QMetaObject::invokeMethod(
+        q,
+        [this, id, mediaClass, props]() {
+            guiNodeAdded(id, mediaClass, props);
+        },
+        Qt::QueuedConnection);
+
     // Pre-arm SPA_PARAM_Props: enumerate the current pod, then
     // subscribe so future updates (external volume changes from
     // pavucontrol, WirePlumber policy reconciles, hotkey-driven
@@ -114,13 +136,6 @@ void PipeWireConnection::Private::bindAudioNode(uint32_t id, const char* type, c
     pw_node_enum_params(reinterpret_cast<pw_node*>(proxy), 0, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
     uint32_t subscribeIds[] = {SPA_PARAM_Props};
     pw_node_subscribe_params(reinterpret_cast<pw_node*>(proxy), subscribeIds, 1);
-
-    QMetaObject::invokeMethod(
-        q,
-        [this, id, mediaClass, props]() {
-            guiNodeAdded(id, mediaClass, props);
-        },
-        Qt::QueuedConnection);
 }
 
 void PipeWireConnection::Private::onRegistryGlobalRemove(void* data, uint32_t id)

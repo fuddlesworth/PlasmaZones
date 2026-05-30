@@ -14,6 +14,14 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
 
 add_executable(phosphor-service-pipewire-cli
     main.cpp
+    cli_env.cpp
+    cli_env.h
+    cli_io.cpp
+    cli_io.h
+    cli_target.cpp
+    cli_target.h
+    cli_wait.cpp
+    cli_wait.h
 )
 
 target_link_libraries(phosphor-service-pipewire-cli

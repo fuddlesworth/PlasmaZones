@@ -17,7 +17,17 @@ PipeWireHost::PipeWireHost(QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Private>())
 {
-    d->connection = std::make_unique<PipeWireConnection>(this);
+    // PipeWireConnection ownership is unique_ptr-only (no Qt parent).
+    // Passing `this` as the QObject parent would double up ownership:
+    // the unique_ptr inside Private would delete it on host teardown
+    // AND Qt would have the host's child-deletion sweep target the
+    // same pointer. Per CLAUDE.md the rule is "Parent-based ownership
+    // for QObjects; unique_ptr/QPointer otherwise; never manual
+    // delete" — pick one model. The connection isn't surfaced via
+    // QObject::children() anywhere (we hand it out by raw pointer
+    // through `connection()`), so dropping the parent has no
+    // observable effect for consumers.
+    d->connection = std::make_unique<PipeWireConnection>(nullptr);
     // Forward every observable signal — including `error` — so QML can
     // bind through PipeWireHost without reaching for `.connection.foo`
     // everywhere. The forwarding is symmetric (no transformation) — the

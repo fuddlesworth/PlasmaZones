@@ -14,7 +14,6 @@
 #include <spa/pod/iter.h>
 #include <spa/pod/parser.h>
 
-#include <cstring>
 #include <mutex>
 
 Q_LOGGING_CATEGORY(lcPipeWire, "phosphor.service.pipewire.connection")
@@ -73,32 +72,29 @@ void ensurePipeWireInit()
 bool isAudioNodeClass(const QString& mediaClass)
 {
     // Called on every registry global (Device, Port, Link, Factory,
-    // Client, Node, ...). Compare UTF-8 bytes against fixed C literals
-    // so the hot path pays one toUtf8 + a handful of length-bounded
-    // memcmps rather than constructing QString temporaries for each
-    // candidate.
+    // Client, Node, ...). Compare directly against QLatin1String
+    // literals via QStringView::compare so the hot path allocates
+    // nothing — no toUtf8() temporary, no QByteArray, just a length
+    // check + character-wise compare over the existing QString
+    // backing storage. The class strings are pure ASCII so
+    // QLatin1String comparison is byte-exact.
     //
-    // Use size+memcmp rather than strcmp so an embedded NUL in the
-    // mediaClass UTF-8 buffer (legal in a QString, plausible in a
-    // malformed daemon-supplied value) cannot trick a shorter literal
-    // into a false positive. QByteArray::size() is the buffer length
-    // excluding the trailing NUL it adds, which is exactly what we
-    // want to compare against the literal's strlen-equivalent.
-    const QByteArray bytes = mediaClass.toUtf8();
-    struct Candidate
-    {
-        const char* str;
-        qsizetype len;
+    // Each candidate's length comes from the QLatin1String
+    // constructor's strlen-equivalent at compile time; QStringView's
+    // operator== is length-bounded so an embedded NUL in the
+    // mediaClass (legal in a QString, plausible in a malformed
+    // daemon-supplied value) cannot trick a shorter literal into a
+    // false positive — the lengths differ and the compare short-
+    // circuits.
+    const QStringView view(mediaClass);
+    static constexpr QLatin1String kAudioClasses[] = {
+        QLatin1String("Audio/Sink"),
+        QLatin1String("Audio/Source"),
+        QLatin1String("Stream/Output/Audio"),
+        QLatin1String("Stream/Input/Audio"),
     };
-    static constexpr Candidate kAudioClasses[] = {
-        {"Audio/Sink", 10},
-        {"Audio/Source", 12},
-        {"Stream/Output/Audio", 19},
-        {"Stream/Input/Audio", 18},
-    };
-    const qsizetype bytesLen = bytes.size();
     for (const auto& candidate : kAudioClasses) {
-        if (bytesLen == candidate.len && std::memcmp(bytes.constData(), candidate.str, candidate.len) == 0)
+        if (view == candidate)
             return true;
     }
     return false;
@@ -341,8 +337,33 @@ int PipeWireConnection::Private::onDefaultMetadataProperty(void* data, uint32_t 
             return 0;
         }
         const QJsonDocument doc = QJsonDocument::fromJson(QByteArray(value, len));
-        if (doc.isObject())
-            nodeName = doc.object().value(QStringLiteral("name")).toString();
+        if (!doc.isObject()) {
+            // Well-sized payload but not a JSON object root: the
+            // daemon sent something we don't understand. Bail BEFORE
+            // the invokeMethod block — symmetric with the
+            // oversize-payload branch above. Falling through would
+            // queue setDefaultSinkName(QString{}) /
+            // setDefaultSourceName(QString{}) and silently nuke the
+            // cached default just because the payload shape drifted.
+            // A malformed daemon push or schema-version mismatch
+            // must not clobber observable state; the cached value
+            // from the previous successful parse stays in force
+            // until a parseable payload arrives.
+            qCWarning(lcPipeWire) << "default-metadata value is not a JSON object for key" << keyStr
+                                  << "; preserving cached value";
+            return 0;
+        }
+        const QJsonValue nameVal = doc.object().value(QStringLiteral("name"));
+        if (!nameVal.isString()) {
+            // Object root but no `name` field, or `name` is not a
+            // string. Same reasoning as the non-object branch
+            // above: preserve the cached value rather than wipe it
+            // on a malformed/unexpected schema.
+            qCWarning(lcPipeWire) << "default-metadata value missing string 'name' field for key" << keyStr
+                                  << "; preserving cached value";
+            return 0;
+        }
+        nodeName = nameVal.toString();
     }
     QMetaObject::invokeMethod(
         d->q,

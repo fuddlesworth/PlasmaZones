@@ -1,62 +1,28 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "cli_env.h"
+#include "cli_io.h"
+#include "cli_target.h"
+#include "cli_wait.h"
+
 #include <PhosphorServicePipeWire/PipeWireConnection.h>
 #include <PhosphorServicePipeWire/PwNode.h>
 
 #include <QCoreApplication>
-#include <QElapsedTimer>
 #include <QEventLoop>
-#include <QObject>
 #include <QPointer>
 #include <QSet>
 #include <QTextStream>
 #include <QTimer>
 
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
 #include <functional>
 
 namespace {
 
-// Settle timeouts (ms). Tuned for a developer host with a local
-// PipeWire daemon: handshake + initial registry walk completes well
-// under 250 ms; param echoes after a write land within ~80 ms; metadata
-// writes round-trip through WirePlumber within ~150 ms. The metadata
-// spin-wait deadline is set generously because the round-trip varies
-// with WirePlumber load. Slow-boot or loaded CI machines can override
-// the connect timeout via PHOSPHOR_PW_CONNECT_TIMEOUT_MS, the
-// post-write (volume/mute echo) deadline via
-// PHOSPHOR_PW_POST_WRITE_SETTLE_MS, and the post-metadata
-// (set-default-sink/source echo) deadline via
-// PHOSPHOR_PW_POST_METADATA_SETTLE_MS.
-constexpr int kDefaultPostReadSettleMs = 80; // no env override: settle hint only, not an echo deadline
-constexpr int kDefaultPostWriteSettleMs = 200;
-constexpr int kDefaultPostMetadataSettleMs = 500;
-constexpr int kDefaultConnectTimeoutMs = 2000;
-// Volume echo tolerance: the daemon may quantise the linear amplitude
-// on its way through SPA_PARAM_Props, so set-volume's predicate uses a
-// non-zero epsilon. Overridable via PHOSPHOR_PW_VOLUME_ECHO_EPSILON for
-// hosts whose daemon quantises more aggressively.
-constexpr qreal kDefaultVolumeEchoEpsilon = 0.01;
-// Shutdown settle: small fixed budget for the loop thread to flush any
-// in-flight write before ~PipeWireConnection runs. Not env-overridable
-// because the destructor handles teardown safely on its own; this is
-// just an ordering hint for the metadata/volume write paths.
-constexpr int kDefaultShutdownSettleMs = 50;
-
-QTextStream& out()
-{
-    static QTextStream stream(stdout);
-    return stream;
-}
-
-QTextStream& err()
-{
-    static QTextStream stream(stderr);
-    return stream;
-}
+using PhosphorPipeWireCli::err;
+using PhosphorPipeWireCli::out;
 
 // Exit code convention:
 //   0   success
@@ -109,213 +75,6 @@ int usage()
     return 64; // EX_USAGE
 }
 
-/// Read a positive-int env var override, or fall back to `fallbackMs`
-/// on empty / malformed / non-positive values. Centralises the parse so
-/// every settle-timeout knob has the same defensive behaviour: a typo'd
-/// env value never silently routes through to 0 (which would defeat the
-/// echo waits entirely).
-int envOverrideMs(const char* name, int fallbackMs)
-{
-    const QByteArray overrideEnv = qgetenv(name);
-    if (overrideEnv.isEmpty())
-        return fallbackMs;
-    bool ok = false;
-    const int v = overrideEnv.toInt(&ok);
-    return (ok && v > 0) ? v : fallbackMs;
-}
-
-/// Parallel to envOverrideMs for positive double-valued env vars (e.g.
-/// the volume-echo tolerance epsilon). Empty / malformed / non-finite /
-/// non-positive values fall back to `fallback`; a typo'd env value
-/// never silently routes through to 0 (which would defeat the echo
-/// check entirely).
-qreal envOverrideDouble(const char* name, qreal fallback)
-{
-    const QByteArray overrideEnv = qgetenv(name);
-    if (overrideEnv.isEmpty())
-        return fallback;
-    bool ok = false;
-    const double v = QString::fromUtf8(overrideEnv).toDouble(&ok);
-    return (ok && std::isfinite(v) && v > 0.0) ? v : fallback;
-}
-
-/// Connect-timeout sourced from the env var so users hitting slow-boot
-/// scenarios can override without recompiling.
-int connectTimeoutMs()
-{
-    return envOverrideMs("PHOSPHOR_PW_CONNECT_TIMEOUT_MS", kDefaultConnectTimeoutMs);
-}
-
-/// Volume-echo tolerance: daemons may quantise linear amplitude on
-/// SPA_PARAM_Props, so the set-volume predicate uses a non-zero epsilon.
-/// Overridable via PHOSPHOR_PW_VOLUME_ECHO_EPSILON for hosts whose
-/// daemon quantises more aggressively.
-qreal volumeEchoEpsilon()
-{
-    return envOverrideDouble("PHOSPHOR_PW_VOLUME_ECHO_EPSILON", kDefaultVolumeEchoEpsilon);
-}
-
-/// Post-write (volume/mute) settle deadline. Loaded CI hosts can extend
-/// the window via PHOSPHOR_PW_POST_WRITE_SETTLE_MS without recompiling.
-int postWriteSettleMs()
-{
-    return envOverrideMs("PHOSPHOR_PW_POST_WRITE_SETTLE_MS", kDefaultPostWriteSettleMs);
-}
-
-/// Post-metadata (set-default-sink/source) settle deadline. WirePlumber
-/// round-trip varies with load; extend via
-/// PHOSPHOR_PW_POST_METADATA_SETTLE_MS on slow hosts.
-int postMetadataSettleMs()
-{
-    return envOverrideMs("PHOSPHOR_PW_POST_METADATA_SETTLE_MS", kDefaultPostMetadataSettleMs);
-}
-
-/// Wait for the connection to either reach the connected state or to
-/// time out. Early-outs if `isConnected()` is already true; otherwise
-/// blocks on a local QEventLoop driven by the slot-driven async
-/// handshake. The CLI is a one-shot tool: the daemon either answers
-/// promptly or we bail with an error.
-bool waitForConnect(PhosphorServicePipeWire::PipeWireConnection& conn, int timeoutMs)
-{
-    if (conn.isConnected())
-        return true;
-    QEventLoop loop;
-    QObject::connect(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged, &loop, [&loop, &conn]() {
-        if (conn.isConnected())
-            loop.quit();
-    });
-    QTimer::singleShot(timeoutMs, &loop, &QEventLoop::quit);
-    loop.exec();
-    return conn.isConnected();
-}
-
-/// Many commands need the registry to settle (initial node enumeration)
-/// before they can act. PipeWire fires every `global` event before the
-/// `done` that completes the connected handshake, but our connect path
-/// flips `connected` on the done event, so by the time we observe
-/// connected the nodes are already enumerated. Still, give a short
-/// extra tick for late-arriving SPA_PARAM_Props events (volumes,
-/// mute) before we render output.
-void settleRegistry(int extraMs = kDefaultPostReadSettleMs)
-{
-    QEventLoop loop;
-    QTimer::singleShot(extraMs, &loop, &QEventLoop::quit);
-    loop.exec();
-}
-
-PhosphorServicePipeWire::PwNode* findNode(PhosphorServicePipeWire::PipeWireConnection& conn, uint id)
-{
-    for (auto* node : conn.nodes()) {
-        if (node && node->id() == id)
-            return node;
-    }
-    return nullptr;
-}
-
-/// Resolve a target spec to a PwNode. Accepted forms:
-/// - numeric id (e.g. `55`): exact id match
-/// - `default.audio.sink` / `default.audio.source`: the WirePlumber
-///   default at command time
-/// - a `node.name` string (e.g. `alsa_output.pci-0000_00_1f.3.iec958-stereo`):
-///   exact name match
-///
-/// Diagnostics are written to stderr on the sentinel-no-default path so
-/// callers can distinguish "default sentinel hit an empty default" from
-/// "spec didn't match anything". Returns nullptr on miss.
-PhosphorServicePipeWire::PwNode* resolveTarget(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& spec)
-{
-    // Reject any input containing internal whitespace: " 55" would
-    // otherwise toUInt() to 55 silently, and "alsa output" is never a
-    // valid node.name anyway. We accept leading/trailing whitespace by
-    // trimming first. Iterating QChar walks UTF-16 code units, so
-    // per-char QChar::isSpace() covers the full BMP Unicode whitespace
-    // set (NBSP, U+2028 line separator, etc.); supplementary-plane
-    // whitespace codepoints (none currently assigned in Unicode) would
-    // not be detected, but a narrow space/tab-only check would silently
-    // let the BMP cases through.
-    const QString trimmed = spec.trimmed();
-    for (const QChar ch : trimmed) {
-        if (ch.isSpace()) {
-            err() << "target '" << spec << "' contains whitespace\n";
-            return nullptr;
-        }
-    }
-    bool isNumeric = false;
-    const uint id = trimmed.toUInt(&isNumeric);
-    if (isNumeric)
-        return findNode(conn, id);
-    QString name = trimmed;
-    if (trimmed == QLatin1String("default.audio.sink")) {
-        name = conn.defaultSinkName();
-        if (name.isEmpty()) {
-            err() << "no node matches default sentinel (defaultSinkName empty)\n";
-            return nullptr;
-        }
-    } else if (trimmed == QLatin1String("default.audio.source")) {
-        name = conn.defaultSourceName();
-        if (name.isEmpty()) {
-            err() << "no node matches default sentinel (defaultSourceName empty)\n";
-            return nullptr;
-        }
-    }
-    if (name.isEmpty())
-        return nullptr;
-    for (auto* node : conn.nodes()) {
-        if (node && node->name() == name)
-            return node;
-    }
-    return nullptr;
-}
-
-QString labelFor(PhosphorServicePipeWire::PwNode* node)
-{
-    if (!node)
-        return {};
-    const QString nick = node->nick();
-    if (!nick.isEmpty())
-        return nick;
-    const QString desc = node->description();
-    if (!desc.isEmpty())
-        return desc;
-    return node->name();
-}
-
-void printNode(PhosphorServicePipeWire::PwNode* node)
-{
-    if (!node)
-        return;
-    out() << "  " << node->id() << "  " << labelFor(node) << "\n"
-          << "      name:        " << node->name() << "\n"
-          << "      mediaClass:  " << node->mediaClass() << "\n"
-          << "      channels:    " << node->channelCount() << "\n";
-    const auto vols = node->volumes();
-    if (!vols.isEmpty()) {
-        out() << "      volumes:    [";
-        for (int i = 0; i < vols.size(); ++i) {
-            if (i > 0)
-                out() << ", ";
-            out() << QString::number(vols.at(i), 'f', 3);
-        }
-        out() << "]\n";
-    }
-    out() << "      muted:       " << (node->muted() ? "yes" : "no") << "\n";
-}
-
-// Known list kinds. Used both for the pre-connect validation in main()
-// (so a typo'd kind fails fast) and inside cmdList() for the actual
-// filter. Kept in lock-step with the audio media-class strings.
-//
-// Note: the audio media-class strings ("Audio/Sink", "Audio/Source",
-// "Stream/Output/Audio", "Stream/Input/Audio") are duplicated here, in
-// the smoke tests, and inside PwNodeModel's filtering. Consolidating
-// them behind a single public header constant set is a separate change
-// that touches the library API; this CLI keeps the literals inline so
-// it remains a stand-alone consumer of the public types.
-bool isKnownListKind(const QString& kind)
-{
-    return kind == QLatin1String("sinks") || kind == QLatin1String("sources") || kind == QLatin1String("streams");
-}
-
 int cmdList(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& kind)
 {
     QSet<QString> wanted;
@@ -335,7 +94,7 @@ int cmdList(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ki
     int count = 0;
     for (auto* node : conn.nodes()) {
         if (node && wanted.contains(node->mediaClass())) {
-            printNode(node);
+            PhosphorPipeWireCli::printNode(node);
             ++count;
         }
     }
@@ -353,79 +112,6 @@ int cmdDefault(PhosphorServicePipeWire::PipeWireConnection& conn)
     return 0;
 }
 
-/// Wait for a `propsChanged` echo from `node` and verify the predicate
-/// holds. Returns true once the predicate is satisfied within
-/// `timeoutMs`, false on timeout or mid-wait removal. Unrelated
-/// emissions (a parallel app tweaking volume, a periodic heartbeat)
-/// only cause the loop to re-check the predicate; the wait continues
-/// until the predicate matches or the deadline elapses. `label` is used
-/// for the failure diagnostic on stderr.
-///
-/// The `node` handle is guarded by QPointer so a daemon-side node
-/// removal mid-write cleanly breaks the loop instead of leaving the
-/// lambda calling methods on a dangling pointer. Callers MUST also
-/// guard any references they capture in their predicate (otherwise the
-/// predicate itself dereferences a dangling pointer); the canonical
-/// pattern is to copy a `QPointer<PwNode>` into the predicate capture
-/// and null-check it before dereferencing.
-///
-/// After the deadline elapses we run the predicate one final time so a
-/// late echo that landed during the disconnect / loop-exit window is
-/// still caught. This mirrors waitForString's post-deadline
-/// `accessor() == expected` final read (the guard handling differs:
-/// waitForString has no guarded receiver).
-///
-/// On failure the diagnostic distinguishes "node removed mid-wait"
-/// (guard null at deadline) from a plain timeout — the two cases call
-/// for different operator action (re-list the registry vs. raise the
-/// echo budget), and a unified "timed out" message obscured that.
-bool waitForPropsEchoAndVerify(PhosphorServicePipeWire::PwNode* node, const std::function<bool()>& predicate,
-                               int timeoutMs, const char* label)
-{
-    QPointer<PhosphorServicePipeWire::PwNode> guard(node);
-    if (!guard) {
-        err() << label << ": node removed before wait started\n";
-        return false;
-    }
-    if (predicate())
-        return true;
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        if (!guard)
-            break;
-        QEventLoop loop;
-        const int remaining = timeoutMs - static_cast<int>(timer.elapsed());
-        if (remaining <= 0)
-            break;
-        // Receiver is &loop (not guard.data()) so the connection auto-disconnects
-        // when the loop is destroyed at scope exit; Qt no-ops a disconnect on a
-        // dead sender, so a daemon-side node removal mid-wait is also safe.
-        auto qtConn = QObject::connect(guard.data(), &PhosphorServicePipeWire::PwNode::propsChanged, &loop, [&loop]() {
-            loop.quit();
-        });
-        QTimer::singleShot(remaining, &loop, &QEventLoop::quit);
-        loop.exec();
-        QObject::disconnect(qtConn);
-        if (!guard)
-            break;
-        if (predicate())
-            return true;
-        // Unrelated emission (or spurious wake): fall through and
-        // re-arm the wait for any remaining budget.
-    }
-    // Final recheck: a propsChanged that arrived during the disconnect
-    // / loop-exit window would otherwise be missed, producing a spurious
-    // timeout even though the daemon committed the value.
-    if (guard && predicate())
-        return true;
-    if (!guard)
-        err() << label << ": node removed during wait\n";
-    else
-        err() << label << ": timed out waiting for propsChanged echo (" << timeoutMs << "ms)\n";
-    return false;
-}
-
 int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& target, double pct)
 {
     if (!std::isfinite(pct) || pct < 0.0 || pct > 100.0) {
@@ -435,7 +121,7 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
         err() << "set-volume pct must be a finite value in [0, 100], got " << pct << "\n";
         return 1;
     }
-    auto* node = resolveTarget(conn, target);
+    auto* node = PhosphorPipeWireCli::resolveTarget(conn, target);
     if (!node) {
         err() << "no node matches target '" << target << "'\n";
         return 1;
@@ -462,7 +148,7 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
     // can't cause an early-quit. Epsilon is env-overridable via
     // PHOSPHOR_PW_VOLUME_ECHO_EPSILON for hosts with aggressive
     // quantisation.
-    const qreal volumeEpsilon = volumeEchoEpsilon();
+    const qreal volumeEpsilon = PhosphorPipeWireCli::volumeEchoEpsilon();
     // Capture the matched snapshot inside the predicate so a later
     // unrelated propsChanged can't clobber the values we print. Without
     // this, `node->volumes()` re-read after the wait could show a
@@ -489,7 +175,8 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
         return true;
     };
     node->setVolume(linear);
-    const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, postWriteSettleMs(), "set-volume");
+    const bool echoed = PhosphorPipeWireCli::waitForPropsEchoAndVerify(
+        node, matchesRequest, PhosphorPipeWireCli::postWriteSettleMs(), "set-volume");
     // On match, print the captured matched snapshot. On timeout AND
     // the node is still alive, fall back to the live volumes so the
     // diagnostic shows what the daemon currently exposes. On timeout
@@ -519,7 +206,7 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
 
 int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& target, bool muted)
 {
-    auto* node = resolveTarget(conn, target);
+    auto* node = PhosphorPipeWireCli::resolveTarget(conn, target);
     if (!node) {
         err() << "no node matches target '" << target << "'\n";
         return 1;
@@ -559,7 +246,8 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
     // delays the match; one committing the requested state satisfies
     // the predicate, which is acceptable because the observable
     // end-state is what we contracted for.
-    const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, postWriteSettleMs(), "mute");
+    const bool echoed = PhosphorPipeWireCli::waitForPropsEchoAndVerify(
+        node, matchesRequest, PhosphorPipeWireCli::postWriteSettleMs(), "mute");
     // On match, the predicate guarantees observed == requested. On
     // timeout AND the node is still alive, read the live mute state so
     // the diagnostic shows what the daemon currently exposes. On
@@ -582,57 +270,6 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
     if (!echoed)
         return 1;
     return 0;
-}
-
-/// Signal-driven wait until `accessor()` equals `expected` or the
-/// deadline elapses. Used for set-default-sink / set-default-source so
-/// the CLI returns success only when WirePlumber has actually committed
-/// the new default. `connectSignal` wires the change signal to the
-/// loop's quit slot; unrelated emissions (the metadata observer firing
-/// for a different key) just cause a re-check of the predicate, so we
-/// keep waiting until either the value matches or the deadline elapses.
-/// Returns true on match, false on timeout. Parallel to
-/// waitForConnect's shape.
-bool waitForString(PhosphorServicePipeWire::PipeWireConnection& conn,
-                   void (PhosphorServicePipeWire::PipeWireConnection::*signal)(),
-                   const std::function<QString()>& accessor, const QString& expected, int timeoutMs)
-{
-    if (accessor() == expected)
-        return true;
-    QElapsedTimer timer;
-    timer.start();
-    while (timer.elapsed() < timeoutMs) {
-        QEventLoop loop;
-        const int remaining = timeoutMs - static_cast<int>(timer.elapsed());
-        if (remaining <= 0)
-            break;
-        auto qtConn = QObject::connect(&conn, signal, &loop, [&loop]() {
-            loop.quit();
-        });
-        QTimer::singleShot(remaining, &loop, &QEventLoop::quit);
-        loop.exec();
-        QObject::disconnect(qtConn);
-        if (accessor() == expected)
-            return true;
-        // Unrelated emission: fall through and re-arm for any remaining
-        // budget.
-    }
-    return accessor() == expected;
-}
-
-/// Resolve a target spec to a node.name string, accepting numeric ids
-/// by pre-resolving via findNode/resolveTarget. Without this, a user
-/// typing `set-default-sink 55` would write the literal string "55" into
-/// WirePlumber's default-metadata key. On miss, returns an empty string
-/// and writes an error to stderr.
-QString resolveTargetToName(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& spec)
-{
-    auto* node = resolveTarget(conn, spec);
-    if (!node) {
-        err() << "no node matches target '" << spec << "'\n";
-        return {};
-    }
-    return node->name();
 }
 
 /// Shared body for set-default-sink and set-default-source. The two
@@ -670,7 +307,7 @@ int cmdSetDefault(PhosphorServicePipeWire::PipeWireConnection& conn, const QStri
     // node.name; writing "55" verbatim into WirePlumber's default
     // metadata would corrupt the key for every other session-manager
     // consumer.
-    const QString name = resolveTargetToName(conn, trimmed);
+    const QString name = PhosphorPipeWireCli::resolveTargetToName(conn, trimmed);
     if (name.isEmpty())
         return 1;
     // Snapshot the accessor before issuing the write. If it stays empty
@@ -685,8 +322,8 @@ int cmdSetDefault(PhosphorServicePipeWire::PipeWireConnection& conn, const QStri
     // Signal-driven wait until WirePlumber echoes the new default back
     // through the metadata observer. On timeout exit non-zero so wrapper
     // scripts can detect partial application.
-    const int deadlineMs = postMetadataSettleMs();
-    if (!waitForString(conn, changedSignal, accessor, name, deadlineMs)) {
+    const int deadlineMs = PhosphorPipeWireCli::postMetadataSettleMs();
+    if (!PhosphorPipeWireCli::waitForString(conn, changedSignal, accessor, name, deadlineMs)) {
         if (preWriteValue.isEmpty() && accessor().isEmpty()) {
             // The metadata key was empty before the write and remains
             // empty after the full deadline. WirePlumber would have
@@ -727,7 +364,7 @@ void cleanShutdown(PhosphorServicePipeWire::PipeWireConnection& conn)
     if (!wasConnected)
         return;
     QEventLoop loop;
-    QTimer::singleShot(kDefaultShutdownSettleMs, &loop, &QEventLoop::quit);
+    QTimer::singleShot(PhosphorPipeWireCli::kDefaultShutdownSettleMs, &loop, &QEventLoop::quit);
     loop.exec();
 }
 
@@ -762,7 +399,7 @@ int main(int argc, char** argv)
     if (cmd == QLatin1String("list")) {
         if (args.size() != 3)
             return usage();
-        if (!isKnownListKind(args.at(2))) {
+        if (!PhosphorPipeWireCli::isKnownListKind(args.at(2))) {
             err() << "unknown list kind: " << args.at(2) << " (use sinks, sources, or streams)\n";
             return usage();
         }
@@ -782,19 +419,19 @@ int main(int argc, char** argv)
         return usage();
 
     PhosphorServicePipeWire::PipeWireConnection conn;
-    const int timeoutMs = connectTimeoutMs();
+    const int timeoutMs = PhosphorPipeWireCli::connectTimeoutMs();
     conn.connectToDaemon();
     // waitForConnect early-outs if the connection is already connected,
     // otherwise it blocks on a local QEventLoop driven by the
     // connectedChanged signal. Async handshakes via pw_loop_invoke /
     // queued signals can't complete synchronously, so the slot-driven
     // path is always what runs.
-    if (!waitForConnect(conn, timeoutMs)) {
+    if (!PhosphorPipeWireCli::waitForConnect(conn, timeoutMs)) {
         err() << "failed to connect to PipeWire daemon within " << timeoutMs << "ms\n";
         cleanShutdown(conn);
         return 2;
     }
-    settleRegistry();
+    PhosphorPipeWireCli::settleRegistry();
 
     int rc = 0;
     if (cmd == QLatin1String("list")) {

@@ -97,8 +97,14 @@ void PwNode::applyInfo(QHash<QString, QString> props)
     // role fallback (nick → description → name) pick up the Pulse
     // description correctly.
     const QString newNick = props.value(QStringLiteral("node.nick"));
-    const QString newDescription =
-        props.value(QStringLiteral("node.description"), props.value(QStringLiteral("device.description")));
+    // Compute the fallback lazily: the two-argument QHash::value form
+    // evaluates the default argument unconditionally (C++ function-arg
+    // eval rules), so the `device.description` lookup would always
+    // run even when `node.description` is present. The explicit
+    // isEmpty check skips the second hash probe on the common path.
+    QString newDescription = props.value(QStringLiteral("node.description"));
+    if (newDescription.isEmpty())
+        newDescription = props.value(QStringLiteral("device.description"));
     bool moved = false;
     if (d->name != newName) {
         d->name = newName;

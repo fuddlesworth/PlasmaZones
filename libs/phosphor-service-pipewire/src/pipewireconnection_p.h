@@ -203,10 +203,17 @@ public:
         pw_proxy* proxy = nullptr;
         spa_hook nodeListener{};
         // The spa_hook is intrusively linked through the entry's
-        // storage; a silent copy would clone the link node and split
-        // it from its real owner, leaving dangling list pointers in
-        // the listener wire. Forbid copies at compile time.
-        Q_DISABLE_COPY(LoopNode)
+        // storage; a silent copy OR move would clone the link node
+        // and split it from its real owner, leaving dangling list
+        // pointers in the listener wire. A move would bit-copy the
+        // spa_hook's intrusive list pointers and leave the moved-from
+        // entry still linked into the listener wire — effectively
+        // identical to a copy from the linkage's perspective. Forbid
+        // both at compile time. Ownership stays with std::unique_ptr
+        // inside loopNodes; the LoopNode itself never moves once
+        // emplaced, so the spa_hook's self-referential pointers in
+        // the listener wire remain valid for its lifetime.
+        Q_DISABLE_COPY_MOVE(LoopNode)
         LoopNode() = default;
     };
     /// std::unordered_map (not QHash) because QHash requires its value
