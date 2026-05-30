@@ -88,7 +88,7 @@ bool waitForPropsEchoAndVerify(PhosphorServicePipeWire::PwNode* node, const std:
 
 bool waitForString(PhosphorServicePipeWire::PipeWireConnection& conn,
                    void (PhosphorServicePipeWire::PipeWireConnection::*signal)(),
-                   const std::function<QString()>& accessor, const QString& expected, int timeoutMs)
+                   const std::function<QString()>& accessor, const QString& expected, int timeoutMs, const char* label)
 {
     if (accessor() == expected)
         return true;
@@ -110,7 +110,17 @@ bool waitForString(PhosphorServicePipeWire::PipeWireConnection& conn,
         // Unrelated emission: fall through and re-arm for any remaining
         // budget.
     }
-    return accessor() == expected;
+    // Final recheck mirroring waitForPropsEchoAndVerify: a change
+    // signal that landed during the disconnect / loop-exit window
+    // would otherwise miss this helper too.
+    if (accessor() == expected)
+        return true;
+    // Helper-level timeout diagnostic so this helper self-reports
+    // consistently with waitForPropsEchoAndVerify. cmdSetDefault adds
+    // a richer caller-level diagnostic (no-WirePlumber vs. slow-echo);
+    // this line provides per-helper visibility.
+    err() << label << ": timed out waiting for value '" << expected << "' (" << timeoutMs << "ms)\n";
+    return false;
 }
 
 } // namespace PhosphorPipeWireCli

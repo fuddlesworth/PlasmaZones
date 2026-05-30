@@ -209,9 +209,10 @@ target_link_libraries(plasmazones_core
 # PhosphorShortcuts: plasmazones_core uses ONLY the Integration::IAdhocRegistrar header
 # (consumed by WindowDragAdaptor); the daemon links the shared library
 # binary (see target_link_libraries(plasmazonesd ...) below). Wire the
-# headers via INTERFACE-only include - pulls no .so dependency into
-# editor / settings builds that link plasmazones_core but never touch
-# shortcuts.
+# headers via PRIVATE include — consumer-time only — so the header path
+# is available when plasmazones_core's own translation units compile
+# but is NOT re-exported to downstream targets that link
+# plasmazones_core (editor / settings) and never touch shortcuts.
 target_include_directories(plasmazones_core SYSTEM PRIVATE
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/libs/phosphor-shortcuts/include>
 )

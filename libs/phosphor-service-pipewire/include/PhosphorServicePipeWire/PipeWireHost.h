@@ -13,6 +13,7 @@
 namespace PhosphorServicePipeWire {
 
 class PipeWireConnection;
+class PwNode;
 
 /// Process-wide PipeWire host: owns the single `PipeWireConnection`
 /// instance the shell binds to and re-exposes its observable state as
@@ -22,6 +23,15 @@ class PipeWireConnection;
 /// imperatively, matching every sibling phosphor-service-* lib) so QML
 /// reads `PipeWireHost.connection.defaultSinkName` rather than
 /// maintaining its own `PipeWireConnection` instance.
+///
+/// Facade coverage: every observable signal of `PipeWireConnection`
+/// is forwarded one-for-one — `connectedChanged`,
+/// `daemonAvailableChanged`, `defaultSinkNameChanged`,
+/// `defaultSourceNameChanged`, `error`, `nodeAdded`, `nodeRemoved`.
+/// QML consumers can bind exclusively through `PipeWireHost.*` and
+/// never need to reach through `.connection.*`. The `connection`
+/// property remains exposed for C++ consumers (and for QML code that
+/// wants to pass the connection into a `PwNodeModel`).
 ///
 /// The host is constructed lazily on first QML use (via
 /// `qmlRegisterSingletonType`'s factory) and auto-connects to the
@@ -51,6 +61,11 @@ public:
     explicit PipeWireHost(QObject* parent = nullptr);
     ~PipeWireHost() override;
 
+    /// Constructed eagerly in PipeWireHost ctor; guaranteed non-null for
+    /// the host's lifetime. CONSTANT semantics in the Q_PROPERTY above
+    /// are safe because the pointer never changes after construction —
+    /// reconnect / connectToDaemon / disconnectFromDaemon mutate the
+    /// underlying connection's state, never its identity.
     [[nodiscard]] PipeWireConnection* connection() const;
     [[nodiscard]] bool isConnected() const;
     [[nodiscard]] bool isDaemonAvailable() const;
@@ -85,6 +100,18 @@ Q_SIGNALS:
     /// without transformation so QML observers can bind to `error` on
     /// the host singleton rather than reaching through `.connection`.
     void error(const QString& message);
+    /// Forwarded from `PipeWireConnection::nodeAdded`. Same payload and
+    /// semantics — fired from the GUI thread when the registry reports
+    /// a new audio node. Exposed on the host so QML observers can wire
+    /// `PipeWireHost.onNodeAdded` without reaching through `.connection`.
+    /// FQN `PhosphorServicePipeWire::PwNode*` is intentional — moc's
+    /// metatype registration matches the signature spelling, and the
+    /// FQN dodges QML ambiguity in queued connections.
+    void nodeAdded(PhosphorServicePipeWire::PwNode* node);
+    /// Forwarded from `PipeWireConnection::nodeRemoved`. Fired BEFORE
+    /// the PwNode is destroyed so observers can detach. Same FQN
+    /// rationale as `nodeAdded`.
+    void nodeRemoved(PhosphorServicePipeWire::PwNode* node);
 
 private:
     class Private;

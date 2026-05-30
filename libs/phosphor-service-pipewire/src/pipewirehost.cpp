@@ -40,6 +40,8 @@ PipeWireHost::PipeWireHost(QObject* parent)
     QObject::connect(d->connection.get(), &PipeWireConnection::defaultSourceNameChanged, this,
                      &PipeWireHost::defaultSourceNameChanged);
     QObject::connect(d->connection.get(), &PipeWireConnection::error, this, &PipeWireHost::error);
+    QObject::connect(d->connection.get(), &PipeWireConnection::nodeAdded, this, &PipeWireHost::nodeAdded);
+    QObject::connect(d->connection.get(), &PipeWireConnection::nodeRemoved, this, &PipeWireHost::nodeRemoved);
     // Kick off the handshake immediately — typical QML usage binds to
     // `PipeWireHost.connection.nodes` and expects state to be live as
     // soon as the singleton is instantiated.
@@ -80,6 +82,19 @@ QString PipeWireHost::defaultSourceName() const
 
 void PipeWireHost::reconnect()
 {
+    // Queues a disconnect+connect pair back-to-back. The PipeWire loop
+    // thread services the two requests in FIFO order, so the disconnect
+    // is observed before the follow-up connect kicks off — that
+    // ordering is the entire reason this method exists rather than
+    // letting callers chain the two pieces themselves.
+    //
+    // No coalescing or idempotency guard: calling reconnect() while a
+    // previous reconnect is still in-flight enqueues another
+    // disconnect+connect cycle. Acceptable for the "force fresh
+    // connection" intent (each call gets you a fresh handshake); if a
+    // future caller needs single-in-flight semantics, add a
+    // m_reconnectPending guard that clears in the connect-completion
+    // handler.
     d->connection->disconnectFromDaemon();
     d->connection->connectToDaemon();
 }

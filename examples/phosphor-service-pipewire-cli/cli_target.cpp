@@ -110,6 +110,21 @@ void printNode(PhosphorServicePipeWire::PwNode* node)
         out() << "]\n";
     }
     out() << "      muted:       " << (node->muted() ? "yes" : "no") << "\n";
+    // Flush after each node so pipe-truncated consumers (e.g. `cli list
+    // sinks | head -5`) see complete, deterministic node blocks instead
+    // of a partial last record when the downstream reader closes early.
+    // QTextStream over stdout buffers by default; without the flush the
+    // buffered tail can be discarded on SIGPIPE / pipe close.
+    out().flush();
+}
+
+bool isAudioMediaClass(const QString& mc)
+{
+    for (const char* cls : kAudioMediaClasses) {
+        if (mc == QLatin1String(cls))
+            return true;
+    }
+    return false;
 }
 
 bool isKnownListKind(const QString& kind)

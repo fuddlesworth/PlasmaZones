@@ -79,11 +79,12 @@ int cmdList(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ki
 {
     QSet<QString> wanted;
     if (kind == QLatin1String("sinks")) {
-        wanted = {QStringLiteral("Audio/Sink")};
+        wanted = {QLatin1String(PhosphorPipeWireCli::kAudioMediaClasses[0])};
     } else if (kind == QLatin1String("sources")) {
-        wanted = {QStringLiteral("Audio/Source")};
+        wanted = {QLatin1String(PhosphorPipeWireCli::kAudioMediaClasses[1])};
     } else if (kind == QLatin1String("streams")) {
-        wanted = {QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")};
+        wanted = {QLatin1String(PhosphorPipeWireCli::kAudioMediaClasses[2]),
+                  QLatin1String(PhosphorPipeWireCli::kAudioMediaClasses[3])};
     } else {
         // Already filtered out in main() before connect; keep this as a
         // belt-and-suspenders guard so the function is safe to call
@@ -100,6 +101,12 @@ int cmdList(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ki
     }
     if (count == 0)
         out() << "(no nodes match)\n";
+    // Flush at command exit so pipe-truncated consumers see the trailing
+    // "(no nodes match)" line (or the last node's tail bytes) instead of
+    // a buffered remainder discarded on pipe close. printNode flushes
+    // per-node; this flush covers the trailing "(no nodes match)" line
+    // and any QTextStream buffer state left after the loop.
+    out().flush();
     return 0;
 }
 
@@ -323,7 +330,7 @@ int cmdSetDefault(PhosphorServicePipeWire::PipeWireConnection& conn, const QStri
     // through the metadata observer. On timeout exit non-zero so wrapper
     // scripts can detect partial application.
     const int deadlineMs = PhosphorPipeWireCli::postMetadataSettleMs();
-    if (!PhosphorPipeWireCli::waitForString(conn, changedSignal, accessor, name, deadlineMs)) {
+    if (!PhosphorPipeWireCli::waitForString(conn, changedSignal, accessor, name, deadlineMs, label)) {
         if (preWriteValue.isEmpty() && accessor().isEmpty()) {
             // The metadata key was empty before the write and remains
             // empty after the full deadline. WirePlumber would have
@@ -345,23 +352,40 @@ int cmdSetDefault(PhosphorServicePipeWire::PipeWireConnection& conn, const QStri
     return 0;
 }
 
-/// Explicit disconnect + a brief settle so the loop thread has time to
-/// flush any in-flight write before the connection destructor runs. The
-/// destructor handles teardown safely on its own, but routing through
-/// disconnectFromDaemon() first makes the teardown order deterministic
-/// for the metadata/volume write paths the CLI exercises.
+/// Distinguishes commands that only read state (no in-flight write to
+/// flush) from commands that issued a write (volume/mute/set-default-*).
+/// Read-only commands skip the post-disconnect settle entirely: there is
+/// nothing for the loop thread to flush, so the 50ms wait is pure
+/// overhead. Write commands keep the settle so the loop thread has time
+/// to drain any in-flight pw_loop_invoke before the destructor runs.
+enum class CleanShutdownMode {
+    ReadOnly,
+    AfterWrite
+};
+
+/// Explicit disconnect + (in write mode) a brief settle so the loop
+/// thread has time to flush any in-flight write before the connection
+/// destructor runs. The destructor handles teardown safely on its own,
+/// but routing through disconnectFromDaemon() first makes the teardown
+/// order deterministic for the metadata/volume write paths the CLI
+/// exercises.
 ///
-/// When the connection never reached the connected state (the connect
-/// timeout path), there is no in-flight write to flush, so the settle
-/// window is pure overhead. Skip it in that case — the disconnect
-/// itself is a documented no-op pre-connect, and tools that probe a
-/// no-daemon host should return promptly rather than burning 50ms of
-/// idle wait on every failed connect.
-void cleanShutdown(PhosphorServicePipeWire::PipeWireConnection& conn)
+/// Three cases skip the settle:
+///   1. The connection never reached the connected state (connect
+///      timeout) — disconnectFromDaemon is a documented no-op pre-connect.
+///   2. `mode == ReadOnly` — list/default commands never issued a write,
+///      so there is nothing for the loop thread to flush.
+///   3. Usage-error early returns from main() pass ReadOnly because no
+///      command body actually ran.
+///
+/// In every skip case the settle window would be pure overhead; tools
+/// that probe a no-daemon host or run a quick `list` should return
+/// promptly rather than burning 50ms of idle wait per invocation.
+void cleanShutdown(PhosphorServicePipeWire::PipeWireConnection& conn, CleanShutdownMode mode)
 {
     const bool wasConnected = conn.isConnected();
     conn.disconnectFromDaemon();
-    if (!wasConnected)
+    if (!wasConnected || mode == CleanShutdownMode::ReadOnly)
         return;
     QEventLoop loop;
     QTimer::singleShot(PhosphorPipeWireCli::kDefaultShutdownSettleMs, &loop, &QEventLoop::quit);
@@ -417,6 +441,30 @@ int main(int argc, char** argv)
     // `default` takes no extra arguments; trailing junk is a usage error.
     if (cmd == QLatin1String("default") && args.size() != 2)
         return usage();
+    // Range-validate set-volume's pct at the usage layer so out-of-range
+    // typos (`set-volume sink 150`, `set-volume sink -5`, `set-volume
+    // sink nan`) fail fast with rc=64 instead of paying the 2s handshake
+    // cost only to surface as a runtime error (rc=1) from cmdSetVolume.
+    // The pct domain is documented in both usage() ("0..100") and the
+    // README, so a value outside [0, 100] (or non-finite) is a malformed
+    // argument, not a runtime failure: surfacing it as rc=64 here lets
+    // wrapper scripts distinguish "you typed it wrong" from "the daemon
+    // refused the write" without parsing stderr. cmdSetVolume keeps its
+    // in-function range check as a belt-and-suspenders guard so the
+    // function stays safe to call standalone (e.g. from a future
+    // programmatic caller that doesn't route through main()'s dispatch).
+    if (cmd == QLatin1String("set-volume")) {
+        bool okPct = false;
+        const double pct = args.at(3).toDouble(&okPct);
+        if (!okPct) {
+            err() << "set-volume pct must be a number, got '" << args.at(3) << "'\n";
+            return usage();
+        }
+        if (!std::isfinite(pct) || pct < 0.0 || pct > 100.0) {
+            err() << "set-volume pct must be a finite value in [0, 100], got " << pct << "\n";
+            return usage();
+        }
+    }
 
     PhosphorServicePipeWire::PipeWireConnection conn;
     const int timeoutMs = PhosphorPipeWireCli::connectTimeoutMs();
@@ -428,34 +476,49 @@ int main(int argc, char** argv)
     // path is always what runs.
     if (!PhosphorPipeWireCli::waitForConnect(conn, timeoutMs)) {
         err() << "failed to connect to PipeWire daemon within " << timeoutMs << "ms\n";
-        cleanShutdown(conn);
+        // Connect failed before any command body ran — no writes in
+        // flight, so the settle is unneeded overhead.
+        cleanShutdown(conn, CleanShutdownMode::ReadOnly);
         return 2;
     }
     PhosphorPipeWireCli::settleRegistry();
 
     int rc = 0;
+    // Per-command shutdown mode. list/default are read-only; the
+    // set-volume / mute / unmute / set-default-* commands all issue a
+    // write through pw_loop_invoke and benefit from the loop-thread
+    // settle so the destructor sees a drained queue.
+    CleanShutdownMode shutdownMode = CleanShutdownMode::ReadOnly;
     if (cmd == QLatin1String("list")) {
         rc = cmdList(conn, args.at(2));
     } else if (cmd == QLatin1String("default")) {
         rc = cmdDefault(conn);
     } else if (cmd == QLatin1String("set-volume")) {
-        // Arg-count was validated pre-connect; only the parse can fail
-        // here. A non-numeric pct is a usage error, not a runtime one.
-        // Surface the offending token before routing through usage() so
-        // the user sees what went wrong instead of just the full help
-        // wall — usage() alone makes a "set-volume sink abc" typo look
-        // identical to "set-volume" with no args at all.
-        bool okPct = false;
-        const double pct = args.at(3).toDouble(&okPct);
-        if (!okPct) {
-            err() << "set-volume pct must be a number, got '" << args.at(3) << "'\n";
-            cleanShutdown(conn);
-            return usage();
-        }
+        // Arg-count, numeric parse, and [0, 100] range were all
+        // validated pre-connect in the guard block above. The
+        // toDouble() here just re-parses the already-validated token;
+        // the bool-out is discarded because any failure would have
+        // been routed through usage() before we ever reached the
+        // connect handshake. cmdSetVolume keeps its own range check
+        // as a belt-and-suspenders guard (returning rc=1 on out-of-
+        // range, since by that point the connect cost has already
+        // been paid).
+        const double pct = args.at(3).toDouble();
+        shutdownMode = CleanShutdownMode::AfterWrite;
         rc = cmdSetVolume(conn, args.at(2), pct);
     } else if (cmd == QLatin1String("mute") || cmd == QLatin1String("unmute")) {
+        shutdownMode = CleanShutdownMode::AfterWrite;
         rc = cmdMute(conn, args.at(2), cmd == QLatin1String("mute"));
     } else if (cmd == QLatin1String("set-default-sink")) {
+        // The accessor/setter lambdas capture `conn` by reference. They
+        // outlive only within main()'s synchronous dispatch — cmdSetDefault
+        // is called inline, drives a local QEventLoop, and returns before
+        // we leave this scope, so the reference is always live. If the
+        // dispatch ever moves to a queued/async model (e.g. spawning the
+        // command on a worker thread or deferring through a QTimer), switch
+        // to copy semantics or pass `conn` through cmdSetDefault parameters
+        // so the lambdas don't dangle on the moved/destroyed connection.
+        shutdownMode = CleanShutdownMode::AfterWrite;
         rc = cmdSetDefault(
             conn, args.at(2), "default sink", &PhosphorServicePipeWire::PipeWireConnection::defaultSinkNameChanged,
             [&conn]() {
@@ -465,6 +528,11 @@ int main(int argc, char** argv)
                 conn.setDefaultSink(name);
             });
     } else if (cmd == QLatin1String("set-default-source")) {
+        // Same lambda-capture caveat as set-default-sink above: by-reference
+        // capture of `conn` is safe only because cmdSetDefault runs
+        // synchronously within main()'s scope. Revisit if the dispatch
+        // ever becomes async/queued.
+        shutdownMode = CleanShutdownMode::AfterWrite;
         rc = cmdSetDefault(
             conn, args.at(2), "default source", &PhosphorServicePipeWire::PipeWireConnection::defaultSourceNameChanged,
             [&conn]() {
@@ -482,9 +550,11 @@ int main(int argc, char** argv)
         // return a distinct exit code so the misbehaviour surfaces
         // observably instead of silently exiting 0.
         err() << "internal logic error: unhandled command " << cmd << " (rc=70, EX_SOFTWARE)\n";
-        cleanShutdown(conn);
+        // No command body ran to completion; no in-flight write to
+        // flush, so use the read-only shutdown mode.
+        cleanShutdown(conn, CleanShutdownMode::ReadOnly);
         return 70; // EX_SOFTWARE
     }
-    cleanShutdown(conn);
+    cleanShutdown(conn, shutdownMode);
     return rc;
 }

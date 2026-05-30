@@ -7,6 +7,16 @@
 // so the loader can hold BOTH this fixture and the primary fake
 // plugin in m_plugins simultaneously, necessary to construct the
 // two-iteration unload snapshot the constFind branch needs.
+//
+// Two fixtures exist solely to allow constFind-early-continue path
+// tests in test_phosphor_registry_pluginloader_lifecycle.cpp — the
+// rebound-signal slot needs to remove a sibling entry from m_plugins
+// mid-iteration, which requires the snapshot to contain at least two
+// distinct ids. Keep them as separate TUs (no shared base / no CRTP /
+// no template) — fixtures are deliberately verbose for grep-ability
+// when a future test fails and the triager needs to locate which
+// fixture's behaviour to inspect. The duplication is by design;
+// resist the urge to refactor.
 
 #include <PhosphorRegistry/IBarWidgetFactory.h>
 

@@ -149,8 +149,16 @@ Item {
         // QML and confusing in practice. Warn once at construction so
         // a missed transport assignment surfaces in the log rather
         // than as a missing UI.
-        if (root.contentItem === null && root.contentComponent === null)
-            console.warn("PopoutHost: neither contentItem nor contentComponent set; the host will render empty");
+        //
+        // Deferred via a Timer (50ms) so transports that assign
+        // contentComponent immediately after constructing the host (a
+        // common pattern, since both properties default to null) get a
+        // chance to settle before the warning fires. Firing the check
+        // synchronously in Component.onCompleted produces false
+        // positives any time the transport's assignment order is
+        // construct-then-set-content rather than set-content-then-
+        // construct.
+        contentDiagnosticTimer.start();
     }
     // If the host is destroyed mid-cycle (open was set true but the
     // close-animation timer hasn't emitted dismissed yet), fire
@@ -230,7 +238,13 @@ Item {
         // stays drawn through the fade-out, instead of vanishing the
         // instant `open` flips to false and stealing the fade frames
         // from the Behavior below.
-        readonly property bool backdropShown: root.backdropColor.a > 0 || root.dismissOnClickOutside
+        //
+        // The 0.01 threshold defends against trivial-alpha colors that
+        // are visually invisible (e.g. "#01000000" with alpha 1/255 ≈
+        // 0.0039) being mistaken for an intentional backdrop. Use
+        // Phosphor.Theme.transparent or explicitly set backdropColor to
+        // a sentinel value if you want to disable the backdrop.
+        readonly property bool backdropShown: root.backdropColor.a > 0.01 || root.dismissOnClickOutside
 
         anchors.fill: parent
         color: root.backdropColor
@@ -444,6 +458,23 @@ Item {
                 dismissLatch.dismissedFired = true;
                 root.dismissed();
             }
+        }
+    }
+
+    // Deferred no-content diagnostic. Fires once 50ms after
+    // Component.onCompleted to give transports that assign
+    // contentComponent post-construction a chance to settle. Without
+    // the delay, every transport that uses the two-step pattern
+    // (construct host, then assign contentComponent) would log a
+    // spurious warning at startup.
+    Timer {
+        id: contentDiagnosticTimer
+
+        interval: 50
+        repeat: false
+        onTriggered: {
+            if (root.contentItem === null && root.contentComponent === null)
+                console.warn("PopoutHost: neither contentItem nor contentComponent set; the host will render empty");
         }
     }
 }

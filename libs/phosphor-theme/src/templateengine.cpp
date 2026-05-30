@@ -23,10 +23,13 @@ namespace {
 //
 // Returned `ok` is false only when the token is unknown. In that case
 // the caller leaves the original `{{...}}` placeholder in place. An
-// unknown FIELD on a known token renders the default form rather than
-// failing loudly. A typo in a field name is less critical than a
-// missing color. A renderer crash mid-save would be worse than a
-// fallback render.
+// unknown FIELD on a known token logs a qCWarning AND renders the
+// default hex form — the warning is the loud part (so the template
+// author sees the typo in the journal), the rendering is the
+// graceful-degradation part (so a save still produces a usable
+// output file instead of crashing mid-render). A typo in a field
+// name is less critical than a missing color, and a renderer crash
+// mid-save would be worse than a fallback render.
 QString renderToken(const QString& name, const QString& field, const QVariantMap& tokens, bool& ok)
 {
     ok = false;

@@ -216,50 +216,15 @@ void PipeWireConnection::Private::onCoreError(void* data, uint32_t id, int seq, 
                             .arg(res)
                             .arg(message ? QString::fromUtf8(message) : QStringLiteral("(no message)"));
     qCWarning(lcPipeWire) << msg;
-    // Synchronously flip `connected` AND `daemonAvailable` on the loop
-    // thread BEFORE queueing the GUI-side work. doConnect's wedge-
-    // recovery check (`if (core && !connected.load(...)) doDisconnect()`)
-    // runs on the loop thread, so it must observe the truthful value
-    // the moment the next connectToDaemon() request lands — even if no
-    // queued lambda has drained yet.
-    //
-    // daemonAvailable: a core-level error after the daemon was seen
-    // means the daemon-side endpoint is no longer usable (typical cause
-    // is daemon-killed-mid-run). Flip it false so isDaemonAvailable()
-    // reports the correct value immediately. The mirror queued lambda
-    // below calls setDaemonAvailable(false) using the same L1/L2 FIFO
-    // ordering trick as setConnected: a stale onCoreInfo-queued
-    // setDaemonAvailable(true) lambda would otherwise drain after this
-    // callback returns and re-emit daemonAvailableChanged claiming the
-    // daemon is present. Since the GUI-side setter no longer writes the
-    // atomic, the loop-thread pre-flip below is the authoritative
-    // source of truth and a stale L1 can only cause one extra
-    // shadow-deduped no-op on the GUI thread, never atomic corruption.
-    //
-    // L1-override pattern (connected): a prior onCoreDone may have
-    // already queued a setConnected(true) lambda (L1) that hasn't
-    // drained on the GUI thread yet. If L1 runs after this callback
-    // returns, it would emit connectedChanged claiming we're connected.
-    // To prevent that we ALSO queue an explicit setConnected(false)
-    // lambda (L2) that lands strictly AFTER any stale L1: FIFO delivery
-    // of QueuedConnection posts on the same target guarantees ordering.
-    // setConnected does a shadow-equal-skip against
-    // `lastEmittedConnected` (a GUI-thread shadow, NOT the atomic) so
-    // the double-mutation is idempotent: the GUI thread sees at most
-    // one connectedChanged per genuine flip. Crucially, the GUI-side
-    // setter no longer writes the atomic — only this loop-thread store
-    // does — so a freshly pre-flipped `false` can never be clobbered
-    // back to `true` by a stale L1 draining after this callback
-    // returns.
-    //
-    // We deliberately do NOT tear core/context/registry down from this
-    // callback. The next caller-initiated connectToDaemon() observes the
-    // wedged state (connected == false && core != nullptr) and runs
-    // doDisconnect first, so recovery is automatic and the teardown
-    // stays on the loop thread without us having to post another
-    // pw_loop_invoke.
-    //
-    // Lifetime: see top-of-file "Cross-thread invariants" block.
+    // See the Cross-thread invariants block at the top of this file;
+    // same L1/L2 pattern as setConnected / setDaemonAvailable applies
+    // to both atomics flipped below. We deliberately do NOT tear
+    // core/context/registry down from this callback: the next
+    // caller-initiated connectToDaemon() observes the wedged state
+    // (connected == false && core != nullptr && wedged == true) and
+    // runs doDisconnect first, so recovery is automatic and the
+    // teardown stays on the loop thread without us having to post
+    // another pw_loop_invoke.
     d->connected.store(false, std::memory_order_release);
     d->daemonAvailable.store(false, std::memory_order_release);
     // Clear pendingSyncSeq so a stale `done` event echoing the original

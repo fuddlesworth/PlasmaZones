@@ -66,6 +66,14 @@ void PipeWireConnection::Private::bindDefaultMetadata(uint32_t id, const char* t
         qCWarning(lcPipeWire) << "pw_registry_bind failed for default metadata global" << id;
         return;
     }
+    // pw_metadata_add_listener is a void macro that wraps
+    // spa_interface_call_method; failure cannot be observed at this
+    // layer. defaultMetadataId is set after the call under the
+    // invariant "id set implies fully-wired listener" — if a future
+    // iface refactor makes add_listener observably fail, this
+    // invariant breaks and the bind path will need a new
+    // failure-handling branch (clear defaultMetadata, leave id at
+    // SPA_ID_INVALID).
     pw_metadata_add_listener(reinterpret_cast<pw_metadata*>(defaultMetadata), &defaultMetadataListener,
                              &kDefaultMetadataEvents, this);
     // Cache the registry id LAST so the invariant "defaultMetadataId !=
@@ -133,6 +141,13 @@ void PipeWireConnection::Private::bindAudioNode(uint32_t id, const char* type, c
     // adjustments) propagate as `param` events. Without the
     // subscription only the initial enumeration would land; every
     // out-of-band change would be invisible to the model.
+    //
+    // UINT32_MAX = "all params" per PipeWire convention. Trusted-
+    // daemon assumption; a malicious daemon could ship unbounded param
+    // events. Each event queues a GUI-thread lambda — flood vector if
+    // the trust assumption breaks. If we ever need to defend against
+    // an untrusted daemon, cap this via a sane upper bound and add
+    // backpressure on the GUI-side handler.
     pw_node_enum_params(reinterpret_cast<pw_node*>(proxy), 0, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
     uint32_t subscribeIds[] = {SPA_PARAM_Props};
     pw_node_subscribe_params(reinterpret_cast<pw_node*>(proxy), subscribeIds, 1);

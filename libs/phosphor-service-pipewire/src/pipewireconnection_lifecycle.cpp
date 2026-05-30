@@ -39,6 +39,26 @@ void PipeWireConnection::Private::LoopThread::run()
     owner->startupReady.release();
     if (!createdLoop) {
         qCWarning(lcPipeWire) << "pw_main_loop_new failed; PipeWire integration disabled";
+        // Surface the failure to GUI observers via the error() signal
+        // so a status indicator can render "PipeWire integration
+        // disabled" instead of silently staying in the
+        // disconnected-with-no-explanation baseline. Queue the emit on
+        // `d->q` (GUI thread): the constructor blocks on
+        // startupReady, which we release above, but the constructor
+        // returns BEFORE the GUI event loop processes this queued
+        // post — that's fine because QueuedConnection just enqueues
+        // and observers will see the signal on the next event-loop
+        // turn. Lifetime: the destructor's wait(5000) + sendPostedEvents
+        // + removePostedEvents drain catches this post the same way it
+        // catches every other loop-thread emit. See top-of-file
+        // "Cross-thread invariants" block in pipewireconnection.cpp.
+        Private* d = owner;
+        QMetaObject::invokeMethod(
+            d->q,
+            [d]() {
+                Q_EMIT d->q->error(QStringLiteral("PipeWire integration disabled: pw_main_loop_new returned null"));
+            },
+            Qt::QueuedConnection);
         return;
     }
     // Blocks until pw_main_loop_quit fires or the loop exits on a
@@ -301,6 +321,15 @@ PipeWireConnection::PipeWireConnection(QObject* parent)
 
 PipeWireConnection::~PipeWireConnection()
 {
+    // Loud guard for accidental cross-thread destruction. The
+    // destructor's QCoreApplication::sendPostedEvents / removePostedEvents
+    // drain at the bottom only works correctly when invoked from the
+    // GUI thread that the QObject lives on; tearing down from the
+    // worker thread (or any other) would dispatch queued lambdas
+    // against a partially-destroyed object. Catch the misuse in debug
+    // builds; release builds skip the check and silently degrade to
+    // the existing teardown ordering rather than abort.
+    Q_ASSERT(thread() == QThread::currentThread());
     // Short-circuit when the worker has already self-exited: with
     // isRunning() == false we know LoopThread::run has progressed past
     // its mutex-guarded destroy+null-store and there's no live loop to
@@ -396,8 +425,23 @@ void PipeWireConnection::connectToDaemon()
             return;
         rc = pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchConnect, 0, nullptr, 0, false, d.get());
     }
-    if (rc < 0)
+    if (rc < 0) {
         qCWarning(lcPipeWire) << "pw_loop_invoke failed for connectToDaemon rc" << rc;
+        // Surface the dispatch failure to GUI observers. A debug-only
+        // log line lets a buggy host swallow the failure silently and
+        // leaves a status indicator wedged in "connecting…" forever.
+        // Queue on the GUI thread (`this` lives there) so this entry
+        // point stays callable from either thread without violating
+        // signal-thread affinity.
+        Private* dd = d.get();
+        const int rcCopy = rc;
+        QMetaObject::invokeMethod(
+            this,
+            [dd, rcCopy]() {
+                Q_EMIT dd->q->error(QStringLiteral("pw_loop_invoke failed for connectToDaemon: %1").arg(rcCopy));
+            },
+            Qt::QueuedConnection);
+    }
 }
 
 void PipeWireConnection::disconnectFromDaemon()
@@ -413,8 +457,20 @@ void PipeWireConnection::disconnectFromDaemon()
         rc = pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchDisconnect, 0, nullptr, 0, false,
                             d.get());
     }
-    if (rc < 0)
+    if (rc < 0) {
         qCWarning(lcPipeWire) << "pw_loop_invoke failed for disconnectFromDaemon rc" << rc;
+        // Same rationale as connectToDaemon's dispatch-failure branch:
+        // a silent debug log leaves observers unaware that the
+        // disconnect they requested never landed.
+        Private* dd = d.get();
+        const int rcCopy = rc;
+        QMetaObject::invokeMethod(
+            this,
+            [dd, rcCopy]() {
+                Q_EMIT dd->q->error(QStringLiteral("pw_loop_invoke failed for disconnectFromDaemon: %1").arg(rcCopy));
+            },
+            Qt::QueuedConnection);
+    }
 }
 
 } // namespace PhosphorServicePipeWire

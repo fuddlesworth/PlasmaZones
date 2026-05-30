@@ -134,6 +134,16 @@ private:
     friend void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, const QString& message);
 };
 
+// DO NOT move warningCapturingHandler into a separate .cpp — the
+// friend relationship above requires its definition to be co-located
+// with the WarningCapture class declaration (the handler reaches
+// into the private `s_activeCapture` static and the private accessors).
+// Cross-TU semantics work today because the function is `inline` and
+// the static is `inline static`, so ODR-merging across translation
+// units in the same executable produces a single live copy. Pulling
+// the body into a .cpp would either break the friend access (TU
+// without the class header) or require re-friending in every TU,
+// neither of which buys anything.
 inline void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
 {
     // Snapshot s_activeCapture once at entry. Two reads of the

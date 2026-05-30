@@ -10,7 +10,6 @@
 #include <QHash>
 #include <QLibrary>
 #include <QObject>
-#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QtCore/qtclasshelpermacros.h>
@@ -187,6 +186,19 @@ private:
     // otherwise double the I/O cost of every scan.
     void loadPluginFromDir(const QString& pluginDir, const Manifest& manifest);
 
+    /// Remove a plugin from m_plugins and unregister its factory.
+    /// shouldPin == true preserves the QLibrary in m_pinnedLibraries
+    /// so still-parented widgets keep their vtable mapping alive
+    /// (the per-rescan removal path) AND emits pluginUnloaded for
+    /// the same id; shouldPin == false skips both — the dtor case
+    /// where the entire process is winding down and pinned libraries
+    /// have nothing to outlive. Returns false if the id is no longer
+    /// present (legitimate re-entry from a prior signal slot that
+    /// rebounded into rescan logic); returns true on a successful
+    /// unload. The id-already-gone case is logged at qDebug, not
+    /// qWarning — see performScanCycle for the rationale.
+    bool unloadPlugin(const QString& id, bool shouldPin);
+
     // Non-owning. Caller guarantees lifetime per the ctor contract.
     // Cannot use QPointer because Registry<T> is not a QObject (the
     // QObject-derived RegistryNotifier lives inside the template).
@@ -220,15 +232,17 @@ private:
     // and refcount-gated unload. See pluginloader.cpp for the full
     // Phase-1.3 vs Phase-5 rationale.
     std::vector<std::unique_ptr<QLibrary>> m_pinnedLibraries;
-    // Per-path warn-once latch for ensurePluginRootExists. Mutated
-    // from the const ensurePluginRootExists via `mutable` since the
-    // logical "did we already complain about this root?" state is
-    // not part of the loader's observable contract — the public API
+    // Warn-once latch for ensurePluginRootExists. Mutated from the
+    // const ensurePluginRootExists via `mutable` since the logical
+    // "did we already complain about this root?" state is not part
+    // of the loader's observable contract — the public API
     // (loadedPluginIds, liveWidgetCount, pluginRoot) returns the
-    // same values whether or not we have logged. See
-    // ensurePluginRootExists in pluginloader.cpp for the GUI-thread-
-    // only thread-safety rationale.
-    mutable QSet<QString> m_loggedPluginRoots;
+    // same values whether or not we have logged. Plain bool (not a
+    // per-path QSet): m_pluginRoot is set in the ctor and never
+    // mutated, so a single bool tracks the only path that can ever
+    // need latching. See ensurePluginRootExists in pluginloader.cpp
+    // for the GUI-thread-only thread-safety rationale.
+    mutable bool m_loggedPluginRootFailure = false;
     // Idempotency guard for scanAndLoad. The first successful call
     // hands the plugin root to WatchedDirectorySet::registerDirectory,
     // which arms hot-reload + drives an initial scan. Subsequent

@@ -121,6 +121,31 @@ Item {
     // surface a child component reads from `root.` stays grouped.
     readonly property alias topPanelRef: topPanel
 
+    // Build the panel's clock+date string. Extracted from the TopPanel
+    // binding below so the formatting logic is grep-able and a
+    // debugger can place a breakpoint on the assembly itself.
+    //
+    // Defensive floor on hours >= 0: SystemClock's constructor
+    // populates hours/minutes synchronously via update(), so the
+    // pre-tick sentinels are never observable from QML in practice.
+    // This guard only triggers if QTime::currentDateTime() ever
+    // returns invalid, which it does not for any valid system time.
+    // Kept as defensive belt-and-braces against future SystemClock
+    // refactors that could defer the initial update().
+    //
+    // Qt.formatTime can't be used here because SystemClock exposes
+    // only a QDate (clock.date), not a QDateTime; passing a QDate to
+    // Qt.formatTime returns an empty string. String.padStart handles
+    // the zero-fill cleanly.
+    function buildClockText() {
+        if (clock.hours < 0)
+            return "";
+        const hh = String(clock.hours).padStart(2, "0");
+        const mm = String(clock.minutes).padStart(2, "0");
+        const date = Qt.formatDate(clock.date, Qt.locale().dateFormat(Locale.ShortFormat));
+        return hh + ":" + mm + " · " + date;
+    }
+
     SystemClock {
         id: clock
 
@@ -282,21 +307,13 @@ Item {
         // user's locale (the hand-rolled English arrays and hardcoded
         // "ddd MMM dd" this replaced were both i18n regressions).
         //
-        // Binding reads clock.hours, clock.minutes, and clock.date
-        // (each a Q_PROPERTY with its own NOTIFY), so it re-evaluates
-        // every minute when timeChanged fires AND on day rollover when
-        // dateChanged fires. Qt.formatTime can't be used here because
-        // SystemClock exposes only a QDate (clock.date), not a
-        // QDateTime; passing a QDate to Qt.formatTime returns an empty
-        // string. String.padStart handles the zero-fill cleanly.
-        //
-        // Defensive floor on hours >= 0: SystemClock's constructor
-        // populates hours/minutes synchronously via update(), so the
-        // pre-tick sentinels are never observable from QML in practice.
-        // This guard only triggers if QTime::currentDateTime() ever
-        // returns invalid, which it does not for any valid system time.
-        // Kept as defensive belt-and-braces against future SystemClock
-        // refactors that could defer the initial update().
+        // Binding reads clock.hours, clock.minutes, and clock.date via
+        // buildClockText() (each a Q_PROPERTY with its own NOTIFY), so
+        // it re-evaluates every minute when timeChanged fires AND on
+        // day rollover when dateChanged fires. The formatting logic is
+        // extracted to root.buildClockText() above for readability and
+        // breakpoint placement; see that function for the floor-on-
+        // hours and Qt.formatTime caveats.
         //
         // Width caveat: Qt.locale().dateFormat(Locale.ShortFormat) is
         // locale-driven and includes the year on most locales (e.g.
@@ -305,7 +322,7 @@ Item {
         // produces; do NOT assume a fixed width here. If a no-year
         // format is ever required, switch to an explicit format string
         // rather than parsing the locale's pattern.
-        clockText: clock.hours >= 0 ? String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0") + " · " + Qt.formatDate(clock.date, Qt.locale().dateFormat(Locale.ShortFormat)) : ""
+        clockText: root.buildClockText()
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent
         // Math.round drops UPower's decimal precision. Deliberate: the

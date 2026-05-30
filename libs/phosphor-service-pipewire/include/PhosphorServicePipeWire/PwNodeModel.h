@@ -57,6 +57,12 @@ class PHOSPHORSERVICEPIPEWIRE_EXPORT PwNodeModel : public QAbstractListModel
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
+    // DO NOT REORDER OR INSERT MID-LIST — smoke tests pin these values
+    // for QML wire stability. New roles must be appended at the end
+    // (`Qt::UserRole + 10`, ...) so the documented role-name → int
+    // mapping stays stable for QML consumers that key on the integers
+    // (Q_ENUM exposes them by name into QML, but the int values are
+    // also reachable via `Qt.UserRole + N` patterns).
     enum Role {
         NodeRole = Qt::UserRole + 1,
         IdRole = Qt::UserRole + 2,
@@ -142,6 +148,17 @@ private:
 /// Copy/move suppression is inherited from `PwNodeModel`; redeclaring
 /// `Q_DISABLE_COPY_MOVE` here would only add noise to the moc table
 /// without changing the contract.
+///
+/// Not marked `final` even though the design rationale excludes further
+/// subclassing: `qmlRegisterType<PwSinkModel>` (and the sibling
+/// registrations below) instantiate Qt's internal
+/// `QQmlPrivate::QQmlElement<T>`, which is declared `final class
+/// QQmlElement final : public T` — that subclass cannot derive from a
+/// `final` base, so adding `final` here breaks the build with
+/// `cannot derive from 'final' base 'PwSinkModel'`. The "leaf convenience
+/// wrapper" contract is enforced socially / via code review instead;
+/// callers that need a different media-class filter should still
+/// instantiate `PwNodeModel` directly and set `mediaClasses`.
 class PHOSPHORSERVICEPIPEWIRE_EXPORT PwSinkModel : public PwNodeModel
 {
     Q_OBJECT
@@ -151,7 +168,9 @@ public:
 };
 
 /// Convenience subclass pre-pinned to `Audio/Source`. Copy/move
-/// suppression inherited from `PwNodeModel`.
+/// suppression inherited from `PwNodeModel`. Same "no `final`" caveat
+/// as `PwSinkModel` — `qmlRegisterType`'s internal `QQmlElement<T>`
+/// derives from us.
 class PHOSPHORSERVICEPIPEWIRE_EXPORT PwSourceModel : public PwNodeModel
 {
     Q_OBJECT
@@ -164,7 +183,8 @@ public:
 /// `Stream/Input/Audio`. Streams are application-level audio endpoints
 /// (Firefox's playback stream, the OBS capture stream, etc.) and the
 /// mixer UI typically wants them in one list grouped by direction.
-/// Copy/move suppression inherited from `PwNodeModel`.
+/// Copy/move suppression inherited from `PwNodeModel`. Same "no `final`"
+/// caveat as `PwSinkModel`.
 class PHOSPHORSERVICEPIPEWIRE_EXPORT PwStreamModel : public PwNodeModel
 {
     Q_OBJECT

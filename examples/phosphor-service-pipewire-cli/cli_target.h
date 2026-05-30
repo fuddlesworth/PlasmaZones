@@ -37,16 +37,32 @@ QString labelFor(PhosphorServicePipeWire::PwNode* node);
 
 void printNode(PhosphorServicePipeWire::PwNode* node);
 
+// Canonical audio media-class set the CLI recognises. Centralised here
+// so isKnownListKind() / printNode() / cmdList()'s wanted-set / any
+// future media-class check all iterate the same source-of-truth array
+// instead of drift-prone duplicated literals.
+//
+// Note: these strings are also used inside the smoke tests and inside
+// PwNodeModel's filtering. Consolidating them behind a single public
+// header constant set in the library is a separate change that touches
+// the library API; this CLI keeps a local table so it remains a
+// stand-alone consumer of the public types.
+inline constexpr const char* kAudioMediaClasses[] = {
+    "Audio/Sink",
+    "Audio/Source",
+    "Stream/Output/Audio",
+    "Stream/Input/Audio",
+};
+
+/// True if `mc` is one of the four audio media-class strings the CLI
+/// recognises. Iterates kAudioMediaClasses so isKnownListKind /
+/// printNode / any future call stays in lock-step with the table.
+bool isAudioMediaClass(const QString& mc);
+
 // Known list kinds. Used both for the pre-connect validation in main()
 // (so a typo'd kind fails fast) and inside cmdList() for the actual
-// filter. Kept in lock-step with the audio media-class strings.
-//
-// Note: the audio media-class strings ("Audio/Sink", "Audio/Source",
-// "Stream/Output/Audio", "Stream/Input/Audio") are duplicated here, in
-// the smoke tests, and inside PwNodeModel's filtering. Consolidating
-// them behind a single public header constant set is a separate change
-// that touches the library API; this CLI keeps the literals inline so
-// it remains a stand-alone consumer of the public types.
+// filter. Kept in lock-step with kAudioMediaClasses via a runtime
+// mapping inside isKnownListKind's implementation.
 bool isKnownListKind(const QString& kind);
 
 } // namespace PhosphorPipeWireCli

@@ -89,7 +89,11 @@ QObject::connect(barRegistry.notifier(), &RegistryNotifier::factoryRegistered,
 that exposes the factory ids as a `Q_PROPERTY(QStringList)` and the
 widget construction as a `Q_INVOKABLE`. The library stays QML-free so
 consumers own their own facade; this controller pattern is what both
-phosphor-registry demos use.
+phosphor-registry demos use. The snippets below name it `BarController`
+to match the production-shell shape (a top-bar widget controller);
+`examples/phosphor-registry-demo/Main.qml` wires the same pattern under
+the context-property name `demoController` to keep the demo's QML
+self-describing.
 
 ```cpp
 // barcontroller.h

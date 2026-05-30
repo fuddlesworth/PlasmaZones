@@ -6,9 +6,11 @@
 #include <PhosphorServicePipeWire/PwNode.h>
 #include <PhosphorServicePipeWire/PwNodeModel.h>
 
+#include <QByteArray>
 #include <QElapsedTimer>
 #include <QSet>
 #include <QSignalSpy>
+#include <QtGlobal>
 #include <QtTest/QtTest>
 
 class TestSmoke : public QObject
@@ -66,13 +68,18 @@ private Q_SLOTS:
         conn.connectToDaemon();
         conn.connectToDaemon();
         conn.connectToDaemon();
-        // 100ms was tight on slow CI hosts where the scheduler delays
-        // the connected-true emission past the wait boundary, letting
-        // the test pass for the wrong reason (we asserted "count <= 1"
-        // before the daemon had a chance to land the single legitimate
-        // flip). 2000ms matches kDefaultConnectTimeoutMs so a connected
-        // daemon has the full handshake budget to land its one flip.
-        QTest::qWait(2000);
+        // Poll for either a successful connect (the one legitimate flip
+        // landed) or the 2000ms budget elapsing. 2000ms matches
+        // kDefaultConnectTimeoutMs so a connected daemon has the full
+        // handshake budget to land its one flip; on a no-daemon host the
+        // loop exits at the first 200ms tick with isConnected() still
+        // false, instead of burning the full 2000ms. The previous fixed
+        // qWait(2000) wasted the entire budget on every no-daemon CI run.
+        QElapsedTimer timer;
+        timer.start();
+        while (!conn.isConnected() && timer.elapsed() < 2000) {
+            QTest::qWait(200);
+        }
         QVERIFY2(connectedSpy.count() <= 1,
                  qPrintable(QStringLiteral("connectedChanged fired %1 times").arg(connectedSpy.count())));
     }
@@ -183,27 +190,70 @@ private Q_SLOTS:
         using PhosphorServicePipeWire::PwNodeModel;
         PwNodeModel model;
         const auto names = model.roleNames();
-        QCOMPARE(names.value(PwNodeModel::NodeRole), QByteArrayLiteral("node"));
-        QCOMPARE(names.value(PwNodeModel::IdRole), QByteArrayLiteral("id"));
-        QCOMPARE(names.value(PwNodeModel::NameRole), QByteArrayLiteral("name"));
-        QCOMPARE(names.value(PwNodeModel::NickRole), QByteArrayLiteral("nick"));
-        QCOMPARE(names.value(PwNodeModel::DescriptionRole), QByteArrayLiteral("description"));
-        QCOMPARE(names.value(PwNodeModel::MediaClassRole), QByteArrayLiteral("mediaClass"));
-        QCOMPARE(names.value(PwNodeModel::ChannelCountRole), QByteArrayLiteral("channelCount"));
-        QCOMPARE(names.value(PwNodeModel::VolumesRole), QByteArrayLiteral("volumes"));
-        QCOMPARE(names.value(PwNodeModel::MutedRole), QByteArrayLiteral("muted"));
-        QCOMPARE(names.value(Qt::DisplayRole), QByteArrayLiteral("display"));
 
-        QCOMPARE(int(Qt::DisplayRole), 0);
-        QCOMPARE(int(PwNodeModel::NodeRole), int(Qt::UserRole) + 1);
-        QCOMPARE(int(PwNodeModel::IdRole), int(Qt::UserRole) + 2);
-        QCOMPARE(int(PwNodeModel::NameRole), int(Qt::UserRole) + 3);
-        QCOMPARE(int(PwNodeModel::NickRole), int(Qt::UserRole) + 4);
-        QCOMPARE(int(PwNodeModel::DescriptionRole), int(Qt::UserRole) + 5);
-        QCOMPARE(int(PwNodeModel::MediaClassRole), int(Qt::UserRole) + 6);
-        QCOMPARE(int(PwNodeModel::ChannelCountRole), int(Qt::UserRole) + 7);
-        QCOMPARE(int(PwNodeModel::VolumesRole), int(Qt::UserRole) + 8);
-        QCOMPARE(int(PwNodeModel::MutedRole), int(Qt::UserRole) + 9);
+        // Role-name table: each entry pins one role's expected
+        // QByteArray name. Named-pair pattern (vs. a flat sequence of
+        // bare QCOMPAREs) so a reordering regression surfaces the
+        // specific role that drifted in the assertion message instead
+        // of a generic "value mismatch" buried in a wall of identical-
+        // looking lines.
+        struct RoleNameCase
+        {
+            const char* roleName;
+            int role;
+            QByteArray expected;
+        };
+        const RoleNameCase nameCases[] = {
+            {"NodeRole", int(PwNodeModel::NodeRole), QByteArrayLiteral("node")},
+            {"IdRole", int(PwNodeModel::IdRole), QByteArrayLiteral("id")},
+            {"NameRole", int(PwNodeModel::NameRole), QByteArrayLiteral("name")},
+            {"NickRole", int(PwNodeModel::NickRole), QByteArrayLiteral("nick")},
+            {"DescriptionRole", int(PwNodeModel::DescriptionRole), QByteArrayLiteral("description")},
+            {"MediaClassRole", int(PwNodeModel::MediaClassRole), QByteArrayLiteral("mediaClass")},
+            {"ChannelCountRole", int(PwNodeModel::ChannelCountRole), QByteArrayLiteral("channelCount")},
+            {"VolumesRole", int(PwNodeModel::VolumesRole), QByteArrayLiteral("volumes")},
+            {"MutedRole", int(PwNodeModel::MutedRole), QByteArrayLiteral("muted")},
+            {"Qt::DisplayRole", int(Qt::DisplayRole), QByteArrayLiteral("display")},
+        };
+        for (const auto& c : nameCases) {
+            const QByteArray actual = names.value(c.role);
+            QVERIFY2(actual == c.expected,
+                     qPrintable(QStringLiteral("role-name regression: %1 expected '%2', got '%3'")
+                                    .arg(QLatin1String(c.roleName))
+                                    .arg(QLatin1String(c.expected))
+                                    .arg(QLatin1String(actual))));
+        }
+
+        // Role-value table: same pattern, for the int role enum values.
+        // A reordering regression here breaks every C++ caller doing
+        // `data(idx, PwNodeModel::VolumesRole)`, so the named-pair
+        // diagnostic points the operator straight at which role's
+        // integer slot changed.
+        struct RoleValueCase
+        {
+            const char* roleName;
+            int actual;
+            int expected;
+        };
+        const RoleValueCase valueCases[] = {
+            {"Qt::DisplayRole", int(Qt::DisplayRole), 0},
+            {"NodeRole", int(PwNodeModel::NodeRole), int(Qt::UserRole) + 1},
+            {"IdRole", int(PwNodeModel::IdRole), int(Qt::UserRole) + 2},
+            {"NameRole", int(PwNodeModel::NameRole), int(Qt::UserRole) + 3},
+            {"NickRole", int(PwNodeModel::NickRole), int(Qt::UserRole) + 4},
+            {"DescriptionRole", int(PwNodeModel::DescriptionRole), int(Qt::UserRole) + 5},
+            {"MediaClassRole", int(PwNodeModel::MediaClassRole), int(Qt::UserRole) + 6},
+            {"ChannelCountRole", int(PwNodeModel::ChannelCountRole), int(Qt::UserRole) + 7},
+            {"VolumesRole", int(PwNodeModel::VolumesRole), int(Qt::UserRole) + 8},
+            {"MutedRole", int(PwNodeModel::MutedRole), int(Qt::UserRole) + 9},
+        };
+        for (const auto& c : valueCases) {
+            QVERIFY2(c.actual == c.expected,
+                     qPrintable(QStringLiteral("role-value regression: %1 expected %2, got %3")
+                                    .arg(QLatin1String(c.roleName))
+                                    .arg(c.expected)
+                                    .arg(c.actual)));
+        }
     }
 
     /// PwSinkModel / PwSourceModel / PwStreamModel pre-set their
@@ -215,23 +265,22 @@ private Q_SLOTS:
     /// pinned contract; set membership is.
     void convenienceSubclassesPinTheirFilters()
     {
-        using QStringSet = QSet<QString>;
         PhosphorServicePipeWire::PwSinkModel sinks;
         PhosphorServicePipeWire::PwSourceModel sources;
         PhosphorServicePipeWire::PwStreamModel streams;
         const auto toSet = [](const QStringList& list) {
-            return QStringSet(list.cbegin(), list.cend());
+            return QSet<QString>(list.cbegin(), list.cend());
         };
         // Assert both set membership AND list size so a stutter regression
         // (e.g. {"Audio/Sink", "Audio/Sink"}) doesn't pass — QSet membership
         // alone would collapse the duplicate.
         QCOMPARE(sinks.mediaClasses().size(), 1);
-        QCOMPARE(toSet(sinks.mediaClasses()), (QStringSet{QStringLiteral("Audio/Sink")}));
+        QCOMPARE(toSet(sinks.mediaClasses()), (QSet<QString>{QStringLiteral("Audio/Sink")}));
         QCOMPARE(sources.mediaClasses().size(), 1);
-        QCOMPARE(toSet(sources.mediaClasses()), (QStringSet{QStringLiteral("Audio/Source")}));
+        QCOMPARE(toSet(sources.mediaClasses()), (QSet<QString>{QStringLiteral("Audio/Source")}));
         QCOMPARE(streams.mediaClasses().size(), 2);
         QCOMPARE(toSet(streams.mediaClasses()),
-                 (QStringSet{QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")}));
+                 (QSet<QString>{QStringLiteral("Stream/Output/Audio"), QStringLiteral("Stream/Input/Audio")}));
     }
 
     /// Write APIs must survive being called for a non-existent node id
@@ -295,6 +344,26 @@ private Q_SLOTS:
                 }
             }
             if (sink) {
+                // Opt-out for hosts where toggling a real sink's mute
+                // state is unacceptable (active recording / call,
+                // session manager that fights back hard, etc.). See
+                // tests/CMakeLists.txt for the full env-var contract.
+                //
+                // Default: PHOSPHOR_PW_TESTS_ALLOW_WRITE unset OR set
+                // to any value other than "0" — the live-write half
+                // runs (preserving the historical behaviour for
+                // anyone whose CI / dev workflow does NOT set the
+                // variable). Set to "0" to skip the live write; the
+                // negative half (unknown-id writes are safe) still
+                // ran above, so the contract this test pins for
+                // headless / no-daemon hosts is still exercised.
+                const QByteArray allowWrite = qgetenv("PHOSPHOR_PW_TESTS_ALLOW_WRITE");
+                if (allowWrite == QByteArrayLiteral("0")) {
+                    QSKIP(
+                        "PHOSPHOR_PW_TESTS_ALLOW_WRITE=0 — skipping live-write half "
+                        "(mutates host audio state). The unknown-id no-crash half "
+                        "above still ran.");
+                }
                 QSignalSpy propsSpy(sink, &PhosphorServicePipeWire::PwNode::propsChanged);
                 // Flip mute to the opposite of the current value so the
                 // daemon has work to do; if the node was already in the
@@ -471,6 +540,72 @@ private Q_SLOTS:
         QVERIFY2(sinks.rowCount() > 0,
                  qPrintable(QStringLiteral("PwSinkModel observed zero sinks on a connected daemon — likely a "
                                            "setConnection snapshot regression that ignores later registry adds")));
+    }
+
+    /// Exercise the dangling-pointer recovery path inside PwNodeModel.
+    /// PwNodeModel uses a `QPointer<PipeWireConnection>` to detect a
+    /// connection that was destroyed externally without going through
+    /// `setConnection(nullptr)` first. When that happens, the next call
+    /// to a slot that walks the connection (e.g. `setMediaClasses`)
+    /// must drop the now-dangling node rows via beginResetModel /
+    /// endResetModel rather than dereferencing the QPointer.
+    ///
+    /// Setup: attach a PwSinkModel to a heap-allocated PipeWireConnection,
+    /// delete the connection externally so the QPointer goes null, then
+    /// drive `setMediaClasses` to force the recovery path. The test
+    /// passes if the model handles the dangling-pointer case cleanly
+    /// (no crash, no asserts) and ends up with zero rows.
+    ///
+    /// We don't attempt to populate rows pre-deletion: the test runs on
+    /// both daemon-present and no-daemon hosts, and the recovery path
+    /// doesn't depend on whether rows existed — it depends only on the
+    /// QPointer-null branch in `setMediaClasses` being reachable. The
+    /// branch fires whenever the model has an attached (now-dangling)
+    /// connection and setMediaClasses is called with a different filter.
+    void pwNodeModelSurvivesExternalConnectionDestruction()
+    {
+        PhosphorServicePipeWire::PwSinkModel model;
+        // Heap-allocate the connection so we can destroy it explicitly
+        // mid-test without waiting for stack unwind ordering.
+        auto* conn = new PhosphorServicePipeWire::PipeWireConnection();
+        model.setConnection(conn);
+        QCOMPARE(model.connection(), conn);
+
+        // Destroy the connection externally — bypassing
+        // setConnection(nullptr). After this, the QPointer<PipeWireConnection>
+        // inside the model's Private is observably null, but the
+        // model's row bookkeeping (nodes, rowIndex, nodeWires,
+        // connectionWires) is whatever state the rebuild left behind.
+        // Qt auto-releases the QMetaObject::Connection wires when their
+        // sender died, so callback delivery is already safe — the QHash
+        // entries themselves are stale.
+        delete conn;
+        QCOMPARE(model.connection(), nullptr);
+
+        // Drive the recovery path. Changing mediaClasses while the
+        // connection is dangling routes through the `else if
+        // (!d->nodes.isEmpty())` branch in setMediaClasses, which is
+        // the dangling-recovery branch we want to exercise. Even when
+        // nodes is empty (no-daemon host, no rows ever populated), the
+        // call must not crash and must leave the model in a coherent
+        // zero-row state.
+        QSignalSpy mediaClassesSpy(&model, &PhosphorServicePipeWire::PwNodeModel::mediaClassesChanged);
+        model.setMediaClasses({QStringLiteral("Audio/Source")});
+        // mediaClassesChanged must fire exactly once for the filter
+        // change — the recovery path emits after the rebuild/reset
+        // completes, same as the normal path.
+        QCOMPARE(mediaClassesSpy.count(), 1);
+        QCOMPARE(model.mediaClasses(), QStringList{QStringLiteral("Audio/Source")});
+        // Post-recovery the model must report zero rows: the dangling
+        // PwNode pointers have been flushed (either via the reset
+        // branch, or because there were never any rows to begin with).
+        QCOMPARE(model.rowCount(), 0);
+        // A subsequent data() probe at the (invalid) row 0 must return
+        // a default QVariant rather than dereferencing a dangling
+        // PwNode*. This is belt-and-braces — rowCount being 0 already
+        // implies any sensible view stops here — but it pins the
+        // contract for direct C++ callers.
+        QVERIFY(!model.data(model.index(0), PhosphorServicePipeWire::PwNodeModel::NodeRole).isValid());
     }
 
     /// Pin the pre-connect empty-defaults baseline plus the

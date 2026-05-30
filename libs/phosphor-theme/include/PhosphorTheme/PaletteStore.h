@@ -15,6 +15,15 @@
 #include <optional>
 
 class QFileSystemWatcher;
+// QJsonDocument is referenced only by the class's private member
+// signatures (applyParsedJson, applyParsedDocWithLoadError,
+// extractTokensOrEmpty, extractValidTokens). C++ requires non-nested
+// forward declarations at global / namespace scope rather than inside
+// a class body, so it can't live in the `private:` section literally.
+// Grouped here with the other private-only Qt forward decls
+// (QFileSystemWatcher, QTimer — both private members) to keep the
+// "private-API consumer" relationship obvious to readers scanning
+// the file top.
 class QJsonDocument;
 class QTimer;
 
@@ -78,13 +87,18 @@ public:
     // IThemeService.
     [[nodiscard]] QVariantMap palette() const override;
     [[nodiscard]] Q_INVOKABLE QColor token(const QString& name) const override;
-    // loadFromJson is atomic: a failed parse / shape check leaves
-    // sourcePath, the watcher, and the active palette unchanged
-    // (the implementation validates the payload up-front, then
-    // commits only on success). A previously-file-loaded store
-    // therefore keeps its watcher armed across a failed
-    // loadFromJson call. Callers can treat any false return as a
-    // pure no-op.
+    // loadFromJson is atomic across ALL three failure modes:
+    //   - Parse failure (malformed JSON)
+    //   - Shape mismatch (tokens key present but not a JSON object,
+    //     mapped to ApplyResult::TokensKeyNotObject)
+    //   - No-usable-tokens-found (parsed.isEmpty() after the
+    //     QColor-parse pass, mapped to ApplyResult::NoUsableTokens)
+    // On any of these the sourcePath, the watcher, and the active
+    // palette are all unchanged (the implementation validates the
+    // payload up-front, then commits only on success). A previously-
+    // file-loaded store therefore keeps its watcher armed across a
+    // failed loadFromJson call. Callers can treat any false return
+    // as a pure no-op.
     Q_INVOKABLE bool loadFromJson(const QByteArray& json) override;
     // loadFromFile is INTENTIONALLY ASYMMETRIC with loadFromJson:
     // it commits the new sourcePath + swaps the watcher BEFORE
@@ -129,6 +143,15 @@ public:
     Q_INVOKABLE void resetToDefaults() override;
 
     [[nodiscard]] QString sourcePath() const;
+
+    /// Test-only: override the hot-reload debounce interval (default
+    /// 80 ms). Lets test_palettestore_hotreload.cpp resolve QTRY-style
+    /// polling in O(milliseconds) instead of waiting on the production
+    /// 80 ms window for every event. Production code never calls this;
+    /// the `ForTest` suffix is the project convention for test seams
+    /// (see DirectoryLoader::setDebounceIntervalForTest, etc.). Values
+    /// less than 1 ms are clamped to 1.
+    void setDebounceIntervalForTest(int ms);
 
 Q_SIGNALS:
     void paletteChanged();
@@ -219,6 +242,18 @@ private:
     /// resorting to a connect/disconnect dance to observe the emit.
     bool applyPalette(const QVariantMap& tokens);
     void reloadFromCurrentPath();
+    /// Arm the file + parent-directory watches for `absolutePath`.
+    /// Both branches of loadFromFile (path moved + path NOT moved)
+    /// converge here so the addPath-with-existence-and-contains-guard
+    /// pattern can't drift between them. The "path moved" branch
+    /// removes prior entries BEFORE calling; the "path NOT moved"
+    /// branch relies on addPath being a no-op when the path is
+    /// already tracked AND on the contains() guards inside this
+    /// helper to re-arm any silently-dropped watch (rm-rf-then-mkdir
+    /// of the parent while the store was idle, NFS server bounce
+    /// dropping inotify state). The helper itself does not remove
+    /// prior entries — callers handle the swap when they need it.
+    void armWatchesFor(const QString& absolutePath);
 
     QVariantMap m_palette;
     QString m_sourcePath;

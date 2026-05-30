@@ -83,6 +83,10 @@ public:
     explicit PipeWireConnection(QObject* parent = nullptr);
     ~PipeWireConnection() override;
 
+    // `is`-prefixed getters follow the Qt convention for bool Q_PROPERTY
+    // READ accessors (matches QObject::isWidgetType, QWindow::isVisible,
+    // etc.); the property name stays unprefixed (`connected`,
+    // `daemonAvailable`) for the QML side.
     [[nodiscard]] bool isConnected() const;
     [[nodiscard]] bool isDaemonAvailable() const;
     [[nodiscard]] QString defaultSinkName() const;
@@ -107,6 +111,16 @@ public:
     /// / `PwSourceModel` / `PwStreamModel` convenience subclasses),
     /// which observes `nodeAdded` / `nodeRemoved` and exposes the
     /// nodes as a live model.
+    ///
+    /// Reentrancy: do NOT iterate the returned list while pumping
+    /// `QCoreApplication::processEvents()` on the GUI thread. The list
+    /// is a value-copy of raw `PwNode*` pointers, but the nodes
+    /// themselves are still owned by this connection — a queued
+    /// `nodeRemoved` delivered during the pump can destroy a snapshot
+    /// entry mid-iteration, leaving a dangling pointer in your loop.
+    /// If you need to call back into Qt's event loop while iterating,
+    /// copy the entries into `QPointer<PwNode>` first and check
+    /// validity on each access.
     [[nodiscard]] QList<PwNode*> nodes() const;
 
 public Q_SLOTS:
@@ -135,9 +149,20 @@ public Q_SLOTS:
     /// pod. Called by `PwNode::setVolumes` / `setVolume`; advanced QML
     /// consumers may invoke directly when they have a node id but no
     /// PwNode* handle.
+    ///
+    /// Stale-id behavior: if `nodeId` refers to a node that has been
+    /// removed (no longer in `nodes()`), the write is silently dropped
+    /// on the loop thread without an error signal — the registry
+    /// lookup misses and the slot returns. Callers that issue writes
+    /// directly through this slot (rather than via `PwNode::setVolumes`
+    /// / `setVolume`, which short-circuit on a removed parent) and
+    /// need confirmation should check `nodes()` for the id before
+    /// dispatching.
     void writeVolumes(quint32 nodeId, const QList<qreal>& volumes);
     /// Asynchronously write a mute state. Same dispatch + echo model
-    /// as `writeVolumes`.
+    /// as `writeVolumes`, including the same silent-drop behavior for
+    /// stale ids — see `writeVolumes` for the rationale and the
+    /// caller-side check recommendation.
     void writeMuted(quint32 nodeId, bool muted);
 
 Q_SIGNALS:
@@ -158,12 +183,21 @@ Q_SIGNALS:
     /// `propsChanged` for populated values.
     /// PwNode* metatype is registered automatically in
     /// pipewireconnection.cpp's ensurePipeWireInit().
+    ///
+    /// FQN `PhosphorServicePipeWire::PwNode*` is intentional — moc's
+    /// metatype registration matches the signature spelling, and the
+    /// FQN dodges QML ambiguity in queued connections (the queued
+    /// dispatcher resolves the parameter type by literal string match
+    /// against the registered metatype name).
     void nodeAdded(PhosphorServicePipeWire::PwNode* node);
     /// Fired from the GUI thread BEFORE the PwNode is destroyed so
     /// observers (models) can detach. The pointer is still valid
     /// during this signal.
     /// PwNode* metatype is registered automatically in
     /// pipewireconnection.cpp's ensurePipeWireInit().
+    /// Same FQN rationale as `nodeAdded` — keep the
+    /// `PhosphorServicePipeWire::PwNode*` spelling for moc / queued
+    /// dispatch.
     void nodeRemoved(PhosphorServicePipeWire::PwNode* node);
 
 private:

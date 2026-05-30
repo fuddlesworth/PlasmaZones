@@ -67,6 +67,12 @@ PaletteStore::PaletteStore(QObject* parent)
     // short enough that hot-reload still feels live.
     m_reloadDebounce->setSingleShot(true);
     m_reloadDebounce->setInterval(80);
+    // Stable objectName so the hot-reload test suite can fetch the
+    // timer with `findChild<QTimer*>(QStringLiteral("paletteReloadDebounce"))`
+    // instead of the index-fragile findChildren-then-first pattern. Tests
+    // that scan the QObject child tree without an objectName would break
+    // the moment any future code adds another QTimer child to PaletteStore.
+    m_reloadDebounce->setObjectName(QStringLiteral("paletteReloadDebounce"));
     connect(m_reloadDebounce.get(), &QTimer::timeout, this, &PaletteStore::reloadFromCurrentPath);
 
     // Two events drive a reload:
@@ -166,9 +172,15 @@ QColor PaletteStore::token(const QString& name) const
     // applyPalette normalises every stored value to QColor before
     // insert, so a non-QColor variant here is a contract violation
     // (direct map mutation, deserialisation skipping the normaliser,
-    // or a memory corruption indicator). Log instead of silently
-    // returning a default QColor and hiding the bug downstream.
+    // or a memory corruption indicator). Q_ASSERT for a loud debug-
+    // build catch so the contract violation surfaces during dev /
+    // test rather than slipping into a silent qWarning trail. The
+    // qWarning + default-return remain as belt-and-braces for
+    // release builds where the assert compiles out — a downstream
+    // QML binding silently rendering against QColor() is still less
+    // bad than a process crash from a deref'd half-state.
     if (it.value().userType() != QMetaType::QColor) {
+        Q_ASSERT(it.value().userType() == QMetaType::QColor);
         qWarning().noquote() << "phosphor-theme: PaletteStore::token(" << name
                              << ") expected QColor but stored variant has typeId" << it.value().userType()
                              << "; returning default QColor()";
@@ -210,18 +222,14 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
     // Extract once. The returned map is the same one applyPalette
     // will merge below, so the validator and the applier consume
     // identical bytes by construction — no second QColor-parse pass.
+    //
+    // Contract dependency: when extractValidTokens returns Ok, the
+    // optional is guaranteed engaged (see its declaration). Skip
+    // the .has_value() guard here — the only error escape is the
+    // outError-driven branch above.
     ApplyResult extractErr = ApplyResult::Ok;
     const auto parsed = extractValidTokens(doc, extractErr);
     if (extractErr != ApplyResult::Ok) {
-        return false;
-    }
-    // Defence-in-depth against an extractValidTokens contract bug:
-    // shapeError == Ok must imply a payload exists. Keep the assert
-    // for debug-build clarity AND an explicit early-out so a release
-    // build can't deref a default-constructed optional if the
-    // invariant ever drifts.
-    Q_ASSERT(parsed.has_value());
-    if (!parsed) {
         return false;
     }
     if (parsed->isEmpty()) {
@@ -345,21 +353,14 @@ PaletteStore::ApplyResult PaletteStore::applyParsedJson(const QJsonDocument& doc
     // reuses the cached map, so the JSON-blob path and the file-load
     // path observe identical accept-set behaviour without going
     // through this function twice.
+    // Contract dependency: when extractValidTokens returns Ok, the
+    // optional is guaranteed engaged (see its declaration). Skip
+    // the .has_value() guard here — the only error escape is the
+    // err-driven branch above.
     ApplyResult err = ApplyResult::Ok;
     auto parsed = extractValidTokens(doc, err);
     if (err != ApplyResult::Ok) {
         return err;
-    }
-    // Defence-in-depth: shapeError == Ok must imply a payload
-    // exists. Keep the assert for debug-build clarity AND an
-    // explicit early-out so a release build can't deref a default-
-    // constructed optional if extractValidTokens' contract ever
-    // drifts. NoUsableTokens is the closest existing variant
-    // (the no-payload case is observationally identical to
-    // "shape was fine, contents had nothing usable").
-    Q_ASSERT(parsed.has_value());
-    if (!parsed) {
-        return ApplyResult::NoUsableTokens;
     }
     if (parsed->isEmpty()) {
         return ApplyResult::NoUsableTokens;
@@ -496,38 +497,42 @@ bool PaletteStore::loadFromFile(const QString& path)
     // so any user slot wired to paletteChanged that reads the
     // watcher observes the NEW state, not the stale one.
     if (sourcePathMoved) {
+        // Swap: drop the prior watches first so the helper's
+        // contains() guard doesn't suppress an addPath for the new
+        // file (the prior file's entry would still be in the watcher's
+        // tracked-files list when the helper ran).
         if (!m_watcher->files().isEmpty()) {
             m_watcher->removePaths(m_watcher->files());
         }
         if (!m_watcher->directories().isEmpty()) {
             m_watcher->removePaths(m_watcher->directories());
         }
-        m_watcher->addPath(absolutePath);
-        const QString parentDir = QFileInfo(absolutePath).absolutePath();
-        if (!parentDir.isEmpty()) {
-            m_watcher->addPath(parentDir);
-        }
-    } else {
-        // Same logical path — re-add any silently-dropped entries
-        // (rm-rf-then-mkdir of the parent directory while the
-        // PaletteStore was idle, NFS server bounce dropping
-        // inotify state, etc.). No removePaths first: the watcher
-        // either already tracks the path (addPath is a no-op then)
-        // or had silently dropped it (addPath re-arms).
-        if (QFileInfo::exists(absolutePath) && !m_watcher->files().contains(absolutePath)) {
-            m_watcher->addPath(absolutePath);
-        }
-        const QString parentDir = QFileInfo(absolutePath).absolutePath();
-        if (!parentDir.isEmpty() && QFileInfo::exists(parentDir) && !m_watcher->directories().contains(parentDir)) {
-            m_watcher->addPath(parentDir);
-        }
     }
+    // Same code path for both moved + not-moved cases — armWatchesFor
+    // wraps addPath in the existence+contains guard pattern so the
+    // call is safe whether the watcher is empty (post-removePaths)
+    // or already armed (same-path re-call, possibly with a silently-
+    // dropped entry to re-arm). Routing both branches through one
+    // helper makes "the file + parent watches end up armed" the
+    // structural invariant.
+    armWatchesFor(absolutePath);
 
     // Drop any pending debounce from the previous source so a queued
     // tick can't fire a redundant reload of the file we just loaded
     // synchronously.
     m_reloadDebounce->stop();
 
+    // Signal-order convention: sourcePathChanged fires BEFORE
+    // paletteChanged. This matches loadFromJson + resetToDefaults
+    // (every entry point that can mutate both signals routes
+    // through the same convention). The convention is pinned by
+    // tests test_palettestore.cpp::loadFromJson_signalOrderIsSourceBeforePalette
+    // and test_palettestore.cpp::resetToDefaults_signalOrderIsSourceBeforePalette
+    // so a regression that flipped the order in any caller would
+    // fail the suite. QML bindings that read both reach a coherent
+    // new-source / new-palette state on the first re-evaluation
+    // instead of palette-against-stale-source on the first tick
+    // and catching up on the second.
     if (sourcePathMoved) {
         Q_EMIT sourcePathChanged();
     }
@@ -558,12 +563,13 @@ PaletteStore::ApplyResult PaletteStore::applyParsedDocWithLoadError(const QStrin
     // watcher only signals "something changed" — not what).
     const ApplyResult result = applyParsedJson(doc);
     // Exhaustive switch — every ApplyResult variant has an explicit
-    // arm. Adding a new variant surfaces a -Wswitch warning here
-    // (clang/gcc emit it for an unscoped enum-class switch missing
-    // a case), which is the structural enforcement the prior
-    // Q_UNREACHABLE tried to provide at runtime. The trailing
-    // `return result;` keeps gcc-without-Werror builds happy without
-    // adding a runtime branch the warning already prevents.
+    // arm. Adding a new variant surfaces a -Wswitch-enum warning
+    // here AND trips Q_UNREACHABLE_RETURN below if the new variant
+    // somehow falls through — so enum drift becomes a build error
+    // rather than silently degrading to a permissive trailing
+    // return. The Q_UNREACHABLE_RETURN replaces the prior trailing
+    // `return result;` which let a missing case slip through with
+    // no warning escalation.
     switch (result) {
     case ApplyResult::Ok:
         return ApplyResult::Ok;
@@ -574,7 +580,7 @@ PaletteStore::ApplyResult PaletteStore::applyParsedDocWithLoadError(const QStrin
         Q_EMIT loadError(absolutePath, QStringLiteral("no usable color tokens"));
         return result;
     }
-    return result;
+    Q_UNREACHABLE_RETURN(result);
 }
 
 PaletteStore::ApplyResult PaletteStore::readParseAndApply(const QString& absolutePath)
@@ -744,6 +750,45 @@ void PaletteStore::reloadFromCurrentPath()
     // success/failure to; the loadError signal is the only
     // observable side-channel.
     (void)readParseAndApply(m_sourcePath);
+}
+
+void PaletteStore::armWatchesFor(const QString& absolutePath)
+{
+    // Shared by both branches of loadFromFile. The contains() guards
+    // make the call idempotent: in the "path moved" branch the prior
+    // entries have already been removed by the caller so contains()
+    // returns false and we addPath unconditionally; in the "path NOT
+    // moved" branch the entries usually still exist and contains()
+    // short-circuits the addPath — except when the watch was silently
+    // dropped (rm-rf-then-mkdir of the parent while the store was
+    // idle, NFS server bounce dropping inotify state), in which case
+    // contains() returns false and we re-arm. Either way the post-
+    // call invariant is "watcher armed against absolutePath + parent
+    // directory", which is what every loadFromFile caller wants.
+    //
+    // The existence checks defend against a window where the file or
+    // parent directory was unlinked between the loadFromFile preflight
+    // and this re-arm. addPath against a non-existent path silently
+    // fails (and QFileSystemWatcher logs a warning to stderr), so the
+    // guard keeps the diagnostic noise off the user's journal in the
+    // unlink-race case.
+    if (QFileInfo::exists(absolutePath) && !m_watcher->files().contains(absolutePath)) {
+        m_watcher->addPath(absolutePath);
+    }
+    const QString parentDir = QFileInfo(absolutePath).absolutePath();
+    if (!parentDir.isEmpty() && QFileInfo::exists(parentDir) && !m_watcher->directories().contains(parentDir)) {
+        m_watcher->addPath(parentDir);
+    }
+}
+
+void PaletteStore::setDebounceIntervalForTest(int ms)
+{
+    // Test-only seam used by test_palettestore_hotreload.cpp to shrink
+    // the 80ms hot-reload debounce window so QTRY-style polling
+    // resolves quickly. Clamped to >= 1ms because QTimer treats 0ms
+    // as "fire on the next event-loop tick" which is observationally
+    // useful but defeats the burst-coalescing the test is exercising.
+    m_reloadDebounce->setInterval(ms < 1 ? 1 : ms);
 }
 
 } // namespace PhosphorTheme

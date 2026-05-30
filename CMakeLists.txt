@@ -454,8 +454,17 @@ set(PHOSPHOR_ENGINE_TARGETS
 # Refuse to configure if any engine target ever picks up a Qml/Quick
 # link. Cheap guardrail; failures here mean someone added a dependency
 # that drags Qml in transitively or wired a target up wrong.
+#
+# Track whether ANY entry matched a real target so the firewall can't
+# silently degrade to a no-op if PHOSPHOR_ENGINE_TARGETS goes stale
+# (e.g. an engine lib gets renamed but the list doesn't follow). A
+# zero-match firewall would let a future Qml link through unnoticed,
+# which is exactly the failure mode the rationale above is designed
+# to prevent.
+set(_pz_engine_matched_any FALSE)
 foreach(_pz_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
     if(TARGET ${_pz_engine_lib})
+        set(_pz_engine_matched_any TRUE)
         get_target_property(_pz_engine_links ${_pz_engine_lib} LINK_LIBRARIES)
         if(_pz_engine_links)
             foreach(_pz_link IN LISTS _pz_engine_links)
@@ -480,6 +489,18 @@ foreach(_pz_engine_lib IN LISTS PHOSPHOR_ENGINE_TARGETS)
         endif()
     endif()
 endforeach()
+if(NOT _pz_engine_matched_any)
+    message(FATAL_ERROR
+        "Engine QML firewall matched zero targets from PHOSPHOR_ENGINE_TARGETS "
+        "(${PHOSPHOR_ENGINE_TARGETS}). The firewall is a no-op in this state, "
+        "which defeats its purpose. Either an engine lib was renamed without "
+        "updating the list, the add_subdirectory order changed so engines "
+        "haven't been declared yet at this point, or every engine subdir got "
+        "gated behind an option that's currently OFF. Update "
+        "PHOSPHOR_ENGINE_TARGETS to match the real engine target names, or "
+        "move this firewall block below the add_subdirectory calls that "
+        "declare the engines.")
+endif()
 
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK

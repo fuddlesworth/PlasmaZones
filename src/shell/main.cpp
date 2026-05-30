@@ -51,6 +51,19 @@ int main(int argc, char* argv[])
     // primitive qmlRegisterType is NOT idempotent (Qt warns and
     // overwrites on second registration), which is the reason the
     // per-lib guard exists.
+    //
+    // Each registerQmlTypes() returns void on purpose: by current design
+    // every service's registration is idempotent AND infallible —
+    // std::call_once gates the body to a one-shot, and the inner
+    // QCoreApplication guard returns silently if pre-conditions fail
+    // (logging a warning instead of throwing). There is intentionally
+    // no failure surface to inspect, which is why this loop doesn't
+    // check return values. If any future service grows
+    // environment-dependent registration logic (e.g. needs to fail hard
+    // when a required platform feature is absent, or needs to surface
+    // a registration error to the shell launcher), this loop MUST be
+    // revisited: the wrappers will need to start returning success
+    // status and the loop will need to handle a partial-init scenario.
     PhosphorServiceSni::registerQmlTypes();
     PhosphorServiceIconTheme::registerQmlTypes();
     PhosphorServiceUPower::registerQmlTypes();
@@ -91,7 +104,13 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    qCInfo(lcShell) << "Loading shell from:" << shellUrl.toLocalFile();
+    // Use toString() rather than toLocalFile(): toLocalFile() returns
+    // an empty string for non-file URLs (qrc:, http:, etc.), which
+    // would produce an uninformative "Loading shell from: " log line
+    // when ShellLoader resolves to a bundled qrc resource. toString()
+    // always yields the full URL form, so the log entry is meaningful
+    // regardless of the URL scheme.
+    qCInfo(lcShell) << "Loading shell from:" << shellUrl.toString();
 
     PhosphorShell::ShellEngine engine(
         PhosphorShell::ShellEngine::Deps{

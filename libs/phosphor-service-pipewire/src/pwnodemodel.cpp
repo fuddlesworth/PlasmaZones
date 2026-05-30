@@ -84,6 +84,13 @@ PwNodeModel::~PwNodeModel()
     // solely on Qt's auto-cleanup, and they ensure no callback can
     // fire between this point and the actual object teardown.
     d->connection = nullptr;
+    // QObject::disconnect(wire) returns bool — intentionally ignored
+    // here and in every disconnect loop below. A false return simply
+    // means the connection was already torn down (Qt auto-releases the
+    // QMetaObject::Connection when its sender or receiver is destroyed),
+    // and a true return means we proactively dropped a live wire.
+    // Either outcome leaves us in the desired post-state: no callback
+    // can fire from this wire after the loop exits.
     for (const auto& wire : d->connectionWires) {
         QObject::disconnect(wire);
     }
@@ -91,6 +98,10 @@ PwNodeModel::~PwNodeModel()
     for (auto* node : d->nodes) {
         if (!d->nodeWires.contains(node))
             continue;
+        // Same disconnect-bool-ignored contract as the connectionWires
+        // loop above: false = sender/receiver already gone (auto-
+        // cleanup), true = wire proactively dropped. Both outcomes are
+        // the desired post-state.
         for (const auto& wire : d->nodeWires.value(node)) {
             QObject::disconnect(wire);
         }
@@ -141,6 +152,16 @@ void PwNodeModel::Private::rebuildFromConnection()
     const int oldCount = nodes.size();
 
     // Drop wires + nodes from any previous connection.
+    //
+    // QObject::disconnect(wire) returns bool — intentionally ignored
+    // in both loops below. A false return simply means the wire was
+    // already disconnected (Qt auto-releases the
+    // QMetaObject::Connection when its sender or receiver dies, which
+    // can happen between the previous rebuild and this one if the
+    // upstream PipeWireConnection or a PwNode was destroyed). A true
+    // return means we proactively dropped a still-live wire. Either
+    // outcome leaves us in the desired post-state: the wire cannot
+    // fire after this loop exits.
     for (const auto& wire : connectionWires) {
         QObject::disconnect(wire);
     }
@@ -242,6 +263,11 @@ void PwNodeModel::Private::rebuildFromConnection()
                 const int row = rowIndex.value(node, -1);
                 if (row < 0)
                     return;
+                // QObject::disconnect(wire) bool return intentionally
+                // ignored — see ~PwNodeModel for the full rationale.
+                // false = wire auto-released when sender/receiver died;
+                // true = wire proactively dropped. Either outcome
+                // leaves the wire unable to fire after this loop.
                 for (const auto& wire : nodeWires.value(node)) {
                     QObject::disconnect(wire);
                 }

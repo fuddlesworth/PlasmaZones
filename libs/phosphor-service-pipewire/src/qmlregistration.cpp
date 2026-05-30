@@ -19,6 +19,25 @@ Q_LOGGING_CATEGORY(lcPipeWireQml, "phosphor.service.pipewire.qml")
 
 namespace PhosphorServicePipeWire {
 
+// QML type-name maintenance contract:
+//
+// Every qmlRegister* call below takes a C++ type as a template argument
+// AND a string literal QML name. The two must stay in lock-step:
+//
+//   * If you rename a C++ type below (PipeWireConnection, PwNode,
+//     PwNodeModel, PwSinkModel, PwSourceModel, PwStreamModel,
+//     PipeWireHost), also rename the corresponding string-literal QML
+//     name argument here. The compiler will NOT catch a stale QML name
+//     — the template argument and the literal are independent.
+//
+//   * When adding or removing a registered type, audit ALL qmlRegister*
+//     calls in this function (uncreatable, type, singleton) to keep
+//     the module surface consistent and to spot any sibling registration
+//     that has drifted out of sync.
+//
+// A constexpr table mapping `cppName` to QML metadata would mechanise
+// this, but for 7 types it's over-engineering — this comment plus
+// localised review is the chosen contract.
 void registerQmlTypes()
 {
     // qmlRegisterType is process-global, not per-engine. Repeat calls

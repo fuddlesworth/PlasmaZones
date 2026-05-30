@@ -210,6 +210,13 @@ void TestPaletteStoreHotReload::hotReload_resetCancelsPendingDebounce()
     QVERIFY(seedTempJsonFile(tmp, QStringLiteral("p.json"), path));
 
     PaletteStore s;
+    // Shrink the debounce window so the QTRY_VERIFY_WITH_TIMEOUT below
+    // doesn't have to wait a full 80 ms after every fileChanged delivery.
+    // 1 ms gives the same coalescing semantics on a much tighter window —
+    // the production code's behaviour (timer-arm → reset stops timer →
+    // verify isActive returns false) is what we're pinning, not the
+    // exact ms count.
+    s.setDebounceIntervalForTest(1);
     QVERIFY(s.loadFromFile(path));
 
     // The debounce timer is parented to the store. We need it to verify
@@ -217,9 +224,20 @@ void TestPaletteStoreHotReload::hotReload_resetCancelsPendingDebounce()
     // this check the test passes even if reset never stops the timer
     // (the fileChanged event would deliver later and re-arm the timer
     // anyway, then short-circuit on empty m_sourcePath).
-    const auto timers = s.findChildren<QTimer*>();
-    QCOMPARE(timers.size(), 1);
-    QTimer* debounce = timers.first();
+    //
+    // Prefer the objectName-based lookup so a future PaletteStore that
+    // adds a sibling QTimer child (animation, retry-backoff, anything)
+    // doesn't silently break this test by changing findChildren's order
+    // / count. Fall back to findChildren if the objectName isn't set —
+    // a defensive guard against an in-flight rename of the stable name
+    // ("paletteReloadDebounce") in the production code.
+    QTimer* debounce = s.findChild<QTimer*>(QStringLiteral("paletteReloadDebounce"));
+    if (!debounce) {
+        const auto timers = s.findChildren<QTimer*>();
+        QCOMPARE(timers.size(), 1);
+        debounce = timers.first();
+    }
+    QVERIFY(debounce);
     QVERIFY(!debounce->isActive());
 
     // Edit the file. The watcher schedules a reload via the debounce

@@ -95,9 +95,19 @@ PluginLoader::~PluginLoader()
     // m_plugins directly while signals can rebound into us is a
     // QHash-iterator-invalidation hazard. (m_registry assumed non-
     // null — see the class invariant on the field.)
+    //
+    // Route through unloadPlugin with shouldPin == false: we don't
+    // need to preserve the QLibrary mappings here (the whole process
+    // is winding down; pinned libraries have nothing to outlive) AND
+    // we don't emit pluginUnloaded (the QObject signal infrastructure
+    // is being torn down — subscribers can rely on
+    // factoryUnregistered from the Registry, which IS still safe
+    // to fire). The performScanCycle removal path uses shouldPin ==
+    // true for the opposite reason: surviving widgets need their
+    // vtable mappings preserved.
     const QList<QString> ids = m_plugins.keys();
     for (const QString& id : ids) {
-        m_registry->unregisterFactory(id);
+        unloadPlugin(id, /*shouldPin=*/false);
     }
     m_plugins.clear();
     // Pinned libraries from prior removals — drop them too. Same
@@ -178,47 +188,39 @@ QString PluginLoader::resolveDefaultPluginRoot() const
 
 bool PluginLoader::ensurePluginRootExists() const
 {
-    // Per-path warn-once latch. Without it, every rescanNow() (the
-    // watcher's timer, the demo's reload button) re-logs the same
-    // "failed to create plugin root" line and floods the journal.
-    // Per-path so a future re-config of m_pluginRoot to a different
-    // path still surfaces a fresh failure the first time. Keyed on
-    // the actual root string; QSet not QHash because we only need
-    // membership.
+    // Warn-once latch. Without it, every rescanNow() (the watcher's
+    // timer, the demo's reload button) re-logs the same "failed to
+    // create plugin root" line and floods the journal.
     //
-    // Per-instance retention: m_loggedPluginRoots is a member, so
-    // the set's lifetime is tied to the PluginLoader instance. Each
-    // instance logs once per (instance, root) pair. The set entry
-    // is dropped the moment this instance manages to create the
-    // directory (the remove() at the top of this function), so a
-    // recoverable failure resets the latch cleanly for that instance.
-    // The previous design used a function-scope static to share the
-    // latch process-wide; the per-instance design is structurally
-    // cleaner (no shared mutable state across PluginLoader instances,
-    // no test-isolation footgun where one test's failure suppresses
-    // another's diagnostic) at the cost of one extra log line per
-    // additional PluginLoader instance sharing a broken root — an
-    // acceptable trade since the shell only constructs one
-    // PluginLoader per session in practice.
+    // Plain bool: m_pluginRoot is set in the ctor and never mutated,
+    // so a single latch covers the only path that can ever reach
+    // this function. The latch is cleared the moment this instance
+    // manages to create (or finds) the directory, so a recoverable
+    // failure resets cleanly and the next failure re-logs.
+    //
+    // Per-instance retention: the bool is a member, so its lifetime
+    // is tied to the PluginLoader instance. The shell only constructs
+    // one PluginLoader per session in practice — multiple instances
+    // sharing a broken root would each log once, which is fine.
     //
     // Thread-safety: unguarded — PluginLoader is GUI-thread-only per
-    // the class contract. Promote to a QMutex-guarded set and update
-    // the class docs in lockstep if any caller ever moves off-thread.
+    // the class contract. Promote to an atomic + update the class
+    // docs in lockstep if any caller ever moves off-thread.
 
     QDir dir(m_pluginRoot);
     if (dir.exists()) {
-        m_loggedPluginRoots.remove(m_pluginRoot);
+        m_loggedPluginRootFailure = false;
         return true;
     }
     if (!QDir().mkpath(m_pluginRoot)) {
-        if (!m_loggedPluginRoots.contains(m_pluginRoot)) {
+        if (!m_loggedPluginRootFailure) {
             qWarning() << "PluginLoader: failed to create plugin root" << m_pluginRoot
                        << "(subsequent rescans silently retry)";
-            m_loggedPluginRoots.insert(m_pluginRoot);
+            m_loggedPluginRootFailure = true;
         }
         return false;
     }
-    m_loggedPluginRoots.remove(m_pluginRoot);
+    m_loggedPluginRootFailure = false;
     return true;
 }
 
@@ -298,37 +300,61 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
         if (discoveredIds.contains(pluginId)) {
             continue;
         }
-        const auto it = m_plugins.constFind(pluginId);
-        if (it == m_plugins.constEnd()) {
-            // A previously-fired pluginUnloaded slot rebounded into
-            // a path that removed this entry. Skip it rather than
-            // dereffing a default-constructed shared_ptr. This is
-            // legitimate re-entry handling, not an error condition,
-            // so log at qDebug — qWarning would fire on the happy
-            // path every time a slot wired to pluginUnloaded calls
-            // rescanNow() and flood the journal.
-            //
-            // We don't also check `!it.value()`: loadPluginFromDir is
-            // the only code path that inserts into m_plugins, and it
-            // always stores a freshly-constructed std::make_shared
-            // (never null). A null-entry guard here would be dead
-            // defensive code masking a contract violation rather than
-            // catching one — if a future insert path landed a null
-            // shared_ptr we'd want a crash, not a silent skip.
-            qDebug() << "PluginLoader: plugin" << pluginId
-                     << "vanished mid-unload (rebound from prior signal slot); skipping";
-            continue;
-        }
-        // Move ownership out of the hash BEFORE any signal fires so
-        // a re-entrant slot can't observe the entry in two states.
-        std::shared_ptr<LoadedPlugin> entry = it.value();
-        m_plugins.remove(pluginId);
-        m_pinnedLibraries.push_back(std::move(entry->library));
-        m_registry->unregisterFactory(pluginId);
-        Q_EMIT pluginUnloaded(pluginId);
+        // shouldPin == true: surviving widgets produced by the now-
+        // gone factory need the .so to stay mapped until their
+        // parents tear them down (see LoadedPlugin's design note for
+        // the vtable-in-unmapped-.so crash class this defends
+        // against). unloadPlugin also fires pluginUnloaded here.
+        unloadPlugin(pluginId, /*shouldPin=*/true);
     }
 
     return watchedFiles;
+}
+
+bool PluginLoader::unloadPlugin(const QString& id, bool shouldPin)
+{
+    // Shared unload routine: both the dtor (shouldPin == false, no
+    // emit) and the per-rescan removal path (shouldPin == true,
+    // emit pluginUnloaded) route through here so the hash-erase →
+    // optionally-pin → unregister sequence can't drift between them.
+    const auto it = m_plugins.constFind(id);
+    if (it == m_plugins.constEnd()) {
+        // A previously-fired pluginUnloaded slot rebounded into a
+        // path that removed this entry. Skip it rather than
+        // dereffing a default-constructed shared_ptr. This is
+        // legitimate re-entry handling, not an error condition,
+        // so log at qDebug — qWarning would fire on the happy
+        // path every time a slot wired to pluginUnloaded calls
+        // rescanNow() and flood the journal.
+        //
+        // We don't also check `!it.value()`: loadPluginFromDir is
+        // the only code path that inserts into m_plugins, and it
+        // always stores a freshly-constructed std::make_shared
+        // (never null). A null-entry guard here would be dead
+        // defensive code masking a contract violation rather than
+        // catching one — if a future insert path landed a null
+        // shared_ptr we'd want a crash, not a silent skip.
+        qDebug() << "PluginLoader: plugin" << id << "vanished mid-unload (rebound from prior signal slot); skipping";
+        return false;
+    }
+    // Move ownership out of the hash BEFORE any signal fires so a
+    // re-entrant slot can't observe the entry in two states.
+    std::shared_ptr<LoadedPlugin> entry = it.value();
+    m_plugins.remove(id);
+    if (shouldPin) {
+        // Critical ordering: move the QLibrary into m_pinnedLibraries
+        // BEFORE the LoadedPlugin's shared_ptr last ref drops (and
+        // runs the factory's deleter). The factory's destructor and
+        // any of its vtable dispatch live inside the .so; if the
+        // QLibrary were unmapped first, that destructor call would
+        // jump into freed memory and segfault.
+        m_pinnedLibraries.push_back(std::move(entry->library));
+    }
+    m_registry->unregisterFactory(id);
+    if (shouldPin) {
+        Q_EMIT pluginUnloaded(id);
+    }
+    return true;
 }
 
 void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& parsedManifest)

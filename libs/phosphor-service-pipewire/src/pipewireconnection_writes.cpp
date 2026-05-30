@@ -204,6 +204,17 @@ void PipeWireConnection::Private::doParamWrite(const ParamWriteRequest& req)
 
 void PipeWireConnection::writeVolumes(quint32 nodeId, const QList<qreal>& volumes)
 {
+    // Reject empty volume lists at the API boundary. An empty list
+    // carries no observable channel update; dispatching it would wake
+    // the loop thread, hand a ParamWriteRequest through pw_loop_invoke,
+    // and have doParamWrite early-return on volumeCount == 0 — all of
+    // it pure overhead. Bail synchronously and log so a buggy caller
+    // (stale model snapshot, race against device removal) shows up in
+    // the trace.
+    if (volumes.isEmpty()) {
+        qCDebug(lcPipeWire) << "writeVolumes called with empty volume list for node" << nodeId << "; ignoring";
+        return;
+    }
     auto req = std::unique_ptr<Private::ParamWriteRequest>(new Private::ParamWriteRequest{
         .owner = d.get(),
         .nodeId = nodeId,

@@ -69,11 +69,17 @@ public:
     [[nodiscard]] quint32 channelCount() const;
     [[nodiscard]] QList<qreal> volumes() const;
     [[nodiscard]] bool muted() const;
+    /// @internal C++ callers only; not bindable from QML
+    /// (`QHash<QString, QString>` has no QML metatype, and the accessor
+    /// is intentionally neither Q_PROPERTY nor Q_INVOKABLE).
+    ///
     /// Full property hash (`node.name`, `application.name`,
-    /// `media.role`, ...). C++ callers only; QML should rely on the
-    /// named accessors above. Not exposed to QML — no Q_PROPERTY, no
-    /// Q_INVOKABLE, and `QHash<QString, QString>` is not a registered
-    /// metatype for QML bindings.
+    /// `media.role`, ...). QML should rely on the named accessors above
+    /// (`name`, `nick`, `description`, ...) for individual fields.
+    /// Lives in this block (above the QML-visible Q_PROPERTY getters)
+    /// rather than below them because it's grouped with the other
+    /// info-derived accessors it parallels — `name` / `nick` /
+    /// `description` are all surfaces of the same property hash.
     [[nodiscard]] QHash<QString, QString> properties() const;
 
     /// Typed accessor for the owning connection. PwNode's write slots
@@ -141,6 +147,12 @@ private:
     /// is automatic when the connection tears down. Private so only
     /// the friended connection can instantiate nodes — downstream
     /// code cannot fabricate nodes the registry never reported.
+    ///
+    /// `parent` is REQUIRED (asserted non-null in the ctor body): the
+    /// connection-as-parent relationship is the node's only lifetime
+    /// anchor. The `connection()` accessor downcasts `parent()` to a
+    /// `PipeWireConnection*` and `setVolumes` / `setMuted` route writes
+    /// through it; both would dereference null without the parent.
     PwNode(quint32 id, QString mediaClass, PipeWireConnection* parent);
 
     class Private;

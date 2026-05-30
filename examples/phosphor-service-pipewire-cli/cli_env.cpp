@@ -26,6 +26,10 @@ qreal envOverrideDouble(const char* name, qreal fallback)
     if (overrideEnv.isEmpty())
         return fallback;
     bool ok = false;
+    // POSIX env vars are byte strings; QString::fromUtf8 coerces
+    // malformed bytes to U+FFFD which parse-fails to ok=false, falling
+    // back to default. Acceptable behaviour — no diagnostic surface for
+    // malformed env values.
     const double v = QString::fromUtf8(overrideEnv).toDouble(&ok);
     return (ok && std::isfinite(v) && v > 0.0) ? v : fallback;
 }

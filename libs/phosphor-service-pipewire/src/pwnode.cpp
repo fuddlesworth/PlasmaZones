@@ -25,6 +25,15 @@ PwNode::PwNode(quint32 id, QString mediaClass, PipeWireConnection* parent)
     : QObject(parent)
     , d(std::make_unique<Private>())
 {
+    // Connection-as-parent contract: PwNode lifetime is tied to the
+    // owning PipeWireConnection via Qt's parent-child machinery (see
+    // header doc on the ctor). The only legal caller is
+    // PipeWireConnection::Private's loop→GUI bounce, which always
+    // hands `this` as the parent — a null parent would orphan the
+    // node and let it outlive the connection that vended it. Assert
+    // up front so any future caller that drops the contract crashes
+    // immediately rather than leaking the node.
+    Q_ASSERT(parent);
     d->id = id;
     d->mediaClass = std::move(mediaClass);
 }
