@@ -64,9 +64,10 @@ public:
 
     /// Trigger a Wi-Fi scan on every managed Wi-Fi device (NM
     /// `Device.Wireless.RequestScan`). Fire-and-forget; the scan refreshes
-    /// each device's access-point list daemon-side. Access-point surfacing
-    /// is a later milestone (see the lib README), so today this only kicks
-    /// the scan. No-op when no Wi-Fi device is present.
+    /// each device's access-point list daemon-side, which an
+    /// AccessPointModel bound to that device then surfaces (its rows
+    /// update as the daemon emits AccessPointAdded/Removed). No-op when no
+    /// Wi-Fi device is present.
     Q_INVOKABLE void scanWifi();
 
     /// Activate an existing saved connection on a device (NM

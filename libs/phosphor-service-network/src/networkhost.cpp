@@ -318,6 +318,15 @@ void NetworkHost::connectToAccessPoint(NetworkDevice* device, AccessPoint* acces
 {
     if (!device || !accessPoint || !d->bus.isConnected())
         return;
+    // A hidden-network AccessPoint legitimately reports an empty SSID, and a
+    // stale AP can carry an empty path; either would marshal a malformed
+    // 802-11-wireless profile that NetworkManager is bound to reject.
+    // Connecting to a hidden SSID needs an explicit name the AP can't supply
+    // here, so refuse at the boundary rather than fire a doomed call.
+    if (accessPoint->ssid().isEmpty() || accessPoint->dbusPath().isEmpty()) {
+        qCDebug(lcNetworkHost) << "connectToAccessPoint: refusing AP with empty SSID/path" << accessPoint->dbusPath();
+        return;
+    }
     ensureConnectionSettingsRegistered();
 
     // Minimal Wi-Fi profile. NM fills in uuid + the rest of the defaults;
