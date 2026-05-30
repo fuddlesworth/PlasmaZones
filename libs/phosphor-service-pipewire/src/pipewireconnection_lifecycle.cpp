@@ -416,9 +416,9 @@ PipeWireConnection::~PipeWireConnection()
 // request struct and routing it through the template. A negative rc
 // means the loop refused the post; surface it as a warning so the
 // failure isn't silently dropped, but keep the call shape simple. See
-// pipewireconnection_writes.cpp:80-90 for the rc < 0 rationale (it's the
-// same: pw_loop_invoke returns a non-negative seq on success or a
-// negative errno when the loop queue refuses the post).
+// submitLoopRequest in pipewireconnection_writes.cpp for the rc < 0
+// rationale (it's the same: pw_loop_invoke returns a non-negative seq
+// on success or a negative errno when the loop queue refuses the post).
 //
 // loopMutex scope: same TOCTOU window the destructor closes — a
 // spontaneous loop exit (libpipewire-internal error, daemon kill

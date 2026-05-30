@@ -453,13 +453,15 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& p
         }
         return;
     }
-    if (soFiles.size() > 1) {
+    if (soFiles.size() > 1 && shouldWarnForPluginDir(pluginDir)) {
         // Multiple .so files in one plugin directory is almost
         // certainly a packaging mistake. Surface it so the author
         // notices instead of silently picking the lexicographically
-        // first match. (Not latched: this path proceeds to load and
-        // the plugin is inserted into m_plugins, so the directory is
-        // skipped on subsequent rescans and the warning fires once.)
+        // first match. Latched: on a successful load the directory is
+        // skipped on later rescans anyway (m_plugins.contains), but if
+        // the picked .so fails downstream (corrupt, missing entry,
+        // id mismatch) the plugin is never inserted, so without the
+        // latch this would re-fire on every rescan.
         qWarning().noquote() << "PluginLoader:" << pluginDir << "contains" << soFiles.size() << ".so files; picking"
                              << soFiles.first() << "(deterministic by lexicographic order)";
     }

@@ -43,6 +43,7 @@ private Q_SLOTS:
     void rejectsAbiVersionMismatch();
     void rejectsPathTraversalId();
     void rejectsSymlinkedSoEscapingRoot();
+    void rejectsSymlinkedSubdirEscapingRoot();
     void rejectsGroupOrWorldWritableSo();
     void rejectsNullFactoryReturn();
     void rejectsPluginWithoutEntryPoint();
@@ -280,6 +281,39 @@ void TestPluginLoader::rejectsSymlinkedSoEscapingRoot()
     PluginLoader loader(&registry, pluginRoot);
     QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
     QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("no \\.so under")));
+    loader.scanAndLoad();
+
+    QCOMPARE(loadedSpy.count(), 0);
+    QCOMPARE(registry.size(), 0);
+    QVERIFY(loader.loadedPluginIds().isEmpty());
+}
+
+void TestPluginLoader::rejectsSymlinkedSubdirEscapingRoot()
+{
+    // The plugin root is user-writable; a symlinked plugin *directory*
+    // pointing at a tree outside the root would smuggle a whole plugin
+    // past the containment boundary if the loader followed it. The
+    // subdirectory enumeration uses QDir::NoSymLinks, so the symlinked
+    // directory is never even a discovery candidate.
+    QTemporaryDir tempDir;
+    QVERIFY(tempDir.isValid());
+    QTemporaryDir externalRoot; // deliberately OUTSIDE the plugin root
+    QVERIFY(externalRoot.isValid());
+
+    // A complete, valid plugin staged outside the plugin root.
+    QString externalPluginDir;
+    QVERIFY(installFakePlugin(externalRoot.path(), QStringLiteral("fake-plugin"), externalPluginDir));
+
+    // Symlink <root>/fake-plugin -> <external>/fake-plugin. Its basename
+    // matches the manifest id, so it WOULD load if symlinks were followed.
+    const QString pluginRoot = tempDir.path();
+    const QString linkPath = QDir(pluginRoot).absoluteFilePath(QStringLiteral("fake-plugin"));
+    QVERIFY(QFile::link(externalPluginDir, linkPath));
+    QVERIFY(QFileInfo(linkPath).isSymLink());
+
+    Registry<IBarWidgetFactory> registry;
+    PluginLoader loader(&registry, pluginRoot);
+    QSignalSpy loadedSpy(&loader, &PluginLoader::pluginLoaded);
     loader.scanAndLoad();
 
     QCOMPARE(loadedSpy.count(), 0);
