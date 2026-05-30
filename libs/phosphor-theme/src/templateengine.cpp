@@ -7,6 +7,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QLatin1String>
+#include <QLoggingCategory>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
 #include <QSaveFile>
@@ -14,6 +15,8 @@
 #include <QVariant>
 
 namespace PhosphorTheme {
+
+Q_LOGGING_CATEGORY(lcPhosphorTheme, "phosphor.theme")
 
 namespace {
 
@@ -82,8 +85,8 @@ QString renderToken(const QString& name, const QString& field, const QVariantMap
     // Unknown field: degrade to the default hex form. Logged so the
     // template author can spot the typo without the substitution
     // disappearing silently.
-    qWarning().noquote() << "phosphor-theme: unknown template field" << field << "on token" << name
-                         << ", falling back to hex";
+    qCWarning(lcPhosphorTheme).noquote() << "phosphor-theme: unknown template field" << field << "on token" << name
+                                         << ", falling back to hex";
     return c.name(QColor::HexRgb).toUpper();
 }
 
@@ -93,12 +96,18 @@ QString TemplateEngine::render(const QString& templateSource, const QVariantMap&
 {
     // Capture group 1 = token name (alnum + underscore).
     // Capture group 2 = optional field (alphabetic), without the dot.
+    // No UseUnicodePropertiesOption — the character classes are pure
+    // ASCII ([A-Za-z_], [A-Za-z0-9_], [A-Za-z]) so unicode-aware word
+    // semantics would buy nothing and pay a regex-engine cost.
     static const QRegularExpression re(
-        QStringLiteral(R"(\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\.\s*([A-Za-z]+))?\s*\}\})"),
-        QRegularExpression::UseUnicodePropertiesOption);
+        QStringLiteral(R"(\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\.\s*([A-Za-z]+))?\s*\}\})"));
 
     QString result;
-    result.reserve(templateSource.size());
+    // Reserve a generous bound: every expanded token typically renders
+    // to 7-16 chars (e.g. "#RRGGBBAA" or "255, 200, 100, 1.000") which
+    // is longer than the source placeholder. Avoid the per-append
+    // realloc storm by pre-reserving source + 16 × token-map size.
+    result.reserve(templateSource.size() + tokens.size() * 16);
 
     qsizetype cursor = 0;
     const QStringView source(templateSource);

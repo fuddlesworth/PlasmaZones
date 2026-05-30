@@ -154,6 +154,17 @@ Q_SIGNALS:
     // remains mapped — see the class-level Lifetime contract — so
     // widgets the plugin produced before removal stay valid until
     // their parents tear them down.
+    //
+    // Re-entry contract: slots wired to this signal MAY call
+    // rescanNow() (the const-find guard in unloadPlugin makes that
+    // safe), but doing so amplifies stack depth linearly with the
+    // size of the current removal batch — each remaining-to-unload
+    // plugin re-enters performScanCycle through the slot. For a
+    // desktop shell session this depth is bounded by the user's
+    // plugin churn (<100 typically), well under any sane stack
+    // budget; a slot that calls rescanNow unconditionally on every
+    // unload should add its own re-entry latch if the plugin
+    // population is unbounded.
     void pluginUnloaded(const QString& id);
 
 private:

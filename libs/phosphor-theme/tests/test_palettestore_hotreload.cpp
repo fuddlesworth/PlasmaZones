@@ -212,11 +212,14 @@ void TestPaletteStoreHotReload::hotReload_resetCancelsPendingDebounce()
     PaletteStore s;
     // Shrink the debounce window so the QTRY_VERIFY_WITH_TIMEOUT below
     // doesn't have to wait a full 80 ms after every fileChanged delivery.
-    // 1 ms gives the same coalescing semantics on a much tighter window —
-    // the production code's behaviour (timer-arm → reset stops timer →
-    // verify isActive returns false) is what we're pinning, not the
-    // exact ms count.
-    s.setDebounceIntervalForTest(1);
+    // 100 ms is well above QTRY_VERIFY's 50 ms poll interval (the timer
+    // is reliably observable as active during one poll), and far below
+    // the production 80 ms so the test still finishes in well under a
+    // second. The previous 1 ms was racy on busy CI runners — the timer
+    // could fire and clear isActive between QTRY_VERIFY polls, flaking
+    // the assertion. We're pinning timer-arm → reset stops timer →
+    // verify isActive returns false, not exact ms counts.
+    s.setDebounceIntervalForTest(100);
     QVERIFY(s.loadFromFile(path));
 
     // The debounce timer is parented to the store. We need it to verify

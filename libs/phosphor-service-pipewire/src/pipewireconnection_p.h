@@ -169,14 +169,13 @@ public:
     /// equality check, all of which execute on the PipeWire loop
     /// thread. Same lifetime model as the wedged flag below; no
     /// cross-thread synchronisation needed.
-private:
-    /// Implementation constant for the pendingSyncSeq sentinel.
-    /// Scoped private explicitly so it is consumed only via the
-    /// member callbacks above, never by external code reaching into
-    /// the pimpl through a header it shouldn't have seen.
+    ///
+    /// kNoPendingSync sentinel value: the previous code put it behind a
+    /// private:/public: scoping pair to "limit external reach", but
+    /// Private is itself a private nested class of PipeWireConnection
+    /// — no external TU can see this header. The scope guard was
+    /// protection theater; the constant is plain public for readability.
     static constexpr int kNoPendingSync = -1;
-
-public:
     int pendingSyncSeq = kNoPendingSync;
 
     /// Loop-thread flag: set by onCoreError when a core-level error

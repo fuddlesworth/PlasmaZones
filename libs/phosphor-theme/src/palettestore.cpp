@@ -704,9 +704,15 @@ bool PaletteStore::applyPalette(const QVariantMap& tokens)
     bool changed = false;
     for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
         QColor c;
-        if (it.value().userType() == QMetaType::QColor) {
+        const int type = it.value().userType();
+        if (type == QMetaType::QColor) {
             c = it.value().value<QColor>();
-        } else if (it.value().canConvert<QString>()) {
+        } else if (type == QMetaType::QString) {
+            // Narrow to QString rather than the broader canConvert<QString>:
+            // canConvert returns true for ints/doubles/bools/QDateTime etc.,
+            // each of which would round-trip through toString() into a
+            // QColor() construction that always fails — wasted work that
+            // obscures the producer's intent ("the value is a hex string").
             c = QColor(it.value().toString());
         }
         if (!c.isValid()) {

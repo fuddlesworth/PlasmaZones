@@ -163,9 +163,13 @@ generate_export_header(plasmazones_core
 # Layer-shell: implementation moved to PhosphorWayland library.
 # The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
+
+# All four TUs below are excluded from unity build:
+#   configdefaults.cpp — Settings PCH includes that conflict with unity macros
+#   drag.cpp / drag_protocol.cpp / drop.cpp — forward-declaration conflicts
+#     with the d-bus-adaptor-generated extern declarations across these TUs
 set_source_files_properties(
     config/configdefaults.cpp
-    # Exclude from unity build to avoid forward-declaration conflicts
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
@@ -570,10 +574,10 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/DeleteZoneCommand.h
     editor/undo/commands/UpdateZoneGeometryCommand.cpp
     editor/undo/commands/UpdateZoneGeometryCommand.h
-        editor/undo/commands/UpdateZoneNameCommand.cpp
-        editor/undo/commands/UpdateZoneNameCommand.h
-        editor/undo/commands/UpdateZoneNumberCommand.cpp
-        editor/undo/commands/UpdateZoneNumberCommand.h
+    editor/undo/commands/UpdateZoneNameCommand.cpp
+    editor/undo/commands/UpdateZoneNameCommand.h
+    editor/undo/commands/UpdateZoneNumberCommand.cpp
+    editor/undo/commands/UpdateZoneNumberCommand.h
     editor/undo/commands/UpdateZoneAppearanceCommand.cpp
     editor/undo/commands/UpdateZoneAppearanceCommand.h
     editor/undo/commands/DuplicateZoneCommand.cpp

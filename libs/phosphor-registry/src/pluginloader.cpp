@@ -193,6 +193,18 @@ int PluginLoader::liveWidgetCount(const QString& pluginId) const
 QString PluginLoader::resolveDefaultPluginRoot() const
 {
     const QString base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    if (base.isEmpty()) {
+        // No writable GenericDataLocation — XDG_DATA_HOME and HOME are
+        // both unset (unusual but possible in stripped containers /
+        // headless CI). Returning a relative "phosphor/plugins" would
+        // resolve against CWD at scan time, almost never what the shell
+        // wants. Return an empty sentinel; ensurePluginRootExists will
+        // refuse to mkpath an empty string and the loader stays inert
+        // rather than silently scanning CWD.
+        qWarning().noquote() << "PluginLoader: GenericDataLocation is empty (no XDG_DATA_HOME or HOME); "
+                                "plugin discovery disabled. Pass an explicit pluginRoot to the ctor.";
+        return QString();
+    }
     return QDir(base).filePath(QStringLiteral("phosphor/plugins"));
 }
 
@@ -217,6 +229,13 @@ bool PluginLoader::ensurePluginRootExists() const
     // the class contract. Promote to an atomic + update the class
     // docs in lockstep if any caller ever moves off-thread.
 
+    if (m_pluginRoot.isEmpty()) {
+        // resolveDefaultPluginRoot returned empty (no GenericDataLocation)
+        // — refuse cleanly rather than mkpath an empty string (which
+        // resolves to "" → CWD). The empty-path warning was already
+        // logged at construction time; stay silent here on every rescan.
+        return false;
+    }
     QDir dir(m_pluginRoot);
     if (dir.exists()) {
         m_loggedPluginRootFailure = false;
@@ -261,13 +280,27 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
                 qWarning().noquote() << "PluginLoader: refusing" << pluginDir << "—" << m.parseError;
                 continue;
             }
+            // Duplicate-id detection within this rescan cycle. Two
+            // distinct plugin directories shipping the same manifest id
+            // is a packaging-collision bug (typical cause: a user
+            // copied a plugin dir without renaming the id). The
+            // Registry-side warning only fires on registerFactory,
+            // which the second plugin never reaches because of the
+            // contains() short-circuit below — surface it here so a
+            // triager sees BOTH conflicting paths in the log instead of
+            // just the surviving one.
+            if (discoveredIds.contains(m.id)) {
+                qWarning().noquote() << "PluginLoader: duplicate manifest id" << m.id << "in" << pluginDir
+                                     << "— a sibling directory already shipped this id this rescan; skipping";
+                continue;
+            }
             discoveredIds.insert(m.id);
 
-            // Already loaded? Phase 1.3 does NOT honour in-place .so
-            // replacement (see LoadedPlugin's design note for the
-            // POSIX-dlopen-refcount rationale). The supported hot-
-            // reload path is directory add/remove. Subsequent
-            // rescans of an unchanged plugin are no-ops.
+            // Already loaded from a previous rescan? Phase 1.3 does NOT
+            // honour in-place .so replacement (see LoadedPlugin's
+            // design note for the POSIX-dlopen-refcount rationale).
+            // The supported hot-reload path is directory add/remove.
+            // Subsequent rescans of an unchanged plugin are no-ops.
             if (m_plugins.contains(m.id)) {
                 continue;
             }

@@ -147,10 +147,19 @@ public:
     /// Test-only: override the hot-reload debounce interval (default
     /// 80 ms). Lets test_palettestore_hotreload.cpp resolve QTRY-style
     /// polling in O(milliseconds) instead of waiting on the production
-    /// 80 ms window for every event. Production code never calls this;
-    /// the `ForTest` suffix is the project convention for test seams
-    /// (see DirectoryLoader::setDebounceIntervalForTest, etc.). Values
-    /// less than 1 ms are clamped to 1.
+    /// 80 ms window for every event. Values less than 1 ms are clamped
+    /// to 1.
+    ///
+    /// CONTRACT: the `ForTest` suffix is convention only — there is no
+    /// build-time guard preventing production code from calling this.
+    /// Production consumers MUST NOT touch this method; doing so
+    /// breaks the documented 80 ms coalescing behaviour relied on by
+    /// downstream shells. The method stays public (rather than
+    /// `friend class Test...`) because the test TU is built as a
+    /// separate executable and friend-class extension across CMake
+    /// targets is brittle. The `ForTest` suffix is the project
+    /// convention for this trade-off (see DirectoryLoader::
+    /// setDebounceIntervalForTest, etc.).
     void setDebounceIntervalForTest(int ms);
 
 Q_SIGNALS:
