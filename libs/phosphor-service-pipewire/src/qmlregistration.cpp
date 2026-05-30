@@ -11,6 +11,7 @@
 #include <QCoreApplication>
 #include <QLoggingCategory>
 #include <QQmlEngine>
+#include <QThread>
 
 #include <mutex>
 
@@ -97,17 +98,28 @@ void registerQmlTypes()
                 // (which is the documented Phosphor shell contract —
                 // engines are constructed in PhosphorShell::ShellEngine
                 // on the GUI thread).
+                Q_ASSERT(QThread::currentThread() == QCoreApplication::instance()->thread());
                 static PipeWireHost* hostPtr = nullptr;
                 static std::once_flag hostOnce;
                 std::call_once(hostOnce, [] {
-                    hostPtr = new PipeWireHost();
-                    // Parent to the app so Qt destroys the host
-                    // during app shutdown (before QCoreApplication's
-                    // own dtor), not at static-cleanup time when Qt
-                    // internals are gone.
-                    hostPtr->setParent(QCoreApplication::instance());
-                    QQmlEngine::setObjectOwnership(hostPtr, QQmlEngine::CppOwnership);
+                    // Parent to the app inline so the host is never
+                    // briefly parentless between `new` and a follow-up
+                    // setParent — the QObject ctor wires the
+                    // parent-child link atomically.
+                    hostPtr = new PipeWireHost(QCoreApplication::instance());
                 });
+                // setObjectOwnership lives OUTSIDE call_once: it is a
+                // per-engine policy registered against the
+                // engine-private QML metadata table, not against the
+                // QObject itself. The first engine's call_once-only
+                // pinning would leave any subsequent engine (think
+                // hot-reload spawning a fresh QQmlEngine) treating the
+                // shared host as JavaScriptOwnership — which would
+                // schedule a delete on engine teardown and yank the
+                // process-wide singleton out from under every other
+                // engine still alive. Repeating per-call is the
+                // documented Qt pattern for shared C++-owned QObjects.
+                QQmlEngine::setObjectOwnership(hostPtr, QQmlEngine::CppOwnership);
                 return hostPtr;
             });
     });

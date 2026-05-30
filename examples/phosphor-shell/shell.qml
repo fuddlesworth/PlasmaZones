@@ -148,9 +148,16 @@ Item {
             // idle = idle + iowait (matches the original awk formula).
             const idle = fields[3] + (fields[4] || 0);
             let total = 0;
+            // Mirrors the fields[3] guard above: any non-finite jiffy
+            // field means the kernel /proc/stat layout is broken, and a
+            // silent skip would parse a partial total and produce a
+            // drifting percent. Warn and early-return for visibility.
             for (const f of fields) {
-                if (Number.isFinite(f))
-                    total += f;
+                if (!Number.isFinite(f)) {
+                    console.warn("cpuStat: non-finite jiffy field encountered, skipping update (field=" + f + ")");
+                    return;
+                }
+                total += f;
             }
             if (!Number.isFinite(idle) || !Number.isFinite(total))
                 return;
@@ -210,7 +217,7 @@ Item {
             // /proc/meminfo, available would stay at 0 and the guard
             // below would yield a bogus 100% reading.
             if (foundAvailable && Number.isFinite(total) && Number.isFinite(available) && total > 0)
-                percent = Math.round((1 - available / total) * 100).toString();
+                percent = Math.max(0, Math.min(100, Math.round((1 - available / total) * 100))).toString();
         }
     }
 
@@ -258,10 +265,13 @@ Item {
         // QDateTime; passing a QDate to Qt.formatTime returns an empty
         // string. String.padStart handles the zero-fill cleanly.
         //
-        // Defensive floor on hours >= 0: SystemClock initialises its
-        // hours/minutes Q_PROPERTYs to -1 before its first tick, and a
-        // hot-reload can momentarily expose the pre-update state. The
-        // guard yields "" rather than flashing "-1:-1 · " on the panel.
+        // Defensive floor on hours >= 0: SystemClock's constructor
+        // populates hours/minutes synchronously via update(), so the
+        // pre-tick sentinels are never observable from QML in practice.
+        // This guard only triggers if QTime::currentDateTime() ever
+        // returns invalid, which it does not for any valid system time.
+        // Kept as defensive belt-and-braces against future SystemClock
+        // refactors that could defer the initial update().
         clockText: clock.hours >= 0 ? String(clock.hours).padStart(2, "0") + ":" + String(clock.minutes).padStart(2, "0") + " · " + Qt.formatDate(clock.date, Qt.locale().dateFormat(Locale.ShortFormat)) : ""
         cpuPercent: cpuStat.percent
         memPercent: memInfo.percent

@@ -71,6 +71,16 @@ PwNodeModel::~PwNodeModel()
     // would invite slots to read connection() after `d` has begun
     // unwinding. rebuildFromConnection(nullptr) drops every wire +
     // row without firing the property-NOTIFY signal.
+    //
+    // Subclass-override contract: rebuildFromConnection drives
+    // beginRemoveRows / endRemoveRows on `q` (this), so any future
+    // subclass that overrides those (or `index()` / `rowCount()`) must
+    // remain safe to call after subclass destruction has begun. The
+    // standard QAbstractListModel hooks are virtual-on-this; by the
+    // time ~PwNodeModel runs, the subclass dtor has already finished,
+    // so the vtable has been sliced back to PwNodeModel's. Subclasses
+    // that need teardown notifications should hook ~Subclass directly.
+    d->connection = nullptr;
     d->rebuildFromConnection(nullptr);
 }
 
@@ -143,11 +153,14 @@ void PwNodeModel::Private::rebuildFromConnection(PipeWireConnection* newConnecti
         q->endRemoveRows();
     }
 
-    // setConnection has already assigned d->connection and emitted
-    // connectionChanged when it called us; the dtor path assigns
-    // nullptr here directly. Either way, mirror the parameter so the
-    // rest of this function uses the same handle the caller passed.
-    connection = newConnection;
+    // setConnection has already assigned d->connection (the
+    // connectionChanged emit happens AFTER we return); the dtor path
+    // explicitly nulls d->connection before calling us. Either way,
+    // `connection` (the Private member, a QPointer<PipeWireConnection>)
+    // is already the post-mutation handle, so we don't re-assign it.
+    // `newConnection` is the same target — the assert documents that
+    // contract and would catch a future caller that diverges.
+    Q_ASSERT(connection.data() == newConnection);
 
     // Local wire-up helper: subscribe one PwNode to info / props
     // changes so the model emits dataChanged on the matching roles.
@@ -193,12 +206,12 @@ void PwNodeModel::Private::rebuildFromConnection(PipeWireConnection* newConnecti
             QObject::connect(connection.data(), &PipeWireConnection::nodeAdded, q, [this, wireNode](PwNode* node) {
                 if (!node || !mediaClasses.contains(node->mediaClass()))
                     return;
-                // Guard against a race window between connect() and
-                // the nodes() snapshot below: if nodeAdded fires for
-                // a node that's already in the snapshot we seed from,
-                // we'd double-insert without this check. rowIndex is
-                // the O(1) hash, so the lookup is cheap on the hot
-                // path even when the race doesn't happen.
+                // Defensive guard: nodeAdded is fired on the GUI
+                // thread, but if a future refactor moves the
+                // connection/snapshot read across a yielding boundary,
+                // this prevents double-insertion. rowIndex is the O(1)
+                // hash, so the lookup is cheap on the hot path even
+                // when no race window exists.
                 if (rowIndex.contains(node))
                     return;
                 const int row = nodes.size();
@@ -294,13 +307,23 @@ void PwNodeModel::setMediaClasses(const QStringList& classes)
     auto* current = d->connection.data();
     if (current) {
         d->rebuildFromConnection(current);
-    } else {
-        // No connection means no rows; rebuildFromConnection has
-        // nothing to re-seed from. Lock the invariant: whoever last
-        // detached this model (setConnection(nullptr) or the initial
-        // empty state) must have drained the row list, so a filter
-        // change with no connection cannot leave stragglers behind.
-        Q_ASSERT(d->nodes.isEmpty());
+    } else if (!d->nodes.isEmpty()) {
+        // QPointer guards against an external PipeWireConnection
+        // destruction that bypassed setConnection(nullptr): the
+        // tracked pointer has gone null but our rows still hold the
+        // (now-dangling) PwNode*s the connection owned. Drop them
+        // with a full model reset so views invalidate any cached
+        // index handles in one go, and clear the wire bookkeeping —
+        // every QMetaObject::Connection has already been
+        // auto-released by Qt when its source died, but the QHash
+        // entries themselves are stale and must be flushed.
+        beginResetModel();
+        d->nodes.clear();
+        d->rowIndex.clear();
+        d->nodeWires.clear();
+        d->connectionWires.clear();
+        endResetModel();
+        Q_EMIT countChanged();
     }
     Q_EMIT mediaClassesChanged();
 }

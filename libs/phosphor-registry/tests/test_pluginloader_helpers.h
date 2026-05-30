@@ -71,17 +71,17 @@ void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, 
 // callback has no `this` to capture, so the sink the handler
 // writes into has to be reachable via static storage. We route
 // that through a single static "active capture" pointer (set in
-// the ctor, cleared in the dtor) and hold the QStringList* sink
+// the ctor, restored in the dtor) and hold the QStringList* sink
 // reference on the instance, so the sink is folded into the
 // capture object itself rather than living as a separate file-
-// scope global. The prior-handler pointer is also instance state,
-// so nesting two captures is structurally safe — an outer scope's
-// destructor restores the handler that was live BEFORE the outer
-// scope opened, not whatever the inner scope happened to leave
-// behind. The Q_ASSERT in the ctor catches the only remaining
-// nesting hazard: two concurrent captures would clobber the
-// active-capture pointer and re-route the outer scope's captured
-// warnings into the inner scope's sink.
+// scope global. Nesting two captures is structurally safe: the
+// ctor saves whatever s_activeCapture was before it took over,
+// and the dtor restores that prior pointer — so an inner scope's
+// teardown hands control back to the outer scope's capture, not
+// to nullptr. The Q_ASSERT in the ctor remains in place as a
+// debug-build advisory that the test plan didn't intend to nest;
+// the runtime behaviour is correct either way thanks to the
+// save-and-restore.
 class WarningCapture
 {
 public:
@@ -89,13 +89,19 @@ public:
         : m_sink(&sink)
     {
         Q_ASSERT(s_activeCapture == nullptr);
+        m_priorActiveCapture = s_activeCapture;
         s_activeCapture = this;
         m_priorHandler = qInstallMessageHandler(warningCapturingHandler);
     }
     ~WarningCapture()
     {
         qInstallMessageHandler(m_priorHandler);
-        s_activeCapture = nullptr;
+        // Restore the capture that was active before this scope
+        // opened (typically nullptr; an outer WarningCapture if
+        // a test ever nests them). Unconditional nulling would
+        // strand the outer scope's captured warnings on the floor
+        // for the rest of its lifetime.
+        s_activeCapture = m_priorActiveCapture;
     }
     Q_DISABLE_COPY_MOVE(WarningCapture)
 
@@ -112,28 +118,42 @@ public:
 private:
     // Single-active pointer the C-style message-handler callback
     // chains through to invoke the saved prior handler and write
-    // into the caller-owned sink. Set in the ctor, cleared in the
-    // dtor — the matching Q_ASSERT in the ctor guarantees nesting
-    // can't quietly swap the active capture out from under the
-    // outer scope. Kept private so the only access path is through
-    // the friended handler below; tests must use the WarningCapture
-    // RAII scope to interact with it. `inline` so the header can be
-    // included from multiple TUs in the same executable without an
-    // ODR violation.
+    // into the caller-owned sink. Set in the ctor, restored to
+    // the prior value in the dtor — nesting is structurally safe
+    // because each instance remembers what was active before it
+    // and hands control back on destruction. Kept private so the
+    // only access path is through the friended handler below;
+    // tests must use the WarningCapture RAII scope to interact
+    // with it. `inline` so the header can be included from
+    // multiple TUs in the same executable without an ODR violation.
     inline static WarningCapture* s_activeCapture = nullptr;
     QtMessageHandler m_priorHandler = nullptr;
     QStringList* m_sink = nullptr;
+    WarningCapture* m_priorActiveCapture = nullptr;
 
     friend void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, const QString& message);
 };
 
 inline void warningCapturingHandler(QtMsgType type, const QMessageLogContext& context, const QString& message)
 {
-    if (type == QtWarningMsg && WarningCapture::s_activeCapture && WarningCapture::s_activeCapture->sink()) {
-        WarningCapture::s_activeCapture->sink()->append(message);
+    // Snapshot s_activeCapture once at entry. Two reads of the
+    // global mid-handler would be vulnerable to a (hypothetical)
+    // re-entrant install/uninstall between the type-check and the
+    // chain-call: capture-as-nullptr after the type-check would
+    // skip the sink append, then we would still try to invoke the
+    // prior handler via the same now-stale pointer on the next
+    // read — or vice versa. PluginLoader tests are GUI-thread-only
+    // so this is more about correctness clarity than thread safety,
+    // but a single read makes the control flow obviously consistent.
+    WarningCapture* const active = WarningCapture::s_activeCapture;
+    if (!active) {
+        return;
     }
-    if (WarningCapture::s_activeCapture && WarningCapture::s_activeCapture->priorHandler()) {
-        WarningCapture::s_activeCapture->priorHandler()(type, context, message);
+    if (type == QtWarningMsg && active->sink()) {
+        active->sink()->append(message);
+    }
+    if (active->priorHandler()) {
+        active->priorHandler()(type, context, message);
     }
 }
 

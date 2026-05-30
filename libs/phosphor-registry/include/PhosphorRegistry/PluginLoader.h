@@ -178,7 +178,14 @@ private:
     // should keep per-file watches on.
     QStringList performScanCycle(const QStringList& directoriesInScanOrder);
 
-    void loadPluginFromDir(const QString& pluginDir);
+    // The manifest is parsed by performScanCycle (which inspects
+    // every candidate directory's manifest.json to gather the
+    // discovered-id set) and then handed in here. Threading the
+    // parsed Manifest through avoids re-running Manifest::parse on
+    // the same file twice per discovery cycle — once during
+    // enumeration and once during per-plugin load — which would
+    // otherwise double the I/O cost of every scan.
+    void loadPluginFromDir(const QString& pluginDir, const Manifest& manifest);
 
     // Non-owning. Caller guarantees lifetime per the ctor contract.
     // Cannot use QPointer because Registry<T> is not a QObject (the

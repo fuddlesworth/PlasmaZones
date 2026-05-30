@@ -38,8 +38,10 @@ private Q_SLOTS:
         conn.disconnectFromDaemon();
         // Process any queued events from the loop thread to make sure
         // a misbehaving doDisconnect doesn't leak signals into the GUI
-        // queue.
-        QTest::qWait(50);
+        // queue. 200ms covers a slow CI host's scheduler latency; the
+        // no-op path itself is fast (synchronous early-out + no thread
+        // wakeup), so the extra budget is pure margin, not a contract.
+        QTest::qWait(200);
 
         QCOMPARE(connSpy.count(), 0);
         QCOMPARE(availSpy.count(), 0);
@@ -55,11 +57,23 @@ private Q_SLOTS:
     void connectIdempotent()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
+        // Baseline: connectedChanged must not fire from construction
+        // alone. Without this, a regression that flipped the property
+        // at construction would silently pass the post-connect bound
+        // (count <= 1) because we'd never observe the second flip.
+        QSignalSpy constructionSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged);
+        QCOMPARE(constructionSpy.count(), 0);
         QSignalSpy connectedSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged);
         conn.connectToDaemon();
         conn.connectToDaemon();
         conn.connectToDaemon();
-        QTest::qWait(100);
+        // 100ms was tight on slow CI hosts where the scheduler delays
+        // the connected-true emission past the wait boundary, letting
+        // the test pass for the wrong reason (we asserted "count <= 1"
+        // before the daemon had a chance to land the single legitimate
+        // flip). 2000ms matches kDefaultConnectTimeoutMs so a connected
+        // daemon has the full handshake budget to land its one flip.
+        QTest::qWait(2000);
         QVERIFY2(connectedSpy.count() <= 1,
                  qPrintable(QStringLiteral("connectedChanged fired %1 times").arg(connectedSpy.count())));
     }
@@ -131,12 +145,23 @@ private Q_SLOTS:
             // because the daemon may add or remove nodes mid-shutdown
             // (a hot-plugged USB sink, a Firefox stream ending) and
             // exact-equality would flake on a live host.
+            //
+            // Snapshot the spy count BEFORE the disconnect so the
+            // post-disconnect delta isn't inflated (or masked) by any
+            // pre-disconnect removals: a node that legitimately
+            // disappeared during the handshake (USB sink unplugged
+            // between connect and disconnect) would otherwise count
+            // toward expectedRemovals, hiding a regression where the
+            // disconnect path fired one fewer than expected.
             const int expectedRemovals = nodes.size();
+            const int removedBeforeDisconnect = removedSpy.count();
             conn.disconnectFromDaemon();
             QTest::qWait(150);
-            QVERIFY2(
-                removedSpy.count() >= expectedRemovals,
-                qPrintable(QStringLiteral("removed %1, expected >= %2").arg(removedSpy.count()).arg(expectedRemovals)));
+            const int disconnectDrivenRemovals = removedSpy.count() - removedBeforeDisconnect;
+            QVERIFY2(disconnectDrivenRemovals >= expectedRemovals,
+                     qPrintable(QStringLiteral("disconnect-driven removed %1, expected >= %2")
+                                    .arg(disconnectDrivenRemovals)
+                                    .arg(expectedRemovals)));
             QCOMPARE(conn.nodes().size(), 0);
         } else {
             // No daemon — confirm the absence is graceful: no nodes,
@@ -285,21 +310,29 @@ private Q_SLOTS:
                          "subsequent known-good write produced no propsChanged echo (silent-swallow regression?)");
                 // Restore the previous mute state so this test is
                 // side-effect-clean for the developer host. Wait for
-                // the restore echo too so the next test starts from a
-                // settled state rather than a fire-and-forget write
-                // that might still be in flight.
-                const int beforeRestore = propsSpy.count();
+                // the restore to take effect by polling the observable
+                // state (sink->muted() == !flipTo) instead of counting
+                // propsChanged emissions: a parallel propsChanged from
+                // a competing session manager can inflate the spy
+                // counter without our restore write ever landing, and
+                // conversely the daemon may coalesce our restore into
+                // an existing in-flight emission so the count delta is
+                // unreliable either way.
                 sink->setMuted(!flipTo);
-                if (propsSpy.count() == beforeRestore)
-                    propsSpy.wait(500);
+                QElapsedTimer restoreTimer;
+                restoreTimer.start();
+                while (sink->muted() != !flipTo && restoreTimer.elapsed() < 500) {
+                    propsSpy.wait(50);
+                }
                 // Restore is best-effort cleanup: if a competing session
                 // manager re-flipped the mute state between our restore
-                // write and the echo wait, we'd see no echo even though
-                // the original write path works. Log instead of failing
-                // so the test's actual contract (the known-good write
-                // echoes) isn't dragged down by cleanup flakiness.
-                if (propsSpy.count() <= beforeRestore) {
-                    QWARN("restore write produced no propsChanged echo (cleanup may have left dirty state)");
+                // write and the echo wait, the observable state may
+                // disagree with our write even though the write path
+                // works. Log instead of failing so the test's actual
+                // contract (the known-good write echoes) isn't dragged
+                // down by cleanup flakiness.
+                if (sink->muted() != !flipTo) {
+                    QWARN("restore write did not converge to requested mute state (cleanup may have left dirty state)");
                 }
             }
             // No sink available (rare: a connected daemon with zero
@@ -325,8 +358,14 @@ private Q_SLOTS:
         // changes without reaching for `.connection.connected`.
         QSignalSpy connSpy(&host, &PhosphorServicePipeWire::PipeWireHost::connectedChanged);
         QSignalSpy availSpy(&host, &PhosphorServicePipeWire::PipeWireHost::daemonAvailableChanged);
-        // Host construction kicked off connectToDaemon() — give it a moment.
-        QTest::qWait(250);
+        // Host construction kicked off connectToDaemon() — give it the
+        // full connect-timeout budget (matching kDefaultConnectTimeoutMs)
+        // so the handshake has every chance to land before we decide a
+        // daemon isn't present. The previous 250ms was tight enough that
+        // a slow-boot host could race the wait boundary and flip the
+        // test into the QSKIP branch even though the daemon was just
+        // about to answer.
+        QTest::qWait(2000);
         if (!host.isConnected()) {
             // Surface a real skip in the CI dashboard rather than a
             // silent fallthrough; a "no-daemon" run looks identical to a
@@ -412,6 +451,18 @@ private Q_SLOTS:
             QVERIFY2(mc == QLatin1String("Stream/Output/Audio") || mc == QLatin1String("Stream/Input/Audio"),
                      qPrintable(mc));
         }
+        // Positive assertion: on a connected daemon the sinks model
+        // must surface at least one row. A connected PipeWire instance
+        // always carries a default audio sink, so a zero-row result
+        // here means setConnection() snapshotted before any nodes had
+        // arrived and the model isn't observing later registry adds —
+        // a regression the row-by-row loops above would silently miss
+        // (an empty model trivially satisfies every "matches filter"
+        // assertion). Streams and sources can legitimately be zero on
+        // a quiet host with no input devices, so we only pin sinks.
+        QVERIFY2(sinks.rowCount() > 0,
+                 qPrintable(QStringLiteral("PwSinkModel observed zero sinks on a connected daemon — likely a "
+                                           "setConnection snapshot regression that ignores later registry adds")));
     }
 
     /// Pin the pre-connect empty-defaults baseline plus the
@@ -469,13 +520,16 @@ private Q_SLOTS:
         QSignalSpy removedSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::nodeRemoved);
         conn.connectToDaemon();
         QTest::qWait(250);
-        const int trackedBeforeDisconnect = conn.nodes().size();
-        // Snapshot the removed-count BEFORE disconnect so we can assert
-        // the disconnect-driven delta. A pre-disconnect spurious
-        // nodeRemoved (a node legitimately going away during the
-        // handshake) would otherwise be counted against the
-        // disconnect-driven removals and mask a regression.
+        // Snapshot the removed-count FIRST, then the tracked-node count.
+        // The opposite order leaves a window where a spurious nodeRemoved
+        // arriving between the two reads would simultaneously drop a
+        // node from `trackedBeforeDisconnect` AND get folded into
+        // `removedBeforeDisconnect`, masking the disconnect-driven
+        // removal count. Reading the spy first ensures any spurious
+        // removal counted in the baseline is also reflected in the
+        // tracked snapshot we compare against.
         const int removedBeforeDisconnect = removedSpy.count();
+        const int trackedBeforeDisconnect = conn.nodes().size();
         conn.disconnectFromDaemon();
         QTest::qWait(150);
         // Every node that was being tracked at disconnect time must

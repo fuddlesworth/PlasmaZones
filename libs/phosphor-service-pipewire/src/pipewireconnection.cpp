@@ -122,7 +122,9 @@ QHash<QString, QString> propsFromDict(const struct spa_dict* dict)
 } // namespace detail
 
 // LoopThread::run lives in pipewireconnection_lifecycle.cpp alongside
-// the rest of the connect/disconnect state machine it drives.
+// the rest of the connect/disconnect state machine it drives. See the
+// file-top doc block in pipewireconnection_lifecycle.cpp for the full
+// inventory of definitions extracted into that TU.
 
 const pw_core_events PipeWireConnection::Private::kCoreEvents = {
     .version = PW_VERSION_CORE_EVENTS,

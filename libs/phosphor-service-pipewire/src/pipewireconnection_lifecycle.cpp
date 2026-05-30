@@ -47,8 +47,22 @@ void PipeWireConnection::Private::LoopThread::run()
     // Tear down any remaining loop-owned state on the loop thread, in
     // the correct order, before exit. doDisconnect is idempotent.
     owner->doDisconnect();
-    pw_main_loop_destroy(createdLoop);
-    owner->loop.store(nullptr, std::memory_order_release);
+    // Destroy + null-store happen under loopMutex so a destructor
+    // racing a spontaneous loop exit (libpipewire-internal error,
+    // daemon kill mid-run) cannot observe a non-null `loop` pointer
+    // and then call pw_main_loop_quit on freed memory. The destructor
+    // holds the same mutex across its load+quit pair, so either it
+    // sees the loop alive and quits it before we destroy, or it sees
+    // null and skips the quit entirely. Without the mutex, the
+    // release-store-after-destroy below would also be a TOCTOU UAF
+    // window even if we ordered store-before-destroy — the destructor
+    // could still grab the pointer post-store-pre-destroy. The lock
+    // is the only correct serialiser.
+    {
+        QMutexLocker locker(&owner->loopMutex);
+        pw_main_loop_destroy(createdLoop);
+        owner->loop.store(nullptr, std::memory_order_release);
+    }
 }
 
 void PipeWireConnection::Private::doConnect()
@@ -191,13 +205,15 @@ void PipeWireConnection::Private::doConnect()
 void PipeWireConnection::Private::doDisconnect()
 {
     // Tear down per-node state before the registry / core so the
-    // listener removals run while the proxy + core still exist.
+    // listener removals run while the proxy + core still exist. We
+    // skip clearing entry->proxy because the loopNodes.clear() call
+    // immediately below destroys the owning unique_ptr, freeing the
+    // LoopNode storage — the write would be a dead store.
     for (auto& kv : loopNodes) {
         auto& entry = kv.second;
         if (entry && entry->proxy) {
             spa_hook_remove(&entry->nodeListener);
             pw_proxy_destroy(entry->proxy);
-            entry->proxy = nullptr;
         }
     }
     loopNodes.clear();
@@ -285,15 +301,28 @@ PipeWireConnection::PipeWireConnection(QObject* parent)
 
 PipeWireConnection::~PipeWireConnection()
 {
-    if (pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire)) {
-        // pw_main_loop_quit is MT-safe (it routes through
-        // pw_loop_signal_event internally) so we can call it from the
-        // GUI thread directly. The loop thread's run() body picks up
-        // the quit, tears down any remaining state via doDisconnect,
-        // and exits. Quitting before the loop has started running is
-        // also safe: pw_main_loop records the request and exits on
-        // entry to pw_main_loop_run.
-        pw_main_loop_quit(mainLoop);
+    // Short-circuit when the worker has already self-exited: with
+    // isRunning() == false we know LoopThread::run has progressed past
+    // its mutex-guarded destroy+null-store and there's no live loop to
+    // quit. Avoids taking loopMutex in the common shutdown case where
+    // the worker is already gone.
+    if (d->thread.isRunning()) {
+        // Hold loopMutex across BOTH the load AND the quit so the
+        // worker thread cannot destroy the loop between those two
+        // operations. Without the mutex, a spontaneous loop exit
+        // (libpipewire-internal error, daemon kill mid-run) lets the
+        // worker race through doDisconnect + pw_main_loop_destroy
+        // after we load the pointer but before we call quit on it —
+        // classic TOCTOU UAF. The matching lock in LoopThread::run
+        // makes the load+quit pair atomic w.r.t. destroy+null-store.
+        // pw_main_loop_quit itself is MT-safe (routes through
+        // pw_loop_signal_event internally); quitting before the loop
+        // has started running is also safe — pw_main_loop records
+        // the request and exits on entry to pw_main_loop_run.
+        QMutexLocker locker(&d->loopMutex);
+        if (pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire)) {
+            pw_main_loop_quit(mainLoop);
+        }
     }
     if (!d->thread.wait(5000)) {
         // FATAL-BY-DESIGN: a stuck pw_main_loop_run means libpipewire
@@ -336,16 +365,20 @@ PipeWireConnection::~PipeWireConnection()
     QCoreApplication::removePostedEvents(this);
 }
 
+// connectToDaemon / disconnectFromDaemon bypass submitLoopRequest because
+// they carry no payload (no heap request, no ownership handoff), so the
+// 2-line direct pw_loop_invoke call is clearer than constructing an
+// empty request struct and routing it through the template. A negative
+// rc means the loop refused the post; surface it as a warning so the
+// failure isn't silently dropped, but keep the call shape simple. See
+// pipewireconnection_writes.cpp:80-90 for the rc < 0 rationale (it's the
+// same: pw_loop_invoke returns a non-negative seq on success or a
+// negative errno when the loop queue refuses the post).
 void PipeWireConnection::connectToDaemon()
 {
     pw_main_loop* mainLoop = d->loop.load(std::memory_order_acquire);
     if (!d->thread.isRunning() || !mainLoop)
         return;
-    // connectToDaemon/disconnectFromDaemon bypass submitLoopRequest
-    // because they carry no payload (no heap request, no ownership
-    // handoff). A negative rc means the loop refused the post; surface
-    // it as a warning so the failure isn't silently dropped, but keep
-    // the call shape simple.
     const int rc =
         pw_loop_invoke(pw_main_loop_get_loop(mainLoop), &Private::dispatchConnect, 0, nullptr, 0, false, d.get());
     if (rc < 0)

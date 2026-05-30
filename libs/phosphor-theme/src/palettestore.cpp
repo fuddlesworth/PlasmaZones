@@ -179,14 +179,23 @@ QColor PaletteStore::token(const QString& name) const
 // the wrapped `tokens` key is non-object, or the token map yields
 // no usable colors, a previously file-loaded store still sees its
 // watcher armed and sourcePath populated when this returns false.
-// We achieve that by extracting + validating the payload up-front
-// AND deferring dropWatcherAndClearSourcePath until AFTER the merge
-// has been committed via applyPalette. The single extractValidTokens
+// We achieve that by extracting + validating the payload up-front,
+// then committing in two ordered steps once success is irrevocable:
+// (1) dropWatcherAndClearSourcePath emits sourcePathChanged, (2)
+// applyPalette emits paletteChanged. The single extractValidTokens
 // call is reused for the merge step so the validator and the merger
-// see the exact same byte sequence (no double-parse), and the watcher
-// teardown happens last so any abort point before it leaves observable
-// state untouched — no Q_ASSERT-only divergence risk between debug
-// and release.
+// see the exact same byte sequence (no double-parse).
+//
+// Signal-order convention: sourcePathChanged BEFORE paletteChanged
+// matches resetToDefaults + loadFromFile. QML bindings that read
+// both reach a coherent state on the first re-evaluation (new
+// source against the new palette) instead of palette-against-stale-
+// source on the first tick and only catching up on the second.
+// Atomicity is preserved: extractValidTokens + the empty-map check
+// have already committed success when control reaches the two
+// emit-side helpers, and neither one can fail (applyPalette is a
+// pure in-memory merge, dropWatcherAndClearSourcePath is QFileSystemWatcher
+// removePaths + a string clear).
 bool PaletteStore::loadFromJson(const QByteArray& json)
 {
     QJsonParseError err{};
@@ -203,19 +212,29 @@ bool PaletteStore::loadFromJson(const QByteArray& json)
     if (extractErr != ApplyResult::Ok) {
         return false;
     }
+    // Defence-in-depth against an extractValidTokens contract bug:
+    // shapeError == Ok must imply a payload exists. Keep the assert
+    // for debug-build clarity AND an explicit early-out so a release
+    // build can't deref a default-constructed optional if the
+    // invariant ever drifts.
     Q_ASSERT(parsed.has_value());
+    if (!parsed) {
+        return false;
+    }
     if (parsed->isEmpty()) {
         return false;
     }
 
-    // Merge first; only on success do we tear down the watcher and
-    // clear the source path. applyPalette is a pure in-memory merge
-    // that cannot fail, so by the time control reaches the watcher
-    // teardown the new tokens are already committed and the
-    // atomic-on-failure contract holds without leaning on a debug-only
-    // assert to catch divergence.
-    applyPalette(*parsed);
+    // Success is committed. Fire sourcePathChanged BEFORE
+    // paletteChanged to match the resetToDefaults / loadFromFile
+    // ordering convention (QML bindings see the new source on the
+    // same tick that brings the new palette). Neither call can fail
+    // — dropWatcherAndClearSourcePath only mutates watcher state +
+    // m_sourcePath, and applyPalette is a pure in-memory merge —
+    // so the atomic-on-failure contract for the public API holds:
+    // every error path returns above this line.
     dropWatcherAndClearSourcePath();
+    applyPalette(*parsed);
     return true;
 }
 
@@ -328,7 +347,17 @@ PaletteStore::ApplyResult PaletteStore::applyParsedJson(const QJsonDocument& doc
     if (err != ApplyResult::Ok) {
         return err;
     }
+    // Defence-in-depth: shapeError == Ok must imply a payload
+    // exists. Keep the assert for debug-build clarity AND an
+    // explicit early-out so a release build can't deref a default-
+    // constructed optional if extractValidTokens' contract ever
+    // drifts. NoUsableTokens is the closest existing variant
+    // (the no-payload case is observationally identical to
+    // "shape was fine, contents had nothing usable").
     Q_ASSERT(parsed.has_value());
+    if (!parsed) {
+        return ApplyResult::NoUsableTokens;
+    }
     if (parsed->isEmpty()) {
         return ApplyResult::NoUsableTokens;
     }
@@ -415,6 +444,15 @@ bool PaletteStore::loadFromFile(const QString& path)
     // When the prior path fails to canonicalise (it was unlinked)
     // the raw string is used as a deterministic fallback so the
     // comparison still terminates.
+    //
+    // Edge case (acknowledged, not addressed): a symlink that
+    // re-points to a NEW target between load and the current call,
+    // with the OLD target's path passed in, will now resolve to the
+    // new target's canonical path and read as a path move. There is
+    // no way to detect "symlink stayed at same target" from path
+    // strings alone post-rewrite; treating it as a move drops and
+    // re-arms the watcher, which is the safer behaviour anyway
+    // (the new target is what the user is actually editing).
     const QString currentCanonical = m_sourcePath.isEmpty() ? QString() : QFileInfo(m_sourcePath).canonicalFilePath();
     const QString currentForCompare = currentCanonical.isEmpty() ? m_sourcePath : currentCanonical;
     const bool sourcePathMoved = (currentForCompare != absolutePath);

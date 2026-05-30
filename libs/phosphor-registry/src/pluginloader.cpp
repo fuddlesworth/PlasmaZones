@@ -243,7 +243,14 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
             if (m_plugins.contains(m.id)) {
                 continue;
             }
-            loadPluginFromDir(pluginDir);
+            // Hand the already-parsed Manifest through to avoid a
+            // second Manifest::parse pass inside loadPluginFromDir
+            // — the file has not changed on disk between the parse
+            // above and the load call below, so re-reading it would
+            // just duplicate work (and risk a transient parse-
+            // failure-on-second-read flake if the file is being
+            // edited concurrently).
+            loadPluginFromDir(pluginDir, m);
         }
     }
 
@@ -308,7 +315,7 @@ QStringList PluginLoader::performScanCycle(const QStringList& directoriesInScanO
     return watchedFiles;
 }
 
-void PluginLoader::loadPluginFromDir(const QString& pluginDir)
+void PluginLoader::loadPluginFromDir(const QString& pluginDir, const Manifest& parsedManifest)
 {
     QDir dir(pluginDir);
     // QDir::Name forces lexicographic sort so the "first" pick is
@@ -333,13 +340,20 @@ void PluginLoader::loadPluginFromDir(const QString& pluginDir)
                              << soFiles.first() << "(deterministic by lexicographic order)";
     }
     const QString libraryPath = dir.absoluteFilePath(soFiles.first());
-    const QString manifestPath = dir.absoluteFilePath(QStringLiteral("manifest.json"));
 
-    Manifest manifest = Manifest::parse(manifestPath, pluginDir);
-    if (!manifest.isValid) {
-        qWarning().noquote() << "PluginLoader: invalid manifest at" << manifestPath << "—" << manifest.parseError;
+    // performScanCycle has already validated the manifest before
+    // reaching us — the only caller — so an invalid one here would
+    // be a contract violation by a future second caller. Guard
+    // anyway so a stray invalid Manifest can't load a .so against
+    // a placeholder id. The libraryPath field is the one piece
+    // performScanCycle doesn't know about (it discovers the .so
+    // here), so populate it onto a local copy before storing.
+    if (!parsedManifest.isValid) {
+        qWarning().noquote() << "PluginLoader: refusing" << pluginDir
+                             << "— manifest invalid:" << parsedManifest.parseError;
         return;
     }
+    Manifest manifest = parsedManifest;
     manifest.libraryPath = libraryPath;
 
     auto library = std::make_unique<QLibrary>(libraryPath);

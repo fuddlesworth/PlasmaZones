@@ -31,6 +31,14 @@ Item {
     // (parent set to null), not restored to its prior parent. Callers
     // handing in a pre-built Item should expect to give up its
     // parenting.
+    //
+    // Contract: the component's (or contentItem's) root MUST set
+    // implicitWidth and implicitHeight. The contentLoader inside
+    // contentFrame uses `anchors.fill: parent` (so the loaded item
+    // sees a sized parent for anchors-based layouts), and contentFrame
+    // sizes itself from the delegate's implicitWidth/implicitHeight.
+    // A delegate without implicit sizes collapses contentFrame to 0x0
+    // and the popout renders empty.
     property Component contentComponent: null
     property Item contentItem: null
     // Open state. Driving this from false to true plays the open
@@ -148,6 +156,19 @@ Item {
     // partially torn-down object - QML's child destruction order is
     // not guaranteed to outlive this handler). Treat the handler as
     // bookkeeping-only.
+    //
+    // The destruction-time emission is synchronous with the slot
+    // dispatch: any handler reading host-side state (or state any
+    // sibling QObject of the host owns whose teardown ordering is
+    // entangled with the host's) is reading partially-torn-down
+    // memory. Transports that connect to dismissed MUST ensure their
+    // handler is strictly stateless w.r.t. the host - capture
+    // everything the handler needs in the closure at connect time
+    // (transport id, bookkeeping handle), and never dereference the
+    // host or its children from inside the handler. The single signal
+    // signature (no fromDestruction argument) is deliberate: branching
+    // on the path inside the handler would tempt callers into the
+    // exact re-entrance the warning above forbids.
     Component.onDestruction: {
         if (dismissLatch.everOpened && !dismissLatch.dismissedFired) {
             dismissEmitter.stop();
@@ -245,6 +266,18 @@ Item {
         // or the Loader's instantiation of contentComponent. Read by
         // the size bindings below so the frame matches the delegate's
         // intrinsic size without re-evaluating the resolution twice.
+        //
+        // Transient null window: when contentItem is reassigned from a
+        // non-null value to null, contentLoader.active flips true only
+        // after this binding re-evaluates, so for one binding tick
+        // _visibleDelegate is null and contentFrame collapses to 0x0.
+        // The same is true on initial construction before the Loader
+        // instantiates. Both transients are masked by the opacity
+        // Behavior (frame stays invisible while open=false); the next
+        // binding evaluation inflates the frame before opacity reaches
+        // 1. Eagerly preloading the Loader (active: contentComponent
+        // !== null) would close the window but at the cost of building
+        // a delegate the host may never display.
         readonly property Item _visibleDelegate: root.contentItem ?? contentLoader.item
 
         function rebindContentItem() {
@@ -260,8 +293,17 @@ Item {
             // which is occasionally intentional (transport tear-down)
             // but more often a contract slip.
             if (_lastBound && _lastBound !== root.contentItem) {
-                if (_lastBound.parent === contentFrame)
+                if (_lastBound.parent === contentFrame) {
                     _lastBound.parent = null;
+                } else {
+                    // _lastBound was tracked here as the bound item, but
+                    // its parent has drifted away from contentFrame -
+                    // some external code reparented it without going
+                    // through the host. Warn parallel to the non-host-
+                    // parent warn below so both directions of ownership
+                    // drift surface in the log.
+                    console.warn("PopoutHost.rebindContentItem: _lastBound parent drifted from contentFrame (parent=", _lastBound.parent, "); skipping detach to avoid stealing from a new owner");
+                }
                 if (!root.contentItem)
                     console.warn("PopoutHost.rebindContentItem: contentItem set to null while a previous item was bound; detaching without successor");
             }

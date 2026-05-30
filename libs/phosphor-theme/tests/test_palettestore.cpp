@@ -26,6 +26,7 @@ private Q_SLOTS:
     void loadFromJson_mergesNotReplaces();
     void loadFromJson_rejectsInvalidPayload();
     void loadFromJson_failedAfterFileLoadPreservesSourcePath();
+    void loadFromJson_signalOrderIsSourceBeforePalette();
     void loadFromJson_rejectsWrappedTokensWithNonObjectValue();
     void loadFromFile_persistsSourcePath();
     void loadFromFile_emitsErrorOnMissingFile();
@@ -180,6 +181,48 @@ void TestPaletteStore::loadFromJson_failedAfterFileLoadPreservesSourcePath()
 
     // Palette tokens that were committed by the file load survive.
     QCOMPARE(s.token(QStringLiteral("primary")), QColor("#112233"));
+}
+
+void TestPaletteStore::loadFromJson_signalOrderIsSourceBeforePalette()
+{
+    // Pin loadFromJson's signal ordering: when the call drops a
+    // previously-watched source AND mutates the palette, QML
+    // bindings must observe sourcePathChanged FIRST and then
+    // paletteChanged. Mirrors resetToDefaults_signalOrderIsSourceBeforePalette
+    // — the rationale is identical (a binding reading both reaches
+    // the new-source / new-palette pair on the first re-evaluation
+    // instead of palette-against-stale-source on the first tick and
+    // only catching up on the second). A previous implementation
+    // ran applyPalette BEFORE dropWatcherAndClearSourcePath, which
+    // emitted the signals in the opposite order: a regression here
+    // would resurface that bug.
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath(QStringLiteral("p.json"));
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({"tokens": {"primary": "#abcdef"}})");
+    }
+    PaletteStore s;
+    QVERIFY(s.loadFromFile(path));
+
+    QStringList signalOrder;
+    QObject::connect(&s, &PaletteStore::paletteChanged, &s, [&signalOrder] {
+        signalOrder.append(QStringLiteral("paletteChanged"));
+    });
+    QObject::connect(&s, &PaletteStore::sourcePathChanged, &s, [&signalOrder] {
+        signalOrder.append(QStringLiteral("sourcePathChanged"));
+    });
+
+    // Apply a new in-process palette via JSON blob. The store had a
+    // file source from loadFromFile above, so the loadFromJson call
+    // must (a) drop the watcher + clear m_sourcePath (firing
+    // sourcePathChanged) and (b) apply the new palette (firing
+    // paletteChanged) — in that order.
+    QVERIFY(s.loadFromJson(R"({"tokens": {"primary": "#000000"}})"));
+
+    QCOMPARE(signalOrder, (QStringList{QStringLiteral("sourcePathChanged"), QStringLiteral("paletteChanged")}));
 }
 
 void TestPaletteStore::loadFromFile_persistsSourcePath()

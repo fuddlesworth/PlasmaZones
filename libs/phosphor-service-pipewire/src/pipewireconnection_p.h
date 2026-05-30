@@ -7,6 +7,7 @@
 
 #include <QHash>
 #include <QLoggingCategory>
+#include <QMutex>
 #include <QSemaphore>
 #include <QString>
 #include <QThread>
@@ -91,6 +92,27 @@ public:
     /// acquire/release ordering so the GUI thread either sees the fully
     /// constructed loop or null — never a half-published pointer.
     std::atomic<pw_main_loop*> loop{nullptr};
+
+    /// Loop-thread mutex guarding the lifetime of `loop`. The worker
+    /// destroys the loop and stores nullptr under this lock; the GUI
+    /// destructor acquires the same lock before reading-and-using the
+    /// pointer, so a self-exit race cannot leave the destructor with a
+    /// stale dangling pointer.
+    ///
+    /// Why the std::atomic above is not sufficient on its own: the
+    /// atomic ensures the GUI thread reads either null or a fully
+    /// published pointer — never a half-written one. It does NOT
+    /// serialise the GUI thread's load+use sequence against the
+    /// worker's destroy+store sequence. If `pw_main_loop_run` exits on
+    /// its own (libpipewire-internal error, daemon kill mid-run), the
+    /// worker can race ahead through `doDisconnect` +
+    /// `pw_main_loop_destroy(createdLoop)` between the destructor's
+    /// load and its `pw_main_loop_quit` call, producing a use-after-
+    /// free on the freshly-destroyed loop. This mutex closes that
+    /// TOCTOU window: the worker holds it across destroy+store-null,
+    /// and the destructor holds it across load+quit.
+    QMutex loopMutex;
+
     pw_context* context = nullptr;
     pw_core* core = nullptr;
     pw_registry* registry = nullptr;
@@ -122,8 +144,11 @@ public:
     /// sentinel PipeWire never emits, since pw_core seq numbers are
     /// non-negative) so an unrelated seq=0 done event arriving before
     /// our sync request landed cannot be misread as our handshake.
-    /// Reset back to the sentinel on disconnect and on sync-submission
-    /// failure.
+    /// Reset back to the sentinel on disconnect, on sync-submission
+    /// failure, and on every doConnect failure path that aborts before
+    /// the sync request lands (pw_context_new failure, pw_context_connect
+    /// failure) so a subsequent reconnect attempt cannot resurrect a
+    /// stale seq from a torn-down handshake.
     ///
     /// Loop-thread only — written from doConnect and the core
     /// callbacks (onCoreDone, onCoreError) and read from onCoreDone's

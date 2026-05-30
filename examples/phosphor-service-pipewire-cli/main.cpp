@@ -70,6 +70,10 @@ QTextStream& err()
 //   70  internal software error (e.g., maintainer-introduced dispatch gap
 //       where a command was added to knownCommands without a matching
 //       dispatch arm). Matches BSD sysexits.h EX_SOFTWARE.
+//
+// Always returns 64 (EX_USAGE) so callers can `return usage();` from
+// any error-detection arm without re-stating the exit code at every
+// call site.
 int usage()
 {
     err() << "usage: phosphor-service-pipewire-cli <command> [args]\n"
@@ -97,10 +101,10 @@ int usage()
           << "  64  usage error (bad/missing arguments)\n"
           << "  70  internal software error (e.g., maintainer-introduced dispatch gap)\n"
           << "\n"
-          << "env overrides (positive int ms; malformed values fall back to defaults):\n"
-          << "  PHOSPHOR_PW_CONNECT_TIMEOUT_MS         daemon-connect timeout       (default 2000)\n"
-          << "  PHOSPHOR_PW_POST_WRITE_SETTLE_MS       volume/mute echo deadline    (default 200)\n"
-          << "  PHOSPHOR_PW_POST_METADATA_SETTLE_MS    set-default echo deadline    (default 500)\n"
+          << "env overrides (malformed values fall back to defaults):\n"
+          << "  PHOSPHOR_PW_CONNECT_TIMEOUT_MS         daemon-connect timeout       (positive int ms, default 2000)\n"
+          << "  PHOSPHOR_PW_POST_WRITE_SETTLE_MS       volume/mute echo deadline    (positive int ms, default 200)\n"
+          << "  PHOSPHOR_PW_POST_METADATA_SETTLE_MS    set-default echo deadline    (positive int ms, default 500)\n"
           << "  PHOSPHOR_PW_VOLUME_ECHO_EPSILON        set-volume echo tolerance    (positive double, default 0.01)\n";
     return 64; // EX_USAGE
 }
@@ -223,11 +227,16 @@ PhosphorServicePipeWire::PwNode* resolveTarget(PhosphorServicePipeWire::PipeWire
     // Reject any input containing internal whitespace: " 55" would
     // otherwise toUInt() to 55 silently, and "alsa output" is never a
     // valid node.name anyway. We accept leading/trailing whitespace by
-    // trimming first.
+    // trimming first. Per-char QChar::isSpace() covers the full Unicode
+    // whitespace set so an exotic spec like "alsa output" (NBSP)
+    // or one containing a U+2028 line separator is also rejected; a
+    // narrow space/tab-only check would silently let those through.
     const QString trimmed = spec.trimmed();
-    if (trimmed.contains(QChar::Space) || trimmed.contains(QLatin1Char('\t'))) {
-        err() << "target '" << spec << "' contains whitespace\n";
-        return nullptr;
+    for (const QChar ch : trimmed) {
+        if (ch.isSpace()) {
+            err() << "target '" << spec << "' contains whitespace\n";
+            return nullptr;
+        }
     }
     bool isNumeric = false;
     const uint id = trimmed.toUInt(&isNumeric);
@@ -344,27 +353,38 @@ int cmdDefault(PhosphorServicePipeWire::PipeWireConnection& conn)
 
 /// Wait for a `propsChanged` echo from `node` and verify the predicate
 /// holds. Returns true once the predicate is satisfied within
-/// `timeoutMs`, false on timeout. Unrelated emissions (a parallel app
-/// tweaking volume, a periodic heartbeat) only cause the loop to
-/// re-check the predicate; the wait continues until the predicate
-/// matches or the deadline elapses. `label` is used for the timeout
-/// diagnostic on stderr.
+/// `timeoutMs`, false on timeout or mid-wait removal. Unrelated
+/// emissions (a parallel app tweaking volume, a periodic heartbeat)
+/// only cause the loop to re-check the predicate; the wait continues
+/// until the predicate matches or the deadline elapses. `label` is used
+/// for the failure diagnostic on stderr.
 ///
 /// The `node` handle is guarded by QPointer so a daemon-side node
 /// removal mid-write cleanly breaks the loop instead of leaving the
-/// lambda calling methods on a dangling pointer.
+/// lambda calling methods on a dangling pointer. Callers MUST also
+/// guard any references they capture in their predicate (otherwise the
+/// predicate itself dereferences a dangling pointer); the canonical
+/// pattern is to copy a `QPointer<PwNode>` into the predicate capture
+/// and null-check it before dereferencing.
 ///
 /// After the deadline elapses we run the predicate one final time so a
 /// late echo that landed during the disconnect / loop-exit window is
 /// still caught. This mirrors waitForString's post-deadline
 /// `accessor() == expected` final read (the guard handling differs:
 /// waitForString has no guarded receiver).
+///
+/// On failure the diagnostic distinguishes "node removed mid-wait"
+/// (guard null at deadline) from a plain timeout — the two cases call
+/// for different operator action (re-list the registry vs. raise the
+/// echo budget), and a unified "timed out" message obscured that.
 bool waitForPropsEchoAndVerify(PhosphorServicePipeWire::PwNode* node, const std::function<bool()>& predicate,
                                int timeoutMs, const char* label)
 {
     QPointer<PhosphorServicePipeWire::PwNode> guard(node);
-    if (!guard)
+    if (!guard) {
+        err() << label << ": node removed before wait started\n";
         return false;
+    }
     if (predicate())
         return true;
     QElapsedTimer timer;
@@ -397,7 +417,10 @@ bool waitForPropsEchoAndVerify(PhosphorServicePipeWire::PwNode* node, const std:
     // timeout even though the daemon committed the value.
     if (guard && predicate())
         return true;
-    err() << label << ": timed out waiting for propsChanged echo (" << timeoutMs << "ms)\n";
+    if (!guard)
+        err() << label << ": node removed during wait\n";
+    else
+        err() << label << ": timed out waiting for propsChanged echo (" << timeoutMs << "ms)\n";
     return false;
 }
 
@@ -415,6 +438,15 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
         err() << "no node matches target '" << target << "'\n";
         return 1;
     }
+    // Snapshot id + name BEFORE issuing the write. id is a CONSTANT
+    // property on PwNode and name is effectively constant for the
+    // lifetime of the node, but the node itself can be removed by the
+    // daemon mid-wait — reading either via the raw pointer after the
+    // wait would be UB. The snapshots let us emit complete diagnostics
+    // (including which node we tried to write) even if the node went
+    // away while we were waiting for the echo.
+    const uint nodeId = node->id();
+    const QString nodeName = node->name();
     // Map 0..100 to linear amplitude 0.0..1.0. PipeWire's
     // SPA_PROP_channelVolumes domain is bounded at 1.0 (full scale).
     // Cubic / perceptual conversion is a UI concern (curves live in a
@@ -434,9 +466,17 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
     // this, `node->volumes()` re-read after the wait could show a
     // divergent snapshot (e.g. another channel updated between match
     // and read) that doesn't reflect what we actually saw match.
+    //
+    // QPointer-guard the node capture so a daemon-side removal mid-wait
+    // doesn't leave the predicate dereferencing a dangling pointer —
+    // waitForPropsEchoAndVerify guards its own internal receiver
+    // similarly but cannot reach into the caller's capture list.
+    QPointer<PhosphorServicePipeWire::PwNode> nodePtr(node);
     QList<qreal> matchedVolumes;
-    const auto matchesRequest = [node, linear, volumeEpsilon, &matchedVolumes]() {
-        const auto echoed = node->volumes();
+    const auto matchesRequest = [nodePtr, linear, volumeEpsilon, &matchedVolumes]() {
+        if (!nodePtr)
+            return false;
+        const auto echoed = nodePtr->volumes();
         if (echoed.isEmpty())
             return false;
         for (const qreal v : echoed) {
@@ -448,11 +488,19 @@ int cmdSetVolume(PhosphorServicePipeWire::PipeWireConnection& conn, const QStrin
     };
     node->setVolume(linear);
     const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, postWriteSettleMs(), "set-volume");
-    // On match, print the captured matched snapshot; on timeout, fall
-    // back to the current live snapshot so the diagnostic still shows
-    // what the daemon currently exposes.
-    const QList<qreal> echoedVolumes = echoed ? matchedVolumes : node->volumes();
-    out() << "set node " << node->id() << " (" << node->name() << ") volume = " << QString::number(linear, 'f', 3)
+    // On match, print the captured matched snapshot. On timeout AND
+    // the node is still alive, fall back to the live volumes so the
+    // diagnostic shows what the daemon currently exposes. On timeout
+    // AND the node has been removed mid-wait, reading volumes() would
+    // be UB — leave the echoed list empty and downstream printing will
+    // surface an empty `[]` alongside the "node removed during wait"
+    // diagnostic that waitForPropsEchoAndVerify already emitted.
+    QList<qreal> echoedVolumes;
+    if (echoed)
+        echoedVolumes = matchedVolumes;
+    else if (nodePtr)
+        echoedVolumes = nodePtr->volumes();
+    out() << "set node " << nodeId << " (" << nodeName << ") volume = " << QString::number(linear, 'f', 3)
           << " (linear), echoed = [";
     for (int i = 0; i < echoedVolumes.size(); ++i) {
         if (i > 0)
@@ -474,6 +522,15 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
         err() << "no node matches target '" << target << "'\n";
         return 1;
     }
+    // Snapshot id + name BEFORE issuing the write. id is a CONSTANT
+    // property on PwNode and name is effectively constant for the
+    // lifetime of the node, but the node itself can be removed by the
+    // daemon mid-wait — reading either via the raw pointer after the
+    // wait would be UB. The snapshots let us emit complete diagnostics
+    // (including which node we tried to write) even if the node went
+    // away while we were waiting for the echo.
+    const uint nodeId = node->id();
+    const QString nodeName = node->name();
     // Hook the echo wait BEFORE issuing the write so we can confirm
     // PipeWire actually committed the new mute state; otherwise the
     // CLI returns success even when the write was silently dropped.
@@ -481,8 +538,16 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
     // The predicate narrows to muted == requested, so on success the
     // observed mute state is by definition equal to the requested
     // value. No need to capture a separate snapshot.
-    const auto matchesRequest = [node, muted]() {
-        return node->muted() == muted;
+    //
+    // QPointer-guard the node capture so a daemon-side removal mid-wait
+    // doesn't leave the predicate dereferencing a dangling pointer —
+    // waitForPropsEchoAndVerify guards its own internal receiver
+    // similarly but cannot reach into the caller's capture list.
+    QPointer<PhosphorServicePipeWire::PwNode> nodePtr(node);
+    const auto matchesRequest = [nodePtr, muted]() {
+        if (!nodePtr)
+            return false;
+        return nodePtr->muted() == muted;
     };
     node->setMuted(muted);
     // Shares postWriteSettleMs() with set-volume: both ride the same
@@ -493,8 +558,22 @@ int cmdMute(PhosphorServicePipeWire::PipeWireConnection& conn, const QString& ta
     // the predicate, which is acceptable because the observable
     // end-state is what we contracted for.
     const bool echoed = waitForPropsEchoAndVerify(node, matchesRequest, postWriteSettleMs(), "mute");
-    const bool echoedMuted = echoed ? muted : node->muted();
-    out() << "set node " << node->id() << " (" << node->name() << ") muted = " << (muted ? "true" : "false")
+    // On match, the predicate guarantees observed == requested. On
+    // timeout AND the node is still alive, read the live mute state so
+    // the diagnostic shows what the daemon currently exposes. On
+    // timeout AND the node has been removed mid-wait, reading muted()
+    // would be UB — surface the requested value (the same value that
+    // wouldn't echo) so the diagnostic stays self-consistent alongside
+    // the "node removed during wait" message that
+    // waitForPropsEchoAndVerify already emitted.
+    bool echoedMuted;
+    if (echoed)
+        echoedMuted = muted;
+    else if (nodePtr)
+        echoedMuted = nodePtr->muted();
+    else
+        echoedMuted = muted;
+    out() << "set node " << nodeId << " (" << nodeName << ") muted = " << (muted ? "true" : "false")
           << ", echoed = " << (echoedMuted ? "true" : "false") << "\n";
     // On timeout, waitForPropsEchoAndVerify already logged the timeout
     // diagnostic; we just route through rc=1 to surface the failure.
@@ -598,7 +677,11 @@ int cmdSetDefault(PhosphorServicePipeWire::PipeWireConnection& conn, const QStri
     // scripts can detect partial application.
     const int deadlineMs = postMetadataSettleMs();
     if (!waitForString(conn, changedSignal, accessor, name, deadlineMs)) {
-        err() << label << ": timed out waiting for WirePlumber echo (" << deadlineMs << "ms)\n";
+        // Include the requested name in the diagnostic so operators can
+        // tell which write was waiting: a parallel session manager
+        // racing on the same default would otherwise produce a
+        // diagnostic indistinguishable from a slow WirePlumber.
+        err() << label << ": timed out waiting for WirePlumber echo of '" << name << "' (" << deadlineMs << "ms)\n";
         return 1;
     }
     out() << "set " << label << " = " << name << "\n";
@@ -610,9 +693,19 @@ int cmdSetDefault(PhosphorServicePipeWire::PipeWireConnection& conn, const QStri
 /// destructor handles teardown safely on its own, but routing through
 /// disconnectFromDaemon() first makes the teardown order deterministic
 /// for the metadata/volume write paths the CLI exercises.
+///
+/// When the connection never reached the connected state (the connect
+/// timeout path), there is no in-flight write to flush, so the settle
+/// window is pure overhead. Skip it in that case — the disconnect
+/// itself is a documented no-op pre-connect, and tools that probe a
+/// no-daemon host should return promptly rather than burning 50ms of
+/// idle wait on every failed connect.
 void cleanShutdown(PhosphorServicePipeWire::PipeWireConnection& conn)
 {
+    const bool wasConnected = conn.isConnected();
     conn.disconnectFromDaemon();
+    if (!wasConnected)
+        return;
     QEventLoop loop;
     QTimer::singleShot(kDefaultShutdownSettleMs, &loop, &QEventLoop::quit);
     loop.exec();
@@ -691,9 +784,14 @@ int main(int argc, char** argv)
     } else if (cmd == QLatin1String("set-volume")) {
         // Arg-count was validated pre-connect; only the parse can fail
         // here. A non-numeric pct is a usage error, not a runtime one.
+        // Surface the offending token before routing through usage() so
+        // the user sees what went wrong instead of just the full help
+        // wall — usage() alone makes a "set-volume sink abc" typo look
+        // identical to "set-volume" with no args at all.
         bool okPct = false;
         const double pct = args.at(3).toDouble(&okPct);
         if (!okPct) {
+            err() << "set-volume pct must be a number, got '" << args.at(3) << "'\n";
             cleanShutdown(conn);
             return usage();
         }

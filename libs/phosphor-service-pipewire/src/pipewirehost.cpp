@@ -36,21 +36,12 @@ PipeWireHost::PipeWireHost(QObject* parent)
     d->connection->connectToDaemon();
 }
 
-PipeWireHost::~PipeWireHost()
-{
-    // Symmetric with the ctor's connectToDaemon() call: explicitly
-    // tear down the daemon connection before Private (and the
-    // PipeWireConnection it owns) unwinds. Letting `= default` rely on
-    // ~PipeWireConnection to do the disconnect implicitly mixes
-    // destructor-order quirks (PipeWire loop thread teardown vs the
-    // QObject signal table) with reasoning about exit paths;
-    // disconnecting here keeps the lifecycle visibly paired with the
-    // ctor's connectToDaemon() and means signal observers see a clean
-    // disconnect-then-destroy sequence on shutdown.
-    if (d->connection) {
-        d->connection->disconnectFromDaemon();
-    }
-}
+// Default dtor: ~PipeWireConnection (invoked when Private unwinds via
+// the unique_ptr) handles the disconnect contract — it calls
+// pw_main_loop_quit and the loop thread's run() invokes doDisconnect on
+// exit. Adding an explicit disconnectFromDaemon() here would only
+// double up that teardown.
+PipeWireHost::~PipeWireHost() = default;
 
 PipeWireConnection* PipeWireHost::connection() const
 {
