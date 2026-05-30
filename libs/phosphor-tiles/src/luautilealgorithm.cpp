@@ -365,8 +365,12 @@ bool LuauTileAlgorithm::isUserScript() const noexcept
 QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QRect& area) const
 {
     QVariantMap ctx;
+    // New ergonomic names (count/gap) plus the JS-compatible names
+    // (windowCount/innerGap) the faithfully-ported bundled algorithms use.
     ctx[QStringLiteral("count")] = params.windowCount;
+    ctx[QStringLiteral("windowCount")] = params.windowCount;
     ctx[QStringLiteral("gap")] = std::max(0, params.innerGap);
+    ctx[QStringLiteral("innerGap")] = std::max(0, params.innerGap);
 
     QVariantMap areaMap;
     areaMap[QStringLiteral("x")] = area.x();

@@ -149,6 +149,13 @@ target_compile_definitions(test_luau_tile_algorithm PRIVATE "PZ_LUAU_TEST_DIR=\"
 target_link_libraries(test_luau_tile_algorithm PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
 add_test(NAME test_luau_tile_algorithm COMMAND test_luau_tile_algorithm)
 
+# Golden parity harness: ported Luau algorithms vs the prior JS engine.
+add_executable(test_luau_parity scripting/test_luau_parity.cpp)
+set_target_properties(test_luau_parity PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_parity PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_luau_parity PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_parity COMMAND test_luau_parity)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile Engine Tests (core, master, minsize, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
