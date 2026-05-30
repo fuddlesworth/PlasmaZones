@@ -39,6 +39,11 @@ void AccessPointModel::setDevice(NetworkDevice* device)
         unsubscribe();
         disconnect(m_device, nullptr, this, nullptr);
     }
+    // Detach before clearRows(): its model-reset signals can re-enter
+    // consumer code (proxy models, QML delegates), which must observe the
+    // detached state rather than the device being unbound. This mirrors the
+    // device-destroyed handler below, which documents the same ordering.
+    m_device = nullptr;
     clearRows();
     m_device = device;
     if (m_device) {

@@ -30,7 +30,8 @@ class PHOSPHORSERVICENETWORK_EXPORT NetworkDevice : public QObject
 public:
     // Mirrors org.freedesktop.NetworkManager.Device `DeviceType` (NM 1.0+,
     // see NetworkManager's NMDeviceType). Values are wire constants; the
-    // enum is sparse (3 and 4 are unused upstream, and the table jumps to
+    // enum is sparse (3 and 4 are unused upstream, and NM's OVS/WPAN/6LoWPAN
+    // types at 24-28 are intentionally not modelled, so the table ends at
     // Wireguard=29). Unrecognised raw values map to Unknown rather than
     // casting to an enumerator we don't declare.
     enum DeviceType {

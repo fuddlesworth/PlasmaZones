@@ -238,6 +238,15 @@ int cmdListOrScanAps(bool triggerScan)
 
 int cmdConnect(const QString& ssid, const QString& passphrase)
 {
+    // Mirror the library's WPA-PSK boundary (an 8-63 character passphrase or
+    // a 64-character hex PSK). connectToAccessPoint silently drops an
+    // out-of-range secret, so reject it here with a clear message rather
+    // than pump for 4s and falsely report "activation requested".
+    if (!passphrase.isEmpty() && (passphrase.size() < 8 || passphrase.size() > 64)) {
+        err() << "passphrase must be 8-63 characters (or a 64-character hex PSK)\n";
+        err().flush();
+        return 64;
+    }
     NetworkHost host;
     pump(1500);
     auto* wifi = firstWifiDevice(host);
