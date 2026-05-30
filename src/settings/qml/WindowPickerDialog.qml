@@ -195,7 +195,7 @@ Kirigami.Dialog {
             id: searchField
 
             Layout.fillWidth: true
-            placeholderText: i18n("Filter...")
+            placeholderText: i18n("Filter…")
         }
 
         Kirigami.Separator {

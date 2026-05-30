@@ -207,6 +207,81 @@ private Q_SLOTS:
         }
     }
 
+    void testExcludeAnimationsRulesFrom_emptySource()
+    {
+        const WindowRuleSet source;
+        const WindowRuleSet sliced = ER::excludeAnimationsRulesFrom(source);
+        QVERIFY(sliced.isEmpty());
+    }
+
+    void testExcludeAnimationsRulesFrom_preservesIdsPriorityAndMatch()
+    {
+        // Parity with testExcludeRulesFrom_preservesIdsPriorityAndMatch —
+        // both slicers dispatch through the same file-local rulesWithAction
+        // helper, so a regression in priority/id/match preservation could
+        // only affect one of them through a future divergence. Pin
+        // independently so the contract risk stays symmetric.
+        WindowRuleSet source;
+        WindowRule a =
+            makeRule(QStringLiteral("anim-pri"), /*priority=*/175,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("steam")),
+                     {excludeAnimationsActionInstance()});
+        QVERIFY(source.addRule(a));
+
+        const WindowRuleSet sliced = ER::excludeAnimationsRulesFrom(source);
+        QCOMPARE(sliced.count(), 1);
+        const WindowRule out = sliced.rules().first();
+        QCOMPARE(out.id, a.id);
+        QCOMPARE(out.priority, 175);
+        QCOMPARE(out.match.kind(), MatchExpression::Kind::Leaf);
+        QCOMPARE(out.match.predicate().field, Field::WindowClass);
+        QCOMPARE(out.match.predicate().op, Operator::Contains);
+        QCOMPARE(out.match.predicate().value.toString(), QStringLiteral("steam"));
+    }
+
+    void testExcludeAnimationsRulesFrom_keepsMultiActionRuleWhenAnyMatches()
+    {
+        // Parity with the snap-side multi-action test — a rule carrying
+        // Float + ExcludeAnimations still appears in the animations slice
+        // because the action-type filter matches on ANY action's type.
+        WindowRuleSet source;
+        WindowRule multi =
+            makeRule(QStringLiteral("multi-anim"), 0,
+                     MatchExpression::makeLeaf(Field::WindowClass, Operator::Contains, QStringLiteral("firefox")),
+                     {floatAction(), excludeAnimationsActionInstance()});
+        QVERIFY(source.addRule(multi));
+
+        const WindowRuleSet sliced = ER::excludeAnimationsRulesFrom(source);
+        QCOMPARE(sliced.count(), 1);
+        QVERIFY(containsRuleId(sliced, multi.id));
+    }
+
+    void testSlicers_ruleWithBothExcludeAndExcludeAnimationsAppearsInBothSlices()
+    {
+        // The migration produces rules with exactly one of Exclude /
+        // ExcludeAnimations, but the WindowRule schema doesn't forbid a
+        // hand-authored rule carrying BOTH on the same `actions` list.
+        // The current contract: a multi-action rule with both action
+        // types appears in BOTH slices. Pin this so a future "disjoint
+        // slices" optimisation can't silently change the resolution
+        // shape — that change would have to update this assertion AND
+        // gate one of the slicers / action validator to refuse the
+        // combination on input.
+        WindowRuleSet source;
+        WindowRule both =
+            makeRule(QStringLiteral("both"), 0,
+                     MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("firefox")),
+                     {excludeAction(), excludeAnimationsActionInstance()});
+        QVERIFY(source.addRule(both));
+
+        const WindowRuleSet snapSlice = ER::excludeRulesFrom(source);
+        const WindowRuleSet animSlice = ER::excludeAnimationsRulesFrom(source);
+        QCOMPARE(snapSlice.count(), 1);
+        QCOMPARE(animSlice.count(), 1);
+        QVERIFY(containsRuleId(snapSlice, both.id));
+        QVERIFY(containsRuleId(animSlice, both.id));
+    }
+
     void testExcludeAnimationsRulesFrom_skipsDisabledRules()
     {
         // Same disabled-skip contract as the snap slicer above.

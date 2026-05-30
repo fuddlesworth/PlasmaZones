@@ -26,7 +26,6 @@
 #include <PhosphorSnapEngine/SnapState.h>
 
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
-#include <PhosphorSnapEngine/ISnapSettings.h>
 #include <PhosphorZones/Layout.h>
 
 #include <PhosphorWindowRule/RuleEvaluator.h>
@@ -35,7 +34,6 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include "snapenginelogging.h"
 #include <PhosphorScreens/Manager.h>
-#include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -255,6 +253,13 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
                                   QString(), ctx.screenId);
         return;
     }
+    // m_snapState is set by SnapEngine's ctor as a Qt-child; the
+    // de-reference at line ~285 (`m_snapState->screenAssignments()`)
+    // would otherwise be the first thing to crash if a future refactor
+    // moves m_snapState ownership to a delegated setter that can leave
+    // it null. The Q_ASSERT documents the invariant so a future code
+    // change has to acknowledge it.
+    Q_ASSERT(m_snapState);
     if (direction.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_direction"), QString(),
                                   QString(), ctx.screenId);
@@ -411,6 +416,7 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
 
 void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
 {
+    Q_ASSERT(m_snapState);
     qCInfo(PhosphorSnapEngine::lcSnapEngine) << "SnapEngine::toggleFocusedFloat";
     if (!m_windowTracker) {
         Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("engine_unavailable"), QString(),

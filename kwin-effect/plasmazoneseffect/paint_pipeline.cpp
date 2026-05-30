@@ -870,11 +870,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // `endShaderTransition` on the successor and kill it before
             // it ever paints. Mirrors the timer-driven teardown pattern
             // in `tryBeginShaderForEvent`'s post-install QTimer::singleShot.
-            // Pointer `st` was obtained earlier in this function and no
-            // intervening code mutates `m_shaderManager`'s transition map,
-            // so the read is safe. The assertion documents that contract
-            // for future edits.
-            Q_ASSERT(st != nullptr);
+            // Pointer `st` is provably non-null here: the enclosing
+            // `if (st && st->cached && st->cached->shader)` guard upstream
+            // already gated this branch on `st`, so the read is safe in
+            // both debug and release builds without a redundant Q_ASSERT
+            // (which only documented the contract in debug).
             const quint64 expiringGeneration = st->generation;
             QMetaObject::invokeMethod(
                 this,

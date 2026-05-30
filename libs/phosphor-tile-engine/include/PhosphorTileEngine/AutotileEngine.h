@@ -476,14 +476,15 @@ public:
      * Mirror of PhosphorPlacement::WindowTrackingService::pruneExcludedPendingRestores
      * for the autotile side. Patterns are compared via
      * PhosphorIdentity::WindowId::appIdMatches. The snap engine uses the same
-     * predicate when it gates runtime restores against the user's exclusion lists,
-     * so the disk-pruning verdict here matches what the runtime would already do.
+     * predicate when it gates runtime restores against the user's unified
+     * WindowRule store's Exclude rules, so the disk-pruning verdict here
+     * matches what the runtime would already do.
      *
      * The existing ShouldPersistRestorePredicate filters entries by disabled
      * context across screen, desktop, and activity but is blind to the
-     * exclusion-list axis. Entries authored before the user excluded an app
-     * remain on disk and bloat AutotilePendingRestores until this method
-     * runs at the next save.
+     * Exclude-rule axis. Entries authored before the user added an
+     * Application-subject Exclude rule remain on disk and bloat
+     * AutotilePendingRestores until this method runs at the next save.
      *
      * The engine is settings-agnostic by design to keep the LGPL boundary
      * clean. It takes plain patterns and does NOT mark dirty. The WTA caller

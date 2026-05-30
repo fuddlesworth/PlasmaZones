@@ -6,9 +6,10 @@
 // Public declaration of the library's logging categories. The category objects
 // themselves are defined in the library's TU (windowrulelogging.cpp); this
 // header simply re-exposes the declarations so header-only consumers (the
-// inline bridges in ContextRuleBridge.h, ExclusionRules.h) can emit
-// warnings through the same `org.phosphor.windowrule.*` channels the rest of
-// the library uses.
+// inline bridge in ContextRuleBridge.h) can emit warnings through the same
+// `org.phosphor.windowrule.*` channels the rest of the library uses.
+// (ExclusionRules moved its bodies into src/exclusionrules.cpp and includes
+// this header from the .cpp directly, not from its public header.)
 
 #include <QLoggingCategory>
 

@@ -9,6 +9,8 @@
 #include <effect/effecthandler.h>
 #include <window.h>
 
+#include <sys/types.h> // pid_t
+
 namespace PlasmaZones {
 
 PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
@@ -105,6 +107,8 @@ PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w)
     // from EffectWindow::pid(). Engaging `query.pid = 0` would let a
     // `Pid Equals 0` predicate silently match every such window. Gate
     // on pid > 0 so the optional stays disengaged in the no-process case.
+    // pid_t comes from <sys/types.h>; included explicitly (don't rely on
+    // KWin's effect/window.h re-exporting it transitively).
     const pid_t pid = w->pid();
     if (pid > 0) {
         query.pid = static_cast<int>(pid);

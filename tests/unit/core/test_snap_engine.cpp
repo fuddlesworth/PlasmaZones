@@ -11,6 +11,11 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorWindowRule/MatchExpression.h>
+#include <PhosphorWindowRule/MatchTypes.h>
+#include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 
@@ -964,6 +969,146 @@ private Q_SLOTS:
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
                  "with no predicate the disabled-context gate must never fire");
         m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // setExcludeRuleSet + isAppIdExcluded wiring tests
+    //
+    // Daemon owns the filtered Exclude rule set and pushes its address into
+    // SnapEngine via `setExcludeRuleSet`. SnapEngine lazily binds a
+    // `RuleEvaluator` to that set on first `isAppIdExcluded` call and
+    // re-binds it whenever the pointer changes. An in-place edit through
+    // `WindowRuleSet::setRules` bumps the revision counter; the evaluator's
+    // per-revision sort index + match cache invalidate automatically.
+    //
+    // These tests pin the contract the daemon's `refilterExcludeRules`
+    // lambda + `Daemon::stop()` `setExcludeRuleSet(nullptr)` teardown
+    // rely on:
+    //   - nullptr borrow ⇒ isAppIdExcluded == false (early-init fast path)
+    //   - empty set      ⇒ isAppIdExcluded == false (no-exclusions fast path)
+    //   - matching rule  ⇒ isAppIdExcluded == true
+    //   - pointer change ⇒ cached evaluator drops + rebinds against new set
+    //   - in-place edit  ⇒ revision bump invalidates the eval cache
+    // =========================================================================
+
+    void testExcludeWiring_nullptrBorrowReturnsFalse()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        // No setExcludeRuleSet call — m_excludeRuleSet starts nullptr.
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+    }
+
+    void testExcludeWiring_emptySetReturnsFalse()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        PhosphorWindowRule::WindowRuleSet emptySet;
+        engine.setExcludeRuleSet(&emptySet);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+    }
+
+    void testExcludeWiring_matchingRuleReturnsTrue()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRule::WindowRuleSet set;
+        PhosphorWindowRule::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("exclude-firefox");
+        rule.enabled = true;
+        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("firefox"));
+        PhosphorWindowRule::RuleAction action;
+        action.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        rule.actions.append(action);
+        QVERIFY(set.addRule(rule));
+
+        engine.setExcludeRuleSet(&set);
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("firefox")));
+        // Non-matching appId resolves to not-excluded against the same
+        // bound set — the evaluator differentiates correctly.
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+    }
+
+    void testExcludeWiring_pointerChangeRebindsEvaluator()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRule::WindowRuleSet firefoxSet;
+        PhosphorWindowRule::WindowRule firefoxRule;
+        firefoxRule.id = QUuid::createUuid();
+        firefoxRule.enabled = true;
+        firefoxRule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("firefox"));
+        PhosphorWindowRule::RuleAction firefoxAction;
+        firefoxAction.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        firefoxRule.actions.append(firefoxAction);
+        QVERIFY(firefoxSet.addRule(firefoxRule));
+
+        PhosphorWindowRule::WindowRuleSet konsoleSet;
+        PhosphorWindowRule::WindowRule konsoleRule;
+        konsoleRule.id = QUuid::createUuid();
+        konsoleRule.enabled = true;
+        konsoleRule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("konsole"));
+        PhosphorWindowRule::RuleAction konsoleAction;
+        konsoleAction.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        konsoleRule.actions.append(konsoleAction);
+        QVERIFY(konsoleSet.addRule(konsoleRule));
+
+        // Wire the firefox set, prime the cached evaluator.
+        engine.setExcludeRuleSet(&firefoxSet);
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+
+        // Re-wire to the konsole set — the cached evaluator was bound to
+        // firefoxSet by reference; without the pointer-change rebind in
+        // setExcludeRuleSet, this would still resolve "firefox" as
+        // excluded and "konsole" as not.
+        engine.setExcludeRuleSet(&konsoleSet);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("konsole")));
+
+        // Clear: nullptr borrow short-circuits to false again.
+        engine.setExcludeRuleSet(nullptr);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+    }
+
+    void testExcludeWiring_inPlaceSetRulesInvalidatesEvalCache()
+    {
+        // Same pointer, different rules-list — the daemon's refilter
+        // lambda's expected hot path. The evaluator's per-revision
+        // index + match cache key off the bound set's revision counter,
+        // so a `WindowRuleSet::setRules` edit must invalidate the cached
+        // resolve result without requiring a setExcludeRuleSet re-fence
+        // (which the Pass 1 init-prologue refactor explicitly dropped).
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRule::WindowRuleSet set;
+        // Wire BEFORE adding rules so the bound pointer doesn't change
+        // when we mutate the set; this is the daemon's actual pattern
+        // (setExcludeRuleSet wired once at init, edits happen via
+        // setRules from the rulesChanged subscription).
+        engine.setExcludeRuleSet(&set);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+
+        PhosphorWindowRule::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("firefox"));
+        PhosphorWindowRule::RuleAction action;
+        action.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        rule.actions.append(action);
+
+        set.setRules({rule});
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("firefox")));
+
+        // Remove every rule via in-place setRules — same pointer, empty
+        // list. The cached evaluator MUST notice the revision bump or
+        // this assertion fails (stale match cache returns true).
+        set.setRules({});
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
     }
 };
 

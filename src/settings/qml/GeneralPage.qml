@@ -124,8 +124,13 @@ SettingsFlickable {
                     description: appSettings.minimumWindowWidth === 0 ? i18n("Disabled — no width threshold") : i18n("Windows narrower than this are excluded")
 
                     SettingsSpinBox {
-                        from: 0
-                        to: 1000
+                        // Schema-driven bounds — see GeneralPageController's
+                        // minimumWindowWidthMin/Max Q_PROPERTYs. Literal
+                        // bounds would silently truncate any saved value
+                        // outside the literal range when the SpinBox clamped
+                        // the bound `value` on render.
+                        from: settingsController.generalPage.minimumWindowWidthMin
+                        to: settingsController.generalPage.minimumWindowWidthMax
                         stepSize: 10
                         value: appSettings.minimumWindowWidth
                         unitText: ""
@@ -146,8 +151,8 @@ SettingsFlickable {
                     description: appSettings.minimumWindowHeight === 0 ? i18n("Disabled — no height threshold") : i18n("Windows shorter than this are excluded")
 
                     SettingsSpinBox {
-                        from: 0
-                        to: 1000
+                        from: settingsController.generalPage.minimumWindowHeightMin
+                        to: settingsController.generalPage.minimumWindowHeightMax
                         stepSize: 10
                         value: appSettings.minimumWindowHeight
                         unitText: ""

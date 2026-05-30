@@ -202,15 +202,15 @@ void SettingsController::buildApplicationController()
     // are guarded against re-entrancy by comparing the incoming value to the
     // already-stored one before propagating.
     m_app->setCurrentPageId(m_activePage);
+    // Context object for both connections below is `m_app.get()`, so Qt
+    // auto-disconnects them when `m_app` is destroyed — no manual
+    // null-guard on `m_app` inside the lambdas is needed.
     connect(this, &SettingsController::activePageChanged, m_app.get(), [this]() {
-        if (m_app && m_app->currentPageId() != m_activePage) {
+        if (m_app->currentPageId() != m_activePage) {
             m_app->setCurrentPageId(m_activePage);
         }
     });
     connect(m_app.get(), &PhosphorSettingsUi::ApplicationController::currentPageIdChanged, this, [this]() {
-        if (!m_app) {
-            return;
-        }
         const QString id = m_app->currentPageId();
         if (id.isEmpty() || id == m_activePage) {
             return;

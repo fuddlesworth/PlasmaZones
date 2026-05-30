@@ -21,8 +21,10 @@
  *   - WindowRuleStore   — QObject persistent store over windowrules.json
  *   - ContextRuleBridge — header-only context-rule helpers (per-desktop /
  *                         per-activity layer-rule fan-out)
- *   - ExclusionRules    — header-only slicers for the Exclude /
- *                         ExcludeAnimations action shapes
+ *   - ExclusionRules    — slicers for the Exclude / ExcludeAnimations
+ *                         action shapes (declarations in
+ *                         ExclusionRules.h, bodies in
+ *                         src/exclusionrules.cpp)
  *   - IdentityKey       — length-prefixed key encoder (UUIDv5 namespace
  *                         derivation, dedup keys)
  *   - WindowRuleLogging — Q_DECLARE_LOGGING_CATEGORY re-exports for

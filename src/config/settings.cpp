@@ -316,10 +316,12 @@ void Settings::purgeStaleKeys()
     // blanket-delete loop ("General", "TilingQuickLayoutSlots", "Updates")
     // and (b) root-level KEYS holding stash data — `_v4DisableStash`,
     // `_v4ExclusionStash` and `_v4AnimationExclusionStash` are JSON
-    // OBJECTS and survive via the Pass 2 listing below; the
-    // `_v4AnimationRulesStash` is a JSON ARRAY and is actually preserved
-    // by Pass 2 NOT enumerating non-object root values (jsonbackend's
-    // `groupList()` filter), with the listing here as defence-in-depth
+    // OBJECTS and survive Pass 2 via `preservedGroups.contains(topLevel)`
+    // membership in the loop body below (without that short-circuit Pass
+    // 2's group iteration WOULD delete them); the `_v4AnimationRulesStash`
+    // is a JSON ARRAY and is additionally preserved by Pass 2 NOT
+    // enumerating non-object root values (jsonbackend's `groupList()`
+    // filter), so the listing here is defence-in-depth for that case
     // against future Pass 2 restructuring. All four stashes feed the v4
     // chain-stall retry path in configmigration.cpp::finalizeV4Conversion.
     const QStringList preservedGroups = {

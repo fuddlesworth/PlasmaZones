@@ -131,13 +131,19 @@ public:
     /// JSON + `Exclude`-action rules + `ExcludeAnimations`-action rules),
     /// writes windowrules.json (atomic), relocates the QuickLayouts slots
     /// into the quicklayouts.json sidecar, strips all four stash keys
-    /// from config.json, then — as the last, irreversible step — deletes
-    /// assignments.json.
+    /// from config.json, then — as the last, irreversible step — retires
+    /// assignments.json (renamed to `.migrated` for forensic recovery; if
+    /// the rename fails the file is removed outright).
     ///
-    /// Idempotent: a no-op when windowrules.json already exists as a valid
-    /// v4 `WindowRuleSet` (probed via `WindowRuleSet::loadFromFile`, which
-    /// requires `_version == ConfigSchemaVersion` exactly). Safe to call on
-    /// every startup.
+    /// Idempotent: the cleanup-only branch runs whenever windowrules.json
+    /// already exists as a valid v4 `WindowRuleSet` (probed via
+    /// `WindowRuleSet::loadFromFile`, which requires `_version ==
+    /// ConfigSchemaVersion` exactly). It is NOT a strict no-op — it
+    /// retries the still-pending tail steps (strip surviving `_v4*Stash`
+    /// keys, retire a still-present assignments.json) so a partial earlier
+    /// run that crashed between windowrules.json commit and the tail
+    /// converges to a clean state on the next startup. The rule-rebuild
+    /// path itself NEVER runs from the cleanup branch.
     ///
     /// Rebuild trigger: a missing/invalid windowrules.json triggers a
     /// rebuild PROVIDED config.json has reached

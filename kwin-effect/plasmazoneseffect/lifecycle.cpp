@@ -136,6 +136,24 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     windows.push_back(w);
                 for (auto* w : windows)
                     endShaderTransition(w);
+                // Release-build pair for the contract: every transition entry
+                // MUST drain through endShaderTransition before we clear the
+                // shader cache. A residual entry holds a cached shader
+                // pointer; clearing the cache while it survives would let
+                // the next paintWindow on that window deref a freed shader.
+                // Self-heal in production by re-running endShaderTransition
+                // for the residual entries — same handler the loop above
+                // uses — so a future refactor that adds an early-return to
+                // endShaderTransition can't crash the compositor.
+                if (!m_shaderManager.empty()) {
+                    qCCritical(lcEffect) << "shader manager not drained before cache clear; re-draining"
+                                         << m_shaderManager.shaderTransitions().size() << "residual transitions";
+                    QVarLengthArray<KWin::EffectWindow*, 8> residual;
+                    for (auto& [w, _] : m_shaderManager.shaderTransitions())
+                        residual.push_back(w);
+                    for (auto* w : residual)
+                        endShaderTransition(w);
+                }
                 Q_ASSERT(m_shaderManager.empty());
                 m_shaderManager.m_shaderCache.clear();
                 // Drop the texture cache too — a hot-reload that swaps a
@@ -672,6 +690,19 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // daemonReady against the new bus name but the rulesChanged
         // subscription guard would still latch and skip the re-subscribe
         // — silently dropping rule edits across daemon restarts.
+        //
+        // Disconnect the previous rulesChanged match rule BEFORE flipping
+        // the gate. Qt does not deduplicate match rules (same pitfall the
+        // daemonReady serviceRegistered handler addresses); without this
+        // disconnect, every daemon restart accumulates one extra match
+        // rule, and each rulesChanged emission then dispatches N times
+        // to slotWindowRulesChanged across N restarts. The debounce
+        // collapses the work to a single fetch, but each dispatch still
+        // pays D-Bus delivery + Qt slot invocation.
+        QDBusConnection::sessionBus().disconnect(QString(PhosphorProtocol::Service::Name),
+                                                 QString(PhosphorProtocol::Service::ObjectPath),
+                                                 QString(PhosphorProtocol::Service::Interface::WindowRules),
+                                                 QStringLiteral("rulesChanged"), this, SLOT(slotWindowRulesChanged()));
         m_windowRulesSubscribed = false;
         // Release any pending first-frame open suppression. Without the
         // daemon there is no `resolveWindowRestore` reply coming and no

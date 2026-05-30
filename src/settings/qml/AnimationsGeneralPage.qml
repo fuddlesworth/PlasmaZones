@@ -362,8 +362,13 @@ SettingsFlickable {
                     description: page.appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
 
                     SettingsSpinBox {
-                        from: 0
-                        to: 1000
+                        // Schema-driven bounds — see GeneralPageController's
+                        // animationMinimumWindowWidthMin/Max Q_PROPERTYs.
+                        // Literal bounds would silently truncate any saved
+                        // value outside the literal range when the SpinBox
+                        // clamped the bound `value` on render.
+                        from: settingsController.generalPage.animationMinimumWindowWidthMin
+                        to: settingsController.generalPage.animationMinimumWindowWidthMax
                         stepSize: 10
                         value: page.appSettings.animationMinimumWindowWidth
                         // textFromValue already emits the localised "%1 px" suffix; suppress
@@ -387,8 +392,8 @@ SettingsFlickable {
                     description: page.appSettings.animationMinimumWindowHeight === 0 ? i18n("Disabled. No height threshold.") : i18n("Windows shorter than this will not animate")
 
                     SettingsSpinBox {
-                        from: 0
-                        to: 1000
+                        from: settingsController.generalPage.animationMinimumWindowHeightMin
+                        to: settingsController.generalPage.animationMinimumWindowHeightMax
                         stepSize: 10
                         value: page.appSettings.animationMinimumWindowHeight
                         // textFromValue already emits the localised "%1 px" suffix; see the

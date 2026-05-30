@@ -2563,13 +2563,30 @@ bool ConfigMigration::finalizeV4Conversion(const QString& jsonPath)
     // this file exists as a valid v4 rule set, the cleanup-only branch
     // short-circuits the rebuild forever.
     PhosphorWindowRule::WindowRuleSet ruleSet;
+    const int inputRuleCount = rules.size();
     ruleSet.setRules(rules);
+    const int storedRuleCount = ruleSet.count();
     QDir().mkpath(QFileInfo(windowRulesPath).absolutePath());
     if (!ruleSet.saveToFile(windowRulesPath)) {
         qWarning("ConfigMigration: failed to write %s — aborting v4 conversion", qPrintable(windowRulesPath));
         return false;
     }
-    qInfo("ConfigMigration: wrote %d window rules to %s", ruleSet.count(), qPrintable(windowRulesPath));
+    // Log the input-vs-stored delta whenever setRules dedups: identical
+    // `(Field::AppId, Operator::AppIdMatches, "firefox")` tuples in BOTH
+    // Exclusions.Applications AND Exclusions.WindowClasses collapse to
+    // one rule (same UUIDv5 namespace + segment encoding), and a parallel
+    // case exists for animation-side `(field, op, pattern, action)`
+    // tuples. The dedup is semantically correct (the rules are identical)
+    // but silent in the bare-count message; surfacing the delta makes the
+    // collapse forensically visible.
+    if (storedRuleCount != inputRuleCount) {
+        qInfo(
+            "ConfigMigration: wrote %d window rules to %s (deduplicated from %d candidates — identical "
+            "(field,op,pattern[,action]) tuples collapsed on UUIDv5)",
+            storedRuleCount, qPrintable(windowRulesPath), inputRuleCount);
+    } else {
+        qInfo("ConfigMigration: wrote %d window rules to %s", storedRuleCount, qPrintable(windowRulesPath));
+    }
 
     // ── Rewrite config.json: strip the temporary stash keys ────────────────
     // The real Display.*Disabled* / Exclusions.{Applications,WindowClasses} /

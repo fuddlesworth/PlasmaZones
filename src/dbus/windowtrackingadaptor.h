@@ -600,19 +600,21 @@ public:
      * direct C++ invocation through the daemon. Same pattern as
      * `WindowDragAdaptor::clearForCompositorReconnect`.
      *
-     * Called from two daemon-side sites — WTA's own constructor no longer
-     * runs the prune (the snap queues are loaded before the rule store
-     * has been filtered; the daemon kicks the prune eagerly at the same
-     * point it wires the rules-changed subscription, which lands after
-     * WTA::loadState in the daemon's init order).
-     *   1. Daemon::init's `refilterExcludeRules` lambda — fired once
-     *      after wire-up completes (the priming call directly below the
-     *      subscription is wired) AND again on every
-     *      `WindowRuleStore::rulesChanged` so a settings-app rule edit
-     *      prunes queued restores live. The autotile queue is not yet
-     *      loaded at the priming call, so the autotile-side prune is a
-     *      no-op there.
-     *   2. Daemon::finalizeStartup, after AutotileEngine::loadState has
+     * Called from three daemon-side sites — WTA's own constructor no
+     * longer runs the prune (the snap queues are loaded before the rule
+     * store has been filtered; the daemon kicks the prune from the
+     * init prologue after WTA::loadState completes in init order).
+     *   1. Daemon::init's init-prologue priming call — drains queue
+     *      entries WTA::loadState just populated. Runs once, synchronously,
+     *      before the `rulesChanged` subscription connects. The autotile
+     *      queue is not yet loaded at this point, so the autotile-side
+     *      prune is a no-op here.
+     *   2. Daemon::init's `refilterExcludeRules` lambda, fired on every
+     *      `WindowRuleStore::rulesChanged` whose post-filter Exclude
+     *      slice differs from the cached one — equality-guarded so
+     *      non-Exclude rule edits don't walk the queues unnecessarily.
+     *      Drives live settings-app rule edits into the prune.
+     *   3. Daemon::finalizeStartup, after AutotileEngine::loadState has
      *      populated the autotile queue, so the autotile-side prune
      *      actually has something to process.
      * The daemon derives @p patterns from the unified WindowRule store

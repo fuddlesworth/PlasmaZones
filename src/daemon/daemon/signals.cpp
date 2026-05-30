@@ -710,9 +710,10 @@ void Daemon::finalizeStartup()
     // Now that AutotileEngine::loadState has deserialized
     // m_pendingAutotileRestores, re-run the exclusion-rule prune so any
     // persisted entries for apps that an Exclude rule covers are dropped
-    // here too. The snap side already gets pruned by the rulesChanged
-    // subscription wired in Daemon::init (which also kicks once at
-    // startup); this call also touches the autotile queues that didn't
+    // here too. The snap side already got pruned by the init-prologue
+    // priming call at daemon.cpp's setExcludeRuleSet/setRules/prune
+    // sequence (run synchronously before the rulesChanged subscription
+    // wires); this call also touches the autotile queues that didn't
     // exist at that earlier point. Patterns derive from the unified
     // WindowRule store via PhosphorWindowRule::ExclusionRules.
     if (m_windowTrackingAdaptor) {

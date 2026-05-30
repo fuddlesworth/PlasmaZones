@@ -514,6 +514,17 @@ public:
     /// translation unit redefine the function and the link fails.
     void setExcludeRuleSet(const PhosphorWindowRule::WindowRuleSet* ruleSet);
 
+    /// True if @p appId matches an enabled `Exclude`-action WindowRule
+    /// whose match leaf targets the `AppId` field. Public so the unit-
+    /// test layer can directly verify the wiring (nullptr borrow,
+    /// empty-set short-circuit, evaluator rebind on pointer change,
+    /// revision-bump invalidation on in-place setRules edits) without
+    /// staging the heavy navigation fixture every public navigation
+    /// method needs. Pure const observer — no side effects beyond the
+    /// `mutable` evaluator cache. See the limitation note on
+    /// `m_excludeEvaluator` below for the AppId-only matching contract.
+    bool isAppIdExcluded(const QString& appId) const;
+
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
     // Signals (relayed via SnapAdaptor -> WTA -> D-Bus -> effect)
@@ -610,39 +621,33 @@ private:
     /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
 
-    /// True if @p appId matches an enabled `Exclude`-action WindowRule
-    /// **whose match leaf targets the `AppId` field** (any operator —
-    /// the engine builds a `WindowQuery` with only `query.appId`
-    /// populated and feeds it to the bound `RuleEvaluator`).
-    ///
-    /// **Limitation:** a user-authored Exclude rule whose match leaf
-    /// targets a non-`AppId` field (`WindowClass Contains "steam"`,
-    /// `Title Regex …`, a composite match, …) silently evaluates to
-    /// false here because those leaves never resolve against a
-    /// query that only knows the appId. Migration-produced rules are
-    /// all `AppId AppIdMatches <pattern>` so the legacy v3 behaviour
-    /// is preserved exactly; the gap only opens for hand-authored
-    /// rules with broader match leaves. A more thorough check would
-    /// require the caller to pass the full `WindowQuery` it can
-    /// build from the WTS registry's per-window attributes, instead
-    /// of just the appId.
-    ///
-    /// Returns false when the rule set hasn't been wired (early-init
-    /// paths) or when the filtered set is empty.
-    bool isAppIdExcluded(const QString& appId) const;
-
-    // These two members are daemon-main-thread-only — every access path
-    // runs on the daemon's main thread (rulesChanged signal delivery,
-    // navigation slot dispatch, and the in-thread isAppIdExcluded call
-    // chain). The cache is intentionally unsynchronised: `setExcludeRuleSet`
-    // writes the raw pointer non-atomically, and `RuleEvaluator::resolve`
-    // mutates a lazy priority-order index that must be externally
-    // serialised (see RuleEvaluator.h's thread-safety note). Do not
-    // access from another thread without adding locking.
+    // isAppIdExcluded is declared in the public section above so the
+    // unit tests can drive the wiring directly. The matching contract
+    // is: build a `WindowQuery` with only `query.appId` populated and
+    // evaluate it against the bound `RuleEvaluator`. A user-authored
+    // Exclude rule whose match leaf targets a non-`AppId` field
+    // (`WindowClass Contains "steam"`, `Title Regex …`, a composite
+    // match) silently evaluates to false here because those leaves
+    // never resolve against a query that only knows the appId.
+    // Migration-produced rules are all `AppId AppIdMatches <pattern>`
+    // so legacy v3 behaviour is preserved exactly; the gap only opens
+    // for hand-authored rules with broader match leaves. A more
+    // thorough check would require the caller to pass the full
+    // `WindowQuery` it can build from the WTS registry's per-window
+    // attributes, instead of just the appId.
 
     /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
     /// in early-init paths (before the daemon wires the store) — the
     /// `isAppIdExcluded` fast path short-circuits to false in that case.
+    ///
+    /// @note Daemon-main-thread-only. Every access path runs on the
+    /// daemon's main thread (rulesChanged signal delivery, navigation
+    /// slot dispatch, in-thread isAppIdExcluded calls). `setExcludeRuleSet`
+    /// writes the raw pointer non-atomically and the paired
+    /// `m_excludeEvaluator` mutates a lazy priority-order index that
+    /// must be externally serialised (see RuleEvaluator.h's thread-
+    /// safety note). Do not access from another thread without adding
+    /// locking.
     const PhosphorWindowRule::WindowRuleSet* m_excludeRuleSet = nullptr;
     /// Lazily constructed evaluator bound to @ref m_excludeRuleSet. Reset
     /// in `setExcludeRuleSet` when the pointer changes; the evaluator's
@@ -650,6 +655,8 @@ private:
     /// set's revision counter, so an in-place rule edit through the store
     /// invalidates the evaluator's per-revision state automatically — only
     /// a different rule-set pointer needs the explicit reset.
+    ///
+    /// @note Same daemon-main-thread-only contract as @ref m_excludeRuleSet.
     mutable std::optional<PhosphorWindowRule::RuleEvaluator> m_excludeEvaluator;
 
     // Persistence delegates (KConfig stays in adaptor layer)

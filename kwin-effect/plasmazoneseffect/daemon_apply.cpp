@@ -677,11 +677,18 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
             continue;
         }
 
-        // Normalize X11 "resourceName resourceClass" to just resourceClass,
-        // matching the format used by getWindowId() for app rule matching.
-        int spaceIdx = windowClass.indexOf(QLatin1Char(' '));
-        if (spaceIdx > 0) {
-            windowClass = windowClass.mid(spaceIdx + 1);
+        // Normalize X11 "resourceName resourceClass" to just resourceClass
+        // (lowercased), matching the canonical form `normalizeAppId` produces
+        // for every other appId entry point — getWindowId, rule evaluators,
+        // pending-restore prune patterns. An inline first-space split would
+        // drift in two ways: (1) a three-token resource string like
+        // "foo bar baz" yields "bar baz" here but "baz" through
+        // normalizeAppId; (2) case is preserved here but lowercased
+        // downstream — a rule the user authors against the picker's
+        // case-preserved output with `Equals` would silently never match.
+        windowClass = ::PhosphorIdentity::WindowId::normalizeAppId(QString(), windowClass);
+        if (windowClass.isEmpty()) {
+            continue;
         }
 
         // Deduplicate by windowClass (first seen = topmost due to reverse iteration)
