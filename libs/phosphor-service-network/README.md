@@ -16,8 +16,12 @@ The library is a D-Bus client built on the generic `PhosphorDBus::Client` async 
 | Type                  | Role                                                                                                  |
 |-----------------------|-------------------------------------------------------------------------------------------------------|
 | `NetworkDevice`       | One `org.freedesktop.NetworkManager.Device`. `interfaceName`, `deviceType`, `state`, `managed`.       |
-| `NetworkHost`         | Owns the device set + manager state. `networkingEnabled`, `wirelessEnabled` (writable), `connectivity`, `primaryConnectionType`, `deviceCount`; `scanWifi()`; signals on device add/remove. |
+| `NetworkHost`         | Owns the device set + manager state. `networkingEnabled`, `wirelessEnabled` (writable), `connectivity`, `primaryConnectionType`, `deviceCount`; `scanWifi()`, `activateConnection()`, `connectToAccessPoint()`; signals on device add/remove. |
 | `NetworkDeviceModel`  | `QAbstractListModel` over the host's devices. Roles: `device`, `interfaceName`, `deviceType`, `deviceState`, `managed`. |
+| `AccessPoint`         | One `org.freedesktop.NetworkManager.AccessPoint`. `ssid`, `strength`, `frequency`, `bssid`, `security`, `secured`. |
+| `AccessPointModel`    | `QAbstractListModel` over a Wi-Fi device's scanned APs (bind `device`). Roles: `accessPoint`, `ssid`, `strength`, `frequency`, `bssid`, `security`, `secured`. |
+| `NetworkConnection`   | One saved profile (`Settings.Connection`). `id`, `uuid`, `connectionType`. |
+| `NetworkConnectionModel` | `QAbstractListModel` over NetworkManager's saved connections (self-bootstrapping). Roles: `connection`, `id`, `uuid`, `connectionType`. |
 
 ## Typical use
 
@@ -81,4 +85,4 @@ Repeater {
 
 ## Status
 
-Phase 2.2: in progress. Shipped this milestone: the manager lifecycle (connectivity / radio-toggle state + device enumeration), `NetworkDevice` (interface/type/state/managed), `NetworkDeviceModel`, the Wi-Fi radio toggle, and the `scanWifi()` trigger. Still to land (see `docs/phosphor-shell-design/04-implementation-plan.md` § 2.1-2.10, row 2.2): access-point surfacing (SSID / signal / security per Wi-Fi device), the saved-connection list, connect/disconnect/activate, and the `phosphorctl`-style CLI demo (`list connections`, `scan wifi`, `connect to AP`). The CLI demo + connect path are the Phase-2 gate items for this library.
+Phase 2.2: in progress. Shipped: the manager lifecycle (connectivity / radio-toggle state + device enumeration), `NetworkDevice`, `NetworkDeviceModel`, the Wi-Fi radio toggle and `scanWifi()` trigger, access-point surfacing (`AccessPoint` / `AccessPointModel` with derived security labels), the saved-connection list (`NetworkConnection` / `NetworkConnectionModel`), and the connect paths (`activateConnection()` for a saved profile, `connectToAccessPoint()` via NM AddAndActivateConnection for open or WPA-PSK networks). Still to land for the Phase-2 gate (see `docs/phosphor-shell-design/04-implementation-plan.md` § 2.1-2.10, row 2.2): the `phosphorctl`-style CLI demo (`list connections`, `scan wifi`, `connect to AP`). Live D-Bus integration tests against a fake NetworkManager fixture are a follow-up; the smoke harness pins the public contract (role names, enum wire constants, lifecycle) deterministically without a daemon.

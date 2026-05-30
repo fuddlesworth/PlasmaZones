@@ -2,16 +2,29 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorServiceNetwork/NetworkHost.h>
+#include <PhosphorServiceNetwork/AccessPoint.h>
+#include <PhosphorServiceNetwork/NetworkConnection.h>
 #include <PhosphorServiceNetwork/NetworkDevice.h>
 
 #include <PhosphorDBus/Client.h>
 
 #include <QDBusConnection>
+#include <QDBusMetaType>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusVariant>
 #include <QLoggingCategory>
+
+#include <mutex>
+
+// NetworkManager's connection-settings type a{sa{sv}} — a map of
+// setting-group name to a property dict. Typedef'd so the comma inside the
+// template args doesn't trip the Q_DECLARE_METATYPE macro, then declared +
+// registered so it rides through QVariant / QtDBus marshalling for
+// AddAndActivateConnection.
+using NMConnectionSettings = QMap<QString, QVariantMap>;
+Q_DECLARE_METATYPE(NMConnectionSettings)
 
 Q_LOGGING_CATEGORY(lcNetworkHost, "phosphor.service.network.host")
 
@@ -29,6 +42,15 @@ bool isValidDevicePath(const QString& path)
 {
     static const QString kPrefix = QStringLiteral("/org/freedesktop/NetworkManager/Devices/");
     return path.size() > kPrefix.size() && path.startsWith(kPrefix);
+}
+
+// Register the a{sa{sv}} connection-settings marshaller exactly once.
+void ensureConnectionSettingsRegistered()
+{
+    static std::once_flag once;
+    std::call_once(once, [] {
+        qDBusRegisterMetaType<QMap<QString, QVariantMap>>();
+    });
 }
 } // namespace
 
@@ -276,6 +298,50 @@ void NetworkHost::scanWifi()
             .fireAndForget(this, QLatin1String(kWirelessIface), QStringLiteral("RequestScan"),
                            {QVariant::fromValue(QVariantMap{})}, QStringLiteral("RequestScan"));
     }
+}
+
+void NetworkHost::activateConnection(NetworkConnection* connection, NetworkDevice* device)
+{
+    if (!connection || !device || !d->bus.isConnected())
+        return;
+    // ActivateConnection(connection o, device o, specific_object o). "/"
+    // is the "no specific object" sentinel (NM picks the best AP itself
+    // for a Wi-Fi connection).
+    d->manager().fireAndForget(this, QLatin1String(kManagerIface), QStringLiteral("ActivateConnection"),
+                               {QVariant::fromValue(QDBusObjectPath(connection->dbusPath())),
+                                QVariant::fromValue(QDBusObjectPath(device->dbusPath())),
+                                QVariant::fromValue(QDBusObjectPath(QStringLiteral("/")))},
+                               QStringLiteral("activateConnection"));
+}
+
+void NetworkHost::connectToAccessPoint(NetworkDevice* device, AccessPoint* accessPoint, const QString& passphrase)
+{
+    if (!device || !accessPoint || !d->bus.isConnected())
+        return;
+    ensureConnectionSettingsRegistered();
+
+    // Minimal Wi-Fi profile. NM fills in uuid + the rest of the defaults;
+    // we name the profile after the SSID and, when a passphrase is given,
+    // attach a WPA-PSK security block. Open networks omit it entirely.
+    QMap<QString, QVariantMap> settings;
+    settings.insert(QStringLiteral("connection"),
+                    QVariantMap{{QStringLiteral("id"), accessPoint->ssid()},
+                                {QStringLiteral("type"), QStringLiteral("802-11-wireless")}});
+    settings.insert(QStringLiteral("802-11-wireless"),
+                    QVariantMap{{QStringLiteral("ssid"), accessPoint->ssid().toUtf8()},
+                                {QStringLiteral("mode"), QStringLiteral("infrastructure")}});
+    if (!passphrase.isEmpty()) {
+        settings.insert(
+            QStringLiteral("802-11-wireless-security"),
+            QVariantMap{{QStringLiteral("key-mgmt"), QStringLiteral("wpa-psk")}, {QStringLiteral("psk"), passphrase}});
+    }
+
+    // AddAndActivateConnection(connection a{sa{sv}}, device o, specific_object o).
+    // The AP path is the specific object so NM activates against this exact BSSID's network.
+    d->manager().fireAndForget(this, QLatin1String(kManagerIface), QStringLiteral("AddAndActivateConnection"),
+                               {QVariant::fromValue(settings), QVariant::fromValue(QDBusObjectPath(device->dbusPath())),
+                                QVariant::fromValue(QDBusObjectPath(accessPoint->dbusPath()))},
+                               QStringLiteral("connectToAccessPoint"));
 }
 
 void NetworkHost::_q_onPropertiesChanged(const QString& iface, const QVariantMap& changed,

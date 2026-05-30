@@ -5,6 +5,8 @@
 
 #include <PhosphorServiceNetwork/AccessPoint.h>
 #include <PhosphorServiceNetwork/AccessPointModel.h>
+#include <PhosphorServiceNetwork/NetworkConnection.h>
+#include <PhosphorServiceNetwork/NetworkConnectionModel.h>
 #include <PhosphorServiceNetwork/NetworkDevice.h>
 #include <PhosphorServiceNetwork/NetworkDeviceModel.h>
 #include <PhosphorServiceNetwork/NetworkHost.h>
@@ -38,6 +40,8 @@ void registerQmlTypes()
         qmlRegisterType<NetworkHost>(kModule, kModuleVersionMajor, kModuleVersionMinor, "NetworkHost");
         qmlRegisterType<NetworkDeviceModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "NetworkDeviceModel");
         qmlRegisterType<AccessPointModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "AccessPointModel");
+        qmlRegisterType<NetworkConnectionModel>(kModule, kModuleVersionMajor, kModuleVersionMinor,
+                                                "NetworkConnectionModel");
 
         // Pointer-receivable types. Exposed as Q_PROPERTY / role values from
         // the host or model, never directly constructed in QML; their
@@ -48,6 +52,9 @@ void registerQmlTypes()
         qmlRegisterUncreatableType<AccessPoint>(
             kModule, kModuleVersionMajor, kModuleVersionMinor, "AccessPoint",
             QStringLiteral("AccessPoint is owned by AccessPointModel; bind via the model"));
+        qmlRegisterUncreatableType<NetworkConnection>(
+            kModule, kModuleVersionMajor, kModuleVersionMinor, "NetworkConnection",
+            QStringLiteral("NetworkConnection is owned by NetworkConnectionModel; bind via the model"));
     });
 }
 

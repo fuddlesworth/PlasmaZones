@@ -21,6 +21,8 @@
 
 #include <PhosphorServiceNetwork/AccessPoint.h>
 #include <PhosphorServiceNetwork/AccessPointModel.h>
+#include <PhosphorServiceNetwork/NetworkConnection.h>
+#include <PhosphorServiceNetwork/NetworkConnectionModel.h>
 #include <PhosphorServiceNetwork/NetworkDevice.h>
 #include <PhosphorServiceNetwork/NetworkHost.h>
 #include <PhosphorServiceNetwork/NetworkDeviceModel.h>

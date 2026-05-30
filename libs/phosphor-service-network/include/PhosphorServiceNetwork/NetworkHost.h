@@ -16,6 +16,9 @@
 
 namespace PhosphorServiceNetwork {
 
+class AccessPoint;
+class NetworkConnection;
+
 /// Root of the NetworkManager surface. Binds the system bus, exposes the
 /// manager-level connectivity / radio-toggle state, and materialises one
 /// NetworkDevice per `org.freedesktop.NetworkManager.Device`. Construct
@@ -65,6 +68,21 @@ public:
     /// is a later milestone (see the lib README), so today this only kicks
     /// the scan. No-op when no Wi-Fi device is present.
     Q_INVOKABLE void scanWifi();
+
+    /// Activate an existing saved connection on a device (NM
+    /// ActivateConnection). Fire-and-forget; the result surfaces through
+    /// the device's state and the manager's connectivity. No-op if either
+    /// argument is null or the bus is unavailable.
+    Q_INVOKABLE void activateConnection(PhosphorServiceNetwork::NetworkConnection* connection,
+                                        PhosphorServiceNetwork::NetworkDevice* device);
+
+    /// Create and activate a new Wi-Fi connection for an access point (NM
+    /// AddAndActivateConnection). An empty `passphrase` builds an open
+    /// profile; a non-empty one builds a WPA-PSK profile. Fire-and-forget.
+    /// No-op if either argument is null or the bus is unavailable.
+    Q_INVOKABLE void connectToAccessPoint(PhosphorServiceNetwork::NetworkDevice* device,
+                                          PhosphorServiceNetwork::AccessPoint* accessPoint,
+                                          const QString& passphrase = {});
 
 Q_SIGNALS:
     void networkingEnabledChanged();

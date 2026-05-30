@@ -3,6 +3,8 @@
 
 #include <PhosphorServiceNetwork/AccessPoint.h>
 #include <PhosphorServiceNetwork/AccessPointModel.h>
+#include <PhosphorServiceNetwork/NetworkConnection.h>
+#include <PhosphorServiceNetwork/NetworkConnectionModel.h>
 #include <PhosphorServiceNetwork/NetworkDevice.h>
 #include <PhosphorServiceNetwork/NetworkDeviceModel.h>
 #include <PhosphorServiceNetwork/NetworkHost.h>
@@ -207,6 +209,47 @@ private Q_SLOTS:
         QCOMPARE(model.rowCount(), 0);
         // attach emitted deviceChanged once; destroyed-lambda emits it again.
         QCOMPARE(deviceSpy.count(), 2);
+    }
+
+    void connectionModelConstructsCleanly()
+    {
+        // Self-bootstraps against NM Settings; ListConnections is async, so
+        // the row set is empty synchronously (and stays empty on a CI
+        // runner with no NetworkManager). What we pin: construction binds
+        // without blocking or crashing.
+        NetworkConnectionModel model;
+        QCOMPARE(model.rowCount(), 0);
+        QVERIFY(!model.data(model.index(0), NetworkConnectionModel::IdRole).isValid());
+    }
+
+    void connectionModelExposesContractRoles()
+    {
+        NetworkConnectionModel model;
+        const auto roles = model.roleNames();
+        QVERIFY(roles.contains(NetworkConnectionModel::ConnectionRole));
+        QVERIFY(roles.contains(NetworkConnectionModel::IdRole));
+        QVERIFY(roles.contains(NetworkConnectionModel::UuidRole));
+        QVERIFY(roles.contains(NetworkConnectionModel::ConnectionTypeRole));
+        QCOMPARE(roles[NetworkConnectionModel::ConnectionRole], QByteArrayLiteral("connection"));
+        QCOMPARE(roles[NetworkConnectionModel::IdRole], QByteArrayLiteral("id"));
+        QCOMPARE(roles[NetworkConnectionModel::UuidRole], QByteArrayLiteral("uuid"));
+        QCOMPARE(roles[NetworkConnectionModel::ConnectionTypeRole], QByteArrayLiteral("connectionType"));
+    }
+
+    void hostConnectApisAreSafeWhenIdle()
+    {
+        // Null arguments and inert (CI) objects must no-op, never crash.
+        NetworkHost host;
+        host.activateConnection(nullptr, nullptr);
+        host.connectToAccessPoint(nullptr, nullptr);
+
+        NetworkDevice device(QStringLiteral("/org/freedesktop/NetworkManager/Devices/0"));
+        NetworkConnection connection(QStringLiteral("/org/freedesktop/NetworkManager/Settings/0"));
+        AccessPoint ap(QStringLiteral("/org/freedesktop/NetworkManager/AccessPoints/0"));
+        host.activateConnection(&connection, &device);
+        host.connectToAccessPoint(&device, &ap, QStringLiteral("hunter2"));
+        host.connectToAccessPoint(&device, &ap); // open network (no passphrase)
+        QVERIFY(true);
     }
 };
 
