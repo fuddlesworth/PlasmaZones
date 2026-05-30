@@ -123,9 +123,9 @@ void EditorController::loadEditorSettings()
     // getSetting() calls — this is on the ctor hot path before the QML engine starts.
     refreshGlobalGapOverlaySettings();
 
-    // Load label font settings from global Snapping.Appearance.Labels config (read-only in editor)
+    // Load label font settings from global Snapping.Zones.Labels config (read-only in editor)
     {
-        auto labels = backend->group(ConfigDefaults::snappingAppearanceLabelsGroup());
+        auto labels = backend->group(ConfigDefaults::snappingZonesLabelsGroup());
         m_labelFontFamily = labels->readString(ConfigDefaults::fontFamilyKey());
         m_labelFontSizeScale =
             qBound(ConfigDefaults::labelFontSizeScaleMin(),

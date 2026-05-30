@@ -161,17 +161,17 @@ private Q_SLOTS:
         }
 
         {
-            auto border = backend->group(ConfigDefaults::snappingAppearanceBorderGroup());
+            auto border = backend->group(ConfigDefaults::snappingZonesBorderGroup());
             QCOMPARE(border->readInt(ConfigDefaults::widthKey(), 0), 5);
             QCOMPARE(border->readInt(ConfigDefaults::radiusKey(), 0), 25);
         }
         {
-            auto opacity = backend->group(ConfigDefaults::snappingAppearanceOpacityGroup());
+            auto opacity = backend->group(ConfigDefaults::snappingZonesOpacityGroup());
             QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::activeKey(), 0.0), 0.8));
             QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::inactiveKey(), 0.0), 0.2));
         }
         {
-            auto labels = backend->group(ConfigDefaults::snappingAppearanceLabelsGroup());
+            auto labels = backend->group(ConfigDefaults::snappingZonesLabelsGroup());
             QCOMPARE(labels->readInt(ConfigDefaults::fontWeightKey(), 0), 400);
         }
 
@@ -447,7 +447,7 @@ private Q_SLOTS:
                 g->writeBool(QStringLiteral("OldDisplayToggle"), true);
             }
             {
-                auto g = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+                auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
                 g->writeInt(QStringLiteral("DeprecatedThemeIndex"), 42);
             }
             {
@@ -481,9 +481,9 @@ private Q_SLOTS:
             QVERIFY2(g->hasKey(ConfigDefaults::showNumbersKey()), "Valid key ShowNumbers must survive save()");
         }
         {
-            auto g = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+            auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("DeprecatedThemeIndex")),
-                     "Stale key in Snapping.Appearance.Colors group must be purged by save()");
+                     "Stale key in Snapping.Zones.Colors group must be purged by save()");
         }
         {
             auto g = backend->group(ConfigDefaults::tilingGroup());

@@ -165,7 +165,7 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Appearance ─────────────────────────────────────────────────────────────
-// Five sub-groups under Snapping.Appearance.*: Colors (system toggle + 3
+// Four sub-groups under Snapping.Zones.*: Colors (system toggle + 3
 // zone colors), Labels (font family/color/scale/weight + italic/underline/
 // strikeout toggles), Opacity (active + inactive), Border (width + radius),
 // plus Effects.Blur which shares the load function.
@@ -174,14 +174,14 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
 
-    schema.groups[CD::snappingAppearanceColorsGroup()] = {
+    schema.groups[CD::snappingZonesColorsGroup()] = {
         {CD::useSystemKey(), CD::useSystemColors(), QMetaType::Bool},
         {CD::highlightKey(), CD::highlightColor(), QMetaType::QColor, {}, validColorOr(CD::highlightColor())},
         {CD::inactiveKey(), CD::inactiveColor(), QMetaType::QColor, {}, validColorOr(CD::inactiveColor())},
         {CD::borderKey(), CD::borderColor(), QMetaType::QColor, {}, validColorOr(CD::borderColor())},
     };
 
-    schema.groups[CD::snappingAppearanceLabelsGroup()] = {
+    schema.groups[CD::snappingZonesLabelsGroup()] = {
         {CD::fontColorKey(), CD::labelFontColor(), QMetaType::QColor, {}, validColorOr(CD::labelFontColor())},
         {CD::fontFamilyKey(), CD::labelFontFamily(), QMetaType::QString},
         {CD::fontSizeScaleKey(),
@@ -199,7 +199,7 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
         {CD::fontStrikeoutKey(), CD::labelFontStrikeout(), QMetaType::Bool},
     };
 
-    schema.groups[CD::snappingAppearanceOpacityGroup()] = {
+    schema.groups[CD::snappingZonesOpacityGroup()] = {
         {CD::activeKey(),
          CD::activeOpacity(),
          QMetaType::Double,
@@ -212,7 +212,7 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
          clampDouble(CD::inactiveOpacityMin(), CD::inactiveOpacityMax())},
     };
 
-    schema.groups[CD::snappingAppearanceBorderGroup()] = {
+    schema.groups[CD::snappingZonesBorderGroup()] = {
         {CD::widthKey(), CD::borderWidth(), QMetaType::Int, {}, clampInt(CD::borderWidthMin(), CD::borderWidthMax())},
         {CD::radiusKey(),
          CD::borderRadius(),

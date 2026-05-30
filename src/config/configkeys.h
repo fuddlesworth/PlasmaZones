@@ -58,16 +58,16 @@ public:
     PZ_CONFIG_GROUP(updatesGroup, "Updates")
 
     // Snapping sub-groups
-    PZ_CONFIG_GROUP(snappingAppearanceGroup, "Snapping.Appearance")
+    PZ_CONFIG_GROUP(snappingZonesGroup, "Snapping.Zones")
     PZ_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
     PZ_CONFIG_GROUP(snappingBehaviorZoneSpanGroup, "Snapping.Behavior.ZoneSpan")
     PZ_CONFIG_GROUP(snappingBehaviorSnapAssistGroup, "Snapping.Behavior.SnapAssist")
     PZ_CONFIG_GROUP(snappingBehaviorDisplayGroup, "Snapping.Behavior.Display")
     PZ_CONFIG_GROUP(snappingBehaviorWindowHandlingGroup, "Snapping.Behavior.WindowHandling")
-    PZ_CONFIG_GROUP(snappingAppearanceColorsGroup, "Snapping.Appearance.Colors")
-    PZ_CONFIG_GROUP(snappingAppearanceOpacityGroup, "Snapping.Appearance.Opacity")
-    PZ_CONFIG_GROUP(snappingAppearanceBorderGroup, "Snapping.Appearance.Border")
-    PZ_CONFIG_GROUP(snappingAppearanceLabelsGroup, "Snapping.Appearance.Labels")
+    PZ_CONFIG_GROUP(snappingZonesColorsGroup, "Snapping.Zones.Colors")
+    PZ_CONFIG_GROUP(snappingZonesOpacityGroup, "Snapping.Zones.Opacity")
+    PZ_CONFIG_GROUP(snappingZonesBorderGroup, "Snapping.Zones.Border")
+    PZ_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
     PZ_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     PZ_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
     PZ_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
@@ -208,7 +208,7 @@ public:
     PZ_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Appearance.Colors
+    // Config Keys — Snapping.Zones.Colors
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(useSystemKey, "UseSystem")
@@ -217,21 +217,21 @@ public:
     PZ_CONFIG_KEY(borderKey, "Border")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Appearance.Opacity
+    // Config Keys — Snapping.Zones.Opacity
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(activeKey, "Active")
     // (also uses inactiveKey)
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Appearance.Border
+    // Config Keys — Snapping.Zones.Border
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(widthKey, "Width")
     PZ_CONFIG_KEY(radiusKey, "Radius")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Appearance.Labels
+    // Config Keys — Snapping.Zones.Labels
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(fontColorKey, "FontColor")
@@ -683,6 +683,13 @@ public:
         PZ_CONFIG_GROUP(v3assignmentGroupPrefix, "Assignment:")
         PZ_CONFIG_GROUP(v3quickLayoutsGroup, "QuickLayouts")
         PZ_CONFIG_GROUP(v3modeTrackingGroup, "ModeTracking")
+
+        // v3 zone-overlay groups — renamed to Snapping.Zones.* by
+        // migrateV3ToV4; frozen old paths the migration reads from.
+        PZ_CONFIG_GROUP(v3SnappingAppearanceColorsGroup, "Snapping.Appearance.Colors")
+        PZ_CONFIG_GROUP(v3SnappingAppearanceOpacityGroup, "Snapping.Appearance.Opacity")
+        PZ_CONFIG_GROUP(v3SnappingAppearanceBorderGroup, "Snapping.Appearance.Border")
+        PZ_CONFIG_GROUP(v3SnappingAppearanceLabelsGroup, "Snapping.Appearance.Labels")
 
         // v4 legacy keys/groups — used ONLY by migration code.
         //

@@ -86,7 +86,7 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto appearance = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+            auto appearance = backend->group(ConfigDefaults::snappingZonesColorsGroup());
             appearance->writeBool(ConfigDefaults::useSystemKey(), false);
             appearance->writeString(ConfigDefaults::highlightKey(), QStringLiteral("not-a-color"));
             appearance.reset();
