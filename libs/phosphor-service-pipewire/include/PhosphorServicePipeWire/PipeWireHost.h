@@ -40,6 +40,9 @@ class PHOSPHORSERVICEPIPEWIRE_EXPORT PipeWireHost : public QObject
     Q_DISABLE_COPY_MOVE(PipeWireHost)
     Q_PROPERTY(PhosphorServicePipeWire::PipeWireConnection* connection READ connection CONSTANT)
     Q_PROPERTY(bool connected READ isConnected NOTIFY connectedChanged)
+    /// Mirror of the underlying connection's `daemonAvailable`. See
+    /// `PipeWireConnection::daemonAvailable` for the full semantics
+    /// (info-answered vs. fully connected, and the three reset paths).
     Q_PROPERTY(bool daemonAvailable READ isDaemonAvailable NOTIFY daemonAvailableChanged)
     Q_PROPERTY(QString defaultSinkName READ defaultSinkName NOTIFY defaultSinkNameChanged)
     Q_PROPERTY(QString defaultSourceName READ defaultSourceName NOTIFY defaultSourceNameChanged)

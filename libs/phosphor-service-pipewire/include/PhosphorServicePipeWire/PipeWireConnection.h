@@ -59,14 +59,17 @@ class PHOSPHORSERVICEPIPEWIRE_EXPORT PipeWireConnection : public QObject
     /// True once the PipeWire daemon has answered the `pw_core` info
     /// event for the current connection (i.e. `pw_context_connect`
     /// succeeded AND the daemon shipped its core info). Distinct from
-    /// `connected`: the daemon may answer info but still fail the
-    /// follow-up handshake sync (version mismatch, permission denial,
-    /// transient teardown), in which case `daemonAvailable` stays true
-    /// but `connected` never flips on. QML uses `daemonAvailable` to
-    /// drive the "PipeWire is installed but unreachable" diagnostic.
-    /// Reset to false on disconnect and on every pre-info failure
-    /// path (`pw_context_new` / `pw_context_connect` returning null,
-    /// `pw_core_sync` failing).
+    /// `connected`: info-answered means the daemon is reachable, while
+    /// `connected` additionally requires the post-info handshake sync
+    /// to complete. QML uses `daemonAvailable` to drive the "PipeWire
+    /// is installed but unreachable" diagnostic.
+    /// Reset to false on three paths: (1) disconnect, (2) every
+    /// pre-info failure (`pw_context_new` / `pw_context_connect`
+    /// returning null, `pw_core_sync` failing), and (3) a post-info
+    /// `pw_core` error reported via `onCoreError` (e.g. transient
+    /// teardown, version mismatch), which clears `daemonAvailable`
+    /// alongside `connected` to signal the daemon is no longer
+    /// present even though it had answered info earlier.
     Q_PROPERTY(bool daemonAvailable READ isDaemonAvailable NOTIFY daemonAvailableChanged)
     /// Canonical PipeWire `node.name` of the WirePlumber default audio
     /// sink. Empty when no default metadata has been reported yet (no

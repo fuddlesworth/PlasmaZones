@@ -2,28 +2,31 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Shape-traversal contract — `extractValidTokens` is the single
-// source of truth, called by both validateDoc (validation-only,
-// discards the cached map) and applyParsedJson (merge), so the
-// wrapped-vs-flat JSON layout rules AND the QColor accept set
-// cannot drift between any pair of callers that inspect a parsed
-// payload.
+// source of truth, called by both loadFromJson (validation arm of
+// the JSON-blob path, discards the cached map) and applyParsedJson
+// (merge), so the wrapped-vs-flat JSON layout rules AND the QColor
+// accept set cannot drift between any pair of callers that inspect
+// a parsed payload.
 //
 // extractValidTokens wraps extractTokensOrEmpty (shape probe) and
 // adds the QColor-parse pass, returning the normalised QVariantMap
-// both callers consume. Two file-load entry points (loadFromFile
-// and reloadFromCurrentPath) further share the I/O + parse +
-// apply pipeline through readParseAndApply so the diagnostic
-// wording on every failure mode is identical across fresh-load
-// and hot-reload paths.
+// both callers consume. The two file-backed entry points share the
+// parse + applyParsedDocWithLoadError step (identical diagnostic
+// wording): loadFromFile does its own preflight read to avoid
+// TOCTOU and then calls applyParsedDocWithLoadError directly;
+// reloadFromCurrentPath re-reads via readParseAndApply because the
+// watcher signals "something changed" without the bytes, so the
+// reload needs its own I/O pass before reaching the shared apply
+// step.
 //
 // A previous version of this file open-coded the wrapped/flat
-// traversal in both validateDoc and applyParsedJson and relied on
-// a Q_ASSERT after the apply step to catch drift; in release
-// builds the assert would compile out and a half-committed
-// loadFromJson (watcher dropped, sourcePath cleared,
-// paletteChanged NOT fired) would surface silently. Routing both
-// call sites through one helper makes the divergence structurally
-// impossible.
+// traversal in both loadFromJson's validation arm and
+// applyParsedJson and relied on a Q_ASSERT after the apply step to
+// catch drift; in release builds the assert would compile out and
+// a half-committed loadFromJson (watcher dropped, sourcePath
+// cleared, paletteChanged NOT fired) would surface silently.
+// Routing both call sites through one helper makes the divergence
+// structurally impossible.
 //
 // If you add a new ApplyResult variant or change the shape rules,
 // update extractValidTokens and its callers will stay correct by

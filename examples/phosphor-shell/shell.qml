@@ -96,6 +96,16 @@ Item {
     // bolted onto this alias.
     property alias shellState: shellRouter
 
+    // Root-level alias to the TopPanel id below. Lets PanelPopupHost's
+    // `topPanel` binding be written as `root.topPanelRef` (qualified),
+    // mirroring the `shellState: root.shellState` pattern documented at
+    // the TopPanel block: an unqualified `topPanel: topPanel` binding
+    // resolves the RHS in the assignee's scope, picking up
+    // PanelPopupHost's own (initially undefined) `topPanel` required
+    // property instead of the outer `id: topPanel`. Using a root alias
+    // forces resolution against `root`, avoiding the shadowing hazard.
+    readonly property alias topPanelRef: topPanel
+
     SystemClock {
         id: clock
 
@@ -293,7 +303,13 @@ Item {
         id: panelPopupHost
 
         shellState: root.shellState
-        topPanel: topPanel
+        // Qualified with `root.` for the same reason as `shellState`
+        // above: an unqualified `topPanel: topPanel` RHS resolves in
+        // PanelPopupHost's scope and picks up its own (initially
+        // undefined) `topPanel` required property rather than the outer
+        // `id: topPanel`. The root alias `topPanelRef` (declared near
+        // `shellState`) forces resolution against `root`.
+        topPanel: root.topPanelRef
     }
 
     // ─── Floating windows ────────────────────────────────────────────────

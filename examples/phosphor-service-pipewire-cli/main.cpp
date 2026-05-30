@@ -227,10 +227,12 @@ PhosphorServicePipeWire::PwNode* resolveTarget(PhosphorServicePipeWire::PipeWire
     // Reject any input containing internal whitespace: " 55" would
     // otherwise toUInt() to 55 silently, and "alsa output" is never a
     // valid node.name anyway. We accept leading/trailing whitespace by
-    // trimming first. Per-char QChar::isSpace() covers the full Unicode
-    // whitespace set so an exotic spec like "alsa output" (NBSP)
-    // or one containing a U+2028 line separator is also rejected; a
-    // narrow space/tab-only check would silently let those through.
+    // trimming first. Iterating QChar walks UTF-16 code units, so
+    // per-char QChar::isSpace() covers the full BMP Unicode whitespace
+    // set (NBSP, U+2028 line separator, etc.); supplementary-plane
+    // whitespace codepoints (none currently assigned in Unicode) would
+    // not be detected, but a narrow space/tab-only check would silently
+    // let the BMP cases through.
     const QString trimmed = spec.trimmed();
     for (const QChar ch : trimmed) {
         if (ch.isSpace()) {
@@ -671,17 +673,35 @@ int cmdSetDefault(PhosphorServicePipeWire::PipeWireConnection& conn, const QStri
     const QString name = resolveTargetToName(conn, trimmed);
     if (name.isEmpty())
         return 1;
+    // Snapshot the accessor before issuing the write. If it stays empty
+    // through the entire wait, the host almost certainly has no session
+    // manager (PipeWire alone never publishes the default-sink/source
+    // metadata key — WirePlumber does), which is structurally distinct
+    // from "session manager present but slow". The two cases need
+    // different operator responses, so we surface them separately rather
+    // than collapsing into one timeout string.
+    const QString preWriteValue = accessor();
     setter(name);
     // Signal-driven wait until WirePlumber echoes the new default back
     // through the metadata observer. On timeout exit non-zero so wrapper
     // scripts can detect partial application.
     const int deadlineMs = postMetadataSettleMs();
     if (!waitForString(conn, changedSignal, accessor, name, deadlineMs)) {
-        // Include the requested name in the diagnostic so operators can
-        // tell which write was waiting: a parallel session manager
-        // racing on the same default would otherwise produce a
-        // diagnostic indistinguishable from a slow WirePlumber.
-        err() << label << ": timed out waiting for WirePlumber echo of '" << name << "' (" << deadlineMs << "ms)\n";
+        if (preWriteValue.isEmpty() && accessor().isEmpty()) {
+            // The metadata key was empty before the write and remains
+            // empty after the full deadline. WirePlumber would have
+            // populated it during the initial registry walk; its absence
+            // points at a bare PipeWire daemon with no session manager
+            // rather than a slow echo.
+            err() << label << ": no WirePlumber default metadata observed for '" << name
+                  << "'; PipeWire may be running without a session manager (" << deadlineMs << "ms)\n";
+        } else {
+            // Include the requested name in the diagnostic so operators can
+            // tell which write was waiting: a parallel session manager
+            // racing on the same default would otherwise produce a
+            // diagnostic indistinguishable from a slow WirePlumber.
+            err() << label << ": timed out waiting for WirePlumber echo of '" << name << "' (" << deadlineMs << "ms)\n";
+        }
         return 1;
     }
     out() << "set " << label << " = " << name << "\n";

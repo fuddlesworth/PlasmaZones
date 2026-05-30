@@ -57,12 +57,11 @@ private Q_SLOTS:
     void connectIdempotent()
     {
         PhosphorServicePipeWire::PipeWireConnection conn;
-        // Baseline: connectedChanged must not fire from construction
-        // alone. Without this, a regression that flipped the property
-        // at construction would silently pass the post-connect bound
-        // (count <= 1) because we'd never observe the second flip.
-        QSignalSpy constructionSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged);
-        QCOMPARE(constructionSpy.count(), 0);
+        // The spy attaches after construction, so any construction-time
+        // emission would already have fired (or be queued behind a
+        // qWait) and would not be observable here. constructionDefaults
+        // already pins the baseline property values; rely on that and
+        // let connectedSpy below capture only post-connect transitions.
         QSignalSpy connectedSpy(&conn, &PhosphorServicePipeWire::PipeWireConnection::connectedChanged);
         conn.connectToDaemon();
         conn.connectToDaemon();
@@ -386,11 +385,17 @@ private Q_SLOTS:
         // one more transition (the disconnect half of the cycle) plus
         // the second reconnect half if the daemon answered the new
         // handshake.
+        const int reconnectBaseline = connSpy.count();
         host.reconnect();
-        QTest::qWait(150);
+        // Wait up to kDefaultConnectTimeoutMs (2000ms) for the reconnect
+        // cycle to surface a connectedChanged emission. 150ms was tight
+        // enough on slow hosts that the reconnect was still in-flight
+        // when the isConnected() guard ran, silently skipping the
+        // post-reconnect spy-count assertion.
+        connSpy.wait(2000);
         QVERIFY(host.connection() != nullptr);
         if (host.isConnected())
-            QVERIFY(connSpy.count() >= 2);
+            QVERIFY(connSpy.count() >= reconnectBaseline + 1);
     }
 
     /// WirePlumber's default metadata should surface a non-empty
