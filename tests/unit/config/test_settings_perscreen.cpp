@@ -9,7 +9,6 @@
  * 1. Per-screen zone selector set/clear
  * 2. Per-screen autotile validation
  * 3. Fresh config defaults
- * 4. Empty string list preservation across save/load
  */
 
 #include <QTest>

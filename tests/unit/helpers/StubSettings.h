@@ -31,7 +31,7 @@ namespace PlasmaZones {
  * no currently-exercised unit test routes through a
  * dynamic_cast<IAutotileSettings*> against the stub. If a future test
  * exercises autotile-engine wiring through ISettings, the stub
- * should grow that base + the 22 IAutotileSettings overrides.
+ * should grow that base + the 26 IAutotileSettings overrides.
  */
 class StubSettings : public ISettings, public PhosphorEngine::ISnapSettings
 {

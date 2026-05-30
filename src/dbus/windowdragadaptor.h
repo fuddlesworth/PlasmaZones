@@ -226,7 +226,6 @@ public Q_SLOTS:
      */
     void cancelSnap();
 
-public:
     /**
      * Clear any drag state the daemon is still holding. Called when the
      * compositor bridge re-registers (e.g. KWin reloaded the effect, the
@@ -236,15 +235,25 @@ public:
      * dragStarted from the fresh connection must land on a clean slate.
      * Also hides any leftover overlay so stale visuals don't linger.
      *
-     * Plain public member (NOT under Q_SLOTS) for the same reason
-     * `handleWindowClosed` below uses that placement —
-     * QDBusAbstractAdaptor's runtime introspection exposes every public
-     * scriptable slot on the wire regardless of the XML, and this method
-     * is only invoked in-process from `Daemon::init` via the
-     * `bridgeRegistered` signal. No external D-Bus caller exists.
+     * MUST stay under `public Q_SLOTS` — this is genuinely invoked
+     * cross-process. The effect fires it on shutdown via
+     * `PlasmaZonesEffect::clearDaemonCompositorState()`
+     * (`ClientHelpers::sendOneWay(...WindowDrag, "clearForCompositorReconnect")`,
+     * lifecycle.cpp) so the daemon drops stale drag/overlay state the
+     * moment the effect tears down, not just on the next re-registration.
+     * It is NOT listed in `org.plasmazones.WindowDrag.xml` (the XML is
+     * hand-maintained doc, not adaptor-generating), so the bus surface for
+     * this method comes solely from its `Q_SLOTS` placement: moving it to a
+     * plain `public:` member would silently remove it from the wire and the
+     * effect's fire-and-forget `sendOneWay` call would no-op without any
+     * error. The daemon also calls it in-process from `Daemon::init` via the
+     * `bridgeRegistered` signal, but that only covers re-registration, not
+     * the effect's explicit shutdown-time clear. Contrast `handleWindowClosed`
+     * below, which has no remote caller and is correctly a plain member.
      */
     void clearForCompositorReconnect();
 
+public:
     /**
      * Called when a window is closed during or after a drag operation.
      * Connected to WindowTrackingAdaptor::windowClosedNotification — the

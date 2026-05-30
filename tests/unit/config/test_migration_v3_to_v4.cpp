@@ -15,6 +15,10 @@
  *     SetSnappingLayout / SetTilingAlgorithm,
  *   - a provider-default catch-all rule exists at priority 0,
  *   - per-mode disable-list entries become DisableEngine context rules,
+ *   - the v3 window-class/application exclusion lists fold into
+ *     `AppId AppIdMatches` Exclude rules,
+ *   - the v3 animation-application rules fold into animation-override rules
+ *     and the animation exclusion lists fold into `ExcludeAnimations` rules,
  *   - config.json is stamped `_version == 4`,
  *   - the conversion is idempotent (running twice is a no-op).
  *
@@ -154,19 +158,6 @@ private:
         return root.value(QStringLiteral("rules")).toArray();
     }
 
-    /// Returns the first rule at the given @p priority, or an empty object if
-    /// none exists.
-    QJsonObject findRuleByPriority(const QJsonArray& rules, int priority)
-    {
-        for (const QJsonValue& v : rules) {
-            const QJsonObject r = v.toObject();
-            if (r.value(QStringLiteral("priority")).toInt() == priority) {
-                return r;
-            }
-        }
-        return {};
-    }
-
     QList<QJsonObject> allRulesByPriority(const QJsonArray& rules, int priority)
     {
         QList<QJsonObject> out;
@@ -177,6 +168,41 @@ private:
             }
         }
         return out;
+    }
+
+    // An assignment rule sets an engine mode and does NOT disable an engine.
+    // Disable rules share the assignment cascade priorities (e.g. a
+    // screen+activity disable and a screen+activity assignment both land at
+    // 510), so any priority-keyed lookup that must target the assignment rule
+    // has to filter on this predicate rather than taking the first match.
+    bool isAssignmentRule(const QJsonObject& rule)
+    {
+        const QStringList types = actionTypes(rule);
+        return types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"));
+    }
+
+    bool hasAssignmentAtPriority(const QJsonArray& rules, int priority)
+    {
+        for (const QJsonObject& r : allRulesByPriority(rules, priority)) {
+            if (isAssignmentRule(r)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Returns the assignment rule at @p priority, skipping any same-priority
+    // disable rule. A bare first-match-by-priority lookup would return
+    // whichever rule the migration happened to emit first — an order
+    // dependency the assertion should not rely on.
+    QJsonObject findAssignmentRuleByPriority(const QJsonArray& rules, int priority)
+    {
+        for (const QJsonObject& r : allRulesByPriority(rules, priority)) {
+            if (isAssignmentRule(r)) {
+                return r;
+            }
+        }
+        return {};
     }
 
     /// Collect the action `type` strings of a rule.
@@ -303,29 +329,18 @@ private Q_SLOTS:
         // present in the migrated rule set.
         //
         // Priorities 410/510 can also carry same-priority disable rules, so we
-        // assert against the assignment cascade explicitly: a rule that sets an
-        // engine mode and does NOT disable an engine.
-        const auto isAssignmentRule = [this](const QJsonObject& rule) {
-            const QStringList types = actionTypes(rule);
-            return types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"));
-        };
-        const auto hasAssignmentAtPriority = [&](int priority) {
-            for (const QJsonObject& r : allRulesByPriority(rules, priority)) {
-                if (isAssignmentRule(r)) {
-                    return true;
-                }
-            }
-            return false;
-        };
+        // assert against the assignment cascade explicitly via the shared
+        // assignment-filtered helper (a rule that sets an engine mode and does
+        // NOT disable an engine).
 
         // Exact (screen+desktop+activity) → 610.
-        QVERIFY(hasAssignmentAtPriority(610));
+        QVERIFY(hasAssignmentAtPriority(rules, 610));
         // Screen + activity → 510 (activity weight beats desktop).
-        QVERIFY(hasAssignmentAtPriority(510));
+        QVERIFY(hasAssignmentAtPriority(rules, 510));
         // Screen + desktop → 410.
-        QVERIFY(hasAssignmentAtPriority(410));
+        QVERIFY(hasAssignmentAtPriority(rules, 410));
         // Screen only → 310.
-        QVERIFY(hasAssignmentAtPriority(310));
+        QVERIFY(hasAssignmentAtPriority(rules, 310));
     }
 
     // ─── Lossless three-action assignment rules ──────────────────────────
@@ -340,23 +355,28 @@ private Q_SLOTS:
         const QJsonArray rules = rulesFromWindowRules();
 
         // The exact rule (610) had Mode=Autotile + snappingLayout + tilingAlgo
-        // — all three actions present.
-        const QJsonObject exact = findRuleByPriority(rules, 610);
+        // — all three actions present. (610 is unique to the exact assignment;
+        // no disable rule collides there, but use the assignment-filtered
+        // lookup uniformly so the three sites stay consistent.)
+        const QJsonObject exact = findAssignmentRuleByPriority(rules, 610);
         QVERIFY(!exact.isEmpty());
         QCOMPARE(actionTypes(exact),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout"),
                               QStringLiteral("setTilingAlgorithm")}));
 
         // The screen+activity rule (510) had snapping mode + a layout, no
-        // tiling algorithm → SetEngineMode + SetSnappingLayout only.
-        const QJsonObject scrAct = findRuleByPriority(rules, 510);
+        // tiling algorithm → SetEngineMode + SetSnappingLayout only. A
+        // screen+activity disable rule (AutotileDisabledActivities) also lands
+        // at 510, so filter to the assignment rule explicitly.
+        const QJsonObject scrAct = findAssignmentRuleByPriority(rules, 510);
         QVERIFY(!scrAct.isEmpty());
         QCOMPARE(actionTypes(scrAct),
                  (QStringList{QStringLiteral("setEngineMode"), QStringLiteral("setSnappingLayout")}));
 
         // The screen-only rule (310) was mode-only autotile (both layout
-        // fields empty) → just SetEngineMode.
-        const QJsonObject scrOnly = findRuleByPriority(rules, 310);
+        // fields empty) → just SetEngineMode. Screen-only monitor disable
+        // rules also land at 310, so filter to the assignment rule explicitly.
+        const QJsonObject scrOnly = findAssignmentRuleByPriority(rules, 310);
         QVERIFY(!scrOnly.isEmpty());
         QCOMPARE(actionTypes(scrOnly), (QStringList{QStringLiteral("setEngineMode")}));
     }
@@ -1357,23 +1377,10 @@ private Q_SLOTS:
         // rule's id would drop the assignment from the rebuilt set; counting
         // every cascade level guards that.
         const QJsonArray allRules = rulesFromWindowRules();
-        const auto isAssignmentRule = [this](const QJsonObject& rule) {
-            const QStringList types = actionTypes(rule);
-            return types.contains(QLatin1String("setEngineMode")) && !types.contains(QLatin1String("disableEngine"));
-        };
-        const auto hasAssignmentAtPriority = [&](int priority) {
-            for (const QJsonValue& v : allRules) {
-                const QJsonObject r = v.toObject();
-                if (r.value(QStringLiteral("priority")).toInt() == priority && isAssignmentRule(r)) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        QVERIFY(hasAssignmentAtPriority(610));
-        QVERIFY(hasAssignmentAtPriority(510));
-        QVERIFY(hasAssignmentAtPriority(410));
-        QVERIFY(hasAssignmentAtPriority(310));
+        QVERIFY(hasAssignmentAtPriority(allRules, 610));
+        QVERIFY(hasAssignmentAtPriority(allRules, 510));
+        QVERIFY(hasAssignmentAtPriority(allRules, 410));
+        QVERIFY(hasAssignmentAtPriority(allRules, 310));
 
         // Disable family — count must match testDisableListRules exactly
         // (fixture: 1 + 2 + 1 + 1 = 5). Drift here means an animation rule

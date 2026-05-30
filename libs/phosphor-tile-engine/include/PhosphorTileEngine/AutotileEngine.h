@@ -155,9 +155,10 @@ public:
      * `tilingStateForScreen(screenId)`
      * which returns a (non-const) `PhosphorTiles::TilingState*` for
      * the read/mutate sites that explicitly key off one screen.
-     * Mutation through that accessor is gated by convention to
-     * `friend` classes (PerScreenConfigResolver) and the engine's own
-     * call paths; external read-only access by tests is accepted.
+     * That accessor is public, so the restraint on mutating through it is
+     * convention only (not enforced by access level or `friend`): the
+     * intended writers are the engine's own call paths and the
+     * per-screen config resolver, while tests use it for read-only access.
      */
     QSet<int> desktopsWithActiveState() const override;
 

@@ -1995,10 +1995,13 @@ void appendAnimationRulesFromStash(QList<PhosphorWindowRule::WindowRule>& rules,
 /// the same `(field, op, pattern)` tuple at runtime (pre-v4) produces
 /// the same id post-migration. Two consequences of the deterministic
 /// derivation:
-///   - re-runs of the migration on the same v3 inputs produce
-///     byte-identical rule ids, so `WindowRuleStore::addRule`'s id-
-///     collision check collapses the second run to a no-op rather than
-///     duplicating every rule on every startup, and
+///   - within a single rebuild, two source patterns that derive the same
+///     id collapse via `WindowRuleSet::setRules`' id-dedup (so the snapping
+///     fold of identical patterns across both v3 lists yields one rule);
+///     cross-RUN idempotency is provided separately by the
+///     `windowRulesAlreadyConverted` existence probe in the finalizer, which
+///     refuses to rebuild once windowrules.json exists, so the rebuild path
+///     never runs twice, and
 ///   - the LEGACY runtime bridge's id (pre-v4 daemons that built the
 ///     same rule from the same lists at runtime) matches the migration's
 ///     id, so a v4 store that somehow saw both producers stays consistent.
@@ -2018,6 +2021,26 @@ inline const QUuid& exclusionMigrationNamespace()
     static const QUuid ns(QStringLiteral("{d5f4e3c2-9b60-7182-0abe-2f3a4b5c6d7e}"));
     return ns;
 }
+
+// The migrated exclusion-rule ids below are UUIDv5-derived from the integer
+// values of the Field/Operator enumerators (encoded as decimal strings). Those
+// integers are therefore a wire format: renumbering any of them silently
+// changes every previously-migrated exclusion-rule id and breaks the
+// collision-with-self idempotency guarantee — the same failure mode the
+// ExcludeAnimations wire-string static_assert below guards against. MatchTypes.h
+// already documents "keeping enum values stable across versions"; pin the exact
+// values the derivation depends on so a renumber breaks the build instead.
+static_assert(static_cast<int>(PhosphorWindowRule::Field::AppId) == 0
+                  && static_cast<int>(PhosphorWindowRule::Field::WindowClass) == 1
+                  && static_cast<int>(PhosphorWindowRule::Field::DesktopFile) == 2,
+              "Field enum values feed migrated exclusion-rule UUIDs — renumbering them silently "
+              "changes every migrated rule id. Bump the schema version and write a v4→v5 migration "
+              "if a renumber is truly needed.");
+static_assert(static_cast<int>(PhosphorWindowRule::Operator::Contains) == 1
+                  && static_cast<int>(PhosphorWindowRule::Operator::AppIdMatches) == 5,
+              "Operator enum values feed migrated exclusion-rule UUIDs — renumbering them silently "
+              "changes every migrated rule id. Bump the schema version and write a v4→v5 migration "
+              "if a renumber is truly needed.");
 
 /// Drain the v4 exclusion stash into @p rules. The stash carries two
 /// comma-joined string fields (`Applications` and `WindowClasses`) — the v3
@@ -2106,12 +2129,14 @@ void appendAnimationExclusionRulesFromStash(QList<PhosphorWindowRule::WindowRule
                 continue;
             }
             WindowRule rule;
-            // Deterministic id keyed off `(field, op, pattern)` — same
+            // Deterministic id keyed off `(field, op, pattern, action)` — same
             // namespace + segment encoding as the snapping-side exclusion
             // migration so identical inputs collapse to identical ids on
-            // re-runs, and the action discriminator naturally separates
-            // ExcludeAnimations rules from generic Exclude rules even
-            // when the field/op/pattern triple matches.
+            // re-runs. The snapping side always uses AppId/AppIdMatches while
+            // this side uses DesktopFile|WindowClass/Contains, so the two folds
+            // can never collide on the field/op/pattern triple anyway; the
+            // appended action segment is defensive and additionally keeps this
+            // fold's own entries distinct should the encodings ever converge.
             rule.id = QUuid::createUuidV5(
                 exclusionMigrationNamespace(),
                 Detail::encodeSegment(QString::number(static_cast<int>(field)))

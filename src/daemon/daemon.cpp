@@ -1134,8 +1134,10 @@ bool Daemon::init()
         // (rename, priority change, non-Exclude action edit, …) fires
         // this lambda, but only changes that affect the Exclude slice
         // should bump the evaluator's revision and walk the (potentially
-        // long) pending-restore queues. `WindowRuleSet::operator==`
-        // compares the rules-list only — exactly the semantics we want.
+        // long) pending-restore queues. The guard below compares the two
+        // `QList<WindowRule>` slices element-wise (the same semantics as
+        // `WindowRuleSet::operator==`, which delegates to this list compare) —
+        // exactly the rules-list-only comparison we want.
         const QList<PhosphorWindowRule::WindowRule> newSlice =
             PhosphorWindowRule::ExclusionRules::excludeRulesFrom(m_windowRuleStore->ruleSet()).rules();
         if (newSlice == m_excludeRuleSet.rules()) {
