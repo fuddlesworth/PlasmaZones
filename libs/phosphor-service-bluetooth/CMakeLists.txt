@@ -44,10 +44,16 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(phosphorservicebluetooth_public_HDRS
     include/PhosphorServiceBluetooth/PhosphorServiceBluetooth.h
     include/PhosphorServiceBluetooth/QmlRegistration.h
+    include/PhosphorServiceBluetooth/BluetoothAdapter.h
+    include/PhosphorServiceBluetooth/BluetoothDevice.h
+    include/PhosphorServiceBluetooth/BluetoothHost.h
 )
 
 set(phosphorservicebluetooth_SRCS
     src/qmlregistration.cpp
+    src/bluetoothadapter.cpp
+    src/bluetoothdevice.cpp
+    src/bluetoothhost.cpp
 )
 
 add_library(PhosphorServiceBluetooth SHARED

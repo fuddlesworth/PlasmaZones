@@ -27,4 +27,7 @@
  * generic `PhosphorDBus::Client` async helper and `PhosphorDBus::ObjectManager`.
  */
 
+#include <PhosphorServiceBluetooth/BluetoothAdapter.h>
+#include <PhosphorServiceBluetooth/BluetoothDevice.h>
+#include <PhosphorServiceBluetooth/BluetoothHost.h>
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
