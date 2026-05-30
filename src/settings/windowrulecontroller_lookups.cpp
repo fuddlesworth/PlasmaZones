@@ -52,6 +52,40 @@ void WindowRuleController::setTilingAlgorithmLookup(WindowRuleModel::LabelLookup
     markLookupWired(LookupTilingAlgorithm);
 }
 
+void WindowRuleController::setShaderEffectLookup(WindowRuleModel::LabelLookup fn)
+{
+    // Not part of the AllLookups readiness gate: the gate tracks the four
+    // match/placement lookups that must all land before the first rich
+    // render. Shader/curve are action-summary enhancements — a rule whose
+    // resolver isn't wired yet falls back to the raw id, then refreshes.
+    m_model.setShaderEffectLabelLookup(std::move(fn));
+}
+
+void WindowRuleController::setCurveLabelResolver(const QJSValue& resolver)
+{
+    m_curveResolver = resolver;
+    if (resolver.isCallable()) {
+        m_model.setCurveLabelLookup([this](const QString& wire) -> QString {
+            // Re-read m_curveResolver live: a later setCurveLabelResolver()
+            // swaps the closure without reinstalling this lambda.
+            if (!m_curveResolver.isCallable()) {
+                return wire;
+            }
+            QJSValue result = m_curveResolver.call(QJSValueList{QJSValue(wire)});
+            if (result.isError() || result.isUndefined() || result.isNull()) {
+                return wire;
+            }
+            const QString label = result.toString();
+            return label.isEmpty() ? wire : label;
+        });
+    } else {
+        m_model.setCurveLabelLookup({});
+    }
+    // The resolver arrives from QML page init, which can run after the rule
+    // set is already loaded — refresh so visible Curve labels pick it up.
+    m_model.refreshLabels();
+}
+
 void WindowRuleController::markLookupWired(LookupBit bit)
 {
     m_wiredLookups |= static_cast<unsigned>(bit);

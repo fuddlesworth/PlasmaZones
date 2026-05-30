@@ -214,7 +214,9 @@ QString engineModeDisplayLabel(const QString& wire)
 /// ("bsp", …) — split so a stray cross-resolve can't surface an algorithm
 /// name in a snapping action's label or vice versa.
 QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup& snappingLayoutLookup,
-                    const WindowRuleModel::LabelLookup& tilingAlgorithmLookup)
+                    const WindowRuleModel::LabelLookup& tilingAlgorithmLookup,
+                    const WindowRuleModel::LabelLookup& shaderEffectLookup,
+                    const WindowRuleModel::LabelLookup& curveLookup)
 {
     auto resolveWith = [](const QString& wire, const WindowRuleModel::LabelLookup& lookup) {
         if (wire.isEmpty() || !lookup) {
@@ -283,7 +285,8 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     }
     if (action.type == ActionType::OverrideAnimationShader) {
         const QString id = action.params.value(PhosphorWindowRule::ActionParam::EffectId).toString();
-        return id.isEmpty() ? PzI18n::tr("Block animation shader") : PzI18n::tr("Shader: %1").arg(id);
+        return id.isEmpty() ? PzI18n::tr("Block animation shader")
+                            : PzI18n::tr("Shader: %1").arg(resolveWith(id, shaderEffectLookup));
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
         const int ms = action.params.value(PhosphorWindowRule::ActionParam::DurationMs).toInt();
@@ -291,7 +294,8 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
     }
     if (action.type == ActionType::OverrideAnimationCurve) {
         const QString curve = action.params.value(PhosphorWindowRule::ActionParam::Curve).toString();
-        return curve.isEmpty() ? PzI18n::tr("Animation curve") : PzI18n::tr("Curve: %1").arg(curve);
+        return curve.isEmpty() ? PzI18n::tr("Animation curve")
+                               : PzI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
     }
     return WindowRuleModel::actionTypeFallbackLabel(action.type);
 }
@@ -632,7 +636,8 @@ QString WindowRuleModel::actionSummary(const QList<RuleAction>& actions) const
     }
     QStringList parts;
     for (const RuleAction& a : actions) {
-        parts.append(actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup));
+        parts.append(
+            actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_shaderEffectLookup, m_curveLookup));
     }
     return parts.join(QStringLiteral(" · "));
 }
@@ -696,6 +701,16 @@ void WindowRuleModel::setSnappingLayoutLabelLookup(LabelLookup fn)
 void WindowRuleModel::setTilingAlgorithmLabelLookup(LabelLookup fn)
 {
     m_tilingAlgorithmLookup = std::move(fn);
+}
+
+void WindowRuleModel::setShaderEffectLabelLookup(LabelLookup fn)
+{
+    m_shaderEffectLookup = std::move(fn);
+}
+
+void WindowRuleModel::setCurveLabelLookup(LabelLookup fn)
+{
+    m_curveLookup = std::move(fn);
 }
 
 void WindowRuleModel::refreshLabels()

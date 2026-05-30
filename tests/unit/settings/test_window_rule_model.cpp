@@ -111,6 +111,7 @@ private Q_SLOTS:
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
     void setOpacityRendersValidValuesAndGuardsRejectPaths();
+    void shaderAndCurveLabelsResolveThroughLookups();
 };
 
 void TestWindowRuleModel::rolesExposed()
@@ -476,6 +477,56 @@ void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
     QVERIFY2(labelAt(3).contains(QStringLiteral("invalid")), qPrintable(labelAt(3)));
     // Out-of-range: same marker
     QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
+}
+
+void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
+{
+    // The action summary resolves OverrideAnimationShader effect ids and
+    // OverrideAnimationCurve wire strings to friendly names through the
+    // injected lookups (the registry / CurvePresets sources the rule editor
+    // uses). With no lookup wired the raw value round-trips behind the label,
+    // so a missing resolver degrades gracefully rather than hiding the payload.
+    WindowRule shaderRule;
+    shaderRule.id = QUuid::createUuid();
+    shaderRule.priority = 100;
+    shaderRule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+    RuleAction shader;
+    shader.type = QString(ActionType::OverrideAnimationShader);
+    shader.params.insert(ActionParam::EffectId, QStringLiteral("dissolve"));
+    shaderRule.actions = {shader};
+
+    WindowRule curveRule;
+    curveRule.id = QUuid::createUuid();
+    curveRule.priority = 99;
+    curveRule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("konsole"));
+    RuleAction curve;
+    curve.type = QString(ActionType::OverrideAnimationCurve);
+    curve.params.insert(ActionParam::Curve, QStringLiteral("0.33,1.00,0.68,1.00"));
+    curveRule.actions = {curve};
+
+    WindowRuleModel model;
+    model.setRules({shaderRule, curveRule});
+
+    const auto summaryAt = [&](int row) {
+        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+    };
+
+    // No lookups wired → the raw id / wire string round-trips behind the label.
+    QCOMPARE(summaryAt(0), QStringLiteral("Shader: dissolve"));
+    QCOMPARE(summaryAt(1), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
+
+    // Resolvers mirroring the registry (id → name) and CurvePresets (wire →
+    // preset name) wiring done by SettingsController / the QML rules page.
+    model.setShaderEffectLabelLookup([](const QString& id) {
+        return id == QLatin1String("dissolve") ? QStringLiteral("Dissolve") : id;
+    });
+    model.setCurveLabelLookup([](const QString& wire) {
+        return wire == QLatin1String("0.33,1.00,0.68,1.00") ? QStringLiteral("Standard (Cubic)") : wire;
+    });
+    model.refreshLabels();
+
+    QCOMPARE(summaryAt(0), QStringLiteral("Shader: Dissolve"));
+    QCOMPARE(summaryAt(1), QStringLiteral("Curve: Standard (Cubic)"));
 }
 
 QTEST_MAIN(TestWindowRuleModel)

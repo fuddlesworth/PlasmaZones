@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorSettingsUi/PageController.h>
+#include <QJSValue>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -94,6 +95,19 @@ public:
     void setSnappingLayoutLookup(WindowRuleModel::LabelLookup fn);
     /// Algorithm token ("bsp", …) → display label resolver for SetTilingAlgorithm actions.
     void setTilingAlgorithmLookup(WindowRuleModel::LabelLookup fn);
+    /// Effect id ("dissolve", …) → display name resolver for
+    /// OverrideAnimationShader actions. SettingsController wires this from the
+    /// animation shader registry (the same source the rule editor's shader
+    /// picker uses), so the list renders "Dissolve" rather than the raw id.
+    void setShaderEffectLookup(WindowRuleModel::LabelLookup fn);
+    /// Curve wire-string → display name resolver for OverrideAnimationCurve
+    /// actions. Q_INVOKABLE and QJSValue-typed because the canonical curve
+    /// naming (easing-preset matching + spring formatting + i18n labels) lives
+    /// in the QML CurvePresets singleton; the rules page passes that JS
+    /// resolver here and this wraps it into a model LabelLookup, so the list
+    /// reuses the editor's naming with no easing tables duplicated in C++.
+    /// Passing a non-callable value clears the resolver (raw value shown).
+    Q_INVOKABLE void setCurveLabelResolver(const QJSValue& resolver);
 
     WindowRuleModel* model()
     {
@@ -444,6 +458,10 @@ private:
     /// accidentally hit the tiling-algorithm path and vice versa.
     WindowRuleModel::LabelLookup m_snappingLayoutLookup;
     WindowRuleModel::LabelLookup m_tilingAlgorithmLookup;
+    /// JS resolver supplied by the QML rules page (CurvePresets.curveLabel).
+    /// Held so the model LabelLookup installed in setCurveLabelResolver can
+    /// re-invoke it live on every summary rebuild.
+    QJSValue m_curveResolver;
     /// Bit-mask of resolvers wired so far. When all four bits are set,
     /// emit lookupsReady() once. Tracks individual setters because the
     /// parent SettingsController wires them across separate calls in
