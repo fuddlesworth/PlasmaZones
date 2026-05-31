@@ -35,8 +35,11 @@ return pz.algorithm {
 
         local offsetRatio = math.max(CascadeMinOffsetRatio, math.min(CascadeMaxOffsetRatio, ctx.splitRatio))
 
-        local offsetX = math.max(CascadeMinOffsetPx, math.floor(area.width * offsetRatio / (count - 1)))
-        local offsetY = math.max(CascadeMinOffsetPx, math.floor(area.height * offsetRatio / (count - 1)))
+        -- Guard the divisor (the host short-circuits single-window layouts, so
+        -- this is defensive); identical to `count - 1` for the reachable count>=2
+        -- cases, and matches the guarded divisor on maxOffset below.
+        local offsetX = math.max(CascadeMinOffsetPx, math.floor(area.width * offsetRatio / math.max(1, count - 1)))
+        local offsetY = math.max(CascadeMinOffsetPx, math.floor(area.height * offsetRatio / math.max(1, count - 1)))
 
         local totalOffsetX = offsetX * (count - 1)
         local totalOffsetY = offsetY * (count - 1)
