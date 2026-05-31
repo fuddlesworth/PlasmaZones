@@ -64,7 +64,6 @@ set(phosphortiles_public_HDRS
     include/PhosphorTiles/PhosphorTiles.h
     include/PhosphorTiles/AutotileConstants.h
     include/PhosphorTiles/TilingAlgorithm.h
-    include/PhosphorTiles/TilingAlgorithmHelpers.h
     include/PhosphorTiles/TilingParams.h
     include/PhosphorTiles/TilingState.h
     include/PhosphorTiles/SplitTree.h
