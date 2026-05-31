@@ -73,8 +73,8 @@ public:
      * @brief Inject a resolver that maps an opaque instance id to its live app class.
      *
      * Used by algorithms that need per-window class info (currently only
-     * ScriptedAlgorithm, which exposes class to user-authored JS). Built-in
-     * geometry algorithms don't care and ignore the resolver.
+     * LuauTileAlgorithm, which exposes it to user-authored Luau scripts).
+     * Built-in geometry algorithms don't care and ignore the resolver.
      *
      * Injected by AutotileEngine::setWindowRegistry() so every algorithm
      * returned from AlgorithmRegistry::algorithm() is seeded with the live
@@ -224,8 +224,8 @@ public:
     // ── noexcept convention for virtual methods ──────────────────────────
     // Methods below are noexcept because they only read cached POD fields.
     // Methods above (supportsMasterCount, supportsSplitRatio, etc.) are NOT
-    // noexcept because ScriptedAlgorithm overrides may allocate QStrings or
-    // invoke cached JS values. When adding new virtuals, use noexcept only
+    // noexcept because LuauTileAlgorithm overrides may allocate QStrings or
+    // marshal cached script values. When adding new virtuals, use noexcept only
     // if the implementation is guaranteed to never allocate or throw.
 
     /**
@@ -252,10 +252,10 @@ public:
     /**
      * @brief Whether this algorithm is a user-provided scripted algorithm
      *
-     * Scripted algorithms are loaded from JavaScript files at runtime.
+     * Scripted algorithms are loaded from Luau (.luau) files at runtime.
      * Used by the UI to group algorithms into "Built-in" vs "Custom" sections.
      *
-     * @return true if this is a ScriptedAlgorithm (default: false)
+     * @return true if this is a LuauTileAlgorithm (default: false)
      */
     virtual bool isScripted() const noexcept;
 

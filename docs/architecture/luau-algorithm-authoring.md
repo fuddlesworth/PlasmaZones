@@ -58,8 +58,9 @@ return pz.algorithm {
 }
 ```
 
-That is a complete algorithm. `pz.algorithm{…}` validates the table and returns
-it; `pz` is a pre-loaded, **frozen** global (do not reassign it).
+That is a complete algorithm. `pz.algorithm{…}` wraps the table and returns it
+(it adapts `ctx.area` to a `Rect` for your `tile` function); `pz` is a pre-loaded,
+**frozen** global (do not reassign it).
 
 ---
 

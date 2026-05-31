@@ -11,7 +11,7 @@
 ## Responsibility
 
 [`phosphor-tiles`](../phosphor-tiles/README.md) owns the algorithms
-themselves (`TilingAlgorithm`, `TilingState`, the JS sandbox).
+themselves (`TilingAlgorithm`, `TilingState`, the Luau algorithm binding).
 `phosphor-tile-engine` is the **runtime engine** that drives those
 algorithms in response to compositor events. Splitting them lets
 settings UI render an algorithm preview without linking the engine,
@@ -110,5 +110,5 @@ placementEngineRouter.bind("autotile", autotile);
 
 ## See also
 
-- [`phosphor-tiles`](../phosphor-tiles/README.md) — algorithm vocabulary, JS sandbox, and `TilingState`.
+- [`phosphor-tiles`](../phosphor-tiles/README.md) — algorithm vocabulary, the Luau binding, and `TilingState`.
 - [`phosphor-snap-engine`](../phosphor-snap-engine/README.md) — sibling manual-zone engine.

@@ -2908,7 +2908,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
 
     // Resolve custom params for this algorithm from saved settings.
     // Filter out stale params that no longer match the algorithm's declarations
-    // (e.g., user edited the JS file and renamed/removed a @param).
+    // (e.g., user edited the .luau file and renamed/removed a custom param).
     QVariantMap customParams;
     if (m_config) {
         const auto it = m_config->savedAlgorithmSettings.constFind(algoId);

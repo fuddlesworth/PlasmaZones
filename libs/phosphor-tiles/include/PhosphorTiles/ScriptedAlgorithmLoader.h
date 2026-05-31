@@ -24,7 +24,7 @@ class ITileAlgorithmRegistry;
  * @brief Discovers, loads, and hot-reloads LuauTileAlgorithm instances
  *
  * Scans system and user algorithm directories for .luau files, creates
- * ScriptedAlgorithm instances, and registers them with the injected
+ * LuauTileAlgorithm instances, and registers them with the injected
  * ITileAlgorithmRegistry. Watches directories and files via
  * QFileSystemWatcher with debounced refresh so that new/modified/
  * deleted scripts are picked up automatically.
@@ -118,7 +118,7 @@ private:
     /// algorithm shares ownership of the watchdog so the thread is
     /// joined only when the very last user releases its strong
     /// reference (typically here in ~Loader, occasionally in a
-    /// deferred-delete ~ScriptedAlgorithm). Per-loader instead of a
+    /// deferred-delete ~LuauTileAlgorithm). Per-loader instead of a
     /// process-wide singleton means each composition root (daemon,
     /// editor, settings) gets its own supervisor thread.
     std::shared_ptr<PhosphorScripting::LuauWatchdog> m_watchdog;

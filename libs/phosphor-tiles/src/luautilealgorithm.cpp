@@ -231,7 +231,7 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
     m_cachedDefaultSplitRatio = (m_metadata.defaultSplitRatio > 0.0) ? m_metadata.defaultSplitRatio : DefaultSplitRatio;
 
     // Optional override functions: called once at load, result cached (the
-    // three-tier resolution matching the prior JS engine). Each is guarded by
+    // established three-tier resolution). Each is guarded by
     // the watchdog so a misbehaving override cannot hang load.
     auto resolveInt = [this](const QString& fn, int fallback) -> int {
         if (!m_engine->hasFunction(m_module, fn)) {
@@ -365,7 +365,7 @@ bool LuauTileAlgorithm::isUserScript() const noexcept
 QVariantMap LuauTileAlgorithm::buildContext(const TilingParams& params, const QRect& area) const
 {
     QVariantMap ctx;
-    // New ergonomic names (count/gap) plus the JS-compatible names
+    // New ergonomic names (count/gap) plus the original names
     // (windowCount/innerGap) the faithfully-ported bundled algorithms use.
     ctx[QStringLiteral("count")] = params.windowCount;
     ctx[QStringLiteral("windowCount")] = params.windowCount;

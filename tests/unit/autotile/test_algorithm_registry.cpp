@@ -215,7 +215,7 @@ private Q_SLOTS:
     {
         auto* registry = m_scriptSetup.registry();
         const QStringList expectedIds = {
-            // 15 original C++-to-JS converted algorithms
+            // 15 original built-in tiling algorithms
             QLatin1String("bsp"),
             QLatin1String("cascade"),
             QLatin1String("centered-master"),
@@ -231,7 +231,7 @@ private Q_SLOTS:
             QLatin1String("stair"),
             QLatin1String("three-column"),
             QLatin1String("wide"),
-            // 9 JS-native algorithms (shipped with PR #256)
+            // 9 additional bundled algorithms (originally added in PR #256)
             QLatin1String("corner-master"),
             QLatin1String("quadrant-priority"),
             QLatin1String("deck"),

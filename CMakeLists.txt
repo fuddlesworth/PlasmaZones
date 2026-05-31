@@ -577,7 +577,7 @@ install(DIRECTORY data/animations/
 install(DIRECTORY data/algorithms/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/algorithms
     FILES_MATCHING
-    PATTERN "*.js"
+    PATTERN "*.luau"
 )
 
 # Install support report script

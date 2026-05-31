@@ -251,8 +251,13 @@ return pz.algorithm {
         if #zones == 0 then
             return pz.equalColumnsLayout(area, count, gap, minSizes)
         end
+        -- If the tree could not yield one leaf per window (e.g. a zero-size leaf
+        -- was filtered at an extreme window count), fall back to an even split
+        -- of the whole area — guaranteed `count` non-overlapping zones.
+        -- (appendGracefulDegradation expects a genuine leftover rect, which a
+        -- whole-area BSP doesn't have, so it can't be used here.)
         if #zones < count then
-            pz.appendGracefulDegradation(zones, area, count - #zones, gap)
+            return pz.equalColumnsLayout(area, count, gap, minSizes)
         end
 
         return zones

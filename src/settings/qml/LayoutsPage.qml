@@ -568,6 +568,7 @@ ColumnLayout {
 
         title: i18n("Export Algorithm")
         nameFilters: [i18n("Luau files (*.luau)")]
+        defaultSuffix: "luau"
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile));

@@ -23,8 +23,8 @@ QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount,
     infos.reserve(windowCount);
     for (int i = 0; i < windowCount && i < windows.size(); ++i) {
         WindowInfo info;
-        // Live class lookup via the caller-supplied resolver so ScriptedAlgorithm
-        // user-JS sees the current appId, not a stale first-seen parse. Callers
+        // Live class lookup via the caller-supplied resolver so a LuauTileAlgorithm
+        // user script sees the current appId, not a stale first-seen parse. Callers
         // that don't care about the class (pure geometry algorithms) can pass
         // a no-op lambda; the resolver is cheap either way.
         info.appId = appIdResolver ? appIdResolver(windows[i]) : QString();
