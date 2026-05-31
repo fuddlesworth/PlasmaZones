@@ -12,15 +12,18 @@
 
 #include <memory>
 
+namespace PhosphorScripting {
+class LuauWatchdog;
+}
+
 namespace PhosphorTiles {
 
 class ITileAlgorithmRegistry;
-class ScriptedAlgorithmWatchdog;
 
 /**
- * @brief Discovers, loads, and hot-reloads ScriptedAlgorithm instances
+ * @brief Discovers, loads, and hot-reloads LuauTileAlgorithm instances
  *
- * Scans system and user algorithm directories for .js files, creates
+ * Scans system and user algorithm directories for .luau files, creates
  * ScriptedAlgorithm instances, and registers them with the injected
  * ITileAlgorithmRegistry. Watches directories and files via
  * QFileSystemWatcher with debounced refresh so that new/modified/
@@ -118,7 +121,7 @@ private:
     /// deferred-delete ~ScriptedAlgorithm). Per-loader instead of a
     /// process-wide singleton means each composition root (daemon,
     /// editor, settings) gets its own supervisor thread.
-    std::shared_ptr<ScriptedAlgorithmWatchdog> m_watchdog;
+    std::shared_ptr<PhosphorScripting::LuauWatchdog> m_watchdog;
     std::unique_ptr<JsScanStrategy> m_strategy;
     std::unique_ptr<PhosphorFsLoader::WatchedDirectorySet> m_watcher;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path

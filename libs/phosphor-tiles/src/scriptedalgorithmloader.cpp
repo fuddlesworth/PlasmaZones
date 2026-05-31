@@ -3,9 +3,10 @@
 
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTiles/ScriptedAlgorithm.h>
-#include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
+#include <PhosphorTiles/LuauTileAlgorithm.h>
 #include "tileslogging.h"
+
+#include <PhosphorScripting/LuauWatchdog.h>
 
 #include <PhosphorFsLoader/IScanStrategy.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
@@ -64,7 +65,7 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
     : QObject(parent)
     , m_subdirectory(subdirectory)
     , m_registry(registry)
-    , m_watchdog(std::make_shared<ScriptedAlgorithmWatchdog>())
+    , m_watchdog(std::make_shared<PhosphorScripting::LuauWatchdog>())
     , m_strategy(std::make_unique<JsScanStrategy>(*this))
     , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this))
 {
@@ -414,7 +415,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // so the algorithm keeps it alive across deferred-delete teardown
         // (registry uses deleteLater(); algorithm dtor can run after the
         // loader is gone — see ScriptedAlgorithm.h for the contract).
-        auto* algo = new ScriptedAlgorithm(fullPath, m_watchdog, nullptr);
+        auto* algo = new LuauTileAlgorithm(fullPath, m_watchdog, nullptr);
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
             delete algo;
@@ -483,7 +484,7 @@ QStringList ScriptedAlgorithmLoader::validatedJsFiles(const QString& dirPath, in
     // inside canonicalDir after symlink expansion). Leaving NoSymLinks in the
     // filter would additionally block benign user-local symlinks pointing at
     // read-only system script directories.
-    const QStringList files = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::Readable);
+    const QStringList files = dirObj.entryList({QStringLiteral("*.luau")}, QDir::Files | QDir::Readable);
     for (const QString& file : files) {
         if (result.size() >= maxFiles) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Reached max file limit (" << maxFiles

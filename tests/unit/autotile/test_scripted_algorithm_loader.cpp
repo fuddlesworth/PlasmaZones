@@ -26,9 +26,12 @@ using namespace PlasmaZones::TestHelpers;
 static QString validScript(const QString& name)
 {
     return QStringLiteral(
-               "var metadata = { name: \"%1\", description: \"Test algorithm\" };\n"
-               "function calculateZones(params) {\n"
-               "    return [{ x: 0, y: 0, width: 100, height: 100 }];\n"
+               "local pz = pz\n"
+               "return pz.algorithm {\n"
+               "    metadata = { name = \"%1\", description = \"Test algorithm\" },\n"
+               "    tile = function(ctx)\n"
+               "        return { { x = 0, y = 0, width = 100, height = 100 } }\n"
+               "    end,\n"
                "}\n")
         .arg(name);
 }
@@ -88,7 +91,7 @@ private Q_SLOTS:
         QString algoDir = xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
         QDir().mkpath(algoDir);
 
-        writeScript(algoDir, QStringLiteral("gamma.js"), validScript(QStringLiteral("Gamma")));
+        writeScript(algoDir, QStringLiteral("gamma.luau"), validScript(QStringLiteral("Gamma")));
 
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
@@ -127,13 +130,13 @@ private Q_SLOTS:
         QDir().mkpath(algoDir);
 
         // Valid filename
-        writeScript(algoDir, QStringLiteral("valid-name.js"), validScript(QStringLiteral("Valid")));
+        writeScript(algoDir, QStringLiteral("valid-name.luau"), validScript(QStringLiteral("Valid")));
         // Invalid: spaces
-        writeScript(algoDir, QStringLiteral("has space.js"), validScript(QStringLiteral("HasSpace")));
+        writeScript(algoDir, QStringLiteral("has space.luau"), validScript(QStringLiteral("HasSpace")));
         // Invalid: dots in basename
-        writeScript(algoDir, QStringLiteral("has.dot.js"), validScript(QStringLiteral("HasDot")));
+        writeScript(algoDir, QStringLiteral("has.dot.luau"), validScript(QStringLiteral("HasDot")));
         // Invalid: special chars
-        writeScript(algoDir, QStringLiteral("special!char.js"), validScript(QStringLiteral("Special")));
+        writeScript(algoDir, QStringLiteral("special!char.luau"), validScript(QStringLiteral("Special")));
 
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
@@ -166,12 +169,12 @@ private Q_SLOTS:
         // System dir
         QString systemAlgoDir = xdgRoot.path() + QStringLiteral("/system/plasmazones/algorithms");
         QDir().mkpath(systemAlgoDir);
-        writeScript(systemAlgoDir, QStringLiteral("shared.js"), validScript(QStringLiteral("SystemVersion")));
+        writeScript(systemAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("SystemVersion")));
 
         // User dir
         QString userAlgoDir = xdgRoot.path() + QStringLiteral("/user/plasmazones/algorithms");
         QDir().mkpath(userAlgoDir);
-        writeScript(userAlgoDir, QStringLiteral("shared.js"), validScript(QStringLiteral("UserVersion")));
+        writeScript(userAlgoDir, QStringLiteral("shared.luau"), validScript(QStringLiteral("UserVersion")));
 
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
@@ -207,7 +210,7 @@ private Q_SLOTS:
         QDir().mkpath(algoDir);
 
         QString scriptPath =
-            writeScript(algoDir, QStringLiteral("ephemeral.js"), validScript(QStringLiteral("Ephemeral")));
+            writeScript(algoDir, QStringLiteral("ephemeral.luau"), validScript(QStringLiteral("Ephemeral")));
         QVERIFY(!scriptPath.isEmpty());
 
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
@@ -246,7 +249,7 @@ private Q_SLOTS:
         const QString algoDir = xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
         QVERIFY(QDir().mkpath(algoDir));
 
-        writeScript(algoDir, QStringLiteral("ephemeral.js"), validScript(QStringLiteral("Ephemeral")));
+        writeScript(algoDir, QStringLiteral("ephemeral.luau"), validScript(QStringLiteral("Ephemeral")));
 
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
@@ -284,8 +287,8 @@ private Q_SLOTS:
 
         // Same id, distinguishable name fields — the winner's name field
         // tells us which dir's script registered.
-        writeScript(sysHighDir, QStringLiteral("priority.js"), validScript(QStringLiteral("HighPriority")));
-        writeScript(sysLowDir, QStringLiteral("priority.js"), validScript(QStringLiteral("LowPriority")));
+        writeScript(sysHighDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("HighPriority")));
+        writeScript(sysLowDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("LowPriority")));
 
         // sys-high listed first => higher priority per XDG spec.
         const QByteArray xdgDirs = (xdgRoot.path() + QStringLiteral("/sys-high")).toUtf8() + ":"
@@ -327,12 +330,12 @@ private Q_SLOTS:
         QVERIFY(QDir().mkpath(sysLowDir));
 
         // Shared id `priority` exists in all three — user wins overall.
-        writeScript(userHomeDir, QStringLiteral("priority.js"), validScript(QStringLiteral("UserVersion")));
-        writeScript(sysHighDir, QStringLiteral("priority.js"), validScript(QStringLiteral("HighSystem")));
-        writeScript(sysLowDir, QStringLiteral("priority.js"), validScript(QStringLiteral("LowSystem")));
+        writeScript(userHomeDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("UserVersion")));
+        writeScript(sysHighDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("HighSystem")));
+        writeScript(sysLowDir, QStringLiteral("priority.luau"), validScript(QStringLiteral("LowSystem")));
 
         // `user_only` lives only in user dir; should be present.
-        writeScript(userHomeDir, QStringLiteral("user_only.js"), validScript(QStringLiteral("UserOnly")));
+        writeScript(userHomeDir, QStringLiteral("user_only.luau"), validScript(QStringLiteral("UserOnly")));
 
         const QByteArray xdgDirs = (xdgRoot.path() + QStringLiteral("/sys-high")).toUtf8() + ":"
             + (xdgRoot.path() + QStringLiteral("/sys-low")).toUtf8();
