@@ -141,7 +141,10 @@ void DdcController::setBrightness(const QString& id, int value)
         handle, kLuminanceFeature, static_cast<uint8_t>((value >> 8) & 0xff), static_cast<uint8_t>(value & 0xff));
     if (status != 0)
         qCDebug(lcDdcController) << "set luminance failed for display" << id << ":" << status;
-    // Read back the applied value (DDC clamps to its own range) and report it.
+    // Read back and report the value as authoritative even if the set above
+    // failed: the read reflects the monitor's true state (DDC also clamps to its
+    // own range), so a rejected set simply reports the unchanged value and QML
+    // stays truthful rather than showing an optimistic value that never applied.
     int current = 0;
     int maxValue = 0;
     if (readLuminance(handle, current, maxValue))

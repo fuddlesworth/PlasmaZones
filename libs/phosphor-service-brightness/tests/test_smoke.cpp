@@ -215,6 +215,20 @@ private Q_SLOTS:
         QVERIFY(host.deviceAt(99) == nullptr);
     }
 
+    void testEmptySysfsRootEnumeratesNothing()
+    {
+        // The host is inert (empty device list, no crash) when its sysfs root has
+        // no class/backlight or class/leds subtree at all (a documented
+        // BrightnessHost contract); no logind lookup is needed either.
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        BrightnessHost host(root.path(), QDBusConnection::sessionBus(), QStringLiteral("org.example.Logind"),
+                            QLatin1String(kDummySession));
+        QCOMPARE(host.deviceCount(), 0);
+        QVERIFY(host.deviceAt(0) == nullptr);
+        QVERIFY(host.devices().isEmpty());
+    }
+
     void testMalformedSysfsValueFallsBack()
     {
         QTemporaryDir root;

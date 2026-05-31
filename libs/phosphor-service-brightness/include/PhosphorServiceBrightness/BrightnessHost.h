@@ -27,9 +27,10 @@ class BrightnessDevice;
  * (backlights do not hotplug); per-device values update live via each
  * device's file watcher.
  *
- * Writes route through logind, so the host resolves the caller's session
- * object path (asynchronously via `GetSessionByPID`, or injected) and hands it
- * to the devices. Inert when the sysfs root is absent (empty list, no crash);
+ * Writes route through logind, so the host resolves the session object path
+ * (asynchronously: `GetSession` for `XDG_SESSION_ID`, falling back to
+ * `GetSessionByPID` when that is unset; or injected) and hands it to the
+ * devices. Inert when the sysfs root is absent (empty list, no crash);
  * read-only when no logind session is bound.
  *
  * The sysfs root and the `(connection, service, sessionPath)` are injectable
@@ -48,8 +49,8 @@ public:
 
     /// Injectable wiring for tests / advanced consumers. A non-empty
     /// @p sessionPath is used as-is; an empty one is resolved asynchronously
-    /// from the calling process via `GetSessionByPID` (when @p connection is
-    /// connected).
+    /// from `XDG_SESSION_ID` (or the calling process via `GetSessionByPID` when
+    /// that is unset), when @p connection is connected.
     BrightnessHost(QString sysfsRoot, QDBusConnection connection, QString service, QString sessionPath,
                    QObject* parent = nullptr);
 
