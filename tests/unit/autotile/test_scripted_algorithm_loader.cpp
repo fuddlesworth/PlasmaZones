@@ -262,9 +262,13 @@ private Q_SLOTS:
         // Delete the script file
         QVERIFY(QFile::remove(scriptPath));
 
-        // Rescan — the stale algorithm should be unregistered
+        // Rescan — the stale algorithm should be unregistered AND the change must
+        // be announced via algorithmsChanged so the editor/daemon/settings refresh
+        // (the removal is invisible to consumers without that signal).
+        QSignalSpy removalSpy(&*loader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged);
         loader->scanAndRegister();
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
+        QCOMPARE(removalSpy.count(), 1);
 
         loader.reset();
         loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
