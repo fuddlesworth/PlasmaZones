@@ -70,9 +70,10 @@ pinned to 0.723), extracted at configure time via `file(ARCHIVE_EXTRACT)` and
 built as part of this library — so source tarballs and offline distro builds are
 self-contained with no network. Pass `-DPLASMAZONES_SYSTEM_LUAU=ON` to link a
 system-provided Luau instead. The Luau libraries are linked **PRIVATE** and the
-VM is built PIC with exceptions enabled (the parent project is
-`-fno-exceptions` + unity builds; both are overridden on the vendored targets
-only).
+VM is built PIC, with `-fexceptions` force-enabled and unity builds disabled on
+the vendored targets only (Luau needs C++ unwinding for `lua_pcall`, and its
+file-local symbol names collide under unity batching) — independent of the
+project's global build settings.
 
 ## Design notes
 

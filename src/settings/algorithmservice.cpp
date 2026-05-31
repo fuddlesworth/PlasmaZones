@@ -441,7 +441,15 @@ void AlgorithmService::openAlgorithm(const QString& algorithmId)
     // Fallback: try user algorithms dir directly (works right after creation
     // before the registry has picked up the file via QFileSystemWatcher).
     // Uses algorithmId as filename — valid for createNewAlgorithm (returns filename)
-    // and duplicateAlgorithm (watches for the filename-based ID).
+    // and duplicateAlgorithm (watches for the filename-based ID). Validate the id
+    // as a bare basename before interpolating it into a path, so a stray id with
+    // separators / ".." can never escape the user dir (defence in depth — every
+    // producer already sanitizes).
+    static const QRegularExpression safeBaseName(QStringLiteral("^[A-Za-z0-9_-]+$"));
+    if (!safeBaseName.match(algorithmId).hasMatch()) {
+        qCWarning(PlasmaZones::lcCore) << "Cannot open algorithm — unsafe id (not a bare basename):" << algorithmId;
+        return;
+    }
     const QString userPath = userAlgorithmsDir() + algorithmId + QStringLiteral(".luau");
     if (QFile::exists(userPath)) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(userPath));
