@@ -215,6 +215,25 @@ private Q_SLOTS:
         QVERIFY(host.deviceAt(99) == nullptr);
     }
 
+    void testMalformedSysfsValueFallsBack()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        // A non-numeric brightness attribute must not crash: readSysfsInt falls
+        // back (the ctor's fallback is 0) while a valid max_brightness still reads.
+        const QString dir = root.path() + QStringLiteral("/class/backlight/intel_backlight");
+        writeFile(dir + QStringLiteral("/brightness"), QStringLiteral("not-a-number"));
+        writeFile(dir + QStringLiteral("/max_brightness"), QStringLiteral("255"));
+
+        BrightnessHost host(root.path(), QDBusConnection::sessionBus(), QStringLiteral("org.example.Logind"),
+                            QLatin1String(kDummySession));
+        auto* display = findByName(host, QStringLiteral("intel_backlight"));
+        QVERIFY(display);
+        QCOMPARE(display->brightness(), 0);
+        QCOMPARE(display->maxBrightness(), 255);
+        QCOMPARE(display->percentage(), 0.0);
+    }
+
     void testZeroMaxBrightnessDoesNotDivideByZero()
     {
         QTemporaryDir root;
@@ -351,6 +370,14 @@ private Q_SLOTS:
         // bound); the floor, not the unclamped input, reaches the setter.
         device.setBrightness(-5);
         QCOMPARE(lastSet, 0);
+
+        // refresh() only re-reads sysfs; for an external display it is a no-op
+        // (values arrive via applyExternalValue), so it must neither change the
+        // cached value nor emit.
+        QSignalSpy refreshSpy(&device, &BrightnessDevice::brightnessChanged);
+        device.refresh();
+        QCOMPARE(refreshSpy.count(), 0);
+        QCOMPARE(device.brightness(), 100);
     }
 
     void testModelMirrorsHostAndForwardsChanges()
