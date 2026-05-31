@@ -443,7 +443,7 @@ if(BUILD_PHOSPHOR_SHELL)
     # image provider + theme resolver), so configure it first. The
     # other Phase 2.0 siblings are independent. Phase 2.0 is complete:
     # the phosphor-services umbrella has been dissolved into these
-    # four per-domain libraries.
+    # per-domain libraries.
     add_subdirectory(libs/phosphor-service-icontheme) # XDG icon-theme resolver + Qt image provider
     add_subdirectory(libs/phosphor-service-sni)       # StatusNotifierItem host + watcher + dbusmenu
     add_subdirectory(libs/phosphor-service-upower)    # UPower battery / power-supply readouts
@@ -451,6 +451,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-pipewire)  # PipeWire mixer (Phase 2.1, shipped)
     add_subdirectory(libs/phosphor-service-network)   # NetworkManager devices / connectivity (Phase 2.2)
     add_subdirectory(libs/phosphor-service-bluetooth) # BlueZ adapters / devices / pairing (Phase 2.3)
+    add_subdirectory(libs/phosphor-service-brightness) # display / keyboard backlight brightness (Phase 2.4)
 endif()
 
 # Source directories
@@ -690,6 +691,15 @@ endif()
 # is OFF the lib target does not exist, so the CLI can't link.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-bluetooth-cli)
+endif()
+
+# phosphor-service-brightness-cli. Acceptance harness for the
+# phosphor-service-brightness library (Phase 2.4). Headless driver exercising
+# the read path (list, get) and write path (set) against real sysfs backlights
+# and logind. Gated like the lib: when BUILD_PHOSPHOR_SHELL is OFF the lib
+# target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-brightness-cli)
 endif()
 
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo

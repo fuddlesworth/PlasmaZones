@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
+#include <PhosphorServiceBrightness/QmlRegistration.h>
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
 #include <PhosphorServiceMpris/QmlRegistration.h>
 #include <PhosphorServiceNetwork/QmlRegistration.h>
@@ -73,6 +74,12 @@ int main(int argc, char* argv[])
     //                                            registered as
     //                                            uncreatable for type
     //                                            visibility)
+    //   Brightness Phosphor.Service.Brightness 1.0 (BrightnessHost +
+    //                                            BrightnessDeviceModel,
+    //                                            plus BrightnessDevice
+    //                                            registered as
+    //                                            uncreatable for type
+    //                                            visibility)
     // One call per lib here at startup is sufficient. The wrapper
     // functions are idempotent (each lib guards its registration with
     // std::call_once internally), so a future hot-reload hook that
@@ -103,6 +110,7 @@ int main(int argc, char* argv[])
     PhosphorServicePipeWire::registerQmlTypes();
     PhosphorServiceNetwork::registerQmlTypes();
     PhosphorServiceBluetooth::registerQmlTypes();
+    PhosphorServiceBrightness::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();
