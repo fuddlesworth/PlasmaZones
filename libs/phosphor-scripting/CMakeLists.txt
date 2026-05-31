@@ -94,11 +94,12 @@ else()
         set(LUAU_WERROR      OFF CACHE BOOL "" FORCE)
         # EXCLUDE_FROM_ALL so only the targets we actually link (Luau.VM +
         # Luau.Compiler and their deps) build — never Luau.Analysis/CLI, which we
-        # don't use and which don't compile under our -fno-exceptions toolchain.
+        # don't use.
         add_subdirectory("${_pz_luau_src}" "${CMAKE_BINARY_DIR}/extern/luau" EXCLUDE_FROM_ALL)
-        # The parent project builds with -fno-exceptions and unity builds; Luau
-        # needs exceptions (lua_pcall unwinding) and breaks under unity (same-named
-        # file-local symbols collide). Vendored Luau is also STATIC, so it must be
+        # Luau needs exceptions (lua_pcall uses C++ unwinding) — force -fexceptions
+        # on the vendored targets so they build correctly regardless of the
+        # project's global exception settings. Luau also breaks under unity builds
+        # (same-named file-local symbols collide), and is STATIC, so it must be
         # PIC to link into our shared lib. Override on the vendored targets only.
         foreach(_luau_tgt Luau.Ast Luau.Compiler Luau.VM Luau.Bytecode Luau.CodeGen Luau.Config)
             if(TARGET ${_luau_tgt})

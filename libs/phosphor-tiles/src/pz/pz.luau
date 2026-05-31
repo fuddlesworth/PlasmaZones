@@ -319,7 +319,9 @@ local function extractRegionMaxMin(minSizes, startIdx, endIdx, axis)
     local i = startIdx -- 0-based source index
     while i < endIdx and i < #minSizes do
         local entry = minSizes[i + 1]
-        local v = (entry[axis] and entry[axis] > 0) and entry[axis] or 0
+        -- Guard `entry` for a sparse minSizes, matching _extractMinDims /
+        -- interleaveMinWidths (defensive; the host always marshals dense entries).
+        local v = (entry and entry[axis] and entry[axis] > 0) and entry[axis] or 0
         if v > maxVal then maxVal = v end
         i = i + 1
     end

@@ -159,7 +159,7 @@ src/editor/      — Layout editor
 src/settings/    — Standalone settings app
 src/dbus/        — D-Bus adaptors
 src/config/      — Configuration backends
-src/autotile/    — Tiling algorithms (built-in + scripted JS)
+src/autotile/    — Tiling algorithms (scripted Luau via phosphor-tiles)
 kcm/             — System Settings module
 kwin/            — KWin script integration
 tests/           — Unit tests (Qt Test)

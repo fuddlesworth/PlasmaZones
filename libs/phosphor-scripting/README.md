@@ -38,7 +38,7 @@ the result back. It deliberately knows nothing about what the scripts compute.
 
 | Type | Purpose |
 |------|---------|
-| `PhosphorScripting::LuauEngine`   | The sandboxed VM; `QVariant`-only API (init / runPrelude / sandbox / loadModule / callModule / moduleField) |
+| `PhosphorScripting::LuauEngine`   | The sandboxed VM; `QVariant`-only API (init / runPrelude / sandbox / loadModule / releaseModule / moduleField / hasFunction / callModule) |
 | `PhosphorScripting::LuauWatchdog` | Shared CPU-deadline supervisor; aborts runaway scripts via the interrupt callback |
 
 ## Typical use

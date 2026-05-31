@@ -231,7 +231,7 @@ private Q_SLOTS:
             QLatin1String("stair"),
             QLatin1String("three-column"),
             QLatin1String("wide"),
-            // 9 additional bundled algorithms (originally added in PR #256)
+            // 10 additional bundled algorithms (originally added in PR #256)
             QLatin1String("corner-master"),
             QLatin1String("quadrant-priority"),
             QLatin1String("deck"),
@@ -241,6 +241,7 @@ private Q_SLOTS:
             QLatin1String("floating-center"),
             QLatin1String("paper"),
             QLatin1String("tatami"),
+            QLatin1String("cluster"),
         };
         for (const auto& id : expectedIds) {
             QVERIFY2(registry->hasAlgorithm(id), qPrintable(QStringLiteral("Missing algorithm: ") + id));
@@ -350,7 +351,7 @@ private Q_SLOTS:
     // Frozen globals validation — Luau sandbox integrity
     // =========================================================================
 
-    void testFrozenGlobals_jsReassignmentBlocked()
+    void testFrozenGlobals_reassignmentBlocked()
     {
         // The pz standard library is frozen via luaL_sandbox before any algorithm
         // script runs, so a script cannot reassign pz.* constants or helpers.

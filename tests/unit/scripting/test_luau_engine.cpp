@@ -23,6 +23,7 @@ private Q_SLOTS:
     void marshalRoundTrip();
     void marshalDeepNesting();
     void preludeGlobals();
+    void preludeCompileErrorSurfaces();
     void watchdogKillsInfiniteLoopAndRecovers();
     void compileErrorSurfaces();
     void sandboxHolds();
@@ -148,6 +149,17 @@ void TestLuauEngine::preludeGlobals()
     const auto out = engine.callModule(handle, QStringLiteral("tile"), {ctx}, 200);
     QCOMPARE(out.status, LuauEngine::CallStatus::Ok);
     QCOMPARE(out.result.toList().value(0).toInt(), 42);
+}
+
+void TestLuauEngine::preludeCompileErrorSurfaces()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    // A prelude that fails to compile must return false with a non-empty error,
+    // not silently install nothing.
+    QString err;
+    QVERIFY(!engine.runPrelude(QStringLiteral("bad"), "function broken(", &err));
+    QVERIFY(!err.isEmpty());
 }
 
 void TestLuauEngine::watchdogKillsInfiniteLoopAndRecovers()

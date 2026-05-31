@@ -23,6 +23,7 @@
 
 #include <QFile>
 #include <QMap>
+#include <QSet>
 #include <QTextStream>
 
 #include <PhosphorTiles/LuauTileAlgorithm.h>
@@ -60,6 +61,7 @@ class TestLuauParity : public QObject
 private:
     std::shared_ptr<PhosphorScripting::LuauWatchdog> m_watchdog;
     QMap<QString, QString> m_golden;
+    QSet<QString> m_seen; ///< keys actually produced this run (orphan-golden guard)
     bool m_generate = false;
 
     static QString luaPath(const QString& name)
@@ -71,6 +73,7 @@ private:
     void record(const QString& key, const QVector<QRect>& zones)
     {
         const QString val = zonesToStr(zones);
+        m_seen.insert(key);
         if (m_generate) {
             m_golden.insert(key, val);
             return;
@@ -108,6 +111,16 @@ private Q_SLOTS:
     void cleanupTestCase()
     {
         if (!m_generate) {
+            // Every golden row must have been produced this run; a leftover
+            // (orphan) key means the matrix shrank or an algorithm was removed
+            // without regenerating the fixture — which the per-key compare alone
+            // would not catch.
+            for (auto it = m_golden.constBegin(); it != m_golden.constEnd(); ++it) {
+                if (!m_seen.contains(it.key())) {
+                    qWarning().noquote() << "ORPHAN golden key (never produced):" << it.key();
+                }
+            }
+            QCOMPARE(m_seen.size(), m_golden.size());
             return;
         }
         QFile f(goldenPath());

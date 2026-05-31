@@ -52,6 +52,12 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
         d.minValue = d.maxValue;
         d.maxValue = t;
     }
+    // Keep a number param's default inside its own [min, max] range so the
+    // settings control never initialises outside its track (mirrors the
+    // metadata clamping applied to defaultSplitRatio / window counts).
+    if (d.type == QLatin1String("number") && d.defaultValue.canConvert<double>()) {
+        d.defaultValue = std::clamp(d.defaultValue.toDouble(), d.minValue, d.maxValue);
+    }
     d.enumOptions = m.value(QStringLiteral("options")).toStringList();
     return d;
 }
@@ -482,9 +488,12 @@ QVector<QRect> LuauTileAlgorithm::calculateZones(const TilingParams& params) con
 
     // Degenerate screen: fill with stacked full-area zones (matches prior engine).
     if (area.width() < MinRectSizePx || area.height() < MinRectSizePx) {
+        // Cap at MaxZones like every other zone-producing path, rather than
+        // trusting the caller's windowCount unbounded.
+        const int n = std::min(params.windowCount, MaxZones);
         QVector<QRect> zones;
-        zones.reserve(params.windowCount);
-        for (int i = 0; i < params.windowCount; ++i) {
+        zones.reserve(n);
+        for (int i = 0; i < n; ++i) {
             zones.append(area);
         }
         return zones;

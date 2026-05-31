@@ -9,9 +9,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, v3]
+    branches: [main, develop, v3, v3.1, v3.2]
   pull_request:
-    branches: [main, v3]
+    branches: [main, v3, v3.1, v3.2]
     # `labeled` is opt-in for the draft-PKGBUILD job below — it gates
     # on `github.event.label.name == 'build-draft'`. The other jobs
     # (build / lint / nix) skip the `labeled` action subtype via their

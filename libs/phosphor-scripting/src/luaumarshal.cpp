@@ -58,19 +58,19 @@ void pushVariant(lua_State* L, const QVariant& v, int depth)
     case QMetaType::QStringList: {
         const QStringList list = v.toStringList();
         lua_newtable(L);
-        for (int i = 0; i < list.size(); ++i) {
+        for (qsizetype i = 0; i < list.size(); ++i) {
             const QByteArray utf8 = list[i].toUtf8();
             lua_pushlstring(L, utf8.constData(), static_cast<size_t>(utf8.size()));
-            lua_rawseti(L, -2, i + 1);
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
         }
         return;
     }
     case QMetaType::QVariantList: {
         const QVariantList list = v.toList();
         lua_newtable(L);
-        for (int i = 0; i < list.size(); ++i) {
+        for (qsizetype i = 0; i < list.size(); ++i) {
             pushVariant(L, list[i], depth + 1);
-            lua_rawseti(L, -2, i + 1);
+            lua_rawseti(L, -2, static_cast<int>(i + 1));
         }
         return;
     }
@@ -118,7 +118,7 @@ QVariant toVariant(lua_State* L, int idx, int depth)
     case LUA_TSTRING: {
         size_t len = 0;
         const char* s = lua_tolstring(L, abs, &len);
-        return QVariant(QString::fromUtf8(s, static_cast<int>(len)));
+        return QVariant(QString::fromUtf8(s, static_cast<qsizetype>(len)));
     }
     case LUA_TTABLE: {
         if (depth > MaxDepth) {
@@ -157,7 +157,7 @@ QVariant toVariant(lua_State* L, int idx, int depth)
             // failed coercion to a string — only the latter (k == nullptr,
             // e.g. a table/function/boolean key) is dropped.
             const bool haveKey = (k != nullptr);
-            const QString key = haveKey ? QString::fromUtf8(k, static_cast<int>(klen)) : QString();
+            const QString key = haveKey ? QString::fromUtf8(k, static_cast<qsizetype>(klen)) : QString();
             lua_pop(L, 1); // key copy
             if (haveKey) {
                 map.insert(key, toVariant(L, -1, depth + 1));
