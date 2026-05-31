@@ -239,6 +239,9 @@ echo ""
 %files
 %license LICENSE
 %license COPYING.LESSER
+# MIT licence of the vendored Luau runtime (extern/luau), installed by the
+# phosphor-scripting CMake in the default vendored build.
+%license %{_datadir}/licenses/plasmazones/LICENSE.Luau
 %doc README.md
 
 # Executables — globbed by the plasmazones prefix (plasmazonesd plus
