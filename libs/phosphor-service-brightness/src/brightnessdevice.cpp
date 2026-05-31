@@ -113,6 +113,8 @@ BrightnessDevice::BrightnessDevice(QDBusConnection connection, QString service, 
             if (!d->watcher.files().contains(path) && !d->watcher.addPath(path))
                 qCDebug(lcBrightnessDevice) << "lost brightness watch for" << d->name << "; external changes untracked";
         });
+    } else {
+        qCDebug(lcBrightnessDevice) << "could not watch brightness for" << d->name << "; external changes untracked";
     }
 }
 
@@ -197,7 +199,9 @@ void BrightnessDevice::setPercentage(qreal percentage)
     if (d->maxBrightness <= 0 || !std::isfinite(percentage))
         return;
     const qreal clamped = std::clamp(percentage, 0.0, 1.0);
-    setBrightness(static_cast<int>(qRound(clamped * d->maxBrightness)));
+    // qRound(qreal) already yields an int; the clamped fraction times the int
+    // range can never exceed maxBrightness, so no extra cast is needed.
+    setBrightness(qRound(clamped * d->maxBrightness));
 }
 
 void BrightnessDevice::refresh()

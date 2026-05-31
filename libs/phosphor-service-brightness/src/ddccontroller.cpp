@@ -69,6 +69,11 @@ bool DdcController::readLuminance(void* handle, int& current, int& maxValue)
         return false;
     current = (valrec.sh << 8) | valrec.sl;
     maxValue = (valrec.mh << 8) | valrec.ml;
+    // A zero (or negative) max means the luminance feature is uncontrollable on
+    // this monitor (a DDC/CI quirk): treat it as a failed read so enumeration
+    // skips it rather than surfacing a permanently-inert display row.
+    if (maxValue <= 0)
+        return false;
     return true;
 }
 

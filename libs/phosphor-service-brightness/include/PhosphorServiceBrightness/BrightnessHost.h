@@ -63,6 +63,11 @@ Q_SIGNALS:
     /// Sysfs devices are added synchronously at construction; external displays
     /// (DDC/CI) arrive asynchronously after the worker enumerates them.
     void deviceAdded(PhosphorServiceBrightness::BrightnessDevice* device);
+    /// The counterpart to deviceAdded, for dynamic sources that can drop a
+    /// device at runtime. The current sources are stable for the host's lifetime
+    /// (sysfs is enumerated once; DDC/CI enumeration is one-shot), so the host
+    /// does not emit this today; consumers (e.g. BrightnessDeviceModel) handle
+    /// it so a future hot-removal source needs no consumer changes.
     void deviceRemoved(PhosphorServiceBrightness::BrightnessDevice* device);
     void deviceCountChanged();
 

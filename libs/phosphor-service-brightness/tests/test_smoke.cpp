@@ -135,6 +135,66 @@ private Q_SLOTS:
         QVERIFY(findByName(host, QStringLiteral("platform::mute")) == nullptr);
     }
 
+    void testKeyboardBacklightNameFiltering()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        // Valid: a device-prefixed kbd_backlight (the function segment after the
+        // last ':' equals kbd_backlight).
+        makeLed(root.path(), QStringLiteral("tpacpi::kbd_backlight"), 1, 2);
+        // Rejected: a bare kbd_backlight with no colon-delimited prefix.
+        makeLed(root.path(), QStringLiteral("kbd_backlight"), 1, 2);
+        // Rejected: the function segment must equal kbd_backlight exactly, not
+        // merely start with it (suffix mismatch).
+        makeLed(root.path(), QStringLiteral("dell::kbd_backlight_rgb"), 1, 2);
+
+        BrightnessHost host(root.path(), QDBusConnection::sessionBus(), QStringLiteral("org.example.Logind"),
+                            QLatin1String(kDummySession));
+        QCOMPARE(host.deviceCount(), 1);
+        QVERIFY(findByName(host, QStringLiteral("tpacpi::kbd_backlight")) != nullptr);
+        QVERIFY(findByName(host, QStringLiteral("kbd_backlight")) == nullptr);
+        QVERIFY(findByName(host, QStringLiteral("dell::kbd_backlight_rgb")) == nullptr);
+    }
+
+    void testSessionPathActivatesWrites()
+    {
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected())
+            QSKIP("no session bus available");
+        const QString service = QStringLiteral("org.phosphor.test.LateLogind");
+        if (!bus.registerService(service))
+            QSKIP("could not own the test service name");
+        const QString sessionPath = QStringLiteral("/org/phosphor/test/late_session");
+
+        FakeLogindSession fake;
+        QVERIFY(bus.registerObject(sessionPath, &fake, QDBusConnection::ExportAllSlots));
+
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        makeBacklight(root.path(), QStringLiteral("intel_backlight"), 100, 255);
+
+        // Empty session: the write must be inert until a session is bound. This
+        // is the reason BrightnessHost::resolveSession exists; exercise it via
+        // the public BrightnessDevice ctor to avoid a real logind lookup.
+        BrightnessDevice device(bus, service, QString(), BrightnessDevice::Display, QStringLiteral("intel_backlight"),
+                                root.path() + QStringLiteral("/class/backlight/intel_backlight"));
+        device.setBrightness(200);
+        // Give any (erroneous) dispatch a window to land, then assert it did not.
+        QTest::qWait(50);
+        QCOMPARE(fake.lastValue, 0U);
+
+        // Bind the session (what resolveSession does on the async reply) and
+        // confirm the next write goes live.
+        device.setSessionPath(sessionPath);
+        device.setBrightness(200);
+        QTRY_COMPARE(fake.lastValue, 200U);
+        QCOMPARE(fake.lastName, QStringLiteral("intel_backlight"));
+        QCOMPARE(fake.lastSubsystem, QStringLiteral("backlight"));
+
+        bus.unregisterObject(sessionPath);
+        bus.unregisterService(service);
+    }
+
     void testReadSurfaceAndPercentage()
     {
         QTemporaryDir root;
@@ -286,6 +346,11 @@ private Q_SLOTS:
         QCOMPARE(lastSet, 50);
         device.setPercentage(std::numeric_limits<double>::infinity());
         QCOMPARE(lastSet, 50);
+
+        // A negative raw value clamps to the floor of the range (std::clamp lower
+        // bound); the floor, not the unclamped input, reaches the setter.
+        device.setBrightness(-5);
+        QCOMPARE(lastSet, 0);
     }
 
     void testModelMirrorsHostAndForwardsChanges()

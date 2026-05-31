@@ -18,8 +18,10 @@ function(_phosphorservicebrightness_test target source)
     )
 endfunction()
 
-# Smoke test: skeleton-level contract (QML type registration is callable and
-# idempotent). Grows to cover sysfs enumeration, percentage math, the
-# kbd_backlight filter, live watcher updates, and model role names against a
-# fake sysfs tree as those land.
+# Smoke test: exercises the library contract against a fake sysfs tree and an
+# in-process fake logind session. Covers QML registration idempotency, sysfs
+# enumeration with the kbd_backlight filter, percentage math with zero-max
+# safety, the logind write path (including the late session-path binding), the
+# external-display (DDC/CI) device surface, live watcher updates, and the
+# model's add/remove/dataChanged transactions.
 _phosphorservicebrightness_test(test_phosphorservicebrightness_smoke test_smoke.cpp)
