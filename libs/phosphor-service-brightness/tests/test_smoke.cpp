@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorServiceBrightness/BrightnessDevice.h>
+#include <PhosphorServiceBrightness/BrightnessDeviceModel.h>
 #include <PhosphorServiceBrightness/BrightnessHost.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>
 
+#include <QAbstractItemModel>
 #include <QDBusConnection>
 #include <QDir>
 #include <QFile>
@@ -197,6 +199,48 @@ private Q_SLOTS:
 
         bus.unregisterObject(sessionPath);
         bus.unregisterService(service);
+    }
+
+    void testModelMirrorsHostAndForwardsChanges()
+    {
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        makeBacklight(root.path(), QStringLiteral("intel_backlight"), 100, 200);
+        makeLed(root.path(), QStringLiteral("tpacpi::kbd_backlight"), 1, 2);
+
+        BrightnessHost host(root.path(), QDBusConnection::sessionBus(), QStringLiteral("org.example.Logind"),
+                            QLatin1String(kDummySession));
+        BrightnessDeviceModel model;
+        model.setHost(&host);
+        QCOMPARE(model.host(), &host);
+        QCOMPARE(model.rowCount(), 2);
+
+        // Role names + data on the display row.
+        const auto roles = model.roleNames();
+        QCOMPARE(roles.value(BrightnessDeviceModel::NameRole), QByteArrayLiteral("name"));
+        QCOMPARE(roles.value(BrightnessDeviceModel::PercentageRole), QByteArrayLiteral("percentage"));
+        QCOMPARE(roles.size(), 6);
+
+        int displayRow = -1;
+        for (int i = 0; i < model.rowCount(); ++i) {
+            if (model.data(model.index(i), BrightnessDeviceModel::NameRole).toString()
+                == QStringLiteral("intel_backlight")) {
+                displayRow = i;
+                break;
+            }
+        }
+        QVERIFY(displayRow >= 0);
+        const QModelIndex idx = model.index(displayRow);
+        QCOMPARE(model.data(idx, BrightnessDeviceModel::BrightnessRole).toInt(), 100);
+        QCOMPARE(model.data(idx, BrightnessDeviceModel::MaxBrightnessRole).toInt(), 200);
+        QCOMPARE(model.data(idx, BrightnessDeviceModel::PercentageRole).toDouble(), 0.5);
+        QVERIFY(model.data(idx, BrightnessDeviceModel::DeviceRole).value<QObject*>() != nullptr);
+
+        // A live external sysfs change is forwarded as dataChanged on that row.
+        QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+        writeFile(root.path() + QStringLiteral("/class/backlight/intel_backlight/brightness"), QStringLiteral("160"));
+        QVERIFY(changed.wait(3000));
+        QCOMPARE(model.data(idx, BrightnessDeviceModel::BrightnessRole).toInt(), 160);
     }
 };
 
