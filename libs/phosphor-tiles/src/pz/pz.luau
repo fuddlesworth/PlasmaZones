@@ -824,7 +824,10 @@ local function interleaveMinWidths(minSizes, stackIsLeft, stackCount, masterOffs
         local zoneIdx = masterOffset + i
         if zoneIdx < #minSizes then
             local entry = minSizes[zoneIdx + 1]
-            local mw = (entry.w and entry.w > 0) and entry.w or 0
+            -- Guard `entry` for a sparse minSizes (mirrors interleaveMinHeights);
+            -- the production host always marshals dense entries, so this is
+            -- defensive only.
+            local mw = (entry and entry.w and entry.w > 0) and entry.w or 0
             if stackIsLeft[i + 1] then
                 if mw > minLeftWidth then minLeftWidth = mw end
             else

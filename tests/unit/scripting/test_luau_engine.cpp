@@ -21,6 +21,7 @@ class TestLuauEngine : public QObject
 private Q_SLOTS:
     void happyPathAndMarshalling();
     void marshalRoundTrip();
+    void marshalDeepNesting();
     void preludeGlobals();
     void watchdogKillsInfiniteLoopAndRecovers();
     void compileErrorSurfaces();
@@ -98,6 +99,36 @@ void TestLuauEngine::marshalRoundTrip()
     QCOMPARE(r.value(QStringLiteral("ratio")).toDouble(), 0.25);
     QCOMPARE(r.value(QStringLiteral("name")).toString(), QStringLiteral("master"));
     QCOMPARE(r.value(QStringLiteral("sizes")).toList(), (QVariantList{1, 2, 3}));
+}
+
+void TestLuauEngine::marshalDeepNesting()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    // Echo back a map → list → map nest, exercising recursive marshalling in
+    // both directions (and the lua_checkstack reservation at each level).
+    const int handle = engine.loadModule(QStringLiteral("echo"), "return { echo = function(ctx) return ctx end }");
+    QVERIFY(handle >= 0);
+
+    QVariantMap inner;
+    inner[QStringLiteral("leaf")] = 9;
+    QVariantList list;
+    list << QVariant(inner) << QVariant(2);
+    QVariantMap outer;
+    outer[QStringLiteral("items")] = list;
+    outer[QStringLiteral("name")] = QStringLiteral("x");
+
+    const auto out = engine.callModule(handle, QStringLiteral("echo"), {outer}, 200);
+    QCOMPARE(out.status, LuauEngine::CallStatus::Ok);
+    const QVariantMap r = out.result.toMap();
+    QCOMPARE(r.value(QStringLiteral("name")).toString(), QStringLiteral("x"));
+    const QVariantList items = r.value(QStringLiteral("items")).toList();
+    QCOMPARE(items.size(), 2);
+    QCOMPARE(items.at(0).toMap().value(QStringLiteral("leaf")).toInt(), 9);
+    QCOMPARE(items.at(1).toInt(), 2);
+    engine.releaseModule(handle);
 }
 
 void TestLuauEngine::preludeGlobals()

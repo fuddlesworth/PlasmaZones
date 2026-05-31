@@ -79,8 +79,9 @@ namespace PhosphorTileEngine {
 /**
  * @brief Core engine for automatic window tiling.
  *
- * Coordinates per-screen PhosphorTiles::TilingState, invokes tiling algorithms (Master-Stack,
- * Columns, BSP), and applies calculated zone geometries to window positions.
+ * Coordinates per-screen PhosphorTiles::TilingState, invokes the active tiling
+ * algorithm (a Luau script, via the PhosphorTiles::TilingAlgorithm interface),
+ * and applies calculated zone geometries to window positions.
  * Only tiles windows on screens where autotiling is enabled.
  *
  * @see PhosphorTiles::TilingAlgorithm, PhosphorTiles::TilingState, PhosphorTiles::AlgorithmRegistry

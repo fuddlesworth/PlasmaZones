@@ -8,8 +8,6 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include <algorithm>
-#include <climits>
 #include <cmath>
 
 namespace PhosphorScripting {
@@ -131,10 +129,12 @@ QVariant toVariant(lua_State* L, int idx, int depth)
         if (!lua_checkstack(L, 4)) {
             return QVariant();
         }
-        // lua_objlen returns size_t; clamp so a pathological border can't wrap
-        // the int loop bound (not script-reachable under the heap cap, but the
-        // narrowing is otherwise latent).
-        const int n = static_cast<int>(std::min<size_t>(lua_objlen(L, abs), static_cast<size_t>(INT_MAX)));
+        // lua_objlen returns the array border as int; guard the (not normally
+        // reachable) negative case so the loop bound is always sane.
+        const int n = lua_objlen(L, abs);
+        if (n < 0) {
+            return QVariant();
+        }
         if (n > 0) {
             QVariantList list;
             list.reserve(n);

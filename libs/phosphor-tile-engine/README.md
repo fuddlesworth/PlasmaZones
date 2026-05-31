@@ -65,14 +65,13 @@ Wire up the engine inside the daemon's composition root:
 
 using namespace PhosphorTileEngine;
 
-auto* autotile = new AutotileEngine(algorithmRegistry,        // from phosphor-tiles
-                                    layoutRegistry,           // from phosphor-zones
+auto* autotile = new AutotileEngine(layoutRegistry,           // from phosphor-zones
                                     windowTrackingService,
-                                    windowRegistry,
                                     screenManager,
+                                    algorithmRegistry,        // from phosphor-tiles
                                     /*parent*/ daemon);
-autotile->setSettings(autotileSettingsAdaptor);
-autotile->setConfig(loadedConfig);
+autotile->setWindowRegistry(windowRegistry);   // late-bound app-id resolver
+autotile->refreshConfigFromSettings();         // pull initial config from settings
 
 placementEngineRouter.bind("autotile", autotile);
 ```

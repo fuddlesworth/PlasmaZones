@@ -57,6 +57,10 @@ private Q_SLOTS:
     void onWindowRemovedHookRuns();
     void nonFiniteOverrideRejected();
     void scriptedMetadataFlagsExposed();
+    void zoneNumberDisplayInvalidFallsBack();
+    void metadataInfiniteSplitRatioClamped();
+    void erroringOverrideFallsBack();
+    void customParamValueReachesTile();
 };
 
 void TestLuauTileAlgorithm::loadsAndExposesMetadata()
@@ -448,6 +452,102 @@ void TestLuauTileAlgorithm::scriptedMetadataFlagsExposed()
     QVERIFY(algo.centerLayout());
     QVERIFY(!algo.supportsMinSizes());
     QCOMPARE(algo.zoneNumberDisplay(), QStringLiteral("all"));
+}
+
+void TestLuauTileAlgorithm::zoneNumberDisplayInvalidFallsBack()
+{
+    using namespace PlasmaZones::TestHelpers;
+    // A valid token round-trips; an unrecognised token falls back to the
+    // renderer-decides default (never surfaces the bogus string).
+    const QString validPath = writeTempScript(m_tmp, QStringLiteral("znd-valid.luau"), QStringLiteral(R"LUA(
+        return { metadata = { id = "znd-valid", name = "ZND", zoneNumberDisplay = "last" },
+                 tile = function(ctx) return {} end }
+    )LUA"));
+    const QString badPath = writeTempScript(m_tmp, QStringLiteral("znd-bad.luau"), QStringLiteral(R"LUA(
+        return { metadata = { id = "znd-bad", name = "ZND", zoneNumberDisplay = "bogus" },
+                 tile = function(ctx) return {} end }
+    )LUA"));
+    QVERIFY(!validPath.isEmpty() && !badPath.isEmpty());
+
+    LuauTileAlgorithm valid(validPath, m_watchdog);
+    LuauTileAlgorithm bad(badPath, m_watchdog);
+    QVERIFY(valid.isValid() && bad.isValid());
+    QCOMPARE(valid.zoneNumberDisplay(), QStringLiteral("last"));
+    QVERIFY(bad.zoneNumberDisplay() != QStringLiteral("bogus"));
+}
+
+void TestLuauTileAlgorithm::metadataInfiniteSplitRatioClamped()
+{
+    using namespace PlasmaZones::TestHelpers;
+    using namespace AutotileDefaults;
+    // An infinite metadata-field split ratio must clamp to a finite, in-range
+    // value (std::clamp(inf, lo, hi) == hi).
+    const QString path = writeTempScript(m_tmp, QStringLiteral("inf.luau"), QStringLiteral(R"LUA(
+        return { metadata = { id = "inf", name = "Inf", defaultSplitRatio = 1 / 0 },
+                 tile = function(ctx) return {} end }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    QVERIFY(std::isfinite(algo.defaultSplitRatio()));
+    QVERIFY(algo.defaultSplitRatio() >= MinSplitRatio && algo.defaultSplitRatio() <= MaxSplitRatio);
+}
+
+void TestLuauTileAlgorithm::erroringOverrideFallsBack()
+{
+    using namespace PlasmaZones::TestHelpers;
+    using namespace AutotileDefaults;
+    // An override function that errors at load must fall back to the default,
+    // not leave the cached accessor in a bad state.
+    const QString path = writeTempScript(m_tmp, QStringLiteral("errfn.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = { id = "errfn", name = "ErrFn" },
+            defaultSplitRatio = function() error("boom") end,
+            tile = function(ctx) return {} end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    QVERIFY(std::isfinite(algo.defaultSplitRatio()));
+    QVERIFY(algo.defaultSplitRatio() >= MinSplitRatio && algo.defaultSplitRatio() <= MaxSplitRatio);
+}
+
+void TestLuauTileAlgorithm::customParamValueReachesTile()
+{
+    using namespace PlasmaZones::TestHelpers;
+    // End-to-end: a declared custom param's runtime value reaches tile() via
+    // ctx.custom and drives the zone count, distinct from windowCount.
+    const QString path = writeTempScript(m_tmp, QStringLiteral("custom.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = {
+                id = "custom", name = "Custom",
+                customParams = { { name = "cols", type = "number", min = 1, max = 8, default = 3 } },
+            },
+            tile = function(ctx)
+                local n = math.floor((ctx.custom and ctx.custom.cols) or 1)
+                local zones = {}
+                for i = 1, n do zones[i] = { x = 0, y = 0, width = 10, height = 10 } end
+                return zones
+            end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    QVERIFY(algo.supportsCustomParams());
+
+    TilingParams p;
+    p.windowCount = 5; // intentionally != the custom-param-driven count
+    p.screenGeometry = QRect(0, 0, 1920, 1080);
+    p.outerGaps = EdgeGaps::uniform(0);
+    p.customParams.insert(QStringLiteral("cols"), 4);
+
+    // tile() returns `cols` (4) zones, proving ctx.custom.cols flowed through.
+    QCOMPARE(algo.calculateZones(p).size(), 4);
 }
 
 QTEST_MAIN(TestLuauTileAlgorithm)

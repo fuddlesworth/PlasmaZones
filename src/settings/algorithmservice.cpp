@@ -341,19 +341,24 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     // suffix rather than source.fileName(): a "foo.LUAU" source passes the
     // case-insensitive suffix check above but must land as "foo.luau" so the
     // loader's case-sensitive *.luau glob actually picks it up.
-    const QString destPath = destDir + source.completeBaseName() + QStringLiteral(".luau");
+    QString destPath = destDir + source.completeBaseName() + QStringLiteral(".luau");
 
     // Importing a file that already IS the destination (same path, or a symlink
-    // resolving to it) must be a no-op success — otherwise the remove-then-copy
-    // below would delete the user's own algorithm and then fail the copy.
+    // resolving to it) is a no-op success.
     const QFileInfo destInfo(destPath);
     if (destInfo.exists() && source.canonicalFilePath() == destInfo.canonicalFilePath()) {
         return true;
     }
-
-    // Remove existing file so QFile::copy succeeds (it won't overwrite)
+    // A different algorithm already owns that name — pick a unique "<name>-N.luau"
+    // instead of silently clobbering it (matches duplicate/create behaviour and
+    // avoids a destructive remove-then-copy that could lose the existing file).
     if (destInfo.exists()) {
-        QFile::remove(destPath);
+        destPath = findUniqueAlgorithmPath(destDir, source.completeBaseName());
+        if (destPath.isEmpty()) {
+            Q_EMIT algorithmOperationFailed(
+                PzI18n::tr("Too many algorithms share this name. Remove some and try again."));
+            return false;
+        }
     }
 
     const bool ok = QFile::copy(filePath, destPath);
@@ -365,7 +370,10 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
             PzI18n::tr("Could not copy the algorithm file. Check available disk space and permissions."));
         return false;
     }
-    // PhosphorTiles::ScriptedAlgorithmLoader's QFileSystemWatcher will pick up the new file automatically
+    // The loader's QFileSystemWatcher picks up the new file automatically; watch
+    // for that registration so an import that never registers (e.g. invalid
+    // Luau) surfaces an error rather than a silent success, as create/duplicate do.
+    watchForAlgorithmRegistration(QFileInfo(destPath).completeBaseName());
     return true;
 }
 
