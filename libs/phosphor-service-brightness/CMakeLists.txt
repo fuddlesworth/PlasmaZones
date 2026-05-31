@@ -123,6 +123,17 @@ else()
     message(STATUS "PhosphorServiceBrightness: libddcutil not found, external-display (DDC/CI) support disabled")
 endif()
 
+# Surface the optional libddcutil dependency in the top-level feature_summary
+# (the project calls feature_summary() in the root CMakeLists.txt).
+# add_feature_info is the FeatureSummary entry point for pkg-config-discovered
+# modules; mirrors the phosphor-service-pipewire convention.
+if(COMMAND add_feature_info)
+    add_feature_info("Ddcutil"
+        PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL
+        "External-display brightness over DDC/CI for phosphor-service-brightness"
+    )
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -3,10 +3,12 @@
 
 #include "ddccontroller.h"
 
+#include <QByteArray>
 #include <QLoggingCategory>
 
 #include <ddcutil_c_api.h>
 
+#include <algorithm>
 #include <cstdlib>
 
 Q_LOGGING_CATEGORY(lcDdcController, "phosphor.service.brightness.ddc")
@@ -115,7 +117,11 @@ void DdcController::enumerate()
             continue;
         }
         m_refs.insert(id, info.dref);
-        Q_EMIT displayFound(id, QString::fromUtf8(info.model_name), current, maxValue);
+        // model_name is a fixed-size EDID field (13 chars max in a 14-byte
+        // buffer); bound the read so a non-NUL-terminated field can never
+        // over-read past the array.
+        const QString name = QString::fromUtf8(info.model_name, qstrnlen(info.model_name, sizeof(info.model_name)));
+        Q_EMIT displayFound(id, name, current, maxValue);
     }
 
     // The drefs stored in m_refs are library-owned and survive freeing the list
@@ -130,6 +136,11 @@ void DdcController::setBrightness(const QString& id, int value)
     const auto it = m_refs.constFind(id);
     if (it == m_refs.constEnd())
         return;
+    // VCP non-table values are 16-bit; clamp at this I2C boundary so a stray
+    // out-of-range request can never wrap into the packed bytes. The upstream
+    // BrightnessDevice clamps to the per-display max; this guards the boundary
+    // itself, since the slot is reachable by any queued caller.
+    value = std::clamp(value, 0, 0xFFFF);
     DDCA_Display_Handle handle = nullptr;
     if (ddca_open_display2(it.value(), /*wait=*/true, &handle) != 0 || !handle) {
         qCDebug(lcDdcController) << "open failed for set on display" << id;

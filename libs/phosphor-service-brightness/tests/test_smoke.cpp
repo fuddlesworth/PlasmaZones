@@ -191,6 +191,14 @@ private Q_SLOTS:
         QCOMPARE(fake.lastName, QStringLiteral("intel_backlight"));
         QCOMPARE(fake.lastSubsystem, QStringLiteral("backlight"));
 
+        // Clearing the session path makes writes inert again (the same empty-path
+        // guard the host relies on before a session resolves / when none is bound).
+        device.setSessionPath(QString());
+        fake.lastValue = 0;
+        device.setBrightness(150);
+        QTest::qWait(50);
+        QCOMPARE(fake.lastValue, 0U);
+
         bus.unregisterObject(sessionPath);
         bus.unregisterService(service);
     }
@@ -264,6 +272,16 @@ private Q_SLOTS:
         device->setPercentage(0.5);
         QCOMPARE(device->brightness(), 0);
         QCOMPARE(device->percentage(), 0.0);
+
+        // The same maxBrightness <= 0 guard protects an external (DDC) device:
+        // applyExternalValue against a zero-max device must neither emit nor move
+        // the cached value.
+        BrightnessDevice external(QStringLiteral("i2c-0"), QStringLiteral("Zero"), 0, 0, [](int) { });
+        QSignalSpy spy(&external, &BrightnessDevice::brightnessChanged);
+        external.applyExternalValue(50);
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(external.brightness(), 0);
+        QCOMPARE(external.percentage(), 0.0);
     }
 
     void testLiveWatcherTracksExternalChange()
@@ -392,6 +410,26 @@ private Q_SLOTS:
         device.refresh();
         QCOMPARE(refreshSpy.count(), 0);
         QCOMPARE(device.brightness(), 100);
+    }
+
+    void testModelDataGuardsReturnInvalid()
+    {
+        // data() must return an invalid QVariant for an invalid index, an
+        // out-of-range row, and an unknown role (the defensive guards in data()).
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        makeBacklight(root.path(), QStringLiteral("intel_backlight"), 100, 200);
+        BrightnessHost host(root.path(), QDBusConnection::sessionBus(), QStringLiteral("org.example.Logind"),
+                            QLatin1String(kDummySession));
+        BrightnessDeviceModel model;
+        model.setHost(&host);
+        QCOMPARE(model.rowCount(), 1);
+
+        // Invalid index, and an out-of-range row (index() itself returns invalid).
+        QVERIFY(!model.data(QModelIndex(), BrightnessDeviceModel::NameRole).isValid());
+        QVERIFY(!model.data(model.index(99), BrightnessDeviceModel::NameRole).isValid());
+        // Unknown role on a valid index hits the switch default branch.
+        QVERIFY(!model.data(model.index(0), Qt::UserRole + 9999).isValid());
     }
 
     void testModelMirrorsHostAndForwardsChanges()
