@@ -42,12 +42,14 @@ set(phosphorservicebrightness_public_HDRS
     include/PhosphorServiceBrightness/PhosphorServiceBrightness.h
     include/PhosphorServiceBrightness/QmlRegistration.h
     include/PhosphorServiceBrightness/BrightnessDevice.h
+    include/PhosphorServiceBrightness/BrightnessDeviceModel.h
     include/PhosphorServiceBrightness/BrightnessHost.h
 )
 
 set(phosphorservicebrightness_SRCS
     src/qmlregistration.cpp
     src/brightnessdevice.cpp
+    src/brightnessdevicemodel.cpp
     src/brightnesshost.cpp
 )
 

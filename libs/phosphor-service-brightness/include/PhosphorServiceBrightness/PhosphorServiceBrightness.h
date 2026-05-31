@@ -26,5 +26,6 @@
  */
 
 #include <PhosphorServiceBrightness/BrightnessDevice.h>
+#include <PhosphorServiceBrightness/BrightnessDeviceModel.h>
 #include <PhosphorServiceBrightness/BrightnessHost.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>
