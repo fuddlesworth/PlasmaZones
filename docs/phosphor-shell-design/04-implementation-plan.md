@@ -372,9 +372,9 @@ Two structural firsts versus 2.2:
 
 ---
 
-### 2.4: `phosphor-service-brightness` *(planned)*
+### 2.4: `phosphor-service-brightness` *(shipped)*
 
-Forward plan for `feat/phase-2.4-brightness-service`, in the shape of the §2.1 narrative. A change of shape from 2.2 / 2.3: the read path is **sysfs** (`/sys/class/backlight` + `/sys/class/leds`), not D-Bus, and the privileged write path is logind's `org.freedesktop.login1.Session.SetBrightness(subsystem, name, value)` (writing the sysfs `brightness` attribute directly needs root / udev rules, whereas logind permits the active session to set brightness). Namespace `PhosphorServiceBrightness`, export macro `PHOSPHORSERVICEBRIGHTNESS_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Brightness 1.0`. Smallest service lib so far (effort S); no `ObjectManager` involvement (sysfs has no ObjectManager root).
+Shipped on `feat/phase-2.4-brightness-service` (milestones 1-7), in the shape of the §2.1 narrative. A change of shape from 2.2 / 2.3: the read path is **sysfs** (`/sys/class/backlight` + `/sys/class/leds`), not D-Bus, and the privileged write path is logind's `org.freedesktop.login1.Session.SetBrightness(subsystem, name, value)` (writing the sysfs `brightness` attribute directly needs root / udev rules, whereas logind permits the active session to set brightness). Namespace `PhosphorServiceBrightness`, export macro `PHOSPHORSERVICEBRIGHTNESS_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Brightness 1.0`. Smallest service lib so far (effort S); no `ObjectManager` involvement (sysfs has no ObjectManager root).
 
 **Decisions taken up front** (see Unknowns for the rest):
 
