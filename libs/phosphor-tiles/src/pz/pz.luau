@@ -807,10 +807,11 @@ local function buildStackIsLeft(stackCount, leftCount, rightCount)
         elseif li < leftCount then
             stackIsLeft[#stackIsLeft + 1] = true
             li = li + 1
-        elseif ri < rightCount then
-            stackIsLeft[#stackIsLeft + 1] = false
-            ri = ri + 1
         else
+            -- Faithful to interleaveStacks.js, which had a fourth
+            -- `else if (ri < rightCount)` branch here. It is unreachable —
+            -- the second branch above already established ri >= rightCount —
+            -- so it is dropped; the fallback assigns left, exactly as before.
             stackIsLeft[#stackIsLeft + 1] = true
         end
     end
