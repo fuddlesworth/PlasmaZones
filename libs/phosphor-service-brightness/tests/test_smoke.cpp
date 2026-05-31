@@ -15,6 +15,9 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <cmath>
+#include <limits>
+
 using namespace PhosphorServiceBrightness;
 
 namespace {
@@ -275,6 +278,13 @@ private Q_SLOTS:
         QCOMPARE(device.brightness(), 100);
 
         device.setPercentage(0.5); // 50 of 100, routed through the setter
+        QCOMPARE(lastSet, 50);
+
+        // Non-finite percentages are rejected before qRound(NaN) UB; the setter
+        // is not invoked, so the last routed value stays 50.
+        device.setPercentage(std::nan(""));
+        QCOMPARE(lastSet, 50);
+        device.setPercentage(std::numeric_limits<double>::infinity());
         QCOMPARE(lastSet, 50);
     }
 

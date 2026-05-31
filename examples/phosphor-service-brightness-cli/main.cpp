@@ -22,6 +22,8 @@
 #include <QTextStream>
 #include <QTimer>
 
+#include <cmath>
+
 using namespace PhosphorServiceBrightness;
 
 namespace {
@@ -123,7 +125,9 @@ int cmdSet(const QString& id, const QString& value)
     bool ok = false;
     if (value.endsWith(QLatin1Char('%'))) {
         const double pct = value.left(value.size() - 1).toDouble(&ok);
-        if (!ok || pct < 0.0 || pct > 100.0) {
+        // !isfinite rejects "nan" / "inf": NaN passes every range comparison
+        // (all false), so without this it would reach setPercentage(NaN).
+        if (!ok || !std::isfinite(pct) || pct < 0.0 || pct > 100.0) {
             err() << "percentage must be 0-100\n";
             err().flush();
             return 64;

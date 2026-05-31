@@ -443,7 +443,7 @@ if(BUILD_PHOSPHOR_SHELL)
     # image provider + theme resolver), so configure it first. The
     # other Phase 2.0 siblings are independent. Phase 2.0 is complete:
     # the phosphor-services umbrella has been dissolved into these
-    # four per-domain libraries.
+    # per-domain libraries.
     add_subdirectory(libs/phosphor-service-icontheme) # XDG icon-theme resolver + Qt image provider
     add_subdirectory(libs/phosphor-service-sni)       # StatusNotifierItem host + watcher + dbusmenu
     add_subdirectory(libs/phosphor-service-upower)    # UPower battery / power-supply readouts

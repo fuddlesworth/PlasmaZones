@@ -12,6 +12,7 @@
 #include <QLoggingCategory>
 
 #include <algorithm>
+#include <cmath>
 
 Q_LOGGING_CATEGORY(lcBrightnessDevice, "phosphor.service.brightness.device")
 
@@ -157,7 +158,12 @@ int BrightnessDevice::maxBrightness() const
 }
 qreal BrightnessDevice::percentage() const
 {
-    return d->maxBrightness > 0 ? static_cast<qreal>(d->brightness) / d->maxBrightness : 0.0;
+    if (d->maxBrightness <= 0)
+        return 0.0;
+    // Clamp to honor the documented [0.0, 1.0] contract for every source: a
+    // sysfs read is not clamped into the cached value, so a (kernel-level)
+    // brightness above max_brightness must not leak a percentage above 1.0.
+    return std::clamp(static_cast<qreal>(d->brightness) / d->maxBrightness, 0.0, 1.0);
 }
 
 void BrightnessDevice::setBrightness(int value)
@@ -185,7 +191,10 @@ void BrightnessDevice::setBrightness(int value)
 
 void BrightnessDevice::setPercentage(qreal percentage)
 {
-    if (d->maxBrightness <= 0)
+    // Reject a non-finite percentage (NaN / inf): std::clamp would pass NaN
+    // through and qRound(NaN) is undefined. This is a public Q_INVOKABLE, so a
+    // QML caller can reach it too.
+    if (d->maxBrightness <= 0 || !std::isfinite(percentage))
         return;
     const qreal clamped = std::clamp(percentage, 0.0, 1.0);
     setBrightness(static_cast<int>(qRound(clamped * d->maxBrightness)));
