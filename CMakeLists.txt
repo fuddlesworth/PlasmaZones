@@ -451,6 +451,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-pipewire)  # PipeWire mixer (Phase 2.1, shipped)
     add_subdirectory(libs/phosphor-service-network)   # NetworkManager devices / connectivity (Phase 2.2)
     add_subdirectory(libs/phosphor-service-bluetooth) # BlueZ adapters / devices / pairing (Phase 2.3)
+    add_subdirectory(libs/phosphor-service-brightness) # display / keyboard backlight brightness (Phase 2.4)
 endif()
 
 # Source directories
