@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "ScriptedAlgorithmHelpers.h"
+#include "TileScriptMetadata.h"
 #include "TilingAlgorithm.h"
 
 #include <phosphortiles_export.h>

@@ -12,7 +12,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
-#include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/LuauTileAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
@@ -333,7 +333,7 @@ QString AlgorithmService::scriptedFilePath(const QString& algorithmId) const
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo)
         return QString();
-    auto* scripted = qobject_cast<PhosphorTiles::ScriptedAlgorithm*>(algo);
+    auto* scripted = qobject_cast<PhosphorTiles::LuauTileAlgorithm*>(algo);
     if (!scripted)
         return QString();
     const QString path = scripted->filePath();

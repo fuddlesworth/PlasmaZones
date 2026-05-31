@@ -38,7 +38,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
 
 # PhosphorLayoutApi provides the LayoutPreview / ILayoutSource contract that
 # this library implements via AutotileLayoutSource. Found via add_subdirectory
@@ -69,13 +69,9 @@ set(phosphortiles_public_HDRS
     include/PhosphorTiles/AlgorithmPreviewParams.h
     include/PhosphorTiles/AlgorithmRegistry.h
     include/PhosphorTiles/ITileAlgorithmRegistry.h
-    include/PhosphorTiles/ScriptedAlgorithm.h
     include/PhosphorTiles/LuauTileAlgorithm.h
-    include/PhosphorTiles/ScriptedAlgorithmHelpers.h
-    include/PhosphorTiles/ScriptedAlgorithmJsBuiltins.h
+    include/PhosphorTiles/TileScriptMetadata.h
     include/PhosphorTiles/ScriptedAlgorithmLoader.h
-    include/PhosphorTiles/ScriptedAlgorithmSandbox.h
-    include/PhosphorTiles/ScriptedAlgorithmWatchdog.h
     include/PhosphorTiles/AutotileLayoutSource.h
     include/PhosphorTiles/AutotileLayoutSourceFactory.h
     include/PhosphorTiles/AutotilePreviewRender.h
@@ -92,19 +88,11 @@ set(phosphortiles_SRCS
     src/splittree.cpp
     src/splittreerebuild.cpp
     src/splittreeserializer.cpp
-    src/scriptedalgorithm.cpp
-    src/scriptedalgorithm_hooks.cpp
-    src/scriptedalgorithm_tree.cpp
-    src/scriptedalgorithmhelpers.cpp
-    src/scriptedalgorithmjsbuiltins.cpp
     src/scriptedalgorithmloader.cpp
-    src/scriptedalgorithmsandbox.cpp
-    src/scriptedalgorithmwatchdog.cpp
     src/luautilealgorithm.cpp
+    src/tilescriptmetadata.cpp
     src/tileslogging.h
     src/tileslogging.cpp
-    # Builtin JS helpers compiled into the binary as Qt resources.
-    src/builtins.qrc
     # The pz Luau standard library, compiled into the binary as a Qt resource.
     src/pz.qrc
 )
@@ -140,7 +128,6 @@ target_compile_features(PhosphorTiles PUBLIC cxx_std_20)
 target_link_libraries(PhosphorTiles
     PUBLIC
         Qt6::Core
-        Qt6::Qml
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorEngine::PhosphorEngine
         PhosphorScripting::PhosphorScripting
