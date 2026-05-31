@@ -111,6 +111,7 @@ private Q_SLOTS:
     void actionSummaryRendersAllEngineModes();
     void disableEngineNamesTheModeBeingDisabled();
     void setOpacityRendersValidValuesAndGuardsRejectPaths();
+    void shaderAndCurveLabelsResolveThroughLookups();
 };
 
 void TestWindowRuleModel::rolesExposed()
@@ -476,6 +477,87 @@ void TestWindowRuleModel::setOpacityRendersValidValuesAndGuardsRejectPaths()
     QVERIFY2(labelAt(3).contains(QStringLiteral("invalid")), qPrintable(labelAt(3)));
     // Out-of-range: same marker
     QVERIFY2(labelAt(4).contains(QStringLiteral("invalid")), qPrintable(labelAt(4)));
+}
+
+void TestWindowRuleModel::shaderAndCurveLabelsResolveThroughLookups()
+{
+    // The action summary resolves OverrideAnimationShader effect ids and
+    // OverrideAnimationCurve wire strings to friendly names through the
+    // injected lookups (the registry / CurvePresets sources the rule editor
+    // uses). With no lookup wired the raw value round-trips behind the label,
+    // so a missing resolver degrades gracefully rather than hiding the payload.
+    // A null payload uses the dedicated placeholder label (lookup not consulted).
+    const auto shaderRuleWith = [](const QString& effectId) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 100;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        RuleAction shader;
+        shader.type = QString(ActionType::OverrideAnimationShader);
+        if (!effectId.isNull()) {
+            shader.params.insert(ActionParam::EffectId, effectId);
+        }
+        rule.actions = {shader};
+        return rule;
+    };
+    const auto curveRuleWith = [](const QString& wire) {
+        WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 99;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("konsole"));
+        RuleAction curve;
+        curve.type = QString(ActionType::OverrideAnimationCurve);
+        if (!wire.isNull()) {
+            curve.params.insert(ActionParam::Curve, wire);
+        }
+        rule.actions = {curve};
+        return rule;
+    };
+
+    WindowRuleModel model;
+    model.setRules({
+        shaderRuleWith(QStringLiteral("dissolve")),
+        curveRuleWith(QStringLiteral("0.33,1.00,0.68,1.00")),
+        shaderRuleWith(QString()), // empty effect id → placeholder, never the lookup
+        curveRuleWith(QString()), // empty curve → placeholder
+        shaderRuleWith(QStringLiteral("mystery")), // unknown id → lookup passthrough
+    });
+
+    const auto summaryAt = [&](int row) {
+        return model.data(model.index(row, 0), WindowRuleModel::ActionSummaryRole).toString();
+    };
+
+    // No lookups wired → the raw id / wire string round-trips behind the label;
+    // empty payloads use the dedicated placeholders regardless of the lookup.
+    QCOMPARE(summaryAt(0), QStringLiteral("Shader: dissolve"));
+    QCOMPARE(summaryAt(1), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
+    QCOMPARE(summaryAt(2), QStringLiteral("Block animation shader"));
+    QCOMPARE(summaryAt(3), QStringLiteral("Animation curve"));
+
+    // Installing the resolvers and calling refreshLabels must emit exactly one
+    // coalesced dataChanged spanning every label-derived role — the contract
+    // the settings layer relies on after a lookup-source change. The setters
+    // themselves are install-once and emit nothing, so the count pins refresh.
+    QSignalSpy changedSpy(&model, &QAbstractItemModel::dataChanged);
+    model.setShaderEffectLabelLookup([](const QString& id) {
+        return id == QLatin1String("dissolve") ? QStringLiteral("Dissolve") : id;
+    });
+    model.setCurveLabelLookup([](const QString& wire) {
+        return wire == QLatin1String("0.33,1.00,0.68,1.00") ? QStringLiteral("Standard (Cubic)") : wire;
+    });
+    model.refreshLabels();
+
+    QCOMPARE(changedSpy.count(), 1);
+    const QList<int> roles = changedSpy.at(0).at(2).value<QList<int>>();
+    QVERIFY(roles.contains(WindowRuleModel::ActionSummaryRole));
+
+    QCOMPARE(summaryAt(0), QStringLiteral("Shader: Dissolve"));
+    QCOMPARE(summaryAt(1), QStringLiteral("Curve: Standard (Cubic)"));
+    // Empty payloads still render their placeholders; an unknown id passes
+    // through the lookup unchanged (the resolver returns its input).
+    QCOMPARE(summaryAt(2), QStringLiteral("Block animation shader"));
+    QCOMPARE(summaryAt(3), QStringLiteral("Animation curve"));
+    QCOMPARE(summaryAt(4), QStringLiteral("Shader: mystery"));
 }
 
 QTEST_MAIN(TestWindowRuleModel)

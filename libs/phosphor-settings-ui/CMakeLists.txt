@@ -121,6 +121,21 @@ set(phosphorsettingsui_SRCS
 # side-effecting registration) to one of the shared sources — that
 # would surface the triple-registration footgun and need plumbing
 # (split source between targets, or a single-target install path).
+
+# Suppress -Wmissing-include-dirs for Qt-managed AUTOMOC scratch dirs.
+# KDECompilerSettings (in the PlasmaZones parent build) enables the
+# warning globally, and qt_add_qml_module adds `<target>_autogen/include`
+# to every generated sub-target's -I list (qmltyperegistration, resource
+# init, qmlplugin). Those sub-targets carry no Q_OBJECT, so AUTOMOC
+# produces nothing and the dir ends up empty or — after `--clean-first`
+# — missing entirely, so cc1plus fires before AUTOMOC recreates it.
+# Set at DIRECTORY level so every implicitly-generated sub-target picks
+# it up without enumerating the ever-changing list by name; placed before
+# the first target so it also propagates to the examples/ and tests/
+# subdirectories added below. Mirrors libs/phosphor-animation and
+# src/shared — see those for the full rationale.
+set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
+
 add_library(PhosphorSettingsUi ${_phosphor_settings_ui_lib_type}
     ${phosphorsettingsui_public_HDRS}
     ${phosphorsettingsui_SRCS}

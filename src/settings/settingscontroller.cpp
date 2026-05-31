@@ -115,6 +115,9 @@ SettingsController::~SettingsController()
         m_windowRulesPage->setActivityLookup({});
         m_windowRulesPage->setSnappingLayoutLookup({});
         m_windowRulesPage->setTilingAlgorithmLookup({});
+        // The shader resolver captures `this` and reaches m_animationShaderRegistry;
+        // clear it too so the cleared set stays symmetric with what's installed.
+        m_windowRulesPage->setShaderEffectLookup({});
         // Drain any in-flight `dataChanged` emissions queued against
         // the cleared lookups before the model captures the now-
         // empty resolvers. refreshLabels walks every row once and
@@ -532,6 +535,19 @@ SettingsController::SettingsController(QObject* parent)
     };
     m_windowRulesPage->setSnappingLayoutLookup(resolveByLayoutsLookup);
     m_windowRulesPage->setTilingAlgorithmLookup(resolveTilingAlgorithmLookup);
+    // OverrideAnimationShader actions store an effect id ("dissolve"); resolve
+    // it to the friendly name via the same animation shader registry the rule
+    // editor's shader picker reads (availableShaderEffects), so the list shows
+    // "Shader: Dissolve" rather than the raw id. Unknown ids round-trip
+    // verbatim (registry miss → raw id), matching the editor's fallback.
+    auto resolveShaderEffectLookup = [this](const QString& effectId) -> QString {
+        if (effectId.isEmpty() || !m_animationShaderRegistry || !m_animationShaderRegistry->hasEffect(effectId)) {
+            return effectId;
+        }
+        const QString name = m_animationShaderRegistry->effect(effectId).name;
+        return name.isEmpty() ? effectId : name;
+    };
+    m_windowRulesPage->setShaderEffectLookup(resolveShaderEffectLookup);
     auto refreshRuleLabels = [this]() {
         if (m_windowRulesPage && m_windowRulesPage->model()) {
             m_windowRulesPage->model()->refreshLabels();
@@ -540,6 +556,10 @@ SettingsController::SettingsController(QObject* parent)
     connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);
+    // A shader-pack rescan (user drops in a new effect, or one is removed)
+    // can change an id→name mapping; refresh so resolved Shader labels track it.
+    connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
+            refreshRuleLabels);
 
     // Overlay shader registry — settings-side mirror of the daemon's. The
     // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
