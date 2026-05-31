@@ -796,7 +796,9 @@ public:
     }
     bool snapWindowHideTitleBars() const override
     {
-        return false;
+        // Distinct from snapWindowShowBorder so the D-Bus batch test can detect a
+        // registration swap between the two adjacent bool keys via value-mirroring.
+        return true;
     }
     void setSnapWindowHideTitleBars(bool) override
     {
@@ -831,14 +833,17 @@ public:
     }
     QColor snapWindowInactiveBorderColor() const override
     {
-        return {};
+        // A distinct, valid color (active is white) so the D-Bus batch test can
+        // round-trip it through HexArgb and catch an active/inactive swap.
+        return Qt::black;
     }
     void setSnapWindowInactiveBorderColor(const QColor&) override
     {
     }
     bool snapWindowUseSystemBorderColors() const override
     {
-        return false;
+        // Distinct from snapWindowShowBorder for the same batch-test swap detection.
+        return true;
     }
     void setSnapWindowUseSystemBorderColors(bool) override
     {

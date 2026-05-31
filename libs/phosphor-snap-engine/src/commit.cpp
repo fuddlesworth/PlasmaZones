@@ -117,6 +117,15 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
         return geometries;
     }
 
+    // Every non-restore entry below routes through commitSnap/commitMultiZoneSnap,
+    // which require a live m_snapState. Guard the whole batch symmetrically with
+    // commitSnapImpl/uncommitSnap rather than doing the full per-entry resolution
+    // pass against a half-dead engine.
+    Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return geometries;
+    }
+
     auto* mgr = m_windowTracker->screenManager();
 
     // Resolve and remember per-entry screenId in a single pass so the geometry
@@ -168,8 +177,12 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
             qint64 bestDistSq = -1;
             for (QScreen* screen : QGuiApplication::screens()) {
                 const QRect g = screen->geometry();
-                const qint64 dx = qMax(0, qMax(g.left() - center.x(), center.x() - g.right()));
-                const qint64 dy = qMax(0, qMax(g.top() - center.y(), center.y() - g.bottom()));
+                // Use the half-open far edges (x + width / y + height) rather than
+                // QRect::right()/bottom() (which return x + width - 1): the latter's
+                // off-by-one scores a point sitting exactly on a screen's far edge as
+                // 1px outside it.
+                const qint64 dx = qMax(0, qMax(g.left() - center.x(), center.x() - (g.x() + g.width())));
+                const qint64 dy = qMax(0, qMax(g.top() - center.y(), center.y() - (g.y() + g.height())));
                 const qint64 distSq = dx * dx + dy * dy;
                 if (bestDistSq < 0 || distSq < bestDistSq) {
                     bestDistSq = distSq;

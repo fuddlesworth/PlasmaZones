@@ -108,6 +108,38 @@ private Q_SLOTS:
         QCOMPARE(settings.snapWindowBorderRadius(), ConfigDefaults::snapWindowBorderRadiusMax());
     }
 
+    void testReadValidatedInt_snapWindowBorderWidth_negative_returnsMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
+            borders->writeInt(ConfigDefaults::widthKey(), -5); // clamp min is snapWindowBorderWidthMin()
+            borders.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.snapWindowBorderWidth(), ConfigDefaults::snapWindowBorderWidthMin());
+    }
+
+    void testReadValidatedInt_snapWindowBorderRadius_negative_returnsMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
+            borders->writeInt(ConfigDefaults::radiusKey(), -5); // clamp min is snapWindowBorderRadiusMin()
+            borders.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.snapWindowBorderRadius(), ConfigDefaults::snapWindowBorderRadiusMin());
+    }
+
     /**
      * The validColorOr validator on the snapped-window border color
      * (Snapping.Appearance.Colors/Active) must fall back to the schema default

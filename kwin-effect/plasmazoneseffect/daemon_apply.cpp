@@ -210,9 +210,10 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
                       zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
                                        : PhosphorAnimation::ProfilePaths::WindowSnapIn);
     // Track snapping's own border set (mirrors how autotile records at its
-    // tile-apply) using the same discriminator as the batch path
-    // (slotApplyGeometriesBatch), so a window can never land in both the snap
-    // and autotile border sets:
+    // tile-apply) using an equivalent discriminator to the batch path
+    // (slotApplyGeometriesBatch); here an empty zoneId stands in for that path's
+    // explicit floating check, so a window can never land in both the snap and
+    // autotile border sets:
     //   - empty zoneId         → float-restore: leave snapping's set
     //   - empty/autotile screen → autotile-managed or unresolved: leave the set
     //                             (AutotileHandler tracks autotile-screen windows)

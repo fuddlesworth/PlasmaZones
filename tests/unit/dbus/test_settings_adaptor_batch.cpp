@@ -274,11 +274,25 @@ private Q_SLOTS:
         QCOMPARE(result.value(QStringLiteral("snapWindowInactiveBorderColor")).metaType().id(), QMetaType::QString);
 
         // Values mirror the stub's snapWindow* getters, proving each key is
-        // wired to its own accessor rather than collapsed onto a neighbour.
+        // wired to its own accessor rather than collapsed onto a neighbour. The
+        // int (width 2 / radius 0) and color (white / black) keys hold mutually
+        // distinct values, so any swap among them flips a mirror. Among the three
+        // bools only showBorder (false) differs from hideTitleBars/useSystem
+        // (both true) — two booleans cannot encode three distinct values — so the
+        // bool mirrors catch any swap involving showBorder; a hideTitleBars↔
+        // useSystem swap is instead pinned by the verified-correct production
+        // registration and the per-key metaType assertions above.
         QCOMPARE(result.value(QStringLiteral("snapWindowBorderWidth")).toInt(), m_settings->snapWindowBorderWidth());
         QCOMPARE(result.value(QStringLiteral("snapWindowBorderRadius")).toInt(), m_settings->snapWindowBorderRadius());
         QCOMPARE(QColor(result.value(QStringLiteral("snapWindowBorderColor")).toString()),
                  m_settings->snapWindowBorderColor());
+        QCOMPARE(QColor(result.value(QStringLiteral("snapWindowInactiveBorderColor")).toString()),
+                 m_settings->snapWindowInactiveBorderColor());
+        QCOMPARE(result.value(QStringLiteral("snapWindowHideTitleBars")).toBool(),
+                 m_settings->snapWindowHideTitleBars());
+        QCOMPARE(result.value(QStringLiteral("snapWindowShowBorder")).toBool(), m_settings->snapWindowShowBorder());
+        QCOMPARE(result.value(QStringLiteral("snapWindowUseSystemBorderColors")).toBool(),
+                 m_settings->snapWindowUseSystemBorderColors());
     }
 
     // ─────────────────────────────────────────────────────────────────────

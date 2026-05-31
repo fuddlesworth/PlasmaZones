@@ -2064,13 +2064,14 @@ private Q_SLOTS:
         QVERIFY(!snapping.contains(QStringLiteral("Appearance")));
     }
 
-    void testZoneRename_idempotentOnAlreadyV4()
+    void testZoneRename_v4VersionGatePreventsRemove()
     {
         IsolatedConfigGuard guard;
 
         // An already-v4 config whose zone groups are at the NEW Snapping.Zones.*
-        // paths. Running the migration must not move or duplicate them — the
-        // v4 version gate short-circuits migrateV3ToV4.
+        // paths. The v4 version gate short-circuits migrateV3ToV4 entirely (the
+        // move code is never reached), so the groups must not be moved or
+        // duplicated and no Snapping.Appearance group is resurrected.
         QJsonObject zonesColors;
         zonesColors.insert(QStringLiteral("UseSystem"), true);
         QJsonObject zones;

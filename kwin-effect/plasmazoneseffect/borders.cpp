@@ -186,9 +186,11 @@ void PlasmaZonesEffect::updateAllBorders()
 const PhosphorCompositor::BorderState* PlasmaZonesEffect::resolveBorderStateFor(const QString& windowId) const
 {
     using namespace PhosphorCompositor;
-    // Autotile first, then snap. A window is managed by exactly one mode at a
-    // time (a screen is either autotile or snap, and a window lives on one
-    // screen), so the order only matters for a transient mid-transition state.
+    // Autotile takes precedence; a window can transiently appear in both the
+    // autotile and snap border sets during a mode switch (the call sites guard
+    // against steady-state double-tracking via isAutotileScreen, but the
+    // transition window is real), and resolving autotile-first is the
+    // authoritative tie-break — this ordering is load-bearing, not cosmetic.
     const BorderState& autotile = m_autotileHandler->borderState();
     if (AutotileStateHelpers::shouldShowBorderForWindow(autotile, windowId)) {
         return &autotile;
