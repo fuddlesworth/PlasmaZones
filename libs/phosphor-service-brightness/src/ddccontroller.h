@@ -47,8 +47,10 @@ private:
     // Read VCP 0x10 from an already-open handle into current/max; false on error.
     static bool readLuminance(void* handle, int& current, int& maxValue);
 
-    void* m_displayList = nullptr; // DDCA_Display_Info_List* (kept alive for dref validity)
-    QHash<QString, void*> m_refs; // id -> DDCA_Display_Ref
+    // id -> DDCA_Display_Ref. The drefs are library-owned (valid until
+    // ddca_redetect_displays), so we keep value-copies here and do not retain
+    // the display-info list.
+    QHash<QString, void*> m_refs;
     bool m_initialized = false;
 };
 

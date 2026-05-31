@@ -124,8 +124,10 @@ BrightnessDevice::BrightnessDevice(QString id, QString name, int brightness, int
     d->kind = ExternalDisplay;
     d->id = std::move(id);
     d->name = std::move(name);
-    d->brightness = brightness;
     d->maxBrightness = maxBrightness;
+    // Clamp the initial probe value into range, in case the DDC read reported a
+    // transiently inconsistent current/max pair (matches applyExternalValue).
+    d->brightness = maxBrightness > 0 ? std::clamp(brightness, 0, maxBrightness) : brightness;
     d->externalSetter = std::move(setter);
     // No sysfs watcher: DDC/CI has no change notification; the host pushes
     // read-backs via applyExternalValue.
@@ -197,7 +199,12 @@ void BrightnessDevice::refresh()
 
 void BrightnessDevice::applyExternalValue(int brightness)
 {
-    const int clamped = d->maxBrightness > 0 ? std::clamp(brightness, 0, d->maxBrightness) : brightness;
+    // A zero/invalid range has no controllable value; drop the read-back rather
+    // than cache an unclamped value (matches the setBrightness / setPercentage
+    // guards).
+    if (d->maxBrightness <= 0)
+        return;
+    const int clamped = std::clamp(brightness, 0, d->maxBrightness);
     if (clamped == d->brightness)
         return;
     d->brightness = clamped;

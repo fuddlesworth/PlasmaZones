@@ -135,6 +135,8 @@ public:
         QObject::connect(ddc, &DdcController::brightnessRead, owner, [this](const QString& id, int brightness) {
             if (auto* device = ddcDevices.value(id))
                 device->applyExternalValue(brightness);
+            else
+                qCDebug(lcBrightnessHost) << "DDC read-back for unknown display dropped:" << id;
         });
 
         ddcThread->start();

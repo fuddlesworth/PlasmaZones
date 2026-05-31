@@ -22,11 +22,7 @@ DdcController::DdcController(QObject* parent)
 {
 }
 
-DdcController::~DdcController()
-{
-    if (m_displayList)
-        ddca_free_display_info_list(static_cast<DDCA_Display_Info_List*>(m_displayList));
-}
+DdcController::~DdcController() = default;
 
 bool DdcController::ensureInitialized()
 {
@@ -82,13 +78,9 @@ void DdcController::enumerate()
         return;
 
     // Re-enumeration is not part of the current contract (the host calls this
-    // once), but make the invariant self-enforcing: drop any prior list and its
-    // stale refs before probing, so a second call cannot leak the old list.
-    if (m_displayList) {
-        ddca_free_display_info_list(static_cast<DDCA_Display_Info_List*>(m_displayList));
-        m_displayList = nullptr;
-        m_refs.clear();
-    }
+    // once), but make it self-enforcing: drop any prior id->dref map before
+    // re-probing so stale ids do not linger.
+    m_refs.clear();
 
     DDCA_Display_Info_List* list = nullptr;
     const DDCA_Status status = ddca_get_display_info_list2(/*include_invalid=*/false, &list);
@@ -96,9 +88,6 @@ void DdcController::enumerate()
         qCDebug(lcDdcController) << "ddca_get_display_info_list2 failed:" << status;
         return;
     }
-    // Keep the list alive: the dref handles inside it must outlive enumeration
-    // so later get/set calls can reuse them.
-    m_displayList = list;
 
     for (int i = 0; i < list->ct; ++i) {
         const DDCA_Display_Info& info = list->info[i];
@@ -123,6 +112,12 @@ void DdcController::enumerate()
         m_refs.insert(id, info.dref);
         Q_EMIT displayFound(id, QString::fromUtf8(info.model_name), current, maxValue);
     }
+
+    // The drefs stored in m_refs are library-owned and survive freeing the list
+    // (ddca_free_display_info_list: the list is a pointer-free copy; only
+    // ddca_redetect_displays invalidates drefs), so the list itself is no longer
+    // needed once the map is built.
+    ddca_free_display_info_list(list);
 }
 
 void DdcController::setBrightness(const QString& id, int value)
