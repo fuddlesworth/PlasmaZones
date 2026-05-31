@@ -156,7 +156,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Appearance Settings
+    // Zone Overlay (Snapping.Zones.*) Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
     static bool useSystemColors()

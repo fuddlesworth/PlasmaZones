@@ -255,6 +255,9 @@ void PlasmaZonesEffect::clearWindowSnapped(const QString& windowId)
     }
     const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
     AutotileStateHelpers::removeFromAllScreens(m_snapBorder, windowId);
+    // Snap never populates zoneGeometries — snap borders render off the live
+    // frame geometry, not stored zone geometry; the remove/clear calls exist
+    // only for structural symmetry with the autotile BorderState.
     m_snapBorder.zoneGeometries.remove(windowId);
     // Restore the title bar only if snap had hidden it AND autotile doesn't
     // still want it borderless. A window mid-transition between modes can be in

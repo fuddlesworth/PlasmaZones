@@ -191,11 +191,12 @@ private Q_SLOTS:
     }
 
     /**
-     * The snapped-window appearance defaults must mirror the autotile* border
-     * defaults (they share the same UX semantics). Pinning each value here
-     * catches silent drift between the snap-window and autotile defaults, and
-     * the colors are compared against the zone color accessors rather than
-     * hardcoded RGB so a palette change can't make the test stale.
+     * The snapped-window border width/radius/colors must mirror the autotile*
+     * border defaults (they share the same UX semantics); the colors are
+     * compared against the zone color accessors rather than hardcoded RGB so a
+     * palette change can't make the test stale. The hide-title-bars and
+     * show-border booleans are independent defaults (asserted against literals,
+     * not the autotile accessors). Pinning each value here catches silent drift.
      */
     void testSnapWindowAppearance_defaults()
     {

@@ -165,10 +165,11 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Appearance ─────────────────────────────────────────────────────────────
-// Four sub-groups under Snapping.Zones.*: Colors (system toggle + 3
-// zone colors), Labels (font family/color/scale/weight + italic/underline/
-// strikeout toggles), Opacity (active + inactive), Border (width + radius),
-// plus Effects.Blur which shares the load function. Also declares the
+// Declares seven groups. Four zone-overlay sub-groups under Snapping.Zones.*:
+// Colors (system toggle + 3 zone colors), Labels (font family/color/scale/weight
+// + italic/underline/strikeout toggles), Opacity (active + inactive), Border
+// (width + radius). (Effects.Blur is a zone-overlay setting too but shares the
+// Effects container declared in appendDisplaySchema.) Plus three
 // Snapping.Appearance.{Colors,Decorations,Borders} snapped-window decoration
 // groups (parallel to Tiling.Appearance.*).
 
