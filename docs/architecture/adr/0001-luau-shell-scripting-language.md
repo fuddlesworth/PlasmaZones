@@ -60,7 +60,7 @@ and configuration language**.
    core) with no tiling knowledge, so future shell surfaces reuse it.
    `libs/phosphor-tiles` depends on it and implements the tiling binding
    (`LuauTileAlgorithm`, the `pz` stdlib + `.d.lua`, params/state/tree
-   marshalling). **Luau is vendored** as a static git submodule by default
+   marshalling). **Luau is vendored** as a committed source tarball by default
    (opt-in `-DPLASMAZONES_SYSTEM_LUAU=ON`) because it is packaged for only Arch
    and Nix — not Debian, Fedora, or openSUSE — and has no stable ABI.
 
@@ -169,22 +169,29 @@ separate future work for actual shell UI surfaces.
 
 **Done.** The full tiling increment shipped — impl-plan phases 0–7 are complete:
 `libs/phosphor-scripting` (LGPL Luau host: engine, `luaL_sandbox`, interrupt
-watchdog, compile/load, QVariant marshalling), `libs/phosphor-tiles`
+watchdog, a per-script **heap cap** via a custom capped `lua_Alloc` enforced
+once sandboxed, compile/load, QVariant marshalling), `libs/phosphor-tiles`
 (`LuauTileAlgorithm` + the `pz` stdlib), all 25 algorithms ported under a
 golden-snapshot parity test, the loader swapped to `.luau`, the QJSEngine path
 deleted, and a CI **`luau-analyze` gate** over the bundled algorithms + `pz`
-stdlib. Vendoring landed as **in-tree Luau source** (`extern/luau`, pinned
-0.723) rather than a submodule, so source tarballs are self-contained for every
-distro; `-DPLASMAZONES_SYSTEM_LUAU=ON` still links a system Luau. An end-user
+stdlib. Vendoring landed as a **committed source tarball**
+(`extern/luau-0.723.tar.gz`, extracted at configure time via FetchContent from
+that local file) rather than a submodule or the unpacked tree, so source
+tarballs stay self-contained for every distro with no network, while the repo
+carries one ~2 MB blob instead of ~950 files;
+`-DPLASMAZONES_SYSTEM_LUAU=ON` still links a system Luau. An end-user
 [Luau algorithm authoring guide](../luau-algorithm-authoring.md) ships with it.
 
 **Remaining:**
 
-- **Memory-cap allocator** — designed in the spike, still not built; the engine
-  uses `luaL_newstate`'s default allocator. The interrupt watchdog bounds *time*
-  but not heap. Build before opening the algorithm surface to untrusted authors.
 - **QML↔Luau bridge design** — deferred to the eventual shell-UI surfaces; not
   needed for the tiling migration, which is pure C++↔Luau.
+
+Both spike-designed safety nets are now built: the interrupt watchdog bounds CPU
+*time*, and the capped allocator bounds *heap* (default 64 MiB, configurable per
+engine; enforcement starts at `sandbox()` so trusted init/preludes can't be
+spuriously OOM-killed). A runaway allocation surfaces as a catchable Luau OOM,
+not a host crash.
 
 A competitor-architecture study (how Hyprland / Noctalia-Quickshell structure
 their Lua and QML↔Lua boundaries) was considered and **deliberately skipped** —

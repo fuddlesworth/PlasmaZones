@@ -20,10 +20,45 @@ namespace {
 constexpr int ChunkTimeoutMs = 1000;
 } // namespace
 
-LuauEngine::LuauEngine(std::shared_ptr<LuauWatchdog> watchdog)
+LuauEngine::LuauEngine(std::shared_ptr<LuauWatchdog> watchdog, std::size_t memoryCapBytes)
     : m_watchdog(std::move(watchdog))
     , m_interrupt(std::make_shared<std::atomic<bool>>(false))
 {
+    m_memory.cap = memoryCapBytes;
+}
+
+void* LuauEngine::allocate(void* ud, void* ptr, std::size_t osize, std::size_t nsize)
+{
+    auto* budget = static_cast<MemoryBudget*>(ud);
+
+    // Free: osize is the real old size (0 when ptr is null), per the Luau
+    // frealloc contract.
+    if (nsize == 0) {
+        std::free(ptr);
+        if (budget) {
+            budget->used -= (osize <= budget->used) ? osize : budget->used;
+        }
+        return nullptr;
+    }
+
+    // Grow/alloc: reject anything that would push live bytes past the cap, but
+    // only once enforcement is on (after sandbox()). Returning nullptr makes
+    // Luau raise a catchable out-of-memory error inside the protected call.
+    if (budget && budget->enforce && budget->cap != 0) {
+        const std::size_t projected = budget->used - osize + nsize;
+        if (projected > budget->cap) {
+            return nullptr;
+        }
+    }
+
+    void* block = std::realloc(ptr, nsize);
+    if (block && budget) {
+        budget->used = budget->used - osize + nsize;
+        if (budget->used > budget->peak) {
+            budget->peak = budget->used;
+        }
+    }
+    return block;
 }
 
 LuauEngine::~LuauEngine()
@@ -41,10 +76,18 @@ bool LuauEngine::init(QString* error)
     if (m_L) {
         return true; // already initialised
     }
-    m_L = luaL_newstate();
+    // Custom allocator so we can cap heap use; mirrors luaL_newstate (which is
+    // just lua_newstate over a plain malloc wrapper) but routes through our
+    // accounting. Enforcement stays off until sandbox(), so this trusted setup
+    // and the preludes below — none of which run inside a protected call —
+    // cannot be OOM-killed by a tight cap.
+    m_memory.used = 0;
+    m_memory.peak = 0;
+    m_memory.enforce = false;
+    m_L = lua_newstate(&LuauEngine::allocate, &m_memory);
     if (!m_L) {
         if (error) {
-            *error = QStringLiteral("luaL_newstate failed");
+            *error = QStringLiteral("lua_newstate failed");
         }
         return false;
     }
@@ -95,6 +138,10 @@ void LuauEngine::sandbox()
     if (m_L && !m_sandboxed) {
         luaL_sandbox(m_L);
         m_sandboxed = true;
+        // From here on every allocation is on behalf of untrusted module code
+        // (load + calls), all of which runs inside protected calls — so the cap
+        // can be enforced safely, turning a runaway into a catchable OOM.
+        m_memory.enforce = true;
     }
 }
 

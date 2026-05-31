@@ -25,6 +25,8 @@ private Q_SLOTS:
     void watchdogKillsInfiniteLoopAndRecovers();
     void compileErrorSurfaces();
     void sandboxHolds();
+    void memoryCapEnforcedAndRecovers();
+    void memoryCapAllowsNormalWork();
 };
 
 void TestLuauEngine::happyPathAndMarshalling()
@@ -166,6 +168,59 @@ void TestLuauEngine::sandboxHolds()
 
     const auto out = engine.callModule(handle, QStringLiteral("tile"), {}, 200);
     QCOMPARE(out.status, LuauEngine::CallStatus::Ok);
+}
+
+void TestLuauEngine::memoryCapEnforcedAndRecovers()
+{
+    // Cap well above the VM + stdlib baseline (~1-2 MiB) but far below what the
+    // runaway below grabs, so init/sandbox succeed and the cap bites only once
+    // the untrusted script starts allocating.
+    constexpr std::size_t kCap = 16ull * 1024 * 1024;
+    auto watchdog = std::make_shared<LuauWatchdog>();
+    LuauEngine engine(watchdog, kCap);
+    QVERIFY(engine.init());
+    engine.sandbox();
+    QCOMPARE(engine.memoryCapBytes(), kCap);
+
+    // Grow a table without bound. The allocator fails the realloc that would
+    // cross the cap; Luau raises a catchable OOM inside the protected call, so
+    // this surfaces as Error (not a crash, and not a TimedOut — the generous
+    // timeout is only a backstop).
+    const int hog = engine.loadModule(
+        QStringLiteral("hog"),
+        "return { tile = function(ctx) local t = {} for i = 1, 1000000000 do t[i] = i end return {} end }");
+    QVERIFY(hog >= 0);
+    const auto out = engine.callModule(hog, QStringLiteral("tile"), {}, 5000);
+    QCOMPARE(out.status, LuauEngine::CallStatus::Error);
+    QVERIFY(!out.message.isEmpty());
+    // The cap was actually the limiter — live bytes never exceeded it.
+    QVERIFY(engine.peakMemoryBytes() <= kCap);
+
+    // The engine must recover and run a well-behaved module afterwards.
+    const int ok = engine.loadModule(QStringLiteral("ok"), "return { tile = function(ctx) return { 1, 2, 3 } end }");
+    QVERIFY(ok >= 0);
+    const auto out2 = engine.callModule(ok, QStringLiteral("tile"), {}, 200);
+    QCOMPARE(out2.status, LuauEngine::CallStatus::Ok);
+    QCOMPARE(out2.result.toList().size(), 3);
+}
+
+void TestLuauEngine::memoryCapAllowsNormalWork()
+{
+    // The default cap must never get in the way of ordinary tiling work.
+    LuauEngine engine; // default DefaultMemoryCapBytes
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    const int handle =
+        engine.loadModule(QStringLiteral("m"), "return { tile = function(ctx) return { { x = 0, width = 10 } } end }");
+    QVERIFY(handle >= 0);
+    const auto out = engine.callModule(handle, QStringLiteral("tile"), {}, 200);
+    QCOMPARE(out.status, LuauEngine::CallStatus::Ok);
+
+    // Baseline footprint sits far under the cap — documents the headroom.
+    QVERIFY(engine.peakMemoryBytes() > 0);
+    QVERIFY(engine.peakMemoryBytes() < engine.memoryCapBytes());
+    QVERIFY(engine.peakMemoryBytes() < 16ull * 1024 * 1024);
 }
 
 QTEST_MAIN(TestLuauEngine)

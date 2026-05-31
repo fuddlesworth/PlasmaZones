@@ -11,6 +11,7 @@
 #include <QVariantList>
 
 #include <atomic>
+#include <cstddef>
 #include <memory>
 
 struct lua_State;
@@ -51,9 +52,18 @@ public:
         QString message; ///< Set when status != Ok.
     };
 
+    /// Default per-engine heap ceiling for untrusted script execution. Generous
+    /// headroom over a tiling algorithm's real working set (which is well under
+    /// 1 MiB beyond the ~1–2 MiB VM + stdlib baseline), while still bounding a
+    /// runaway allocation long before it can exhaust the host.
+    static constexpr std::size_t DefaultMemoryCapBytes = 64ull * 1024 * 1024;
+
     /// @p watchdog may be shared across engines; nullptr disables the timeout
-    /// safety net (useful for short, trusted scripts in tests).
-    explicit LuauEngine(std::shared_ptr<LuauWatchdog> watchdog = nullptr);
+    /// safety net (useful for short, trusted scripts in tests). @p memoryCapBytes
+    /// caps heap allocated once the engine is sandboxed (0 = unlimited); the
+    /// watchdog bounds CPU time, this bounds memory. See @ref sandbox.
+    explicit LuauEngine(std::shared_ptr<LuauWatchdog> watchdog = nullptr,
+                        std::size_t memoryCapBytes = DefaultMemoryCapBytes);
     ~LuauEngine();
 
     LuauEngine(const LuauEngine&) = delete;
@@ -94,8 +104,43 @@ public:
         return m_L != nullptr;
     }
 
+    /// Live heap bytes currently allocated by the VM (host accounting).
+    std::size_t memoryUsedBytes() const noexcept
+    {
+        return m_memory.used;
+    }
+
+    /// High-water mark of @ref memoryUsedBytes over the engine's lifetime.
+    std::size_t peakMemoryBytes() const noexcept
+    {
+        return m_memory.peak;
+    }
+
+    /// The configured heap ceiling (0 = unlimited).
+    std::size_t memoryCapBytes() const noexcept
+    {
+        return m_memory.cap;
+    }
+
 private:
     static void interruptCallback(lua_State* L, int gc);
+
+    /// Custom `lua_Alloc`: tracks live/peak bytes and, once @ref sandbox has
+    /// enabled enforcement, fails (returns nullptr) any allocation that would
+    /// push live bytes past the cap — Luau turns that into a catchable OOM.
+    static void* allocate(void* ud, void* ptr, std::size_t osize, std::size_t nsize);
+
+    /// Heap accounting backing the custom allocator. Plain (non-atomic): the VM
+    /// — and therefore every allocation — is single-threaded. Enforcement starts
+    /// off so the trusted init/prelude/sandbox phases (which run outside any
+    /// protected call) can never spuriously OOM regardless of the cap.
+    struct MemoryBudget
+    {
+        std::size_t used = 0;
+        std::size_t peak = 0;
+        std::size_t cap = 0; ///< 0 = unlimited
+        bool enforce = false;
+    };
 
     /// Watchdog-guarded `lua_pcall`. Function + @p nargs must already be on the
     /// stack; on Ok, @p nresults results are left on the stack. On failure the
@@ -105,6 +150,7 @@ private:
     lua_State* m_L = nullptr;
     std::shared_ptr<LuauWatchdog> m_watchdog;
     std::shared_ptr<std::atomic<bool>> m_interrupt;
+    MemoryBudget m_memory;
     bool m_sandboxed = false;
     bool m_timedOut = false;
     int m_lastTimeoutMs = 0;
