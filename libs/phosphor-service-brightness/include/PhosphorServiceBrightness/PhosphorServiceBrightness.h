@@ -25,4 +25,6 @@
  * `PhosphorDBus::Client` async helper for the logind call.
  */
 
+#include <PhosphorServiceBrightness/BrightnessDevice.h>
+#include <PhosphorServiceBrightness/BrightnessHost.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>

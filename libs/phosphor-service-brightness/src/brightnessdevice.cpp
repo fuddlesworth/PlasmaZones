@@ -1,0 +1,168 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorServiceBrightness/BrightnessDevice.h>
+
+#include <PhosphorDBus/Client.h>
+
+#include <QDBusConnection>
+#include <QDir>
+#include <QFile>
+#include <QFileSystemWatcher>
+#include <QLoggingCategory>
+
+#include <algorithm>
+
+Q_LOGGING_CATEGORY(lcBrightnessDevice, "phosphor.service.brightness.device")
+
+namespace {
+constexpr auto kSessionIface = "org.freedesktop.login1.Session";
+
+// Read a single integer from a sysfs attribute file. Returns fallback when the
+// file is missing or unparseable (a malformed entry must not crash the lib).
+int readSysfsInt(const QString& path, int fallback)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return fallback;
+    bool ok = false;
+    const int value = file.readLine().trimmed().toInt(&ok);
+    return ok ? value : fallback;
+}
+} // namespace
+
+namespace PhosphorServiceBrightness {
+
+class BrightnessDevice::Private
+{
+public:
+    BrightnessDevice* owner = nullptr;
+    QDBusConnection bus;
+    QString service;
+    QString sessionPath;
+    Kind kind = Display;
+    QString name;
+    QString sysfsDir;
+
+    int brightness = 0;
+    int maxBrightness = 0;
+
+    QFileSystemWatcher watcher;
+
+    explicit Private(QDBusConnection connection)
+        : bus(std::move(connection))
+    {
+    }
+
+    [[nodiscard]] QString brightnessPath() const
+    {
+        return QDir(sysfsDir).filePath(QStringLiteral("brightness"));
+    }
+
+    // logind's SetBrightness subsystem string: backlight devices live under
+    // /sys/class/backlight, keyboard backlights under /sys/class/leds.
+    [[nodiscard]] QString subsystem() const
+    {
+        return kind == Keyboard ? QStringLiteral("leds") : QStringLiteral("backlight");
+    }
+
+    void readMax()
+    {
+        // actual_brightness is the hardware read-back; max_brightness the range.
+        maxBrightness = readSysfsInt(QDir(sysfsDir).filePath(QStringLiteral("max_brightness")), 0);
+    }
+
+    void readBrightness()
+    {
+        const int previous = brightness;
+        brightness = readSysfsInt(brightnessPath(), brightness);
+        if (brightness != previous)
+            Q_EMIT owner->brightnessChanged();
+    }
+};
+
+BrightnessDevice::BrightnessDevice(QDBusConnection connection, QString service, QString sessionPath, Kind kind,
+                                   QString name, QString sysfsDir, QObject* parent)
+    : QObject(parent)
+    , d(std::make_unique<Private>(std::move(connection)))
+{
+    d->owner = this;
+    d->service = std::move(service);
+    d->sessionPath = std::move(sessionPath);
+    d->kind = kind;
+    d->name = std::move(name);
+    d->sysfsDir = std::move(sysfsDir);
+
+    d->readMax();
+    d->brightness = readSysfsInt(d->brightnessPath(), 0);
+
+    // Watch the brightness attribute so hardware keys / other apps are tracked
+    // live. QFileSystemWatcher drops the path on some change events, so the
+    // handler re-adds it after re-reading.
+    if (d->watcher.addPath(d->brightnessPath())) {
+        connect(&d->watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
+            d->readBrightness();
+            if (!d->watcher.files().contains(path))
+                d->watcher.addPath(path);
+        });
+    }
+}
+
+BrightnessDevice::~BrightnessDevice() = default;
+
+QString BrightnessDevice::name() const
+{
+    return d->name;
+}
+BrightnessDevice::Kind BrightnessDevice::kind() const
+{
+    return d->kind;
+}
+int BrightnessDevice::brightness() const
+{
+    return d->brightness;
+}
+int BrightnessDevice::maxBrightness() const
+{
+    return d->maxBrightness;
+}
+qreal BrightnessDevice::percentage() const
+{
+    return d->maxBrightness > 0 ? static_cast<qreal>(d->brightness) / d->maxBrightness : 0.0;
+}
+
+void BrightnessDevice::setBrightness(int value)
+{
+    if (d->maxBrightness <= 0)
+        return;
+    const int clamped = std::clamp(value, 0, d->maxBrightness);
+    if (d->sessionPath.isEmpty() || !d->bus.isConnected()) {
+        qCDebug(lcBrightnessDevice) << "no logind session; brightness write inert for" << d->name;
+        return;
+    }
+    // Fire-and-forget; the cached value moves when the watcher re-reads the
+    // sysfs attribute, never optimistically.
+    PhosphorDBus::Client session(d->bus, d->service, d->sessionPath, &lcBrightnessDevice());
+    session.fireAndForget(this, QLatin1String(kSessionIface), QStringLiteral("SetBrightness"),
+                          {d->subsystem(), d->name, static_cast<uint>(clamped)}, QStringLiteral("SetBrightness"));
+}
+
+void BrightnessDevice::setPercentage(qreal percentage)
+{
+    if (d->maxBrightness <= 0)
+        return;
+    const qreal clamped = std::clamp(percentage, 0.0, 1.0);
+    setBrightness(static_cast<int>(qRound(clamped * d->maxBrightness)));
+}
+
+void BrightnessDevice::refresh()
+{
+    d->readBrightness();
+}
+
+void BrightnessDevice::setSessionPath(const QString& sessionPath)
+{
+    d->sessionPath = sessionPath;
+}
+
+} // namespace PhosphorServiceBrightness

@@ -41,10 +41,14 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(phosphorservicebrightness_public_HDRS
     include/PhosphorServiceBrightness/PhosphorServiceBrightness.h
     include/PhosphorServiceBrightness/QmlRegistration.h
+    include/PhosphorServiceBrightness/BrightnessDevice.h
+    include/PhosphorServiceBrightness/BrightnessHost.h
 )
 
 set(phosphorservicebrightness_SRCS
     src/qmlregistration.cpp
+    src/brightnessdevice.cpp
+    src/brightnesshost.cpp
 )
 
 add_library(PhosphorServiceBrightness SHARED
