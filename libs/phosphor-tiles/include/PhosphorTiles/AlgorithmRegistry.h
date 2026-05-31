@@ -59,7 +59,7 @@ public:
      * @brief Early cleanup of all registered algorithms.
      *
      * Wired to @c QCoreApplication::aboutToQuit so algorithm objects
-     * (especially @c ScriptedAlgorithm instances with @c QJSEngine
+     * (especially @c LuauTileAlgorithm instances with @c lua_State
      * internals) are destroyed while Qt is still fully alive, avoiding
      * teardown crashes if an instance outlives @c QCoreApplication.
      *

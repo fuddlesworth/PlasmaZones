@@ -6,7 +6,8 @@
 # Stateless tiling-algorithm layer: TilingAlgorithm interface, AlgorithmRegistry
 # singleton, SplitTree primitive (BSP node tree + serialization + rebuild),
 # TilingState (per-screen mutable state consumed by previews), and the scripted-
-# algorithm runtime (QJSEngine sandbox + loader + helpers). Implements
+# algorithm runtime (Luau-backed LuauTileAlgorithm + ScriptedAlgorithmLoader,
+# evaluated through PhosphorScripting). Implements
 # PhosphorLayout::ILayoutSource via AutotileLayoutSource so editor / settings
 # code can render autotile previews without depending on the daemon engine.
 #
@@ -17,7 +18,7 @@
 #
 # Self-contained: depends only on Qt6 + PhosphorLayoutApi.  Logging is
 # library-local (`PhosphorTiles::lcTilesLib`).  Strings in
-# scriptedalgorithm.cpp ship as untranslated English placeholders — the
+# luautilealgorithm.cpp ship as untranslated English placeholders — the
 # application config layer overrides them via algorithm display name.
 
 cmake_minimum_required(VERSION 3.16)
@@ -49,7 +50,7 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
 endif()
 
 # phosphor-fsloader — shared filesystem-loader scaffolding (used by
-# ScriptedAlgorithmLoader's WatchedDirectorySet + JsScanStrategy).
+# ScriptedAlgorithmLoader's WatchedDirectorySet + LuauScanStrategy).
 if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader 0.1.0 REQUIRED)
 endif()

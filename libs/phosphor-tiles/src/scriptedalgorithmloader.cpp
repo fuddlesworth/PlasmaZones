@@ -43,10 +43,10 @@ static constexpr int kMaxScripts = 10'000;
 /// triggered rescans (file edits, parent-watch promotion) reuse the
 /// snapshot from the last `scanAndRegister` and avoid redundantly
 /// re-resolving XDG paths on every inotify wake.
-class ScriptedAlgorithmLoader::JsScanStrategy : public PhosphorFsLoader::IScanStrategy
+class ScriptedAlgorithmLoader::LuauScanStrategy : public PhosphorFsLoader::IScanStrategy
 {
 public:
-    explicit JsScanStrategy(ScriptedAlgorithmLoader& loader)
+    explicit LuauScanStrategy(ScriptedAlgorithmLoader& loader)
         : m_loader(&loader)
     {
     }
@@ -66,7 +66,7 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
     , m_subdirectory(subdirectory)
     , m_registry(registry)
     , m_watchdog(std::make_shared<PhosphorScripting::LuauWatchdog>())
-    , m_strategy(std::make_unique<JsScanStrategy>(*this))
+    , m_strategy(std::make_unique<LuauScanStrategy>(*this))
     , m_watcher(std::make_unique<PhosphorFsLoader::WatchedDirectorySet>(*m_strategy, this))
 {
     Q_ASSERT(m_registry);
@@ -385,7 +385,7 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
 
 void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserDir, const QString& canonicalUserDir)
 {
-    const QStringList validFiles = validatedJsFiles(dir, MaxWatchedFilesPerDir);
+    const QStringList validFiles = validatedLuauFiles(dir, MaxWatchedFilesPerDir);
 
     for (const QString& fullPath : validFiles) {
         // Mid-directory bail when the global cap was reached during this
@@ -396,7 +396,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
             return;
         }
         // Two layered checks, intentionally not redundant:
-        //   • `validatedJsFiles` filters by `*.js` extension AND verifies
+        //   • `validatedLuauFiles` filters by `*.luau` extension AND verifies
         //     symlink containment within `dir`'s canonical tree (path-
         //     traversal defense).
         //   • The regex below restricts the BASENAME — the script id is
@@ -468,7 +468,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
     }
 }
 
-QStringList ScriptedAlgorithmLoader::validatedJsFiles(const QString& dirPath, int maxFiles) const
+QStringList ScriptedAlgorithmLoader::validatedLuauFiles(const QString& dirPath, int maxFiles) const
 {
     QStringList result;
     QDir dirObj(dirPath);
