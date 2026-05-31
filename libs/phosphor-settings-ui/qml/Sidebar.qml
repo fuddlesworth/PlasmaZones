@@ -92,6 +92,14 @@ ColumnLayout {
     // (1.5×, 1.25×) don't yield sub-pixel widths that anti-alias to a
     // washed-out half-pixel line.
     readonly property int accentBarWidth: Math.round(Screen.devicePixelRatio * 2.5)
+    /** Rendered height of the sticky SearchField row's control (excludes
+     *  its surrounding Layout margins). The chrome binds the breadcrumb
+     *  bar's height to this so the search field and the breadcrumb sit
+     *  at the same vertical center and their separators land on the same
+     *  Y — keeping the sidebar header and content header aligned. Zero in
+     *  compact mode (search field hidden), so the consumer falls back to
+     *  the breadcrumb's own implicit height. */
+    readonly property real searchFieldHeight: searchField.visible ? searchField.implicitHeight : 0
 
     function drillInto(parentId) {
         // Short-circuit on either the already-displayed scope OR a
@@ -521,6 +529,15 @@ ColumnLayout {
 
         Layout.fillWidth: true
         Layout.fillHeight: true
+        // Inset the row list horizontally so the active-row accent
+        // stripe and hover backgrounds don't run flush against the
+        // window's left edge. Matches the SearchField's smallSpacing
+        // inset above so rows align with the search field's left edge,
+        // and balances the right-hand scrollbar gutter the ScrollView
+        // already reserves (which is the "right padding" that was
+        // present without a matching left inset).
+        Layout.leftMargin: Kirigami.Units.smallSpacing
+        Layout.rightMargin: Kirigami.Units.smallSpacing
         clip: true
 
         ColumnLayout {

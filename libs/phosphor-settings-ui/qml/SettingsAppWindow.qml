@@ -321,12 +321,32 @@ Kirigami.ApplicationWindow {
                 spacing: 0
 
                 RowLayout {
+                    id: breadcrumbBar
+
                     Layout.fillWidth: true
-                    Layout.margins: Kirigami.Units.smallSpacing
+                    // Horizontal gutter matches the PageHost content
+                    // margin + the UnsavedChangesFooter inset (both
+                    // largeSpacing) so the breadcrumb, page body, and
+                    // footer share one left/right edge. Vertical stays
+                    // at smallSpacing to keep the breadcrumb row compact.
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    // Match the sidebar's SearchField height so the two
+                    // header bars line up and their separators land on
+                    // the same Y. Falls back to the bar's own content
+                    // height in compact mode (search field hidden →
+                    // searchFieldHeight is 0).
+                    Layout.preferredHeight: Math.max(breadcrumbBar.implicitHeight, sidebarItem.searchFieldHeight)
                     spacing: Kirigami.Units.smallSpacing
 
                     Breadcrumbs {
                         Layout.fillWidth: true
+                        // Center the crumb trail in the bar so it shares
+                        // the search field's vertical center (the bar's
+                        // height is matched to the search field below).
+                        Layout.alignment: Qt.AlignVCenter
                         controller: root.controller
                     }
 
