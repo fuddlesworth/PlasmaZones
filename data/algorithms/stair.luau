@@ -41,8 +41,10 @@ return pz.algorithm {
 
         local totalOffsetX = math.max(0, area.width - winWidth)
         local totalOffsetY = math.max(0, area.height - winHeight)
-        local stepX = math.floor(totalOffsetX / (count - 1))
-        local stepY = math.floor(totalOffsetY / (count - 1))
+        -- Guard the count==1 divisor (the host short-circuits single-window
+        -- layouts, so this is defensive); mirrors paper.luau's `count > 1` guard.
+        local stepX = count > 1 and math.floor(totalOffsetX / (count - 1)) or 0
+        local stepY = count > 1 and math.floor(totalOffsetY / (count - 1)) or 0
 
         local zones = {}
         for i = 0, count - 1 do

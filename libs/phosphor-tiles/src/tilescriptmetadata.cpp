@@ -17,7 +17,7 @@ QVector<QRect> clampZonesToArea(const QVector<QRect>& zones, const QRect& area, 
         const QRect bounded = zone.intersected(area);
         if (bounded.isEmpty()) {
             qCWarning(PhosphorTiles::lcTilesLib)
-                << "ScriptedAlgorithm: zone" << i << "outside area, using full area as fallback"
+                << "LuauTileAlgorithm: zone" << i << "outside area, using full area as fallback"
                 << "zone=" << zone << "area=" << area << "script=" << scriptId;
             clamped.append(area);
             continue;

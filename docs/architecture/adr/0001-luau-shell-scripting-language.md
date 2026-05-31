@@ -59,7 +59,7 @@ and configuration language**.
    owns the Luau host (engine, sandbox, watchdog, compile/load, marshalling
    core) with no tiling knowledge, so future shell surfaces reuse it.
    `libs/phosphor-tiles` depends on it and implements the tiling binding
-   (`LuauTileAlgorithm`, the `pz` stdlib + `.d.lua`, params/state/tree
+   (`LuauTileAlgorithm`, the `pz` stdlib + `.d.luau`, params/state/tree
    marshalling). **Luau is vendored** as a committed source tarball by default
    (opt-in `-DPLASMAZONES_SYSTEM_LUAU=ON`) because it is packaged for only Arch
    and Nix — not Debian, Fedora, or openSUSE — and has no stable ABI.
@@ -175,8 +175,8 @@ once sandboxed, compile/load, QVariant marshalling), `libs/phosphor-tiles`
 golden-snapshot parity test, the loader swapped to `.luau`, the QJSEngine path
 deleted, and a CI **`luau-analyze` gate** over the bundled algorithms + `pz`
 stdlib. Vendoring landed as a **committed source tarball**
-(`extern/luau-0.723.tar.gz`, extracted at configure time via FetchContent from
-that local file) rather than a submodule or the unpacked tree, so source
+(`extern/luau-0.723.tar.gz`, extracted at configure time from that local file
+via `file(ARCHIVE_EXTRACT)`) rather than a submodule or the unpacked tree, so source
 tarballs stay self-contained for every distro with no network, while the repo
 carries one ~2 MB blob instead of ~950 files;
 `-DPLASMAZONES_SYSTEM_LUAU=ON` still links a system Luau. An end-user

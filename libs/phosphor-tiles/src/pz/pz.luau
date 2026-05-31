@@ -1,5 +1,5 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
--- SPDX-License-Identifier: GPL-3.0-or-later
+-- SPDX-License-Identifier: LGPL-2.1-or-later
 --
 -- The `pz` tiling standard library. Injected as a global by LuauTileAlgorithm
 -- before the VM is sandboxed, then frozen.

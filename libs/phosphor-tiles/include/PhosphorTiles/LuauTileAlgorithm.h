@@ -90,7 +90,6 @@ public:
     bool supportsCustomParams() const noexcept override;
     QVariantList customParamDefList() const override;
     bool hasCustomParam(const QString& name) const override;
-    const QVector<ScriptedHelpers::CustomParamDef>& customParamDefs() const;
 
 private:
     bool loadScript(const QString& filePath);

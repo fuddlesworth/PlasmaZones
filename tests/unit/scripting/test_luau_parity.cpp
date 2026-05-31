@@ -207,6 +207,10 @@ private Q_SLOTS:
     {
         runMatrix(QStringLiteral("dwindle-memory"));
     }
+    void bsp()
+    {
+        runMatrix(QStringLiteral("bsp"));
+    }
 
     void clusterWithWindows();
     void dwindleMemoryTreePath();

@@ -5,7 +5,6 @@
 #include <PhosphorScripting/LuauWatchdog.h>
 
 #include "luaumarshal.h"
-#include "scriptinglogging.h"
 
 #include <lua.h>
 #include <lualib.h>
@@ -113,6 +112,15 @@ bool LuauEngine::runPrelude(const QString& chunkName, const QByteArray& source, 
 
     size_t bcSize = 0;
     char* bc = luau_compile(source.constData(), static_cast<size_t>(source.size()), nullptr, &bcSize);
+    // luau_compile allocates the result with its own allocator (outside the VM
+    // heap cap) and encodes syntax errors into a non-null blob — a null return
+    // means allocation failure, not a syntax error.
+    if (!bc) {
+        if (error) {
+            *error = QStringLiteral("luau_compile failed (out of memory)");
+        }
+        return false;
+    }
     const int loadStatus = luau_load(m_L, chunkName.toUtf8().constData(), bc, bcSize, 0);
     std::free(bc);
     if (loadStatus != 0) {
@@ -156,6 +164,13 @@ int LuauEngine::loadModule(const QString& chunkName, const QByteArray& source, Q
 
     size_t bcSize = 0;
     char* bc = luau_compile(source.constData(), static_cast<size_t>(source.size()), nullptr, &bcSize);
+    // See runPrelude: a null blob is an allocation failure, not a syntax error.
+    if (!bc) {
+        if (error) {
+            *error = QStringLiteral("luau_compile failed (out of memory)");
+        }
+        return -1;
+    }
     const int loadStatus = luau_load(m_L, chunkName.toUtf8().constData(), bc, bcSize, 0);
     std::free(bc);
     if (loadStatus != 0) {

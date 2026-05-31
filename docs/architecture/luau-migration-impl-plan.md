@@ -45,7 +45,7 @@ Gains a dependency on `phosphor-scripting` and implements only the
 
 - `LuauTileAlgorithm : TilingAlgorithm` — replaces `ScriptedAlgorithm`.
 - the `pz` tiling stdlib in Luau (Rect API + the 25 C++ builtin helpers
-  reimplemented) + typed `.d.lua` definitions.
+  reimplemented) + typed `.d.luau` definitions.
 - `TilingParams` / `TilingState` / `SplitTree` ↔ Lua marshalling.
 
 **Blast radius is small:** the registry
@@ -87,7 +87,7 @@ The `metadata` table replaces *both* the JS `metadata` object and the
 | Decision | Choice | Rationale |
 |---|---|---|
 | New library | `phosphor-scripting` (LGPL-2.1), generic | Reused by future shell surfaces, not tiling-bound |
-| Vendoring | committed source tarball `extern/luau-0.723.tar.gz`, **static, default** (FetchContent-extracted); opt-in `-DPLASMAZONES_SYSTEM_LUAU=ON` | Luau packaged for only 2 of 5 targets (Arch, Nix); not Debian/Fedora/openSUSE. No stable ABI + ~weekly releases ⇒ pin and vendor. System switch for Arch/Nix no-bundling packagers. |
+| Vendoring | committed source tarball `extern/luau-0.723.tar.gz`, **static, default** (extracted via `file(ARCHIVE_EXTRACT)`); opt-in `-DPLASMAZONES_SYSTEM_LUAU=ON` | Luau packaged for only 2 of 5 targets (Arch, Nix); not Debian/Fedora/openSUSE. No stable ABI + ~weekly releases ⇒ pin and vendor. System switch for Arch/Nix no-bundling packagers. |
 | Bundled algorithms | `.luau` **source**, installed to `plasmazones/algorithms` | Readable, hot-reloadable, learnable. Bytecode precompile deferred. |
 | `.js` → `.luau` | Clean break, no auto-migration | Per CLAUDE.md no-ad-hoc-backcompat. Documented manual porting guide for users with custom `.js`. |
 
@@ -107,10 +107,10 @@ The `metadata` table replaces *both* the JS `metadata` object and the
 |---|---|---|
 | **0. Foundations** | Vendor Luau @ 0.723; confirm name/ext/format (done); CMake `SYSTEM_LUAU` option | builds from vendored tarball |
 | **1. phosphor-scripting** | New LGPL lib (mirror other phosphor-* CMake/export/install); `LuauEngine`, `LuauWatchdog`, compile/load, marshalling core; unit tests (sandbox/escape probe, watchdog kill, compile-error surfacing, round-trip marshalling) | spike `LuauHost` is now a tested library |
-| **2. Tiling binding** | `pz` Luau stdlib (Rect + 25 helpers) + `.d.lua`; `LuauTileAlgorithm` implementing the *full* contract incl. tree/hooks/custom-params; port `test_scripted_algorithm.cpp` | one algorithm runs end-to-end with hooks + memory |
+| **2. Tiling binding** | `pz` Luau stdlib (Rect + 25 helpers) + `.d.luau`; `LuauTileAlgorithm` implementing the *full* contract incl. tree/hooks/custom-params; port `test_scripted_algorithm.cpp` | one algorithm runs end-to-end with hooks + memory |
 | **3. Port 25 algorithms** | `data/algorithms/*.js` → `*.luau` using `pz`; **golden parity tests** (JS vs Luau zone output across counts/gaps/ratios/min-sizes); `luau-analyze` clean | byte-identical zones for all 25 |
 | **4. Loader / discovery** | Swap loader backend to create `LuauTileAlgorithm`, discover `.luau`; bytecode-aware hot-reload; install `.luau` | hot-reload works; registry unchanged |
-| **5. Host integration** | Verify daemon (`AutotileEngine`), editor (preview + custom-params UI), settings (algo list) untouched via `TilingAlgorithm`; update editor "new algorithm" template to `.luau` + ship `.d.lua` | end-to-end in real app |
+| **5. Host integration** | Verify daemon (`AutotileEngine`), editor (preview + custom-params UI), settings (algo list) untouched via `TilingAlgorithm`; update editor "new algorithm" template to `.luau` + ship `.d.luau` | end-to-end in real app |
 | **6. Remove JS path** | Delete `scriptedalgorithm*`, `builtins.qrc`, sandbox; drop `Qt6::Qml` from phosphor-tiles if only QJSEngine needed it; update CLAUDE.md/docs | QJSEngine gone |
 | **7. Packaging / CI / docs** | Vendored static Luau in packaging; CI `luau-analyze` gate; ADR → Implemented; author guide for `.luau` algorithms | shippable |
 
@@ -118,8 +118,8 @@ The `metadata` table replaces *both* the JS `metadata` object and the
 > (1) Phase 3's parity harness was converted to a **JS-free golden-snapshot**
 > test once the QJSEngine path was deleted (the live JS-vs-Luau diff couldn't
 > outlive the engine it compared against). (2) Phase 0/7 vendoring landed as a
-> **committed source tarball** (`extern/luau-0.723.tar.gz`, FetchContent-extracted
-> from the local file) instead of a git submodule — GitHub's auto-tarball
+> **committed source tarball** (`extern/luau-0.723.tar.gz`, extracted from the
+> local file via `file(ARCHIVE_EXTRACT)`) instead of a git submodule — GitHub's auto-tarball
 > excludes submodules, which broke every source-tarball distro (AUR/OBS/Nix/RPM).
 > Committing the tarball makes the source self-contained with zero per-recipe
 > handling, at one ~2 MB blob instead of the ~950-file unpacked tree. The memory-cap

@@ -29,7 +29,7 @@ inline QString writeTempScript(QTemporaryDir& dir, const QString& filename, cons
 }
 
 /**
- * @brief Helper to write a .js script file in a given directory path
+ * @brief Helper to write a script file (e.g. `.luau`) in a given directory path
  * @param dirPath Directory path to write into
  * @param filename Name of the script file
  * @param content Script content

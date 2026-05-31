@@ -226,8 +226,8 @@ jobs:
   # ─── Luau static analysis: type-check + lint the bundled tiling algorithms
   # and the pz standard library with luau-analyze. Catches parse and type
   # errors (a broken bundled .luau would otherwise only surface at runtime as
-  # a silently-skipped algorithm). The analyzer is built from the in-tree
-  # vendored Luau (extern/luau) so the lint/type ruleset is pinned exactly to
+  # a silently-skipped algorithm). The analyzer is built from the committed
+  # vendored Luau (extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
   # the runtime we ship — analysis stays deterministic across CI runs and only
   # changes when we deliberately bump the vendored Luau.
   #

@@ -34,11 +34,21 @@
 #include <QUuid>
 #include <QVector>
 
-#include <cassert>
-
 namespace PlasmaZones {
 
 namespace {
+
+// Strip characters that would let a metadata display string break out of its
+// Luau double-quoted literal, or inject a brace that desyncs the brace-depth
+// template splicer in spliceLuauTemplate().
+QString sanitizeLuauMetadataString(QString value)
+{
+    value.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    value.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    value.replace(QLatin1Char('\\'), QLatin1Char('/'));
+    value.replace(QLatin1Char('"'), QLatin1Char('\''));
+    return value;
+}
 
 QString userAlgorithmsDir()
 {
@@ -306,6 +316,21 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     if (!source.exists() || !source.isFile())
         return false;
 
+    // The loader only registers `<basename>.luau` files whose basename matches
+    // [A-Za-z0-9_-]+; importing anything else would copy a file the loader
+    // silently ignores, leaving the user with a success toast for an algorithm
+    // that never appears. Reject up front with a clear message instead.
+    if (source.suffix().compare(QLatin1String("luau"), Qt::CaseInsensitive) != 0) {
+        Q_EMIT algorithmOperationFailed(PzI18n::tr("Only Luau algorithm files (.luau) can be imported."));
+        return false;
+    }
+    static const QRegularExpression validBaseName(QStringLiteral("^[A-Za-z0-9_-]+$"));
+    if (!validBaseName.match(source.completeBaseName()).hasMatch()) {
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Algorithm file names may contain only letters, digits, hyphens, and underscores."));
+        return false;
+    }
+
     const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
         + ScriptedAlgorithmSubdir;
     QDir dir(destDir);
@@ -534,12 +559,8 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     QString baseCopyName = algo->name();
     while (baseCopyName.endsWith(QLatin1String(" (Copy)")))
         baseCopyName.chop(7);
-    QString newName = baseCopyName + QStringLiteral(" (Copy)");
-    // Sanitize to prevent metadata injection
-    newName.replace(QLatin1Char('\n'), QLatin1Char(' '));
-    newName.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    newName.replace(QLatin1Char('\\'), QLatin1Char('/'));
-    newName.replace(QLatin1Char('"'), QLatin1Char('\''));
+    // Sanitize to prevent metadata injection.
+    const QString newName = sanitizeLuauMetadataString(baseCopyName + QStringLiteral(" (Copy)"));
     // Replace the first name and id values inside the metadata table.
     // Anchored to line start to avoid matching inside algorithm body strings.
     // Capture leading whitespace so the replacement preserves indentation.
@@ -703,12 +724,8 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     const QString header = QStringLiteral("-- SPDX-FileCopyrightText: ") + QString::number(currentYear)
         + QStringLiteral(" <your name>\n") + QStringLiteral("-- SPDX-License-Identifier: GPL-3.0-or-later\n");
 
-    // Metadata table — strip newlines/quotes to prevent injection
-    QString sanitizedDisplayName = name.trimmed();
-    sanitizedDisplayName.replace(QLatin1Char('\n'), QLatin1Char(' '));
-    sanitizedDisplayName.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    sanitizedDisplayName.replace(QLatin1Char('\\'), QLatin1Char('/'));
-    sanitizedDisplayName.replace(QLatin1Char('"'), QLatin1Char('\''));
+    // Metadata table — strip newlines/quotes to prevent injection.
+    const QString sanitizedDisplayName = sanitizeLuauMetadataString(name.trimmed());
     const QString metadataBlock = buildLuauMetadata(sanitizedDisplayName, filename, producesOverlappingZones,
                                                     supportsMasterCount, supportsSplitRatio, supportsMemory);
 

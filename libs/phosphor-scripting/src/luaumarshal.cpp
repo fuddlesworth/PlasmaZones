@@ -25,19 +25,22 @@ void pushVariant(lua_State* L, const QVariant& v, int depth)
         lua_pushboolean(L, v.toBool() ? 1 : 0);
         return;
     case QMetaType::Int:
-    case QMetaType::UInt:
     case QMetaType::Short:
     case QMetaType::UShort:
     case QMetaType::SChar:
     case QMetaType::UChar:
+        // All fit in lua_Integer (32-bit int) without loss.
         lua_pushinteger(L, v.toInt());
         return;
+    case QMetaType::UInt:
     case QMetaType::LongLong:
     case QMetaType::ULongLong:
     case QMetaType::Long:
     case QMetaType::ULong:
     case QMetaType::Double:
     case QMetaType::Float:
+        // UInt and the 64-bit widths can exceed lua_Integer's range; push as a
+        // double (Lua numbers are doubles) to avoid truncation.
         lua_pushnumber(L, v.toDouble());
         return;
     case QMetaType::QString: {

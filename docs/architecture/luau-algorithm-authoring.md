@@ -96,7 +96,7 @@ to sensible defaults.
 | `producesOverlappingZones` | boolean | Zones may overlap (e.g. stacked/deck layouts) |
 | `centerLayout` | boolean | Layout is centered rather than filling the screen |
 | `masterZoneIndex` | number | Index of the “master” zone (for highlighting); `-1` = none |
-| `zoneNumberDisplay` | string | `"all"`, `"none"`, or `"rendererDecides"` |
+| `zoneNumberDisplay` | string | `"all"`, `"last"`, `"firstAndLast"`, or `"none"` (omit to let the renderer decide) |
 | `customParams` | list | User-tunable parameters (§7) |
 
 ---
@@ -229,6 +229,7 @@ autocomplete and `luau-analyze` know about the injected `pz` global:
 {
     "languageMode": "nonstrict",
     "lint": { "*": true },
+    "lintErrors": false,
     "globals": ["pz"]
 }
 ```
@@ -256,8 +257,10 @@ A parse or type error means the daemon will skip the algorithm, so a clean
   filesystem, or network).
 - A long-running or infinite-looping `tile` is **interrupted** by a watchdog, so
   a runaway script can't hang the compositor.
-- There is **no per-script memory cap yet** (an open follow-up). Until it lands,
-  treat third-party algorithms with the same caution as any downloaded code.
+- Each script's heap is **capped** (default 64 MiB, enforced once the sandbox is
+  active). A runaway allocation surfaces as a catchable Luau out-of-memory error
+  rather than exhausting the compositor — the script fails, the daemon keeps
+  running.
 - Keep `tile` pure and fast: it runs on every relevant layout change. Return
   early for `windowCount <= 0`, and guard against tiny areas with
   `pz.MIN_ZONE_SIZE`.

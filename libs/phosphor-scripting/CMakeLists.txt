@@ -52,7 +52,7 @@ if(PLASMAZONES_SYSTEM_LUAU)
     if(NOT LUAU_INCLUDE_DIR OR NOT LUAU_VM_LIBRARY OR NOT LUAU_COMPILER_LIBRARY)
         message(FATAL_ERROR
             "PLASMAZONES_SYSTEM_LUAU=ON but a system Luau (lua.h + Luau.VM + Luau.Compiler) "
-            "was not found. Install Luau dev files or unset the option to use the in-tree vendored source.")
+            "was not found. Install Luau dev files or unset the option to use the committed vendored tarball.")
     endif()
     add_library(Luau.VM UNKNOWN IMPORTED)
     set_target_properties(Luau.VM PROPERTIES
@@ -125,8 +125,6 @@ set(phosphorscripting_SRCS
     src/luauwatchdog.cpp
     src/luaumarshal.cpp
     src/luaumarshal.h
-    src/scriptinglogging.cpp
-    src/scriptinglogging.h
 )
 
 add_library(PhosphorScripting SHARED

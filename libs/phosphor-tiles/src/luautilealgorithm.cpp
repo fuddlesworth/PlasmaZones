@@ -279,7 +279,7 @@ QString LuauTileAlgorithm::name() const
     }
     QString fallback = m_scriptId;
     if (fallback.startsWith(QLatin1String("script:"))) {
-        fallback = fallback.mid(7);
+        fallback = fallback.mid(QStringLiteral("script:").size());
     }
     if (!fallback.isEmpty()) {
         fallback[0] = fallback[0].toUpper();
@@ -564,11 +564,6 @@ bool LuauTileAlgorithm::hasCustomParam(const QString& name) const
                        [&name](const ScriptedHelpers::CustomParamDef& def) {
                            return def.name == name;
                        });
-}
-
-const QVector<ScriptedHelpers::CustomParamDef>& LuauTileAlgorithm::customParamDefs() const
-{
-    return m_metadata.customParams;
 }
 
 } // namespace PhosphorTiles

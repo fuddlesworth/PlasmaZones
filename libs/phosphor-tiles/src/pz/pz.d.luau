@@ -1,6 +1,6 @@
 --!strict
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
--- SPDX-License-Identifier: GPL-3.0-or-later
+-- SPDX-License-Identifier: LGPL-2.1-or-later
 --
 -- Type definitions for the `pz` tiling standard library, for luau-analyze and
 -- editor autocomplete. The actual implementation is injected by the host
@@ -101,7 +101,7 @@ export type Pz = {
     dwindleLayout: (area: Rect, count: number, splitRatio: number, innerGap: number, minSizes: { MinSize }) -> { Zone },
     threeColumnLayout: (area: Rect, count: number, gap: number, splitRatio: number, masterCount: number,
         minSizes: { MinSize }) -> { Zone },
-    applyTreeGeometry: (node: SplitNode, rect: Rect, gap: number) -> { Zone },
+    applyTreeGeometry: (node: SplitNode, rect: Rect, gap: number, depth: number?) -> { Zone },
     clampSplitRatio: (ratio: number) -> number,
     distributeWithGaps: (total: number, count: number, gap: number) -> { number },
     distributeWithMinSizes: (total: number, count: number, gap: number, minDims: { number }) -> { number },
@@ -112,6 +112,9 @@ export type Pz = {
     extractRegionMaxMin: (minSizes: { MinSize }, startIdx: number, endIdx: number, axis: string) -> number,
     solveTwoPart: (contentDim: number, firstDim: number, secondDim: number, minFirst: number, minSecond: number)
         -> { first: number, second: number },
+    solveThreeColumn: (areaX: number, contentWidth: number, innerGap: number, splitRatio: number, minL: number,
+        minC: number, minR: number) -> { leftWidth: number, centerWidth: number, rightWidth: number,
+        leftX: number, centerX: number, rightX: number },
     applyPerWindowMinSize: (w: number, h: number, minSizes: { MinSize }, i: number) -> { w: number, h: number },
     computeCumulativeMinDims: (windowCount: number, minSizes: { MinSize }, innerGap: number)
         -> { minW: { number }, minH: { number } },

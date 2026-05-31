@@ -453,7 +453,7 @@ ColumnLayout {
         id: algorithmImportDialog
 
         title: i18n("Import Tiling Algorithm")
-        nameFilters: [i18n("JavaScript files (*.js)"), i18n("All files (*)")]
+        nameFilters: [i18n("Luau files (*.luau)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile))) {
@@ -567,7 +567,7 @@ ColumnLayout {
         property string algorithmId: ""
 
         title: i18n("Export Algorithm")
-        nameFilters: [i18n("JavaScript files (*.js)")]
+        nameFilters: [i18n("Luau files (*.luau)")]
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile));

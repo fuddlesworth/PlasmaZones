@@ -287,8 +287,7 @@ QStringList ScriptedAlgorithmLoader::performScan(const QStringList& directoriesI
     // registration-wins yield: user > sys-highest > sys-mid > ... >
     // sys-lowest, which is the actual XDG semantic. `crbegin/crend`
     // matches the strategy-convention used by `JsonScanStrategy` and
-    // `ShaderScanStrategy` and avoids the QStringList copy + std::reverse
-    // the previous shape needed.
+    // avoids the QStringList copy + std::reverse the previous shape needed.
 
     // Resolve the user dir's canonical path ONCE. `loadFromDirectory`
     // takes the canonical form as a parameter so the per-iteration
