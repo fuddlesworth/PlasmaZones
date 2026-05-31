@@ -6,9 +6,11 @@
 // directly against real sysfs backlights and logind, the same pattern as the
 // sibling phosphor-service-* CLIs.
 //
-// The read path (enumeration) is synchronous sysfs; the logind session is
-// resolved asynchronously, so each command pumps the event loop briefly before
-// a write and again afterwards so the watcher can pick up the new value.
+// Sysfs backlights enumerate synchronously, but the logind session and the
+// off-thread DDC/CI external-display enumeration both resolve asynchronously
+// (bus probing takes seconds), so every command pumps the event loop for a
+// generous settle window before reading, and `set` pumps again afterwards so
+// the watcher can pick up the new value.
 
 #include <PhosphorServiceBrightness/BrightnessDevice.h>
 #include <PhosphorServiceBrightness/BrightnessHost.h>

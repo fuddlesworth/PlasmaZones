@@ -72,7 +72,8 @@ public:
 
     void readMax()
     {
-        // actual_brightness is the hardware read-back; max_brightness the range.
+        // max_brightness is the upper bound of the range; the live value is read
+        // separately from the writable brightness attribute (see readBrightness).
         maxBrightness = readSysfsInt(QDir(sysfsDir).filePath(QStringLiteral("max_brightness")), 0);
     }
 
@@ -108,8 +109,8 @@ BrightnessDevice::BrightnessDevice(QDBusConnection connection, QString service, 
     if (d->watcher.addPath(d->brightnessPath())) {
         connect(&d->watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString& path) {
             d->readBrightness();
-            if (!d->watcher.files().contains(path))
-                d->watcher.addPath(path);
+            if (!d->watcher.files().contains(path) && !d->watcher.addPath(path))
+                qCDebug(lcBrightnessDevice) << "lost brightness watch for" << d->name << "; external changes untracked";
         });
     }
 }

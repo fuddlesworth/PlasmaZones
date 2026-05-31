@@ -53,6 +53,9 @@ bool DdcController::ensureInitialized()
         }
         free(infoMsgs);
     }
+    // Init checks < 0 (hard error) rather than != 0: a positive status is a
+    // non-fatal warning, unlike the per-call getters/setters below where any
+    // non-zero status means the VCP operation did not complete.
     if (status < 0) {
         qCDebug(lcDdcController) << "ddca_init2 failed:" << status;
         return false;
@@ -77,6 +80,15 @@ void DdcController::enumerate()
 {
     if (!ensureInitialized())
         return;
+
+    // Re-enumeration is not part of the current contract (the host calls this
+    // once), but make the invariant self-enforcing: drop any prior list and its
+    // stale refs before probing, so a second call cannot leak the old list.
+    if (m_displayList) {
+        ddca_free_display_info_list(static_cast<DDCA_Display_Info_List*>(m_displayList));
+        m_displayList = nullptr;
+        m_refs.clear();
+    }
 
     DDCA_Display_Info_List* list = nullptr;
     const DDCA_Status status = ddca_get_display_info_list2(/*include_invalid=*/false, &list);
@@ -123,26 +135,13 @@ void DdcController::setBrightness(const QString& id, int value)
         qCDebug(lcDdcController) << "open failed for set on display" << id;
         return;
     }
-    const DDCA_Status status = ddca_set_non_table_vcp_value(
+    // ddca_set_non_table_vcp_value2 is the non-deprecated setter; it does not
+    // verify, which is what we want since we do our own read-back below.
+    const DDCA_Status status = ddca_set_non_table_vcp_value2(
         handle, kLuminanceFeature, static_cast<uint8_t>((value >> 8) & 0xff), static_cast<uint8_t>(value & 0xff));
     if (status != 0)
         qCDebug(lcDdcController) << "set luminance failed for display" << id << ":" << status;
     // Read back the applied value (DDC clamps to its own range) and report it.
-    int current = 0;
-    int maxValue = 0;
-    if (readLuminance(handle, current, maxValue))
-        Q_EMIT brightnessRead(id, current);
-    ddca_close_display(handle);
-}
-
-void DdcController::refresh(const QString& id)
-{
-    const auto it = m_refs.constFind(id);
-    if (it == m_refs.constEnd())
-        return;
-    DDCA_Display_Handle handle = nullptr;
-    if (ddca_open_display2(it.value(), /*wait=*/true, &handle) != 0 || !handle)
-        return;
     int current = 0;
     int maxValue = 0;
     if (readLuminance(handle, current, maxValue))

@@ -119,9 +119,10 @@ with the indicator-LED exclusion (`BrightnessHost`), the `QAbstractListModel`
 `phosphorctl`-style CLI demo (`examples/phosphor-service-brightness-cli`: list,
 get, set) covering the Phase-2 gate caps (list devices, get/set brightness) all
 landed. The smoke harness pins enumeration, the `kbd_backlight` filter,
-percentage math, divide-by-zero safety, live watcher updates, model role names,
-the logind write path, and the `ExternalDisplay` route/clamp/read-back path
-deterministically against a fake sysfs tree, a fake logind over a session-bus
-loopback, and a recording setter (no I2C), no root or daemon required. The live
-DDC/CI worker is hardware-bound and validated through the CLI against real
-monitors.
+percentage math, divide-by-zero safety, live watcher updates, model role names
+plus its async add / remove and host-destroyed reset, the logind write path for
+both the `backlight` and `leds` subsystems, and the `ExternalDisplay`
+route/clamp/read-back path deterministically against a fake sysfs tree, a fake
+logind over a session-bus loopback, and a recording setter (no I2C), no root or
+daemon required. The live DDC/CI worker is hardware-bound and validated through
+the CLI against real monitors.

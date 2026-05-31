@@ -21,9 +21,9 @@ namespace PhosphorServiceBrightness {
  * under `/sys/class/leds`).
  *
  * The current value is read from the sysfs `brightness` attribute (with
- * `max_brightness` for the range and `actual_brightness` as the hardware
- * read-back); external changes (hardware keys, another app) are tracked live
- * via a file watcher on the `brightness` attribute. Writes go through logind's
+ * `max_brightness` for the range); external changes (hardware keys, another
+ * app) are tracked live via a file watcher on the `brightness` attribute.
+ * Writes go through logind's
  * `org.freedesktop.login1.Session.SetBrightness(subsystem, name, value)` so no
  * root or udev rule is needed; the cached value is not updated optimistically
  * (it moves when the watcher re-reads), and the write no-ops when no logind

@@ -88,11 +88,13 @@ public:
         // <root>/class/leds. The led name is "device:color:function"; the
         // function segment (after the last ':') distinguishes a keyboard
         // backlight from indicator LEDs (capslock, power, RGB, ...), which are
-        // not brightness controls and are skipped.
+        // not brightness controls and are skipped. The colon-delimited form is
+        // required, so a bare "kbd_backlight" with no device prefix is rejected.
         const QDir ledsDir(QDir(sysfsRoot).filePath(QStringLiteral("class/leds")));
         const auto leds = ledsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString& entry : leds) {
-            if (entry.section(QLatin1Char(':'), -1) == QLatin1String(kKbdBacklightFunction))
+            if (entry.contains(QLatin1Char(':'))
+                && entry.section(QLatin1Char(':'), -1) == QLatin1String(kKbdBacklightFunction))
                 addDevice(BrightnessDevice::Keyboard, entry, ledsDir.filePath(entry));
         }
     }
@@ -112,6 +114,9 @@ public:
         ddc->moveToThread(ddcThread);
         QObject::connect(ddcThread, &QThread::finished, ddc, &QObject::deleteLater);
 
+        // Both handlers below use `owner` (the host, GUI thread) as the context
+        // object, so they run on the GUI thread: ddcDevices is touched only
+        // there, never from the worker, and needs no synchronization.
         QObject::connect(ddc, &DdcController::displayFound, owner,
                          [this](const QString& id, const QString& name, int brightness, int maxValue) {
                              if (ddcDevices.contains(id))
@@ -139,7 +144,7 @@ public:
 
     // True if any enumerated device writes through logind (the sysfs-backed
     // Display / Keyboard backlights). External-display (DDC/CI) devices write
-    // over I2C and need no session, so a box with only those — or none — never
+    // over I2C and need no session, so a box with only those (or none) never
     // resolves a session.
     [[nodiscard]] bool needsLogindSession() const
     {

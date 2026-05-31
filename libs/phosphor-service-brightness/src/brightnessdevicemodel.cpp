@@ -56,7 +56,7 @@ void BrightnessDeviceModel::setHost(BrightnessHost* host)
     }
     endResetModel();
     Q_EMIT hostChanged();
-    if (previousCount != m_rows.size())
+    if (previousCount != static_cast<int>(m_rows.size()))
         Q_EMIT countChanged();
 }
 

@@ -37,8 +37,6 @@ public Q_SLOTS:
     /// Set a display's luminance (raw VCP 0x10 value), then read it back and
     /// emit brightnessRead. @p id is the value passed to displayFound.
     void setBrightness(const QString& id, int value);
-    /// Re-read a display's luminance and emit brightnessRead.
-    void refresh(const QString& id);
 
 Q_SIGNALS:
     void displayFound(const QString& id, const QString& name, int brightness, int maxBrightness);

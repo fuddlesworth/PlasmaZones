@@ -20,6 +20,17 @@ using namespace PhosphorServiceBrightness;
 namespace {
 constexpr auto kDummySession = "/fake/session"; // non-empty: skips async resolve
 
+// Sink for capturing Qt warnings during the idempotency test: a second
+// registration that bypassed the std::call_once guard would re-run
+// qmlRegisterType and make Qt warn. A function-pointer handler cannot capture,
+// so route through this file-scope pointer.
+QStringList* g_warningSink = nullptr;
+void captureWarnings(QtMsgType type, const QMessageLogContext&, const QString& msg)
+{
+    if (g_warningSink && (type == QtWarningMsg || type == QtCriticalMsg))
+        g_warningSink->append(msg);
+}
+
 void writeFile(const QString& path, const QString& content)
 {
     QDir().mkpath(QFileInfo(path).path());
@@ -30,10 +41,11 @@ void writeFile(const QString& path, const QString& content)
 
 void makeBacklight(const QString& root, const QString& name, int brightness, int max)
 {
+    // Only brightness + max_brightness are read by the lib (the live value comes
+    // from the writable brightness attribute); no actual_brightness is needed.
     const QString dir = root + QStringLiteral("/class/backlight/") + name;
     writeFile(dir + QStringLiteral("/brightness"), QString::number(brightness));
     writeFile(dir + QStringLiteral("/max_brightness"), QString::number(max));
-    writeFile(dir + QStringLiteral("/actual_brightness"), QString::number(brightness));
 }
 
 void makeLed(const QString& root, const QString& name, int brightness, int max)
@@ -82,9 +94,18 @@ class TestPhosphorServiceBrightnessSmoke : public QObject
 private Q_SLOTS:
     void testRegisterQmlTypesIsIdempotent()
     {
+        // This is the first call site in the binary, so the first call runs the
+        // real registration and the second must be a std::call_once no-op. Pin
+        // that by asserting the second pass emits no Qt registration warning
+        // (without the guard, the repeat qmlRegisterType warns).
+        QStringList warnings;
+        g_warningSink = &warnings;
+        QtMessageHandler previous = qInstallMessageHandler(captureWarnings);
         registerQmlTypes();
         registerQmlTypes();
-        QVERIFY(true);
+        qInstallMessageHandler(previous);
+        g_warningSink = nullptr;
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join(QLatin1Char('\n'))));
     }
 
     void testEnumeratesBacklightAndKbdBacklightOnly()
@@ -141,9 +162,12 @@ private Q_SLOTS:
         auto* device = findByName(host, QStringLiteral("broken"));
         QVERIFY(device);
         QCOMPARE(device->percentage(), 0.0);
-        device->setBrightness(100); // must no-op, not crash
+        // Writes against a zero-max device must be inert (the maxBrightness <= 0
+        // guard returns early), not crash and not move the cached value.
+        device->setBrightness(100);
         device->setPercentage(0.5);
-        QVERIFY(true);
+        QCOMPARE(device->brightness(), 0);
+        QCOMPARE(device->percentage(), 0.0);
     }
 
     void testLiveWatcherTracksExternalChange()
@@ -181,6 +205,7 @@ private Q_SLOTS:
         QTemporaryDir root;
         QVERIFY(root.isValid());
         makeBacklight(root.path(), QStringLiteral("intel_backlight"), 100, 255);
+        makeLed(root.path(), QStringLiteral("dell::kbd_backlight"), 1, 2);
 
         BrightnessHost host(root.path(), bus, service, sessionPath);
         auto* display = findByName(host, QStringLiteral("intel_backlight"));
@@ -196,6 +221,16 @@ private Q_SLOTS:
         // Percentage write clamps + rounds against maxBrightness (255).
         display->setPercentage(1.0);
         QTRY_COMPARE(fake.lastValue, 255U);
+
+        // A keyboard backlight must write through the "leds" subsystem, not
+        // "backlight" (the subsystem() mapping branch).
+        auto* keyboard = findByName(host, QStringLiteral("dell::kbd_backlight"));
+        QVERIFY(keyboard);
+        QCOMPARE(keyboard->kind(), BrightnessDevice::Keyboard);
+        keyboard->setBrightness(2);
+        QTRY_COMPARE(fake.lastName, QStringLiteral("dell::kbd_backlight"));
+        QCOMPARE(fake.lastSubsystem, QStringLiteral("leds"));
+        QCOMPARE(fake.lastValue, 2U);
 
         bus.unregisterObject(sessionPath);
         bus.unregisterService(service);
@@ -228,6 +263,16 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
         QCOMPARE(device.brightness(), 80);
         QCOMPARE(device.percentage(), 0.8);
+
+        // A read-back equal to the cached value must not re-emit.
+        device.applyExternalValue(80);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(device.brightness(), 80);
+
+        // A read-back above maxBrightness is clamped to the range.
+        device.applyExternalValue(500);
+        QCOMPARE(spy.count(), 2);
+        QCOMPARE(device.brightness(), 100);
 
         device.setPercentage(0.5); // 50 of 100, routed through the setter
         QCOMPARE(lastSet, 50);
@@ -276,6 +321,70 @@ private Q_SLOTS:
         writeFile(root.path() + QStringLiteral("/class/backlight/intel_backlight/brightness"), QStringLiteral("160"));
         QVERIFY(changed.wait(3000));
         QCOMPARE(model.data(idx, BrightnessDeviceModel::BrightnessRole).toInt(), 160);
+    }
+
+    void testModelTracksDeviceAddedAndRemoved()
+    {
+        // Sysfs devices are present at bind, but external displays arrive
+        // asynchronously via deviceAdded / deviceRemoved. Drive those signals
+        // (they are public) to pin the model's insert / remove transactions and
+        // the countChanged emissions independently of any DDC hardware.
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        makeBacklight(root.path(), QStringLiteral("intel_backlight"), 100, 200);
+        BrightnessHost host(root.path(), QDBusConnection::sessionBus(), QStringLiteral("org.example.Logind"),
+                            QLatin1String(kDummySession));
+        BrightnessDeviceModel model;
+        model.setHost(&host);
+        QCOMPARE(model.rowCount(), 1);
+
+        QSignalSpy countSpy(&model, &BrightnessDeviceModel::countChanged);
+        QSignalSpy insertSpy(&model, &QAbstractItemModel::rowsInserted);
+        QSignalSpy removeSpy(&model, &QAbstractItemModel::rowsRemoved);
+
+        BrightnessDevice external(QStringLiteral("i2c-9"), QStringLiteral("External"), 50, 100, [](int) { });
+        Q_EMIT host.deviceAdded(&external);
+        QCOMPARE(model.rowCount(), 2);
+        QCOMPARE(insertSpy.count(), 1);
+        QCOMPARE(countSpy.count(), 1);
+        const int addedRow = model.rowCount() - 1;
+        QCOMPARE(model.data(model.index(addedRow), BrightnessDeviceModel::IdRole).toString(), QStringLiteral("i2c-9"));
+
+        // A duplicate add is ignored (no second row, no extra signal).
+        Q_EMIT host.deviceAdded(&external);
+        QCOMPARE(model.rowCount(), 2);
+        QCOMPARE(insertSpy.count(), 1);
+
+        Q_EMIT host.deviceRemoved(&external);
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(removeSpy.count(), 1);
+        QCOMPARE(countSpy.count(), 2);
+
+        // Removing an unknown device is a no-op.
+        Q_EMIT host.deviceRemoved(&external);
+        QCOMPARE(model.rowCount(), 1);
+        QCOMPARE(removeSpy.count(), 1);
+    }
+
+    void testModelClearsWhenHostDestroyed()
+    {
+        // The model holds host-owned device pointers; if the host is destroyed
+        // while bound, the QObject::destroyed handler must clear the rows so the
+        // model never dereferences a dangling device.
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        makeBacklight(root.path(), QStringLiteral("intel_backlight"), 100, 200);
+        auto* host = new BrightnessHost(root.path(), QDBusConnection::sessionBus(),
+                                        QStringLiteral("org.example.Logind"), QLatin1String(kDummySession));
+        BrightnessDeviceModel model;
+        model.setHost(host);
+        QCOMPARE(model.rowCount(), 1);
+
+        QSignalSpy countSpy(&model, &BrightnessDeviceModel::countChanged);
+        delete host;
+        QCOMPARE(model.host(), nullptr);
+        QCOMPARE(model.rowCount(), 0);
+        QCOMPARE(countSpy.count(), 1);
     }
 };
 
