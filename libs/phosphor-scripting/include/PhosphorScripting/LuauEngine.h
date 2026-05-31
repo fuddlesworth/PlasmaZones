@@ -125,15 +125,18 @@ public:
 private:
     static void interruptCallback(lua_State* L, int gc);
 
-    /// Custom `lua_Alloc`: tracks live/peak bytes and, once @ref sandbox has
-    /// enabled enforcement, fails (returns nullptr) any allocation that would
-    /// push live bytes past the cap — Luau turns that into a catchable OOM.
+    /// Custom `lua_Alloc`: tracks live/peak bytes and, while enforcement is
+    /// armed (per protected call, once sandboxed — see @ref guardedPcall), fails
+    /// (returns nullptr) any allocation that would push live bytes past the cap
+    /// — Luau turns that into a catchable OOM inside the pcall.
     static void* allocate(void* ud, void* ptr, std::size_t osize, std::size_t nsize);
 
     /// Heap accounting backing the custom allocator. Plain (non-atomic): the VM
-    /// — and therefore every allocation — is single-threaded. Enforcement starts
-    /// off so the trusted init/prelude/sandbox phases (which run outside any
-    /// protected call) can never spuriously OOM regardless of the cap.
+    /// — and therefore every allocation — is single-threaded. @ref enforce is
+    /// armed only around the `lua_pcall` of sandboxed script execution; it stays
+    /// off for trusted init/prelude/sandbox and for all host-side marshalling
+    /// and module loading (which touch the VM outside any protected call), so a
+    /// tight cap can never trigger an uncatchable OOM abort() in those phases.
     struct MemoryBudget
     {
         std::size_t used = 0;
@@ -152,6 +155,9 @@ private:
     std::shared_ptr<std::atomic<bool>> m_interrupt;
     MemoryBudget m_memory;
     bool m_sandboxed = false;
+    // VM-thread-only: written by guardedPcall before arming the watchdog and
+    // read after disarming; the interrupt callback that consumes them also runs
+    // on the VM thread (the watchdog thread only flips the atomic m_interrupt).
     bool m_timedOut = false;
     int m_lastTimeoutMs = 0;
 };

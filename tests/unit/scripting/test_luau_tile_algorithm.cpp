@@ -7,12 +7,17 @@
 
 #include <QtTest>
 
+#include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/LuauTileAlgorithm.h>
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorTiles/TilingParams.h>
 #include <PhosphorTiles/TilingState.h>
 
 #include <PhosphorScripting/LuauWatchdog.h>
+
+#include "../helpers/ScriptTestHelpers.h"
+
+#include <QTemporaryDir>
 
 #include <memory>
 
@@ -24,6 +29,7 @@ class TestLuauTileAlgorithm : public QObject
 
 private:
     std::shared_ptr<PhosphorScripting::LuauWatchdog> m_watchdog;
+    QTemporaryDir m_tmp;
     static QString scriptPath(const QString& name)
     {
         return QStringLiteral(PZ_LUAU_TEST_DIR "/data/") + name;
@@ -33,12 +39,18 @@ private Q_SLOTS:
     void initTestCase()
     {
         m_watchdog = std::make_shared<PhosphorScripting::LuauWatchdog>();
+        QVERIFY(m_tmp.isValid());
     }
 
     void loadsAndExposesMetadata();
     void computesMasterStackZones();
     void marshalsSplitTree();
     void lifecycleHooksRunAndPersist();
+    void metadataOutOfRangeValuesClamped();
+    void customParamInvertedRangeNormalized();
+    void malformedZonesKeepCountAndStayInArea();
+    void missingTileFunctionIsInvalid();
+    void runtimeErrorYieldsEmptyZones();
 };
 
 void TestLuauTileAlgorithm::loadsAndExposesMetadata()
@@ -132,6 +144,130 @@ void TestLuauTileAlgorithm::lifecycleHooksRunAndPersist()
 
     const QVector<QRect> zones = algo.calculateZones(p);
     QCOMPARE(zones.size(), 2); // added == 2
+}
+
+void TestLuauTileAlgorithm::metadataOutOfRangeValuesClamped()
+{
+    using namespace PlasmaZones::TestHelpers;
+    using namespace AutotileDefaults;
+    // Raw metadata table (bypassing pz.algorithm) so the C++ parse + clamp path
+    // sees the out-of-range values directly.
+    const QString path = writeTempScript(m_tmp, QStringLiteral("clamp.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = {
+                id = "clamp-test", name = "Clamp Test",
+                defaultSplitRatio = 5.0,   -- above MaxSplitRatio
+                minimumWindows = 9999,     -- above MaxMetadataWindows
+                defaultMaxWindows = 9999,  -- above MaxMetadataWindows
+            },
+            tile = function(ctx) return {} end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    // The bogus 5.0 ratio is pulled back into the legal split range.
+    QVERIFY(algo.defaultSplitRatio() >= MinSplitRatio && algo.defaultSplitRatio() <= MaxSplitRatio);
+    QVERIFY(algo.defaultSplitRatio() < 5.0);
+    QVERIFY(algo.minimumWindows() >= MinMetadataWindows && algo.minimumWindows() <= MaxMetadataWindows);
+    QVERIFY(algo.minimumWindows() < 9999);
+    QVERIFY(algo.defaultMaxWindows() >= MinMetadataWindows && algo.defaultMaxWindows() <= MaxMetadataWindows);
+    QVERIFY(algo.defaultMaxWindows() < 9999);
+}
+
+void TestLuauTileAlgorithm::customParamInvertedRangeNormalized()
+{
+    using namespace PlasmaZones::TestHelpers;
+    const QString path = writeTempScript(m_tmp, QStringLiteral("cp.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = {
+                id = "cp-test", name = "CP Test",
+                customParams = {
+                    { name = "ratio", type = "number", min = 1.0, max = 0.0, default = 0.5 },
+                },
+            },
+            tile = function(ctx) return {} end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    QVERIFY(algo.supportsCustomParams());
+    const QVariantList defs = algo.customParamDefList();
+    QCOMPARE(defs.size(), 1);
+    const QVariantMap cp = defs.at(0).toMap();
+    // The inverted [1.0, 0.0] range must have been swapped to [0.0, 1.0].
+    QVERIFY(cp.value(QStringLiteral("minValue")).toDouble() <= cp.value(QStringLiteral("maxValue")).toDouble());
+}
+
+void TestLuauTileAlgorithm::malformedZonesKeepCountAndStayInArea()
+{
+    using namespace PlasmaZones::TestHelpers;
+    // tile() returns two malformed entries: an empty map and one with negative
+    // dimensions. Both must survive as one zone each (count stays aligned with
+    // the window count) and be clamped back inside the area.
+    const QString path = writeTempScript(m_tmp, QStringLiteral("malformed.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = { id = "malformed", name = "Malformed" },
+            tile = function(ctx)
+                return { {}, { x = -100, y = 0, width = -5, height = 10 } }
+            end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+
+    TilingParams p;
+    p.windowCount = 2;
+    p.screenGeometry = QRect(0, 0, 1920, 1080);
+    p.outerGaps = EdgeGaps::uniform(0);
+
+    const QRect area(0, 0, 1920, 1080);
+    const QVector<QRect> zones = algo.calculateZones(p);
+    QCOMPARE(zones.size(), 2); // not collapsed to fewer than the window count
+    for (const QRect& z : zones) {
+        QVERIFY(!z.isEmpty());
+        QVERIFY(area.contains(z));
+    }
+}
+
+void TestLuauTileAlgorithm::missingTileFunctionIsInvalid()
+{
+    using namespace PlasmaZones::TestHelpers;
+    const QString path = writeTempScript(m_tmp, QStringLiteral("notile.luau"), QStringLiteral(R"LUA(
+        return { metadata = { id = "notile", name = "No Tile" } }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(!algo.isValid());
+}
+
+void TestLuauTileAlgorithm::runtimeErrorYieldsEmptyZones()
+{
+    using namespace PlasmaZones::TestHelpers;
+    const QString path = writeTempScript(m_tmp, QStringLiteral("boom.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = { id = "boom", name = "Boom" },
+            tile = function(ctx) error("kaboom") end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid()); // loads fine; the error only happens when tile() runs
+
+    TilingParams p;
+    p.windowCount = 3;
+    p.screenGeometry = QRect(0, 0, 1920, 1080);
+    p.outerGaps = EdgeGaps::uniform(0);
+
+    // A runtime error inside tile() degrades to no zones, never a crash.
+    QVERIFY(algo.calculateZones(p).isEmpty());
 }
 
 QTEST_MAIN(TestLuauTileAlgorithm)

@@ -164,7 +164,7 @@ kcm/             — System Settings module
 kwin/            — KWin script integration
 tests/           — Unit tests (Qt Test)
 data/layouts/    — Default layout templates (JSON)
-data/algorithms/ — Bundled JS tiling algorithms
+data/algorithms/ — Bundled Luau tiling algorithms
 ```
 
 ## Testing

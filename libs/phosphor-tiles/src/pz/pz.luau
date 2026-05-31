@@ -936,7 +936,7 @@ local function threeColumnLayout(area, count, gap, splitRatio, masterCount, minS
 end
 
 -- Port of applyTreeGeometry.js. NOTE: reads the host's marshalled tree keys
--- (splitRatio/splitHorizontal/first/second/windowId), not the JS engine's
+-- (splitRatio/splitHorizontal/first/second/windowId), not the prior engine's
 -- (ratio/horizontal) — the geometry is identical because the underlying tree is.
 local function applyTreeGeometry(node, rect, gap, depth)
     depth = depth or 0

@@ -9,6 +9,13 @@
 // (data/golden_zones.txt) captured from that proven-correct output, across the
 // same matrix of counts/gaps/areas/ratios/master-counts/min-sizes.
 //
+// Oracle caveat: every algorithm's fixture except `bsp` was captured while the
+// JS engine still existed, so those cases are anchored to an independent
+// oracle. `bsp` parity cases were (re)generated from the Luau output itself, so
+// for bsp this harness is a regression guard, not an independent-correctness
+// check — bsp's independent correctness is covered by test_tiling_algo_bsp.cpp
+// (hand-worked geometry assertions). Keep that test authoritative for bsp.
+//
 // Regenerate the fixture after an intentional output change:
 //   PZ_GENERATE_GOLDEN=1 ./build/bin/test_luau_parity
 

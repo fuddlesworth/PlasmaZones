@@ -17,6 +17,16 @@ namespace PhosphorScripting {
 namespace {
 // Compile/run budget for prelude + module chunks (well-behaved host code).
 constexpr int ChunkTimeoutMs = 1000;
+
+// Read the error object on the top of the stack as text. Luau leaves a
+// non-string error object (e.g. `error({})`) un-coercible, in which case
+// lua_tostring returns null — substitute a placeholder so the caller never
+// surfaces an empty diagnostic.
+QString errorText(lua_State* L)
+{
+    const char* msg = lua_tostring(L, -1);
+    return msg ? QString::fromUtf8(msg) : QStringLiteral("<non-string error object>");
+}
 } // namespace
 
 LuauEngine::LuauEngine(std::shared_ptr<LuauWatchdog> watchdog, std::size_t memoryCapBytes)
@@ -41,10 +51,14 @@ void* LuauEngine::allocate(void* ud, void* ptr, std::size_t osize, std::size_t n
     }
 
     // Grow/alloc: reject anything that would push live bytes past the cap, but
-    // only once enforcement is on (after sandbox()). Returning nullptr makes
-    // Luau raise a catchable out-of-memory error inside the protected call.
+    // only while enforcement is on (scoped to the protected call around script
+    // execution — see guardedPcall). Returning nullptr makes Luau raise a
+    // catchable out-of-memory error inside that protected call. Clamp osize to
+    // used (mirroring the free path) so a contract-violating osize > used can
+    // never underflow the projection and spuriously reject a valid allocation.
+    const std::size_t safeOld = budget ? ((osize <= budget->used) ? osize : budget->used) : osize;
     if (budget && budget->enforce && budget->cap != 0) {
-        const std::size_t projected = budget->used - osize + nsize;
+        const std::size_t projected = budget->used - safeOld + nsize;
         if (projected > budget->cap) {
             return nullptr;
         }
@@ -52,7 +66,7 @@ void* LuauEngine::allocate(void* ud, void* ptr, std::size_t osize, std::size_t n
 
     void* block = std::realloc(ptr, nsize);
     if (block && budget) {
-        budget->used = budget->used - osize + nsize;
+        budget->used = budget->used - safeOld + nsize;
         if (budget->used > budget->peak) {
             budget->peak = budget->used;
         }
@@ -125,7 +139,7 @@ bool LuauEngine::runPrelude(const QString& chunkName, const QByteArray& source, 
     std::free(bc);
     if (loadStatus != 0) {
         if (error) {
-            *error = QString::fromUtf8(lua_tostring(m_L, -1));
+            *error = errorText(m_L);
         }
         lua_pop(m_L, 1);
         return false;
@@ -146,10 +160,11 @@ void LuauEngine::sandbox()
     if (m_L && !m_sandboxed) {
         luaL_sandbox(m_L);
         m_sandboxed = true;
-        // From here on every allocation is on behalf of untrusted module code
-        // (load + calls), all of which runs inside protected calls — so the cap
-        // can be enforced safely, turning a runaway into a catchable OOM.
-        m_memory.enforce = true;
+        // Heap-cap enforcement is armed per protected call (see guardedPcall),
+        // not latched on here: only the untrusted module body / function bodies
+        // execute inside a pcall, so the cap bounds them while host-side
+        // marshalling, module loading, and field reads — which touch the VM
+        // OUTSIDE any pcall — never hit a hard, uncatchable OOM abort().
     }
 }
 
@@ -175,7 +190,7 @@ int LuauEngine::loadModule(const QString& chunkName, const QByteArray& source, Q
     std::free(bc);
     if (loadStatus != 0) {
         if (error) {
-            *error = QString::fromUtf8(lua_tostring(m_L, -1));
+            *error = errorText(m_L);
         }
         lua_pop(m_L, 1);
         return -1;
@@ -199,6 +214,15 @@ int LuauEngine::loadModule(const QString& chunkName, const QByteArray& source, Q
 
     const int handle = lua_ref(m_L, -1); // does not pop
     lua_pop(m_L, 1);
+    // A valid registry ref for a (non-nil) table is strictly positive; collapse
+    // LUA_NOREF (-1) and LUA_REFNIL (0) into the single -1 "invalid" sentinel so
+    // the >= 0 handle checks elsewhere never treat a non-handle as valid.
+    if (handle <= 0) {
+        if (error) {
+            *error = QStringLiteral("failed to anchor module table");
+        }
+        return -1;
+    }
     return handle;
 }
 
@@ -303,7 +327,14 @@ LuauEngine::CallStatus LuauEngine::guardedPcall(int nargs, int nresults, int tim
     if (m_watchdog && timeoutMs > 0) {
         m_watchdog->arm(this, timeoutMs);
     }
+    // Enforce the heap cap only for the duration of this protected call, so a
+    // runaway script allocation becomes a catchable Luau OOM here (errorJmp is
+    // set) rather than an uncatchable abort() in host-side marshalling that
+    // runs outside any pcall. Trusted preludes run before sandbox() and stay
+    // unenforced. Not re-entrant — the VM is single-threaded.
+    m_memory.enforce = m_sandboxed;
     const int rc = lua_pcall(m_L, nargs, nresults, 0);
+    m_memory.enforce = false;
     if (m_watchdog) {
         m_watchdog->disarm(this);
     }
@@ -311,7 +342,7 @@ LuauEngine::CallStatus LuauEngine::guardedPcall(int nargs, int nresults, int tim
 
     if (rc != LUA_OK) {
         if (message) {
-            *message = QString::fromUtf8(lua_tostring(m_L, -1));
+            *message = errorText(m_L);
         }
         lua_pop(m_L, 1);
         return m_timedOut ? CallStatus::TimedOut : CallStatus::Error;

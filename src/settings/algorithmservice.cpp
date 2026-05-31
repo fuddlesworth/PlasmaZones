@@ -338,7 +338,11 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
         dir.mkpath(QStringLiteral("."));
     }
 
-    const QString destPath = destDir + QLatin1Char('/') + source.fileName();
+    // Build the destination from the validated basename + canonical ".luau"
+    // suffix rather than source.fileName(): a "foo.LUAU" source passes the
+    // case-insensitive suffix check above but must land as "foo.luau" so the
+    // loader's case-sensitive *.luau glob actually picks it up.
+    const QString destPath = destDir + QLatin1Char('/') + source.completeBaseName() + QStringLiteral(".luau");
 
     // Remove existing file so QFile::copy succeeds (it won't overwrite)
     if (QFile::exists(destPath)) {
@@ -346,8 +350,16 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     }
 
     const bool ok = QFile::copy(filePath, destPath);
+    if (!ok) {
+        // Surface the failure instead of returning false silently — the QML
+        // caller only checks the return value to decide whether to show a toast,
+        // so without this a failed copy looks like success.
+        Q_EMIT algorithmOperationFailed(
+            PzI18n::tr("Could not copy the algorithm file. Check available disk space and permissions."));
+        return false;
+    }
     // PhosphorTiles::ScriptedAlgorithmLoader's QFileSystemWatcher will pick up the new file automatically
-    return ok;
+    return true;
 }
 
 QString AlgorithmService::scriptedFilePath(const QString& algorithmId) const

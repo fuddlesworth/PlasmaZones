@@ -55,7 +55,6 @@ public:
     bool isValid() const;
 
     QString filePath() const;
-    QString scriptId() const;
 
     /// Optional algorithm id declared in metadata (empty if unset).
     QString id() const;

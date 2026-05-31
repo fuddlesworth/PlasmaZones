@@ -11,7 +11,7 @@ namespace PlasmaZones {
 namespace TestHelpers {
 
 /**
- * @brief Helper to write a temporary JS script file
+ * @brief Helper to write a temporary Luau script file
  * @param dir Temporary directory to write into
  * @param filename Name of the script file
  * @param content Script content

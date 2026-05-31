@@ -24,7 +24,7 @@ Luau host (sandbox, watchdog, marshalling) lives in
   ships as a `.luau` script in `data/algorithms/`; there are no hard-coded C++
   geometry algorithms.
 - **`pz` standard library.** Scripts are written against `pz`, a Luau table of
-  geometry primitives (a `Rect` with gap-aware splits, plus ~30 layout/helper
+  geometry primitives (a `Rect` with gap-aware splits, plus ~25 layout/helper
   functions). It is compiled into the library as a Qt resource (`pz.luau`),
   injected as a **frozen** global before each untrusted script runs, and typed
   for editors by `pz.d.luau`.

@@ -71,11 +71,11 @@ private Q_SLOTS:
      */
     void cleanup()
     {
-        cleanupScriptedAlgorithms({QStringLiteral("script:gamma"), QStringLiteral("script:valid-name"),
-                                   QStringLiteral("script:shared"), QStringLiteral("script:ephemeral"),
-                                   QStringLiteral("script:has space"), QStringLiteral("script:has.dot"),
-                                   QStringLiteral("script:special!char"), QStringLiteral("script:priority"),
-                                   QStringLiteral("script:user_only")});
+        cleanupScriptedAlgorithms(
+            {QStringLiteral("script:gamma"), QStringLiteral("script:valid-name"), QStringLiteral("script:shared"),
+             QStringLiteral("script:ephemeral"), QStringLiteral("script:has space"), QStringLiteral("script:has.dot"),
+             QStringLiteral("script:special!char"), QStringLiteral("script:priority"),
+             QStringLiteral("script:user_only"), QStringLiteral("script:notile"), QStringLiteral("script:wellformed")});
     }
 
     // =========================================================================
@@ -150,6 +150,42 @@ private Q_SLOTS:
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:has space")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:has.dot")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:special!char")));
+
+        loader.reset();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
+    }
+
+    // =========================================================================
+    // Content validation — a filename-valid script that is structurally invalid
+    // (loads but exposes no tile() function) must NOT register, while a sibling
+    // well-formed script in the same dir still does.
+    // =========================================================================
+
+    void testContentValidation_missingTileRejected()
+    {
+        XdgEnvGuard envGuard;
+
+        QTemporaryDir xdgRoot;
+        QVERIFY(xdgRoot.isValid());
+        const QString algoDir = xdgRoot.path() + QStringLiteral("/plasmazones/algorithms");
+        QVERIFY(QDir().mkpath(algoDir));
+
+        // Valid filename, valid Luau, returns a table — but no tile() function.
+        writeScript(algoDir, QStringLiteral("notile.luau"),
+                    QStringLiteral("return { metadata = { name = \"No Tile\" } }\n"));
+        // A well-formed sibling proves the scan ran and only the broken one was dropped.
+        writeScript(algoDir, QStringLiteral("wellformed.luau"), validScript(QStringLiteral("Wellformed")));
+
+        qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
+        qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
+
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
+        loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());
+        loader->scanAndRegister();
+
+        auto* registry = PlasmaZones::TestHelpers::testRegistry();
+        QVERIFY(registry->hasAlgorithm(QStringLiteral("script:wellformed")));
+        QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:notile")));
 
         loader.reset();
         loader.emplace(QStringLiteral("plasmazones/algorithms"), PlasmaZones::TestHelpers::testRegistry());

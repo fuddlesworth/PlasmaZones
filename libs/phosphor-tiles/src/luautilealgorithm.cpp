@@ -34,11 +34,20 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     d.type = m.value(QStringLiteral("type")).toString();
     d.defaultValue = m.value(QStringLiteral("default"));
     d.description = m.value(QStringLiteral("description")).toString();
-    if (m.contains(QStringLiteral("min"))) {
+    const bool hasMin = m.contains(QStringLiteral("min"));
+    const bool hasMax = m.contains(QStringLiteral("max"));
+    if (hasMin) {
         d.minValue = m.value(QStringLiteral("min")).toDouble();
     }
-    if (m.contains(QStringLiteral("max"))) {
+    if (hasMax) {
         d.maxValue = m.value(QStringLiteral("max")).toDouble();
+    }
+    // A malformed script can declare an inverted range (min > max); a UI control
+    // built from min > max is undefined, so normalise it when both are given.
+    if (hasMin && hasMax && d.minValue > d.maxValue) {
+        const double t = d.minValue;
+        d.minValue = d.maxValue;
+        d.maxValue = t;
     }
     d.enumOptions = m.value(QStringLiteral("options")).toStringList();
     return d;
@@ -94,10 +103,12 @@ QVector<QRect> variantToRects(const QVariant& v, const QString& scriptId)
     const int cap = std::min<int>(static_cast<int>(list.size()), MaxZones);
     zones.reserve(cap);
     for (int i = 0; i < cap; ++i) {
+        // Always emit one rect per entry to keep the zone count aligned with the
+        // window count: skipping a malformed/empty entry here would leave a
+        // window unplaced. A non-map entry, missing coords, or NaN coerce to a
+        // zero/empty QRect, which clampZonesToArea() detects and replaces with
+        // the full area (with a warning) — the geometry safety net lives there.
         const QVariantMap z = list.at(i).toMap();
-        if (z.isEmpty()) {
-            continue;
-        }
         zones.append(QRect(z.value(QStringLiteral("x")).toInt(), z.value(QStringLiteral("y")).toInt(),
                            z.value(QStringLiteral("width")).toInt(), z.value(QStringLiteral("height")).toInt()));
     }
@@ -147,11 +158,6 @@ QString LuauTileAlgorithm::filePath() const
     return m_filePath;
 }
 
-QString LuauTileAlgorithm::scriptId() const
-{
-    return m_scriptId;
-}
-
 QString LuauTileAlgorithm::id() const
 {
     return m_metadata.id;
@@ -168,6 +174,13 @@ bool LuauTileAlgorithm::loadScript(const QString& filePath)
     m_scriptId = QStringLiteral("script:") + QFileInfo(filePath).completeBaseName();
     m_valid = false;
     m_metadata = ScriptedHelpers::ScriptMetadata{};
+
+    // Release any module anchored by a prior load so a re-load doesn't leak the
+    // previous registry ref (today loadScript runs once, from the ctor).
+    if (m_module >= 0) {
+        m_engine->releaseModule(m_module);
+        m_module = -1;
+    }
 
     QString error;
     if (!m_engine->init(&error)) {
@@ -233,25 +246,38 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
     // Optional override functions: called once at load, result cached (the
     // established three-tier resolution). Each is guarded by
     // the watchdog so a misbehaving override cannot hang load.
-    auto resolveInt = [this](const QString& fn, int fallback) -> int {
+    // A present-but-failing override (runtime error or watchdog timeout) is
+    // distinct from an absent one: log it so a misbehaving override is greppable
+    // instead of silently masquerading as "no override declared".
+    auto warnIfFailed = [this](const QString& fn, LuauEngine::CallStatus status) {
+        if (status != LuauEngine::CallStatus::Ok) {
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "LuauTileAlgorithm: override" << fn << "failed (status" << static_cast<int>(status)
+                << "), using fallback, script=" << m_scriptId;
+        }
+    };
+    auto resolveInt = [this, &warnIfFailed](const QString& fn, int fallback) -> int {
         if (!m_engine->hasFunction(m_module, fn)) {
             return fallback;
         }
         const auto out = m_engine->callModule(m_module, fn, {}, ScriptWatchdogTimeoutMs);
+        warnIfFailed(fn, out.status);
         return out.status == LuauEngine::CallStatus::Ok ? out.result.toInt() : fallback;
     };
-    auto resolveBool = [this](const QString& fn, bool fallback) -> bool {
+    auto resolveBool = [this, &warnIfFailed](const QString& fn, bool fallback) -> bool {
         if (!m_engine->hasFunction(m_module, fn)) {
             return fallback;
         }
         const auto out = m_engine->callModule(m_module, fn, {}, ScriptWatchdogTimeoutMs);
+        warnIfFailed(fn, out.status);
         return out.status == LuauEngine::CallStatus::Ok ? out.result.toBool() : fallback;
     };
-    auto resolveReal = [this](const QString& fn, qreal fallback) -> qreal {
+    auto resolveReal = [this, &warnIfFailed](const QString& fn, qreal fallback) -> qreal {
         if (!m_engine->hasFunction(m_module, fn)) {
             return fallback;
         }
         const auto out = m_engine->callModule(m_module, fn, {}, ScriptWatchdogTimeoutMs);
+        warnIfFailed(fn, out.status);
         return out.status == LuauEngine::CallStatus::Ok ? out.result.toDouble() : fallback;
     };
 

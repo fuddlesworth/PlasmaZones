@@ -25,6 +25,10 @@ private Q_SLOTS:
     void watchdogKillsInfiniteLoopAndRecovers();
     void compileErrorSurfaces();
     void sandboxHolds();
+    void sandboxBlocksEscapeVectors();
+    void runtimeErrorSurfaces();
+    void nonTableModuleRejected();
+    void callMissingFunctionFails();
     void memoryCapEnforcedAndRecovers();
     void memoryCapAllowsNormalWork();
 };
@@ -168,6 +172,93 @@ void TestLuauEngine::sandboxHolds()
 
     const auto out = engine.callModule(handle, QStringLiteral("tile"), {}, 200);
     QCOMPARE(out.status, LuauEngine::CallStatus::Ok);
+}
+
+void TestLuauEngine::sandboxBlocksEscapeVectors()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    // Each entry must be true: the named escape vector is unreachable from a
+    // sandboxed script. Returning a bool map (rather than asserting in Lua) so a
+    // single regression names exactly which capability leaked.
+    // Note: Luau keeps getfenv/setfenv for compatibility, but luaL_sandbox
+    // freezes the global table, so neither can be used to mutate the
+    // environment — that frozen-ness is the actual guarantee, asserted below.
+    const QByteArray probe = R"LUA(
+        return { probe = function()
+            return {
+                io = io == nil,
+                osExecute = (os == nil) or (os.execute == nil),
+                loadstring = loadstring == nil,
+                loadfile = loadfile == nil,
+                dofile = dofile == nil,
+                stringDump = string.dump == nil,
+                stdlibFrozen = not pcall(function() string.format = nil end),
+                globalsFrozen = not pcall(function() _G.__pzevil = true end),
+                envFrozenViaGetfenv = (getfenv == nil) or not pcall(function() getfenv().__pzevil2 = true end),
+            }
+        end }
+    )LUA";
+    const int handle = engine.loadModule(QStringLiteral("escape"), probe);
+    QVERIFY(handle >= 0);
+
+    const auto out = engine.callModule(handle, QStringLiteral("probe"), {}, 200);
+    QCOMPARE(out.status, LuauEngine::CallStatus::Ok);
+    const QVariantMap caps = out.result.toMap();
+    QVERIFY(!caps.isEmpty());
+    for (auto it = caps.constBegin(); it != caps.constEnd(); ++it) {
+        QVERIFY2(it.value().toBool(), qPrintable(QStringLiteral("escape vector reachable: ") + it.key()));
+    }
+    engine.releaseModule(handle);
+}
+
+void TestLuauEngine::runtimeErrorSurfaces()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    // A string error propagates as Error with the message preserved.
+    const int h1 = engine.loadModule(QStringLiteral("e1"), "return { f = function() error('kaboom') end }");
+    QVERIFY(h1 >= 0);
+    const auto o1 = engine.callModule(h1, QStringLiteral("f"), {}, 200);
+    QCOMPARE(o1.status, LuauEngine::CallStatus::Error);
+    QVERIFY(o1.message.contains(QStringLiteral("kaboom")));
+
+    // A non-string error object (no __tostring) must still yield a non-empty
+    // diagnostic rather than an empty string (errorText placeholder).
+    const int h2 = engine.loadModule(QStringLiteral("e2"), "return { f = function() error({ code = 1 }) end }");
+    QVERIFY(h2 >= 0);
+    const auto o2 = engine.callModule(h2, QStringLiteral("f"), {}, 200);
+    QCOMPARE(o2.status, LuauEngine::CallStatus::Error);
+    QVERIFY(!o2.message.isEmpty());
+}
+
+void TestLuauEngine::nonTableModuleRejected()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    QString err;
+    const int handle = engine.loadModule(QStringLiteral("num"), "return 42", &err);
+    QCOMPARE(handle, -1);
+    QVERIFY(err.contains(QStringLiteral("table")));
+}
+
+void TestLuauEngine::callMissingFunctionFails()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    const int handle = engine.loadModule(QStringLiteral("m"), "return { a = 1 }");
+    QVERIFY(handle >= 0);
+    const auto out = engine.callModule(handle, QStringLiteral("nope"), {}, 200);
+    QCOMPARE(out.status, LuauEngine::CallStatus::Error);
+    QVERIFY(out.message.contains(QStringLiteral("nope")));
 }
 
 void TestLuauEngine::memoryCapEnforcedAndRecovers()

@@ -17,7 +17,7 @@ using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
 /**
- * @brief Tests for Cascade, Stair, and Spread tiling algorithms (all JS-based via registry)
+ * @brief Tests for Cascade, Stair, and Spread tiling algorithms (all Luau-based via registry)
  *
  * These are overlapping layout algorithms where zones intentionally overlap,
  * so noOverlaps() and zonesFillScreen() are NOT expected to pass.

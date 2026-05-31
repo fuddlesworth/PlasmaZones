@@ -19,10 +19,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`LayoutRegistry::walkCascade` removed**, replaced by `RuleEvaluator`. The old per-axis cascade (context-keyed assignments vs window-property matching) no longer exists; all matching goes through the evaluator.
 - **`org.plasmazones.WindowTracking.setWindowMetadata`** widened from 4 to 9 arguments to carry the additional fields the evaluator needs (role, app-id, desktop, activity, screen). The KWin effect and daemon must be installed and running as a matched pair — `MinPeerApiVersion` bumped 3 → 4, and either side refuses to register a mismatched peer rather than silently degrading. Packagers must rebuild and ship both binaries together.
 - **`org.plasmazones.Layout.assignmentChangesApplied`** signal dropped its second argument (the per-key field tag). Subscribers that depended on that field must update or they will receive the wrong arity.
+- **Scripted autotiling moved from QJSEngine (JavaScript) to an embedded, sandboxed Luau VM** (`phosphor-scripting`). The 25 bundled algorithms were ported `*.js` → `*.luau`, written against a new frozen `pz` standard library, with a per-engine CPU-time watchdog and a 64 MiB heap cap. The `TilingAlgorithm` contract, daemon, editor, and settings are unchanged. **Breaking for custom algorithms**: the loader now discovers only `*.luau` files, so user scripts in `~/.local/share/plasmazones/algorithms/` written in the old JavaScript form are no longer loaded and must be rewritten in Luau (see `docs/architecture/luau-algorithm-authoring.md`).
 
 ### Removed
 
 - Legacy `Display.SnappingDisabled*` and `Display.AutotileDisabled*` config keys (auto-migrated into rules).
+- **QJSEngine-based scripted-tiling path** (the `ScriptedAlgorithm` runtime, its JS builtins, and the bundled `*.js` algorithms), along with the `Qt6::Qml` dependency in `phosphor-tiles`. Replaced by the Luau path above.
 - `setSnappingLayoutEntry`, `setTilingAlgorithmEntry`, and related per-field `Settings`-side `Q_INVOKABLE`s that the legacy KCM Assignments pages used. There is no QML replacement — use the Window Rules page.
 - Legacy Snapping Assignments, Tiling Assignments, and Animations App Rules settings pages (replaced by Window Rules).
 

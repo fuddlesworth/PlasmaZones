@@ -100,8 +100,10 @@ QVariant toVariant(lua_State* L, int idx, int depth)
         return QVariant(lua_toboolean(L, abs) != 0);
     case LUA_TNUMBER: {
         const double n = lua_tonumber(L, abs);
-        // Present whole numbers as integers so round-trips stay clean.
-        if (std::isfinite(n) && std::floor(n) == n && std::fabs(n) < 9.0e15) {
+        // Present whole numbers as integers so round-trips stay clean. The
+        // cutoff is 2^53, the largest magnitude at which a double represents
+        // every integer exactly; beyond it, keep the value as a double.
+        if (std::isfinite(n) && std::floor(n) == n && std::fabs(n) <= 9007199254740992.0) {
             return QVariant(static_cast<qlonglong>(n));
         }
         return QVariant(n);
@@ -134,9 +136,13 @@ QVariant toVariant(lua_State* L, int idx, int depth)
             lua_pushvalue(L, -2);
             size_t klen = 0;
             const char* k = lua_tolstring(L, -1, &klen);
-            const QString key = k ? QString::fromUtf8(k, static_cast<int>(klen)) : QString();
+            // Distinguish a genuinely empty-string key (kept) from a key that
+            // failed coercion to a string — only the latter (k == nullptr,
+            // e.g. a table/function/boolean key) is dropped.
+            const bool haveKey = (k != nullptr);
+            const QString key = haveKey ? QString::fromUtf8(k, static_cast<int>(klen)) : QString();
             lua_pop(L, 1); // key copy
-            if (!key.isEmpty()) {
+            if (haveKey) {
                 map.insert(key, toVariant(L, -1, depth + 1));
             }
             lua_pop(L, 1); // value, keep original key for lua_next
