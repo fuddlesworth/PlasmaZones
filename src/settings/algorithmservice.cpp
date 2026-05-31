@@ -337,21 +337,17 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
         dir.mkpath(QStringLiteral("."));
     }
 
-    // Build the destination from the validated basename + canonical ".luau"
-    // suffix rather than source.fileName(): a "foo.LUAU" source passes the
-    // case-insensitive suffix check above but must land as "foo.luau" so the
-    // loader's case-sensitive *.luau glob actually picks it up.
+    // Land as "<validated-basename>.luau" (lower-case suffix) so the loader's
+    // case-sensitive *.luau glob picks it up regardless of the source suffix case.
     QString destPath = destDir + source.completeBaseName() + QStringLiteral(".luau");
 
-    // Importing a file that already IS the destination (same path, or a symlink
-    // resolving to it) is a no-op success.
+    // Same file (or a symlink to it) already in place: no-op success.
     const QFileInfo destInfo(destPath);
     if (destInfo.exists() && source.canonicalFilePath() == destInfo.canonicalFilePath()) {
         return true;
     }
-    // A different algorithm already owns that name — pick a unique "<name>-N.luau"
-    // instead of silently clobbering it (matches duplicate/create behaviour and
-    // avoids a destructive remove-then-copy that could lose the existing file).
+    // A different file owns the name: pick a unique "<name>-N.luau" rather than
+    // clobbering it (no destructive remove-then-copy; matches duplicate/create).
     if (destInfo.exists()) {
         destPath = findUniqueAlgorithmPath(destDir, source.completeBaseName());
         if (destPath.isEmpty()) {
@@ -361,19 +357,15 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
         }
     }
 
-    const bool ok = QFile::copy(filePath, destPath);
-    if (!ok) {
-        // Surface the failure instead of returning false silently — the QML
-        // caller only checks the return value to decide whether to show a toast,
-        // so without this a failed copy looks like success.
+    if (!QFile::copy(filePath, destPath)) {
+        // Report failure — the QML caller treats a false return as a silent no-op.
         Q_EMIT algorithmOperationFailed(
             PzI18n::tr("Could not copy the algorithm file. Check available disk space and permissions."));
         return false;
     }
-    // The loader's QFileSystemWatcher picks up the new file automatically; watch
-    // for that registration so an import that never registers (e.g. invalid
-    // Luau) surfaces an error rather than a silent success, as create/duplicate do.
-    watchForAlgorithmRegistration(QFileInfo(destPath).completeBaseName());
+    // The loader's QFileSystemWatcher picks up the new file and refreshes the list.
+    // No id-keyed watch here: an import registers under its own metadata id (not
+    // necessarily its filename), so a basename watch would false-error.
     return true;
 }
 

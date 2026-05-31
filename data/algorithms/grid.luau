@@ -30,7 +30,7 @@ return pz.algorithm {
         local cols = math.ceil(math.sqrt(count))
         local rows = math.ceil(count / cols)
 
-        -- 1-indexed; JS col/row are 0-based so accesses below use [idx + 1].
+        -- 1-indexed; the original 0-based col/row indices map to [idx + 1].
         local colMinWidths = {}
         local rowMinHeights = {}
         for c = 1, cols do colMinWidths[c] = 0 end
