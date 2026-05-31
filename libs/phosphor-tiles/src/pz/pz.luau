@@ -461,8 +461,10 @@ end
 local function applyPerWindowMinSize(w, h, minSizes, i)
     if minSizes and i < #minSizes then
         local entry = minSizes[i + 1] -- i is 0-based
-        if entry.w and entry.w > 0 then w = math.max(w, entry.w) end
-        if entry.h and entry.h > 0 then h = math.max(h, entry.h) end
+        -- Guard `entry` for a sparse minSizes, matching the other readers
+        -- (defensive; the host always marshals dense entries).
+        if entry and entry.w and entry.w > 0 then w = math.max(w, entry.w) end
+        if entry and entry.h and entry.h > 0 then h = math.max(h, entry.h) end
     end
     return { w = w, h = h }
 end
