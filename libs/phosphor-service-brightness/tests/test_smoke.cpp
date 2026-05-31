@@ -502,6 +502,43 @@ private Q_SLOTS:
         QCOMPARE(model.rowCount(), 0);
         QCOMPARE(countSpy.count(), 1);
     }
+
+    void testModelRebindsToNewHost()
+    {
+        // setHost() while already bound must disconnect the old host and its
+        // devices and load the new host's rows, so stale signals from the old
+        // host no longer reach the model while the new host's do.
+        QTemporaryDir rootA;
+        QVERIFY(rootA.isValid());
+        makeBacklight(rootA.path(), QStringLiteral("intel_backlight"), 100, 200);
+        BrightnessHost hostA(rootA.path(), QDBusConnection::sessionBus(), QStringLiteral("org.example.Logind"),
+                             QLatin1String(kDummySession));
+
+        QTemporaryDir rootB;
+        QVERIFY(rootB.isValid());
+        makeBacklight(rootB.path(), QStringLiteral("edp"), 50, 100);
+        makeLed(rootB.path(), QStringLiteral("tpacpi::kbd_backlight"), 1, 2);
+        BrightnessHost hostB(rootB.path(), QDBusConnection::sessionBus(), QStringLiteral("org.example.Logind"),
+                             QLatin1String(kDummySession));
+
+        BrightnessDeviceModel model;
+        model.setHost(&hostA);
+        QCOMPARE(model.rowCount(), 1);
+
+        model.setHost(&hostB);
+        QCOMPARE(model.host(), &hostB);
+        QCOMPARE(model.rowCount(), 2);
+
+        // A deviceAdded from the OLD host must no longer reach the model.
+        BrightnessDevice straggler(QStringLiteral("i2c-1"), QStringLiteral("Old"), 10, 100, [](int) { });
+        Q_EMIT hostA.deviceAdded(&straggler);
+        QCOMPARE(model.rowCount(), 2);
+
+        // A deviceAdded from the NEW host is tracked.
+        BrightnessDevice fresh(QStringLiteral("i2c-2"), QStringLiteral("New"), 20, 100, [](int) { });
+        Q_EMIT hostB.deviceAdded(&fresh);
+        QCOMPARE(model.rowCount(), 3);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestPhosphorServiceBrightnessSmoke)
