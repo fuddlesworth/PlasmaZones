@@ -6,15 +6,18 @@
  * @brief Unit tests for WindowTrackingService session restore, clear-stale, and resnap
  *
  * Tests cover:
- * 1. PhosphorZones::Zone-number fallback on session restore
- * 2. Floating window skips restore
- * 3. Clear stale pending assignments
- * 4. Resnap from previous layout
- * 5. Rotation calculations
- * 6. Daemon restart / pending restore
- * 7. Multi-monitor restore edge cases
- * 8. Auto-snap marking
- * 9. Consume pending assignment
+ * 1. Clear stale pending assignments
+ * 2. Resnap from previous layout
+ * 3. Rotation calculations
+ * 4. Daemon restart / pending-restore-available emission
+ * 5. Multi-monitor restore edge cases
+ * 6. Auto-snap marking
+ * 7. Consume pending assignment
+ * 8. Layout import UUID collision
+ *
+ * Session zone-restore-from-session (the old calculateRestoreFromSession /
+ * PendingRestoreQueues path) is now covered by the unified WindowPlacementStore
+ * tests (test_window_placement_store, test_wta_convenience).
  *
  * WIRE FORMAT NOTE: fixtures use legacy "appId|uuid" composites because the
  * WTS is constructed without a WindowRegistry. See header in
@@ -183,47 +186,10 @@ private Q_SLOTS:
     // P1: Session Restore
     // =====================================================================
 
-    void testRestore_zoneNumberFallback()
-    {
-        QString appId = QStringLiteral("firefox");
-        QString oldZoneId = QUuid::createUuid().toString();
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {oldZoneId};
-        entry.screenId = QString();
-        entry.layoutId = m_testLayout->id().toString();
-        entry.zoneNumbers = {2};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result = m_engine->calculateRestoreFromSession(QStringLiteral("firefox|99999"), QString(), false);
-        Q_UNUSED(result);
-
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().zoneNumbers, QList<int>{2});
-    }
-
-    void testRestore_floatingWindowSkipsRestore()
-    {
-        QString appId = QStringLiteral("firefox");
-        QString windowId = QStringLiteral("firefox|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        QSet<QString> floating;
-        floating.insert(appId);
-        m_service->setFloatingWindows(floating);
-
-        SnapResult result = m_engine->calculateRestoreFromSession(windowId, QString(), false);
-        QVERIFY(!result.shouldSnap);
-    }
+    // Session zone-restore is now served by the unified WindowPlacementStore
+    // (see test_window_placement_store + test_wta_convenience). The legacy
+    // calculateRestoreFromSession / PendingRestoreQueues tests were removed with
+    // that mechanism.
 
     // =====================================================================
     // P1: Clear Stale Pending
@@ -332,26 +298,6 @@ private Q_SLOTS:
         QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().screenId, QStringLiteral("HDMI-2"));
     }
 
-    void testRestore_savedScreenDisconnected()
-    {
-        QString appId = QStringLiteral("app");
-        QString windowId = QStringLiteral("app|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.screenId = QStringLiteral("DISCONNECTED-99");
-        entry.layoutId = m_testLayout->id().toString();
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result = m_engine->calculateRestoreFromSession(windowId, QStringLiteral("DP-1"), false);
-        if (result.shouldSnap) {
-            QVERIFY(result.geometry.isValid());
-        }
-    }
-
     // =====================================================================
     // P1: Auto-snap / Mark as auto-snapped
     // =====================================================================
@@ -387,77 +333,6 @@ private Q_SLOTS:
         m_service->consumePendingAssignment(windowId);
 
         QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
-    }
-
-    // =====================================================================
-    // P0: WindowKind gate on PendingRestore consume
-    // =====================================================================
-
-    void testKindGate_rejectsMismatch_entryPreserved()
-    {
-        QString appId = QStringLiteral("steam");
-        QString windowId = QStringLiteral("steam|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.layoutId = m_testLayout->id().toString();
-        entry.zoneNumbers = {1};
-        entry.windowKind = PhosphorEngine::WindowKind::Normal;
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result =
-            m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Transient);
-        QVERIFY(!result.shouldSnap);
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).size(), 1);
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().windowKind, PhosphorEngine::WindowKind::Normal);
-    }
-
-    void testKindGate_acceptsMatch_doesNotShortCircuit()
-    {
-        QString appId = QStringLiteral("firefox");
-        QString windowId = QStringLiteral("firefox|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.layoutId = m_testLayout->id().toString();
-        entry.zoneNumbers = {1};
-        entry.windowKind = PhosphorEngine::WindowKind::Normal;
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result =
-            m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Normal);
-        Q_UNUSED(result);
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-    }
-
-    void testKindGate_unknownEntry_doesNotShortCircuit()
-    {
-        QString appId = QStringLiteral("legacy-app");
-        QString windowId = QStringLiteral("legacy-app|12345");
-
-        PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {m_zoneIds[0]};
-        entry.layoutId = m_testLayout->id().toString();
-        entry.zoneNumbers = {1};
-        QCOMPARE(entry.windowKind, PhosphorEngine::WindowKind::Unknown);
-
-        QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;
-        queues[appId] = {entry};
-        m_service->setPendingRestoreQueues(queues);
-
-        SnapResult result =
-            m_engine->calculateRestoreFromSession(windowId, QString(), false, PhosphorEngine::WindowKind::Transient);
-        Q_UNUSED(result);
-        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
-        QCOMPARE(m_service->pendingRestoreQueues().value(appId).first().windowKind,
-                 PhosphorEngine::WindowKind::Unknown);
     }
 
     // =====================================================================

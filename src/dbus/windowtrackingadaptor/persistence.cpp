@@ -252,11 +252,13 @@ void WindowTrackingAdaptor::onLayoutChanged()
     // Delegate to service
     m_service->onLayoutChanged();
 
-    // After layout becomes available, check if we have pending restores
-    if (!m_service->pendingRestoreQueues().isEmpty()) {
+    // After layout becomes available, check if we have placement records to
+    // restore. The unified WindowPlacementStore is the source of truth (the legacy
+    // m_pendingRestoreQueues is in-session-only and empty at startup).
+    if (m_service->placementStore().size() > 0) {
         m_hasPendingRestores = true;
-        qCDebug(lcDbusWindow) << "Layout available with" << m_service->pendingRestoreQueues().size()
-                              << "pending restores, checking if panel geometry is ready";
+        qCDebug(lcDbusWindow) << "Layout available with" << m_service->placementStore().size()
+                              << "placement records, checking if panel geometry is ready";
         tryEmitPendingRestoresAvailable();
     }
 }

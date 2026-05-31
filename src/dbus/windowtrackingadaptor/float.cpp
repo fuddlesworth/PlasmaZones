@@ -127,6 +127,9 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
                                   QStringList{},
                                   false,
                               });
+
+    // Unified model: refresh the live placement record on float toggle.
+    captureWindowPlacement(windowId);
 }
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()

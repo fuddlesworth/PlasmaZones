@@ -1230,46 +1230,25 @@ bool Daemon::init()
         return wta && wta->service() && wta->service()->isWindowFloating(windowId);
     });
 
-    // Wire window order serialization delegates so WTA includes autotile window
-    // orders in its save/load cycle (analogous to WindowZoneAssignmentsFull for snap mode)
-    m_windowTrackingAdaptor->setTilingStateDelegates(
-        [engine = QPointer(autotileEngine)]() -> QJsonArray {
-            return engine ? engine->serializeWindowOrders() : QJsonArray{};
-        },
-        [engine = QPointer(autotileEngine)](const QJsonArray& orders) {
-            if (engine)
-                engine->deserializeWindowOrders(orders);
-        });
+    // Autotile restore persistence (window orders + pending restores) is now
+    // subsumed by the unified WindowPlacementStore — an autotiled window's position
+    // is one WindowPlacement record, captured by the common save-time snapshot and
+    // close hook and restored on reopen by AutotileEngine::insertWindow. Like snap,
+    // there is no engine-specific serialize delegate.
 
-    // Autotile pending-restore filtering (discussion #461 item 2) is owned
-    // by AutotileEngine itself via setShouldPersistRestorePredicate, which
-    // WTA wires in setEngines() — same isPersistedContextDisabled funnel as
-    // the snap-side ShouldTrackPredicate. Delegates here are now bare
-    // forwarders; the engine's own serialize/deserialize apply the gate.
-    m_windowTrackingAdaptor->setTilingPendingRestoreDelegates(
-        [engine = QPointer(autotileEngine)]() -> QJsonObject {
-            return engine ? engine->serializePendingRestores() : QJsonObject{};
-        },
-        [engine = QPointer(autotileEngine)](const QJsonObject& obj) {
-            if (engine)
-                engine->deserializePendingRestores(obj);
-        });
-
-    // Trigger WTA save on autotile state changes (window order, split ratio, master count).
-    // Narrower dirty mask than the default DirtyAll — only the two autotile-owned
-    // fields can change as a result of a placementChanged signal, so the next save
-    // rewrites just those keys rather than the whole window-tracking blob.
-    //
-    // markDirty() emits PhosphorPlacement::WindowTrackingService::stateChanged, which is wired to
-    // WindowTrackingAdaptor::scheduleSaveState in the adaptor's constructor —
-    // that connection is what actually kicks the debounced save timer. If the
-    // stateChanged hookup ever gets severed, autotile state will silently
-    // stop persisting; add an explicit scheduleSaveState() call here if so.
+    // Trigger a placement save when the autotile layout changes (window added /
+    // removed / reordered / floated). markDirty(DirtyWindowPlacements) emits
+    // stateChanged → scheduleSaveState (wired in the adaptor ctor), and saveState's
+    // refreshOpenWindowPlacements re-captures every open window's current placement
+    // (including autotiled positions) into the unified store before writing. This
+    // placementChanged bridge is autotile-specific: snap captures directly on
+    // windowSnapStateChanged → captureWindowPlacement, whereas autotile has no
+    // per-window signal, so its per-screen placementChanged schedules the save and
+    // the save-time snapshot does the per-window capture.
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, m_windowTrackingAdaptor, [this]() {
         if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
             m_windowTrackingAdaptor->service()->markDirty(
-                PhosphorPlacement::WindowTrackingService::DirtyAutotileOrders
-                | PhosphorPlacement::WindowTrackingService::DirtyAutotilePending);
+                PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
         }
     });
 
@@ -1776,8 +1755,9 @@ void Daemon::stop()
 
     m_reapplyGeometriesTimer.stop();
 
-    // Autotile tiling state is now included in WTA's saveStateOnShutdown() above
-    // via the tiling state serialization delegates. No separate save needed.
+    // Autotile per-window restore state is included in WTA's saveStateOnShutdown()
+    // above via the unified WindowPlacementStore (refreshOpenWindowPlacements
+    // captures every open window's placement). No separate save needed.
     //
     // Do NOT call setAutotileScreens({}) here — it emits windowsReleased
     // which clears WTS floating state and restarts the save timer, potentially

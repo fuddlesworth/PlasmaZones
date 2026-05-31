@@ -101,37 +101,4 @@ bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
     return true;
 }
 
-int WindowTrackingService::pruneExcludedPendingRestores(const QStringList& exclusionPatterns)
-{
-    if (exclusionPatterns.isEmpty() || m_pendingRestoreQueues.isEmpty()) {
-        return 0;
-    }
-    int removed = 0;
-    for (auto it = m_pendingRestoreQueues.begin(); it != m_pendingRestoreQueues.end();) {
-        const QString& appId = it.key();
-        bool matched = false;
-        for (const QString& pattern : exclusionPatterns) {
-            if (pattern.isEmpty()) {
-                continue;
-            }
-            if (PhosphorIdentity::WindowId::appIdMatches(appId, pattern)) {
-                matched = true;
-                break;
-            }
-        }
-        if (matched) {
-            qCInfo(lcPlacement) << "Pruning pending-restore queue for excluded appId:" << appId << "("
-                                << it.value().size() << "entries)";
-            it = m_pendingRestoreQueues.erase(it);
-            ++removed;
-        } else {
-            ++it;
-        }
-    }
-    if (removed > 0) {
-        markDirty(DirtyPendingRestores);
-    }
-    return removed;
-}
-
 } // namespace PhosphorPlacement

@@ -5,6 +5,7 @@
 
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorEngine/NavigationContext.h>
+#include <PhosphorEngine/WindowPlacement.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -16,6 +17,7 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <optional>
 
 class QObject;
 
@@ -150,6 +152,67 @@ public:
     virtual void setActiveScreens(const QSet<QString>& screens)
     {
         Q_UNUSED(screens)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPTIONAL: Window-appearance re-application (compositor reconnect)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Re-drive the compositor's per-window appearance (border, hidden title
+    /// bar) for every window this engine currently manages, WITHOUT recomputing
+    /// the layout — windows keep their current zones/positions. The compositor
+    /// derives each window's chrome from the geometry/state this re-emits.
+    ///
+    /// Called by the daemon when the compositor bridge (re)registers: on a
+    /// daemon or effect restart the compositor drops its per-window appearance
+    /// state, so it must be re-driven from the daemon's authoritative placement
+    /// state. Distinct from reapplyLayout(), which is a user navigation action
+    /// that recomputes the layout and may move windows. Default is a no-op for
+    /// engines that don't manage compositor-side window chrome.
+    virtual void reapplyManagedWindowAppearance()
+    {
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OPTIONAL: Unified placement capture/restore (engine-agnostic restore model)
+    //
+    // The single seam for the unified WindowPlacement restore model. An engine
+    // implements exactly these two methods to participate in save+restore; a new
+    // engine (e.g. a future scrolling engine) needs no core/schema change — its
+    // own stateId token and opaque engineData carry its vocabulary.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Report @p windowId's CURRENT placement for persistence, or nullopt if this
+    /// engine does not manage it. Fill `engineId` from engineId(), `stateId` from
+    /// the engine's token vocabulary (free/floated/snapped/autotiled/...), and the
+    /// engine-specific restore payload into `engineData`.
+    ///
+    /// This is the polymorphic capture seam the common layer drives — the WTA close
+    /// hook and the save-time snapshot call it for every window.
+    virtual std::optional<WindowPlacement> capturePlacement(const QString& windowId) const
+    {
+        Q_UNUSED(windowId)
+        return std::nullopt;
+    }
+
+    /// Apply @p placement to a (re)opening window on @p screenId. Return true if
+    /// this engine claimed and applied it. Dispatch on placement.stateId, reading
+    /// the engine-specific payload back out of placement.engineData.
+    ///
+    /// Contract pair of capturePlacement() and the engine-agnostic entry point for a
+    /// new engine. NOTE: the built-in snap and autotile engines do NOT route through
+    /// this method — they apply restore inline in their own open paths
+    /// (SnapEngine::resolveWindowRestore consults the store and returns a SnapResult
+    /// to the effect; AutotileEngine::insertWindow take()s the record and inserts at
+    /// position) because those paths carry engine-specific policy (snap's auto-snap
+    /// fallback chain; autotile's burst-insert coalescing) that a single
+    /// apply-this-record call cannot express. A minimal future engine may instead
+    /// implement only this method and have its own open path invoke it directly.
+    virtual bool restorePlacement(const WindowPlacement& placement, const QString& screenId)
+    {
+        Q_UNUSED(placement)
+        Q_UNUSED(screenId)
+        return false;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -486,26 +549,10 @@ public:
     {
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Serialization (override if engine has persistent state)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    virtual QJsonArray serializeWindowOrders() const
-    {
-        return {};
-    }
-    virtual void deserializeWindowOrders(const QJsonArray& orders)
-    {
-        Q_UNUSED(orders)
-    }
-    virtual QJsonObject serializePendingRestores() const
-    {
-        return {};
-    }
-    virtual void deserializePendingRestores(const QJsonObject& obj)
-    {
-        Q_UNUSED(obj)
-    }
+    // Per-window restore persistence is unified: engines implement
+    // capturePlacement()/restorePlacement() (below) and the common
+    // WindowPlacementStore handles capture timing, serialization, and the single
+    // WindowPlacements config key. No engine-specific serialize/deserialize hooks.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Init hooks (override to receive shared services)

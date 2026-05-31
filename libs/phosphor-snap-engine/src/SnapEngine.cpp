@@ -276,6 +276,39 @@ void SnapEngine::reapplyLayout(const NavigationContext& /*ctx*/)
     resnapToNewLayout();
 }
 
+void SnapEngine::reapplyManagedWindowAppearance()
+{
+    if (!m_snapState) {
+        return;
+    }
+    // Re-emit the current zone geometry for every snapped, non-floating window.
+    // The compositor routes a non-empty-zoneId applyGeometryRequested through
+    // its snap-commit path (markWindowSnapped), which re-hides the title bar and
+    // redraws the snap border. The window is already in its zone, so the
+    // compositor's applySnapGeometry no-ops the move — this only re-drives the
+    // chrome the compositor dropped on bridge reconnect. No zone reassignment.
+    const QStringList snapped = m_snapState->snappedWindows();
+    for (const QString& windowId : snapped) {
+        if (m_snapState->isFloating(windowId)) {
+            continue;
+        }
+        const QStringList zoneIds = m_snapState->zonesForWindow(windowId);
+        if (zoneIds.isEmpty()) {
+            continue;
+        }
+        const QString screenId = m_snapState->screenAssignments().value(windowId);
+        if (screenId.isEmpty()) {
+            continue;
+        }
+        const QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, screenId);
+        if (!geo.isValid()) {
+            continue;
+        }
+        Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneIds.first(), screenId,
+                                      false);
+    }
+}
+
 void SnapEngine::snapAllWindows(const NavigationContext& ctx)
 {
     snapAllWindows(ctx.screenId);

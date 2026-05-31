@@ -102,16 +102,45 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
         commitSnap(windowId, unfloat.zoneIds.first(), unfloat.screenId, SnapIntent::UserInitiated);
     }
 
+    // Carry the (representative) zone id, NOT an empty string. The KWin effect's
+    // applyGeometryRequested handler uses an empty zoneId as the "float-restore"
+    // discriminator (→ clearWindowSnapped, which strips the snap title-bar /
+    // border chrome) and a non-empty zoneId as the "snap commit" discriminator
+    // (→ markWindowSnapped, which re-applies it). Unfloat-to-zone IS a snap
+    // commit, so an empty zoneId here would leave the re-snapped window wearing
+    // its floating chrome (no hidden title bar, no snap border).
     Q_EMIT applyGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(), unfloat.geometry.width(),
-                                  unfloat.geometry.height(), QString(), unfloat.screenId, false);
+                                  unfloat.geometry.height(), unfloat.zoneIds.first(), unfloat.screenId, false);
     return true;
 }
 
 bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& screenId)
 {
+    // Prefer the unified placement record's float-back geometry. It is the single
+    // source of truth: appId-keyed (survives the uuid change on logout/login),
+    // one-record-per-window, and — unlike the legacy m_unmanagedGeometries store —
+    // not silently dropped on load by the disabled-context gate when the user has
+    // toggled snapping off/on. The legacy store is consulted only as a fallback
+    // for windows with no record yet (pre-migration / first float of the session).
+    if (m_windowTracker) {
+        const QString appId = m_windowTracker->currentAppIdFor(windowId);
+        auto rec =
+            m_windowTracker->placementStore().peek(windowId, appId, [&](const PhosphorEngine::WindowPlacement& p) {
+                return p.engineId == engineId() && p.geometry.isValid();
+            });
+        if (rec && rec->geometry.isValid()) {
+            qCInfo(PhosphorSnapEngine::lcSnapEngine)
+                << "applyGeometryForFloat:" << windowId << "restoring to" << rec->geometry << "(placement record)";
+            Q_EMIT applyGeometryRequested(windowId, rec->geometry.x(), rec->geometry.y(), rec->geometry.width(),
+                                          rec->geometry.height(), QString(), screenId, false);
+            return true;
+        }
+    }
+
     auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId);
     if (geo) {
-        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "applyGeometryForFloat:" << windowId << "restoring to" << *geo;
+        qCInfo(PhosphorSnapEngine::lcSnapEngine)
+            << "applyGeometryForFloat:" << windowId << "restoring to" << *geo << "(legacy unmanaged store)";
         Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
                                       false);
         return true;
@@ -182,8 +211,11 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
             } else {
                 commitSnap(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId, SnapIntent::UserInitiated);
             }
+            // Non-empty zoneId so the effect routes this cross-engine snap to
+            // markWindowSnapped (snap chrome), not clearWindowSnapped — see the
+            // matching note in unfloatToZone().
             Q_EMIT applyGeometryRequested(ctx.windowId, zoneGeo.x(), zoneGeo.y(), zoneGeo.width(), zoneGeo.height(),
-                                          QString(), ctx.toScreenId, false);
+                                          ctx.sourceZoneIds.first(), ctx.toScreenId, false);
             return;
         }
     }

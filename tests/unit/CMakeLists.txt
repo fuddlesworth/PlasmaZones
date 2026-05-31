@@ -31,6 +31,7 @@ pz_add_test(test_window_registry core/test_window_registry.cpp)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_window_tracking_snap core/test_window_tracking_snap.cpp)
 pz_add_test(test_window_tracking_float core/test_window_tracking_float.cpp)
+pz_add_test(test_window_placement_store core/test_window_placement_store.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Session Persistence Tests
@@ -146,7 +147,6 @@ pz_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
 pz_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_order_cycling.cpp)
 target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
-pz_add_test(test_autotile_engine_pending_restore_filter autotile/test_autotile_engine_pending_restore_filter.cpp)
 pz_add_test(test_autotile_drag_insert autotile/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_handoff autotile/test_autotile_handoff.cpp)

@@ -226,58 +226,55 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     QString currentActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
 
-    for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
-        if (it->isEmpty()) {
+    // Source the effect's instant-restore cache from the unified placement store:
+    // one snapped WindowPlacement per appId-keyed window, resolved to its zone
+    // geometry. The async resolveWindowRestore re-validates and corrects, so this
+    // is a best-effort anti-flash fast path (an invalid/stale zone resolves to an
+    // empty rect and is skipped). When an appId has several snapped records (multi
+    // instance), pick the LOWEST-sequence (oldest/FIFO-head) deterministically so a
+    // repeated lookup is stable and matches the FIFO consumption order, rather than
+    // depending on unordered hash iteration.
+    QHash<QString, quint64> chosenSequence;
+    for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
+        if (p.engineId != QLatin1String("snap") || p.stateId != PhosphorEngine::WindowPlacement::stateSnapped()) {
+            continue;
+        }
+        QStringList zoneIds;
+        for (const QJsonValue& v : p.engineData.value(QLatin1String("zoneIds")).toArray()) {
+            const QString z = v.toString();
+            if (!z.isEmpty()) {
+                zoneIds.append(z);
+            }
+        }
+        if (zoneIds.isEmpty() || p.appId.isEmpty()) {
             continue;
         }
 
-        // Only the first entry per appId (FIFO consumption order)
-        const PendingRestore& entry = it->first();
-        if (entry.zoneIds.isEmpty()) {
-            continue;
-        }
+        const QString screenId = resolveEffectiveScreenId(p.screenId);
 
-        QString screenId = resolveEffectiveScreenId(entry.screenId);
-
-        // Skip entries whose saved screen is currently in autotile mode. The
-        // effect cache is a snap-mode fast path — autotile owns its screens
-        // and will place the window itself when it opens. Populating the
-        // cache for autotile-owned screens would let the effect teleport the
-        // window to a stale snap rect before autotile's tile request lands.
+        // Skip screens currently in autotile mode — autotile owns placement there
+        // and would otherwise fight a stale snap teleport.
         if (m_layoutManager
-            && m_layoutManager->modeForScreen(screenId, entry.virtualDesktop, currentActivity)
+            && m_layoutManager->modeForScreen(screenId, p.virtualDesktop, currentActivity)
                 != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             continue;
         }
 
-        // Validate layout context — same checks as calculateRestoreFromSession.
-        // Without this, the cache could contain geometry for a zone that no longer
-        // exists in the current layout, causing a wrong-position teleport that the
-        // async resolveWindowRestore then rejects (orphaned window at zone position
-        // with no zone assignment).
-        if (!entry.layoutId.isEmpty() && m_layoutManager) {
-            PhosphorZones::Layout* currentLayout =
-                m_layoutManager->layoutForScreen(screenId, entry.virtualDesktop, currentActivity);
-            if (!currentLayout) {
-                currentLayout = m_layoutManager->activeLayout();
-            }
-            if (!currentLayout) {
-                continue;
-            }
-            QUuid savedUuid = QUuid::fromString(entry.layoutId);
-            if (!savedUuid.isNull() && currentLayout->id() != savedUuid) {
-                continue;
-            }
-        }
-
-        // Validate desktop context
-        if (entry.virtualDesktop > 0 && currentDesktop > 0 && entry.virtualDesktop != currentDesktop) {
+        // Validate desktop context.
+        if (p.virtualDesktop > 0 && currentDesktop > 0 && p.virtualDesktop != currentDesktop) {
             continue;
         }
 
-        QRect geo = resolveZoneGeometry(entry.zoneIds, screenId);
+        // Keep only the FIFO-head (lowest sequence) record per appId.
+        const auto seqIt = chosenSequence.constFind(p.appId);
+        if (seqIt != chosenSequence.constEnd() && seqIt.value() <= p.sequence) {
+            continue;
+        }
+
+        const QRect geo = resolveZoneGeometry(zoneIds, screenId);
         if (geo.isValid()) {
-            result.insert(it.key(), PendingRestoreTarget{geo, screenId});
+            result.insert(p.appId, PendingRestoreTarget{geo, screenId});
+            chosenSequence.insert(p.appId, p.sequence);
         }
     }
 

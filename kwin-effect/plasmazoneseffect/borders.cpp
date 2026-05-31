@@ -16,6 +16,34 @@
 
 namespace PlasmaZones {
 
+namespace {
+// Drop the server-side decoration while keeping the window filling its zone.
+// KWin holds the CLIENT size constant across a decoration change, so calling
+// setNoBorder(true) AFTER the zone geometry was applied shrinks the frame by the
+// title-bar height and leaves a gap at the bottom of the zone. Re-assert the
+// zone rect after dropping the decoration so the content grows to fill it.
+//
+// CRITICAL: use moveResizeGeometry(), NOT frameGeometry(). On Wayland the latter
+// lags behind moveResize() until the client acks the configure, so right after
+// applySnapGeometry's moveResize it still reports the window's PRE-snap frame —
+// capturing and re-applying that would clobber the snap (the window reverts to
+// its floating size/position; this broke snap restore entirely). moveResizeGeometry()
+// is the zone rect KWin is already moving toward, set synchronously by moveResize.
+// The setNoBorder→moveResize ordering mirrors autotile hiding the title bar
+// BEFORE its moveResize (autotilehandler/tiling.cpp).
+void hideTitleBarFillingZone(KWin::Window* kw)
+{
+    const KWin::RectF zoneTarget = kw->moveResizeGeometry();
+    kw->setNoBorder(true);
+    // Only re-assert a real target. A degenerate move-resize geometry would
+    // otherwise resize the window to nothing; in that case leave the decoration
+    // change to settle on its own.
+    if (zoneTarget.isValid() && !zoneTarget.isEmpty()) {
+        kw->moveResize(zoneTarget);
+    }
+}
+} // namespace
+
 void PlasmaZonesEffect::removeWindowBorder(const QString& windowId)
 {
     auto it = m_windowBorders.find(windowId);
@@ -240,7 +268,7 @@ void PlasmaZonesEffect::markWindowSnapped(const QString& windowId, const QString
         AutotileStateHelpers::addBorderlessOnScreen(m_snapBorder, screenId, windowId);
         if (!wasBorderless) {
             if (KWin::Window* kw = w->window()) {
-                kw->setNoBorder(true);
+                hideTitleBarFillingZone(kw);
             }
         }
     }
@@ -290,7 +318,7 @@ void PlasmaZonesEffect::updateSnapHideTitleBars(bool hide)
             if (!AutotileStateHelpers::isBorderlessWindow(m_snapBorder, p.first)) {
                 AutotileStateHelpers::addBorderlessOnScreen(m_snapBorder, p.second, p.first);
                 if (KWin::Window* kw = w->window()) {
-                    kw->setNoBorder(true);
+                    hideTitleBarFillingZone(kw);
                 }
             }
         }

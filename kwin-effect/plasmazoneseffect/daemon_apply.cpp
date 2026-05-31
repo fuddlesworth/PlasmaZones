@@ -195,7 +195,18 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Store pre-snap geometry before first snap (idempotent — skips if already stored).
     // The daemon handles windowSnapped/recordSnapIntent internally, but only the effect
     // knows the window's current frame geometry for pre-tile storage.
-    if (!zoneId.isEmpty()) {
+    //
+    // ONLY when the window is actually MOVING into the zone: a window already at
+    // the target geometry has no meaningful pre-snap rect to capture (its current
+    // frame IS the zone). Without this guard, a re-apply of the zone geometry for
+    // an already-snapped window — e.g. reapplyWindowAppearance() re-emitting each
+    // snapped window's geometry on daemon reconnect — would store the ZONE rect as
+    // the pre-tile geometry, clobbering the real pre-snap position the window
+    // floats back to (Meta+F then teleports it to the zone instead of its float
+    // spot). The idempotent daemon-side check normally protects this, but on a
+    // daemon restart the reapply can race ahead of the disk-persisted pre-tile
+    // load; the move-check makes it robust regardless of ordering.
+    if (!zoneId.isEmpty() && w->frameGeometry().toRect() != geometry) {
         // Capture frame geometry synchronously BEFORE applySnapGeometry moves the window.
         // ensurePreSnapGeometryStored is async (D-Bus hasPreTileGeometry check) — without
         // pre-capturing, the callback would read the post-move geometry instead of the
@@ -210,10 +221,13 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
                       zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
                                        : PhosphorAnimation::ProfilePaths::WindowSnapIn);
     // Track snapping's own border set (mirrors how autotile records at its
-    // tile-apply) using an equivalent discriminator to the batch path
-    // (slotApplyGeometriesBatch); here an empty zoneId stands in for that path's
-    // explicit floating check, so a window can never land in both the snap and
-    // autotile border sets:
+    // tile-apply) using a discriminator analogous to the batch path
+    // (slotApplyGeometriesBatch). The batch path adds an explicit isWindowFloating
+    // guard because it carries float-restore entries with non-empty geometry; this
+    // single-window path is only reached for explicit snap commits (which legitimately
+    // un-float) and float-restores (which arrive with an empty zoneId), so the empty
+    // zoneId alone is the correct float discriminator here. A window can never land in
+    // both the snap and autotile border sets:
     //   - empty zoneId         → float-restore: leave snapping's set
     //   - empty/autotile screen → autotile-managed or unresolved: leave the set
     //                             (AutotileHandler tracks autotile-screen windows)
@@ -630,6 +644,19 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         // stored, so applyGeometryForFloat sends nothing). Idempotent — a
         // no-op if the window wasn't snap-tracked.
         clearWindowSnapped(windowId);
+
+        // Invalidate any stale instant-restore entry for this app. The
+        // m_snapRestoreCache is a single-shot latency cache populated at
+        // daemon-ready from the daemon's pending restores. Once a window
+        // floats, its saved zone no longer applies: windowClosed() will NOT
+        // persist a PendingRestore for a floating window (it should reopen
+        // floating). But a stale cache entry would still "Instant snap restore"
+        // the reopened window into its old zone WITHOUT a daemon commit
+        // (resolveWindowRestore finds nothing), leaving a ghost — visually
+        // snapped but untracked. Dropping the entry makes the reopen take the
+        // authoritative daemon path so the window stays floating. Keyed by
+        // appId to survive the window's identity change across close/reopen.
+        m_snapRestoreCache.remove(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
 }
 

@@ -367,9 +367,24 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             // still function as a fallback.
             m_daemonReadyRestoresDone = true;
 
+            // Re-drive per-window chrome (snap border / hidden title bar,
+            // autotile border) for windows the daemon already considers managed.
             QDBusPendingReply<QStringList> reply = *w;
             QSet<QString> trackedAppIds;
             if (reply.isValid()) {
+                // On daemon loss the effect cleared its window-appearance state
+                // (restoreAllSnapBorderless / AutotileHandler::restoreAllBorderless)
+                // and restored every title bar; already-tracked windows are NOT in
+                // the untracked-restore set below, so their chrome would never come
+                // back without this. Daemon-driven and engine-common: the daemon
+                // re-emits each engine's placement geometry, which routes through the
+                // normal snap-commit / tile-request paths. Fired only on a VALID
+                // reply — that proves the daemon's placement state is populated. The
+                // windows are already in their zones, so nothing moves.
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("reapplyWindowAppearance"), {}, QStringLiteral("reapplyWindowAppearance"));
+
                 const QStringList trackedWindows = reply.value();
                 for (const QString& windowId : trackedWindows) {
                     QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);

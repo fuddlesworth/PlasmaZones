@@ -30,7 +30,10 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
+    include/PhosphorEngine/WindowPlacement.h
+    include/PhosphorEngine/WindowPlacementStore.h
     src/PlacementEngineBase.cpp
+    src/WindowPlacementStore.cpp
     src/GeometryUtils.cpp
     src/WindowRegistry.cpp
     include/PhosphorEngine/WindowRegistry.h

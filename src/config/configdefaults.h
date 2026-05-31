@@ -1001,11 +1001,11 @@ public:
     }
     static bool autotileHideTitleBars()
     {
-        return true;
+        return false;
     }
     static bool autotileShowBorder()
     {
-        return true;
+        return false;
     }
     static int autotileBorderWidth()
     {
@@ -1021,7 +1021,7 @@ public:
     }
     static int autotileBorderRadius()
     {
-        return 0;
+        return ::PhosphorZones::ZoneDefaults::BorderRadius;
     }
     static constexpr int autotileBorderRadiusMin()
     {
@@ -1044,51 +1044,53 @@ public:
         return true;
     }
 
-    // Snapping window appearance — defaults mirror autotile* (the snapped
-    // window's border / title-bar decoration; stored under Snapping.Appearance.*).
+    // Snapping window appearance — the snapped window's border / title-bar
+    // decoration (stored under Snapping.Appearance.*). Every default delegates to
+    // its autotile* counterpart so the two modes start from identical window
+    // appearance: a single edit to the autotile default moves both in lockstep.
     static bool snapWindowHideTitleBars()
     {
-        return true;
+        return autotileHideTitleBars();
     }
     static bool snapWindowShowBorder()
     {
-        return true;
+        return autotileShowBorder();
     }
     static int snapWindowBorderWidth()
     {
-        return ::PhosphorZones::ZoneDefaults::BorderWidth;
+        return autotileBorderWidth();
     }
     static constexpr int snapWindowBorderWidthMin()
     {
-        return 0;
+        return autotileBorderWidthMin();
     }
     static constexpr int snapWindowBorderWidthMax()
     {
-        return 10;
+        return autotileBorderWidthMax();
     }
     static int snapWindowBorderRadius()
     {
-        return 0;
+        return autotileBorderRadius();
     }
     static constexpr int snapWindowBorderRadiusMin()
     {
-        return 0;
+        return autotileBorderRadiusMin();
     }
     static constexpr int snapWindowBorderRadiusMax()
     {
-        return 20;
+        return autotileBorderRadiusMax();
     }
     static QColor snapWindowBorderColor()
     {
-        return ::PhosphorZones::ZoneDefaults::HighlightColor;
+        return autotileBorderColor();
     }
     static QColor snapWindowInactiveBorderColor()
     {
-        return ::PhosphorZones::ZoneDefaults::InactiveColor;
+        return autotileInactiveBorderColor();
     }
     static bool snapWindowUseSystemBorderColors()
     {
-        return true;
+        return autotileUseSystemBorderColors();
     }
     static int autotileStickyWindowHandling()
     {

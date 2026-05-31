@@ -3,17 +3,23 @@
 
 #pragma once
 
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <phosphorengine_export.h>
 
 #include <QHash>
 #include <QJsonObject>
+#include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QVariantMap>
+
+#include <functional>
+#include <optional>
 
 namespace PhosphorEngine {
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorEngine/WindowPlacementStore.h>
 #include <phosphorengine_export.h>
 
 #include <QHash>
@@ -120,6 +121,10 @@ public:
     virtual QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const = 0;
     virtual QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const = 0;
     virtual QString resolveEffectiveScreenId(const QString& screenId) const = 0;
+
+    /// The unified, engine-agnostic placement store. Engines reach it through the
+    /// tracking service to capture/restore the one WindowPlacement per window.
+    virtual WindowPlacementStore& placementStore() = 0;
     // Tech debt: takes concrete Layout* — should take an opaque layout identifier
     // once the layout interface is extracted. Acceptable for this extraction phase.
     virtual QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId,

@@ -3,6 +3,7 @@
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLatin1String>
 

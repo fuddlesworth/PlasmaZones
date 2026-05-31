@@ -1,0 +1,286 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorEngine/WindowPlacementStore.h>
+
+#include <QJsonArray>
+#include <QLatin1Char>
+
+namespace PhosphorEngine {
+
+void WindowPlacementStore::record(WindowPlacement placement)
+{
+    if (placement.windowId.isEmpty() || placement.appId.isEmpty() || !placement.isValid()) {
+        return;
+    }
+    placement.sequence = ++m_sequence;
+
+    // Replace an existing record for the EXACT windowId, wherever it lives. This
+    // is the mutual-exclusivity invariant: one window → one record. windowId is
+    // unique across buckets, so once we find (and handle) it we stop searching —
+    // critically WITHOUT running the loop's `++it` after a possible erase(it),
+    // which would increment an invalidated iterator (UB).
+    for (auto it = m_byApp.begin(); it != m_byApp.end();) {
+        QList<WindowPlacement>& bucket = it.value();
+        bool found = false;
+        for (int i = 0; i < bucket.size(); ++i) {
+            if (bucket.at(i).windowId == placement.windowId) {
+                if (it.key() == placement.appId) {
+                    bucket[i] = placement; // same bucket — update in place
+                    return;
+                }
+                // appId changed (mid-session rename): drop the stale entry and
+                // fall through to append under the new appId.
+                bucket.removeAt(i);
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            if (bucket.isEmpty()) {
+                m_byApp.erase(it); // iterator consumed — do not ++it below
+            }
+            break;
+        }
+        ++it;
+    }
+
+    QList<WindowPlacement>& bucket = m_byApp[placement.appId];
+    while (bucket.size() >= MaxPerApp) {
+        bucket.removeFirst();
+    }
+    bucket.append(placement);
+}
+
+std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowId, const QString& appId,
+                                                          const std::function<bool(const WindowPlacement&)>& accept)
+{
+    const auto matches = [&](const WindowPlacement& p) {
+        return !accept || accept(p);
+    };
+
+    // 1. Exact-windowId match first (daemon restart, uuid stable).
+    if (!windowId.isEmpty()) {
+        for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+            QList<WindowPlacement>& bucket = it.value();
+            for (int i = 0; i < bucket.size(); ++i) {
+                if (bucket.at(i).windowId == windowId && matches(bucket.at(i))) {
+                    WindowPlacement p = bucket.takeAt(i);
+                    if (bucket.isEmpty()) {
+                        m_byApp.erase(it);
+                    }
+                    return p;
+                }
+            }
+        }
+    }
+
+    // 2. appId FIFO (close/reopen, new uuid) — oldest accepted entry.
+    if (!appId.isEmpty()) {
+        auto it = m_byApp.find(appId);
+        if (it != m_byApp.end()) {
+            QList<WindowPlacement>& bucket = it.value();
+            for (int i = 0; i < bucket.size(); ++i) {
+                if (matches(bucket.at(i))) {
+                    WindowPlacement p = bucket.takeAt(i);
+                    if (bucket.isEmpty()) {
+                        m_byApp.erase(it);
+                    }
+                    return p;
+                }
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<WindowPlacement>
+WindowPlacementStore::peek(const QString& windowId, const QString& appId,
+                           const std::function<bool(const WindowPlacement&)>& accept) const
+{
+    const auto matches = [&](const WindowPlacement& p) {
+        return !accept || accept(p);
+    };
+
+    // 1. Exact-windowId match first (same window, daemon restart).
+    if (!windowId.isEmpty()) {
+        for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
+            for (const WindowPlacement& p : it.value()) {
+                if (p.windowId == windowId && matches(p)) {
+                    return p;
+                }
+            }
+        }
+    }
+
+    // 2. appId fallback (uuid changed across login): the NEWEST accepted record,
+    //    since the most recent placement is the right one to read live.
+    if (!appId.isEmpty()) {
+        const auto it = m_byApp.constFind(appId);
+        if (it != m_byApp.constEnd()) {
+            const WindowPlacement* best = nullptr;
+            for (const WindowPlacement& p : it.value()) {
+                if (matches(p) && (!best || p.sequence > best->sequence)) {
+                    best = &p;
+                }
+            }
+            if (best) {
+                return *best;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+bool WindowPlacementStore::contains(const QString& windowId, const QString& appId) const
+{
+    if (!appId.isEmpty()) {
+        const auto it = m_byApp.constFind(appId);
+        if (it != m_byApp.constEnd() && !it->isEmpty()) {
+            return true;
+        }
+    }
+    if (windowId.isEmpty()) {
+        return false;
+    }
+    for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
+        for (const WindowPlacement& p : it.value()) {
+            if (p.windowId == windowId) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void WindowPlacementStore::clear(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    for (auto it = m_byApp.begin(); it != m_byApp.end();) {
+        QList<WindowPlacement>& bucket = it.value();
+        for (int i = bucket.size() - 1; i >= 0; --i) {
+            if (bucket.at(i).windowId == windowId) {
+                bucket.removeAt(i);
+            }
+        }
+        if (bucket.isEmpty()) {
+            it = m_byApp.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+int WindowPlacementStore::removeIf(const std::function<bool(const WindowPlacement&)>& pred)
+{
+    if (!pred) {
+        return 0;
+    }
+    int removed = 0;
+    for (auto it = m_byApp.begin(); it != m_byApp.end();) {
+        QList<WindowPlacement>& bucket = it.value();
+        for (int i = bucket.size() - 1; i >= 0; --i) {
+            if (pred(bucket.at(i))) {
+                bucket.removeAt(i);
+                ++removed;
+            }
+        }
+        if (bucket.isEmpty()) {
+            it = m_byApp.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return removed;
+}
+
+void WindowPlacementStore::clearAll()
+{
+    m_byApp.clear();
+}
+
+QList<WindowPlacement> WindowPlacementStore::records() const
+{
+    QList<WindowPlacement> out;
+    for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
+        out.append(it.value());
+    }
+    return out;
+}
+
+QJsonObject WindowPlacementStore::serialize(const std::function<bool(const WindowPlacement&)>& keep) const
+{
+    QJsonObject root;
+    for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
+        // appIds never contain '|' (that delimits appId|uuid) — a key that does is
+        // a corrupt identity; skip rather than persist poison.
+        if (it.key().isEmpty() || it.key().contains(QLatin1Char('|'))) {
+            continue;
+        }
+        QJsonArray arr;
+        for (const WindowPlacement& p : it.value()) {
+            if (keep && !keep(p)) {
+                continue;
+            }
+            arr.append(p.toJson());
+        }
+        if (!arr.isEmpty()) {
+            root[it.key()] = arr;
+        }
+    }
+    return root;
+}
+
+void WindowPlacementStore::deserialize(const QJsonObject& obj)
+{
+    m_byApp.clear();
+    for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+        if (it.key().isEmpty() || it.key().contains(QLatin1Char('|'))) {
+            continue;
+        }
+        QList<WindowPlacement> bucket;
+        const QJsonArray arr = it->toArray();
+        for (const QJsonValue& v : arr) {
+            WindowPlacement p = WindowPlacement::fromJson(it.key(), v.toObject());
+            if (!p.isValid()) {
+                continue;
+            }
+            // Drop a structureless windowId (no `appId|uuid` separator) — a forged
+            // or truncated identity that no live window can exact-match. Do NOT
+            // require the windowId prefix to equal the bucket appId: the stored
+            // appId comes from the identity registry, which legitimately drifts
+            // from the windowId's embedded class (e.g. Electron/CEF apps re-broadcast
+            // their WM_CLASS mid-session). The appId-FIFO lookup keys on the bucket,
+            // not the prefix, so such a record is still restorable.
+            if (!p.windowId.contains(QLatin1Char('|'))) {
+                continue;
+            }
+            if (p.sequence > m_sequence) {
+                m_sequence = p.sequence;
+            }
+            bucket.append(p);
+        }
+        // Enforce the per-app cap by dropping the OLDEST (front) to keep the newest
+        // MaxPerApp — same direction as record()'s eviction (record() uses `>=`
+        // because it appends one afterward; here nothing is appended, so `>`).
+        while (bucket.size() > MaxPerApp) {
+            bucket.removeFirst();
+        }
+        if (!bucket.isEmpty()) {
+            m_byApp[it.key()] = bucket;
+        }
+    }
+}
+
+int WindowPlacementStore::size() const
+{
+    int n = 0;
+    for (auto it = m_byApp.constBegin(); it != m_byApp.constEnd(); ++it) {
+        n += it->size();
+    }
+    return n;
+}
+
+} // namespace PhosphorEngine

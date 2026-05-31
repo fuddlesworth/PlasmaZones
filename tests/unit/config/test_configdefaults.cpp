@@ -14,6 +14,8 @@
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/core/constants.h"
 
+#include <PhosphorZones/ZoneDefaults.h>
+
 using namespace PlasmaZones;
 
 class TestConfigDefaults : public QObject
@@ -191,29 +193,32 @@ private Q_SLOTS:
     }
 
     /**
-     * The snapped-window border width/radius/colors must mirror the autotile*
-     * border defaults (they share the same UX semantics); the colors are
-     * compared against the zone color accessors rather than hardcoded RGB so a
-     * palette change can't make the test stale. The hide-title-bars and
-     * show-border booleans are independent defaults (asserted against literals,
-     * not the autotile accessors). Pinning each value here catches silent drift.
+     * Snapped-window appearance defaults must be IDENTICAL to the autotile*
+     * window appearance defaults — the two modes start a window from the same
+     * chrome (every snapWindow* default delegates to its autotile* counterpart).
+     * Assert each pair is equal rather than pinning literals so a single change
+     * to an autotile default moves both in lockstep without staling this test.
+     * The concrete shipped values are pinned separately below.
      */
     void testSnapWindowAppearance_defaults()
     {
-        QCOMPARE(ConfigDefaults::snapWindowHideTitleBars(), true);
-        QCOMPARE(ConfigDefaults::snapWindowShowBorder(), true);
-        QCOMPARE(ConfigDefaults::snapWindowUseSystemBorderColors(), true);
-        // snapWindowBorderColor mirrors the highlight (active) zone color and
-        // snapWindowInactiveBorderColor mirrors the inactive zone color.
-        QCOMPARE(ConfigDefaults::snapWindowBorderColor(), ConfigDefaults::highlightColor());
-        QCOMPARE(ConfigDefaults::snapWindowInactiveBorderColor(), ConfigDefaults::inactiveColor());
-        // The numeric border defaults delegate to the same source the
-        // autotile* border defaults use (ZoneDefaults::BorderWidth and a
-        // literal 0 radius). Assert against the autotile accessors rather than
-        // hardcoded magic numbers so a shared-default change moves both in
-        // lockstep without staling the test.
+        QCOMPARE(ConfigDefaults::snapWindowHideTitleBars(), ConfigDefaults::autotileHideTitleBars());
+        QCOMPARE(ConfigDefaults::snapWindowShowBorder(), ConfigDefaults::autotileShowBorder());
+        QCOMPARE(ConfigDefaults::snapWindowUseSystemBorderColors(), ConfigDefaults::autotileUseSystemBorderColors());
+        QCOMPARE(ConfigDefaults::snapWindowBorderColor(), ConfigDefaults::autotileBorderColor());
+        QCOMPARE(ConfigDefaults::snapWindowInactiveBorderColor(), ConfigDefaults::autotileInactiveBorderColor());
         QCOMPARE(ConfigDefaults::snapWindowBorderWidth(), ConfigDefaults::autotileBorderWidth());
         QCOMPARE(ConfigDefaults::snapWindowBorderRadius(), ConfigDefaults::autotileBorderRadius());
+
+        // Pin the concrete shipped defaults (shared by both modes): title bars
+        // and the border are OFF, width 2, radius 8. Colors are compared against
+        // the zone color accessors so a palette change can't stale the test.
+        QCOMPARE(ConfigDefaults::snapWindowHideTitleBars(), false);
+        QCOMPARE(ConfigDefaults::snapWindowShowBorder(), false);
+        QCOMPARE(ConfigDefaults::snapWindowBorderColor(), ConfigDefaults::highlightColor());
+        QCOMPARE(ConfigDefaults::snapWindowInactiveBorderColor(), ConfigDefaults::inactiveColor());
+        QCOMPARE(ConfigDefaults::snapWindowBorderWidth(), ::PhosphorZones::ZoneDefaults::BorderWidth);
+        QCOMPARE(ConfigDefaults::snapWindowBorderRadius(), ::PhosphorZones::ZoneDefaults::BorderRadius);
     }
 };
 

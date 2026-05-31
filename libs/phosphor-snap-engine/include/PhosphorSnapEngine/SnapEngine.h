@@ -233,11 +233,9 @@ public:
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
      * @param sticky Whether the window is on all desktops
-     * @param kind Structural kind of the opening window. Compared against the
-     *             kind recorded on the matching PendingRestore entry; when
-     *             both sides are concrete and disagree, the restore is
-     *             refused and the entry is left intact for the next-opening
-     *             window of the right kind. Default `Unknown` is permissive.
+     * @param kind Structural kind of the opening window. Accepted for D-Bus
+     *             wire-compatibility but no longer gates restore — the matched
+     *             WindowPlacement record carries its own kind.
      * @return PhosphorEngine::SnapResult with geometry and zone info, or PhosphorEngine::SnapResult::noSnap()
      */
     PhosphorEngine::SnapResult
@@ -335,6 +333,19 @@ public:
     /// resnapToNewLayout().
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
 
+    /// Re-emit the snap geometry for every currently-snapped (non-floating)
+    /// window so the compositor re-applies its snap border / hidden title bar
+    /// after a bridge reconnect. Does not recompute zone assignments. See
+    /// IPlacementEngine::reapplyManagedWindowAppearance().
+    void reapplyManagedWindowAppearance() override;
+
+    /// Unified placement model — report this window's current snap state
+    /// (snapped / floated / free) for persistence, or nullopt if untracked.
+    std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
+
+    /// Unified placement model — re-apply a snap/float/free placement on reopen.
+    bool restorePlacement(const PhosphorEngine::WindowPlacement& placement, const QString& screenId) override;
+
     /// Snap every unmanaged window on the screen. The IPlacementEngine
     /// override takes PhosphorEngine::NavigationContext; coexists with the existing
     /// snapAllWindows(const QString&) method which it delegates to.
@@ -387,9 +398,6 @@ public:
                                                        bool isSticky) const;
     PhosphorEngine::SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId,
                                                         bool isSticky) const;
-    PhosphorEngine::SnapResult
-    calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky,
-                                PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / rotation calculations (moved from WTS)

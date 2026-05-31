@@ -9,6 +9,7 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorPlacement/IGeometryResolver.h>
 #include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorProtocol/WindowTypes.h>
@@ -120,6 +121,17 @@ public:
     void setSnapState(PhosphorSnapEngine::SnapState* state)
     {
         m_snapState = state;
+    }
+
+    /// The unified, engine-agnostic placement store (one WindowPlacement record
+    /// per window). Both engines reach it via this service; the WTA persists it.
+    PhosphorEngine::WindowPlacementStore& placementStore() override
+    {
+        return m_placementStore;
+    }
+    const PhosphorEngine::WindowPlacementStore& placementStore() const
+    {
+        return m_placementStore;
     }
 
     /**
@@ -493,40 +505,6 @@ public:
      */
     bool consumePendingAssignment(const QString& windowId) override;
 
-    /**
-     * @brief Drop pending-restore queues whose appId matches any exclusion
-     *        pattern.
-     *
-     * The snap engine already refuses to honor a pending restore for an
-     * excluded app at runtime. See resolveWindowRestore in
-     * phosphor-snap-engine/lifecycle.cpp. So the entries are functionally
-     * dead, yet they still live on disk in PendingRestoreQueues until the
-     * next save cycle. Their persistence generates one "pending snap:" log
-     * line per entry at every daemon startup, and bloats session state
-     * with values that can never be replayed. This method walks the queues
-     * and removes appIds that match any pattern via
-     * PhosphorIdentity::WindowId::appIdMatches. That is the same predicate
-     * the snap engine itself uses. When any removal happens it marks
-     * DirtyPendingRestores so the next debounced save persists the pruned
-     * set.
-     *
-     * Called from the daemon at startup (kicked eagerly at the same
-     * point the unified rule store's rules-changed subscription is
-     * wired) and from the daemon's finalizeStartup once
-     * AutotileEngine::loadState has populated the autotile queue. Live
-     * edits to the rule store re-trigger via the same subscription.
-     *
-     * @param exclusionPatterns AppId patterns extracted from the
-     *                          unified rule store's Exclude rules via
-     *                          PhosphorWindowRule::ExclusionRules. Empty
-     *                          patterns and an empty list are no-ops.
-     * @return number of appId entries fully removed. The queue may have
-     *         contained multiple PendingRestores for one appId. One
-     *         removal counts once. This mirrors the shape of
-     *         m_pendingRestoreQueues' QHash.
-     */
-    int pruneExcludedPendingRestores(const QStringList& exclusionPatterns);
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
     // ═══════════════════════════════════════════════════════════════════════════
@@ -700,11 +678,12 @@ public:
      * Used by the KWin effect to cache expected snap positions so that
      * windows can be teleported to their zone immediately on windowAdded,
      * eliminating the visible "flash" from KWin's session-restored position.
-     * Only the first entry per appId is returned (FIFO consumption order).
-     * Entries whose saved screen is currently in autotile mode are skipped:
-     * the effect cache is a snap-mode-only fast path, and autotile on the
-     * saved screen will own placement. Validates layout/desktop context so
-     * the cache never contains geometries the async resolver would reject.
+     * Sourced from the unified WindowPlacementStore's snapped records; for a
+     * multi-instance appId the lowest-sequence (FIFO-head) record is chosen
+     * deterministically. Entries whose saved screen is currently in autotile
+     * mode are skipped: the effect cache is a snap-mode-only fast path, and
+     * autotile on the saved screen will own placement. Validates desktop
+     * context so the cache never contains geometries the async resolver rejects.
      */
     QHash<QString, PendingRestoreTarget> pendingRestoreGeometries() const;
 
@@ -838,19 +817,31 @@ public:
     // immediately after populating in-memory state so the first real save
     // doesn't redundantly write back what we just loaded.
     // ═══════════════════════════════════════════════════════════════════════
+    // NOTE: several bits below (DirtyZoneAssignments, DirtyPendingRestores,
+    // DirtyPreTileGeometries, DirtyPreFloatZones, DirtyPreFloatScreens,
+    // DirtyAutotileOrders, DirtyAutotilePending) no longer have a dedicated save
+    // block — their legacy keys were collapsed into DirtyWindowPlacements. The
+    // runtime mutators that still OR them in are retained because the act of
+    // marking ANY bit schedules a save, and saveState()'s refreshOpenWindowPlacements()
+    // re-derives the affected per-window state into the placement record. They are
+    // therefore "schedule a save" triggers, not independent persisted fields; only
+    // DirtyActiveLayoutId / DirtyLastUsedZone / DirtyUserSnapped / DirtyWindowPlacements
+    // map to their own on-disk key.
     enum DirtyField : uint32_t {
         DirtyNone = 0,
         DirtyActiveLayoutId = 1u << 0,
-        DirtyZoneAssignments = 1u << 1, // zones + screens + desktops (always written together)
-        DirtyPendingRestores = 1u << 2,
-        DirtyPreTileGeometries = 1u << 3,
+        DirtyZoneAssignments = 1u << 1, // legacy save-trigger → DirtyWindowPlacements
+        DirtyPendingRestores = 1u << 2, // legacy save-trigger → DirtyWindowPlacements
+        DirtyPreTileGeometries = 1u << 3, // legacy save-trigger → DirtyWindowPlacements
         DirtyLastUsedZone = 1u << 4,
-        DirtyPreFloatZones = 1u << 5,
-        DirtyPreFloatScreens = 1u << 6,
+        DirtyPreFloatZones = 1u << 5, // legacy save-trigger → DirtyWindowPlacements
+        DirtyPreFloatScreens = 1u << 6, // legacy save-trigger → DirtyWindowPlacements
         DirtyUserSnapped = 1u << 7,
-        DirtyAutotileOrders = 1u << 8,
-        DirtyAutotilePending = 1u << 9,
-        DirtyAll = 0x3FFu,
+        DirtyAutotileOrders = 1u << 8, // legacy save-trigger → DirtyWindowPlacements
+        DirtyAutotilePending = 1u << 9, // legacy save-trigger → DirtyWindowPlacements
+        // bit 10 reserved (was DirtyFloatRestores, removed with the FloatRestoreQueues key)
+        DirtyWindowPlacements = 1u << 11, ///< unified WindowPlacementStore (sole per-window restore state)
+        DirtyAll = 0xFFFu, // covers bits 0-11 incl. the reserved bit 10
     };
     using DirtyMask = uint32_t;
 
@@ -979,6 +970,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorZones::IZoneDetector* m_zoneDetector;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
+    PhosphorEngine::WindowPlacementStore m_placementStore;
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
