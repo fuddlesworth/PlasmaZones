@@ -39,6 +39,8 @@ void BrightnessDeviceModel::setHost(BrightnessHost* host)
         m_rows = m_host->devices();
         for (auto* device : std::as_const(m_rows))
             connectDevice(device);
+        connect(m_host, &BrightnessHost::deviceAdded, this, &BrightnessDeviceModel::onDeviceAdded);
+        connect(m_host, &BrightnessHost::deviceRemoved, this, &BrightnessDeviceModel::onDeviceRemoved);
         // The host owns the devices; if it is destroyed while still set, m_host
         // and every m_rows entry would dangle. Drop them all.
         connect(m_host, &QObject::destroyed, this, [this]() {
@@ -100,6 +102,30 @@ QHash<int, QByteArray> BrightnessDeviceModel::roleNames() const
         {MaxBrightnessRole, "maxBrightness"},
         {PercentageRole, "percentage"},
     };
+}
+
+void BrightnessDeviceModel::onDeviceAdded(BrightnessDevice* device)
+{
+    if (!device || m_rows.contains(device))
+        return;
+    const int row = static_cast<int>(m_rows.size());
+    beginInsertRows({}, row, row);
+    m_rows.append(device);
+    connectDevice(device);
+    endInsertRows();
+    Q_EMIT countChanged();
+}
+
+void BrightnessDeviceModel::onDeviceRemoved(BrightnessDevice* device)
+{
+    const int row = static_cast<int>(m_rows.indexOf(device));
+    if (row < 0)
+        return;
+    disconnect(device, nullptr, this, nullptr);
+    beginRemoveRows({}, row, row);
+    m_rows.removeAt(row);
+    endRemoveRows();
+    Q_EMIT countChanged();
 }
 
 void BrightnessDeviceModel::onDeviceBrightnessChanged(BrightnessDevice* device)

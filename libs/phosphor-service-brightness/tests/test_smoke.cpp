@@ -201,6 +201,35 @@ private Q_SLOTS:
         bus.unregisterService(service);
     }
 
+    void testExternalDisplayDeviceRoutesAndUpdates()
+    {
+        // External-display (DDC/CI) device path, exercised without libddcutil /
+        // hardware: setBrightness routes the clamped value to the host-supplied
+        // setter (no optimistic update), and applyExternalValue pushes the
+        // worker's read-back, emitting on change.
+        int lastSet = -1;
+        BrightnessDevice device(QStringLiteral("LG Ultra HD"), 60, 100, [&lastSet](int value) {
+            lastSet = value;
+        });
+        QCOMPARE(device.kind(), BrightnessDevice::ExternalDisplay);
+        QCOMPARE(device.brightness(), 60);
+        QCOMPARE(device.maxBrightness(), 100);
+        QCOMPARE(device.percentage(), 0.6);
+
+        device.setBrightness(150); // clamps to maxBrightness
+        QCOMPARE(lastSet, 100);
+        QCOMPARE(device.brightness(), 60); // unchanged until the read-back lands
+
+        QSignalSpy spy(&device, &BrightnessDevice::brightnessChanged);
+        device.applyExternalValue(80);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(device.brightness(), 80);
+        QCOMPARE(device.percentage(), 0.8);
+
+        device.setPercentage(0.5); // 50 of 100, routed through the setter
+        QCOMPARE(lastSet, 50);
+    }
+
     void testModelMirrorsHostAndForwardsChanges()
     {
         QTemporaryDir root;

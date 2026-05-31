@@ -39,7 +39,7 @@ class BrightnessDevice;
 class PHOSPHORSERVICEBRIGHTNESS_EXPORT BrightnessHost : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(int deviceCount READ deviceCount CONSTANT)
+    Q_PROPERTY(int deviceCount READ deviceCount NOTIFY deviceCountChanged)
 
 public:
     /// Production wiring: the real sysfs root (`/sys`), the system bus, and the
@@ -58,6 +58,13 @@ public:
     [[nodiscard]] QList<BrightnessDevice*> devices() const;
     [[nodiscard]] int deviceCount() const;
     [[nodiscard]] Q_INVOKABLE PhosphorServiceBrightness::BrightnessDevice* deviceAt(int index) const;
+
+Q_SIGNALS:
+    /// Sysfs devices are added synchronously at construction; external displays
+    /// (DDC/CI) arrive asynchronously after the worker enumerates them.
+    void deviceAdded(PhosphorServiceBrightness::BrightnessDevice* device);
+    void deviceRemoved(PhosphorServiceBrightness::BrightnessDevice* device);
+    void deviceCountChanged();
 
 private:
     Q_DISABLE_COPY_MOVE(BrightnessHost)

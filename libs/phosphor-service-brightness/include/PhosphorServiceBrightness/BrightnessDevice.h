@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QString>
 
+#include <functional>
 #include <memory>
 
 class QDBusConnection;
@@ -45,8 +46,17 @@ public:
     };
     Q_ENUM(Kind)
 
+    /// Sysfs-backed device (Display / Keyboard): reads sysfs, writes via logind.
     BrightnessDevice(QDBusConnection connection, QString service, QString sessionPath, Kind kind, QString name,
                      QString sysfsDir, QObject* parent = nullptr);
+
+    /// External-display (DDC/CI) device. The range comes from the initial DDC
+    /// probe; `setter` is invoked with the requested raw value (BrightnessHost
+    /// routes it to its off-thread DDC worker), and read-backs are pushed via
+    /// applyExternalValue. Keeps libddcutil / threading out of this class.
+    BrightnessDevice(QString name, int brightness, int maxBrightness, std::function<void(int)> setter,
+                     QObject* parent = nullptr);
+
     ~BrightnessDevice() override;
 
     [[nodiscard]] QString name() const;
@@ -62,8 +72,14 @@ public:
     Q_INVOKABLE void setPercentage(qreal percentage);
 
     /// Re-read the sysfs attributes now. Called by the watcher on external
-    /// changes; also useful for an on-demand refresh.
+    /// changes; also useful for an on-demand refresh. (Sysfs devices only;
+    /// external-display values are pushed via applyExternalValue.)
     void refresh();
+
+    /// Push a DDC read-back value for an external-display device. BrightnessHost
+    /// calls this from its DDC worker's read signal; updates the cached
+    /// brightness, emitting brightnessChanged on a real change.
+    void applyExternalValue(int brightness);
 
     /// Logind session object path used for the SetBrightness write. Set by
     /// BrightnessHost once it resolves the session (the write is inert until

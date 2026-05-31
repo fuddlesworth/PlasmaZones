@@ -13,9 +13,10 @@
 namespace PhosphorServiceBrightness {
 
 /// List model over a BrightnessHost's devices. Bind `host`, then drive a
-/// Repeater/ListView off the rows. The host enumerates its devices once (no
-/// hotplug), so the model snapshots them at bind time; per-device `brightness`
-/// / `percentage` changes are forwarded as `dataChanged`.
+/// Repeater/ListView off the rows. Sysfs devices are present at bind time;
+/// external displays (DDC/CI) arrive asynchronously, so the model tracks the
+/// host's `deviceAdded` / `deviceRemoved` with insert/remove transactions, and
+/// forwards per-device `brightness` / `percentage` changes as `dataChanged`.
 class PHOSPHORSERVICEBRIGHTNESS_EXPORT BrightnessDeviceModel : public QAbstractListModel
 {
     Q_OBJECT
@@ -49,6 +50,8 @@ Q_SIGNALS:
     void countChanged();
 
 private Q_SLOTS:
+    void onDeviceAdded(PhosphorServiceBrightness::BrightnessDevice* device);
+    void onDeviceRemoved(PhosphorServiceBrightness::BrightnessDevice* device);
     void onDeviceBrightnessChanged(PhosphorServiceBrightness::BrightnessDevice* device);
 
 private:

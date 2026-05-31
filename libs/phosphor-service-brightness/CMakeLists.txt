@@ -110,6 +110,19 @@ set_target_properties(PhosphorServiceBrightness PROPERTIES
     UNITY_BUILD OFF
 )
 
+# External-monitor (DDC/CI) support is optional: only compiled when libddcutil
+# is present. The DdcController source + the gate macro + the link are all
+# guarded, so the library builds identically without ddcutil (just surfacing no
+# external displays). The header (src/ddccontroller.h) stays private.
+if(PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL)
+    target_sources(PhosphorServiceBrightness PRIVATE src/ddccontroller.cpp)
+    target_compile_definitions(PhosphorServiceBrightness PRIVATE PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL)
+    target_link_libraries(PhosphorServiceBrightness PRIVATE PkgConfig::Ddcutil)
+    message(STATUS "PhosphorServiceBrightness: DDC/CI external-display support enabled (libddcutil)")
+else()
+    message(STATUS "PhosphorServiceBrightness: libddcutil not found, external-display (DDC/CI) support disabled")
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════

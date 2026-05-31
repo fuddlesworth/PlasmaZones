@@ -13,7 +13,14 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDir>
+#include <QHash>
 #include <QLoggingCategory>
+
+#ifdef PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL
+#include "ddccontroller.h"
+
+#include <QThread>
+#endif
 
 Q_LOGGING_CATEGORY(lcBrightnessHost, "phosphor.service.brightness.host")
 
@@ -37,9 +44,36 @@ public:
 
     QList<BrightnessDevice*> devices;
 
+#ifdef PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL
+    QThread* ddcThread = nullptr;
+    DdcController* ddc = nullptr;
+    QHash<QString, BrightnessDevice*> ddcDevices;
+#endif
+
     explicit Private(QDBusConnection connection)
         : bus(std::move(connection))
     {
+    }
+
+    ~Private()
+    {
+#ifdef PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL
+        if (ddcThread) {
+            // Stop the worker; the controller is deleted via the thread's
+            // finished -> deleteLater. wait() guarantees the thread is gone
+            // before this Private (and the host's device children) tear down.
+            ddcThread->quit();
+            ddcThread->wait();
+            delete ddcThread;
+        }
+#endif
+    }
+
+    void appendDevice(BrightnessDevice* device)
+    {
+        devices.append(device);
+        Q_EMIT owner->deviceAdded(device);
+        Q_EMIT owner->deviceCountChanged();
     }
 
     void enumerate()
@@ -65,8 +99,43 @@ public:
 
     void addDevice(BrightnessDevice::Kind kind, const QString& name, const QString& sysfsDir)
     {
-        devices.append(new BrightnessDevice(bus, service, sessionPath, kind, name, sysfsDir, owner));
+        appendDevice(new BrightnessDevice(bus, service, sessionPath, kind, name, sysfsDir, owner));
     }
+
+#ifdef PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL
+    // Start the off-thread DDC/CI worker and enumerate external displays. They
+    // surface asynchronously via deviceAdded as the worker reports them.
+    void startDdc()
+    {
+        ddcThread = new QThread;
+        ddc = new DdcController; // no parent; owned by the worker thread
+        ddc->moveToThread(ddcThread);
+        QObject::connect(ddcThread, &QThread::finished, ddc, &QObject::deleteLater);
+
+        QObject::connect(ddc, &DdcController::displayFound, owner,
+                         [this](const QString& id, const QString& name, int brightness, int maxValue) {
+                             if (ddcDevices.contains(id))
+                                 return;
+                             DdcController* controller = ddc;
+                             auto* device = new BrightnessDevice(
+                                 name, brightness, maxValue,
+                                 [controller, id](int value) {
+                                     QMetaObject::invokeMethod(controller, "setBrightness", Qt::QueuedConnection,
+                                                               Q_ARG(QString, id), Q_ARG(int, value));
+                                 },
+                                 owner);
+                             ddcDevices.insert(id, device);
+                             appendDevice(device);
+                         });
+        QObject::connect(ddc, &DdcController::brightnessRead, owner, [this](const QString& id, int brightness) {
+            if (auto* device = ddcDevices.value(id))
+                device->applyExternalValue(brightness);
+        });
+
+        ddcThread->start();
+        QMetaObject::invokeMethod(ddc, "enumerate", Qt::QueuedConnection);
+    }
+#endif
 
     // True if any enumerated device writes through logind (the sysfs-backed
     // Display / Keyboard backlights). External-display (DDC/CI) devices write
@@ -115,6 +184,12 @@ BrightnessHost::BrightnessHost(QObject* parent)
     : BrightnessHost(QStringLiteral("/sys"), QDBusConnection::systemBus(), QLatin1String(kLogindService), QString(),
                      parent)
 {
+#ifdef PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL
+    // Production wiring only: probe real external displays. The injectable
+    // ctor (tests / consumers passing a fake sysfs root) does NOT auto-start
+    // DDC, so tests never touch real I2C / the tester's monitors.
+    d->startDdc();
+#endif
 }
 
 BrightnessHost::BrightnessHost(QString sysfsRoot, QDBusConnection connection, QString service, QString sessionPath,

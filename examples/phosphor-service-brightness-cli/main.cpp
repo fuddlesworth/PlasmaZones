@@ -36,7 +36,10 @@ QTextStream& err()
 }
 
 // Run the event loop for `ms` so the async logind session resolution and the
-// brightness watcher can settle.
+// off-thread DDC/CI enumeration can settle. DDC enumeration probes I2C buses
+// and is slow (seconds), so the settle window is generous.
+constexpr int kSettleMs = 3000;
+
 void pump(int ms)
 {
     QEventLoop loop;
@@ -46,7 +49,15 @@ void pump(int ms)
 
 QString kindName(BrightnessDevice::Kind kind)
 {
-    return kind == BrightnessDevice::Keyboard ? QStringLiteral("keyboard") : QStringLiteral("display");
+    switch (kind) {
+    case BrightnessDevice::Keyboard:
+        return QStringLiteral("keyboard");
+    case BrightnessDevice::ExternalDisplay:
+        return QStringLiteral("external");
+    case BrightnessDevice::Display:
+        break;
+    }
+    return QStringLiteral("display");
 }
 
 BrightnessDevice* findDevice(const BrightnessHost& host, const QString& name)
@@ -68,7 +79,7 @@ void printDevice(BrightnessDevice* device)
 int cmdList()
 {
     BrightnessHost host;
-    pump(500);
+    pump(kSettleMs);
     const auto devices = host.devices();
     if (devices.isEmpty())
         out() << "(no brightness devices)\n";
@@ -81,7 +92,7 @@ int cmdList()
 int cmdGet(const QString& name)
 {
     BrightnessHost host;
-    pump(500);
+    pump(kSettleMs);
     BrightnessDevice* device = findDevice(host, name);
     if (!device) {
         err() << "no brightness device named '" << name << "'\n";
@@ -96,7 +107,7 @@ int cmdGet(const QString& name)
 int cmdSet(const QString& name, const QString& value)
 {
     BrightnessHost host;
-    pump(1000); // let the logind session resolve before the write
+    pump(kSettleMs); // let logind + DDC enumeration settle before the write
     BrightnessDevice* device = findDevice(host, name);
     if (!device) {
         err() << "no brightness device named '" << name << "'\n";
@@ -123,7 +134,7 @@ int cmdSet(const QString& name, const QString& value)
         device->setBrightness(raw);
     }
 
-    pump(1000); // give logind + the watcher time to apply and read back
+    pump(2000); // give logind/DDC time to apply and read back
     printDevice(device);
     out().flush();
     return 0;

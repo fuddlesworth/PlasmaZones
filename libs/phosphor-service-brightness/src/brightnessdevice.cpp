@@ -47,7 +47,10 @@ public:
     int brightness = 0;
     int maxBrightness = 0;
 
+    // Sysfs (Display / Keyboard) only.
     QFileSystemWatcher watcher;
+    // External-display (DDC/CI) only: routes a raw set to the host's worker.
+    std::function<void(int)> externalSetter;
 
     explicit Private(QDBusConnection connection)
         : bus(std::move(connection))
@@ -108,6 +111,21 @@ BrightnessDevice::BrightnessDevice(QDBusConnection connection, QString service, 
     }
 }
 
+BrightnessDevice::BrightnessDevice(QString name, int brightness, int maxBrightness, std::function<void(int)> setter,
+                                   QObject* parent)
+    : QObject(parent)
+    , d(std::make_unique<Private>(QDBusConnection(QString())))
+{
+    d->owner = this;
+    d->kind = ExternalDisplay;
+    d->name = std::move(name);
+    d->brightness = brightness;
+    d->maxBrightness = maxBrightness;
+    d->externalSetter = std::move(setter);
+    // No sysfs watcher: DDC/CI has no change notification; the host pushes
+    // read-backs via applyExternalValue.
+}
+
 BrightnessDevice::~BrightnessDevice() = default;
 
 QString BrightnessDevice::name() const
@@ -136,6 +154,13 @@ void BrightnessDevice::setBrightness(int value)
     if (d->maxBrightness <= 0)
         return;
     const int clamped = std::clamp(value, 0, d->maxBrightness);
+    if (d->kind == ExternalDisplay) {
+        // DDC/CI write: hand the raw value to the host's off-thread worker. No
+        // optimistic update; the cached value moves on the worker's read-back.
+        if (d->externalSetter)
+            d->externalSetter(clamped);
+        return;
+    }
     if (d->sessionPath.isEmpty() || !d->bus.isConnected()) {
         qCDebug(lcBrightnessDevice) << "no logind session; brightness write inert for" << d->name;
         return;
@@ -157,7 +182,17 @@ void BrightnessDevice::setPercentage(qreal percentage)
 
 void BrightnessDevice::refresh()
 {
-    d->readBrightness();
+    if (d->kind != ExternalDisplay)
+        d->readBrightness();
+}
+
+void BrightnessDevice::applyExternalValue(int brightness)
+{
+    const int clamped = d->maxBrightness > 0 ? std::clamp(brightness, 0, d->maxBrightness) : brightness;
+    if (clamped == d->brightness)
+        return;
+    d->brightness = clamped;
+    Q_EMIT brightnessChanged();
 }
 
 void BrightnessDevice::setSessionPath(const QString& sessionPath)

@@ -418,7 +418,7 @@ Shipped on `feat/phase-2.4-brightness-service` (milestones 1-7), in the shape of
 
 **Out of scope for 2.4.** General `/sys/class/leds` control (indicators, RGB, triggers), ambient-light auto-brightness, and the brightness **OSD / slider UI** (Phase 3 / 4). (External-display DDC/CI brightness was initially deferred but is now folded in as the 2.4 extension below.)
 
-### 2.4 extension: external-display brightness (DDC/CI) *(in progress)*
+### 2.4 extension: external-display brightness (DDC/CI) *(shipped)*
 
 The sysfs + logind backend only covers internal panels and keyboard backlights; a desktop with external monitors has no `/sys/class/backlight` entries, so it surfaces zero devices. External-display brightness rides over **DDC/CI on I2C** (VCP feature `0x10`), which logind does not mediate. This extension adds that as a second source inside the same library, decided as follows:
 
@@ -431,7 +431,7 @@ The sysfs + logind backend only covers internal panels and keyboard backlights; 
 
 8. **CMake optional libddcutil detection + `ExternalDisplay` kind (S, ~1 day).** pkg-config `ddcutil` → `HAVE_DDCUTIL`; link when present. Add the `ExternalDisplay` enumerator to `BrightnessDevice::Kind`. The `BrightnessHost::needsLogindSession()` gate already excludes it (DDC writes don't use logind).
 9. **`DdcController` worker + DDC device path (M, ~3-4 days).** A `DdcController` QObject on a worker `QThread` wrapping libddcutil: enumerate displays, read / set VCP `0x10`, emit per-display results via queued signals. `BrightnessHost` (when `HAVE_DDCUTIL`) creates `ExternalDisplay` `BrightnessDevice`s from the enumeration; the device's `setBrightness` routes to the controller (not logind) and its cached value updates from the controller's read signal. All additive: the sysfs path is untouched.
-10. **Tests + CLI + docs (S-M, ~1-2 days).** A mock controller makes the `ExternalDisplay` device's read/route/update path deterministic on CI (no I2C); the live libddcutil path is `QSKIP`'d without `HAVE_DDCUTIL` / monitors. CLI `list` / `get` / `set` already work by name across all kinds. README + this section updated to shipped.
+10. **Tests + CLI + docs (S-M, ~1-2 days).** A deterministic unit test constructs an `ExternalDisplay` `BrightnessDevice` with a recording setter lambda and asserts the route/clamp/read-back/emit path with no I2C or libddcutil; the live `DdcController` + host wiring is hardware-bound, so it is validated manually through the CLI against real monitors rather than in CI. CLI `list` / `get` / `set` work by name across all kinds (`list` shows the `external` kind). README + this section updated to shipped.
 
 **Out of scope (still).** DDC/CI features beyond luminance (contrast, input source, power), and the brightness OSD/UI.
 
