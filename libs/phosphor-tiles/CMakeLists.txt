@@ -4,7 +4,8 @@
 # PhosphorTiles — auto-tiling algorithm primitives.
 #
 # Stateless tiling-algorithm layer: TilingAlgorithm interface, AlgorithmRegistry
-# singleton, SplitTree primitive (BSP node tree + serialization + rebuild),
+# (per-composition-root, no global singleton), SplitTree primitive (BSP node
+# tree + serialization + rebuild),
 # TilingState (per-screen mutable state consumed by previews), and the scripted-
 # algorithm runtime (Luau-backed LuauTileAlgorithm + ScriptedAlgorithmLoader,
 # evaluated through PhosphorScripting). Implements

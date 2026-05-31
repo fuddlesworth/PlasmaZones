@@ -8,6 +8,8 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <algorithm>
+#include <climits>
 #include <cmath>
 
 namespace PhosphorScripting {
@@ -16,6 +18,13 @@ namespace Marshal {
 void pushVariant(lua_State* L, const QVariant& v, int depth)
 {
     if (depth > MaxDepth || !v.isValid() || v.isNull()) {
+        lua_pushnil(L);
+        return;
+    }
+    // Reserve stack for this level's pushes (table + key + value). Luau only
+    // guarantees LUA_MINSTACK free slots on entry; a deep/wide nest marshalled
+    // outside a protected call would otherwise risk an uncatchable overflow.
+    if (!lua_checkstack(L, 4)) {
         lua_pushnil(L);
         return;
     }
@@ -117,7 +126,15 @@ QVariant toVariant(lua_State* L, int idx, int depth)
         if (depth > MaxDepth) {
             return QVariant();
         }
-        const int n = lua_objlen(L, abs);
+        // Reserve stack for the reads below (rawgeti / pushvalue / next). See
+        // the pushVariant note: this runs outside any protected call.
+        if (!lua_checkstack(L, 4)) {
+            return QVariant();
+        }
+        // lua_objlen returns size_t; clamp so a pathological border can't wrap
+        // the int loop bound (not script-reachable under the heap cap, but the
+        // narrowing is otherwise latent).
+        const int n = static_cast<int>(std::min<size_t>(lua_objlen(L, abs), static_cast<size_t>(INT_MAX)));
         if (n > 0) {
             QVariantList list;
             list.reserve(n);

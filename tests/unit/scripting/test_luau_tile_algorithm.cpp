@@ -51,6 +51,12 @@ private Q_SLOTS:
     void malformedZonesKeepCountAndStayInArea();
     void missingTileFunctionIsInvalid();
     void runtimeErrorYieldsEmptyZones();
+    void zoneCountCappedAtMaxZones();
+    void oversizedScriptRejected();
+    void enumAndBoolCustomParamsParsed();
+    void onWindowRemovedHookRuns();
+    void nonFiniteOverrideRejected();
+    void scriptedMetadataFlagsExposed();
 };
 
 void TestLuauTileAlgorithm::loadsAndExposesMetadata()
@@ -268,6 +274,180 @@ void TestLuauTileAlgorithm::runtimeErrorYieldsEmptyZones()
 
     // A runtime error inside tile() degrades to no zones, never a crash.
     QVERIFY(algo.calculateZones(p).isEmpty());
+}
+
+void TestLuauTileAlgorithm::zoneCountCappedAtMaxZones()
+{
+    using namespace PlasmaZones::TestHelpers;
+    using namespace AutotileDefaults;
+    // tile() returns far more entries than MaxZones; calculateZones must cap the
+    // result at MaxZones rather than returning an unbounded list.
+    const QString path = writeTempScript(m_tmp, QStringLiteral("toomany.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = { id = "toomany", name = "Too Many" },
+            tile = function(ctx)
+                local zones = {}
+                for i = 1, 300 do
+                    zones[i] = { x = 0, y = 0, width = 10, height = 10 }
+                end
+                return zones
+            end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+
+    TilingParams p;
+    p.windowCount = 300;
+    p.screenGeometry = QRect(0, 0, 1920, 1080);
+    p.outerGaps = EdgeGaps::uniform(0);
+
+    QCOMPARE(algo.calculateZones(p).size(), MaxZones);
+}
+
+void TestLuauTileAlgorithm::oversizedScriptRejected()
+{
+    using namespace PlasmaZones::TestHelpers;
+    // A script larger than the 1 MiB cap must be rejected (invalid), not loaded.
+    QString content = QStringLiteral("-- ");
+    content += QString(1100000, QLatin1Char('x')); // padding comment > 1 MiB
+    content +=
+        QStringLiteral("\nreturn { metadata = { id = \"big\", name = \"Big\" }, tile = function() return {} end }\n");
+    const QString path = writeTempScript(m_tmp, QStringLiteral("big.luau"), content);
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(!algo.isValid());
+}
+
+void TestLuauTileAlgorithm::enumAndBoolCustomParamsParsed()
+{
+    using namespace PlasmaZones::TestHelpers;
+    const QString path = writeTempScript(m_tmp, QStringLiteral("cptypes.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = {
+                id = "cptypes", name = "CP Types",
+                customParams = {
+                    { name = "mode", type = "enum", default = "a", options = { "a", "b", "c" } },
+                    { name = "flag", type = "bool", default = true },
+                },
+            },
+            tile = function(ctx) return {} end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    const QVariantList defs = algo.customParamDefList();
+    QCOMPARE(defs.size(), 2);
+
+    QVariantMap byName0 = defs.at(0).toMap();
+    QVariantMap byName1 = defs.at(1).toMap();
+    const QVariantMap& enumDef =
+        byName0.value(QStringLiteral("name")).toString() == QLatin1String("mode") ? byName0 : byName1;
+    const QVariantMap& boolDef = (&enumDef == &byName0) ? byName1 : byName0;
+
+    QCOMPARE(enumDef.value(QStringLiteral("type")).toString(), QStringLiteral("enum"));
+    QCOMPARE(enumDef.value(QStringLiteral("enumOptions")).toStringList(),
+             (QStringList{QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
+    QCOMPARE(boolDef.value(QStringLiteral("type")).toString(), QStringLiteral("bool"));
+    // bool params carry neither number bounds nor enum options.
+    QVERIFY(!boolDef.contains(QStringLiteral("minValue")));
+    QVERIFY(!boolDef.contains(QStringLiteral("enumOptions")));
+}
+
+void TestLuauTileAlgorithm::onWindowRemovedHookRuns()
+{
+    using namespace PlasmaZones::TestHelpers;
+    // Self-contained module: onWindowAdded increments, onWindowRemoved decrements
+    // a module-local counter; tile() returns `counter` plain rects (no pz needed).
+    const QString path = writeTempScript(m_tmp, QStringLiteral("hooks.luau"), QStringLiteral(R"LUA(
+        local n = 0
+        return {
+            metadata = { id = "hooks", name = "Hooks" },
+            onWindowAdded = function(state, index) n = n + 1 end,
+            onWindowRemoved = function(state, index) n = n - 1 end,
+            tile = function(ctx)
+                local zones = {}
+                for i = 1, math.max(1, n) do zones[i] = { x = 0, y = 0, width = 10, height = 10 } end
+                return zones
+            end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    QVERIFY(algo.supportsLifecycleHooks());
+
+    TilingState state(QStringLiteral("screen-1"));
+    state.addWindow(QStringLiteral("a"));
+    state.addWindow(QStringLiteral("b"));
+    state.addWindow(QStringLiteral("c"));
+
+    TilingParams p;
+    p.windowCount = 4;
+    p.screenGeometry = QRect(0, 0, 1920, 1080);
+    p.state = &state; // no split tree → tile() returns `counter` zones
+    p.innerGap = 8;
+
+    algo.onWindowAdded(&state, 0);
+    algo.onWindowAdded(&state, 1);
+    algo.onWindowAdded(&state, 2); // counter == 3
+    QCOMPARE(algo.calculateZones(p).size(), 3); // sanity: three adds persisted
+
+    algo.onWindowRemoved(&state, 2); // counter == 2 — proves the remove hook ran
+    QCOMPARE(algo.calculateZones(p).size(), 2);
+}
+
+void TestLuauTileAlgorithm::nonFiniteOverrideRejected()
+{
+    using namespace PlasmaZones::TestHelpers;
+    using namespace AutotileDefaults;
+    // A defaultSplitRatio override function returning a non-finite value (0/0)
+    // must not poison geometry: std::clamp(NaN) returns NaN, so the resolver
+    // falls back to a finite default.
+    const QString path = writeTempScript(m_tmp, QStringLiteral("nan.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = { id = "nan", name = "NaN" },
+            defaultSplitRatio = function() return 0 / 0 end,
+            tile = function(ctx) return {} end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    const qreal ratio = algo.defaultSplitRatio();
+    QVERIFY(std::isfinite(ratio));
+    QVERIFY(ratio >= MinSplitRatio && ratio <= MaxSplitRatio);
+}
+
+void TestLuauTileAlgorithm::scriptedMetadataFlagsExposed()
+{
+    using namespace PlasmaZones::TestHelpers;
+    const QString path = writeTempScript(m_tmp, QStringLiteral("flags.luau"), QStringLiteral(R"LUA(
+        return {
+            metadata = {
+                id = "flags", name = "Flags",
+                producesOverlappingZones = true,
+                centerLayout = true,
+                supportsMinSizes = false,
+                zoneNumberDisplay = "all",
+            },
+            tile = function(ctx) return {} end,
+        }
+    )LUA"));
+    QVERIFY(!path.isEmpty());
+
+    LuauTileAlgorithm algo(path, m_watchdog);
+    QVERIFY(algo.isValid());
+    QVERIFY(algo.producesOverlappingZones());
+    QVERIFY(algo.centerLayout());
+    QVERIFY(!algo.supportsMinSizes());
+    QCOMPARE(algo.zoneNumberDisplay(), QStringLiteral("all"));
 }
 
 QTEST_MAIN(TestLuauTileAlgorithm)

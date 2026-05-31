@@ -27,6 +27,7 @@ private Q_SLOTS:
     void sandboxHolds();
     void sandboxBlocksEscapeVectors();
     void runtimeErrorSurfaces();
+    void distinctNamedFunctionsMutateSharedUpvalue();
     void nonTableModuleRejected();
     void callMissingFunctionFails();
     void memoryCapEnforcedAndRecovers();
@@ -234,6 +235,30 @@ void TestLuauEngine::runtimeErrorSurfaces()
     const auto o2 = engine.callModule(h2, QStringLiteral("f"), {}, 200);
     QCOMPARE(o2.status, LuauEngine::CallStatus::Error);
     QVERIFY(!o2.message.isEmpty());
+}
+
+void TestLuauEngine::distinctNamedFunctionsMutateSharedUpvalue()
+{
+    LuauEngine engine;
+    QVERIFY(engine.init());
+    engine.sandbox();
+
+    const int h =
+        engine.loadModule(QStringLiteral("counter"),
+                          "local n = 0 return { add = function() n = n + 1 end, sub = function() n = n - 1 end, "
+                          "get = function() return n end }");
+    QVERIFY(h >= 0);
+    QVERIFY(engine.hasFunction(h, QStringLiteral("add")));
+    QVERIFY(engine.hasFunction(h, QStringLiteral("sub")));
+
+    engine.callModule(h, QStringLiteral("add"), {}, 200);
+    engine.callModule(h, QStringLiteral("add"), {}, 200);
+    engine.callModule(h, QStringLiteral("add"), {}, 200);
+    QCOMPARE(engine.callModule(h, QStringLiteral("get"), {}, 200).result.toInt(), 3);
+
+    engine.callModule(h, QStringLiteral("sub"), {}, 200);
+    QCOMPARE(engine.callModule(h, QStringLiteral("get"), {}, 200).result.toInt(), 2);
+    engine.releaseModule(h);
 }
 
 void TestLuauEngine::nonTableModuleRejected()

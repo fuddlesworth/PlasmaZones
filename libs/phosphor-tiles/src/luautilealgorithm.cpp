@@ -16,6 +16,7 @@
 #include <QFileInfo>
 
 #include <algorithm>
+#include <cmath>
 
 using PhosphorScripting::LuauEngine;
 
@@ -42,9 +43,11 @@ ScriptedHelpers::CustomParamDef parseCustomParam(const QVariantMap& m)
     if (hasMax) {
         d.maxValue = m.value(QStringLiteral("max")).toDouble();
     }
-    // A malformed script can declare an inverted range (min > max); a UI control
-    // built from min > max is undefined, so normalise it when both are given.
-    if (hasMin && hasMax && d.minValue > d.maxValue) {
+    // Guarantee a non-inverted range for the settings UI even when a script
+    // supplies only one bound (the other keeps its default): an inverted
+    // [min, max] makes a slider/spinbox undefined. (hasMin/hasMax are read above
+    // to apply the explicit values; the normalisation itself is unconditional.)
+    if (d.minValue > d.maxValue) {
         const double t = d.minValue;
         d.minValue = d.maxValue;
         d.maxValue = t;
@@ -105,9 +108,12 @@ QVector<QRect> variantToRects(const QVariant& v, const QString& scriptId)
     for (int i = 0; i < cap; ++i) {
         // Always emit one rect per entry to keep the zone count aligned with the
         // window count: skipping a malformed/empty entry here would leave a
-        // window unplaced. A non-map entry, missing coords, or NaN coerce to a
-        // zero/empty QRect, which clampZonesToArea() detects and replaces with
-        // the full area (with a warning) — the geometry safety net lives there.
+        // window unplaced. Degenerate entries either coerce to an empty QRect
+        // (a non-map entry, missing coords, or NaN → 0), which clampZonesToArea()
+        // replaces with the full area, or to a small in-area rect after QRect
+        // normalization — either way the entry survives as one valid in-area
+        // zone and the count stays aligned. The geometry safety net is in
+        // clampZonesToArea().
         const QVariantMap z = list.at(i).toMap();
         zones.append(QRect(z.value(QStringLiteral("x")).toInt(), z.value(QStringLiteral("y")).toInt(),
                            z.value(QStringLiteral("width")).toInt(), z.value(QStringLiteral("height")).toInt()));
@@ -278,7 +284,14 @@ void LuauTileAlgorithm::cacheMetadataAndOverrides()
         }
         const auto out = m_engine->callModule(m_module, fn, {}, ScriptWatchdogTimeoutMs);
         warnIfFailed(fn, out.status);
-        return out.status == LuauEngine::CallStatus::Ok ? out.result.toDouble() : fallback;
+        if (out.status != LuauEngine::CallStatus::Ok) {
+            return fallback;
+        }
+        // A non-finite result (e.g. a script returning 0/0) must not reach the
+        // clamp below: std::clamp(NaN, lo, hi) returns NaN, which would poison
+        // the geometry. Fall back to the finite default instead.
+        const qreal v = out.result.toDouble();
+        return std::isfinite(v) ? v : fallback;
     };
 
     m_cachedMasterZoneIndex = resolveInt(QStringLiteral("masterZoneIndex"), m_cachedMasterZoneIndex);

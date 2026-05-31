@@ -331,8 +331,7 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
         return false;
     }
 
-    const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
-        + ScriptedAlgorithmSubdir;
+    const QString destDir = userAlgorithmsDir();
     QDir dir(destDir);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -342,10 +341,18 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     // suffix rather than source.fileName(): a "foo.LUAU" source passes the
     // case-insensitive suffix check above but must land as "foo.luau" so the
     // loader's case-sensitive *.luau glob actually picks it up.
-    const QString destPath = destDir + QLatin1Char('/') + source.completeBaseName() + QStringLiteral(".luau");
+    const QString destPath = destDir + source.completeBaseName() + QStringLiteral(".luau");
+
+    // Importing a file that already IS the destination (same path, or a symlink
+    // resolving to it) must be a no-op success — otherwise the remove-then-copy
+    // below would delete the user's own algorithm and then fail the copy.
+    const QFileInfo destInfo(destPath);
+    if (destInfo.exists() && source.canonicalFilePath() == destInfo.canonicalFilePath()) {
+        return true;
+    }
 
     // Remove existing file so QFile::copy succeeds (it won't overwrite)
-    if (QFile::exists(destPath)) {
+    if (destInfo.exists()) {
         QFile::remove(destPath);
     }
 

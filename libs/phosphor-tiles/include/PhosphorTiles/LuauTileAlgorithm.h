@@ -25,7 +25,7 @@ class SplitNode;
 /**
  * @brief A tiling algorithm backed by a user-provided Luau script.
  *
- * Replaces the QJSEngine-based ScriptedAlgorithm. Each instance owns a
+ * Each instance owns a
  * PhosphorScripting::LuauEngine into which the `pz` standard library is injected
  * (and frozen) before the script module is loaded. The script is a Luau chunk
  * that returns a module table, conventionally via `pz.algorithm{...}`:

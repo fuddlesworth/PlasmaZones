@@ -27,10 +27,12 @@ the result back. It deliberately knows nothing about what the scripts compute.
   never touches the `lua_State` — so a late fire during teardown is safe. One
   watchdog can be shared across many engines.
 - **Heap cap.** A custom `lua_Alloc` tracks live/peak bytes and fails any
-  allocation that would cross the cap once the engine is sandboxed, turning a
-  runaway script into a catchable Luau out-of-memory error rather than a host
-  crash. Default 64 MiB, configurable per engine; enforcement starts at
-  `sandbox()` so trusted init/preludes can never be spuriously OOM-killed.
+  allocation that would cross the cap, turning a runaway script into a catchable
+  Luau out-of-memory error rather than a host crash. Default 64 MiB, configurable
+  per engine. Enforcement is armed only around the `lua_pcall` of sandboxed
+  script execution, so trusted init/preludes and host-side QVariant marshalling
+  (which touch the VM outside any protected call) can never be spuriously
+  OOM-killed into an uncatchable abort.
 
 ## Key types
 
