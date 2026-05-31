@@ -60,11 +60,13 @@ QString kindName(BrightnessDevice::Kind kind)
     return QStringLiteral("display");
 }
 
-BrightnessDevice* findDevice(const BrightnessHost& host, const QString& name)
+// Address devices by their stable unique id, not the display name: identical
+// external monitors share a model name, so a name lookup is ambiguous.
+BrightnessDevice* findById(const BrightnessHost& host, const QString& id)
 {
     const auto devices = host.devices();
     for (auto* device : devices) {
-        if (device->name() == name)
+        if (device->id() == id)
             return device;
     }
     return nullptr;
@@ -72,8 +74,9 @@ BrightnessDevice* findDevice(const BrightnessHost& host, const QString& name)
 
 void printDevice(BrightnessDevice* device)
 {
-    out() << device->name() << "\t(" << kindName(device->kind()) << ")\t" << device->brightness() << " / "
-          << device->maxBrightness() << "\t" << qRound(device->percentage() * 100.0) << "%\n";
+    out() << device->id() << "\t" << device->name() << "\t(" << kindName(device->kind()) << ")\t"
+          << device->brightness() << " / " << device->maxBrightness() << "\t" << qRound(device->percentage() * 100.0)
+          << "%\n";
 }
 
 int cmdList()
@@ -89,13 +92,13 @@ int cmdList()
     return 0;
 }
 
-int cmdGet(const QString& name)
+int cmdGet(const QString& id)
 {
     BrightnessHost host;
     pump(kSettleMs);
-    BrightnessDevice* device = findDevice(host, name);
+    BrightnessDevice* device = findById(host, id);
     if (!device) {
-        err() << "no brightness device named '" << name << "'\n";
+        err() << "no brightness device with id '" << id << "'\n";
         err().flush();
         return 1;
     }
@@ -104,13 +107,13 @@ int cmdGet(const QString& name)
     return 0;
 }
 
-int cmdSet(const QString& name, const QString& value)
+int cmdSet(const QString& id, const QString& value)
 {
     BrightnessHost host;
     pump(kSettleMs); // let logind + DDC enumeration settle before the write
-    BrightnessDevice* device = findDevice(host, name);
+    BrightnessDevice* device = findById(host, id);
     if (!device) {
-        err() << "no brightness device named '" << name << "'\n";
+        err() << "no brightness device with id '" << id << "'\n";
         err().flush();
         return 1;
     }
@@ -145,9 +148,9 @@ int cmdSet(const QString& name, const QString& value)
 int usage()
 {
     err() << "usage: phosphor-service-brightness-cli <command> [args]\n"
-          << "  list                  all brightness devices (display + keyboard)\n"
-          << "  get <name>            show one device's brightness\n"
-          << "  set <name> <value>    set raw brightness, or a percentage with a trailing %\n";
+          << "  list                all brightness devices (display + keyboard + external)\n"
+          << "  get <id>            show one device's brightness (id is the first list column)\n"
+          << "  set <id> <value>    set raw brightness, or a percentage with a trailing %\n";
     err().flush();
     return 64;
 }

@@ -118,7 +118,7 @@ public:
                                  return;
                              DdcController* controller = ddc;
                              auto* device = new BrightnessDevice(
-                                 name, brightness, maxValue,
+                                 id, name, brightness, maxValue,
                                  [controller, id](int value) {
                                      QMetaObject::invokeMethod(controller, "setBrightness", Qt::QueuedConnection,
                                                                Q_ARG(QString, id), Q_ARG(int, value));

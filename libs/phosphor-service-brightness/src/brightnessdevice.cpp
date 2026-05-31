@@ -41,6 +41,7 @@ public:
     QString service;
     QString sessionPath;
     Kind kind = Display;
+    QString id;
     QString name;
     QString sysfsDir;
 
@@ -94,6 +95,8 @@ BrightnessDevice::BrightnessDevice(QDBusConnection connection, QString service, 
     d->sessionPath = std::move(sessionPath);
     d->kind = kind;
     d->name = std::move(name);
+    // The sysfs device name is already unique, so it doubles as the id.
+    d->id = d->name;
     d->sysfsDir = std::move(sysfsDir);
 
     d->readMax();
@@ -111,13 +114,14 @@ BrightnessDevice::BrightnessDevice(QDBusConnection connection, QString service, 
     }
 }
 
-BrightnessDevice::BrightnessDevice(QString name, int brightness, int maxBrightness, std::function<void(int)> setter,
-                                   QObject* parent)
+BrightnessDevice::BrightnessDevice(QString id, QString name, int brightness, int maxBrightness,
+                                   std::function<void(int)> setter, QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Private>(QDBusConnection(QString())))
 {
     d->owner = this;
     d->kind = ExternalDisplay;
+    d->id = std::move(id);
     d->name = std::move(name);
     d->brightness = brightness;
     d->maxBrightness = maxBrightness;
@@ -128,6 +132,10 @@ BrightnessDevice::BrightnessDevice(QString name, int brightness, int maxBrightne
 
 BrightnessDevice::~BrightnessDevice() = default;
 
+QString BrightnessDevice::id() const
+{
+    return d->id;
+}
 QString BrightnessDevice::name() const
 {
     return d->name;

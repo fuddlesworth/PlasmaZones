@@ -27,9 +27,9 @@ host. This is compile-time optional (see Design notes).
 
 | Type                    | Role                                                                                              |
 |-------------------------|---------------------------------------------------------------------------------------------------|
-| `BrightnessDevice`      | One backlight or external monitor. `name`, `kind` (Display / Keyboard / ExternalDisplay), `brightness`, `maxBrightness`, `percentage`; `setBrightness()`, `setPercentage()` (sysfs devices write fire-and-forget via logind; external displays route to the DDC worker). |
+| `BrightnessDevice`      | One backlight or external monitor. `id` (stable unique key: sysfs name for backlights, I2C bus like `i2c-7` for external displays), `name` (human-readable, not unique: identical monitors share it), `kind` (Display / Keyboard / ExternalDisplay), `brightness`, `maxBrightness`, `percentage`; `setBrightness()`, `setPercentage()` (sysfs devices write fire-and-forget via logind; external displays route to the DDC worker). |
 | `BrightnessHost`        | Enumerates the brightness devices under a sysfs root, resolves the logind session for sysfs writes, and (when built with libddcutil) enumerates external monitors over DDC/CI. `deviceCount`, `deviceAt()`, `devices()`; `deviceAdded` / `deviceRemoved`. |
-| `BrightnessDeviceModel` | `QAbstractListModel` over the host's devices, tracking async `deviceAdded` / `deviceRemoved` (external displays arrive after enumeration). Roles: `device`, `name`, `kind`, `brightness`, `maxBrightness`, `percentage`. |
+| `BrightnessDeviceModel` | `QAbstractListModel` over the host's devices, tracking async `deviceAdded` / `deviceRemoved` (external displays arrive after enumeration). Roles: `device`, `id`, `name`, `kind`, `brightness`, `maxBrightness`, `percentage`. |
 
 ## Typical use
 

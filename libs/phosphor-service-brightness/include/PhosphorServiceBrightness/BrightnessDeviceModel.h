@@ -27,6 +27,7 @@ class PHOSPHORSERVICEBRIGHTNESS_EXPORT BrightnessDeviceModel : public QAbstractL
 public:
     enum Roles {
         DeviceRole = Qt::UserRole + 1,
+        IdRole,
         NameRole,
         KindRole,
         BrightnessRole,

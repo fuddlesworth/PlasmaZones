@@ -208,10 +208,13 @@ private Q_SLOTS:
         // setter (no optimistic update), and applyExternalValue pushes the
         // worker's read-back, emitting on change.
         int lastSet = -1;
-        BrightnessDevice device(QStringLiteral("LG Ultra HD"), 60, 100, [&lastSet](int value) {
+        BrightnessDevice device(QStringLiteral("i2c-7"), QStringLiteral("LG Ultra HD"), 60, 100, [&lastSet](int value) {
             lastSet = value;
         });
         QCOMPARE(device.kind(), BrightnessDevice::ExternalDisplay);
+        // The id is the stable unique key; the name is the (non-unique) model.
+        QCOMPARE(device.id(), QStringLiteral("i2c-7"));
+        QCOMPARE(device.name(), QStringLiteral("LG Ultra HD"));
         QCOMPARE(device.brightness(), 60);
         QCOMPARE(device.maxBrightness(), 100);
         QCOMPARE(device.percentage(), 0.6);
@@ -246,9 +249,10 @@ private Q_SLOTS:
 
         // Role names + data on the display row.
         const auto roles = model.roleNames();
+        QCOMPARE(roles.value(BrightnessDeviceModel::IdRole), QByteArrayLiteral("id"));
         QCOMPARE(roles.value(BrightnessDeviceModel::NameRole), QByteArrayLiteral("name"));
         QCOMPARE(roles.value(BrightnessDeviceModel::PercentageRole), QByteArrayLiteral("percentage"));
-        QCOMPARE(roles.size(), 6);
+        QCOMPARE(roles.size(), 7);
 
         int displayRow = -1;
         for (int i = 0; i < model.rowCount(); ++i) {
@@ -260,6 +264,8 @@ private Q_SLOTS:
         }
         QVERIFY(displayRow >= 0);
         const QModelIndex idx = model.index(displayRow);
+        // For sysfs devices the id is the sysfs name, so it doubles as the key.
+        QCOMPARE(model.data(idx, BrightnessDeviceModel::IdRole).toString(), QStringLiteral("intel_backlight"));
         QCOMPARE(model.data(idx, BrightnessDeviceModel::BrightnessRole).toInt(), 100);
         QCOMPARE(model.data(idx, BrightnessDeviceModel::MaxBrightnessRole).toInt(), 200);
         QCOMPARE(model.data(idx, BrightnessDeviceModel::PercentageRole).toDouble(), 0.5);

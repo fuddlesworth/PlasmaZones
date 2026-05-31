@@ -7,6 +7,8 @@
 
 #include <ddcutil_c_api.h>
 
+#include <cstdlib>
+
 Q_LOGGING_CATEGORY(lcDdcController, "phosphor.service.brightness.ddc")
 
 namespace {
@@ -30,11 +32,29 @@ bool DdcController::ensureInitialized()
 {
     if (m_initialized)
         return true;
-    // ddca_init must run before other ddca calls; do it on the worker thread.
-    // Quiet syslog, default config-file handling.
-    const DDCA_Status status = ddca_init(nullptr, DDCA_SYSLOG_NEVER, DDCA_INIT_OPTIONS_NONE);
+
+    // libddcutil writes startup chatter (e.g. the sleep-watch thread notice) to
+    // its per-thread stdout/stderr by default; as an embedded library we never
+    // want that on the consumer's streams. These redirections are thread-local
+    // (ddcutil docs), and this controller owns its worker thread, so they only
+    // silence our thread. The config file is still read (DDCA_INIT_OPTIONS_NONE),
+    // preserving any per-monitor quirks the user has configured.
+    ddca_set_fout(nullptr);
+    ddca_set_ferr(nullptr);
+
+    // ddca_init2 returns the init informational messages instead of printing
+    // them (unlike the deprecated ddca_init); route them to our debug log.
+    char** infoMsgs = nullptr;
+    const DDCA_Status status = ddca_init2(nullptr, DDCA_SYSLOG_NEVER, DDCA_INIT_OPTIONS_NONE, &infoMsgs);
+    if (infoMsgs) {
+        for (char** msg = infoMsgs; *msg; ++msg) {
+            qCDebug(lcDdcController) << "ddca_init:" << *msg;
+            free(*msg);
+        }
+        free(infoMsgs);
+    }
     if (status < 0) {
-        qCDebug(lcDdcController) << "ddca_init failed:" << status;
+        qCDebug(lcDdcController) << "ddca_init2 failed:" << status;
         return false;
     }
     m_initialized = true;
@@ -70,7 +90,11 @@ void DdcController::enumerate()
 
     for (int i = 0; i < list->ct; ++i) {
         const DDCA_Display_Info& info = list->info[i];
-        const QString id = QString::number(info.dispno);
+        // Address displays by their I2C bus (stable per physical port and what
+        // `ddcutil --bus N` uses), not the display number (reassigned across
+        // enumerations) or the model name (identical monitors collide).
+        const QString id = info.path.io_mode == DDCA_IO_I2C ? QStringLiteral("i2c-%1").arg(info.path.path.i2c_busno)
+                                                            : QStringLiteral("dispno-%1").arg(info.dispno);
         DDCA_Display_Handle handle = nullptr;
         if (ddca_open_display2(info.dref, /*wait=*/true, &handle) != 0 || !handle) {
             qCDebug(lcDdcController) << "open failed for display" << id;

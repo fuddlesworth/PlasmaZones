@@ -77,6 +77,8 @@ QVariant BrightnessDeviceModel::data(const QModelIndex& index, int role) const
     switch (role) {
     case DeviceRole:
         return QVariant::fromValue<QObject*>(device);
+    case IdRole:
+        return device->id();
     case NameRole:
         return device->name();
     case KindRole:
@@ -96,6 +98,7 @@ QHash<int, QByteArray> BrightnessDeviceModel::roleNames() const
 {
     return {
         {DeviceRole, "device"},
+        {IdRole, "id"},
         {NameRole, "name"},
         {KindRole, "kind"},
         {BrightnessRole, "brightness"},
