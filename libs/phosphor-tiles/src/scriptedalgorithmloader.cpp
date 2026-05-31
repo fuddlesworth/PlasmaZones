@@ -117,7 +117,7 @@ ScriptedAlgorithmLoader::~ScriptedAlgorithmLoader()
     // which uses deleteLater() — so algorithm dtors run on a later
     // event-loop pass, AFTER this loader's members destruct. The
     // shared_ptr<watchdog> design lets the deferred-delete algorithm
-    // keep the watchdog alive until ~ScriptedAlgorithm finally fires;
+    // keep the watchdog alive until ~LuauTileAlgorithm finally fires;
     // the thread joins when the last shared_ptr (loader's or a
     // deferred algo's) is released. No member-ordering trick required.
     if (!QCoreApplication::instance() || !m_registry)
@@ -413,7 +413,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // we delete it explicitly below. Pass the watchdog as shared_ptr
         // so the algorithm keeps it alive across deferred-delete teardown
         // (registry uses deleteLater(); algorithm dtor can run after the
-        // loader is gone — see ScriptedAlgorithm.h for the contract).
+        // loader is gone — see LuauTileAlgorithm.h for the contract).
         auto* algo = new LuauTileAlgorithm(fullPath, m_watchdog, nullptr);
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;

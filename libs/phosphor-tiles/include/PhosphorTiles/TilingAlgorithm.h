@@ -84,7 +84,7 @@ public:
      *
      * Thread safety: setter must be called from the main thread; the resolver
      * itself is invoked only from algorithm methods that already run on the
-     * main thread (buildJsState / onWindowAdded / etc.).
+     * main thread (buildStateMap / onWindowAdded / etc.).
      */
     void setAppIdResolver(std::function<QString(const QString&)> resolver)
     {
