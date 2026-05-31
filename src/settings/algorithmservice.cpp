@@ -48,63 +48,80 @@ QString userAlgorithmsDir()
 
 QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
 {
-    QString path = dir + baseName + QStringLiteral(".js");
+    QString path = dir + baseName + QStringLiteral(".luau");
     if (!QFile::exists(path))
         return path;
     for (int i = 1; i <= 999; ++i) {
-        path = dir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".js");
+        path = dir + baseName + QStringLiteral("-") + QString::number(i) + QStringLiteral(".luau");
         if (!QFile::exists(path))
             return path;
     }
     return QString();
 }
 
-/// Index of the first line AFTER the `};` that closes `var metadata = { ... }`
-/// at file scope in @p lines. Returns -1 if no such declaration exists.
-///
-/// Uses a brace-depth tracker so nested objects / arrays inside metadata
-/// (e.g. `customParams: [{ ... }]`) don't end the block early. String
-/// literals are skipped so stray `{`/`}` inside description values don't
-/// throw the count off. One trailing blank line after the metadata close
-/// is consumed (the convention in every bundled template).
-///
-/// Contract with template authors: `var metadata = ` must appear at file
-/// scope (not inside a function), and its value must be a single object
-/// literal terminated by `};` — which all 25 bundled templates satisfy.
-/// Block and line comments INSIDE the metadata value are not supported
-/// (no bundled template uses them); adding that would require a full
-/// tokeniser.
-int findMetadataBodyStart(const QStringList& lines)
+/// Build a `metadata = { ... }` Luau table block (4-space indented, as it
+/// appears inside `pz.algorithm{ ... }`). Ends with `},` so it drops in ahead
+/// of the tile field.
+QString buildLuauMetadata(const QString& name, const QString& id, bool overlapping, bool masterCount, bool splitRatio,
+                          bool memory)
 {
-    int depth = 0;
-    bool insideMetadata = false;
-    for (int i = 0; i < lines.size(); ++i) {
-        const QString& line = lines[i];
-        if (!insideMetadata) {
-            if (!line.trimmed().startsWith(QLatin1String("var metadata"))) {
-                continue;
-            }
-            insideMetadata = true;
+    const auto b = [](bool v) {
+        return v ? QStringLiteral("true") : QStringLiteral("false");
+    };
+    QString m;
+    m += QStringLiteral("    metadata = {\n");
+    m += QStringLiteral("        name = \"") + name + QStringLiteral("\",\n");
+    m += QStringLiteral("        id = \"") + id + QStringLiteral("\",\n");
+    m += QStringLiteral("        description = \"Custom tiling algorithm\",\n");
+    m += QStringLiteral("        producesOverlappingZones = ") + b(overlapping) + QStringLiteral(",\n");
+    m += QStringLiteral("        supportsMasterCount = ") + b(masterCount) + QStringLiteral(",\n");
+    m += QStringLiteral("        supportsSplitRatio = ") + b(splitRatio) + QStringLiteral(",\n");
+    m += QStringLiteral("        defaultSplitRatio = 0.5,\n");
+    m += QStringLiteral("        defaultMaxWindows = 6,\n");
+    m += QStringLiteral("        minimumWindows = 1,\n");
+    m += QStringLiteral("        zoneNumberDisplay = \"all\",\n");
+    m += QStringLiteral("        supportsMemory = ") + b(memory) + QStringLiteral(",\n");
+    m += QStringLiteral("    },");
+    return m;
+}
+
+/// Splice a bundled `.luau` template: replace its leading SPDX comment block
+/// with @p newHeader and its `metadata = { ... }` table with @p metadataBlock,
+/// preserving the module locals + tile function. Returns empty on a template
+/// whose `metadata = {` block can't be located (caller falls back to a blank
+/// scaffold). Brace-depth scan; matches the bundled templates' formatting (no
+/// `{`/`}` inside metadata strings).
+QString spliceLuauTemplate(const QString& templateContent, const QString& newHeader, const QString& metadataBlock)
+{
+    const QStringList lines = templateContent.split(QLatin1Char('\n'));
+
+    // Skip the template's own leading comment / blank lines (its SPDX header).
+    int firstCode = 0;
+    while (firstCode < lines.size()) {
+        const QString t = lines[firstCode].trimmed();
+        if (t.isEmpty() || t.startsWith(QLatin1String("--"))) {
+            ++firstCode;
+            continue;
         }
-        bool inString = false;
-        QChar stringQuote;
-        for (int j = 0; j < line.size(); ++j) {
-            const QChar c = line[j];
-            if (inString) {
-                if (c == QLatin1Char('\\') && j + 1 < line.size()) {
-                    ++j; // skip the escaped character
-                    continue;
-                }
-                if (c == stringQuote) {
-                    inString = false;
-                }
-                continue;
-            }
-            if (c == QLatin1Char('"') || c == QLatin1Char('\'')) {
-                inString = true;
-                stringQuote = c;
-                continue;
-            }
+        break;
+    }
+
+    static const QRegularExpression metaRe(QStringLiteral(R"(^\s*metadata\s*=\s*\{)"));
+    int metaStart = -1;
+    for (int i = firstCode; i < lines.size(); ++i) {
+        if (metaRe.match(lines[i]).hasMatch()) {
+            metaStart = i;
+            break;
+        }
+    }
+    if (metaStart < 0) {
+        return QString();
+    }
+
+    int depth = 0;
+    int metaEnd = -1;
+    for (int i = metaStart; i < lines.size(); ++i) {
+        for (const QChar c : lines[i]) {
             if (c == QLatin1Char('{')) {
                 ++depth;
             } else if (c == QLatin1Char('}')) {
@@ -112,14 +129,26 @@ int findMetadataBodyStart(const QStringList& lines)
             }
         }
         if (depth == 0) {
-            int bodyStart = i + 1;
-            if (bodyStart < lines.size() && lines[bodyStart].trimmed().isEmpty()) {
-                ++bodyStart;
-            }
-            return bodyStart;
+            metaEnd = i;
+            break;
         }
     }
-    return -1;
+    if (metaEnd < 0) {
+        return QString();
+    }
+
+    QString out = newHeader + QStringLiteral("\n");
+    for (int i = firstCode; i < metaStart; ++i) {
+        out += lines[i] + QLatin1Char('\n');
+    }
+    out += metadataBlock + QLatin1Char('\n');
+    for (int i = metaEnd + 1; i < lines.size(); ++i) {
+        out += lines[i];
+        if (i < lines.size() - 1) {
+            out += QLatin1Char('\n');
+        }
+    }
+    return out;
 }
 
 } // anonymous namespace
@@ -369,7 +398,7 @@ void AlgorithmService::openAlgorithm(const QString& algorithmId)
     // before the registry has picked up the file via QFileSystemWatcher).
     // Uses algorithmId as filename — valid for createNewAlgorithm (returns filename)
     // and duplicateAlgorithm (watches for the filename-based ID).
-    const QString userPath = userAlgorithmsDir() + algorithmId + QStringLiteral(".js");
+    const QString userPath = userAlgorithmsDir() + algorithmId + QStringLiteral(".luau");
     if (QFile::exists(userPath)) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(userPath));
         return;
@@ -473,7 +502,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     if (!dir.exists())
         dir.mkpath(QStringLiteral("."));
 
-    // Generate unique filename: algorithmId-copy.js, algorithmId-copy-2.js, etc.
+    // Generate unique filename: algorithmId-copy.luau, algorithmId-copy-2.luau, etc.
     const QString baseName = algorithmId + QStringLiteral("-copy");
     const QString destPath = findUniqueAlgorithmPath(destDir, baseName);
     if (destPath.isEmpty()) {
@@ -511,7 +540,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     newName.replace(QLatin1Char('\r'), QLatin1Char(' '));
     newName.replace(QLatin1Char('\\'), QLatin1Char('/'));
     newName.replace(QLatin1Char('"'), QLatin1Char('\''));
-    // Replace the first name: and id: values inside the var metadata object.
+    // Replace the first name and id values inside the metadata table.
     // Anchored to line start to avoid matching inside algorithm body strings.
     // Capture leading whitespace so the replacement preserves indentation.
     //
@@ -520,9 +549,10 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     // property-shorthand metadata is unsupported — if either match fails, the
     // duplicate would otherwise be written with the original name + id,
     // colliding with the source in the registry. Bail out instead.
-    static const QRegularExpression nameRe(QStringLiteral(R"(^(\s*)name:\s*"[^"]*")"),
+    static const QRegularExpression nameRe(QStringLiteral(R"(^(\s*)name\s*=\s*"[^"]*")"),
                                            QRegularExpression::MultilineOption);
-    static const QRegularExpression idRe(QStringLiteral(R"(^(\s*)id:\s*"[^"]*")"), QRegularExpression::MultilineOption);
+    static const QRegularExpression idRe(QStringLiteral(R"(^(\s*)id\s*=\s*"[^"]*")"),
+                                         QRegularExpression::MultilineOption);
     const QRegularExpressionMatch nameMatch = nameRe.match(content);
     const QRegularExpressionMatch idMatch = idRe.match(content);
     if (!nameMatch.hasMatch() || !idMatch.hasMatch()) {
@@ -531,11 +561,11 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
                                        << ")";
         Q_EMIT algorithmOperationFailed(
             PzI18n::tr("Could not duplicate algorithm — its metadata format is not recognised. "
-                       "Expected `name: \"...\"` and `id: \"...\"` on separate lines."));
+                       "Expected `name = \"...\"` and `id = \"...\"` on separate lines."));
         return false;
     }
     content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(),
-                    nameMatch.captured(1) + QStringLiteral("name: \"") + newName + QStringLiteral("\""));
+                    nameMatch.captured(1) + QStringLiteral("name = \"") + newName + QStringLiteral("\""));
     // idMatch captured positions may have shifted after the name replacement;
     // re-run id match over the updated content so we don't corrupt bytes.
     const QRegularExpressionMatch idMatch2 = idRe.match(content);
@@ -545,7 +575,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
         return false;
     }
     content.replace(idMatch2.capturedStart(), idMatch2.capturedLength(),
-                    idMatch2.captured(1) + QStringLiteral("id: \"") + newFilename + QStringLiteral("\""));
+                    idMatch2.captured(1) + QStringLiteral("id = \"") + newFilename + QStringLiteral("\""));
 
     QFile destFile(destPath);
     if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -665,47 +695,30 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     // Update filename to match the final path (may have -N suffix)
     filename = QFileInfo(destPath).completeBaseName();
 
-    // Build JS content
+    // Build Luau content
     QString content;
 
     // SPDX header — use current year and a placeholder author
     const int currentYear = QDate::currentDate().year();
-    content +=
-        QStringLiteral("// SPDX-FileCopyrightText: ") + QString::number(currentYear) + QStringLiteral(" <your name>\n");
-    content += QStringLiteral("// SPDX-License-Identifier: GPL-3.0-or-later\n\n");
+    const QString header = QStringLiteral("-- SPDX-FileCopyrightText: ") + QString::number(currentYear)
+        + QStringLiteral(" <your name>\n") + QStringLiteral("-- SPDX-License-Identifier: GPL-3.0-or-later\n");
 
-    // Metadata object — strip newlines/quotes to prevent injection
+    // Metadata table — strip newlines/quotes to prevent injection
     QString sanitizedDisplayName = name.trimmed();
     sanitizedDisplayName.replace(QLatin1Char('\n'), QLatin1Char(' '));
     sanitizedDisplayName.replace(QLatin1Char('\r'), QLatin1Char(' '));
     sanitizedDisplayName.replace(QLatin1Char('\\'), QLatin1Char('/'));
     sanitizedDisplayName.replace(QLatin1Char('"'), QLatin1Char('\''));
-    content += QStringLiteral("var metadata = {\n");
-    content += QStringLiteral("    name: \"") + sanitizedDisplayName + QStringLiteral("\",\n");
-    content += QStringLiteral("    id: \"") + filename + QStringLiteral("\",\n");
-    content += QStringLiteral("    description: \"Custom tiling algorithm\",\n");
-    content += QStringLiteral("    producesOverlappingZones: ")
-        + (producesOverlappingZones ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral(",\n");
-    content += QStringLiteral("    supportsMasterCount: ")
-        + (supportsMasterCount ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral(",\n");
-    content += QStringLiteral("    supportsSplitRatio: ")
-        + (supportsSplitRatio ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral(",\n");
-    content += QStringLiteral("    defaultSplitRatio: 0.5,\n");
-    content += QStringLiteral("    defaultMaxWindows: 6,\n");
-    content += QStringLiteral("    minimumWindows: 1,\n");
-    content += QStringLiteral("    zoneNumberDisplay: \"all\",\n");
-    content += QStringLiteral("    supportsMemory: ")
-        + (supportsMemory ? QStringLiteral("true") : QStringLiteral("false")) + QStringLiteral("\n");
-    content += QStringLiteral("};\n\n");
+    const QString metadataBlock = buildLuauMetadata(sanitizedDisplayName, filename, producesOverlappingZones,
+                                                    supportsMasterCount, supportsSplitRatio, supportsMemory);
 
-    // Try to read base template body from system algorithm dirs. We emit
-    // our own SPDX + metadata above, then splice in the template's body
-    // (everything AFTER its own `var metadata = { ... };` block).
+    // Start from a base template by reusing its module locals + tile and
+    // swapping in our own SPDX header + metadata table.
     bool foundTemplate = false;
     if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
         const QString templateFile =
             QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                   ScriptedAlgorithmSubdir + QLatin1Char('/') + baseTemplate + QStringLiteral(".js"));
+                                   ScriptedAlgorithmSubdir + QLatin1Char('/') + baseTemplate + QStringLiteral(".luau"));
 
         if (!templateFile.isEmpty()) {
             QFile file(templateFile);
@@ -713,18 +726,13 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
                 const QString templateContent = QString::fromUtf8(file.readAll());
                 file.close();
 
-                const QStringList lines = templateContent.split(QLatin1Char('\n'));
-                const int bodyStart = findMetadataBodyStart(lines);
-                if (bodyStart < 0) {
+                const QString spliced = spliceLuauTemplate(templateContent, header, metadataBlock);
+                if (spliced.isEmpty()) {
                     qCWarning(PlasmaZones::lcCore)
                         << "createNewAlgorithm: template" << baseTemplate
-                        << "has no recognisable `var metadata = { ... };` block — using fallback body.";
-                } else if (bodyStart < lines.size()) {
-                    for (int i = bodyStart; i < lines.size(); ++i) {
-                        content += lines[i];
-                        if (i < lines.size() - 1)
-                            content += QLatin1Char('\n');
-                    }
+                        << "has no recognisable `metadata = { ... }` block — using fallback body.";
+                } else {
+                    content = spliced;
                     foundTemplate = true;
                 }
             } else {
@@ -734,17 +742,12 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     }
 
     if (!foundTemplate) {
-        content += QStringLiteral(
-            "/**\n"
-            " * Custom tiling algorithm.\n"
-            " *\n"
-            " * @param {Object} params - Tiling parameters\n"
-            " * @returns {Array<{x: number, y: number, width: number, height: number}>}\n"
-            " */\n"
-            "function calculateZones(params) {\n"
-            "    if (params.windowCount <= 0) return [];\n"
-            "    return fillArea(params.area, params.windowCount);\n"
-            "}\n");
+        // Blank scaffold: a self-contained pz.algorithm module the user edits.
+        content = header + QStringLiteral("\nlocal pz = pz\n\nreturn pz.algorithm {\n") + metadataBlock
+            + QStringLiteral("\n\n") + QStringLiteral("    tile = function(ctx)\n")
+            + QStringLiteral("        if ctx.windowCount <= 0 then return {} end\n")
+            + QStringLiteral("        return pz.fillArea(ctx.area, ctx.windowCount)\n")
+            + QStringLiteral("    end,\n}\n");
     }
 
     // Write the file
