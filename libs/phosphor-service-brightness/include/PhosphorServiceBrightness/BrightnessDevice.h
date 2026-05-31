@@ -39,8 +39,9 @@ class PHOSPHORSERVICEBRIGHTNESS_EXPORT BrightnessDevice : public QObject
 
 public:
     enum Kind {
-        Display,
-        Keyboard,
+        Display, ///< Internal panel backlight (/sys/class/backlight).
+        Keyboard, ///< Keyboard backlight (*::kbd_backlight under /sys/class/leds).
+        ExternalDisplay, ///< External monitor over DDC/CI (libddcutil); writes do not use logind.
     };
     Q_ENUM(Kind)
 

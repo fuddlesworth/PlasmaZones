@@ -416,7 +416,24 @@ Shipped on `feat/phase-2.4-brightness-service` (milestones 1-7), in the shape of
 | U3 | Percentage curve: linear or perceptual? | **Resolved: linear on the public surface** (`percentage = brightness / maxBrightness`). A perceptual / log curve, if wanted, is a UI-layer helper, matching the 2.1 cubic-volume resolution. |
 | U4 | Surface `actual_brightness` separately from `brightness`? | **Resolved: expose `brightness` as the primary value; surface `actual_brightness` only if it diverges** (most drivers keep them equal). Keep the model role list small. |
 
-**Out of scope for 2.4.** General `/sys/class/leds` control (indicators, RGB, triggers), per-output / per-monitor DDC/CI brightness (external displays over I2C — a separate backend), ambient-light auto-brightness, and the brightness **OSD / slider UI** (Phase 3 / 4).
+**Out of scope for 2.4.** General `/sys/class/leds` control (indicators, RGB, triggers), ambient-light auto-brightness, and the brightness **OSD / slider UI** (Phase 3 / 4). (External-display DDC/CI brightness was initially deferred but is now folded in as the 2.4 extension below.)
+
+### 2.4 extension: external-display brightness (DDC/CI) *(in progress)*
+
+The sysfs + logind backend only covers internal panels and keyboard backlights; a desktop with external monitors has no `/sys/class/backlight` entries, so it surfaces zero devices. External-display brightness rides over **DDC/CI on I2C** (VCP feature `0x10`), which logind does not mediate. This extension adds that as a second source inside the same library, decided as follows:
+
+- **libddcutil backend.** Link `libddcutil` (ddcutil 2.x) rather than reimplementing DDC/CI on raw `/dev/i2c-*` or shelling out to the `ddcutil` binary: it owns the I2C transactions, the DDC/CI framing + checksums, retries, timing, and per-monitor quirks. The dependency is **compile-time optional** (detected via pkg-config `ddcutil`); without it the library still builds and simply surfaces no external displays.
+- **One unified surface.** External monitors are surfaced as `BrightnessDevice` with a new `kind` of `ExternalDisplay`, alongside the sysfs Display / Keyboard devices, so the shell still binds a single `BrightnessHost` + `BrightnessDeviceModel`.
+- **Off-thread I2C.** libddcutil calls are blocking and slow (~50ms+ per op, with retries), so enumeration and get/set run on a dedicated worker `QThread`; results post back to the GUI thread via queued signals. External-display brightness has no change notification, so it is refreshed by polling rather than a watcher.
+- **Permissions.** DDC/CI writes need `/dev/i2c-*` access (the `i2c` group + a udev rule); unlike the logind path there is no privileged mediator. The lib degrades to read-only (or no displays) when I2C is inaccessible.
+
+**Milestones**
+
+8. **CMake optional libddcutil detection + `ExternalDisplay` kind (S, ~1 day).** pkg-config `ddcutil` → `HAVE_DDCUTIL`; link when present. Add the `ExternalDisplay` enumerator to `BrightnessDevice::Kind`. The `BrightnessHost::needsLogindSession()` gate already excludes it (DDC writes don't use logind).
+9. **`DdcController` worker + DDC device path (M, ~3-4 days).** A `DdcController` QObject on a worker `QThread` wrapping libddcutil: enumerate displays, read / set VCP `0x10`, emit per-display results via queued signals. `BrightnessHost` (when `HAVE_DDCUTIL`) creates `ExternalDisplay` `BrightnessDevice`s from the enumeration; the device's `setBrightness` routes to the controller (not logind) and its cached value updates from the controller's read signal. All additive: the sysfs path is untouched.
+10. **Tests + CLI + docs (S-M, ~1-2 days).** A mock controller makes the `ExternalDisplay` device's read/route/update path deterministic on CI (no I2C); the live libddcutil path is `QSKIP`'d without `HAVE_DDCUTIL` / monitors. CLI `list` / `get` / `set` already work by name across all kinds. README + this section updated to shipped.
+
+**Out of scope (still).** DDC/CI features beyond luminance (contrast, input source, power), and the brightness OSD/UI.
 
 ---
 

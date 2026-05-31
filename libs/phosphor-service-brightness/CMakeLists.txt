@@ -32,6 +32,18 @@ include(GenerateExportHeader)
 # only the .cpp uses PhosphorDBus::Client for the logind SetBrightness call.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus)
 
+# Optional: libddcutil for external-monitor brightness over DDC/CI. When absent,
+# the library still builds and simply surfaces no external displays (the sysfs
+# backlight + keyboard path is unaffected). Detected via pkg-config.
+find_package(PkgConfig QUIET)
+set(PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL OFF)
+if(PkgConfig_FOUND)
+    pkg_check_modules(Ddcutil IMPORTED_TARGET ddcutil)
+    if(Ddcutil_FOUND)
+        set(PHOSPHORSERVICEBRIGHTNESS_HAVE_DDCUTIL ON)
+    endif()
+endif()
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ═══════════════════════════════════════════════════════════════════════════════
