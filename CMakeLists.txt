@@ -693,6 +693,15 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-bluetooth-cli)
 endif()
 
+# phosphor-service-brightness-cli. Acceptance harness for the
+# phosphor-service-brightness library (Phase 2.4). Headless driver exercising
+# the read path (list, get) and write path (set) against real sysfs backlights
+# and logind. Gated like the lib: when BUILD_PHOSPHOR_SHELL is OFF the lib
+# target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-brightness-cli)
+endif()
+
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third
 # (CPU-meter) widget builds as a separate .so + manifest.json and

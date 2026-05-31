@@ -1,0 +1,167 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// phosphor-service-brightness-cli: headless acceptance harness + worked
+// example for the phosphor-service-brightness library. Drives the lib
+// directly against real sysfs backlights and logind, the same pattern as the
+// sibling phosphor-service-* CLIs.
+//
+// The read path (enumeration) is synchronous sysfs; the logind session is
+// resolved asynchronously, so each command pumps the event loop briefly before
+// a write and again afterwards so the watcher can pick up the new value.
+
+#include <PhosphorServiceBrightness/BrightnessDevice.h>
+#include <PhosphorServiceBrightness/BrightnessHost.h>
+
+#include <QCoreApplication>
+#include <QEventLoop>
+#include <QString>
+#include <QStringList>
+#include <QTextStream>
+#include <QTimer>
+
+using namespace PhosphorServiceBrightness;
+
+namespace {
+
+QTextStream& out()
+{
+    static QTextStream s(stdout);
+    return s;
+}
+QTextStream& err()
+{
+    static QTextStream s(stderr);
+    return s;
+}
+
+// Run the event loop for `ms` so the async logind session resolution and the
+// brightness watcher can settle.
+void pump(int ms)
+{
+    QEventLoop loop;
+    QTimer::singleShot(ms, &loop, &QEventLoop::quit);
+    loop.exec();
+}
+
+QString kindName(BrightnessDevice::Kind kind)
+{
+    return kind == BrightnessDevice::Keyboard ? QStringLiteral("keyboard") : QStringLiteral("display");
+}
+
+BrightnessDevice* findDevice(const BrightnessHost& host, const QString& name)
+{
+    const auto devices = host.devices();
+    for (auto* device : devices) {
+        if (device->name() == name)
+            return device;
+    }
+    return nullptr;
+}
+
+void printDevice(BrightnessDevice* device)
+{
+    out() << device->name() << "\t(" << kindName(device->kind()) << ")\t" << device->brightness() << " / "
+          << device->maxBrightness() << "\t" << qRound(device->percentage() * 100.0) << "%\n";
+}
+
+int cmdList()
+{
+    BrightnessHost host;
+    pump(500);
+    const auto devices = host.devices();
+    if (devices.isEmpty())
+        out() << "(no brightness devices)\n";
+    for (auto* device : devices)
+        printDevice(device);
+    out().flush();
+    return 0;
+}
+
+int cmdGet(const QString& name)
+{
+    BrightnessHost host;
+    pump(500);
+    BrightnessDevice* device = findDevice(host, name);
+    if (!device) {
+        err() << "no brightness device named '" << name << "'\n";
+        err().flush();
+        return 1;
+    }
+    printDevice(device);
+    out().flush();
+    return 0;
+}
+
+int cmdSet(const QString& name, const QString& value)
+{
+    BrightnessHost host;
+    pump(1000); // let the logind session resolve before the write
+    BrightnessDevice* device = findDevice(host, name);
+    if (!device) {
+        err() << "no brightness device named '" << name << "'\n";
+        err().flush();
+        return 1;
+    }
+
+    bool ok = false;
+    if (value.endsWith(QLatin1Char('%'))) {
+        const double pct = value.left(value.size() - 1).toDouble(&ok);
+        if (!ok || pct < 0.0 || pct > 100.0) {
+            err() << "percentage must be 0-100\n";
+            err().flush();
+            return 64;
+        }
+        device->setPercentage(pct / 100.0);
+    } else {
+        const int raw = value.toInt(&ok);
+        if (!ok || raw < 0) {
+            err() << "brightness must be a non-negative integer (or N%)\n";
+            err().flush();
+            return 64;
+        }
+        device->setBrightness(raw);
+    }
+
+    pump(1000); // give logind + the watcher time to apply and read back
+    printDevice(device);
+    out().flush();
+    return 0;
+}
+
+// Exit codes follow the sysexits convention the sibling CLIs use: 0 ok,
+// 64 usage error, 1 runtime failure.
+int usage()
+{
+    err() << "usage: phosphor-service-brightness-cli <command> [args]\n"
+          << "  list                  all brightness devices (display + keyboard)\n"
+          << "  get <name>            show one device's brightness\n"
+          << "  set <name> <value>    set raw brightness, or a percentage with a trailing %\n";
+    err().flush();
+    return 64;
+}
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+    QCoreApplication app(argc, argv);
+    const QStringList args = app.arguments();
+    if (args.size() < 2)
+        return usage();
+
+    const QString command = args.at(1);
+    if (command == QLatin1String("list"))
+        return cmdList();
+    if (command == QLatin1String("get")) {
+        if (args.size() < 3)
+            return usage();
+        return cmdGet(args.at(2));
+    }
+    if (command == QLatin1String("set")) {
+        if (args.size() < 4)
+            return usage();
+        return cmdSet(args.at(2), args.at(3));
+    }
+    return usage();
+}
