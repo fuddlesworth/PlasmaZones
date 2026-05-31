@@ -68,21 +68,40 @@ public:
         devices.append(new BrightnessDevice(bus, service, sessionPath, kind, name, sysfsDir, owner));
     }
 
-    // Resolve the caller's logind session object path, then propagate it to the
-    // already-enumerated devices so their SetBrightness writes can target it.
+    // True if any enumerated device writes through logind (the sysfs-backed
+    // Display / Keyboard backlights). External-display (DDC/CI) devices write
+    // over I2C and need no session, so a box with only those — or none — never
+    // resolves a session.
+    [[nodiscard]] bool needsLogindSession() const
+    {
+        for (auto* device : devices) {
+            if (device->kind() == BrightnessDevice::Display || device->kind() == BrightnessDevice::Keyboard)
+                return true;
+        }
+        return false;
+    }
+
+    // Resolve the user's active *graphical* session object path, then propagate
+    // it to the devices so their SetBrightness writes can target it. The
+    // graphical session is named by XDG_SESSION_ID; resolving by it (rather
+    // than the caller's PID) is correct even when this process runs outside the
+    // session's cgroup (a --user service, a multiplexer, ssh). GetSessionByPID
+    // is the fallback when XDG_SESSION_ID is unset.
     void resolveSession()
     {
         PhosphorDBus::Client manager(bus, service, QLatin1String(kManagerPath), &lcBrightnessHost());
-        auto* watcher = new QDBusPendingCallWatcher(
-            manager.asyncCall(QLatin1String(kManagerIface), QStringLiteral("GetSessionByPID"),
-                              {static_cast<uint>(QCoreApplication::applicationPid())}),
-            owner);
+        const QString xdgSessionId = qEnvironmentVariable("XDG_SESSION_ID");
+        const QDBusPendingCall pending = xdgSessionId.isEmpty()
+            ? manager.asyncCall(QLatin1String(kManagerIface), QStringLiteral("GetSessionByPID"),
+                                {static_cast<uint>(QCoreApplication::applicationPid())})
+            : manager.asyncCall(QLatin1String(kManagerIface), QStringLiteral("GetSession"), {xdgSessionId});
+        auto* watcher = new QDBusPendingCallWatcher(pending, owner);
         QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner, [this](QDBusPendingCallWatcher* call) {
             call->deleteLater();
             const QDBusPendingReply<QDBusObjectPath> reply = *call;
             if (reply.isError()) {
                 qCDebug(lcBrightnessHost)
-                    << "GetSessionByPID failed; brightness writes inert:" << reply.error().message();
+                    << "logind session lookup failed; brightness writes inert:" << reply.error().message();
                 return;
             }
             sessionPath = reply.value().path();
@@ -110,9 +129,11 @@ BrightnessHost::BrightnessHost(QString sysfsRoot, QDBusConnection connection, QS
 
     d->enumerate();
 
-    // Resolve the session only when one wasn't supplied; an injected path is
-    // used as-is (tests, or a consumer that already knows its session).
-    if (d->sessionPath.isEmpty() && d->bus.isConnected())
+    // Resolve the session only when one wasn't supplied AND a device actually
+    // needs it (a sysfs backlight). An injected path is used as-is (tests, or a
+    // consumer that already knows its session); a box with no logind-written
+    // devices issues no lookup.
+    if (d->sessionPath.isEmpty() && d->bus.isConnected() && d->needsLogindSession())
         d->resolveSession();
 }
 
