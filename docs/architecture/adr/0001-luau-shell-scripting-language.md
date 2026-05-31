@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| **Status** | Accepted (direction); implementation staged |
+| **Status** | Implemented (2026-05-30) — tiling increment shipped; see follow-ups |
 | **Date** | 2026-05-30 |
 | **Deciders** | Nathan (fuddlesworth) |
 | **Scope** | Shell/compositor scripting surface; first increment = scripted autotiling |
@@ -167,17 +167,24 @@ separate future work for actual shell UI surfaces.
 
 ## Open follow-ups
 
-Resolved since first draft: host-library placement/license (→ new LGPL
-`libs/phosphor-scripting`) and vendoring strategy (→ static git submodule by
-default, opt-in system Luau) are now decided and captured in the
-[implementation plan](../luau-migration-impl-plan.md).
+**Done.** The full tiling increment shipped — impl-plan phases 0–7 are complete:
+`libs/phosphor-scripting` (LGPL Luau host: engine, `luaL_sandbox`, interrupt
+watchdog, compile/load, QVariant marshalling), `libs/phosphor-tiles`
+(`LuauTileAlgorithm` + the `pz` stdlib), all 25 algorithms ported under a
+golden-snapshot parity test, the loader swapped to `.luau`, the QJSEngine path
+deleted, and a CI **`luau-analyze` gate** over the bundled algorithms + `pz`
+stdlib. Vendoring landed as **in-tree Luau source** (`extern/luau`, pinned
+0.723) rather than a submodule, so source tarballs are self-contained for every
+distro; `-DPLASMAZONES_SYSTEM_LUAU=ON` still links a system Luau. An end-user
+[Luau algorithm authoring guide](../luau-algorithm-authoring.md) ships with it.
 
-Remaining:
+**Remaining:**
 
-- **Memory-cap allocator** and the **`luau-analyze` import gate** — designed in
-  the spike, not yet built (impl plan phases 1 and 7).
+- **Memory-cap allocator** — designed in the spike, still not built; the engine
+  uses `luaL_newstate`'s default allocator. The interrupt watchdog bounds *time*
+  but not heap. Build before opening the algorithm surface to untrusted authors.
 - **QML↔Luau bridge design** — deferred to the eventual shell-UI surfaces; not
-  needed for the tiling migration.
+  needed for the tiling migration, which is pure C++↔Luau.
 
 A competitor-architecture study (how Hyprland / Noctalia-Quickshell structure
 their Lua and QML↔Lua boundaries) was considered and **deliberately skipped** —

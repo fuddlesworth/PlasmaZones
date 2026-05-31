@@ -5,7 +5,7 @@
 
 | | |
 |---|---|
-| **Status** | Planned — not started |
+| **Status** | Implemented — phases 0–7 complete (2026-05-30) |
 | **Date** | 2026-05-30 |
 | **Decision** | [ADR-0001](adr/0001-luau-shell-scripting-language.md) |
 | **Spike** | `spike/luau-autotile-embed` (`spikes/luau-autotile-embed/`, all green) |
@@ -105,7 +105,7 @@ The `metadata` table replaces *both* the JS `metadata` object and the
 
 | Phase | Work | Exit criteria |
 |---|---|---|
-| **0. Foundations** | Submodule Luau @ 0.723; confirm name/ext/format (done); CMake `SYSTEM_LUAU` option | submodule builds in-tree |
+| **0. Foundations** | Vendor Luau @ 0.723; confirm name/ext/format (done); CMake `SYSTEM_LUAU` option | builds in-tree |
 | **1. phosphor-scripting** | New LGPL lib (mirror other phosphor-* CMake/export/install); `LuauEngine`, `LuauWatchdog`, compile/load, marshalling core; unit tests (sandbox/escape probe, watchdog kill, compile-error surfacing, round-trip marshalling) | spike `LuauHost` is now a tested library |
 | **2. Tiling binding** | `pz` Luau stdlib (Rect + 25 helpers) + `.d.lua`; `LuauTileAlgorithm` implementing the *full* contract incl. tree/hooks/custom-params; port `test_scripted_algorithm.cpp` | one algorithm runs end-to-end with hooks + memory |
 | **3. Port 25 algorithms** | `data/algorithms/*.js` → `*.luau` using `pz`; **golden parity tests** (JS vs Luau zone output across counts/gaps/ratios/min-sizes); `luau-analyze` clean | byte-identical zones for all 25 |
@@ -113,6 +113,16 @@ The `metadata` table replaces *both* the JS `metadata` object and the
 | **5. Host integration** | Verify daemon (`AutotileEngine`), editor (preview + custom-params UI), settings (algo list) untouched via `TilingAlgorithm`; update editor "new algorithm" template to `.luau` + ship `.d.lua` | end-to-end in real app |
 | **6. Remove JS path** | Delete `scriptedalgorithm*`, `builtins.qrc`, sandbox; drop `Qt6::Qml` from phosphor-tiles if only QJSEngine needed it; update CLAUDE.md/docs | QJSEngine gone |
 | **7. Packaging / CI / docs** | Vendored static Luau in packaging; CI `luau-analyze` gate; ADR → Implemented; author guide for `.luau` algorithms | shippable |
+
+> **Outcome (2026-05-30).** All phases complete. Two deviations from the plan:
+> (1) Phase 3's parity harness was converted to a **JS-free golden-snapshot**
+> test once the QJSEngine path was deleted (the live JS-vs-Luau diff couldn't
+> outlive the engine it compared against). (2) Phase 0/7 vendoring landed as
+> **in-tree Luau source** (`extern/luau`, committed verbatim) instead of a git
+> submodule — GitHub's auto-tarball excludes submodules, which broke every
+> source-tarball distro (AUR/OBS/Nix/RPM); committing the source makes the
+> tarball self-contained with zero per-recipe handling. The memory-cap
+> allocator (ADR follow-up) remains deferred.
 
 ## Cross-cutting risks
 

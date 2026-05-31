@@ -164,6 +164,18 @@ endif()
 if(NOT DEFINED KDE_INSTALL_BINDIR)
     set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
+if(NOT DEFINED KDE_INSTALL_DATADIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_DATADIR ${CMAKE_INSTALL_DATAROOTDIR})
+endif()
+
+# Ship the pz standard-library type definitions so users authoring custom
+# `.luau` algorithms get luau-lsp autocomplete and luau-analyze type-checking
+# (see docs/architecture/luau-algorithm-authoring.md). Installed OUTSIDE the
+# scanned algorithms subdirectory — the loader globs `*.luau`, and a `.d.luau`
+# sitting next to the algorithms would be mistaken for one.
+install(FILES src/pz/pz.d.luau
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones)
 
 install(TARGETS PhosphorTiles
     EXPORT PhosphorTilesTargets
