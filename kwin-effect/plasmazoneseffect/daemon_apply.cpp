@@ -479,7 +479,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
             QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
 
             // User-initiated snap commands override floating state.
-            // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
+            // windowSnapped() on the daemon clears floating inside SnapEngine::commitSnap (clearFloatingForSnap).
 
             // Always use EDID-based screen ID for comparison
             QString winScreen = getWindowScreenId(w);

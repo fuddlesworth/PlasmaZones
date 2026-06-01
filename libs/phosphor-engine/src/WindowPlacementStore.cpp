@@ -228,6 +228,8 @@ bool WindowPlacementStore::clearFreeGeometry(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
+    // windowId is unique across buckets (record() enforces this), so the first
+    // match is the only match — return as soon as it's cleared.
     for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
         for (WindowPlacement& p : it.value()) {
             if (p.windowId == windowId && !p.freeGeometryByScreen.isEmpty()) {

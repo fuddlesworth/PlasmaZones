@@ -118,8 +118,8 @@ private Q_SLOTS:
     /**
      * reset() must restore every snapped-window appearance setting
      * (Snapping.Appearance.{Borders,Decorations,Colors}) to its ConfigDefaults
-     * value. These are hand-wired into Settings::reset() separately from the
-     * macro-generated settings, so they get dedicated reset coverage.
+     * value. reset() reverts them via its group-delete + reload path (like every
+     * other store-backed setting), so this pins dedicated reset coverage for them.
      */
     void testReset_restoresSnapWindowAppearanceDefaults()
     {

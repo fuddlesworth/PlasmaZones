@@ -673,7 +673,8 @@ public:
      * @brief Migrate window screen assignments from physical to virtual screen IDs
      *
      * Windows snapped before virtual screens were configured have physical screen IDs
-     * in m_windowScreenAssignments. When virtual screens are active, all per-screen
+     * in SnapState's screen assignments (m_snapState->screenAssignments()). When
+     * virtual screens are active, all per-screen
      * lookups use virtual IDs, so these windows become invisible to zone occupancy
      * checks, snap assist, float/unfloat, etc.
      *

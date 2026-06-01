@@ -1890,6 +1890,19 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
     }
 
+    // Clear the late-bound WTS float / mode callbacks that capture `this` (Daemon,
+    // via screenModeForWindow) — symmetric with the setShouldTrackPredicate /
+    // setShouldRestorePredicate clears, so the "every `this`-capturing predicate is
+    // cleared before teardown" contract stays grep-discoverable and survives a
+    // future ownership/order refactor.
+    if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+        auto* wts = m_windowTrackingAdaptor->service();
+        wts->setEngineFloatResolver({});
+        wts->setEngineFloatWriter({});
+        wts->setEngineFloatLister({});
+        wts->setAutotileModePredicate({});
+    }
+
     // Tear down the context-resolver triple before destroying the
     // services the adapters borrow from. Order: borrowers (D-Bus
     // adaptors) drop their non-owning resolver pointer first, then the

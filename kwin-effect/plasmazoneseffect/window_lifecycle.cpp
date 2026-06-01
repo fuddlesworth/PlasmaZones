@@ -569,8 +569,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             m_trackedScreenPerWindow[safeW] = newScreenId;
 
             // Skip during drag — the drag system owns state transitions.
-            // Autotile drag handles VS transfers in dragStopped (line 262-285).
-            // Snapping drag handles cross-screen unsnap in dragStopped via daemon.
+            // Autotile drag handles VS transfers via the drag-policy-changed path.
+            // Snapping drag handles cross-screen unsnap on drag-stop via the daemon.
             if (m_dragTracker->isDragging()) {
                 return;
             }

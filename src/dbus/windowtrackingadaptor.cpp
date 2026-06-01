@@ -511,9 +511,11 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     m_service->consumePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 
-    // Emit unified state change for screen-change-triggered unsnap
+    // Emit unified state change for screen-change-triggered unsnap. Report the
+    // resolved (effective) screen — the same value the decision + log above use —
+    // not the raw newScreenId.
     Q_EMIT windowStateChanged(windowId,
-                              PhosphorProtocol::WindowStateEntry{windowId, QString(), newScreenId, false,
+                              PhosphorProtocol::WindowStateEntry{windowId, QString(), resolvedNewScreen, false,
                                                                  QStringLiteral("screen_changed"), QStringList{},
                                                                  false});
 }

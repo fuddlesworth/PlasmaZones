@@ -154,11 +154,13 @@ void AutotileHandler::drainPendingBorderlessRestore()
     (*step)();
 }
 
-void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
+bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
 {
-    const bool wasEnabled = m_border.hideTitleBars;
+    if (m_border.hideTitleBars == enabled) {
+        return false;
+    }
     m_border.hideTitleBars = enabled;
-    if (wasEnabled && !enabled) {
+    if (!enabled) {
         // Turning OFF — restore title bars for all borderless windows
         m_border.zoneGeometries.clear();
         const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
@@ -168,7 +170,7 @@ void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
                 setWindowBorderless(win, p.first, false, p.second);
             }
         }
-    } else if (!wasEnabled && enabled) {
+    } else {
         // Turning ON — hide title bars for all currently tiled windows
         const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
         for (const auto& p : pairs) {
@@ -178,11 +180,16 @@ void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
             }
         }
     }
+    return true;
 }
 
-void AutotileHandler::updateShowBorderSetting(bool enabled)
+bool AutotileHandler::updateShowBorderSetting(bool enabled)
 {
+    if (m_border.showBorder == enabled) {
+        return false;
+    }
     m_border.showBorder = enabled;
+    return true;
 }
 
 void AutotileHandler::setFocusFollowsMouse(bool enabled)

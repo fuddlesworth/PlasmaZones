@@ -229,7 +229,6 @@ void AutotileEngine::connectSignals()
                         // Snapshot each window's autotile slot into the unified record
                         // (single source of truth) before teardown — same as setAutotileScreens.
                         orphanedVsIds.insert(sid);
-                        m_overflow.takeForScreen(sid);
                         const QStringList vsTiled = it.value()->tiledWindows();
                         const QStringList floated = it.value()->floatingWindows();
                         if (m_windowTracker) {
@@ -241,6 +240,11 @@ void AutotileEngine::connectSignals()
                                 m_windowTracker->placementStore().record(*rec);
                             }
                         }
+                        // Drop the overflow set AFTER capture (see setAutotileScreens):
+                        // isOverflow must still distinguish overflow floats from user
+                        // floats during capture, else overflow windows stick floating
+                        // instead of re-tiling on re-entry.
+                        m_overflow.takeForScreen(sid);
                         releasedWindows.append(vsTiled);
                         releasedWindows.append(floated);
                         m_pendingInitialOrders.remove(sid);
@@ -629,7 +633,6 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         // records a USER float as floating and a tiled/overflow window as tiled (so it
         // re-tiles on re-entry); the shared free geometry rides from the engine's own
         // float-back cache.
-        m_overflow.takeForScreen(key.screenId); // drop the overflow set for the removed screen
         const QStringList tiled = it.value()->tiledWindows();
         const QStringList floated = it.value()->floatingWindows();
         if (m_windowTracker) {
@@ -641,6 +644,11 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                 m_windowTracker->placementStore().record(*rec);
             }
         }
+        // Drop the overflow set AFTER capture: capturePlacement's overflow-vs-user-float
+        // discriminator (isOverflow) must still see this screen's overflow windows, or
+        // they'd be mis-recorded as user floats and stick floating instead of re-tiling
+        // on re-entry.
+        m_overflow.takeForScreen(key.screenId);
         releasedWindows.append(tiled);
         releasedWindows.append(floated);
         m_configResolver->removeOverridesForScreen(key.screenId);

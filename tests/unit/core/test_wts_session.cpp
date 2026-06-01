@@ -317,11 +317,9 @@ private Q_SLOTS:
     void testPendingRestore_preservesZoneNumbers()
     {
         QString appId = QStringLiteral("app");
-        QString bogusUuid = QUuid::createUuid().toString();
 
         PhosphorPlacement::WindowTrackingService::PendingRestore entry;
-        entry.zoneIds = {bogusUuid};
-        entry.layoutId = m_testLayout->id().toString();
+        entry.zoneIds = {m_zoneIds[0]};
         entry.zoneNumbers = {1};
 
         QHash<QString, QList<PhosphorPlacement::WindowTrackingService::PendingRestore>> queues;

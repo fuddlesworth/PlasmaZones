@@ -240,6 +240,9 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     };
 
     removeHash(m_windowStickyStates);
+    // m_floatingWindows is the legacy fallback set — empty in production once the
+    // per-engine float resolver/writer are wired (the engines own float state), so
+    // this is a no-op there; kept for the unwired / unit-test path.
     removeSet(m_floatingWindows);
 
     if (m_snapEngine) {

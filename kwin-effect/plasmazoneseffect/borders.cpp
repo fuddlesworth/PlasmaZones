@@ -30,7 +30,7 @@ namespace {
 // its floating size/position; this broke snap restore entirely). moveResizeGeometry()
 // is the zone rect KWin is already moving toward, set synchronously by moveResize.
 // The setNoBorder→moveResize ordering mirrors autotile hiding the title bar
-// BEFORE its moveResize (autotilehandler/tiling.cpp).
+// BEFORE its moveResize (autotilehandler/state.cpp::setWindowBorderless).
 void hideTitleBarFillingZone(KWin::Window* kw)
 {
     const KWin::RectF zoneTarget = kw->moveResizeGeometry();

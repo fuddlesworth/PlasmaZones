@@ -58,8 +58,8 @@ void PlasmaZonesEffect::slotDaemonReady()
     }
     if (m_bridgeRegistrationInFlight) {
         // A registerBridge async call is already pending. The Introspect-
-        // probe path at line ~782 and the daemonReady D-Bus signal can
-        // both fire slotDaemonReady before the FIRST registerBridge reply
+        // probe path (effect ctor, lifecycle.cpp) and the daemonReady D-Bus
+        // signal can both fire slotDaemonReady before the FIRST registerBridge reply
         // sets m_daemonServiceRegistered. Without this gate, a daemon
         // racing its own readiness signal against an Introspect probe
         // would receive TWO registerBridge calls in flight, then both
@@ -644,13 +644,15 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     // autotileHideTitleBars needs extra logic when toggled off — delegate to handler
     loadSettingAsync(QStringLiteral("autotileHideTitleBars"), [this](const QVariant& v) {
-        m_autotileHandler->updateHideTitleBarsSetting(v.toBool());
-        updateAllBorders();
+        if (m_autotileHandler->updateHideTitleBarsSetting(v.toBool())) {
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileShowBorder"), [this](const QVariant& v) {
-        m_autotileHandler->updateShowBorderSetting(v.toBool());
-        updateAllBorders();
+        if (m_autotileHandler->updateShowBorderSetting(v.toBool())) {
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
