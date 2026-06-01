@@ -83,8 +83,6 @@ public:
     /// Remove every record matching @p pred. Returns the count removed.
     int removeIf(const std::function<bool(const WindowPlacement&)>& pred);
 
-    void clearAll();
-
     /// All records, in no particular order. For read-only sweeps (e.g. building
     /// the effect's instant-restore cache from the snapped records).
     QList<WindowPlacement> records() const;

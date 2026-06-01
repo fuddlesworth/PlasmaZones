@@ -274,11 +274,6 @@ int WindowPlacementStore::removeIf(const std::function<bool(const WindowPlacemen
     return removed;
 }
 
-void WindowPlacementStore::clearAll()
-{
-    m_byApp.clear();
-}
-
 QList<WindowPlacement> WindowPlacementStore::records() const
 {
     QList<WindowPlacement> out;

@@ -127,8 +127,9 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     const bool desktopChanged = (previousDesktop != virtualDesktop);
 
     m_snapState->assignWindowToZones(windowId, validZoneIds, screenId, virtualDesktop);
-    // Mirror SnapState::assignWindowToZones's own floating-set removal at the
-    // WTS layer (SnapState.cpp:171). The two sets are independent — assigning
+    // Mirror SnapState::assignWindowToZones's own floating-set removal (it removes
+    // the window from its m_floatingWindows) at the WTS layer. The two sets are
+    // independent — assigning
     // a window to zones implicitly un-floats it in SnapState, but the WTS
     // m_floatingWindows entry would survive without this clear, leaving
     // isWindowFloating() returning true via the appId fallback even though
