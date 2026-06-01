@@ -58,28 +58,33 @@
   vulkan-headers,
 
   # -- Caller-supplied source --
-  # When used from flake.nix the src is `self` (the repo root).
+  # When used from flake.nix the src is a fileset-scoped view of the repo root.
   # When used from nixpkgs it will be a fetchFromGitHub derivation.
   src,
 
+  # -- Caller-supplied version --
+  # Parsed once from CMakeLists.txt in flake.nix, where the flake `self` is
+  # always a store path so the read is pure. Reading it here instead would force
+  # an import-from-derivation (IFD) when nixpkgs builds from a fetchFromGitHub
+  # src — which nixpkgs forbids. nixpkgs callers pass a literal version string.
+  version,
+
   # -- Feature flags (nixpkgs-style, override with .override { }) --
   withKdeFrameworks ? true,  # Set false for the portable Qt-only daemon+editor
+
+  # LTO is OFF by default: every NixOS / Home-Manager / overlay consumer
+  # rebuilds this package against their *host* pkgs (see overlays.nix), and LTO
+  # adds 2-5× link time with no binary-cache reuse. Enable it only for the
+  # cached release artifact via `.override { enableLTO = true; }`.
+  enableLTO ? false,
 }:
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "plasmazones";
 
-  # Read the version directly from CMakeLists.txt at evaluation time.
-  # This way the Nix package version always matches the source without
-  # the maintainer needing to touch any Nix files on each release.
-  version = let
-    cmakeFile = builtins.readFile "${src}/CMakeLists.txt";
-    match = builtins.match ".*project\\([A-Za-z]+ VERSION ([0-9]+\\.[0-9]+\\.[0-9]+)[^)]*\\).*" cmakeFile;
-  in
-    if match != null then builtins.head match
-    else throw "Could not parse version from CMakeLists.txt";
-
-  inherit src;
+  # Version is supplied by the caller (parsed from CMakeLists.txt in flake.nix,
+  # the single source of truth — see the `version` argument above).
+  inherit version src;
 
   # ── Build inputs ──────────────────────────────────────────────────────────
   #
@@ -177,27 +182,26 @@ stdenv.mkDerivation (finalAttrs: {
     # Disable the phosphor-shell WIP desktop shell — not packaged yet.
     "-DBUILD_PHOSPHOR_SHELL=OFF"
 
-    # LTO (Link-Time Optimization): enabled in Release builds per CMakeLists.
-    # In Nix this is fine — stdenv handles the toolchain consistently.
-    # Disable if your builds are extremely slow (LTO adds 2-5× link time).
-    "-DENABLE_LTO=ON"
+    # LTO (Link-Time Optimization): opt-in, default OFF (see `enableLTO` above).
+    # In Nix the toolchain is consistent so LTO is safe, but it is expensive for
+    # the host-pkgs rebuild that every module/overlay consumer performs.
+    "-DENABLE_LTO=${if enableLTO then "ON" else "OFF"}"
 
-    # Fix the Qt plugin install path on NixOS.
+    # Install Qt/KWin plugins into *this package's* $out — never into another
+    # derivation's store path. The previous value here was
+    #   ${qt6.qtbase}/lib/qt6/plugins
+    # an absolute path into the read-only qtbase output. A derivation may only
+    # write under its own $out, so the KWin effect silently never landed in the
+    # closure (the daemon ran, but zone overlays never appeared).
     #
-    # KDE's ECM (extra-cmake-modules) sets KDE_INSTALL_QTPLUGINDIR by querying
-    # `qmake -query QT_INSTALL_PLUGINS`. On NixOS, qmake reports a path using
-    # "qt-6" (with a hyphen), producing:
-    #
-    #   lib/qt-6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
-    #
-    # KWin, however, scans the path it was itself compiled with, which uses
-    # "qt6" (no hyphen):
-    #
-    #   lib/qt6/plugins/kwin/effects/plugins/
-    #
-    # The plugin lands in the wrong directory and KWin never finds it.
-    # We override the install dir to match what KWin actually scans.
-    "-DKDE_INSTALL_QTPLUGINDIR=${qt6.qtbase}/lib/qt6/plugins"
+    # `qtbase.qtPluginPrefix` is the relative "lib/qt-6/plugins" path that every
+    # Qt 6 package on NixOS uses. The effect therefore installs to:
+    #   $out/lib/qt-6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
+    # The running KWin discovers it because NixOS adds each system-profile
+    # package's lib/qt-6/plugins to QT_PLUGIN_PATH (the package is placed in
+    # environment.systemPackages by the NixOS module). This is the canonical
+    # NixOS plugin layout — the same approach quickshell uses for its QML/plugins.
+    "-DKDE_INSTALL_QTPLUGINDIR=${placeholder "out"}/${qt6.qtbase.qtPluginPrefix}"
   ];
 
   # ── Post-install fixups ───────────────────────────────────────────────────
