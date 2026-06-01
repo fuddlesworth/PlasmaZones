@@ -490,9 +490,10 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         m_snapState->setFloating(windowId, floating);
     }
 
-    // Floating state is ephemeral and NOT persisted (saveload.cpp:257-259
-    // explicitly skips writing it — `obsoleteFloatingWindowsKey` exists
-    // only to delete any pre-ephemeral remnant on disk). Calling
+    // Floating state is ephemeral and NOT persisted — WindowTrackingAdaptor's
+    // save path never writes it, and its load path only deletes the obsolete
+    // `obsoleteFloatingWindowsKey` to remove any pre-ephemeral remnant on disk.
+    // Calling
     // scheduleSaveState() here used to OR DirtyAll into the dirty mask
     // and trigger a debounced full state rewrite of every OTHER persisted
     // field for nothing — every Meta+F toggle / drag-to-float would

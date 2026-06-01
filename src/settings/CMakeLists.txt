@@ -41,6 +41,10 @@ set(plasmazones_settings_SRCS
     # RuleStore) — extracted from settingscontroller.cpp so the central
     # TU stays under the 800-line cap (CLAUDE.md).
     settingscontroller_dbuswire.cpp
+    # Active-page navigation + per-page dirty tracking + external-edit
+    # envelope — extracted from settingscontroller.cpp so the central TU
+    # stays under the 800-line cap (CLAUDE.md).
+    settingscontroller_pagestate.cpp
     # RAII begin/endExternalEdit wrapper — extracted from
     # settingscontroller.h so the header stays under the 800-line cap.
     externaleditscope.h
