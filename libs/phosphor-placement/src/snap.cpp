@@ -31,6 +31,9 @@ namespace PhosphorPlacement {
 void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return;
+    }
     if (wasUserInitiated) {
         QString windowClass = currentAppIdFor(windowId);
         if (!windowClass.isEmpty()) {
@@ -44,6 +47,9 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
                                                const QString& windowClass, int virtualDesktop)
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return;
+    }
     m_snapState->updateLastUsedZone(zoneId, screenId, windowClass, virtualDesktop);
     markDirty(DirtyLastUsedZone);
 }
@@ -63,20 +69,27 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
 void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
 {
     Q_ASSERT(m_snapState);
-    if (!windowId.isEmpty()) {
-        m_snapState->markAsAutoSnapped(windowId);
+    if (!m_snapState || windowId.isEmpty()) {
+        return;
     }
+    m_snapState->markAsAutoSnapped(windowId);
 }
 
 bool WindowTrackingService::isAutoSnapped(const QString& windowId) const
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return false;
+    }
     return m_snapState->isAutoSnapped(windowId);
 }
 
 bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
 {
     Q_ASSERT(m_snapState);
+    if (!m_snapState) {
+        return false;
+    }
     return m_snapState->clearAutoSnapped(windowId);
 }
 
@@ -92,11 +105,11 @@ bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
         return false;
     }
     it->removeFirst();
+    const int remaining = it->size();
     if (it->isEmpty()) {
         m_pendingRestoreQueues.erase(it);
     }
-    qCDebug(lcPlacement) << "Consumed pending assignment for" << appId
-                         << "remaining:" << m_pendingRestoreQueues.value(appId).size();
+    qCDebug(lcPlacement) << "Consumed pending assignment for" << appId << "remaining:" << remaining;
     markDirty(DirtyPendingRestores);
     return true;
 }

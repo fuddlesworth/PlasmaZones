@@ -28,7 +28,6 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
     // `++it` after a possible erase(it) (would increment an invalidated iterator).
     for (auto it = m_byApp.begin(); it != m_byApp.end();) {
         QList<WindowPlacement>& bucket = it.value();
-        bool handled = false;
         for (int i = 0; i < bucket.size(); ++i) {
             if (bucket.at(i).windowId != incoming.windowId) {
                 continue;
@@ -80,9 +79,9 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
             dst.append(merged);
             return true;
         }
-        if (handled) {
-            break;
-        }
+        // No match in this bucket — advance. (A match always returns above; the
+        // appId-rename branch consumes the iterator via erase and returns, so we
+        // only reach here when the inner loop fell through without a hit.)
         ++it;
     }
 

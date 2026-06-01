@@ -222,11 +222,11 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
                                        : PhosphorAnimation::ProfilePaths::WindowSnapIn);
     // Track snapping's own border set (mirrors how autotile records at its
     // tile-apply) using a discriminator analogous to the batch path
-    // (slotApplyGeometriesBatch). The batch path adds an explicit isWindowFloating
-    // guard because it carries float-restore entries with non-empty geometry; this
-    // single-window path is only reached for explicit snap commits (which legitimately
-    // un-float) and float-restores (which arrive with an empty zoneId), so the empty
-    // zoneId alone is the correct float discriminator here. A window can never land in
+    // (slotApplyGeometriesBatch). The batch path discriminates on screenId (empty =
+    // float/restore) and clears any stale float marker before marking snapped; this
+    // single-window path uses the empty zoneId as the float discriminator, since it
+    // is only reached for explicit snap commits (which legitimately un-float) and
+    // float-restores (which arrive with an empty zoneId). A window can never land in
     // both the snap and autotile border sets:
     //   - empty zoneId         → float-restore: leave snapping's set
     //   - empty/autotile screen → autotile-managed or unresolved: leave the set
@@ -371,10 +371,10 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
                 // mirroring the single-window applyGeometry path. Without this the float
                 // flag survives, markWindowSnapped never sets the snap border, and the
                 // next snap→autotile saves the zone rect as the pre-tile float-back —
-                // poisoning the float geometry with the snapped rect.
-                if (isWindowFloating(batchWid)) {
-                    m_navigationHandler->setWindowFloating(batchWid, false);
-                }
+                // poisoning the float geometry with the snapped rect. setWindowFloating
+                // is an idempotent local FloatingCache write (no signal/D-Bus), so it is
+                // called unconditionally — no need to read-guard a no-op overwrite.
+                m_navigationHandler->setWindowFloating(batchWid, false);
                 markWindowSnapped(batchWid, p.screenId);
             }
         },

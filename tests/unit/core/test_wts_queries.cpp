@@ -273,15 +273,23 @@ private Q_SLOTS:
 
     void testCalculateSnapAllWindows_fillsEmptyZones()
     {
-        QStringList unsnappedWindows = {
+        const QStringList unsnappedWindows = {
             QStringLiteral("new1:win:111"),
             QStringLiteral("new2:win:222"),
         };
 
         QVector<ZoneAssignmentEntry> entries = m_engine->calculateSnapAllWindowEntries(unsnappedWindows, QString());
 
-        // In headless mode, result is empty (no screen -> no geometry)
-        Q_UNUSED(entries);
+        // The two unsnapped windows fill two of the three empty zones: one entry per
+        // input window, distinct target zones, no spurious windows.
+        QCOMPARE(entries.size(), 2);
+        QVERIFY(entries[0].targetZoneId != entries[1].targetZoneId);
+        QSet<QString> placed;
+        for (const ZoneAssignmentEntry& e : entries) {
+            QVERIFY(unsnappedWindows.contains(e.windowId));
+            placed.insert(e.windowId);
+        }
+        QCOMPARE(placed.size(), 2);
     }
 
     // =====================================================================
@@ -290,10 +298,16 @@ private Q_SLOTS:
 
     void testMultiZoneGeometry_unionOfZones()
     {
-        QStringList multiZones = {m_zoneIds[0], m_zoneIds[1]};
-        QRect geo = m_service->multiZoneGeometry(multiZones, QString());
-        // In headless mode geo is invalid. The method should not crash.
-        Q_UNUSED(geo);
+        const QStringList multiZones = {m_zoneIds[0], m_zoneIds[1]};
+        const QRect geo = m_service->multiZoneGeometry(multiZones, QString());
+        const QRect zone0 = m_service->zoneGeometry(m_zoneIds[0], QString());
+        const QRect zone1 = m_service->zoneGeometry(m_zoneIds[1], QString());
+        QVERIFY(zone0.isValid());
+        QVERIFY(zone1.isValid());
+        // The multi-zone geometry is the bounding union — valid and covering both zones.
+        QVERIFY(geo.isValid());
+        QVERIFY(geo.contains(zone0));
+        QVERIFY(geo.contains(zone1));
     }
 
     // =====================================================================

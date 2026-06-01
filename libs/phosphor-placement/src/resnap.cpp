@@ -236,7 +236,7 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
     // depending on unordered hash iteration.
     QHash<QString, quint64> chosenSequence;
     for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
-        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(QLatin1String("snap"));
+        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(QStringLiteral("snap"));
         if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped()) {
             continue;
         }

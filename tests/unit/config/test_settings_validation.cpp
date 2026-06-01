@@ -189,6 +189,32 @@ private Q_SLOTS:
         QCOMPARE(settings.snapWindowInactiveBorderColor(), ConfigDefaults::snapWindowInactiveBorderColor());
     }
 
+    /**
+     * The inverse of the validator tests above: with useSystemBorderColors ENABLED,
+     * Settings::load() routes through applySnapWindowBorderSystemColor(), overriding the
+     * stored Active color with the accent-derived highlight color. A hand-seeded
+     * explicit Active color must NOT survive the load — proving the system-color
+     * override fires for the snap-window border (the load path the disabled tests
+     * deliberately avoid).
+     */
+    void testReadValidatedColor_snapWindowBorderColor_systemColorsEnabled_overridesStored()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+            colors->writeBool(ConfigDefaults::useSystemKey(), true);
+            colors->writeString(ConfigDefaults::activeKey(), QStringLiteral("#010203"));
+            colors.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.snapWindowBorderColor(), settings.highlightColor());
+        QVERIFY(settings.snapWindowBorderColor() != QColor(QStringLiteral("#010203")));
+    }
+
     // =========================================================================
     // Schema validColorOr validator (invalid color string)
     // =========================================================================

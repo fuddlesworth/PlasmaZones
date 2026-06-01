@@ -236,6 +236,16 @@ private Q_SLOTS:
         m_service->onLayoutChanged();
 
         QVector<ZoneAssignmentEntry> resnap = m_engine->calculateResnapFromPreviousLayout();
+        // The previously-assigned windows are mapped into the new layout's zones:
+        // the first call yields restore entries, each for one of the assigned windows
+        // targeting a real zone.
+        QVERIFY(!resnap.isEmpty());
+        const QSet<QString> sources = {window1, window2, window3};
+        for (const ZoneAssignmentEntry& e : resnap) {
+            QVERIFY(sources.contains(e.windowId));
+            QVERIFY(!e.targetZoneId.isEmpty());
+        }
+
         QVector<ZoneAssignmentEntry> secondCall = m_engine->calculateResnapFromPreviousLayout();
         QVERIFY(secondCall.isEmpty()); // Buffer consumed on first call
     }

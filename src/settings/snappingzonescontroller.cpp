@@ -76,8 +76,12 @@ void SnappingZonesController::loadColorsFromFile(const QString& filePath)
     // target. This catches the directory-traversal concern (the resolved
     // target must be a real .json) without rejecting symlinked-colors-file
     // layouts that loadColorsFromPywal() above silently accepts.
-    const QFileInfo canonInfo(info.canonicalFilePath());
-    if (canonInfo.canonicalFilePath().isEmpty() || !canonInfo.exists() || !canonInfo.isFile()) {
+    // canonicalFilePath() returns empty for a broken symlink or a path that vanished
+    // between the exists() check above and here (TOCTOU) — resolve it ONCE and test
+    // that result, rather than re-canonicalizing an already-canonical QFileInfo.
+    const QString canonicalPath = info.canonicalFilePath();
+    const QFileInfo canonInfo(canonicalPath);
+    if (canonicalPath.isEmpty() || !canonInfo.exists() || !canonInfo.isFile()) {
         Q_EMIT colorImportError(PzI18n::tr("Color import file does not resolve to a regular file: %1").arg(filePath));
         return;
     }

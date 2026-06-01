@@ -199,15 +199,21 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
         return false;
     }
-    auto& screenGeometries = m_preAutotileGeometries[screenId];
     // Use EXACT windowId match only — NOT stableId fallback.
     // Multiple instances of the same app (e.g., 3 Dolphin windows) share a stableId.
     // hasSavedGeometryForWindow's stableId fallback would return true after the first
     // instance is saved, preventing all other instances from saving their own geometry.
     // On restore, all instances would get the first instance's geometry — scrambling
     // window positions on every autotile ↔ snapping toggle.
-    if (screenGeometries.contains(windowId)) {
-        return false;
+    //
+    // Use a CONST lookup for the contains-check so a guard-bail below never inserts an
+    // empty per-screen bucket (operator[] would); the bucket is created only at the
+    // genuine insertion point (below).
+    {
+        const auto screenIt = m_preAutotileGeometries.constFind(screenId);
+        if (screenIt != m_preAutotileGeometries.constEnd() && screenIt->contains(windowId)) {
+            return false;
+        }
     }
     // Only save geometry for floating windows — snapped/tiled windows have zone
     // dimensions in frameGeometry(), not the original free-floating size. Storing
@@ -236,12 +242,13 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
         return true;
     }
-    screenGeometries[windowId] = frame;
+    m_preAutotileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
     if (m_effect->m_daemonServiceRegistered) {
-        // overwrite=true: the isWindowFloating() guard above already skipped
-        // this path for snapped windows, so when we reach here the frame is
-        // the window's authoritative free-floating geometry for THIS session.
+        // overwrite=true: the isWindowMarkedSnapped() and isWindowFloating() guards
+        // above already skipped this path for snapped/tiled windows (the former even
+        // on the knownFreeFloating fast path), so when we reach here the frame is the
+        // window's authoritative free-floating geometry for THIS session.
         // The daemon persists pre-tile entries across window close/reopen
         // (keyed by appId for session restore), so a stale entry from a
         // prior session would otherwise block the fresh capture and leave

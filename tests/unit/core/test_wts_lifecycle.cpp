@@ -450,6 +450,81 @@ private Q_SLOTS:
         QCOMPARE(rec->freeGeometryFor(screen), QRect(100, 100, 800, 600));
     }
 
+    void testRecordFreeGeometry_firstCaptureWins_whenNotOverwrite()
+    {
+        // overwrite=false is the production capture path: the FIRST captured free
+        // frame wins; a later non-overwrite write is ignored; overwrite=true replaces.
+        const QString windowId = QStringLiteral("firefox|eeee");
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        const QString screen = QStringLiteral("DP-1");
+
+        m_service->recordFreeGeometry(windowId, screen, QRect(10, 10, 400, 300), /*overwrite=*/false);
+        m_service->recordFreeGeometry(windowId, screen, QRect(20, 20, 800, 600), /*overwrite=*/false);
+        const auto rec = m_service->placementStore().peek(windowId, appId);
+        QVERIFY(rec);
+        QCOMPARE(rec->freeGeometryFor(screen), QRect(10, 10, 400, 300)); // first wins
+
+        m_service->recordFreeGeometry(windowId, screen, QRect(30, 30, 500, 400), /*overwrite=*/true);
+        const auto rec2 = m_service->placementStore().peek(windowId, appId);
+        QVERIFY(rec2);
+        QCOMPARE(rec2->freeGeometryFor(screen), QRect(30, 30, 500, 400)); // overwrite replaces
+    }
+
+    void testRecordedSnapZones_appIdFallbackAfterRelogin()
+    {
+        // After a relogin the window's uuid changes; the durable record stored under
+        // the OLD uuid must still resolve for a NEW same-app window via the appId
+        // bucket (the exact-uuid branch misses, the appId fallback hits).
+        const QString oldId = QStringLiteral("firefox|old-uuid");
+        PhosphorEngine::WindowPlacement p;
+        p.windowId = oldId;
+        p.appId = PhosphorIdentity::WindowId::extractAppId(oldId);
+        PhosphorEngine::EngineSlot snap;
+        snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        snap.zoneIds = QStringList{m_zoneIds[1]};
+        p.engines.insert(QStringLiteral("snap"), snap);
+        m_service->placementStore().record(p);
+
+        const QString newId = QStringLiteral("firefox|new-uuid");
+        QCOMPARE(m_service->recordedSnapZones(newId), QStringList{m_zoneIds[1]});
+    }
+
+    void testResnapFromAutotileOrder_sameAppInstancesEachKeepOwnZone()
+    {
+        // Two instances of the same app, one LIVE-assigned and one DURABLE-only (cold
+        // cache, e.g. post-restart): each must resolve to its OWN recorded zone via the
+        // exact-uuid path — never cross-routed through the shared appId bucket.
+        const QString instA = QStringLiteral("firefox|aaaa");
+        const QString instB = QStringLiteral("firefox|bbbb");
+
+        m_service->assignWindowToZone(instA, m_zoneIds[0], QString(), 0);
+
+        PhosphorEngine::WindowPlacement p;
+        p.windowId = instB;
+        p.appId = PhosphorIdentity::WindowId::extractAppId(instB);
+        PhosphorEngine::EngineSlot snap;
+        snap.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        snap.zoneIds = QStringList{m_zoneIds[2]};
+        p.engines.insert(QStringLiteral("snap"), snap);
+        m_service->placementStore().record(p);
+
+        QCOMPARE(m_service->recordedSnapZones(instA), QStringList{m_zoneIds[0]});
+        QCOMPARE(m_service->recordedSnapZones(instB), QStringList{m_zoneIds[2]});
+
+        QVector<ZoneAssignmentEntry> entries =
+            m_engine->calculateResnapEntriesFromAutotileOrder(QStringList{instA, instB}, QString());
+        ZoneAssignmentEntry a;
+        ZoneAssignmentEntry b;
+        for (const ZoneAssignmentEntry& e : entries) {
+            if (e.windowId == instA)
+                a = e;
+            if (e.windowId == instB)
+                b = e;
+        }
+        QCOMPARE(a.targetZoneId, m_zoneIds[0]);
+        QCOMPARE(b.targetZoneId, m_zoneIds[2]);
+    }
+
     void testRecordedSnapZones_fallsBackToDurableRecordWhenLiveCold()
     {
         const QString windowId = QStringLiteral("firefox|aaaa");

@@ -883,7 +883,9 @@ bool Daemon::init()
         // zone positions. PhosphorZones::Zone assignments are preserved during autotile (onLayoutChanged
         // skips autotile screens) so resnap uses original snap assignments.
         if (autotileToggled && !autotileNow && m_windowTrackingAdaptor && m_snapAdaptor && m_snapEngine) {
-            m_suppressResnapOsd = 1;
+            // Pre-arm OSD suppression for the resnap signal(s) about to fire (the
+            // feedback returns asynchronously, so arm before emitting).
+            m_suppressResnapOsd = 1; // resnapCurrentAssignments()
             m_snapAdaptor->resnapCurrentAssignments();
             // Batched float-restore: one resnap signal per autotile-disabled
             // toggle instead of per-window D-Bus chatter. Downcast mirrors
@@ -891,8 +893,23 @@ bool Daemon::init()
             // would simply skip the batch (no behaviour regression vs the
             // pre-batch shape, which used per-window D-Bus calls).
             if (auto* concreteSnap = qobject_cast<PhosphorSnapEngine::SnapEngine*>(m_snapEngine.get())) {
-                const QVector<ZoneAssignmentEntry> entries = buildAutotileRestoreEntries();
+                // updateAutotileScreens() above fired windowsReleased synchronously,
+                // populating m_pendingSnapFloatRestores with the snap-float and
+                // branch-b snap-zone restores for windows that were floated in
+                // autotile. Those windows must be EXCLUDED from the pre-tile geometry
+                // restore (they get a float/zone restore instead) and their entries
+                // appended to this batch — mirroring the mode-toggle path. Dropping
+                // them (the previous behaviour) lost the snap-float restore entirely
+                // and left stale entries to corrupt the next toggle's preClaimedZoneIds.
+                QSet<QString> restoredWindows;
+                for (const ZoneAssignmentEntry& e : m_pendingSnapFloatRestores) {
+                    restoredWindows.insert(e.windowId);
+                }
+                QVector<ZoneAssignmentEntry> entries = buildAutotileRestoreEntries(restoredWindows);
+                entries.append(m_pendingSnapFloatRestores);
+                m_pendingSnapFloatRestores.clear();
                 if (!entries.isEmpty()) {
+                    ++m_suppressResnapOsd; // the batched emit drives a second resnap feedback
                     concreteSnap->emitBatchedResnap(entries);
                 }
             }

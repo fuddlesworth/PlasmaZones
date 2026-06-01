@@ -123,19 +123,23 @@ void AutotileEngine::onWindowReleased(const QString& windowId)
     // No WTS propagation needed.
 }
 
-void AutotileEngine::markAutotileFloated(const QString& windowId)
+// Canonicalize on every access so set/clear/read key on the same id regardless of
+// the raw alias a caller passes — symmetric with isWindowFloatingInAutotile(). The
+// daemon already passes canonical ids today, but relying on every caller's discipline
+// is fragile: a raw mark + canonical clear would leak the marker across a mode flip.
+void AutotileEngine::markAutotileFloated(const QString& rawWindowId)
 {
-    m_autotileFloatedWindows.insert(windowId);
+    m_autotileFloatedWindows.insert(canonicalizeForLookup(rawWindowId));
 }
 
-void AutotileEngine::clearAutotileFloated(const QString& windowId)
+void AutotileEngine::clearAutotileFloated(const QString& rawWindowId)
 {
-    m_autotileFloatedWindows.remove(windowId);
+    m_autotileFloatedWindows.remove(canonicalizeForLookup(rawWindowId));
 }
 
-bool AutotileEngine::isAutotileFloated(const QString& windowId) const
+bool AutotileEngine::isAutotileFloated(const QString& rawWindowId) const
 {
-    return m_autotileFloatedWindows.contains(windowId);
+    return m_autotileFloatedWindows.contains(canonicalizeForLookup(rawWindowId));
 }
 
 void AutotileEngine::onWindowFloated(const QString& windowId)
@@ -351,8 +355,11 @@ bool AutotileEngine::isActiveOnScreen(const QString& screenId) const
     return isAutotileScreen(screenId);
 }
 
-bool AutotileEngine::isWindowTiled(const QString& windowId) const
+bool AutotileEngine::isWindowTiled(const QString& rawWindowId) const
 {
+    // Canonicalize for the lookup, symmetric with isWindowFloatingInAutotile() — both
+    // are consulted from the same daemon mode-resolution path with the same id.
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     auto it = m_windowToStateKey.constFind(windowId);
     if (it == m_windowToStateKey.constEnd()) {
         return false;
@@ -3713,41 +3720,6 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     }
     p.engines.insert(engineId(), slot);
     return p;
-}
-
-bool AutotileEngine::restorePlacement(const PhosphorEngine::WindowPlacement& placement, const QString& screenId)
-{
-    using PhosphorEngine::WindowPlacement;
-    const QString restoreScreen = placement.screenId.isEmpty() ? screenId : placement.screenId;
-    PhosphorTiles::TilingState* state = tilingStateForScreen(restoreScreen);
-    if (!state) {
-        return false;
-    }
-    const QString wid = canonicalizeForLookup(placement.windowId);
-    const PhosphorEngine::EngineSlot slot = placement.slotFor(engineId());
-
-    if (slot.state == WindowPlacement::stateTiled()) {
-        state->addWindow(wid, slot.order);
-        state->setFloating(wid, false);
-        m_windowToStateKey.insert(wid, currentKeyForScreen(restoreScreen));
-        retile(restoreScreen);
-        return true;
-    }
-    if (slot.state == WindowPlacement::stateFloating()) {
-        state->addWindow(wid);
-        state->setFloating(wid, true);
-        m_windowToStateKey.insert(wid, currentKeyForScreen(restoreScreen));
-        QRect freeGeo = placement.freeGeometryFor(restoreScreen);
-        if (!freeGeo.isValid()) {
-            freeGeo = placement.anyFreeGeometry();
-        }
-        if (freeGeo.isValid()) {
-            Q_EMIT geometryRestoreRequested(placement.windowId, freeGeo, restoreScreen);
-        }
-        retile(restoreScreen);
-        return true;
-    }
-    return false;
 }
 
 void AutotileEngine::snapAllWindows(const NavigationContext& ctx)

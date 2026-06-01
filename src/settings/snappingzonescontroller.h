@@ -15,8 +15,9 @@ class ISettings;
 /// drag-time zone overlay).
 ///
 /// Exposed as a child Q_PROPERTY on SettingsController. Two responsibilities:
-///   1. Expose border-width / border-radius slider bounds as CONSTANTs
-///      (ConfigDefaults delegation, mirrors SnappingZoneSelectorController).
+///   1. Expose the zone-overlay border-width / border-radius slider bounds as
+///      CONSTANTs, delegating directly to ConfigDefaults::borderWidthMin/Max and
+///      borderRadiusMin/Max.
 ///   2. Own the color-import action surface: `loadColorsFromPywal()` and
 ///      `loadColorsFromFile(path)`, plus their `colorImportError(msg)` /
 ///      `colorImportSuccess()` signals. Each successful import emits

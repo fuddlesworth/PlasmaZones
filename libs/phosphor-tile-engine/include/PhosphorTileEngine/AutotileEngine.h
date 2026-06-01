@@ -163,7 +163,7 @@ public:
      * window should enter the drag-insert preview (tiled windows reorder;
      * floating / untracked windows drag free and float on drop as before).
      */
-    bool isWindowTiled(const QString& windowId) const override;
+    bool isWindowTiled(const QString& rawWindowId) const override;
 
     /**
      * @brief Authoritative per-window autotile float state.
@@ -700,7 +700,6 @@ public:
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
     void reapplyManagedWindowAppearance() override;
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
-    bool restorePlacement(const PhosphorEngine::WindowPlacement& placement, const QString& screenId) override;
     void snapAllWindows(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
     void cycleFocus(bool forward, const PhosphorEngine::NavigationContext& ctx) override;
@@ -977,9 +976,9 @@ public:
     // Autotile-float origin tracking (ephemeral, not persisted)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void markAutotileFloated(const QString& windowId);
-    void clearAutotileFloated(const QString& windowId);
-    bool isAutotileFloated(const QString& windowId) const;
+    void markAutotileFloated(const QString& rawWindowId);
+    void clearAutotileFloated(const QString& rawWindowId);
+    bool isAutotileFloated(const QString& rawWindowId) const;
 
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 

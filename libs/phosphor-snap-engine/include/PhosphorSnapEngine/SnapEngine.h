@@ -349,9 +349,6 @@ public:
     /// (snapped / floated / free) for persistence, or nullopt if untracked.
     std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
 
-    /// Unified placement model — re-apply a snap/float/free placement on reopen.
-    bool restorePlacement(const PhosphorEngine::WindowPlacement& placement, const QString& screenId) override;
-
     /// Snap every unmanaged window on the screen. The IPlacementEngine
     /// override takes PhosphorEngine::NavigationContext; coexists with the existing
     /// snapAllWindows(const QString&) method which it delegates to.

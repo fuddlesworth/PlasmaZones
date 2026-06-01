@@ -102,9 +102,10 @@ struct WindowPlacement
         return freeGeometryByScreen.value(screenId);
     }
 
-    /// Any captured free/float geometry — the newest by no particular order — used
-    /// as a cross-screen fallback when the exact screen has none. Returns an
-    /// invalid rect when the window has no free geometry on record at all.
+    /// Any captured free/float geometry (the first valid rect in unspecified hash
+    /// order — there is no per-screen recency to pick a "newest"), used as a
+    /// cross-screen fallback when the exact screen has none. Returns an invalid
+    /// rect when the window has no free geometry on record at all.
     QRect anyFreeGeometry() const
     {
         for (auto it = freeGeometryByScreen.constBegin(); it != freeGeometryByScreen.constEnd(); ++it) {

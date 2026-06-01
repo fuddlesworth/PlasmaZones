@@ -47,6 +47,7 @@
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/config/configkeys.h"
 #include "../../../src/config/configmigration.h"
+#include "../../../src/config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorWindowRule/ContextRuleBridge.h>
@@ -2044,6 +2045,14 @@ private Q_SLOTS:
         QCOMPARE(
             snapping.value(QStringLiteral("Behavior")).toObject().value(QStringLiteral("ToggleActivation")).toBool(),
             true);
+
+        // End-state collision check: the NEW snap-window appearance settings reuse the
+        // freed Snapping.Appearance.Colors namespace. The v3 zone-overlay value
+        // (UseSystem=false) was relocated to Snapping.Zones above, so a Settings loaded
+        // from the migrated config must read snapWindowUseSystemBorderColors() as the
+        // SHIPPED DEFAULT — proving no stale v3 zone value bleeds into the new key.
+        Settings settings;
+        QCOMPARE(settings.snapWindowUseSystemBorderColors(), ConfigDefaults::snapWindowUseSystemBorderColors());
     }
 
     void testZoneRename_absentSourceIsNoOp()
