@@ -48,7 +48,7 @@ enum class WindowKind : int {
 /// treats `Unknown` permissively, which is the safe-by-default policy.
 /// Centralised here so the three persistence-layer call sites
 /// (`WindowTrackingAdaptor::windowClosed`, `SnapAdaptor::resolveWindowRestore`,
-/// saveload pending-restore load) stay in lockstep when a new kind is added.
+/// `WindowPlacement::fromJson`) stay in lockstep when a new kind is added.
 inline WindowKind clampWindowKindFromWire(int wire)
 {
     switch (wire) {

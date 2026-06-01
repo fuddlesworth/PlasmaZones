@@ -1274,12 +1274,11 @@ bool Daemon::init()
                 return all;
             });
 
-        // Per-engine float-back GEOMETRY: the autotile pre-tile float-back and
-        // the snap pre-snap-float position live in SEPARATE engine stores. WTS
-        // resolves validatedUnmanagedGeometry to the engine owning the window's
-        // current mode via this predicate (same screen→mode resolution as the
-        // float resolver above).
-        m_windowTrackingAdaptor->service()->setAutotileEngine(autotileEngine);
+        // Owning-engine predicate: WTS answers isWindowInAutotileMode with this
+        // (the single owning-engine signal for the capture funnel + float
+        // routing), using the same screen→mode resolution as the float resolver
+        // above. Float-back geometry itself is single-sourced from the unified
+        // WindowPlacementStore, so no per-engine geometry wiring is needed.
         m_windowTrackingAdaptor->service()->setAutotileModePredicate(
             [screenModeForWindow](const QString& windowId) -> bool {
                 return screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile;

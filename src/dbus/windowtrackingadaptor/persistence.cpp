@@ -25,29 +25,6 @@ namespace PlasmaZones {
 
 using namespace WindowTrackingInternal;
 
-PhosphorEngine::PlacementEngineBase* WindowTrackingAdaptor::geometryEngineForScreen(const QString& screenId) const
-{
-    if (m_autotileEngine && !screenId.isEmpty() && m_autotileEngine->isActiveOnScreen(screenId)) {
-        return m_autotileEngine.data();
-    }
-    return m_snapEngine.data();
-}
-
-PhosphorEngine::PlacementEngineBase* WindowTrackingAdaptor::geometryEngineForWindow(const QString& windowId) const
-{
-    // Resolve the window's current screen, then its mode. WTS screenAssignments
-    // is the primary source; the autotile engine's own tracking covers windows
-    // snap never saw.
-    QString screenId;
-    if (m_service) {
-        screenId = m_service->screenAssignments().value(windowId);
-    }
-    if (screenId.isEmpty() && m_autotileEngine && m_autotileEngine->isWindowTracked(windowId)) {
-        return m_autotileEngine.data();
-    }
-    return geometryEngineForScreen(screenId);
-}
-
 void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x, int y, int width, int height,
                                                  const QString& screenId, bool overwrite)
 {
@@ -108,6 +85,11 @@ PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometrie
     // Source from the SINGLE float-back store — the unified record's shared
     // per-screen free geometry — so the effect's float-cache seed sees every
     // window's float-back regardless of which mode captured it.
+    // Intentionally NOT gated by isPersistedContextDisabled (unlike
+    // getPendingRestoreGeometries): float-back restores a window to a FREE
+    // position, it does not snap it into a zone, so the snap-disable gate must
+    // not apply here — mirroring the snap engine's floating-branch policy in
+    // SnapEngine::resolveWindowRestore.
     for (const PhosphorEngine::WindowPlacement& p : m_service->placementStore().records()) {
         for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
             const QRect& geo = it.value();

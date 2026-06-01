@@ -163,7 +163,7 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
 
 // SnapEngine::clearFloatingStateForSnap was removed — its two callers
 // (windowOpened in lifecycle.cpp, unfloatToZone above) now go through
-// WindowTrackingService::commitSnap which handles clearing floating
+// SnapEngine::commitSnap which handles clearing floating
 // state as step 1 of its orchestration. The D-Bus-visible behaviour is
 // identical: commitSnap emits windowFloatingClearedForSnap, WTA relays
 // it as windowFloatingChanged on the same D-Bus interface.

@@ -1774,6 +1774,9 @@ void removeGroupAtSegments(QJsonObject& root, const QStringList& segments)
 /// creating destination ancestors and pruning now-empty source ancestors.
 /// No-op when the source object is absent/empty. Used by migrateV3ToV4 to
 /// rename Snapping.Appearance.* zone-overlay groups to Snapping.Zones.*.
+/// If the destination already exists it is overwritten wholesale (source
+/// wins) — this cannot arise for a genuine v3 config since the destination
+/// namespace did not exist before v4.
 void moveGroupAtPath(QJsonObject& root, const QString& fromDotPath, const QString& toDotPath)
 {
     const QStringList fromSegments = fromDotPath.split(QLatin1Char('.'), Qt::SkipEmptyParts);

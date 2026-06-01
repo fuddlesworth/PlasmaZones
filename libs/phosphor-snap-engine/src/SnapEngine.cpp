@@ -51,30 +51,6 @@ SnapEngine::GapParams SnapEngine::resolveGapParams() const
 // header (forward-declared in SnapEngine.h).
 SnapEngine::~SnapEngine() = default;
 
-void SnapEngine::onWindowClaimed(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-    // PlacementEngineBase is the single store for unmanaged geometry.
-    // No WTS propagation needed.
-}
-
-void SnapEngine::onWindowReleased(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-    // PlacementEngineBase is the single store for unmanaged geometry.
-    // No WTS propagation needed.
-}
-
-void SnapEngine::onWindowFloated(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-}
-
-void SnapEngine::onWindowUnfloated(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-}
-
 void SnapEngine::markWindowReported(const QString& windowId)
 {
     if (!windowId.isEmpty()) {
@@ -220,7 +196,7 @@ void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 
 // SnapEngine::assignToZones was removed — its two callers (windowOpened
 // in lifecycle.cpp, unfloatToZone in float.cpp) now go through
-// WindowTrackingService::commitSnap / commitMultiZoneSnap which run the
+// SnapEngine::commitSnap / commitMultiZoneSnap which run the
 // full snap orchestration (clear floating, assign zone, emit state
 // change). The raw-assign path was the last thin wrapper that bypassed
 // the orchestration layer.

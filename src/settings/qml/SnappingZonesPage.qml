@@ -404,7 +404,6 @@ SettingsFlickable {
         id: colorImportErrorDialog
 
         title: i18n("Color Import Failed")
-        subtitle: ""
         standardButtons: Kirigami.Dialog.Ok
         preferredWidth: Math.min(Kirigami.Units.gridUnit * 30, parent.width * 0.8)
     }

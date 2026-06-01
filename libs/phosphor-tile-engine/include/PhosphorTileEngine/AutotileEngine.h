@@ -754,8 +754,6 @@ public:
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
 
     /**
-     * @brief Clear saved floating state for windows that are actively zone-snapped.
-     *
      * @brief Get the current tiled window order for a screen
      *
      * Returns the autotile engine's tiled window list for deterministic
@@ -989,12 +987,6 @@ private Q_SLOTS:
     void onWindowFocused(const QString& windowId);
     void onScreenGeometryChanged(const QString& screenId);
     void onLayoutChanged(PhosphorZones::Layout* layout);
-
-protected:
-    void onWindowClaimed(const QString& windowId) override;
-    void onWindowReleased(const QString& windowId) override;
-    void onWindowFloated(const QString& windowId) override;
-    void onWindowUnfloated(const QString& windowId) override;
 
 private:
     void connectSignals();

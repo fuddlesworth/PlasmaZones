@@ -73,7 +73,7 @@ QString resolveNavScreen(INavigationStateProvider* navState, const QString& wind
                     // identifier still resolves on the live screen set.
                     if (PhosphorScreens::ScreenIdentity::findByIdOrName(physId)) {
                         // `service` is already non-null per the outer
-                        // guard at line 64; no need to re-check it here.
+                        // guard above; no need to re-check it here.
                         auto* mgr = service->screenManager();
                         if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
                             return storedScreen;

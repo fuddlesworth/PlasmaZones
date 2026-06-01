@@ -231,8 +231,9 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         // current desktop. Every calculator feeding this path either snaps a
         // window opening now on the current desktop (calculateSnapToAppRule /
         // calculateSnapToEmptyZone) or refuses outright when the saved desktop
-        // is not the current one — calculateRestoreFromSession and
-        // calculateSnapToLastZone both return noSnap on a desktop mismatch. A
+        // is not the current one — the WindowPlacementStore restore block gates
+        // on screen and disabled-context (restoring onto the current desktop),
+        // and calculateSnapToLastZone returns noSnap on a desktop mismatch. A
         // restored window therefore lands on the current desktop/activity.
         // Resolver's handleFor pulls (currentVirtualDesktop, currentActivity)
         // from the daemon's VDM/AM — same values the snap engine sees on

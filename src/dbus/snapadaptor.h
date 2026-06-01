@@ -145,7 +145,8 @@ public Q_SLOTS:
     /**
      * @brief Run the full 4-level snap-restore fallback chain in one call
      * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
-     *                   Forwarded to SnapEngine for the kind-match gate.
+     *                   Forwarded to SnapEngine for protocol compatibility; the unified
+     *                   placement record now carries the kind, so it no longer gates restore.
      */
     void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind, int& snapX,
                               int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);

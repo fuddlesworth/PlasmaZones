@@ -655,8 +655,8 @@ void AutotileHandler::onDaemonReady()
     }
 }
 
-// handleAutotileFloatToggle removed: float toggle is now routed through
-// the unified WTA toggleFloatForWindow method via slotToggleWindowFloatRequested.
+// handleAutotileFloatToggle removed: float toggle is now daemon-local via
+// WindowTrackingAdaptor::toggleWindowFloat (which emits applyGeometryRequested).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // D-Bus signal connections and settings

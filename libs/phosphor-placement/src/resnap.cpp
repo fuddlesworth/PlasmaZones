@@ -231,9 +231,10 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
     // geometry. The async resolveWindowRestore re-validates and corrects, so this
     // is a best-effort anti-flash fast path (an invalid/stale zone resolves to an
     // empty rect and is skipped). When an appId has several snapped records (multi
-    // instance), pick the LOWEST-sequence (oldest/FIFO-head) deterministically so a
-    // repeated lookup is stable and matches the FIFO consumption order, rather than
-    // depending on unordered hash iteration.
+    // instance), pick the lowest-sequence record (least-recently-recorded; sequence
+    // is re-stamped on every record()) deterministically so a repeated lookup is
+    // stable and matches the FIFO consumption order, rather than depending on
+    // unordered hash iteration.
     QHash<QString, quint64> chosenSequence;
     for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
         const PhosphorEngine::EngineSlot snapSlot = p.slotFor(QStringLiteral("snap"));
@@ -260,7 +261,7 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
             continue;
         }
 
-        // Keep only the FIFO-head (lowest sequence) record per appId.
+        // Keep only the lowest-sequence (least-recently-recorded) record per appId.
         const auto seqIt = chosenSequence.constFind(p.appId);
         if (seqIt != chosenSequence.constEnd() && seqIt.value() <= p.sequence) {
             continue;

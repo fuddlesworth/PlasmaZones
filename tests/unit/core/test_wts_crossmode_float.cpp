@@ -308,5 +308,5 @@ private:
     QStringList m_zoneIds;
 };
 
-QTEST_GUILESS_MAIN(TestWtsCrossModeFloat)
+QTEST_MAIN(TestWtsCrossModeFloat)
 #include "test_wts_crossmode_float.moc"

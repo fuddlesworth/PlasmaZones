@@ -102,7 +102,11 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
         return !accept || accept(p);
     };
 
-    // 1. Exact-windowId match first (daemon restart, uuid stable).
+    // 1. Exact-windowId match first (daemon restart, uuid stable). A record
+    //    whose windowId matches but whose `accept` predicate rejects it is NOT
+    //    consumed here; the loop falls through to the appId FIFO below (the
+    //    semantics are "consume the oldest restorable record", not "fail if the
+    //    exact record is unrestorable").
     if (!windowId.isEmpty()) {
         for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
             QList<WindowPlacement>& bucket = it.value();

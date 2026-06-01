@@ -58,80 +58,17 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 // =========================================================================
 
 #include "../helpers/StubSettings.h"
+#include "../helpers/StubZoneDetector.h"
 
 using StubSettingsSession = StubSettings;
 
 // =========================================================================
-// Stub PhosphorZones::Zone Detector
+// Stub PhosphorZones::Zone Detector + createTestLayout come from the shared
+// helper (StubZoneDetector.h). No local Q_OBJECT subclass is needed — see the
+// rationale in that header.
 // =========================================================================
 
-class StubZoneDetectorSession : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorSession(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(PhosphorZones::Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    PhosphorZones::Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helper
-// =========================================================================
-
-static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new PhosphorZones::Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
+using StubZoneDetectorSession = StubZoneDetector;
 
 // =========================================================================
 // Test Class
@@ -265,8 +202,32 @@ private Q_SLOTS:
         QVector<ZoneAssignmentEntry> cw = m_engine->calculateRotation(true);
         QVector<ZoneAssignmentEntry> ccw = m_engine->calculateRotation(false);
 
-        Q_UNUSED(cw);
-        Q_UNUSED(ccw);
+        // Rotation target geometry needs a resolvable screen; in the headless
+        // harness the zone-geometry lookup may yield no entries. Only assert the
+        // rotation *semantics* when entries were produced — otherwise we'd be
+        // pinning harness screen availability rather than the rotation logic.
+        if (cw.isEmpty() && ccw.isEmpty()) {
+            QSKIP("rotation produced no geometry in headless harness — screen unavailable");
+        }
+
+        QCOMPARE(cw.size(), ccw.size());
+
+        // Clockwise (+1) and counter-clockwise (-1) must send the same window to
+        // DIFFERENT target zones in a 3-zone layout, and the source must be the
+        // window's current assignment.
+        const auto targetFor = [](const QVector<ZoneAssignmentEntry>& v, const QString& w) -> QString {
+            for (const auto& e : v) {
+                if (e.windowId == w) {
+                    return e.targetZoneId;
+                }
+            }
+            return QString();
+        };
+        const QString cwTarget = targetFor(cw, window1);
+        const QString ccwTarget = targetFor(ccw, window1);
+        QVERIFY(!cwTarget.isEmpty());
+        QVERIFY(!ccwTarget.isEmpty());
+        QVERIFY(cwTarget != ccwTarget);
     }
 
     // =====================================================================
@@ -290,10 +251,12 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Restore wrong display (multi-monitor)
+    // P0: PendingRestore round-trip preserves screenId
+    // (wrong-display restore *resolution* is covered by test_window_placement_store
+    //  / test_wta_convenience; this only pins the persistence round-trip)
     // =====================================================================
 
-    void testRestore_wrongDisplay_multiMonitor()
+    void testPendingRestore_preservesScreenId()
     {
         QString appId = QStringLiteral("app");
 
@@ -346,10 +309,12 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: PhosphorZones::Layout Import UUID Collision
+    // P0: PendingRestore round-trip preserves zoneNumbers
+    // (UUID-collision regeneration on import is covered elsewhere; this only
+    //  pins that zoneNumbers survive the persistence round-trip)
     // =====================================================================
 
-    void testLayoutImport_uuidCollision_regeneratesIds()
+    void testPendingRestore_preservesZoneNumbers()
     {
         QString appId = QStringLiteral("app");
         QString bogusUuid = QUuid::createUuid().toString();

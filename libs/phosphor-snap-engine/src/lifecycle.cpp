@@ -219,9 +219,13 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                     m_snapState->addPreFloatZone(windowId, slot.zoneIds);
                     m_snapState->addPreFloatScreen(windowId, restoreScreen);
                 }
+                // The window is floating regardless of whether a free position was
+                // recorded — tell the compositor unconditionally (matching
+                // toggleWindowFloat / setWindowFloat / handoffReceive). Only the
+                // geometry move is gated on a valid recorded position.
+                Q_EMIT windowFloatingChanged(windowId, true, restoreScreen);
                 if (freeGeo.isValid()) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
-                    Q_EMIT windowFloatingChanged(windowId, true, restoreScreen);
                 }
                 qCInfo(PhosphorSnapEngine::lcSnapEngine)
                     << "resolveWindowRestore: placement(floating) for" << windowId << "->" << freeGeo;

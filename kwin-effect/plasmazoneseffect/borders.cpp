@@ -272,6 +272,10 @@ void PlasmaZonesEffect::markWindowSnapped(const QString& windowId, const QString
             }
         }
     }
+    // A null w means the window is gone (closed mid-snap); the bucket entry
+    // recorded above is then harmless — if the window later closes, slotWindowClosed
+    // clears m_snapBorder for it. No border is drawn (nothing to draw on) and none
+    // is needed; updateAllBorders() iterates only live windows so it simply skips it.
     if (w) {
         updateWindowBorder(windowId, w);
     }
@@ -357,6 +361,8 @@ void PlasmaZonesEffect::restoreAllSnapBorderless()
     // its set, so the guard is a belt-and-braces no-op here (a window autotile
     // shares is already un-hidden by then, and a second setNoBorder(false) is
     // harmless/idempotent).
+    // This drops the snap border STATE only; callers pair it with
+    // clearAllBorders() to tear down the OutlinedBorderItem scene items.
     const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_snapBorder);
     for (const auto& p : pairs) {
         if (m_autotileHandler->isBorderlessWindow(p.first)) {

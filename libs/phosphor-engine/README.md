@@ -30,7 +30,7 @@ don't carry their own copies and the daemon wires them up once.
 |------|---------|
 | `PhosphorEngine::IPlacementEngine`       | Intent dispatcher: every snap / move / focus / swap / assign call goes here. |
 | `PhosphorEngine::IPlacementState`        | Read-only per-screen state contract. Persistence + D-Bus consume it without caring which engine produced it. |
-| `PhosphorEngine::PlacementEngineBase`    | Base class implementing the universal window-state FSM (Unmanaged / EngineOwned / Floated) so each engine adds only its mode-specific logic. |
+| `PhosphorEngine::PlacementEngineBase`    | Base class providing shared engine plumbing (settings injection, stale-window pruning, common signals); per-window placement state lives in the engines and the unified `WindowPlacementStore`. Each engine adds only its mode-specific logic. |
 | `PhosphorEngine::NavigationContext`      | `(windowId, screenId)` target for an intent. May be empty on early-startup shortcuts. |
 | `PhosphorEngine::IWindowRegistry`        | Window-id canonicaliser + `appId`-from-instance lookup. |
 | `PhosphorEngine::IWindowTrackingService` | Cross-engine shared store for zone assignments, pre-tile geometries, floating state. |
@@ -53,10 +53,11 @@ don't carry their own copies and the daemon wires them up once.
   read-only plus serialization. Mutation goes through engine-specific
   APIs like `SnapState::assignWindowToZone` and `TilingState::addWindow`,
   because the semantics diverge.
-- **`PlacementEngineBase` owns the universal FSM.** Every engine has the
-  same Unmanaged / EngineOwned / Floated lifecycle for a window, so the
-  base implements it once. Concrete engines override only the
-  mode-specific intents.
+- **`PlacementEngineBase` is a thin shared base.** It provides engine-
+  settings injection and a default no-op prune hook; per-window placement
+  state lives in the engines' own state objects and the unified
+  `WindowPlacementStore`. Concrete engines implement the mode-specific
+  intents.
 - **Settings interfaces live here, not in engine libs.** `ISnapSettings`
   and `IAutotileSettings` are declared inside `PhosphorEngine` (even
   though they ship from the engine libraries) so the daemon can hand the
@@ -65,7 +66,7 @@ don't carry their own copies and the daemon wires them up once.
 
 ## Dependencies
 
-- `QtCore`, `QtGui`
+- `QtCore`
 - [`phosphor-geometry`](../phosphor-geometry/README.md)
 - [`phosphor-identity`](../phosphor-identity/README.md)
 

@@ -238,8 +238,9 @@ void Daemon::handleAutotileDisabled()
             QSignalBlocker blocker(m_layoutManager.get());
             for (const QString& screenId : effectiveIds) {
                 const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                const auto existingSnapUuid = Utils::parseUuid(existingSnapId);
                 PhosphorZones::Layout* existing =
-                    existingSnapId.isEmpty() ? nullptr : m_layoutManager->layoutById(QUuid::fromString(existingSnapId));
+                    existingSnapUuid ? m_layoutManager->layoutById(*existingSnapUuid) : nullptr;
                 if (existing) {
                     continue; // Per-screen snap layout already valid — don't overwrite.
                 }

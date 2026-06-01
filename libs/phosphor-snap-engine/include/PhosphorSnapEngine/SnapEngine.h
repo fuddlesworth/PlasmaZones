@@ -553,12 +553,6 @@ Q_SIGNALS:
     /// "snap_all", "vs_reconfigure"). Relayed to D-Bus via WTA.
     void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
 
-protected:
-    void onWindowClaimed(const QString& windowId) override;
-    void onWindowReleased(const QString& windowId) override;
-    void onWindowFloated(const QString& windowId) override;
-    void onWindowUnfloated(const QString& windowId) override;
-
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
 

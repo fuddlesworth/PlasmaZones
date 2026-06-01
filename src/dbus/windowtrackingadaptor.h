@@ -873,7 +873,7 @@ private:
      */
     int currentDesktop() const;
 
-    // clearFloatingStateForSnap was removed — PhosphorPlacement::WindowTrackingService::commitSnap
+    // clearFloatingStateForSnap was removed — PhosphorSnapEngine::SnapEngine::commitSnap
     // now handles floating-state clearing internally (and emits
     // windowFloatingClearedForSnap which the adaptor relays to its own
     // windowFloatingChanged D-Bus signal).
@@ -910,14 +910,6 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
-
-    // Per-engine float-back geometry routing. The autotile pre-tile float-back
-    // and the snap pre-snap-float position live in SEPARATE engine stores so
-    // they don't overwrite each other; these pick the owning engine by the
-    // window's / screen's current mode (autotile when the autotile engine is
-    // active on that screen, snap otherwise).
-    PhosphorEngine::PlacementEngineBase* geometryEngineForScreen(const QString& screenId) const;
-    PhosphorEngine::PlacementEngineBase* geometryEngineForWindow(const QString& windowId) const;
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.

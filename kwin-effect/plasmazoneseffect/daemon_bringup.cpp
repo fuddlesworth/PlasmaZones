@@ -675,13 +675,19 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderColor"), [this](const QVariant& v) {
-        m_autotileHandler->setBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        const QColor c(v.toString());
+        if (m_autotileHandler->borderColor() != c) {
+            m_autotileHandler->setBorderColor(c);
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileInactiveBorderColor"), [this](const QVariant& v) {
-        m_autotileHandler->setInactiveBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        const QColor c(v.toString());
+        if (m_autotileHandler->inactiveBorderColor() != c) {
+            m_autotileHandler->setInactiveBorderColor(c);
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {

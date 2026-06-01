@@ -58,14 +58,6 @@ public:
 protected:
     explicit PlacementEngineBase(QObject* parent = nullptr);
 
-    // Placement-specific lifecycle hooks. Implemented by each engine; retained as
-    // the engine extension points even though the base no longer drives a window
-    // state machine.
-    virtual void onWindowClaimed(const QString& windowId) = 0;
-    virtual void onWindowReleased(const QString& windowId) = 0;
-    virtual void onWindowFloated(const QString& windowId) = 0;
-    virtual void onWindowUnfloated(const QString& windowId) = 0;
-
 Q_SIGNALS:
     void geometryRestoreRequested(const QString& windowId, const QRect& geometry, const QString& screenId);
 

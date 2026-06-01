@@ -178,11 +178,13 @@ public:
     }
 
     /**
-     * @brief Wire the snap-mode placement engine for unmanaged geometry queries.
+     * @brief Wire the snap-mode placement engine.
      *
-     * PlacementEngineBase is the single store for pre-tile (unmanaged) geometry.
-     * WTS delegates to this engine for geometry lookup, store, and clear
-     * operations used by the D-Bus facade and persistence layer.
+     * Float-back / free geometry is SHARED across modes and lives in the single
+     * unified WindowPlacementStore (freeGeometryByScreen), not per-engine — so this
+     * pointer is not the geometry store (validatedUnmanagedGeometry reads the record
+     * directly). Retained for the engine reference used elsewhere (stale-window
+     * pruning, the D-Bus facade's snapEngine() accessor).
      *
      * Must be set after construction. Not owned.
      */
@@ -197,26 +199,12 @@ public:
     }
 
     /**
-     * @brief Wire the autotile-mode placement engine.
-     *
-     * Float-back / free geometry is SHARED across modes and lives in the single
-     * unified WindowPlacementStore (freeGeometryByScreen), not per-engine — so this
-     * pointer is no longer used for geometry routing (validatedUnmanagedGeometry reads
-     * the record directly). Retained for the engine reference used elsewhere. Not
-     * owned; optional (snap-only tests skip it).
-     */
-    void setAutotileEngine(PhosphorEngine::PlacementEngineBase* engine)
-    {
-        m_autotileGeometryEngine = engine;
-    }
-
-    /**
      * @brief Predicate: is the window currently in Autotile mode?
      *
-     * Injected by the daemon (engine-/settings-agnostic LGPL boundary). When
-     * true, unmanaged-geometry queries resolve to the autotile engine's store;
-     * otherwise the snap engine's. When unset, every window is treated as
-     * snap-mode — the historical single-store behaviour.
+     * Injected by the daemon (engine-/settings-agnostic LGPL boundary). The
+     * single owning-engine signal used by the capture funnel and float
+     * routing (see isWindowInAutotileMode). When unset, every window is
+     * treated as snap-mode.
      */
     using AutotileModePredicate = std::function<bool(const QString& windowId)>;
     void setAutotileModePredicate(AutotileModePredicate predicate)
@@ -330,7 +318,7 @@ public:
      * on the target screen (size clamped to fit). On-screen geometries are
      * returned as-is; off-screen geometries are nudged to the nearest screen.
      *
-     * @param geo             Saved geometry (e.g. from PlacementEngineBase::unmanagedGeometry)
+     * @param geo             Saved geometry (e.g. a window's recorded free geometry)
      * @param savedScreen     Screen connector name at capture time (may be empty)
      * @param currentScreenName Screen where the window currently is
      * @return Adjusted geometry, or nullopt if @p geo is invalid
@@ -339,19 +327,11 @@ public:
                                                    const QString& currentScreenName) const;
 
     /**
-     * @brief Select the placement engine owning a window's pre-tile float-back.
-     *
-     * Returns the autotile engine for autotile-mode windows (per the injected
-     * predicate), the snap engine otherwise. See setAutotileEngine.
-     */
-    PhosphorEngine::PlacementEngineBase* geometryEngineFor(const QString& windowId) const;
-
-    /**
-     * @brief Look up unmanaged geometry from the snap engine with appId fallback and validate.
+     * @brief Look up a window's free (unmanaged) geometry from the unified
+     *        WindowPlacementStore, with appId fallback, and validate it.
      *
      * Combines the windowId lookup, appId fallback, and cross-screen validation
-     * into a single call. Returns nullopt if no geometry is found or if the
-     * snap engine is not wired.
+     * into a single call. Returns nullopt if no geometry is recorded.
      *
      * @param windowId        Full window ID
      * @param screenId        Screen where the window currently is (for cross-screen adjustment)
@@ -1084,10 +1064,6 @@ private:
     PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
-    // Autotile engine: owns the autotile pre-tile / float-back geometry store,
-    // distinct from the snap engine's. See setAutotileEngine / per-engine
-    // float-back geometry. Not owned.
-    QPointer<PhosphorEngine::PlacementEngineBase> m_autotileGeometryEngine;
     AutotileModePredicate m_autotileModePredicate{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries

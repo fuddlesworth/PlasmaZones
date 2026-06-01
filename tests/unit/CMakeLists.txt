@@ -83,7 +83,7 @@ target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus pla
 add_test(NAME test_snap_engine COMMAND test_snap_engine)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# core/ - PlacementEngineBase Tests (LGPL shared library FSM + serialization)
+# core/ - PlacementEngineBase Tests (LGPL shared engine base: settings injection + base prune)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_placement_engine_base core/test_placement_engine_base.cpp)
 target_link_libraries(test_placement_engine_base PRIVATE Qt6::Test Qt6::Core PhosphorEngine)

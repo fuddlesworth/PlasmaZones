@@ -109,20 +109,6 @@ AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager,
 
 AutotileEngine::~AutotileEngine() = default;
 
-void AutotileEngine::onWindowClaimed(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-    // PlacementEngineBase is the single store for unmanaged geometry.
-    // No WTS propagation needed.
-}
-
-void AutotileEngine::onWindowReleased(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-    // PlacementEngineBase is the single store for unmanaged geometry.
-    // No WTS propagation needed.
-}
-
 // Canonicalize on every access so set/clear/read key on the same id regardless of
 // the raw alias a caller passes — symmetric with isWindowFloatingInAutotile(). The
 // daemon already passes canonical ids today, but relying on every caller's discipline
@@ -140,16 +126,6 @@ void AutotileEngine::clearAutotileFloated(const QString& rawWindowId)
 bool AutotileEngine::isAutotileFloated(const QString& rawWindowId) const
 {
     return m_autotileFloatedWindows.contains(canonicalizeForLookup(rawWindowId));
-}
-
-void AutotileEngine::onWindowFloated(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-}
-
-void AutotileEngine::onWindowUnfloated(const QString& windowId)
-{
-    Q_UNUSED(windowId)
 }
 
 int AutotileEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)

@@ -316,20 +316,6 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
     return adjustGeometryToScreen(geo);
 }
 
-PhosphorEngine::PlacementEngineBase* WindowTrackingService::geometryEngineFor(const QString& windowId) const
-{
-    // Per-engine float-back geometry: an autotile-mode window's pre-tile
-    // float-back lives in the autotile engine's store; a snap-mode window's
-    // pre-snap-float position lives in the snap engine's. Routing the lookup by
-    // current mode is what keeps the two from overwriting each other. Falls back
-    // to the snap engine when the autotile engine / predicate aren't wired
-    // (snap-only unit tests).
-    if (m_autotileModePredicate && m_autotileGeometryEngine && m_autotileModePredicate(windowId)) {
-        return m_autotileGeometryEngine.data();
-    }
-    return m_snapEngine.data();
-}
-
 std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
                                                                        bool exactOnly) const
 {

@@ -353,9 +353,8 @@ public:
     // Engines that don't currently distinguish ownership across screens can
     // leave both as no-ops; the defaults are safe.
     //
-    // The verbs are prefixed `handoff*` to keep them distinct from
-    // PlacementEngineBase::releaseWindow (which is part of the base FSM
-    // lifecycle and means "this window is no longer engine-managed at all"
+    // The verbs are prefixed `handoff*` to keep them distinct from an engine
+    // dropping a window entirely (the window is no longer engine-managed at all
     // — a different concept from "transferring ownership to another engine").
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -605,7 +604,7 @@ public:
 
     /// Per-screen state object for the given screen. May return nullptr
     /// if the engine does not manage the screen OR if per-screen state
-    /// ownership has not yet been wired (e.g., SnapEngine before PR 2).
+    /// ownership has not yet been wired for that engine.
     /// Callers must not use a non-null return as a proxy for "engine
     /// manages this screen" — use isActiveOnScreen() for that check.
     virtual IPlacementState* stateForScreen(const QString& screenId) = 0;

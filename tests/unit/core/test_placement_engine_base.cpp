@@ -19,11 +19,6 @@ public:
     {
     }
 
-    int claimedCount = 0;
-    int releasedCount = 0;
-    int floatedCount = 0;
-    int unfloatedCount = 0;
-
     bool isActiveOnScreen(const QString&) const override
     {
         return true;
@@ -89,24 +84,6 @@ public:
     const IPlacementState* stateForScreen(const QString&) const override
     {
         return nullptr;
-    }
-
-protected:
-    void onWindowClaimed(const QString&) override
-    {
-        ++claimedCount;
-    }
-    void onWindowReleased(const QString&) override
-    {
-        ++releasedCount;
-    }
-    void onWindowFloated(const QString&) override
-    {
-        ++floatedCount;
-    }
-    void onWindowUnfloated(const QString&) override
-    {
-        ++unfloatedCount;
     }
 };
 

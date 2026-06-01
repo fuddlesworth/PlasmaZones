@@ -40,7 +40,8 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
     // Screen manager access
     // Tech debt: returns concrete ScreenManager* — should be an IScreenManager
-    // interface once one exists. Acceptable for now as a stepping stone.
+    // interface once one exists. Acceptable as a stepping stone; the
+    // IScreenManager extraction is tracked separately.
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual PhosphorScreens::ScreenManager* screenManager() const = 0;

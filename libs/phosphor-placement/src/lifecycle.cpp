@@ -441,7 +441,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
 
     // B3: Migrate the shared free-geometry screenId KEYS from virtual back to
     // physical (the unified record is the single float-back store).
-    m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
+    const int freeGeoRemapped = m_placementStore.transform([&](PhosphorEngine::WindowPlacement& p) {
         QHash<QString, QRect> remapped;
         bool any = false;
         for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
@@ -458,6 +458,13 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         }
         return any;
     });
+    // Mirror the migrateScreenAssignmentsToVirtual sibling: a remapped free-geometry
+    // key must trigger a save even when no zone assignment migrated (e.g. a purely
+    // floating window whose only state is a float-back rect), else the rewritten
+    // key is never persisted and the stale virtual key reloads on restart.
+    if (freeGeoRemapped > 0) {
+        anyStateMigrated = true;
+    }
 
     // Validate zone assignments against the physical screen's layout.
     // Virtual screen layouts may have zones that don't exist in the physical
@@ -651,10 +658,13 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // No manual full-windowId→appId float-back copy is needed: the unified record's
     // freeGeometry rides on the record itself, which is stored in its appId bucket,
     // so the appId fallback (peek/take) finds it on reopen automatically.
-    // Clear floating state on close — floating is a runtime-only state that
-    // should not carry over when the window is reopened. Without this, closing
-    // a floated window and reopening it would inherit the float state (via appId
-    // fallback), causing a spurious "floated" OSD and preventing auto-snap.
+    // The authoritative engine float bit was already cleared by
+    // m_snapState->windowClosed above (and AutotileEngine::windowClosed clears
+    // its own); here we only clear the LEGACY fallback float set + its appId
+    // aliases — floating is a runtime-only state that must not carry over when
+    // the window is reopened. Without this, closing a floated window and
+    // reopening it would inherit the float state (via appId fallback), causing
+    // a spurious "floated" OSD and preventing auto-snap.
     m_floatingWindows.remove(windowId);
     if (appId != windowId) {
         m_floatingWindows.remove(appId);
@@ -665,7 +675,7 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     if (appId != windowId) {
         m_snapState->clearPreFloatZone(appId);
     }
-    // Remove autotile-floated tracking outright — do NOT migrate to appId.
+    // Remove sticky-window tracking outright — do NOT migrate to appId.
     m_windowStickyStates.remove(windowId);
 
     scheduleSaveState();
@@ -679,8 +689,9 @@ void WindowTrackingService::onLayoutChanged()
     // Validate zone assignments against new layout.
     // NOTE: Do NOT early-return when the global activeLayout() is null. With virtual
     // screens, individual screens may have per-screen layouts via resolveLayoutForScreen().
-    // The per-window loop below (~line 718) already resolves layouts per-screen, so a
-    // null global layout does not mean "no layouts anywhere".
+    // The per-window stale-assignment loop further down resolves layouts
+    // per-screen via resolveLayoutForScreen(), so a null global layout does not
+    // mean "no layouts anywhere".
     PhosphorZones::Layout* newLayout = m_layoutManager->activeLayout();
 
     // Before removing stale assignments, capture (window, zonePosition) for resnap-to-new-layout.

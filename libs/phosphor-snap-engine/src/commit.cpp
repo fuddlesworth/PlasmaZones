@@ -139,10 +139,11 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
 
     for (const auto& entry : entries) {
         if (entry.targetZoneId == PhosphorEngine::RestoreSentinel) {
+            // uncommitSnap already dereferences m_windowTracker unconditionally
+            // (production deps are non-null; tests never reach this path with a
+            // null tracker), so no separate guard is needed here.
             uncommitSnap(entry.windowId);
-            if (m_windowTracker) {
-                m_windowTracker->clearFreeGeometry(entry.windowId);
-            }
+            m_windowTracker->clearFreeGeometry(entry.windowId);
             resolvedScreens.append(QString());
             continue;
         }

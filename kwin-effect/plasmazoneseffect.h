@@ -64,9 +64,9 @@ namespace PlasmaZones {
 
 using namespace PhosphorCompositor;
 
-// Mirror of core/enums.h AutotileDragBehavior. The effect can't include daemon
-// headers (KWin plugin ABI constraints), so the values are duplicated here.
-// MUST stay in sync with core/enums.h — bump both in the same commit. The
+// Mirror of PhosphorTiles::AutotileDragBehavior (re-exported via core/enums.h).
+// The effect can't include daemon headers (KWin plugin ABI constraints), so the
+// values are duplicated here. MUST stay in sync with the canonical enum — the
 // static_asserts below pin the integer encoding so a drift on either side
 // becomes a compile-time failure rather than a silent runtime mismatch.
 enum class EffectAutotileDragBehavior : int {
@@ -74,10 +74,10 @@ enum class EffectAutotileDragBehavior : int {
     Reorder = 1, ///< Drag-to-reorder (Krohnkite-style)
 };
 static_assert(static_cast<int>(EffectAutotileDragBehavior::Float) == 0,
-              "EffectAutotileDragBehavior::Float must encode as 0 to match core/enums.h AutotileDragBehavior::Float");
+              "EffectAutotileDragBehavior::Float must encode as 0 to match PhosphorTiles::AutotileDragBehavior::Float");
 static_assert(
     static_cast<int>(EffectAutotileDragBehavior::Reorder) == 1,
-    "EffectAutotileDragBehavior::Reorder must encode as 1 to match core/enums.h AutotileDragBehavior::Reorder");
+    "EffectAutotileDragBehavior::Reorder must encode as 1 to match PhosphorTiles::AutotileDragBehavior::Reorder");
 
 // Forward declarations for helper classes
 class AutotileHandler;
