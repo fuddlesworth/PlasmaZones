@@ -451,8 +451,8 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
     // defeats the delta-write design when the call was a no-op.
     //
     // Use the appId-aware `isWindowFloating` predicate (which checks both
-    // the full windowId AND the session-restored appId fallback at
-    // line 309-318). A naive `m_floatingWindows.contains(windowId)` would
+    // the full windowId AND the session-restored appId fallback — see
+    // isWindowFloating's appId branch). A naive `m_floatingWindows.contains(windowId)` would
     // return false when only the appId entry exists post-session-restore,
     // letting the early-return short-circuit the cleanup path below — the
     // appId entry would never be removed and isWindowFloating would keep

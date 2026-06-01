@@ -397,7 +397,7 @@ SettingsFlickable {
         title: i18n("Import Colors from File")
         nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
-        onAccepted: root.settingsBridge.loadColorsFromFile(selectedFile.toString().replace(/^file:\/\/+/, "/"))
+        onAccepted: root.settingsBridge.loadColorsFromFile(settingsController.urlToLocalFile(selectedFile))
     }
 
     Kirigami.PromptDialog {
