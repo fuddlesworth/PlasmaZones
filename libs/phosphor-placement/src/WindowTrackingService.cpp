@@ -685,9 +685,9 @@ const QHash<QString, int>& WindowTrackingService::desktopAssignments() const
 // The lastUsed* accessors are read during the WTA constructor's loadState()
 // call — which runs BEFORE Daemon::init wires SnapState via setSnapState().
 // Returning a sentinel (empty string / 0) when SnapState isn't yet
-// attached lets early-init readers (the setLastUsedZone restore at
-// saveload.cpp~792) pass through harmlessly instead of asserting and
-// crashing the daemon on startup. The snap-engine's own lastUsedZone
+// attached lets early-init readers (the setLastUsedZone restore in
+// WindowTrackingAdaptor::loadState) pass through harmlessly instead of
+// asserting and crashing the daemon on startup. The snap-engine's own lastUsedZone
 // state is loaded later from KConfig through its persistence delegate
 // once SnapState is wired, so the early-init read here can only ever
 // produce a "no last zone yet" result anyway.
