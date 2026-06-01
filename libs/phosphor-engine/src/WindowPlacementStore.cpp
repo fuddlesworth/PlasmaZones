@@ -8,48 +8,92 @@
 
 namespace PhosphorEngine {
 
-void WindowPlacementStore::record(WindowPlacement placement)
+bool WindowPlacementStore::record(WindowPlacement incoming)
 {
-    if (placement.windowId.isEmpty() || placement.appId.isEmpty() || !placement.isValid()) {
-        return;
+    if (incoming.windowId.isEmpty() || incoming.appId.isEmpty() || !incoming.isValid()) {
+        return false;
     }
-    placement.sequence = ++m_sequence;
 
-    // Replace an existing record for the EXACT windowId, wherever it lives. This
-    // is the mutual-exclusivity invariant: one window → one record. windowId is
-    // unique across buckets, so once we find (and handle) it we stop searching —
-    // critically WITHOUT running the loop's `++it` after a possible erase(it),
-    // which would increment an invalidated iterator (UB).
+    // ONE record per window (NOT one per engine). A capture provides only the
+    // CALLING engine's slot (in `engines`) plus any free-geometry update; record()
+    // MERGES that into the window's existing record, leaving the OTHER engine's
+    // slot and the other screens' free geometry untouched. This is what gives
+    // per-mode state independence with a single shared free/float geometry: the
+    // snap engine recording a "snapped" slot never wipes the autotile "floating"
+    // slot, and updating the float position on one screen never drops another
+    // screen's remembered free spot.
+    //
+    // Locate the existing record for the EXACT windowId, wherever it lives. windowId
+    // is unique across buckets, so once found we stop — WITHOUT running the loop's
+    // `++it` after a possible erase(it) (would increment an invalidated iterator).
     for (auto it = m_byApp.begin(); it != m_byApp.end();) {
         QList<WindowPlacement>& bucket = it.value();
-        bool found = false;
+        bool handled = false;
         for (int i = 0; i < bucket.size(); ++i) {
-            if (bucket.at(i).windowId == placement.windowId) {
-                if (it.key() == placement.appId) {
-                    bucket[i] = placement; // same bucket — update in place
-                    return;
+            if (bucket.at(i).windowId != incoming.windowId) {
+                continue;
+            }
+            // Merge incoming into a copy of the existing record. Context (screen /
+            // desktop / activity / kind) is the OWNING engine's business, so only a
+            // real engine capture updates it — a geometry-only write (no engine slot,
+            // e.g. recordFreeGeometry) must NOT clobber the managed-context fields.
+            WindowPlacement merged = bucket.at(i);
+            if (!incoming.engines.isEmpty()) {
+                merged.screenId = incoming.screenId;
+                merged.virtualDesktop = incoming.virtualDesktop;
+                merged.activity = incoming.activity;
+                if (incoming.kind != WindowKind::Unknown) {
+                    merged.kind = incoming.kind;
                 }
-                // appId changed (mid-session rename): drop the stale entry and
-                // fall through to append under the new appId.
-                bucket.removeAt(i);
-                found = true;
-                break;
             }
-        }
-        if (found) {
+            for (auto e = incoming.engines.constBegin(); e != incoming.engines.constEnd(); ++e) {
+                merged.engines.insert(e.key(), e.value());
+            }
+            for (auto g = incoming.freeGeometryByScreen.constBegin(); g != incoming.freeGeometryByScreen.constEnd();
+                 ++g) {
+                merged.freeGeometryByScreen.insert(g.key(), g.value());
+            }
+
+            const bool appIdChanged = (it.key() != incoming.appId);
+            if (!appIdChanged && merged.sameContentAs(bucket.at(i))) {
+                // Content-identical re-capture (sequence aside): leave the existing
+                // record untouched and report "no change" so the save loop settles.
+                return false;
+            }
+            merged.appId = incoming.appId;
+            merged.sequence = ++m_sequence;
+
+            if (!appIdChanged) {
+                bucket[i] = merged; // same bucket — update in place
+                return true;
+            }
+            // appId changed (mid-session rename): drop the stale entry here and
+            // re-insert under the new appId bucket below.
+            bucket.removeAt(i);
             if (bucket.isEmpty()) {
-                m_byApp.erase(it); // iterator consumed — do not ++it below
+                m_byApp.erase(it); // iterator consumed — do not ++it
             }
+            QList<WindowPlacement>& dst = m_byApp[merged.appId];
+            while (dst.size() >= MaxPerApp) {
+                dst.removeFirst();
+            }
+            dst.append(merged);
+            return true;
+        }
+        if (handled) {
             break;
         }
         ++it;
     }
 
-    QList<WindowPlacement>& bucket = m_byApp[placement.appId];
+    // No existing record for this window — append a fresh one.
+    incoming.sequence = ++m_sequence;
+    QList<WindowPlacement>& bucket = m_byApp[incoming.appId];
     while (bucket.size() >= MaxPerApp) {
         bucket.removeFirst();
     }
-    bucket.append(placement);
+    bucket.append(incoming);
+    return true;
 }
 
 std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowId, const QString& appId,
@@ -153,16 +197,18 @@ bool WindowPlacementStore::contains(const QString& windowId, const QString& appI
     return false;
 }
 
-void WindowPlacementStore::clear(const QString& windowId)
+bool WindowPlacementStore::clear(const QString& windowId)
 {
     if (windowId.isEmpty()) {
-        return;
+        return false;
     }
+    bool removed = false;
     for (auto it = m_byApp.begin(); it != m_byApp.end();) {
         QList<WindowPlacement>& bucket = it.value();
         for (int i = bucket.size() - 1; i >= 0; --i) {
             if (bucket.at(i).windowId == windowId) {
                 bucket.removeAt(i);
+                removed = true;
             }
         }
         if (bucket.isEmpty()) {
@@ -171,6 +217,39 @@ void WindowPlacementStore::clear(const QString& windowId)
             ++it;
         }
     }
+    return removed;
+}
+
+bool WindowPlacementStore::clearFreeGeometry(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return false;
+    }
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        for (WindowPlacement& p : it.value()) {
+            if (p.windowId == windowId && !p.freeGeometryByScreen.isEmpty()) {
+                p.freeGeometryByScreen.clear();
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+int WindowPlacementStore::transform(const std::function<bool(WindowPlacement&)>& fn)
+{
+    if (!fn) {
+        return 0;
+    }
+    int changed = 0;
+    for (auto it = m_byApp.begin(); it != m_byApp.end(); ++it) {
+        for (WindowPlacement& p : it.value()) {
+            if (fn(p)) {
+                ++changed;
+            }
+        }
+    }
+    return changed;
 }
 
 int WindowPlacementStore::removeIf(const std::function<bool(const WindowPlacement&)>& pred)

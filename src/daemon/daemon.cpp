@@ -1181,6 +1181,94 @@ bool Daemon::init()
     // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection).
     m_windowTrackingAdaptor->setEngines(snapEngine, autotileEngine);
 
+    // ───────────────────────────────────────────────────────────────────────────
+    // Per-engine float state (root fix for the shared-bit float defect).
+    //
+    // Float state is genuinely per-engine: a window floated in autotile mode is
+    // NOT floating in snapping mode and vice versa. The authoritative store lives
+    // in each engine (SnapEngine→SnapState::isFloating / AutotileEngine→
+    // TilingState::isFloating). WTS is engine-agnostic (LGPL boundary), so we
+    // inject a resolver (reader) and writer that route to the engine owning the
+    // window's CURRENT screen mode. This replaces the old single shared
+    // m_floatingWindows + m_snapState bit that both engines read/wrote.
+    //
+    // Mode resolution: the window's tracked screen (WTS screenAssignments, with
+    // the autotile engine's own tracked screen as the fallback for windows snap
+    // never saw) → LayoutRegistry::modeForScreen → the owning engine.
+    {
+        auto screenModeForWindow = [this, autotilePtr = QPointer(autotileEngine)](
+                                       const QString& windowId) -> PhosphorZones::AssignmentEntry::Mode {
+            QString screenId;
+            if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+                screenId = m_windowTrackingAdaptor->service()->screenAssignments().value(windowId);
+            }
+            if (!screenId.isEmpty() && m_layoutManager) {
+                return m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity());
+            }
+            // No tracked screen in WTS (e.g. a window snap never saw): if the
+            // autotile engine tracks it, its current mode is Autotile. Otherwise
+            // default to Snapping — the historical no-context fallback.
+            if (autotilePtr && autotilePtr->isWindowTracked(windowId)) {
+                return PhosphorZones::AssignmentEntry::Autotile;
+            }
+            return PhosphorZones::AssignmentEntry::Snapping;
+        };
+
+        m_windowTrackingAdaptor->service()->setEngineFloatResolver(
+            [screenModeForWindow, snapEnginePtr = QPointer(snapEngine),
+             autotilePtr = QPointer(autotileEngine)](const QString& windowId) -> bool {
+                if (screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile) {
+                    return autotilePtr && autotilePtr->isWindowFloatingInAutotile(windowId);
+                }
+                return snapEnginePtr && snapEnginePtr->snapState() && snapEnginePtr->snapState()->isFloating(windowId);
+            });
+
+        m_windowTrackingAdaptor->service()->setEngineFloatWriter(
+            [screenModeForWindow, snapEnginePtr = QPointer(snapEngine)](const QString& windowId, bool floating) {
+                // Write ONLY the snap engine's authoritative float store, and
+                // only for snap-mode windows. The two engines keep INDEPENDENT
+                // float state — writing the snap bit for an autotile-mode window
+                // is exactly the cross-mode leak this refactor eliminates.
+                //
+                // Autotile-mode windows are intentionally a no-op here:
+                // TilingState::isFloating is the autotile engine's authoritative
+                // float store and is already set by the engine itself (via
+                // performToggleFloat / setWindowFloat) BEFORE any daemon sync
+                // calls WTS::setWindowFloating. Re-driving setWindowFloat here
+                // would re-toggle the float and retile — so the engine stays the
+                // sole owner of its own float bit.
+                if (screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile) {
+                    return;
+                }
+                if (snapEnginePtr && snapEnginePtr->snapState()) {
+                    snapEnginePtr->snapState()->setFloating(windowId, floating);
+                }
+            });
+
+        m_windowTrackingAdaptor->service()->setEngineFloatLister(
+            [snapEnginePtr = QPointer(snapEngine), autotilePtr = QPointer(autotileEngine)]() -> QStringList {
+                QStringList all;
+                if (snapEnginePtr && snapEnginePtr->snapState()) {
+                    all += snapEnginePtr->snapState()->floatingWindows();
+                }
+                if (autotilePtr) {
+                    all += autotilePtr->allFloatingWindows();
+                }
+                return all;
+            });
+
+        // Per-engine float-back GEOMETRY: the autotile pre-tile float-back and
+        // the snap pre-snap-float position live in SEPARATE engine stores. WTS
+        // resolves validatedUnmanagedGeometry to the engine owning the window's
+        // current mode via this predicate (same screen→mode resolution as the
+        // float resolver above).
+        m_windowTrackingAdaptor->service()->setAutotileEngine(autotileEngine);
+        m_windowTrackingAdaptor->service()->setAutotileModePredicate(
+            [screenModeForWindow](const QString& windowId) -> bool {
+                return screenModeForWindow(windowId) == PhosphorZones::AssignmentEntry::Autotile;
+            });
+    }
+
     // Wire SnapEngine's back-reference to the window tracking adaptor.
     // SnapEngine's navigation methods (focusInDirection, moveFocusedInDirection, …)
     // were moved out of WindowTrackingAdaptor and need to reach back into the
@@ -1226,10 +1314,6 @@ bool Daemon::init()
             if (wta)
                 wta->loadState();
         });
-    autotileEngine->setIsWindowFloatingFn([wta = QPointer(m_windowTrackingAdaptor)](const QString& windowId) -> bool {
-        return wta && wta->service() && wta->service()->isWindowFloating(windowId);
-    });
-
     // Autotile restore persistence (window orders + pending restores) is now
     // subsumed by the unified WindowPlacementStore — an autotiled window's position
     // is one WindowPlacement record, captured by the common save-time snapshot and

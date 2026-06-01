@@ -435,6 +435,18 @@ private:
      */
     bool isWindowFloating(const QString& windowId) const;
 
+    /**
+     * @brief True if the window is currently snap-managed (tiled into a snap zone).
+     * Its frame geometry is the zone rect, NOT a free-floating position — callers
+     * that capture "pre-tile / float-back" geometry must skip such windows even on
+     * fast paths, or the snap zone poisons the autotile float-back (per-mode float
+     * independence). Backed by the shared snap BorderState tiled set.
+     */
+    bool isWindowMarkedSnapped(const QString& windowId) const
+    {
+        return PhosphorCompositor::AutotileStateHelpers::isTiledWindow(m_snapBorder, windowId);
+    }
+
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;

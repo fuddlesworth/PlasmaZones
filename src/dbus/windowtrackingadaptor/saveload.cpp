@@ -109,9 +109,8 @@ void WindowTrackingAdaptor::saveState()
     tracking->deleteKey(ConfigKeys::obsoleteWindowDesktopAssignmentsKey());
 
     // Pre-tile (float-back) geometry is no longer persisted separately — it lives
-    // in the unified WindowPlacement record (a snapped record's geometry IS the
-    // pre-snap float-back). m_unmanagedGeometries remains a pure in-session cache,
-    // re-seeded from the record on restore. Drop the obsolete keys.
+    // in the unified WindowPlacement record's shared freeGeometryByScreen (the single
+    // float-back store). Drop the obsolete keys.
     tracking->deleteKey(ConfigKeys::preTileGeometriesFullKey());
     tracking->deleteKey(ConfigKeys::preTileGeometriesKey());
 
@@ -343,6 +342,11 @@ void WindowTrackingAdaptor::loadState()
             }
         }
     }
+
+    // No engine float-back cache to re-seed: the unified record's freeGeometryByScreen
+    // IS the single float-back store and is loaded directly above (deserialize), and
+    // validatedUnmanagedGeometry reads it. (The per-engine m_unmanagedGeometries store
+    // was removed.)
 
     // Restore active layout from previous session so that previousLayout() is correct
     // on the next layout switch. Without this, the daemon starts with defaultLayout()

@@ -56,6 +56,15 @@ public:
     virtual void unassignWindow(const QString& windowId) = 0;
 
     virtual const QHash<QString, QStringList>& zoneAssignments() const = 0;
+
+    /// A window's recorded snap zone(s), preferring the LIVE assignment but falling
+    /// back to the DURABLE placement-record snap slot when the live cache is cold.
+    /// The live `zoneAssignments()` map is runtime-only — a daemon restart (and
+    /// `handoffRelease` on autotile entry) clears it — so consumers that must
+    /// survive a restart (the autotile→snap resnap) read this instead. Returns an
+    /// empty list for a window that was never snapped in either source.
+    virtual QStringList recordedSnapZones(const QString& windowId) const = 0;
+
     virtual const QHash<QString, QString>& screenAssignments() const = 0;
     virtual QString zoneForWindow(const QString& windowId) const = 0;
     virtual QStringList zonesForWindow(const QString& windowId) const = 0;
@@ -118,6 +127,20 @@ public:
 
     virtual std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
                                                             bool exactOnly = false) const = 0;
+
+    /// Record a window's SHARED free/float geometry (the single float-back store —
+    /// the placement record's freeGeometryByScreen). This is the ONE writer all
+    /// float-back captures route through (effect pre-tile/pre-snap capture, drag
+    /// store, float-toggle capture), so snap and autotile read the same value and
+    /// never drift. @p overwrite=false leaves an existing entry for @p screenId
+    /// untouched (first-capture-wins). No-op on an invalid geometry.
+    virtual void recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
+                                    bool overwrite) = 0;
+
+    /// Clear a window's shared free/float geometry (all screens) from the record,
+    /// leaving its engine slots intact. For the drag-out / layout-change consume
+    /// paths that restore the float-back once and must not re-apply it.
+    virtual void clearFreeGeometry(const QString& windowId) = 0;
     virtual QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const = 0;
     virtual QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const = 0;
     virtual QString resolveEffectiveScreenId(const QString& screenId) const = 0;

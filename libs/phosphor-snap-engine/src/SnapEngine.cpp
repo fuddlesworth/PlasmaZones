@@ -75,21 +75,6 @@ void SnapEngine::onWindowUnfloated(const QString& windowId)
     Q_UNUSED(windowId)
 }
 
-void SnapEngine::saveSnapFloating(const QString& windowId)
-{
-    m_savedSnapFloatingWindows.insert(windowId);
-}
-
-bool SnapEngine::restoreSnapFloating(const QString& windowId)
-{
-    return m_savedSnapFloatingWindows.remove(windowId);
-}
-
-void SnapEngine::clearSavedSnapFloating()
-{
-    m_savedSnapFloatingWindows.clear();
-}
-
 void SnapEngine::markWindowReported(const QString& windowId)
 {
     if (!windowId.isEmpty()) {
@@ -100,14 +85,6 @@ void SnapEngine::markWindowReported(const QString& windowId)
 int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
-    for (auto it = m_savedSnapFloatingWindows.begin(); it != m_savedSnapFloatingWindows.end();) {
-        if (!aliveWindowIds.contains(*it)) {
-            it = m_savedSnapFloatingWindows.erase(it);
-            ++pruned;
-        } else {
-            ++it;
-        }
-    }
     for (auto it = m_effectReportedWindows.begin(); it != m_effectReportedWindows.end();) {
         if (!aliveWindowIds.contains(*it)) {
             it = m_effectReportedWindows.erase(it);

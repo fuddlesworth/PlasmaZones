@@ -197,6 +197,48 @@ public:
     }
 
     /**
+     * @brief Wire the autotile-mode placement engine.
+     *
+     * Float-back / free geometry is SHARED across modes and lives in the single
+     * unified WindowPlacementStore (freeGeometryByScreen), not per-engine — so this
+     * pointer is no longer used for geometry routing (validatedUnmanagedGeometry reads
+     * the record directly). Retained for the engine reference used elsewhere. Not
+     * owned; optional (snap-only tests skip it).
+     */
+    void setAutotileEngine(PhosphorEngine::PlacementEngineBase* engine)
+    {
+        m_autotileGeometryEngine = engine;
+    }
+
+    /**
+     * @brief Predicate: is the window currently in Autotile mode?
+     *
+     * Injected by the daemon (engine-/settings-agnostic LGPL boundary). When
+     * true, unmanaged-geometry queries resolve to the autotile engine's store;
+     * otherwise the snap engine's. When unset, every window is treated as
+     * snap-mode — the historical single-store behaviour.
+     */
+    using AutotileModePredicate = std::function<bool(const QString& windowId)>;
+    void setAutotileModePredicate(AutotileModePredicate predicate)
+    {
+        m_autotileModePredicate = std::move(predicate);
+    }
+
+    /**
+     * @brief True if the window's CURRENT screen mode is autotile.
+     * The single owning-engine signal — the same predicate that routes the float
+     * resolver, the float writer, and validatedUnmanagedGeometry. Exposed so the
+     * capture funnel (WindowTrackingAdaptor::captureWindowPlacement) picks the
+     * owning engine the SAME way, instead of a divergent isWindowTracked() check
+     * that disagrees mid-mode-flip. Returns false when the predicate is unwired
+     * (snap-only tests / early init).
+     */
+    bool isWindowInAutotileMode(const QString& windowId) const
+    {
+        return m_autotileModePredicate && m_autotileModePredicate(windowId);
+    }
+
+    /**
      * @brief Accessor for consumers that need direct access (effect, adaptor).
      */
     PhosphorEngine::WindowRegistry* windowRegistry() const
@@ -297,6 +339,14 @@ public:
                                                    const QString& currentScreenName) const;
 
     /**
+     * @brief Select the placement engine owning a window's pre-tile float-back.
+     *
+     * Returns the autotile engine for autotile-mode windows (per the injected
+     * predicate), the snap engine otherwise. See setAutotileEngine.
+     */
+    PhosphorEngine::PlacementEngineBase* geometryEngineFor(const QString& windowId) const;
+
+    /**
      * @brief Look up unmanaged geometry from the snap engine with appId fallback and validate.
      *
      * Combines the windowId lookup, appId fallback, and cross-screen validation
@@ -310,17 +360,68 @@ public:
     std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
                                                     bool exactOnly = false) const override;
 
+    /// Write the window's shared free/float geometry into the unified record (the
+    /// single float-back store). See IWindowTrackingService::recordFreeGeometry.
+    void recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
+                            bool overwrite) override;
+
+    /// Clear a window's shared free/float geometry from the record. See
+    /// IWindowTrackingService::clearFreeGeometry.
+    void clearFreeGeometry(const QString& windowId) override;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
+     * @brief Per-engine float resolver/writer.
+     *
+     * Float state is genuinely per-engine: a window floated in autotile mode is
+     * NOT floating in snapping mode and vice versa. The authoritative store lives
+     * in each engine (SnapState::isFloating / TilingState::isFloating), keyed by
+     * the screen's current mode. The placement library is intentionally engine-
+     * and settings-agnostic (LGPL boundary), so the daemon injects a resolver
+     * (reader) and writer that route to the engine owning the window's CURRENT
+     * screen mode.
+     *
+     * When unset (unit tests / early init before the engines are wired), the
+     * service falls back to the legacy shared `m_floatingWindows` set so existing
+     * single-engine tests keep their historical behaviour.
+     */
+    using EngineFloatResolver = std::function<bool(const QString& windowId)>;
+    using EngineFloatWriter = std::function<void(const QString& windowId, bool floating)>;
+    using EngineFloatLister = std::function<QStringList()>;
+
+    void setEngineFloatResolver(EngineFloatResolver resolver)
+    {
+        m_engineFloatResolver = std::move(resolver);
+    }
+    void setEngineFloatWriter(EngineFloatWriter writer)
+    {
+        m_engineFloatWriter = std::move(writer);
+    }
+    /// Aggregates both engines' floating windows for the engine-agnostic
+    /// floatingWindows() enumeration. See setEngineFloatResolver rationale.
+    void setEngineFloatLister(EngineFloatLister lister)
+    {
+        m_engineFloatLister = std::move(lister);
+    }
+
+    /**
      * @brief Check if a window is floating (excluded from snapping)
+     *
+     * Delegates to the per-engine resolver when wired; otherwise falls back to
+     * the legacy shared floating set.
      */
     bool isWindowFloating(const QString& windowId) const override;
 
     /**
      * @brief Set window floating state
+     *
+     * Routes to the engine owning the window's current screen mode via the
+     * injected writer when wired; otherwise updates the legacy shared set and
+     * the snap state directly.
+     *
      * @param windowId Full window ID
      * @param floating true to float, false to unfloat
      */
@@ -717,6 +818,10 @@ public:
      */
     const QHash<QString, QStringList>& zoneAssignments() const override;
 
+    /// Live snap zones if present, else the durable placement-record snap slot.
+    /// See IWindowTrackingService::recordedSnapZones.
+    QStringList recordedSnapZones(const QString& windowId) const override;
+
     /**
      * @brief Get all screen assignments for persistence
      */
@@ -979,10 +1084,25 @@ private:
     PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
+    // Autotile engine: owns the autotile pre-tile / float-back geometry store,
+    // distinct from the snap engine's. See setAutotileEngine / per-engine
+    // float-back geometry. Not owned.
+    QPointer<PhosphorEngine::PlacementEngineBase> m_autotileGeometryEngine;
+    AutotileModePredicate m_autotileModePredicate{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
-    // Converted from windowId to appId on window close for persistence
+    // Converted from windowId to appId on window close for persistence.
+    //
+    // LEGACY FALLBACK ONLY: used when no per-engine resolver/writer is wired
+    // (unit tests / early init). In production the daemon injects
+    // m_engineFloatResolver / m_engineFloatWriter and this set is never read or
+    // written by isWindowFloating / setWindowFloating.
     QSet<QString> m_floatingWindows;
+
+    // Daemon-injected per-engine float reader/writer/lister. See setEngineFloatResolver.
+    EngineFloatResolver m_engineFloatResolver{};
+    EngineFloatWriter m_engineFloatWriter{};
+    EngineFloatLister m_engineFloatLister{};
 
     // Session persistence: consumption queue (appId -> list of pending restores, consumed FIFO)
     QHash<QString, QList<PendingRestore>> m_pendingRestoreQueues;

@@ -18,25 +18,34 @@ namespace PhosphorEngine {
 
 /// The single source of truth for window restore state in the unified model.
 ///
-/// Holds AT MOST ONE WindowPlacement record per window, captured live by the
-/// owning engine. Records are keyed two ways so they survive both a daemon
+/// Holds AT MOST ONE WindowPlacement record PER WINDOW (not per engine), captured
+/// live by the engines. Records are keyed two ways so they survive both a daemon
 /// restart (full windowId / uuid is stable while the window stays open) and a
 /// close→reopen (uuid changes, so the appId FIFO carries it).
 ///
-/// The core invariant — `record()` REPLACES any prior record for the exact
-/// windowId — is what makes states mutually exclusive: when a window snaps, the
-/// snap record overwrites its stale "floated" record, so a floated→snapped
-/// window can never resurrect its float on the next login.
+/// The core invariant — `record()` MERGES into the single record for the exact
+/// windowId — gives per-mode state independence with a shared free/float geometry:
+/// each engine updates only its OWN slot (in `engines`, keyed by engineId()) plus
+/// any free-geometry change, so a window may be `snapped` in the snap engine AND
+/// `floating` in the autotile engine at once, each engine remembering the window's
+/// state in its own mode, while the un-managed position lives once in
+/// freeGeometryByScreen (shared across modes, keyed per screen).
 class PHOSPHORENGINE_EXPORT WindowPlacementStore
 {
 public:
     WindowPlacementStore() = default;
 
-    /// Record / replace this window's placement. If a record with the same exact
-    /// windowId already exists (in any appId bucket) it is overwritten in place;
-    /// otherwise the record is appended to its appId's FIFO. Stamps a fresh
-    /// monotonic `sequence`. No-op on an invalid record.
-    void record(WindowPlacement placement);
+    /// Record / MERGE this window's placement. The incoming record supplies only
+    /// the calling engine's slot (in `engines`) and any free-geometry update; if a
+    /// record for the same exact windowId already exists (in any appId bucket) the
+    /// incoming engine slot(s) and free-geometry screen(s) are merged in, leaving
+    /// the other engine's slot and other screens' free geometry intact. Otherwise
+    /// the record is appended to its appId's FIFO. Stamps a fresh monotonic
+    /// `sequence`. No-op on an invalid record. Returns true if the store actually
+    /// changed — false when the merge produced a content-identical record (sequence
+    /// aside), so callers can skip marking state dirty and avoid a self-perpetuating
+    /// save loop.
+    bool record(WindowPlacement placement);
 
     /// Restore lookup: the first record whose `accept` predicate passes, trying
     /// the exact-windowId match before the appId FIFO (oldest first). The matched
@@ -57,7 +66,19 @@ public:
     bool contains(const QString& windowId, const QString& appId = QString()) const;
 
     /// Drop any record for the exact windowId (and prune the empty bucket).
-    void clear(const QString& windowId);
+    /// Returns true if a record was actually removed.
+    bool clear(const QString& windowId);
+
+    /// Clear ONLY the shared free/float geometry for the exact windowId, leaving the
+    /// engine slots and context intact. Returns true if anything was cleared. Used by
+    /// the drag-out / layout-change paths that consume the float-back once.
+    bool clearFreeGeometry(const QString& windowId);
+
+    /// Apply an in-place mutation to every record; @p fn returns true when it changed
+    /// the record. Returns the number changed. For bulk rewrites that keep the appId
+    /// bucketing (e.g. virtual-screen id remap of freeGeometryByScreen keys). Does NOT
+    /// move records between buckets — only mutate fields other than appId.
+    int transform(const std::function<bool(WindowPlacement&)>& fn);
 
     /// Remove every record matching @p pred. Returns the count removed.
     int removeIf(const std::function<bool(const WindowPlacement&)>& pred);

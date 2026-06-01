@@ -313,15 +313,10 @@ private Q_SLOTS:
         QVERIFY(m_service->isWindowFloating(windowIdNew));
     }
 
-    void testPreSnapGeometry_stableIdFallback()
-    {
-        QString appId = QStringLiteral("dolphin");
-        QString windowId = QStringLiteral("dolphin|a1b2c3d4-0000-0000-0000-000088888888");
-
-        m_engine->storeUnmanagedGeometry(appId, QRect(50, 100, 640, 480), QString());
-        QVERIFY(m_engine->hasUnmanagedGeometry(appId));
-        QCOMPARE(m_engine->unmanagedGeometry(appId).width(), 640);
-    }
+    // testPreSnapGeometry_stableIdFallback removed: the per-engine unmanaged-geometry
+    // store was collapsed into the unified WindowPlacementStore. The appId-fallback
+    // lookup for float-back geometry is now exercised by the WindowPlacementStore
+    // peek/take appId-FIFO tests.
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;

@@ -256,36 +256,71 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId)
     if (windowId.isEmpty() || !m_service) {
         return;
     }
-    PhosphorEngine::PlacementEngineBase* engines[] = {m_snapEngine.data(), m_autotileEngine.data()};
+    // Capture from the engine that CURRENTLY OWNS this window, not merely the first
+    // engine that returns a placement. The engines keep INDEPENDENT state (snap:
+    // snapped / floated / free; autotile: tiled / floated), so a window now managed
+    // by autotile can still carry stale snap state — e.g. leftover unmanaged
+    // geometry from a prior snap session — which SnapEngine::capturePlacement would
+    // claim as a "free" record before autotile is ever asked.
+    //
+    // Owning engine = the engine matching the window's CURRENT screen mode, via the
+    // SAME predicate that routes the float resolver / writer / float-back geometry
+    // (WTS::isWindowInAutotileMode → the daemon's screenModeForWindow). Using one
+    // definition everywhere avoids the mid-mode-flip divergence an isWindowTracked()
+    // check would introduce (it goes false at autotile teardown a beat before the
+    // assignment flips). Both engines are still tried (first non-null wins), so the
+    // mode pick is just ordering insurance — SnapEngine::capturePlacement is itself
+    // gated to return nullopt on autotile-mode screens.
+    PhosphorEngine::PlacementEngineBase* primary = m_snapEngine.data();
+    PhosphorEngine::PlacementEngineBase* secondary = m_autotileEngine.data();
+    if (m_autotileEngine && m_service->isWindowInAutotileMode(windowId)) {
+        std::swap(primary, secondary);
+    }
+    PhosphorEngine::PlacementEngineBase* engines[] = {primary, secondary};
     for (PhosphorEngine::PlacementEngineBase* e : engines) {
         if (!e) {
             continue;
         }
         std::optional<PhosphorEngine::WindowPlacement> p = e->capturePlacement(windowId);
         if (p) {
-            // The live frame is the restore-target geometry ONLY for floated/free
-            // windows (where the frame IS where the window should reopen). For a
-            // SNAPPED window the live frame is the zone rect — overwriting with it
-            // would destroy the float-back geometry the engine put in p->geometry
-            // (its pre-snap position), which is exactly what a later float toggle
-            // needs. So leave a snapped record's geometry untouched.
-            if (p->stateId != PhosphorEngine::WindowPlacement::stateSnapped()) {
-                const QRect live = m_frameGeometry.value(windowId);
-                if (live.isValid()) {
-                    p->geometry = live;
+            // The engine's capturePlacement fills ONLY its own slot (state + zone IDs
+            // / tile order) — never a rectangle. Here is the SINGLE point that writes
+            // the shared free/float geometry, and it does so ONLY when the window is
+            // genuinely free or floating in this engine. For a snapped/tiled window
+            // the live frame IS the zone/tile rect, so writing it would poison the
+            // float-back — exactly the per-mode geometry leak this model removes. By
+            // gating the write on the slot state (not a fragile frame-vs-zone compare),
+            // a managed rect can never become the shared free geometry. The merge in
+            // record() leaves any other screen's free geometry and the other engine's
+            // slot intact.
+            const PhosphorEngine::EngineSlot slot = p->slotFor(e->engineId());
+            const bool unmanagedState = (slot.state == PhosphorEngine::WindowPlacement::stateFree()
+                                         || slot.state == PhosphorEngine::WindowPlacement::stateFloating());
+            if (unmanagedState && !p->screenId.isEmpty()) {
+                const QRect frame = m_frameGeometry.value(windowId);
+                if (frame.isValid()) {
+                    p->freeGeometryByScreen.insert(p->screenId, frame);
                 }
             }
-            m_service->placementStore().record(*p);
-            m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+            // Only mark dirty when the store actually changed. A content-identical
+            // re-capture (the common case — refreshOpenWindowPlacements re-captures
+            // every open window on each save) returns false, so an idle window does
+            // NOT re-arm the save timer. Without this the save→refresh→record→
+            // markDirty→reschedule cycle never settles (a ~2 Hz save/capture storm).
+            if (m_service->placementStore().record(*p)) {
+                m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
+            }
             return;
         }
     }
-    // No engine manages it → drop any stale record so the store never holds a
-    // placement for an unmanaged/free window.
-    if (m_service->placementStore().contains(windowId)) {
-        m_service->placementStore().clear(windowId);
-        m_service->markDirty(PhosphorPlacement::WindowTrackingService::DirtyWindowPlacements);
-    }
+    // No engine actively manages the window right now → do NOT clear its records.
+    // The single per-window record is per-mode MEMORY: a window on an autotile screen
+    // keeps its frozen snap slot (its last snap-mode placement) and vice versa, and a
+    // transient gap where neither engine tracks a just-opened window must not wipe
+    // that memory. A record is only ever merge-updated by an engine recording newer
+    // state (record()), consumed on restore (take), or removed by an explicit
+    // exclude-rule prune (removeIf) — never by a capture miss. (Stale records are
+    // bounded by MaxPerApp and consumed on reopen.)
 }
 
 void WindowTrackingAdaptor::refreshOpenWindowPlacements()

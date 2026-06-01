@@ -165,6 +165,29 @@ public:
      */
     bool isWindowTiled(const QString& windowId) const override;
 
+    /**
+     * @brief Authoritative per-window autotile float state.
+     *
+     * Returns true iff the window is tracked by autotile AND its owning
+     * TilingState marks it floating. This is the autotile engine's half of the
+     * per-engine float contract: the daemon's WTS float resolver consults this
+     * for windows whose current screen mode is Autotile (the snap half is
+     * SnapState::isFloating). Distinct from isModeSpecificFloated(), which
+     * reports the mode-transition MARKER (autotile-originated float), not the
+     * live TilingState float.
+     */
+    bool isWindowFloatingInAutotile(const QString& windowId) const;
+
+    /**
+     * @brief All windows currently floating in autotile across every tracked state.
+     *
+     * Used by the daemon's WTS floating-windows aggregator so the engine-agnostic
+     * floatingWindows() enumeration (effect float-cache seed, getAllWindowStates)
+     * still sees autotile floats now that they live in TilingState rather than the
+     * old shared WTS set.
+     */
+    QStringList allFloatingWindows() const;
+
     // IPlacementEngine
     bool isActiveOnScreen(const QString& screenId) const override;
 
@@ -394,16 +417,6 @@ public:
     {
         m_persistSaveFn = std::move(saveFn);
         m_persistLoadFn = std::move(loadFn);
-    }
-
-    /**
-     * @brief Set callback to query daemon-side window floating state
-     *
-     * Used by toggleWindowFloat to adopt untracked floating windows into autotile.
-     */
-    void setIsWindowFloatingFn(std::function<bool(const QString&)> fn) override
-    {
-        m_isWindowFloatingFn = std::move(fn);
     }
 
     // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
@@ -744,21 +757,6 @@ public:
     /**
      * @brief Clear saved floating state for windows that are actively zone-snapped.
      *
-     * Called during snapping → autotile transitions so that windows the user
-     * re-snapped in manual mode aren't incorrectly restored as floating.
-     *
-     * @param windowIds Windows to remove from the saved floating set
-     */
-    void clearSavedFloatingForWindows(const QStringList& windowIds) override;
-
-    /**
-     * @brief Clear ALL saved floating state (used when autotile is disabled globally)
-     *
-     * Prevents stale entries from incorrectly floating windows on next activation.
-     */
-    void clearAllSavedFloating() override;
-
-    /**
      * @brief Get the current tiled window order for a screen
      *
      * Returns the autotile engine's tiled window list for deterministic
@@ -1003,7 +1001,6 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
-    void removeSavedFloatingEntry(const QString& windowId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
@@ -1219,7 +1216,6 @@ private:
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
-    std::function<bool(const QString&)> m_isWindowFloatingFn;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
@@ -1256,11 +1252,6 @@ private:
     // currentKeyForScreen() returns the key of the existing PhosphorTiles::TilingState rather
     // than a new (empty) key after a desktop switch.
     QHash<QString, int> m_screenDesktopOverride;
-
-    // Floating window IDs preserved across mode switches, per desktop/activity.
-    // When autotile is deactivated, floated windows are saved here so that
-    // re-enabling autotile restores them as floating regardless of screen.
-    QHash<PhosphorEngine::TilingStateKey, QSet<QString>> m_savedFloatingWindows;
 
     // Pre-seeded window order for snapping → autotile transitions.
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).

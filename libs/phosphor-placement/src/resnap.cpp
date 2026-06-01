@@ -236,16 +236,11 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
     // depending on unordered hash iteration.
     QHash<QString, quint64> chosenSequence;
     for (const PhosphorEngine::WindowPlacement& p : m_placementStore.records()) {
-        if (p.engineId != QLatin1String("snap") || p.stateId != PhosphorEngine::WindowPlacement::stateSnapped()) {
+        const PhosphorEngine::EngineSlot snapSlot = p.slotFor(QLatin1String("snap"));
+        if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped()) {
             continue;
         }
-        QStringList zoneIds;
-        for (const QJsonValue& v : p.engineData.value(QLatin1String("zoneIds")).toArray()) {
-            const QString z = v.toString();
-            if (!z.isEmpty()) {
-                zoneIds.append(z);
-            }
-        }
+        const QStringList zoneIds = snapSlot.zoneIds;
         if (zoneIds.isEmpty() || p.appId.isEmpty()) {
             continue;
         }

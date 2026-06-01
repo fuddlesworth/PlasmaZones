@@ -229,7 +229,8 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromCurrentAssignments(c
 }
 
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                                          const QString& screenId) const
+                                                                          const QString& screenId,
+                                                                          const QStringList& preClaimedZoneIds) const
 {
     QVector<ZoneAssignmentEntry> result;
 
@@ -256,29 +257,52 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
         zoneById[z->id().toString()] = z;
     }
 
-    // Track which zones have been claimed by original-assignment restoration
-    // so positional fallback doesn't double-assign.
+    // Zones occupied so far — pass-2's positional fallback avoids these so a
+    // never-snapped window never STEALS a zone. Pass-1 (recorded-zone restoration)
+    // deliberately does NOT consult this set: snapping supports MULTIPLE windows per
+    // zone, so two windows that each RECORDED the same zone both restore to it
+    // (stacked). The set only gates the positional fallback, which has no recorded
+    // intent and must not pile an arbitrary window onto an occupied zone.
     QSet<int> claimedZoneIndices;
+    // Seed with zones already reserved by OTHER restore producers in this same batch
+    // (the daemon's windowsReleased snap-zone restores for windows floated-in-autotile,
+    // which are absent from this window order). This keeps pass-2 from handing a
+    // reserved zone to a never-snapped window. Pass-1 still stacks a window onto a
+    // reserved zone when that window ALSO recorded it (legitimate multi-window-per-zone).
+    for (const QString& zid : preClaimedZoneIds) {
+        PhosphorZones::Zone* z = zoneById.value(zid);
+        if (!z)
+            continue;
+        const int idx = zones.indexOf(z);
+        if (idx >= 0)
+            claimedZoneIndices.insert(idx);
+    }
     // Track windows placed in the first pass for O(1) lookup in the second pass
     QSet<QString> placedWindowIds;
 
-    const auto& zoneAssignments = m_windowTracker->zoneAssignments();
-
     // First pass: restore windows to their ORIGINAL zone assignment (pre-autotile).
-    // m_windowZoneAssignments preserves zone IDs from before autotile was activated.
+    // Each window's recorded zone comes from recordedSnapZones() — the LIVE snap
+    // assignment when present, else the DURABLE placement-record snap slot. The
+    // durable fallback is what makes autotile→snap restore work after a daemon
+    // restart (or any handoffRelease), when the live zone cache is cold and a
+    // live-only read would treat every snapped window as never-snapped.
     // Iterate ALL windows (not min(windowCount, zoneCount)) — a window past the
     // zoneCount cutoff in autotile order can still have a saved zone that is
     // unique in the new layout, and capping the loop would silently drop its
-    // restoration. The claimedZoneIndices set still prevents double-booking.
+    // restoration. A window restores to its recorded zone even when another window
+    // already occupies it — multiple windows per zone is a supported snap feature.
     for (int i = 0; i < windowCount; ++i) {
         const QString& windowId = autotileWindowOrder.at(i);
-        const QStringList& savedZones = zoneAssignments.value(windowId);
+        const QStringList savedZones = m_windowTracker->recordedSnapZones(windowId);
 
         if (savedZones.isEmpty())
             continue;
 
         // Restore to ALL saved zone assignments (supports multi-zone spans).
-        // Verify all zones still exist in the restored layout.
+        // Verify all zones still exist in the restored layout. Do NOT skip a zone
+        // that is already occupied — stacking onto a window's OWN recorded zone is
+        // intentional (multi-window-per-zone); only the positional fallback below
+        // avoids occupied zones.
         QStringList validZoneIds;
         QList<int> validZoneIndices;
         for (const QString& zid : savedZones) {
@@ -286,7 +310,7 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromAutotileOrder(const 
             if (!z)
                 continue;
             int idx = zones.indexOf(z);
-            if (idx < 0 || claimedZoneIndices.contains(idx))
+            if (idx < 0)
                 continue;
             validZoneIds.append(zid);
             validZoneIndices.append(idx);

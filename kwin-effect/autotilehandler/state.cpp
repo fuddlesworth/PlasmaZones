@@ -219,6 +219,19 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     // window pass knownFreeFloating=true to bypass the guard. Without that bypass,
     // the save is silently dropped and every later float-restore for this window
     // falls through to stale cross-session data (or, with exact-only lookups, nothing).
+    // A snap-managed window's frame IS its zone rect, never a free-floating
+    // position — this holds EVEN on the knownFreeFloating fast path, which fires
+    // when a window is re-added to autotile on a snap→autotile toggle. Storing the
+    // zone rect as the pre-autotile float-back is the per-mode leak: a later
+    // float-in-autotile then teleports the window to the snap zone instead of its
+    // genuine pre-snap free position. isWindowFloating() below misses this because
+    // knownFreeFloating bypasses it, so check the snap-managed state explicitly and
+    // unconditionally.
+    if (m_effect->isWindowMarkedSnapped(windowId)) {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry for snap-managed window (frame is zone rect)" << windowId
+                          << "on" << screenId;
+        return true;
+    }
     if (!knownFreeFloating && !m_effect->isWindowFloating(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
         return true;

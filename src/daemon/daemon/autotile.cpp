@@ -258,16 +258,8 @@ void Daemon::handleAutotileDisabled()
             m_layoutManager->setActiveLayout(fallbackLayout);
         }
     }
-    // Clear ALL saved floating state when autotile is disabled globally.
-    // Stale entries would incorrectly float windows on next activation.
-    if (m_autotileEngine) {
-        m_autotileEngine->clearAllSavedFloating();
-    }
-    // Clear saved snap-floats — we're fully back in snap mode, so the
-    // save/restore mechanism is no longer needed until next autotile entry.
-    if (m_snapEngine) {
-        m_snapEngine->clearSavedModeFloating();
-    }
+    // No parallel saved-floating sets to clear — each window's cross-mode state
+    // lives only in its unified WindowPlacement record (single source of truth).
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
     // windowsReleased clears floating state before windows are resnapped.
 }
@@ -408,11 +400,16 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
 
 void Daemon::presaveSnapFloats(const QString& screenId)
 {
-    // Reachable from `Settings::settingsChanged` (daemon.cpp ~830) before
-    // the engines exist — any synchronous re-entry into settingsChanged
-    // during the D-Bus retry loop in init() would hit this path with
-    // null engine pointers. Symmetric null-check with seedAutotileOrderForScreen
-    // below.
+    // Snapshot snap-mode float state into the unified record BEFORE a screen leaves
+    // snapping for autotile, so the screen's return restores the float from the
+    // SINGLE source of truth (the record's snap slot) — no parallel saved-float set.
+    // Runs while the screen is still in snapping mode, so captureWindowPlacement
+    // routes to the snap engine and records the snap slot (= floating) plus the
+    // shared free geometry from the live frame.
+    //
+    // Reachable from `Settings::settingsChanged` (daemon.cpp ~830) before the
+    // engines exist — any synchronous re-entry into settingsChanged during the
+    // D-Bus retry loop in init() would hit this path with null engine pointers.
     if (!m_windowTrackingAdaptor || !m_autotileEngine || !m_snapEngine) {
         return;
     }
@@ -422,17 +419,16 @@ void Daemon::presaveSnapFloats(const QString& screenId)
         if (m_autotileEngine->isModeSpecificFloated(fid)) {
             continue;
         }
-        // When scoped to a screen, only save windows on that screen.
-        // Windows floating on other screens are not entering autotile
-        // and must not have their snap-float state recorded.
+        // When scoped to a screen, only snapshot windows on that screen.
+        // Windows floating on other screens are not entering autotile.
         if (!screenId.isEmpty()) {
             const QString windowScreen = wts->screenAssignments().value(fid);
             if (!windowScreen.isEmpty() && windowScreen != screenId) {
                 continue;
             }
         }
-        m_snapEngine->saveModeFloat(fid);
-        qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "screen=" << screenId;
+        m_windowTrackingAdaptor->captureWindowPlacement(fid);
+        qCDebug(lcDaemon) << "Captured snap-float to record for" << fid << "screen=" << screenId;
     }
 }
 
@@ -455,12 +451,9 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     }
 
     if (!order.isEmpty()) {
-        // Clear saved-floating for windows that were re-snapped to zones.
-        // If the user floated a window in autotile then re-snapped it in manual
-        // mode, the re-snap shows intent to tile — don't restore as floating.
-        // Un-snapped windows (not in zoneOrder) keep their saved floating state
-        // so they stay floating when autotile is re-enabled.
-        m_autotileEngine->clearSavedFloatingForWindows(order);
+        // A window's re-snap intent is already captured in its record (snap slot =
+        // snapped) by the snap-commit path, so no saved-floating set needs clearing
+        // here — the record is the single source of truth.
         m_autotileEngine->setInitialWindowOrder(screenId, order);
     }
 }

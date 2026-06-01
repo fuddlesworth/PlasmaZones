@@ -178,14 +178,18 @@ public:
     //
     // The single seam for the unified WindowPlacement restore model. An engine
     // implements exactly these two methods to participate in save+restore; a new
-    // engine (e.g. a future scrolling engine) needs no core/schema change — its
-    // own stateId token and opaque engineData carry its vocabulary.
+    // engine (e.g. a future scrolling engine) needs no core/schema change — it keys
+    // its own EngineSlot (state token + slot reference) under its engineId() in the
+    // single per-window record and reads/writes the shared freeGeometryByScreen.
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Report @p windowId's CURRENT placement for persistence, or nullopt if this
-    /// engine does not manage it. Fill `engineId` from engineId(), `stateId` from
-    /// the engine's token vocabulary (free/floated/snapped/autotiled/...), and the
-    /// engine-specific restore payload into `engineData`.
+    /// engine does not manage it. Fill the engine's EngineSlot — `state` from its
+    /// token vocabulary (free/floating/snapped/tiled/...) plus its slot reference
+    /// (zone IDs / tile order) — under engines[engineId()], and the screen/desktop/
+    /// activity context. Do NOT set freeGeometryByScreen: the capture orchestrator
+    /// fills the shared free/float geometry from the live frame, and only when the
+    /// state is free/floating, so a managed rect never becomes the float-back.
     ///
     /// This is the polymorphic capture seam the common layer drives — the WTA close
     /// hook and the save-time snapshot call it for every window.
@@ -196,8 +200,8 @@ public:
     }
 
     /// Apply @p placement to a (re)opening window on @p screenId. Return true if
-    /// this engine claimed and applied it. Dispatch on placement.stateId, reading
-    /// the engine-specific payload back out of placement.engineData.
+    /// this engine claimed and applied it. Dispatch on placement.slotFor(engineId())
+    /// .state, reading the engine's slot reference and the shared freeGeometryByScreen.
     ///
     /// Contract pair of capturePlacement() and the engine-agnostic entry point for a
     /// new engine. NOTE: the built-in snap and autotile engines do NOT route through
@@ -262,17 +266,6 @@ public:
     {
         Q_UNUSED(windowId)
     }
-    virtual bool restoreSavedModeFloat(const QString& windowId)
-    {
-        Q_UNUSED(windowId)
-        return false;
-    }
-    /// Remove saved floating state for the given windows (per-window, not bulk clear).
-    virtual void clearSavedFloatingForWindows(const QStringList& windowIds)
-    {
-        Q_UNUSED(windowIds)
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Drag insert preview (override if engine supports drag-to-insert)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -531,22 +524,18 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // OPTIONAL: Float origin (override if engine persists float state across mode switches)
+    // OPTIONAL: Mode-specific float MARKER (runtime discriminator, NOT persistence)
+    //
+    // Distinguishes a USER float in this engine's mode from an incidental float
+    // (e.g. autotile overflow). It is live runtime state the capture funnel reads
+    // to decide whether a float should persist into the record — there is no
+    // parallel "saved floats" store; the WindowPlacement record is the single
+    // source of truth for cross-mode float state.
     // ═══════════════════════════════════════════════════════════════════════════
 
     virtual void markModeSpecificFloated(const QString& windowId)
     {
         Q_UNUSED(windowId)
-    }
-    virtual void clearAllSavedFloating()
-    {
-    }
-    virtual void saveModeFloat(const QString& windowId)
-    {
-        Q_UNUSED(windowId)
-    }
-    virtual void clearSavedModeFloating()
-    {
     }
 
     // Per-window restore persistence is unified: engines implement
@@ -565,12 +554,6 @@ public:
     {
         Q_UNUSED(registry)
     }
-    /// @param fn Callback; must remain valid for this engine's lifetime.
-    virtual void setIsWindowFloatingFn(std::function<bool(const QString&)> fn)
-    {
-        Q_UNUSED(fn)
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Master operations (autotile-specific, no-op on snap engine)
     // ═══════════════════════════════════════════════════════════════════════════

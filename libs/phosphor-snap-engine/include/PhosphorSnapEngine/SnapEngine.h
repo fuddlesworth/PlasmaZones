@@ -184,10 +184,16 @@ public:
      *
      * @param autotileWindowOrder Ordered list of window IDs from autotile engine
      * @param screenId Screen to resnap on
+     * @param preClaimedZoneIds Zone IDs already reserved by OTHER restore producers
+     *        (e.g. the daemon's windowsReleased snap-zone restores for windows that
+     *        were floated in autotile and are absent from the tile order). Seeds the
+     *        claim ledger so the positional fallback never re-uses a zone another
+     *        producer is reclaiming — the two-windows-one-zone collision.
      * @return Vector of PhosphorEngine::ZoneAssignmentEntry (may be empty)
      */
     QVector<PhosphorEngine::ZoneAssignmentEntry>
-    calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId);
+    calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId,
+                                            const QStringList& preClaimedZoneIds = {});
 
     /**
      * @brief Calculate snap-all-windows assignments without applying them
@@ -407,39 +413,12 @@ public:
     QVector<PhosphorEngine::ZoneAssignmentEntry>
     calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
     QVector<PhosphorEngine::ZoneAssignmentEntry>
-    calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId) const;
+    calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId,
+                                     const QStringList& preClaimedZoneIds = {}) const;
     QVector<PhosphorEngine::ZoneAssignmentEntry> calculateSnapAllWindowEntries(const QStringList& windowIds,
                                                                                const QString& screenId) const;
     QVector<PhosphorEngine::ZoneAssignmentEntry> calculateRotation(bool clockwise,
                                                                    const QString& screenFilter = QString()) const;
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Saved snap-floating windows (mode-transition bookkeeping)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void saveSnapFloating(const QString& windowId);
-    bool restoreSnapFloating(const QString& windowId);
-    void clearSavedSnapFloating();
-
-    // IPlacementEngine — generic mode-float overrides
-    bool restoreSavedModeFloat(const QString& windowId) override
-    {
-        return restoreSnapFloating(windowId);
-    }
-    void clearSavedFloatingForWindows(const QStringList& windowIds) override
-    {
-        for (const QString& windowId : windowIds) {
-            m_savedSnapFloatingWindows.remove(windowId);
-        }
-    }
-    void saveModeFloat(const QString& windowId) override
-    {
-        saveSnapFloating(windowId);
-    }
-    void clearSavedModeFloating() override
-    {
-        clearSavedSnapFloating();
-    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Effect-reported windows (runtime flag — not persisted)
@@ -615,7 +594,6 @@ private:
     // by the fact that SnapEngine has to exist before a resolver that
     // takes WTS + PhosphorZones::LayoutRegistry can be built).
     std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
-    QSet<QString> m_savedSnapFloatingWindows;
     QSet<QString> m_effectReportedWindows;
 
     // ═══════════════════════════════════════════════════════════════════════════

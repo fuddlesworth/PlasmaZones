@@ -360,7 +360,21 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             const QString batchWid = getWindowId(p.window);
             if (p.screenId.isEmpty() || m_autotileHandler->isAutotileScreen(p.screenId)) {
                 clearWindowSnapped(batchWid);
-            } else if (!isWindowFloating(batchWid)) {
+            } else {
+                // Real snap commit on a snap-mode screen. The daemon emits a non-empty
+                // authoritative screenId ONLY for genuine placements; float/restore
+                // entries carry an EMPTY screenId and are handled above. So this window
+                // is being snapped and is no longer floating — even if the effect's
+                // float cache is stale (e.g. a window snapped straight from a
+                // floated-in-autotile state via the daemon's windowsReleased snap-zone
+                // restore). Clear the stale float marker BEFORE marking snapped,
+                // mirroring the single-window applyGeometry path. Without this the float
+                // flag survives, markWindowSnapped never sets the snap border, and the
+                // next snap→autotile saves the zone rect as the pre-tile float-back —
+                // poisoning the float geometry with the snapped rect.
+                if (isWindowFloating(batchWid)) {
+                    m_navigationHandler->setWindowFloating(batchWid, false);
+                }
                 markWindowSnapped(batchWid, p.screenId);
             }
         },

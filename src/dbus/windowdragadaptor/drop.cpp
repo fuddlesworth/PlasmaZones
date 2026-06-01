@@ -421,10 +421,9 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 snapHeight = geo->height();
                 shouldApplyGeometry = true;
                 restoreSizeOnlyOut = true;
-                // Only clear unmanaged geometry after successful restore.
-                if (auto* engine = wts->snapEngine()) {
-                    engine->clearUnmanagedGeometry(windowId);
-                }
+                // Single float-back store: clear the record's shared free geometry
+                // after we've consumed it for this drag-out restore.
+                wts->clearFreeGeometry(windowId);
                 qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
             } else {
                 qCInfo(lcDbusWindow) << "Drag-out unsnap: no valid pre-tile geometry for" << windowId;

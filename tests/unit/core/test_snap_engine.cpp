@@ -336,19 +336,8 @@ private Q_SLOTS:
         QVERIFY(m_snapState->preFloatZone(windowId).isEmpty());
     }
 
-    void testEngineBaseUnmanagedGeometry()
-    {
-        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
-        m_wts->setSnapState(engine.snapState());
-        const QString windowId = QStringLiteral("app|uuid-pretile-sync");
-
-        engine.storeUnmanagedGeometry(windowId, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
-        QVERIFY(engine.hasUnmanagedGeometry(windowId));
-
-        engine.forgetWindow(windowId);
-        QVERIFY(!engine.hasUnmanagedGeometry(windowId));
-        m_wts->setSnapState(nullptr);
-    }
+    // testEngineBaseUnmanagedGeometry removed: the per-engine unmanaged-geometry store
+    // was collapsed into the unified WindowPlacementStore (shared freeGeometryByScreen).
 
     void testDualStoreSync_windowClosed()
     {

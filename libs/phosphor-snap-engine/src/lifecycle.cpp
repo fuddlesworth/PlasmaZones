@@ -118,6 +118,25 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
+    // Screen-mode ownership gate (BEFORE the store branch). A window opening on an
+    // AUTOTILE-mode screen is owned by the autotile engine — snap must not restore
+    // it, even when a stale snap record (snapped/floated/free from a prior snap-mode
+    // session on this screen) still exists in the store. Without this, snap commits
+    // that stale record on reopen, which both wrongly snaps an autotile window AND
+    // overwrites its autotile record via the store's mutual-exclusivity invariant,
+    // defeating autotile's own float restore in insertWindow(). Each engine restores
+    // only on the screens its mode owns; floating in one mode is independent of the
+    // other. (Autotile never steals snap-screen windows — it only processes windows
+    // on its active screens — so only the snap side needs this guard.)
+    if (m_layoutManager
+        && m_layoutManager->modeForScreen(screenId, currentVirtualDesktop(), currentActivity())
+            != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+        qCDebug(PhosphorSnapEngine::lcSnapEngine)
+            << "resolveWindowRestore:" << windowId << "opens on non-snap-mode screen" << screenId
+            << "— snap defers to the owning engine";
+        return SnapResult::noSnap();
+    }
+
     // Unified placement store — the single authoritative restore record for this
     // window. Consulted FIRST, before the legacy "already has assignment" skip and
     // the snap/float chains. This ordering is load-bearing: on a daemon-only
@@ -133,53 +152,43 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     if (m_windowTracker) {
         using PhosphorEngine::WindowPlacement;
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
-        // Distinguish "same window across a daemon restart" (uuid-exact) from
-        // "a new instance reopened" (appId-FIFO): only the former re-records, so
-        // an open floating window keeps its record across further restarts while
-        // a reopened instance genuinely consumes the entry (a third instance must
-        // not also inherit the float).
+        // ONE record per window (both engines' slots + the shared free geometry).
+        // take() consumes it (multi-instance FIFO); we then re-record it bound to
+        // the LIVE windowId so the OTHER engine's slot and the per-screen free
+        // geometry survive — without this, a snap-screen open would wipe the
+        // window's autotile slot. Binding the live id is also the consumption: a
+        // second instance of the same app no longer uuid-matches and takes the
+        // next FIFO entry.
         auto rec = m_windowTracker->placementStore().take(windowId, appId, [&](const WindowPlacement& p) {
-            return p.engineId == engineId() && (p.screenId.isEmpty() || p.screenId == screenId);
+            return p.screenId.isEmpty() || p.screenId == screenId;
         });
         if (rec) {
-            // Derive wasExact from the MATCHED record, not a separate contains()
-            // lookup: contains(windowId) ignores the accept predicate, so a
-            // uuid-exact record rejected by accept (wrong engine/screen) would
-            // make wasExact wrongly true for a record actually taken via the
-            // appId FIFO — re-recording a reopened instance's entry it should
-            // have consumed. This is the same-window daemon-restart test.
+            // Same window across a daemon restart (uuid-exact) vs a reopened instance
+            // (appId FIFO). Only the former re-records — keeping the FULL record (the
+            // other engine's slot + per-screen free geometry) alive across further
+            // restarts. A FIFO reopen CONSUMES instead: re-recording it would let a
+            // second instance of the same app steal this placement on its own reopen.
             const bool wasExact = (rec->windowId == windowId);
             const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
+            const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
+            QRect freeGeo = rec->freeGeometryFor(restoreScreen);
+            if (!freeGeo.isValid()) {
+                freeGeo = rec->anyFreeGeometry();
+            }
+            if (wasExact) {
+                m_windowTracker->placementStore().record(*rec);
+            }
 
-            if (rec->stateId == WindowPlacement::stateSnapped()) {
+            if (slot.state == WindowPlacement::stateSnapped()) {
                 // A stored snap is still subject to the disabled-context gate.
                 if (!m_shouldRestorePredicate || m_shouldRestorePredicate(restoreScreen)) {
-                    QStringList zoneIds;
-                    for (const QJsonValue& v : rec->engineData.value(QLatin1String("zoneIds")).toArray()) {
-                        const QString z = v.toString();
-                        if (!z.isEmpty()) {
-                            zoneIds.append(z);
-                        }
-                    }
+                    const QStringList zoneIds = slot.zoneIds;
                     const QRect geo =
                         zoneIds.isEmpty() ? QRect() : m_windowTracker->resolveZoneGeometry(zoneIds, restoreScreen);
                     if (geo.isValid()) {
-                        // Re-seed the float-back geometry (the pre-snap position the
-                        // record carries) so a later float toggle restores the window
-                        // to its real floating spot rather than the zone rect. The
-                        // record is appId-keyed, so this survives the uuid change on
-                        // logout/login that the old uuid-keyed pre-tile map lost.
-                        // overwrite=true: the record is authoritative on restore;
-                        // the effect sends storePreSnap=false here so nothing
-                        // re-clobbers it with the zone rect afterwards.
-                        if (rec->geometry.isValid() && rec->geometry != geo) {
-                            storeUnmanagedGeometry(windowId, rec->geometry, restoreScreen, /*overwrite=*/true);
-                        }
-                        // Keep the record alive for the same window across further
-                        // daemon restarts (uuid-exact); a reopened instance consumes.
-                        if (wasExact) {
-                            m_windowTracker->placementStore().record(*rec);
-                        }
+                        // freeGeo already lives in the record (the single float-back
+                        // store) — a later float toggle reads it directly; nothing to
+                        // re-seed into a separate per-engine store.
                         // Daemon-only restart already loaded the exact assignment:
                         // re-committing would be a redundant apply. If the window is
                         // already snapped to these zones, just consume the pending
@@ -192,52 +201,33 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
                                 << "resolveWindowRestore: placement(snapped) already assigned, no-op for" << windowId;
                             return SnapResult::noSnap();
                         }
-                        qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                            << "resolveWindowRestore: placement(snapped) for" << windowId << "->" << geo
-                            << "floatBack=" << rec->geometry;
+                        qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore: placement(snapped) for"
+                                                                 << windowId << "->" << geo << "freeGeo=" << freeGeo;
                         return SnapResult{true, geo, zoneIds.first(), zoneIds, restoreScreen};
                     }
                 }
                 // Disabled context or zone gone (layout edit) → fall through to
                 // the legacy chain below.
-            } else if (rec->stateId == WindowPlacement::stateFloated()) {
-                // NOTE: the floated (and free, below) branch deliberately does NOT
+            } else if (slot.state == WindowPlacement::stateFloating()) {
+                // NOTE: the floating (and free, below) branch deliberately does NOT
                 // consult m_shouldRestorePredicate. That gate refuses to auto-SNAP a
-                // window onto a context the user disabled snapping for; a floated/free
+                // window onto a context the user disabled snapping for; a floating/free
                 // window is not being snapped into a zone, so restoring its floating
                 // position is correct regardless of the snap-disable state.
                 m_snapState->setFloatingOnScreen(windowId, restoreScreen, currentVirtualDesktop());
-                QStringList pfz;
-                for (const QJsonValue& v : rec->engineData.value(QLatin1String("preFloatZones")).toArray()) {
-                    const QString z = v.toString();
-                    if (!z.isEmpty()) {
-                        pfz.append(z);
-                    }
-                }
-                if (!pfz.isEmpty()) {
-                    m_snapState->addPreFloatZone(windowId, pfz);
+                if (!slot.zoneIds.isEmpty()) {
+                    m_snapState->addPreFloatZone(windowId, slot.zoneIds);
                     m_snapState->addPreFloatScreen(windowId, restoreScreen);
                 }
-                if (rec->geometry.isValid()) {
-                    Q_EMIT geometryRestoreRequested(windowId, rec->geometry, restoreScreen);
+                if (freeGeo.isValid()) {
+                    Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                     Q_EMIT windowFloatingChanged(windowId, true, restoreScreen);
                 }
-                // Re-record only for the same window surviving a daemon restart
-                // (uuid-exact), so it keeps its placement across further restarts.
-                // A reopened instance (FIFO match) must consume the entry instead.
-                if (wasExact) {
-                    m_windowTracker->placementStore().record(*rec);
-                }
                 qCInfo(PhosphorSnapEngine::lcSnapEngine)
-                    << "resolveWindowRestore: placement(floated) for" << windowId << "->" << rec->geometry;
+                    << "resolveWindowRestore: placement(floating) for" << windowId << "->" << freeGeo;
                 return SnapResult::noSnap();
-            } else if (rec->stateId == WindowPlacement::stateFree()) {
-                if (rec->geometry.isValid()) {
-                    storeUnmanagedGeometry(windowId, rec->geometry, restoreScreen);
-                }
-                if (wasExact) {
-                    m_windowTracker->placementStore().record(*rec);
-                }
+            } else if (slot.state == WindowPlacement::stateFree()) {
+                // free geometry already lives in the record; nothing to re-seed.
                 return SnapResult::noSnap();
             }
         }
@@ -397,50 +387,54 @@ std::optional<PhosphorEngine::WindowPlacement> SnapEngine::capturePlacement(cons
         return std::nullopt;
     }
 
+    // Per-mode ownership: snap captures a window only while its CURRENT screen is in
+    // snapping mode. On an autotile-mode screen the window's snap state is FROZEN
+    // memory (its last snap-mode placement, restored when the screen returns to
+    // snapping) — autotile owns the window now. Re-capturing here would over-claim
+    // (a leftover pre-tile unmanaged rect gets reported as "free") and clobber that
+    // frozen snap record, breaking per-mode float independence. Each engine remembers
+    // the window's state in its OWN mode; returning nullopt leaves the snap record
+    // untouched.
+    if (m_layoutManager) {
+        const QString effScreen = screenForTrackedWindow(windowId);
+        if (!effScreen.isEmpty()
+            && m_layoutManager->modeForScreen(effScreen, currentVirtualDesktop(), currentActivity())
+                != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+            return std::nullopt;
+        }
+    }
+
     WindowPlacement p;
     p.windowId = windowId;
     p.appId = m_windowTracker ? m_windowTracker->currentAppIdFor(windowId) : QString();
-    p.engineId = engineId();
     p.virtualDesktop = currentVirtualDesktop();
-    // Default geometry: the engine's float-back rect. The capture orchestrator
-    // overrides this with the live frame geometry when it has one.
-    if (hasUnmanagedGeometry(windowId)) {
-        p.geometry = unmanagedGeometry(windowId);
-    }
+    p.activity = currentActivity();
 
+    // The slot carries only the snap engine's STATE + slot reference (zone IDs) —
+    // NEVER a rectangle. The shared free/float geometry is set by the capture
+    // orchestrator (WTA::captureWindowPlacement) from the live frame, and ONLY when
+    // the state is free/floating, so a zone rect can never become the float-back.
+    PhosphorEngine::EngineSlot slot;
     // Floating is checked BEFORE snapped: a floated-from-snap window keeps its
     // zone assignment (so a float-toggle can resnap it), so isWindowSnapped()
     // stays true while it floats. The active runtime state is floating — record
-    // that, with the pre-float zones carried in engineData for the resnap path.
+    // that, with the pre-float zones carried in the slot for the resnap path.
     if (m_snapState->isFloating(windowId)) {
-        p.stateId = WindowPlacement::stateFloated();
+        slot.state = WindowPlacement::stateFloating();
+        slot.zoneIds = m_snapState->preFloatZones(windowId);
         p.screenId = screenForTrackedWindow(windowId);
-        const QStringList pfz = m_snapState->preFloatZones(windowId);
-        if (!pfz.isEmpty()) {
-            QJsonArray a;
-            for (const QString& z : pfz) {
-                a.append(z);
-            }
-            p.engineData[QLatin1String("preFloatZones")] = a;
-        }
-        return p;
-    }
-    if (m_snapState->isWindowSnapped(windowId)) {
-        p.stateId = WindowPlacement::stateSnapped();
+    } else if (m_snapState->isWindowSnapped(windowId)) {
+        slot.state = WindowPlacement::stateSnapped();
+        slot.zoneIds = m_snapState->zonesForWindow(windowId);
         p.screenId = m_snapState->screenAssignments().value(windowId);
-        QJsonArray zones;
-        for (const QString& z : m_snapState->zonesForWindow(windowId)) {
-            zones.append(z);
-        }
-        p.engineData[QLatin1String("zoneIds")] = zones;
-        return p;
+    } else {
+        // Unmanaged on a snap-mode screen — a genuinely free window. The orchestrator
+        // fills freeGeometryByScreen from the live frame (a real un-managed position).
+        slot.state = WindowPlacement::stateFree();
+        p.screenId = screenForTrackedWindow(windowId);
     }
-    if (hasUnmanagedGeometry(windowId)) {
-        p.stateId = WindowPlacement::stateFree();
-        p.screenId = unmanagedScreen(windowId);
-        return p;
-    }
-    return std::nullopt;
+    p.engines.insert(engineId(), slot);
+    return p;
 }
 
 bool SnapEngine::restorePlacement(const PhosphorEngine::WindowPlacement& placement, const QString& screenId)
@@ -450,15 +444,14 @@ bool SnapEngine::restorePlacement(const PhosphorEngine::WindowPlacement& placeme
         return false;
     }
     const QString restoreScreen = placement.screenId.isEmpty() ? screenId : placement.screenId;
+    const PhosphorEngine::EngineSlot slot = placement.slotFor(engineId());
+    QRect freeGeo = placement.freeGeometryFor(restoreScreen);
+    if (!freeGeo.isValid()) {
+        freeGeo = placement.anyFreeGeometry();
+    }
 
-    if (placement.stateId == WindowPlacement::stateSnapped()) {
-        QStringList zoneIds;
-        for (const QJsonValue& v : placement.engineData.value(QLatin1String("zoneIds")).toArray()) {
-            const QString z = v.toString();
-            if (!z.isEmpty()) {
-                zoneIds.append(z);
-            }
-        }
+    if (slot.state == WindowPlacement::stateSnapped()) {
+        const QStringList zoneIds = slot.zoneIds;
         if (zoneIds.isEmpty() || !m_windowTracker) {
             return false;
         }
@@ -471,35 +464,28 @@ bool SnapEngine::restorePlacement(const PhosphorEngine::WindowPlacement& placeme
         } else {
             commitSnap(placement.windowId, zoneIds.first(), restoreScreen, SnapIntent::AutoRestored);
         }
+        // freeGeo already lives in the record (the single float-back store); a later
+        // float toggle reads it directly — nothing to re-seed.
         Q_EMIT applyGeometryRequested(placement.windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneIds.first(),
                                       restoreScreen, false);
         return true;
     }
 
-    if (placement.stateId == WindowPlacement::stateFloated()) {
+    if (slot.state == WindowPlacement::stateFloating()) {
         m_snapState->setFloatingOnScreen(placement.windowId, restoreScreen, currentVirtualDesktop());
-        QStringList pfz;
-        for (const QJsonValue& v : placement.engineData.value(QLatin1String("preFloatZones")).toArray()) {
-            const QString z = v.toString();
-            if (!z.isEmpty()) {
-                pfz.append(z);
-            }
-        }
-        if (!pfz.isEmpty()) {
-            m_snapState->addPreFloatZone(placement.windowId, pfz);
+        if (!slot.zoneIds.isEmpty()) {
+            m_snapState->addPreFloatZone(placement.windowId, slot.zoneIds);
             m_snapState->addPreFloatScreen(placement.windowId, restoreScreen);
         }
-        if (placement.geometry.isValid()) {
-            Q_EMIT geometryRestoreRequested(placement.windowId, placement.geometry, restoreScreen);
+        if (freeGeo.isValid()) {
+            Q_EMIT geometryRestoreRequested(placement.windowId, freeGeo, restoreScreen);
             Q_EMIT windowFloatingChanged(placement.windowId, true, restoreScreen);
         }
         return true;
     }
 
-    if (placement.stateId == WindowPlacement::stateFree()) {
-        if (placement.geometry.isValid()) {
-            storeUnmanagedGeometry(placement.windowId, placement.geometry, restoreScreen);
-        }
+    if (slot.state == WindowPlacement::stateFree()) {
+        // free geometry already lives in the record; nothing to re-seed.
         return true;
     }
     return false;

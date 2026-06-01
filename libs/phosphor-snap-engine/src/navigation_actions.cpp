@@ -414,7 +414,9 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
         return;
     }
     uncommitSnap(windowId);
-    clearUnmanagedGeometry(windowId);
+    if (m_windowTracker) {
+        m_windowTracker->clearFreeGeometry(windowId);
+    }
     Q_EMIT applyGeometryRequested(windowId, result.x, result.y, result.width, result.height, QString(), screenId,
                                   false);
 }
@@ -446,8 +448,9 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     // whatever's already stored untouched.
     if (m_navState && m_snapState->isFloating(windowId)) {
         QRect geo = m_navState->frameGeometry(windowId);
-        if (geo.isValid()) {
-            storeUnmanagedGeometry(windowId, geo, screenId, /*overwrite=*/true);
+        if (geo.isValid() && m_windowTracker) {
+            // Single float-back store: the unified record's shared free geometry.
+            m_windowTracker->recordFreeGeometry(windowId, screenId, geo, /*overwrite=*/true);
         }
     }
 

@@ -5,99 +5,201 @@
 
 #include <PhosphorEngine/EngineTypes.h>
 
+#include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLatin1String>
 #include <QRect>
 #include <QString>
+#include <QStringList>
 
 namespace PhosphorEngine {
 
-/// One window's single, authoritative placement state — the unit of the
-/// unified, engine-agnostic restore model. A window is in exactly one state at
-/// a time (free / floated / snapped / autotiled / ...); the WindowPlacementStore
-/// holds at most one record per window, captured live by the owning engine and
-/// re-applied on reopen / daemon restart.
+/// One engine's view of a window: which managed slot it occupies (or that it is
+/// floating / unmanaged) in THAT engine's mode. State is PER ENGINE — a window
+/// can be `snapped` in the snap engine AND `floating` in the autotile engine at
+/// the same time, each engine remembering the window's state in its OWN mode.
 ///
-/// Extensibility: a NEW engine or state needs no change here. `engineId` selects
-/// the engine that restores the record; `stateId` is that engine's own token
-/// (cross-engine policy gates read it as an opaque string); and `engineData` is
-/// an opaque per-engine payload (zone ids for snap, tile position for autotile,
-/// scroll column for a future scrolling engine). Core code never inspects
-/// `engineData` or interprets `stateId` beyond equality.
+/// The slot is an IDENTIFIER, never a rectangle: `zoneIds` for the snap engine,
+/// `order` for the autotile engine. A managed rect (the zone or tile geometry) is
+/// NEVER stored here — that is what keeps the shared free/float geometry from
+/// being poisoned by a zone/tile rect (the per-mode geometry leak this model
+/// fixes). The window's actual free/float position lives once, shared, in
+/// WindowPlacement::freeGeometryByScreen.
+struct EngineSlot
+{
+    QString state; ///< engine-defined token: snap "snapped"/"floating"/"free"; autotile "tiled"/"floating"
+    QStringList zoneIds; ///< snap slot — zone UUIDs (first is primary); empty for autotile
+    int order = -1; ///< autotile slot — tile index within the screen; -1 for snap
+
+    bool operator==(const EngineSlot& o) const
+    {
+        return state == o.state && zoneIds == o.zoneIds && order == o.order;
+    }
+    bool operator!=(const EngineSlot& o) const
+    {
+        return !(*this == o);
+    }
+    bool isEmpty() const
+    {
+        return state.isEmpty();
+    }
+};
+
+/// One window's single, authoritative placement record — the unit of the unified,
+/// engine-agnostic restore model. The WindowPlacementStore holds at most ONE
+/// record per window (NOT one per engine). The record carries:
+///
+///  - per-engine STATE in `engines` (keyed by IPlacementEngine::engineId()): each
+///    engine's own slot + state, independent of the others (per-mode float
+///    independence — floating in snap does not float in autotile);
+///  - ONE SHARED free/float GEOMETRY in `freeGeometryByScreen`: the position the
+///    window occupies when it is NOT engine-managed, shared across snap/autotile
+///    but keyed PER SCREEN so a window remembers a distinct free spot per monitor.
+///    Written ONLY from a genuine free/floating frame; FROZEN while the window is
+///    snapped or tiled. A zone/tile rect never enters this map.
+///
+/// Extensibility: a new engine needs no change here — it keys its own slot under
+/// its engineId() and reads/writes the shared geometry. Core code never
+/// interprets an EngineSlot::state beyond equality.
 struct WindowPlacement
 {
     // ── Identity (the two store keys) ──
     QString windowId; ///< full `appId|uuid`; exact key for daemon-restart (uuid stable)
     QString appId; ///< window class; FIFO key for close/reopen (uuid changes)
 
-    // ── State routing ──
-    QString stateId; ///< engine-defined token, e.g. "free"/"floated"/"snapped"/"autotiled"
-    QString engineId; ///< restore dispatch target — IPlacementEngine::engineId()
-
     // ── Context (the universal restore + disabled-context gate) ──
-    QString screenId;
+    QString screenId; ///< last managed-context screen
     int virtualDesktop = 0; ///< 0 = all-desktops / sticky / unknown
     QString activity; ///< empty = all-activities / unknown
     WindowKind kind = WindowKind::Unknown;
 
-    // ── Geometry (floated/free frame; last-known for managed states) ──
-    QRect geometry;
+    // ── Per-engine managed state, keyed by engineId() ──
+    QHash<QString, EngineSlot> engines;
+
+    // ── Shared free/float geometry, keyed by screenId ──
+    QHash<QString, QRect> freeGeometryByScreen;
 
     // ── Recency (most-recent-wins ordering; stamped by the store) ──
     quint64 sequence = 0;
 
-    // ── Opaque per-engine restore payload ──
-    QJsonObject engineData;
-
     bool isValid() const
     {
-        return !windowId.isEmpty() && !engineId.isEmpty() && !stateId.isEmpty();
+        return !windowId.isEmpty() && !appId.isEmpty();
     }
 
-    /// Common state-token vocabulary. Engines may define more; these four cover
-    /// the built-in snap/autotile states and keep the effect's apply switch
-    /// state-agnostic.
+    /// The slot for @p engineId, or a default (empty) slot if this engine has no
+    /// recorded state for the window.
+    EngineSlot slotFor(const QString& engineId) const
+    {
+        return engines.value(engineId);
+    }
+
+    /// The shared free/float geometry for @p screenId, or an invalid rect if none
+    /// has been captured on that screen yet.
+    QRect freeGeometryFor(const QString& screenId) const
+    {
+        return freeGeometryByScreen.value(screenId);
+    }
+
+    /// Any captured free/float geometry — the newest by no particular order — used
+    /// as a cross-screen fallback when the exact screen has none. Returns an
+    /// invalid rect when the window has no free geometry on record at all.
+    QRect anyFreeGeometry() const
+    {
+        for (auto it = freeGeometryByScreen.constBegin(); it != freeGeometryByScreen.constEnd(); ++it) {
+            if (it.value().isValid()) {
+                return it.value();
+            }
+        }
+        return QRect();
+    }
+
+    /// Content equality IGNORING `sequence` (the store stamps a fresh sequence on
+    /// every record(), so it must not count as a change). Lets the merge in
+    /// record() short-circuit a re-capture that produced an identical placement —
+    /// the save-time refreshOpenWindowPlacements() re-captures every open window
+    /// each tick, and without this an unchanged window would re-mark dirty and
+    /// reschedule the save timer forever (a self-perpetuating save/capture loop).
+    bool sameContentAs(const WindowPlacement& o) const
+    {
+        return windowId == o.windowId && appId == o.appId && screenId == o.screenId
+            && virtualDesktop == o.virtualDesktop && activity == o.activity && kind == o.kind && engines == o.engines
+            && freeGeometryByScreen == o.freeGeometryByScreen;
+    }
+
+    /// Common state-token vocabulary. Engines may define more; these cover the
+    /// built-in snap/autotile states.
     static QLatin1String stateFree()
     {
         return QLatin1String("free");
     }
-    static QLatin1String stateFloated()
+    static QLatin1String stateFloating()
     {
-        return QLatin1String("floated");
+        return QLatin1String("floating");
     }
     static QLatin1String stateSnapped()
     {
         return QLatin1String("snapped");
     }
-    static QLatin1String stateAutotiled()
+    static QLatin1String stateTiled()
     {
-        return QLatin1String("autotiled");
+        return QLatin1String("tiled");
     }
 
     QJsonObject toJson() const
     {
         QJsonObject obj;
         obj[QLatin1String("windowId")] = windowId;
-        obj[QLatin1String("state")] = stateId;
-        obj[QLatin1String("engine")] = engineId;
         obj[QLatin1String("screen")] = screenId;
         obj[QLatin1String("desktop")] = virtualDesktop;
         if (!activity.isEmpty()) {
             obj[QLatin1String("activity")] = activity;
         }
         obj[QLatin1String("kind")] = static_cast<int>(kind);
-        if (geometry.isValid()) {
-            QJsonObject g;
-            g[QLatin1String("x")] = geometry.x();
-            g[QLatin1String("y")] = geometry.y();
-            g[QLatin1String("w")] = geometry.width();
-            g[QLatin1String("h")] = geometry.height();
-            obj[QLatin1String("geo")] = g;
+
+        QJsonObject eng;
+        for (auto it = engines.constBegin(); it != engines.constEnd(); ++it) {
+            const EngineSlot& s = it.value();
+            if (s.isEmpty()) {
+                continue;
+            }
+            QJsonObject so;
+            so[QLatin1String("state")] = s.state;
+            if (!s.zoneIds.isEmpty()) {
+                QJsonArray z;
+                for (const QString& id : s.zoneIds) {
+                    z.append(id);
+                }
+                so[QLatin1String("zoneIds")] = z;
+            }
+            if (s.order >= 0) {
+                so[QLatin1String("order")] = s.order;
+            }
+            eng[it.key()] = so;
         }
+        if (!eng.isEmpty()) {
+            obj[QLatin1String("engines")] = eng;
+        }
+
+        QJsonObject fg;
+        for (auto it = freeGeometryByScreen.constBegin(); it != freeGeometryByScreen.constEnd(); ++it) {
+            const QRect& g = it.value();
+            if (!g.isValid()) {
+                continue;
+            }
+            QJsonObject go;
+            go[QLatin1String("x")] = g.x();
+            go[QLatin1String("y")] = g.y();
+            go[QLatin1String("w")] = g.width();
+            go[QLatin1String("h")] = g.height();
+            fg[it.key()] = go;
+        }
+        if (!fg.isEmpty()) {
+            obj[QLatin1String("freeGeo")] = fg;
+        }
+
         obj[QLatin1String("seq")] = static_cast<double>(sequence);
-        if (!engineData.isEmpty()) {
-            obj[QLatin1String("data")] = engineData;
-        }
         return obj;
     }
 
@@ -106,19 +208,39 @@ struct WindowPlacement
         WindowPlacement p;
         p.appId = appId;
         p.windowId = obj.value(QLatin1String("windowId")).toString();
-        p.stateId = obj.value(QLatin1String("state")).toString();
-        p.engineId = obj.value(QLatin1String("engine")).toString();
         p.screenId = obj.value(QLatin1String("screen")).toString();
         p.virtualDesktop = obj.value(QLatin1String("desktop")).toInt();
         p.activity = obj.value(QLatin1String("activity")).toString();
         p.kind = clampWindowKindFromWire(obj.value(QLatin1String("kind")).toInt());
-        const QJsonObject g = obj.value(QLatin1String("geo")).toObject();
-        if (!g.isEmpty()) {
-            p.geometry = QRect(g.value(QLatin1String("x")).toInt(), g.value(QLatin1String("y")).toInt(),
-                               g.value(QLatin1String("w")).toInt(), g.value(QLatin1String("h")).toInt());
+
+        const QJsonObject eng = obj.value(QLatin1String("engines")).toObject();
+        for (auto it = eng.constBegin(); it != eng.constEnd(); ++it) {
+            const QJsonObject so = it.value().toObject();
+            EngineSlot s;
+            s.state = so.value(QLatin1String("state")).toString();
+            for (const QJsonValue& v : so.value(QLatin1String("zoneIds")).toArray()) {
+                const QString z = v.toString();
+                if (!z.isEmpty()) {
+                    s.zoneIds.append(z);
+                }
+            }
+            s.order = so.value(QLatin1String("order")).toInt(-1);
+            if (!s.isEmpty()) {
+                p.engines.insert(it.key(), s);
+            }
         }
+
+        const QJsonObject fg = obj.value(QLatin1String("freeGeo")).toObject();
+        for (auto it = fg.constBegin(); it != fg.constEnd(); ++it) {
+            const QJsonObject go = it.value().toObject();
+            const QRect g(go.value(QLatin1String("x")).toInt(), go.value(QLatin1String("y")).toInt(),
+                          go.value(QLatin1String("w")).toInt(), go.value(QLatin1String("h")).toInt());
+            if (g.isValid()) {
+                p.freeGeometryByScreen.insert(it.key(), g);
+            }
+        }
+
         p.sequence = static_cast<quint64>(obj.value(QLatin1String("seq")).toDouble());
-        p.engineData = obj.value(QLatin1String("data")).toObject();
         return p;
     }
 };

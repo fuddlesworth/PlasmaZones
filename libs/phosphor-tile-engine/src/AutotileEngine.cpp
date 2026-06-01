@@ -246,18 +246,22 @@ void AutotileEngine::connectSignals()
                             continue;
                         }
                         // This virtual screen no longer exists — release its windows.
-                        // Save user-floated windows (excluding overflow) so they stay
-                        // floating if autotile is re-enabled on a new VS config — mirrors
-                        // the preservation logic in setAutotileScreens.
+                        // Snapshot each window's autotile slot into the unified record
+                        // (single source of truth) before teardown — same as setAutotileScreens.
                         orphanedVsIds.insert(sid);
-                        QSet<QString> screenOverflow = m_overflow.takeForScreen(sid);
+                        m_overflow.takeForScreen(sid);
+                        const QStringList vsTiled = it.value()->tiledWindows();
                         const QStringList floated = it.value()->floatingWindows();
-                        for (const QString& fid : floated) {
-                            if (!screenOverflow.contains(fid)) {
-                                m_savedFloatingWindows[it.key()].insert(fid);
+                        if (m_windowTracker) {
+                            for (const QString& wid : floated + vsTiled) {
+                                auto rec = capturePlacement(wid);
+                                if (!rec) {
+                                    continue;
+                                }
+                                m_windowTracker->placementStore().record(*rec);
                             }
                         }
-                        releasedWindows.append(it.value()->tiledWindows());
+                        releasedWindows.append(vsTiled);
                         releasedWindows.append(floated);
                         m_pendingInitialOrders.remove(sid);
                         m_pendingOrderGeneration.remove(sid);
@@ -355,6 +359,28 @@ bool AutotileEngine::isWindowTiled(const QString& windowId) const
     }
     const PhosphorTiles::TilingState* state = m_screenStates.value(it.value());
     return state && !state->isFloating(windowId);
+}
+
+bool AutotileEngine::isWindowFloatingInAutotile(const QString& rawWindowId) const
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    auto it = m_windowToStateKey.constFind(windowId);
+    if (it == m_windowToStateKey.constEnd()) {
+        return false;
+    }
+    const PhosphorTiles::TilingState* state = m_screenStates.value(it.value());
+    return state && state->isFloating(windowId);
+}
+
+QStringList AutotileEngine::allFloatingWindows() const
+{
+    QStringList result;
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        if (it.value()) {
+            result += it.value()->floatingWindows();
+        }
+    }
+    return result;
 }
 
 void AutotileEngine::swapInDirection(const QString& direction, const QString& action)
@@ -498,13 +524,6 @@ void AutotileEngine::updateStickyScreenPins(const std::function<bool(const QStri
                             }
                         }
 
-                        // Migrate saved floating windows
-                        auto floatIt = m_savedFloatingWindows.find(oldKey);
-                        if (floatIt != m_savedFloatingWindows.end()) {
-                            m_savedFloatingWindows[newKey] = floatIt.value();
-                            m_savedFloatingWindows.erase(floatIt);
-                        }
-
                         qCInfo(PhosphorTileEngine::lcTileEngine)
                             << "Migrated screen" << screenId << "state from desktop" << pinnedDesktop << "to"
                             << m_currentDesktop;
@@ -581,28 +600,22 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             m_strictInitialOrderScreens.remove(screenId);
             PhosphorTiles::TilingState* ts = tilingStateForScreen(screenId);
             if (ts) {
-                const TilingStateKey key = currentKeyForScreen(screenId);
-                auto savedIt = m_savedFloatingWindows.find(key);
                 for (const QString& windowId : order) {
                     if (!ts->containsWindow(windowId)) {
                         ts->addWindow(windowId);
-                        // Restore floating state from the saved set (populated at
-                        // runtime when a context is left). Without this, windows
-                        // added from pending orders lose their floating state because
-                        // windowOpened's floating restore is skipped when the
-                        // window already exists in the PhosphorTiles::TilingState.
-                        if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
-                            ts->setFloating(windowId, true);
+                        // Restore floating state from the unified record (single source
+                        // of truth). Without this, windows added from pending orders lose
+                        // their floating state because windowOpened's floating restore is
+                        // skipped when the window already exists in the PhosphorTiles::TilingState.
+                        if (m_windowTracker) {
+                            const auto rec = m_windowTracker->placementStore().peek(
+                                windowId, m_windowTracker->currentAppIdFor(windowId));
+                            if (rec
+                                && rec->slotFor(engineId()).state == PhosphorEngine::WindowPlacement::stateFloating()) {
+                                ts->setFloating(windowId, true);
+                            }
                         }
                     }
-                }
-                // Only erase the saved-floating entry once it's empty. Floating
-                // IDs for windows NOT in this pending order (e.g. session restore
-                // where setInitialWindowOrder narrowed the order to snap-zone
-                // members) must remain so windowOpened/insertWindow can restore
-                // them when KWin notifies the daemon about those windows.
-                if (savedIt != m_savedFloatingWindows.end() && savedIt.value().isEmpty()) {
-                    m_savedFloatingWindows.erase(savedIt);
                 }
             }
         }
@@ -627,18 +640,26 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         if (!removed.contains(key.screenId)) {
             continue;
         }
-        // Save user-floated windows so they stay floating when autotile is re-enabled.
-        // Exclude overflow windows — they were auto-floated by maxWindows cap and
-        // should tile normally when autotile is re-enabled.
-        QSet<QString> screenOverflow = m_overflow.takeForScreen(key.screenId);
+        // Snapshot each window's autotile slot into the unified record BEFORE the
+        // PhosphorTiles::TilingState is torn down — the record is the SINGLE source
+        // of truth for cross-mode state (no parallel saved-floating set). capturePlacement
+        // records a USER float as floating and a tiled/overflow window as tiled (so it
+        // re-tiles on re-entry); the shared free geometry rides from the engine's own
+        // float-back cache.
+        m_overflow.takeForScreen(key.screenId); // drop the overflow set for the removed screen
+        const QStringList tiled = it.value()->tiledWindows();
         const QStringList floated = it.value()->floatingWindows();
-        for (const QString& fid : floated) {
-            if (!screenOverflow.contains(fid)) {
-                m_savedFloatingWindows[key].insert(fid);
+        if (m_windowTracker) {
+            for (const QString& wid : floated + tiled) {
+                auto rec = capturePlacement(wid);
+                if (!rec) {
+                    continue;
+                }
+                m_windowTracker->placementStore().record(*rec);
             }
         }
-        releasedWindows.append(it.value()->tiledWindows());
-        releasedWindows.append(it.value()->floatingWindows());
+        releasedWindows.append(tiled);
+        releasedWindows.append(floated);
         m_configResolver->removeOverridesForScreen(key.screenId);
         m_pendingInitialOrders.remove(key.screenId);
         m_pendingOrderGeneration.remove(key.screenId);
@@ -956,14 +977,6 @@ void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
             ++pruned;
         }
     }
-    // Also prune saved floating windows for this desktop
-    QMutableHashIterator<TilingStateKey, QSet<QString>> fit(m_savedFloatingWindows);
-    while (fit.hasNext()) {
-        fit.next();
-        if (fit.key().desktop == removedDesktop) {
-            fit.remove();
-        }
-    }
     // Clean up window-to-state-key entries that reference the pruned desktop.
     // Stale entries would pollute backfillWindows() and could incorrectly match
     // if desktop numbers are reused.
@@ -1000,14 +1013,6 @@ void AutotileEngine::pruneStatesForActivities(const QStringList& validActivities
             it.value()->deleteLater();
             it.remove();
             ++pruned;
-        }
-    }
-    QMutableHashIterator<TilingStateKey, QSet<QString>> fit(m_savedFloatingWindows);
-    while (fit.hasNext()) {
-        fit.next();
-        const QString& act = fit.key().activity;
-        if (!act.isEmpty() && !valid.contains(act)) {
-            fit.remove();
         }
     }
     // Clean up window-to-state-key entries that reference pruned activities
@@ -1082,37 +1087,6 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
                 << "ms - cleaning up stale entry";
         }
     });
-}
-
-void AutotileEngine::clearSavedFloatingForWindows(const QStringList& windowIds)
-{
-    for (const QString& raw : windowIds) {
-        removeSavedFloatingEntry(canonicalizeWindowId(raw));
-    }
-}
-
-void AutotileEngine::clearAllSavedFloating()
-{
-    int total = 0;
-    for (auto it = m_savedFloatingWindows.constBegin(); it != m_savedFloatingWindows.constEnd(); ++it) {
-        total += it.value().size();
-    }
-    if (total > 0) {
-        qCInfo(PhosphorTileEngine::lcTileEngine) << "Clearing all saved floating state -" << total << "windows";
-        m_savedFloatingWindows.clear();
-    }
-}
-
-void AutotileEngine::removeSavedFloatingEntry(const QString& windowId)
-{
-    for (auto it = m_savedFloatingWindows.begin(); it != m_savedFloatingWindows.end();) {
-        it.value().remove(windowId);
-        if (it.value().isEmpty()) {
-            it = m_savedFloatingWindows.erase(it);
-        } else {
-            ++it;
-        }
-    }
 }
 
 QStringList AutotileEngine::tiledWindowOrder(const QString& screenId) const
@@ -2106,11 +2080,6 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
         }
     }
 
-    // Clean up saved floating state even if window isn't currently tracked
-    // (it may have been floating when autotile was disabled on its screen).
-    // This must happen before onWindowRemoved because removeWindow() early-returns
-    // when the window isn't in m_windowToStateKey (not tracked in any PhosphorTiles::TilingState).
-    removeSavedFloatingEntry(windowId);
     m_autotileFloatedWindows.remove(windowId);
 
     onWindowRemoved(windowId);
@@ -2431,47 +2400,61 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // pending-restore queue below, so regression #271 (stale pre-tile rect)
     // cannot recur. inserted=true → the tile-insert paths below are all skipped;
     // the function tail still records m_windowToStateKey and returns true.
-    if (!inserted && hasStableAppId && m_windowTracker) {
-        using PhosphorEngine::WindowPlacement;
-        auto fr = m_windowTracker->placementStore().take(windowId, appId, [&](const WindowPlacement& p) {
-            return p.engineId == engineId() && p.stateId == WindowPlacement::stateFloated()
-                && (p.screenId.isEmpty() || p.screenId == screenId);
-        });
-        if (fr) {
-            state->addWindow(windowId);
-            state->setFloating(windowId, true);
-            inserted = true;
-            const QString restoreScreen = fr->screenId.isEmpty() ? screenId : fr->screenId;
-            Q_EMIT geometryRestoreRequested(windowId, fr->geometry, restoreScreen);
-            qCInfo(PhosphorTileEngine::lcTileEngine)
-                << "insertWindow: float-restore for" << windowId << "to" << fr->geometry << "on" << restoreScreen;
-        }
-    }
-
-    // Close/reopen restore from the unified placement store: a window that closed
-    // (or whose daemon restarted) while autotiled reopens at its saved position in
-    // the SAME context. Position is index-based — best-effort if neighbours moved,
-    // matching snapping's restore semantics. wasFloating is intentionally NOT
-    // honoured (a window arriving via snap→autotile drag carries "tile me here"
-    // intent); a window that was FLOATING is handled by the floated branch above.
-    bool restoredFromPendingQueue = false;
+    // Close/reopen restore from the unified placement store: ONE record per window
+    // holds both engines' slots + the shared per-screen free geometry. Take it once
+    // and branch on the autotile slot — a FLOATING slot restores the window floating
+    // at its shared free geometry (any screen); a TILED slot restores it at its saved
+    // order in the SAME context (index-based — best-effort if neighbours moved;
+    // wasFloating is not relevant since the slot state IS the intent). Re-record
+    // bound to the live windowId so the snap slot + per-screen free geometry survive
+    // and a second instance of the same app takes the next FIFO entry.
     const TilingStateKey currentKey = currentKeyForScreen(screenId);
     if (!inserted && hasStableAppId && m_windowTracker) {
         using PhosphorEngine::WindowPlacement;
         auto rec = m_windowTracker->placementStore().take(windowId, appId, [&](const WindowPlacement& p) {
-            return p.engineId == engineId() && p.stateId == WindowPlacement::stateAutotiled()
-                && p.screenId == currentKey.screenId && p.virtualDesktop == currentKey.desktop
-                && p.activity == currentKey.activity;
+            const PhosphorEngine::EngineSlot s = p.slotFor(engineId());
+            if (s.state == WindowPlacement::stateFloating()) {
+                return p.screenId.isEmpty() || p.screenId == screenId;
+            }
+            if (s.state == WindowPlacement::stateTiled()) {
+                return p.screenId == currentKey.screenId && p.virtualDesktop == currentKey.desktop
+                    && p.activity == currentKey.activity;
+            }
+            return false;
         });
         if (rec) {
-            const int savedPos = rec->engineData.value(QLatin1String("position")).toInt(-1);
-            const int clampedPos = savedPos < 0 ? state->windowCount() : qMin(savedPos, state->windowCount());
-            state->addWindow(windowId, clampedPos);
-            inserted = true;
-            restoredFromPendingQueue = true;
-            qCDebug(PhosphorTileEngine::lcTileEngine)
-                << "insertWindow: restored" << windowId << "from placement store at position=" << clampedPos
-                << "(saved=" << savedPos << ")";
+            // Same window across a daemon restart (uuid-exact) re-records the FULL
+            // record so the snap slot + per-screen free geometry survive; a reopened
+            // instance (appId FIFO) consumes instead, so a second instance can't steal
+            // this placement.
+            const bool wasExact = (rec->windowId == windowId);
+            const PhosphorEngine::EngineSlot slot = rec->slotFor(engineId());
+            const QString restoreScreen = rec->screenId.isEmpty() ? screenId : rec->screenId;
+            if (wasExact) {
+                m_windowTracker->placementStore().record(*rec);
+            }
+            if (slot.state == WindowPlacement::stateFloating()) {
+                state->addWindow(windowId);
+                state->setFloating(windowId, true);
+                inserted = true;
+                QRect freeGeo = rec->freeGeometryFor(restoreScreen);
+                if (!freeGeo.isValid()) {
+                    freeGeo = rec->anyFreeGeometry();
+                }
+                if (freeGeo.isValid()) {
+                    Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
+                }
+                qCInfo(PhosphorTileEngine::lcTileEngine)
+                    << "insertWindow: float-restore for" << windowId << "to" << freeGeo << "on" << restoreScreen;
+            } else {
+                const int savedPos = slot.order;
+                const int clampedPos = savedPos < 0 ? state->windowCount() : qMin(savedPos, state->windowCount());
+                state->addWindow(windowId, clampedPos);
+                inserted = true;
+                qCDebug(PhosphorTileEngine::lcTileEngine)
+                    << "insertWindow: restored" << windowId << "from placement store at position=" << clampedPos
+                    << "(saved=" << savedPos << ")";
+            }
         }
     }
 
@@ -2491,24 +2474,10 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         }
     }
 
-    // Restore floating state from engine's saved set (populated when autotile was
-    // previously deactivated). Float state is per-mode: snap-mode floats don't
-    // carry into autotile and vice versa. Only m_savedFloatingWindows (the
-    // engine's own memory, keyed by screen+desktop+activity) is authoritative.
-    // Skip when the pending restore queue already handled floating — the queue's
-    // wasFloating reflects the state at close time, which is more recent than
-    // m_savedFloatingWindows (set at mode-toggle time).
-    if (!restoredFromPendingQueue) {
-        auto savedIt = m_savedFloatingWindows.find(currentKey);
-        if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
-            state->setFloating(windowId, true);
-            qCInfo(PhosphorTileEngine::lcTileEngine)
-                << "Restored saved floating state for window" << windowId << "on screen" << screenId;
-            if (savedIt.value().isEmpty()) {
-                m_savedFloatingWindows.erase(savedIt);
-            }
-        }
-    }
+    // Float restore is handled entirely by the record take() above (a floating
+    // autotile slot inserts floating + applies the shared free geometry). No
+    // parallel saved-floating set — the WindowPlacement record is the single
+    // source of truth for cross-mode float state.
 
     m_windowToStateKey.insert(windowId, currentKey);
     return true;
@@ -2532,9 +2501,6 @@ void AutotileEngine::removeWindow(const QString& windowId)
         // reopen consumes that record in insertWindow().
         state->removeWindow(windowId);
     }
-
-    // Clean up saved floating state for closed windows
-    removeSavedFloatingEntry(windowId);
 
     // Purge closed window from pending initial orders.
     // If a pre-seeded window closes before arriving at the autotile engine,
@@ -3723,18 +3689,29 @@ std::optional<PhosphorEngine::WindowPlacement> AutotileEngine::capturePlacement(
     WindowPlacement p;
     p.windowId = windowId;
     p.appId = currentAppIdFor(windowId);
-    p.engineId = engineId();
     p.screenId = key.screenId;
     p.virtualDesktop = key.desktop;
     p.activity = key.activity;
 
-    if (state->isFloating(wid)) {
-        p.stateId = WindowPlacement::stateFloated();
-        // Geometry is filled by the capture orchestrator from the live frame.
+    // The slot carries only the autotile engine's STATE + slot reference (tile
+    // order) — NEVER a rectangle. The shared free/float geometry is filled by the
+    // capture orchestrator from the live frame, and ONLY when floating.
+    //
+    // A genuine float persists across mode toggles. The discriminator is the
+    // OVERFLOW set, NOT the user-float marker: a window can be floating via the
+    // float shortcut (marker set) OR via drag-to-float (marker NOT set — it emits
+    // windowFloatingStateSynced, the passive path), and BOTH are real user floats
+    // that must persist. Only an OVERFLOW float (auto-floated by the maxWindows cap)
+    // is recorded as tiled so it re-tiles — and overflows again if it still doesn't
+    // fit — on restore, rather than sticking as a phantom user float.
+    PhosphorEngine::EngineSlot slot;
+    if (state->isFloating(wid) && !m_overflow.isOverflow(wid)) {
+        slot.state = WindowPlacement::stateFloating();
     } else {
-        p.stateId = WindowPlacement::stateAutotiled();
-        p.engineData[QLatin1String("position")] = state->windowOrder().indexOf(wid);
+        slot.state = WindowPlacement::stateTiled();
+        slot.order = state->windowOrder().indexOf(wid);
     }
+    p.engines.insert(engineId(), slot);
     return p;
 }
 
@@ -3747,21 +3724,25 @@ bool AutotileEngine::restorePlacement(const PhosphorEngine::WindowPlacement& pla
         return false;
     }
     const QString wid = canonicalizeForLookup(placement.windowId);
+    const PhosphorEngine::EngineSlot slot = placement.slotFor(engineId());
 
-    if (placement.stateId == WindowPlacement::stateAutotiled()) {
-        const int pos = placement.engineData.value(QLatin1String("position")).toInt(-1);
-        state->addWindow(wid, pos);
+    if (slot.state == WindowPlacement::stateTiled()) {
+        state->addWindow(wid, slot.order);
         state->setFloating(wid, false);
         m_windowToStateKey.insert(wid, currentKeyForScreen(restoreScreen));
         retile(restoreScreen);
         return true;
     }
-    if (placement.stateId == WindowPlacement::stateFloated()) {
+    if (slot.state == WindowPlacement::stateFloating()) {
         state->addWindow(wid);
         state->setFloating(wid, true);
         m_windowToStateKey.insert(wid, currentKeyForScreen(restoreScreen));
-        if (placement.geometry.isValid()) {
-            Q_EMIT geometryRestoreRequested(placement.windowId, placement.geometry, restoreScreen);
+        QRect freeGeo = placement.freeGeometryFor(restoreScreen);
+        if (!freeGeo.isValid()) {
+            freeGeo = placement.anyFreeGeometry();
+        }
+        if (freeGeo.isValid()) {
+            Q_EMIT geometryRestoreRequested(placement.windowId, freeGeo, restoreScreen);
         }
         retile(restoreScreen);
         return true;

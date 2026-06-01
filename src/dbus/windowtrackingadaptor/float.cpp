@@ -45,9 +45,9 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
         auto geo = m_service->validatedUnmanagedGeometry(windowId, screenId);
         if (geo) {
             Q_EMIT applyGeometryRequested(windowId, 0, 0, geo->width(), geo->height(), QString(), screenId, true);
-            if (m_snapEngine) {
-                m_snapEngine->clearUnmanagedGeometry(windowId);
-            }
+            // Single float-back store: clear the record's shared free geometry now
+            // that we've consumed it for this drag-out restore.
+            m_service->clearFreeGeometry(windowId);
             qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
         }
     }

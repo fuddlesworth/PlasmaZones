@@ -140,7 +140,9 @@ PhosphorProtocol::WindowGeometryList SnapEngine::applyBatchAssignments(const QVe
     for (const auto& entry : entries) {
         if (entry.targetZoneId == PhosphorEngine::RestoreSentinel) {
             uncommitSnap(entry.windowId);
-            clearUnmanagedGeometry(entry.windowId);
+            if (m_windowTracker) {
+                m_windowTracker->clearFreeGeometry(entry.windowId);
+            }
             resolvedScreens.append(QString());
             continue;
         }
