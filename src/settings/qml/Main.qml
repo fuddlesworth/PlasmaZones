@@ -400,7 +400,8 @@ ApplicationWindow {
                         "hasChildren": matchingChildren.length === 0 && item.hasChildren,
                         "isBackButton": false,
                         "hasDividerAfter": false,
-                        "isDivider": false
+                        "isDivider": false,
+                        "isSearchChild": false
                     });
                     // Show matching children inline
                     for (let j = 0; j < matchingChildren.length; j++) {
@@ -423,7 +424,8 @@ ApplicationWindow {
                             "hasChildren": false,
                             "isBackButton": false,
                             "hasDividerAfter": false,
-                            "isDivider": true
+                            "isDivider": true,
+                            "isSearchChild": false
                         });
 
                     }
@@ -436,7 +438,8 @@ ApplicationWindow {
                     "hasChildren": item.hasChildren,
                     "isBackButton": false,
                     "hasDividerAfter": false,
-                    "isDivider": false
+                    "isDivider": false,
+                    "isSearchChild": false
                 });
                 if (item.hasDividerAfter)
                     sidebarModel.append({
@@ -446,7 +449,8 @@ ApplicationWindow {
                     "hasChildren": false,
                     "isBackButton": false,
                     "hasDividerAfter": false,
-                    "isDivider": true
+                    "isDivider": true,
+                    "isSearchChild": false
                 });
 
             }
@@ -469,7 +473,8 @@ ApplicationWindow {
                 "hasChildren": false,
                 "isBackButton": true,
                 "hasDividerAfter": false,
-                "isDivider": false
+                "isDivider": false,
+                "isSearchChild": false
             });
             // Child items
             let children = _childItems[_sidebarMode] || [];
@@ -496,7 +501,8 @@ ApplicationWindow {
                         "hasChildren": nestedMatches.length === 0 && (child.hasChildren || false),
                         "isBackButton": false,
                         "hasDividerAfter": false,
-                        "isDivider": false
+                        "isDivider": false,
+                        "isSearchChild": false
                     });
                     for (let j = 0; j < nestedMatches.length; j++) {
                         sidebarModel.append({
@@ -519,7 +525,8 @@ ApplicationWindow {
                     "hasChildren": child.hasChildren || false,
                     "isBackButton": false,
                     "hasDividerAfter": false,
-                    "isDivider": false
+                    "isDivider": false,
+                    "isSearchChild": false
                 });
                 if (childDivider)
                     sidebarModel.append({
@@ -529,7 +536,8 @@ ApplicationWindow {
                     "hasChildren": false,
                     "isBackButton": false,
                     "hasDividerAfter": false,
-                    "isDivider": true
+                    "isDivider": true,
+                    "isSearchChild": false
                 });
 
             }
@@ -875,12 +883,13 @@ ApplicationWindow {
                         required property bool hasDividerAfter
                         required property bool isDivider
                         // Inline search-result rows under their parent
-                        // carry an `isSearchChild` role; rows without
-                        // it (most of the model) get `false` here via
-                        // the truthy coercion. Reading through `model.`
-                        // rather than as a required property avoids
-                        // forcing every append site to set the role.
-                        readonly property bool isSearchChild: model.isSearchChild === true
+                        // carry an `isSearchChild` role. It must be a
+                        // required property: this delegate declares other
+                        // required roles, which disables the implicit
+                        // `model` context object, so `model.isSearchChild`
+                        // would throw "model is not defined". Every append
+                        // site sets the role so the binding always resolves.
+                        required property bool isSearchChild
                         readonly property bool isActive: {
                             if (isBackButton)
                                 return false;
