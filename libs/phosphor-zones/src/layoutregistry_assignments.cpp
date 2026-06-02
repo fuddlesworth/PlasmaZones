@@ -40,8 +40,8 @@ namespace PWR = PhosphorWindowRule;
 // decodeDims, the matchIsExactContext* family, hasEngineModeAction,
 // isContextAssignmentRule, entryFromRuleMatchActions, makeContextQuery)
 // are pure functions with no LayoutRegistry-member dependency and live in
-// layoutregistry_rulehelpers.cpp / _p.h — pulled in here so this TU stays
-// under the project's 800-line ceiling.
+// layoutregistry_rulehelpers.cpp / _p.h, keeping the rule-shape vocabulary in
+// one place separate from the registry's member-bound resolution logic here.
 using namespace RuleHelpers;
 
 // ── Rule-backed cascade resolution ──────────────────────────────────────────

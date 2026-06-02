@@ -270,7 +270,12 @@ private Q_SLOTS:
             o.insert(QStringLiteral("value"), QStringLiteral("#FF0000"));
             const auto reloaded = RuleAction::fromJson(o);
             QVERIFY2(reloaded.has_value(), type.data());
-            QCOMPARE(*reloaded, RuleAction::fromJson(o).value()); // round-trip stable
+            // Genuine round-trip: serialise the parsed action back out and
+            // re-parse, asserting toJson→fromJson is stable (re-parsing the
+            // same input `o` would only prove fromJson is deterministic).
+            const auto roundTripped = RuleAction::fromJson(reloaded->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(*roundTripped, *reloaded);
         }
     }
 
@@ -284,6 +289,8 @@ private Q_SLOTS:
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));
             o.insert(QStringLiteral("value"), -5);
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 600); // > kMaxGap (500)
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), 0);
             QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
