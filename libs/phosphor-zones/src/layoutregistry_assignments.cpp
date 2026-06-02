@@ -106,6 +106,42 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     return result;
 }
 
+ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, int virtualDesktop,
+                                                      const QString& activity) const
+{
+    // Unlike resolveAssignmentEntry (single winning engine-mode rule), gap
+    // overrides are read PER SLOT from the evaluator's ResolvedActions, so a
+    // gap-only rule and, say, a separate engine-mode rule on the same context
+    // compose — and two gap rules touching different slots both apply. No
+    // engine-mode gate and no isValid() filter: a gap-only context rule is a
+    // first-class override here.
+    ContextGapOverride gaps;
+    if (!m_evaluator) {
+        return gaps;
+    }
+    const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+    const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
+
+    const auto readInt = [&resolved](QLatin1StringView slot, std::optional<int>& out) {
+        if (const auto action = resolved.slot(QString(slot))) {
+            out = action->params.value(PWR::ActionParam::Value).toInt();
+        }
+    };
+    const auto readBool = [&resolved](QLatin1StringView slot, std::optional<bool>& out) {
+        if (const auto action = resolved.slot(QString(slot))) {
+            out = action->params.value(PWR::ActionParam::Value).toBool();
+        }
+    };
+    readInt(PWR::ActionSlot::ZonePadding, gaps.zonePadding);
+    readInt(PWR::ActionSlot::OuterGap, gaps.outerGap);
+    readBool(PWR::ActionSlot::UsePerSideOuterGap, gaps.usePerSideOuterGap);
+    readInt(PWR::ActionSlot::OuterGapTop, gaps.outerGapTop);
+    readInt(PWR::ActionSlot::OuterGapBottom, gaps.outerGapBottom);
+    readInt(PWR::ActionSlot::OuterGapLeft, gaps.outerGapLeft);
+    readInt(PWR::ActionSlot::OuterGapRight, gaps.outerGapRight);
+    return gaps;
+}
+
 bool LayoutRegistry::hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     return findExactContextRule(screenId, virtualDesktop, activity) != nullptr;

@@ -302,6 +302,17 @@ public:
         return layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
     }
 
+    /// Resolve the per-context gap override for (screen, desktop, activity) by
+    /// evaluating a windowless WindowQuery through the RuleEvaluator and
+    /// reading the gap action slots (ZonePadding / OuterGap /
+    /// UsePerSideOuterGap / per-side). Unlike @ref resolveAssignmentEntry this
+    /// is a PER-SLOT read across all matching context rules (not a single
+    /// winning rule), so independent gap rules compose and there is no
+    /// engine-mode gate. Returns an all-unset @ref ContextGapOverride when no
+    /// matching rule fills a gap slot. Same owner-thread affinity as the rest
+    /// of the registry.
+    ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity) const;
+
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
     /// True iff a context-assignment rule whose match is exactly this

@@ -89,10 +89,15 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManag
  * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective zone padding in pixels
  *
- * Resolution cascade: per-screen override → layout override → global settings → default (8px)
+ * @param ruleGapOverride Optional PerScreenSnappingKey-shaped map of context-rule
+ *        gap overrides (built by DaemonGeometryResolver from the resolved
+ *        context rules); takes precedence over every other layer.
+ *
+ * Resolution cascade: context-rule override → per-screen override → layout
+ * override → global settings → default (8px)
  */
 PLASMAZONES_EXPORT int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings,
-                                               const QString& screenId = {});
+                                               const QString& screenId = {}, const QVariantMap& ruleGapOverride = {});
 
 using ::PhosphorZones::GeometryUtils::snapToRect;
 
@@ -103,11 +108,15 @@ using ::PhosphorZones::GeometryUtils::snapToRect;
  * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective per-side edge gaps
  *
- * Resolution cascade: per-screen per-side → per-screen uniform → layout per-side →
- * layout uniform → global per-side → global uniform → default
+ * @param ruleGapOverride Optional PerScreenSnappingKey-shaped map of context-rule
+ *        gap overrides; takes precedence over every other layer.
+ *
+ * Resolution cascade: context-rule override → per-screen per-side → per-screen
+ * uniform → layout per-side → layout uniform → global per-side → global uniform → default
  */
 PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, ISettings* settings,
-                                                                    const QString& screenId = {});
+                                                                    const QString& screenId = {},
+                                                                    const QVariantMap& ruleGapOverride = {});
 
 using ::PhosphorZones::GeometryUtils::effectiveScreenGeometry;
 

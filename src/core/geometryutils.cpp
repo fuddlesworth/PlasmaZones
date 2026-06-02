@@ -46,11 +46,59 @@ QVariantMap getPerScreenSnappingWithFallback(PhosphorEngine::IGeometrySettings* 
     }
     return result;
 }
-} // anonymous namespace
 
-int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings, const QString& screenId)
+// Resolve outer gaps from a PerScreenSnappingKey-shaped override map (used for
+// BOTH the context-rule layer and the per-screen layer). Returns nullopt when
+// the map carries no outer-gap info so the caller falls through to the next
+// precedence layer. A partial per-side map fills missing sides from the map's
+// own uniform OuterGap or, failing that, the global setting — preserving the
+// historical per-screen semantics now that the rule layer shares this path.
+std::optional<::PhosphorLayout::EdgeGaps> resolveOuterGapsFromMap(const QVariantMap& map,
+                                                                  PhosphorEngine::IGeometrySettings* settings)
 {
     namespace PSK = PhosphorEngine::PerScreenSnappingKey;
+    namespace GD = PhosphorEngine::GeometryDefaults;
+    if (map.isEmpty()) {
+        return std::nullopt;
+    }
+    auto usePerSideIt = map.constFind(PSK::UsePerSideOuterGap);
+    const bool usePerSide = (usePerSideIt != map.constEnd()) ? usePerSideIt->toBool() : false;
+    if (usePerSide) {
+        auto topIt = map.constFind(PSK::OuterGapTop);
+        auto bottomIt = map.constFind(PSK::OuterGapBottom);
+        auto leftIt = map.constFind(PSK::OuterGapLeft);
+        auto rightIt = map.constFind(PSK::OuterGapRight);
+        if (topIt != map.constEnd() || bottomIt != map.constEnd() || leftIt != map.constEnd()
+            || rightIt != map.constEnd()) {
+            auto uniformIt = map.constFind(PSK::OuterGap);
+            const int fallback = (uniformIt != map.constEnd()) ? uniformIt->toInt()
+                : settings                                     ? settings->outerGap()
+                                                               : GD::OuterGap;
+            return ::PhosphorLayout::EdgeGaps{(topIt != map.constEnd()) ? topIt->toInt() : fallback,
+                                              (bottomIt != map.constEnd()) ? bottomIt->toInt() : fallback,
+                                              (leftIt != map.constEnd()) ? leftIt->toInt() : fallback,
+                                              (rightIt != map.constEnd()) ? rightIt->toInt() : fallback};
+        }
+    }
+    auto uniformIt = map.constFind(PSK::OuterGap);
+    if (uniformIt != map.constEnd()) {
+        return ::PhosphorLayout::EdgeGaps::uniform(uniformIt->toInt());
+    }
+    return std::nullopt;
+}
+} // anonymous namespace
+
+int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings, const QString& screenId,
+                            const QVariantMap& ruleGapOverride)
+{
+    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
+    // Highest precedence: a context-rule gap override for this context.
+    {
+        auto it = ruleGapOverride.constFind(PSK::ZonePadding);
+        if (it != ruleGapOverride.constEnd()) {
+            return it->toInt();
+        }
+    }
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
         auto it = perScreen.constFind(PSK::ZonePadding);
@@ -68,34 +116,17 @@ int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings, 
 }
 
 ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, ISettings* settings,
-                                                 const QString& screenId)
+                                                 const QString& screenId, const QVariantMap& ruleGapOverride)
 {
-    namespace PSK = PhosphorEngine::PerScreenSnappingKey;
     namespace GD = PhosphorEngine::GeometryDefaults;
+    // Highest precedence: a context-rule gap override for this context.
+    if (auto ruleGaps = resolveOuterGapsFromMap(ruleGapOverride, settings)) {
+        return *ruleGaps;
+    }
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
-        if (!perScreen.isEmpty()) {
-            auto usePerSideIt = perScreen.constFind(PSK::UsePerSideOuterGap);
-            bool usePerSide = (usePerSideIt != perScreen.constEnd()) ? usePerSideIt->toBool() : false;
-            if (usePerSide) {
-                auto topIt = perScreen.constFind(PSK::OuterGapTop);
-                auto bottomIt = perScreen.constFind(PSK::OuterGapBottom);
-                auto leftIt = perScreen.constFind(PSK::OuterGapLeft);
-                auto rightIt = perScreen.constFind(PSK::OuterGapRight);
-                if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd() || leftIt != perScreen.constEnd()
-                    || rightIt != perScreen.constEnd()) {
-                    auto uniformIt = perScreen.constFind(PSK::OuterGap);
-                    int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt() : settings->outerGap();
-                    return {(topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
-                            (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
-                            (leftIt != perScreen.constEnd()) ? leftIt->toInt() : fallback,
-                            (rightIt != perScreen.constEnd()) ? rightIt->toInt() : fallback};
-                }
-            }
-            auto uniformIt = perScreen.constFind(PSK::OuterGap);
-            if (uniformIt != perScreen.constEnd()) {
-                return ::PhosphorLayout::EdgeGaps::uniform(uniformIt->toInt());
-            }
+        if (auto perScreenGaps = resolveOuterGapsFromMap(perScreen, settings)) {
+            return *perScreenGaps;
         }
     }
     if (layout && layout->usePerSideOuterGap() && layout->hasPerSideOuterGapOverride()) {

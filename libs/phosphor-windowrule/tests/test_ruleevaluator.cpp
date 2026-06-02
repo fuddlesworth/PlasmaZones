@@ -290,6 +290,32 @@ private Q_SLOTS:
         eval.clearCache();
         QCOMPARE(eval.cacheSize(), 0);
     }
+
+    // ── per-property appearance slots cascade independently ──
+
+    void testBorderAppearance_perSlotCascade()
+    {
+        // Per-property correctness: a high-priority width rule and a separate
+        // lower-priority colour rule occupy DIFFERENT slots, so BOTH apply;
+        // a second width rule (lowest priority) is shadowed by the higher one
+        // on the SAME slot. This is the behaviour that makes per-property
+        // actions strictly better than a single grouped appearance blob.
+        WindowRuleSet set;
+        set.addRule(makeRule(QStringLiteral("width-high"), 500, MatchExpression{}, {borderWidth(4)}));
+        set.addRule(
+            makeRule(QStringLiteral("color-low"), 100, MatchExpression{}, {borderColor(QStringLiteral("#ff0000"))}));
+        set.addRule(makeRule(QStringLiteral("width-lowest"), 50, MatchExpression{}, {borderWidth(9)}));
+        RuleEvaluator eval(set);
+        const ResolvedActions resolved = eval.resolve(konsoleQuery());
+
+        const auto width = resolved.slot(QString(ActionSlot::BorderWidth));
+        QVERIFY(width.has_value());
+        QCOMPARE(width->params.value(QString(ActionParam::Value)).toInt(), 4); // higher-priority width wins its slot
+
+        const auto color = resolved.slot(QString(ActionSlot::BorderColor));
+        QVERIFY(color.has_value()); // colour slot also filled — not shadowed by the width rules
+        QCOMPARE(color->params.value(QString(ActionParam::Value)).toString(), QStringLiteral("#ff0000"));
+    }
 };
 
 QTEST_MAIN(TestRuleEvaluator)

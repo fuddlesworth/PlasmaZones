@@ -15,6 +15,7 @@
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
@@ -34,11 +35,12 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
                                              PhosphorZones::IZoneDetector* zoneDetector,
                                              PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                                              PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager,
-                                             QObject* parent)
+                                             PhosphorWorkspaces::ActivityManager* activityManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
     , m_virtualDesktopManager(virtualDesktopManager)
+    , m_activityManager(activityManager)
     , m_sessionBackend(createSessionBackend())
 {
     // Null dependencies are a daemon-wiring bug, not a recoverable runtime
@@ -60,10 +62,20 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
             static_cast<void*>(layoutManager), static_cast<void*>(zoneDetector), static_cast<void*>(settings));
     }
 
-    // Create geometry resolver (bridges ISettings to the library's
-    // IGeometryResolver). Owned via unique_ptr — WindowTrackingService
-    // takes a non-owning raw pointer to it.
-    m_geometryResolver = std::make_unique<PlasmaZones::DaemonGeometryResolver>(settings);
+    // Create geometry resolver (bridges ISettings + window-rule context gap
+    // resolution to the library's IGeometryResolver). Owned via unique_ptr —
+    // WindowTrackingService takes a non-owning raw pointer to it. The current
+    // desktop/activity callbacks let it resolve per-context gap rules for the
+    // context a snap happens in (current desktop/activity), mirroring the
+    // current-desktop occupancy filter used in buildEmptyZoneList.
+    m_geometryResolver = std::make_unique<PlasmaZones::DaemonGeometryResolver>(
+        settings, layoutManager,
+        [vdm = m_virtualDesktopManager]() -> int {
+            return vdm ? vdm->currentDesktop() : 0;
+        },
+        [am = m_activityManager]() -> QString {
+            return (am && PhosphorWorkspaces::ActivityManager::isAvailable()) ? am->currentActivity() : QString();
+        });
 
     // Create business logic service
     m_service = new PhosphorPlacement::WindowTrackingService(

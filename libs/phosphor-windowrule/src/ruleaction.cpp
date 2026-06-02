@@ -29,6 +29,55 @@ bool hasNonEmptyString(const QJsonObject& params, QLatin1StringView key)
     return v.isString() && !v.toString().isEmpty();
 }
 
+/// Validates that @p params has a JSON bool at @p key.
+bool hasBool(const QJsonObject& params, QLatin1StringView key)
+{
+    return params.value(key).isBool();
+}
+
+/// Validates that @p params has a number in [0, @p maxValue] at @p key.
+/// Consumers truncate to int; the upper bound keeps a hand-edited payload from
+/// carrying an absurd value into the geometry/border path.
+bool hasNumberInRange(const QJsonObject& params, QLatin1StringView key, double maxValue)
+{
+    const QJsonValue v = params.value(key);
+    if (!v.isDouble()) {
+        return false;
+    }
+    const double d = v.toDouble();
+    return d >= 0.0 && d <= maxValue;
+}
+
+/// Validates that @p params has a "#RRGGBB" hex colour string at @p key.
+bool hasHexColor(const QJsonObject& params, QLatin1StringView key)
+{
+    const QJsonValue v = params.value(key);
+    if (!v.isString()) {
+        return false;
+    }
+    const QString s = v.toString();
+    if (s.size() != 7 || s.at(0) != QLatin1Char('#')) {
+        return false;
+    }
+    for (int i = 1; i < s.size(); ++i) {
+        const QChar c = s.at(i);
+        const bool hex = (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
+            || (c >= QLatin1Char('a') && c <= QLatin1Char('f')) || (c >= QLatin1Char('A') && c <= QLatin1Char('F'));
+        if (!hex) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Upper validation bounds (display units). The effect/daemon clamp to their
+// own ConfigDefaults ranges on consumption; these only reject grossly
+// malformed hand-edited payloads. Kept generous so values a user could pick
+// through the global UI are never dropped on load.
+constexpr double kMaxBorderWidth = 10.0;
+constexpr double kMaxBorderRadius = 20.0;
+constexpr double kMaxGap = 500.0;
+
 } // namespace
 
 // ── RuleAction (de)serialization ────────────────────────────────────────
@@ -452,6 +501,179 @@ void ActionRegistry::registerBuiltins()
                      // before the user adjusted the slider.
                      .defaultDisplay = 100.0}},
     });
+
+    // ── per-window border / title-bar appearance slots (domain Window) ──
+    // One slot per property so independent rules cascade per-property. The
+    // effect (resolveWindowAppearance) reads these slots and merges them over
+    // the global snap/autotile border state for ANY matched window. Bool seeds
+    // (defaultDisplay 1.0 = true) land a fresh "hide title bars" / "show
+    // border" rule in its on state — the user adds the action to turn it on.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetHideTitleBar),
+        .slotFor = constantSlot(ActionSlot::HideTitleBar),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetBorderVisible),
+        .slotFor = constantSlot(ActionSlot::BorderVisible),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetBorderWidth),
+        .slotFor = constantSlot(ActionSlot::BorderWidth),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxBorderWidth);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxBorderWidth,
+                     .defaultDisplay = 2.0}},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetBorderRadius),
+        .slotFor = constantSlot(ActionSlot::BorderRadius),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxBorderRadius);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxBorderRadius,
+                     .defaultDisplay = 8.0}},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetBorderColor),
+        .slotFor = constantSlot(ActionSlot::BorderColor),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasHexColor(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        // Colour seed (#RRGGBB) is a string, so it is set by the editor's
+        // defaultPayloadFor "color" branch, not via defaultDisplay (double).
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetInactiveBorderColor),
+        .slotFor = constantSlot(ActionSlot::InactiveBorderColor),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasHexColor(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
+    });
+
+    // ── per-context gap slots (domain Context) ──
+    // Resolved daemon-side at zone-geometry time (DaemonGeometryResolver) as
+    // the highest-precedence gap layer. Per-property to mirror the
+    // PerScreenSnappingKey set; the resolver maps these slots into a
+    // per-screen-shaped override map and reuses the existing per-side logic.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetZonePadding),
+        .slotFor = constantSlot(ActionSlot::ZonePadding),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxGap);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxGap,
+                     .defaultDisplay = 8.0}},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOuterGap),
+        .slotFor = constantSlot(ActionSlot::OuterGap),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInRange(p, ActionParam::Value, kMaxGap);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = 0.0,
+                     .max = kMaxGap,
+                     .defaultDisplay = 8.0}},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetUsePerSideOuterGap),
+        .slotFor = constantSlot(ActionSlot::UsePerSideOuterGap),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+    });
+    for (const QLatin1StringView perSide : {ActionType::SetOuterGapTop, ActionType::SetOuterGapBottom,
+                                            ActionType::SetOuterGapLeft, ActionType::SetOuterGapRight}) {
+        // Each per-side gap maps to its own slot; the slot id mirrors the
+        // action type tail. Built from a table so the four registrations stay
+        // in lockstep (same validator, kind, bounds).
+        const QString slot = [perSide]() -> QString {
+            if (perSide == ActionType::SetOuterGapTop)
+                return QString(ActionSlot::OuterGapTop);
+            if (perSide == ActionType::SetOuterGapBottom)
+                return QString(ActionSlot::OuterGapBottom);
+            if (perSide == ActionType::SetOuterGapLeft)
+                return QString(ActionSlot::OuterGapLeft);
+            return QString(ActionSlot::OuterGapRight);
+        }();
+        registerAction(ActionDescriptor{
+            .type = QString(perSide),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    return hasNumberInRange(p, ActionParam::Value, kMaxGap);
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Context,
+            .params = {P{.key = QString(ActionParam::Value),
+                         .kind = QStringLiteral("number"),
+                         .min = 0.0,
+                         .max = kMaxGap,
+                         .defaultDisplay = 8.0}},
+        });
+    }
 }
 
 } // namespace PhosphorWindowRule
