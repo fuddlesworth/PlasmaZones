@@ -34,11 +34,15 @@ namespace PlasmaZones {
 
 namespace {
 
-// Collapse a dismissed overlay slot's full-screen texture buffers to a 1x1
-// placeholder so the labels (and wallpaper) QImages - up to tens of MB per
-// shader-enabled screen at 4K - are released while the overlay is hidden
-// rather than pinned on the persistent slot property for the whole session.
-// The next show() rebuilds them via createOverlayWindow ->
+// Collapse a dismissed overlay slot's full-screen labels texture to a 1x1
+// placeholder so the labels QImage - up to tens of MB per shader-enabled
+// screen at 4K - is released while the overlay is hidden rather than pinned
+// on the persistent slot property for the whole session. The wallpaperTexture
+// is reset for symmetry and to drop the slot's stale reference across a
+// wallpaper change, but the bulk wallpaper image is owned by ShaderRegistry's
+// static cache (s_cachedWallpaperImage / crops) and is COW-shared, so that
+// reset reclaims little RSS on its own - the labels release is the real win.
+// The next show() rebuilds both via createOverlayWindow ->
 // updateLabelsTextureForWindow / applyShaderInfoToWindow. Callers MUST also
 // reset PerScreenOverlayState::labelsTextureHash to 0 so the hash compare in
 // updateLabelsTextureForWindow does not short-circuit the rebuild and leave
@@ -602,9 +606,11 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             sit->overlayGeomConnection = {};
             sit->overlayPhysScreen = nullptr;
             sit->overlayGeometry = QRect();
-            // Release the full-screen labels/wallpaper QImage buffers the
-            // persistent slot property would otherwise keep resident for the
-            // whole session while hidden. Zeroing labelsTextureHash forces
+            // Release the full-screen labels QImage the persistent slot
+            // property would otherwise keep resident for the whole session
+            // while hidden (the wallpaper reset is symmetric only - its image
+            // is pinned by ShaderRegistry's static cache; see
+            // releaseOverlaySlotTextures). Zeroing labelsTextureHash forces
             // updateLabelsTextureForWindow to rebuild on the next show()
             // instead of short-circuiting on the now-1x1 placeholder (which
             // would render no labels). The trade is one ZoneLabelTextureBuilder
@@ -658,6 +664,14 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};
+    // Release the slot's full-screen labels buffer too. A shader->non-shader
+    // type flip routes through here (destroyIfTypeMismatch) and the
+    // non-shader createOverlayWindow reload does NOT overwrite labelsTexture,
+    // so without this the slot would pin the last shader-mode QImage for the
+    // screen's whole non-shader session. The screen-teardown callers
+    // immediately destroyPassiveShell, where this is a harmless no-op on an
+    // about-to-be-freed slot. Mirrors dismissOverlayWindow's release.
+    releaseOverlaySlotTextures(it->mainOverlaySlot());
     it->labelsTextureHash = 0;
 }
 
