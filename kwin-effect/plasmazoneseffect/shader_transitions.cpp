@@ -1659,6 +1659,13 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
                           << "total animation rules to the evaluator";
 
+        // Per-window border / title-bar rules ride the same animation rule set
+        // (isEffectRuleAction admits them). Refresh borders so an edited /
+        // added / removed SetBorder* / SetHideTitleBar rule applies immediately
+        // — updateAllBorders re-merges every window and reconciles rule-hidden
+        // title bars against the fresh evaluator.
+        updateAllBorders();
+
         // Update the drag-gate exclusion rule set from the same unified
         // payload — `loadWindowRuleAnimationsFromDbus` is the effect's one
         // and only rule-store sync point, so the snapping-exclusion gate

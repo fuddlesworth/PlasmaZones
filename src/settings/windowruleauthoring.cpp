@@ -52,6 +52,47 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetOpacity && key == ActionParam::Value) {
         return PzI18n::tr("Opacity (%)");
     }
+    // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
+    if (type == ActionType::SetHideTitleBar && key == ActionParam::Value) {
+        return PzI18n::tr("Hide title bars");
+    }
+    if (type == ActionType::SetBorderVisible && key == ActionParam::Value) {
+        return PzI18n::tr("Show border");
+    }
+    if (type == ActionType::SetBorderWidth && key == ActionParam::Value) {
+        return PzI18n::tr("Border width (px)");
+    }
+    if (type == ActionType::SetBorderRadius && key == ActionParam::Value) {
+        return PzI18n::tr("Corner radius (px)");
+    }
+    if (type == ActionType::SetBorderColor && key == ActionParam::Value) {
+        return PzI18n::tr("Border color");
+    }
+    if (type == ActionType::SetInactiveBorderColor && key == ActionParam::Value) {
+        return PzI18n::tr("Inactive border color");
+    }
+    // Per-context gap overrides (all single-value, keyed ActionParam::Value).
+    if (type == ActionType::SetZonePadding && key == ActionParam::Value) {
+        return PzI18n::tr("Zone padding (px)");
+    }
+    if (type == ActionType::SetOuterGap && key == ActionParam::Value) {
+        return PzI18n::tr("Outer gap (px)");
+    }
+    if (type == ActionType::SetUsePerSideOuterGap && key == ActionParam::Value) {
+        return PzI18n::tr("Per-side outer gaps");
+    }
+    if (type == ActionType::SetOuterGapTop && key == ActionParam::Value) {
+        return PzI18n::tr("Top gap (px)");
+    }
+    if (type == ActionType::SetOuterGapBottom && key == ActionParam::Value) {
+        return PzI18n::tr("Bottom gap (px)");
+    }
+    if (type == ActionType::SetOuterGapLeft && key == ActionParam::Value) {
+        return PzI18n::tr("Left gap (px)");
+    }
+    if (type == ActionType::SetOuterGapRight && key == ActionParam::Value) {
+        return PzI18n::tr("Right gap (px)");
+    }
     if (key == ActionParam::Event) {
         return PzI18n::tr("Event");
     }
@@ -173,6 +214,45 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::ExcludeAnimations) {
         return PzI18n::tr("Exclude from animations");
+    }
+    if (type == ActionType::SetHideTitleBar) {
+        return PzI18n::tr("Hide title bars");
+    }
+    if (type == ActionType::SetBorderVisible) {
+        return PzI18n::tr("Show border");
+    }
+    if (type == ActionType::SetBorderWidth) {
+        return PzI18n::tr("Set border width");
+    }
+    if (type == ActionType::SetBorderRadius) {
+        return PzI18n::tr("Set corner radius");
+    }
+    if (type == ActionType::SetBorderColor) {
+        return PzI18n::tr("Set border color");
+    }
+    if (type == ActionType::SetInactiveBorderColor) {
+        return PzI18n::tr("Set inactive border color");
+    }
+    if (type == ActionType::SetZonePadding) {
+        return PzI18n::tr("Set zone padding");
+    }
+    if (type == ActionType::SetOuterGap) {
+        return PzI18n::tr("Set outer gap");
+    }
+    if (type == ActionType::SetUsePerSideOuterGap) {
+        return PzI18n::tr("Use per-side outer gaps");
+    }
+    if (type == ActionType::SetOuterGapTop) {
+        return PzI18n::tr("Set top gap");
+    }
+    if (type == ActionType::SetOuterGapBottom) {
+        return PzI18n::tr("Set bottom gap");
+    }
+    if (type == ActionType::SetOuterGapLeft) {
+        return PzI18n::tr("Set left gap");
+    }
+    if (type == ActionType::SetOuterGapRight) {
+        return PzI18n::tr("Set right gap");
     }
     return WindowRuleModel::actionTypeFallbackLabel(type);
 }
@@ -350,9 +430,26 @@ QVariantList actionTypes()
         ActionType::SetSnappingLayout,
         ActionType::SetTilingAlgorithm,
         ActionType::DisableEngine,
+        // Per-context gap overrides (context-domain, grouped with the other
+        // context actions above).
+        ActionType::SetZonePadding,
+        ActionType::SetOuterGap,
+        ActionType::SetUsePerSideOuterGap,
+        ActionType::SetOuterGapTop,
+        ActionType::SetOuterGapBottom,
+        ActionType::SetOuterGapLeft,
+        ActionType::SetOuterGapRight,
         ActionType::Exclude,
         ActionType::Float,
         ActionType::SetOpacity,
+        // Per-window border / title-bar overrides (window-domain, grouped with
+        // the other per-window appearance actions).
+        ActionType::SetHideTitleBar,
+        ActionType::SetBorderVisible,
+        ActionType::SetBorderWidth,
+        ActionType::SetBorderRadius,
+        ActionType::SetBorderColor,
+        ActionType::SetInactiveBorderColor,
         ActionType::OverrideAnimationShader,
         ActionType::OverrideAnimationCurve,
         ActionType::OverrideAnimationTiming,
@@ -475,6 +572,12 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // default and fail the validator on save.
             const QVariant defaultDisplay = p.value(QStringLiteral("defaultDisplay"));
             payload[key] = defaultDisplay.isValid() ? QVariant(defaultDisplay.toBool()) : QVariant(false);
+        } else if (kind == QLatin1String("color")) {
+            // Colour kind has no numeric `defaultDisplay` (that field is a
+            // double); seed a valid `#RRGGBB` so a fresh rule passes the
+            // SetBorderColor / SetInactiveBorderColor validator before the user
+            // opens the picker. Neutral KDE accent blue.
+            payload[key] = QStringLiteral("#3daee9");
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
             // shaderEffect, curveEditor) and plain strings all start empty —

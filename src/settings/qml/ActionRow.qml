@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
@@ -127,6 +128,24 @@ ColumnLayout {
     // writes it back to `action.params`. Image picking is disabled because
     // shader-image uniforms aren't part of the rule wire format here.
     property Component _shaderParamsEditor
+    // Toggle editor for `kind == "bool"` params (SetHideTitleBar / SetBorderVisible
+    // / SetUsePerSideOuterGap). Stores a JSON bool.
+    property Component _boolParamEditor
+    // Colour swatch + picker for `kind == "color"` params (SetBorderColor /
+    // SetInactiveBorderColor). Stores a `#RRGGBB` wire string — the validator
+    // rejects anything else, so the dialog's selectedColor is encoded to 6-hex
+    // via `_toHex6` (QML color.toString() includes the alpha byte).
+    property Component _colorParamEditor
+
+    /// Encode a QML color to a `#RRGGBB` wire string (no alpha) — the form the
+    /// SetBorderColor / SetInactiveBorderColor validators accept.
+    function _toHex6(c) {
+        function h(v) {
+            var s = Math.round(v * 255).toString(16);
+            return s.length < 2 ? "0" + s : s;
+        }
+        return "#" + h(c.r) + h(c.g) + h(c.b);
+    }
 
     // `actionEdited`, not `actionChanged`, because `property var action`
     // auto-generates `actionChanged()` and QML rejects the duplicate signal.
@@ -370,6 +389,12 @@ ColumnLayout {
                     if (modelData.kind === "curveEditor")
                         return row._curveEditorEditor;
 
+                    if (modelData.kind === "bool")
+                        return row._boolParamEditor;
+
+                    if (modelData.kind === "color")
+                        return row._colorParamEditor;
+
                     return row._stringParamEditor;
                 }
             }
@@ -421,6 +446,49 @@ ColumnLayout {
             value: Math.round(_stored / _scale)
             Accessible.name: _param.label
             onValueModified: row.actionEdited(row._withParam(_param.key, value * _scale))
+        }
+    }
+
+    _boolParamEditor: Component {
+        Switch {
+            readonly property var _param: parent.modelData
+
+            checked: row.action[_param.key] === true
+            Accessible.name: _param.label
+            onToggled: row.actionEdited(row._withParam(_param.key, checked))
+        }
+    }
+
+    _colorParamEditor: Component {
+        RowLayout {
+            readonly property var _param: parent.modelData
+            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : "#3daee9"
+
+            spacing: Kirigami.Units.smallSpacing
+
+            ColorButton {
+                id: swatch
+
+                color: _hex
+                Accessible.name: _param.label
+                onClicked: colorDialog.open()
+            }
+
+            Label {
+                text: swatch.color.toString().toUpperCase()
+                font: Kirigami.Theme.fixedWidthFont
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            ColorDialog {
+                id: colorDialog
+
+                selectedColor: swatch.color
+                onAccepted: row.actionEdited(row._withParam(_param.key, row._toHex6(selectedColor)))
+            }
         }
     }
 

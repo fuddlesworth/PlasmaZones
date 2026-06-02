@@ -597,6 +597,12 @@ private:
 
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
+    // Windows whose server-side title bar a per-window-rule SetHideTitleBar
+    // override hid (distinct from the snap/autotile borderless sets). Tracked
+    // so reconcileRuleHiddenTitleBar can restore the decoration when the rule
+    // stops matching, without fighting snap/autotile borderless ownership.
+    QSet<QString> m_ruleHiddenTitleBars;
+
     // Snapping's own managed-window border state, parallel to
     // AutotileHandler::m_border. Built on the shared PhosphorCompositor
     // BorderState + AutotileStateHelpers so snap and autotile share one
@@ -649,6 +655,12 @@ private:
     /// Resolve which mode's BorderState manages @p windowId — autotile first,
     /// then snap — or nullptr if neither draws a border for it.
     const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;
+
+    /// Apply or restore a per-window-rule SetHideTitleBar override for
+    /// @p windowId, coordinating with the snap/autotile borderless sets so a
+    /// rule never fights mode-driven decoration management. Idempotent — only
+    /// toggles setNoBorder on an actual desired-state change.
+    void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;

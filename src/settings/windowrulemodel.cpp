@@ -297,6 +297,50 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         return curve.isEmpty() ? PzI18n::tr("Animation curve")
                                : PzI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
     }
+    // ── border / title-bar overrides (single-value, keyed ActionParam::Value) ──
+    {
+        const QJsonValue raw = action.params.value(PhosphorWindowRule::ActionParam::Value);
+        if (action.type == ActionType::SetHideTitleBar) {
+            return raw.toBool() ? PzI18n::tr("Hide title bars") : PzI18n::tr("Show title bars");
+        }
+        if (action.type == ActionType::SetBorderVisible) {
+            return raw.toBool() ? PzI18n::tr("Show border") : PzI18n::tr("Hide border");
+        }
+        if (action.type == ActionType::SetBorderWidth) {
+            return PzI18n::tr("Border width: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetBorderRadius) {
+            return PzI18n::tr("Corner radius: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetBorderColor) {
+            return PzI18n::tr("Border: %1").arg(raw.toString().toUpper());
+        }
+        if (action.type == ActionType::SetInactiveBorderColor) {
+            return PzI18n::tr("Inactive border: %1").arg(raw.toString().toUpper());
+        }
+        // ── per-context gap overrides ──
+        if (action.type == ActionType::SetZonePadding) {
+            return PzI18n::tr("Zone padding: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetOuterGap) {
+            return PzI18n::tr("Outer gap: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetUsePerSideOuterGap) {
+            return raw.toBool() ? PzI18n::tr("Per-side outer gaps") : PzI18n::tr("Uniform outer gap");
+        }
+        if (action.type == ActionType::SetOuterGapTop) {
+            return PzI18n::tr("Top gap: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetOuterGapBottom) {
+            return PzI18n::tr("Bottom gap: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetOuterGapLeft) {
+            return PzI18n::tr("Left gap: %1 px").arg(raw.toInt());
+        }
+        if (action.type == ActionType::SetOuterGapRight) {
+            return PzI18n::tr("Right gap: %1 px").arg(raw.toInt());
+        }
+    }
     return WindowRuleModel::actionTypeFallbackLabel(action.type);
 }
 
