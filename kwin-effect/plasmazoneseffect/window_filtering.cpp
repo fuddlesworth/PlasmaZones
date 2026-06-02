@@ -192,7 +192,7 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // `!isEmpty()` fast path keeps a no-exclusions user at two pointer
     // reads — same cost as the prior list-derived check.
     if (!m_snappingExclusionRuleSet.isEmpty()) {
-        if (m_snappingExclusionEvaluator.resolve(windowRuleQueryFor(w)).isExcluded()) {
+        if (m_snappingExclusionEvaluator.resolve(windowRuleQueryFor(w, getWindowScreenId(w))).isExcluded()) {
             return rejectedBecause(rejectReason, "user exclusion rule match");
         }
     }
@@ -245,7 +245,7 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w) const
     std::optional<PhosphorWindowRule::WindowQuery> cachedQuery;
     auto query = [&]() -> const PhosphorWindowRule::WindowQuery& {
         if (!cachedQuery) {
-            cachedQuery = windowRuleQueryFor(w);
+            cachedQuery = windowRuleQueryFor(w, getWindowScreenId(w));
         }
         return *cachedQuery;
     };

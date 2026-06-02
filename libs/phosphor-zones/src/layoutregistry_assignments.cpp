@@ -119,6 +119,22 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     if (!m_evaluator) {
         return gaps;
     }
+
+    // Hot-path cache, mirroring resolveAssignmentEntry: the geometry path
+    // resolves the same context twice per op (zone padding + outer gaps) and
+    // N× inside a multi-zone snap, all with identical arguments. Memoize keyed
+    // by the rule set's monotonic revision so any edit invalidates lazily.
+    const quint64 revision = m_ruleStore->ruleSet().revision();
+    if (revision != m_contextGapCacheRevision) {
+        m_contextGapCache.clear();
+        m_contextGapCacheRevision = revision;
+    }
+    const ContextResolveKey key{screenId, virtualDesktop, activity};
+    const auto cached = m_contextGapCache.constFind(key);
+    if (cached != m_contextGapCache.constEnd()) {
+        return cached.value();
+    }
+
     const PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
     const PWR::ResolvedActions resolved = m_evaluator->resolve(query);
 
@@ -139,6 +155,14 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
     readInt(PWR::ActionSlot::OuterGapBottom, gaps.outerGapBottom);
     readInt(PWR::ActionSlot::OuterGapLeft, gaps.outerGapLeft);
     readInt(PWR::ActionSlot::OuterGapRight, gaps.outerGapRight);
+
+    // Soft cap mirroring m_contextResolveCache (see resolveAssignmentEntry):
+    // drop the whole cache on overflow rather than evicting one key.
+    constexpr qsizetype kMaxEntries = 256;
+    if (m_contextGapCache.size() >= kMaxEntries) {
+        m_contextGapCache.clear();
+    }
+    m_contextGapCache.insert(key, gaps);
     return gaps;
 }
 

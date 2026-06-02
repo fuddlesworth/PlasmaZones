@@ -475,7 +475,10 @@ ColumnLayout {
             }
 
             Label {
-                text: swatch.color.toString().toUpperCase()
+                // Show the stored #RRGGBB wire value, not swatch.color.toString()
+                // (a QML color stringifies to the 9-char #AARRGGBB form, which
+                // would display an alpha byte the saved value never carries).
+                text: parent._hex.toUpperCase()
                 font: Kirigami.Theme.fixedWidthFont
             }
 

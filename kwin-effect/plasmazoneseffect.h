@@ -662,6 +662,12 @@ private:
     /// toggles setNoBorder on an actual desired-state change.
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
 
+    /// Restore every title bar a SetHideTitleBar rule hid and drop the
+    /// m_ruleHiddenTitleBars set. Called on daemon loss / effect teardown
+    /// (symmetric with restoreAllSnapBorderless) so a rule-hidden title bar is
+    /// never left hidden after the authoritative rule state is gone.
+    void restoreAllRuleHiddenTitleBars();
+
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
     std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;

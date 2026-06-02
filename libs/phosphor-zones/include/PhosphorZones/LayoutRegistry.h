@@ -647,6 +647,15 @@ private:
     /// @c m_ruleStore->ruleSet().revision() — see @ref resolveAssignmentEntry.
     mutable quint64 m_contextResolveCacheRevision = 0;
 
+    /// Hot-path cache for @ref resolveContextGaps, keyed and revision-invalidated
+    /// exactly like @c m_contextResolveCache. Separate cache because gaps read a
+    /// per-slot ResolvedActions walk (not the single-winner assignment walk),
+    /// and the geometry path resolves the same (screen, desktop, activity) tuple
+    /// twice per op (padding + outer gaps) — and N× inside a multi-zone snap —
+    /// so memoizing collapses those repeats to one walk per rule-set revision.
+    mutable QHash<ContextResolveKey, ContextGapOverride> m_contextGapCache;
+    mutable quint64 m_contextGapCacheRevision = 0;
+
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
     /// Empty = provider disabled. Returns the user's default autotile
     /// algorithm id when autotile is the active mode; returns empty

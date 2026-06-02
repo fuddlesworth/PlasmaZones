@@ -101,7 +101,8 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // with no rules pay nothing.
     std::optional<ResolvedWindowAppearance> ovr;
     if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
-        ovr = resolveWindowAppearance(m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w), windowId);
+        ovr = resolveWindowAppearance(m_shaderManager.animationRuleEvaluator(),
+                                      windowRuleQueryFor(w, getWindowScreenId(w)), windowId);
     }
 
     // Merge: a rule field wins; otherwise fall back to the owning mode's value
@@ -122,10 +123,17 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    // Choose color: active for focused window, inactive for others
+    // Choose color: active for focused window, inactive for others.
     const QColor activeColor = (ovr && ovr->borderColor) ? *ovr->borderColor : (state ? state->color : QColor());
-    const QColor inactiveColor =
-        (ovr && ovr->inactiveBorderColor) ? *ovr->inactiveBorderColor : (state ? state->inactiveColor : QColor());
+    // Inactive falls back to the active rule colour when a rule supplies only
+    // an active colour AND the window has no owning mode (floating): without
+    // this a rule-bordered floating window would lose its border entirely when
+    // it loses focus (invalid inactiveColor → early-return below). A snapped
+    // window still inherits its mode's inactive colour.
+    const QColor inactiveColor = (ovr && ovr->inactiveBorderColor) ? *ovr->inactiveBorderColor
+        : state                                                    ? state->inactiveColor
+        : (ovr && ovr->borderColor)                                ? *ovr->borderColor
+                                                                   : QColor();
     KWin::EffectWindow* active = KWin::effects->activeWindow();
     const bool isFocused = (w == active);
     const QColor bc = isFocused ? activeColor : inactiveColor;
@@ -251,8 +259,8 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     // hide == false / unset means "no override" and defers to the snap/autotile
     // borderless management — the rule layer never force-shows a title bar that
     // a mode hid, so it can't fight that mode's authoritative decoration state.
-    const std::optional<ResolvedWindowAppearance> ovr =
-        resolveWindowAppearance(m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w), windowId);
+    const std::optional<ResolvedWindowAppearance> ovr = resolveWindowAppearance(
+        m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w, getWindowScreenId(w)), windowId);
     const bool ruleWantsHide = ovr && ovr->hideTitleBar && *ovr->hideTitleBar;
     KWin::Window* kw = w->window();
     const bool weHidIt = m_ruleHiddenTitleBars.contains(windowId);
@@ -454,6 +462,29 @@ void PlasmaZonesEffect::restoreAllSnapBorderless()
     m_snapBorder.borderlessWindowsByScreen.clear();
     m_snapBorder.tiledWindowsByScreen.clear();
     m_snapBorder.zoneGeometries.clear();
+}
+
+void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()
+{
+    using namespace PhosphorCompositor;
+    // Symmetric with restoreAllSnapBorderless: on daemon loss / effect teardown
+    // the authoritative window-rule state is gone, so restore every title bar a
+    // SetHideTitleBar rule hid and drop the set. Skip a window a mode still
+    // wants borderless — that mode's own teardown (restoreAllSnapBorderless /
+    // AutotileHandler::restoreAllBorderless) owns its restore, and a double
+    // setNoBorder(false) would fight it.
+    for (const QString& windowId : m_ruleHiddenTitleBars) {
+        if (AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId)
+            || m_autotileHandler->isBorderlessWindow(windowId)) {
+            continue;
+        }
+        if (KWin::EffectWindow* w = findWindowById(windowId)) {
+            if (KWin::Window* kw = w->window()) {
+                kw->setNoBorder(false);
+            }
+        }
+    }
+    m_ruleHiddenTitleBars.clear();
 }
 
 } // namespace PlasmaZones

@@ -257,7 +257,13 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
         }
         return v.toBool();
     };
-    const auto intSlot = [&resolved](QLatin1StringView slot) -> std::optional<int> {
+    // Upper bounds mirror the load-time descriptor validators in
+    // ruleaction.cpp (kMaxBorderWidth / kMaxBorderRadius) so the consumer
+    // re-validation is genuinely symmetric — a programmatically-built /
+    // hand-edited payload with width:5000 is rejected here, not drawn.
+    constexpr double kMaxBorderWidth = 10.0;
+    constexpr double kMaxBorderRadius = 20.0;
+    const auto intSlot = [&resolved](QLatin1StringView slot, double maxValue) -> std::optional<int> {
         const auto action = resolved.slot(QString(slot));
         if (!action) {
             return std::nullopt;
@@ -267,7 +273,7 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
             return std::nullopt;
         }
         const double d = v.toDouble();
-        if (d < 0.0) {
+        if (d < 0.0 || d > maxValue) {
             return std::nullopt;
         }
         return static_cast<int>(d);
@@ -291,8 +297,8 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
     ResolvedWindowAppearance out;
     out.hideTitleBar = boolSlot(PhosphorWindowRule::ActionSlot::HideTitleBar);
     out.showBorder = boolSlot(PhosphorWindowRule::ActionSlot::BorderVisible);
-    out.borderWidth = intSlot(PhosphorWindowRule::ActionSlot::BorderWidth);
-    out.borderRadius = intSlot(PhosphorWindowRule::ActionSlot::BorderRadius);
+    out.borderWidth = intSlot(PhosphorWindowRule::ActionSlot::BorderWidth, kMaxBorderWidth);
+    out.borderRadius = intSlot(PhosphorWindowRule::ActionSlot::BorderRadius, kMaxBorderRadius);
     out.borderColor = colorSlot(PhosphorWindowRule::ActionSlot::BorderColor);
     out.inactiveBorderColor = colorSlot(PhosphorWindowRule::ActionSlot::InactiveBorderColor);
     if (!out.any()) {

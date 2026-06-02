@@ -1401,7 +1401,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // also resolves its slot. Caching across resolver calls is built
     // into the evaluator's `resolveCached(windowId, …)` path; the query
     // here is only the match input, not the cache key.
-    const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window);
+    const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window, getWindowScreenId(window));
     const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event base duration. The daemon mirrors its motion

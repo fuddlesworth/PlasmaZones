@@ -240,6 +240,11 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(w).has_value());
         w.insert(QStringLiteral("value"), -1);
         QVERIFY(!RuleAction::fromJson(w).has_value());
+        // A JSON bool is NOT a number — hasNumberInRange uses isDouble(), which
+        // is false for a bool. Pin the rejection so a future widening of the
+        // number validator (e.g. isDouble() || isBool()) fails the suite.
+        w.insert(QStringLiteral("value"), true);
+        QVERIFY(!RuleAction::fromJson(w).has_value());
         w.insert(QStringLiteral("value"), 4);
         QVERIFY(RuleAction::fromJson(w).has_value());
 

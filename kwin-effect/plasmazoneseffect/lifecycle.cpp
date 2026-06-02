@@ -730,6 +730,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // Restore borderless and monocle-maximized windows — daemon state is gone
         m_autotileHandler->restoreAllBorderless();
         restoreAllSnapBorderless();
+        restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
@@ -843,6 +844,7 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     if (KWin::effects) {
         m_autotileHandler->restoreAllBorderless();
         restoreAllSnapBorderless();
+        restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
     }
