@@ -442,8 +442,28 @@ SnapAssistThumbnailCapture::exportTextureToDmabuf(KWin::GLTexture* texture) cons
         }
         return result;
     }
+    // Mandatory render-completion fence for the dma-buf path: a sync_file that
+    // signals when the GL render into this buffer finishes, so the daemon waits
+    // before sampling (correctness under repeated/live capture). If the driver
+    // can't produce one, fail the export — the capability fallback then switches
+    // the session to the raw-pixel path.
+    const EGLSyncKHR sync = eglCreateSyncKHR(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
+    if (sync == EGL_NO_SYNC_KHR) {
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: native fence sync unavailable";
+        ::close(fd);
+        return result;
+    }
+    glFlush(); // push the fence into the GL command stream so it can signal
+    const int fenceFd = eglDupNativeFenceFDANDROID(dpy, sync);
+    eglDestroySyncKHR(dpy, sync);
+    if (fenceFd < 0) {
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: eglDupNativeFenceFDANDROID failed";
+        ::close(fd);
+        return result;
+    }
     result.ok = true;
     result.fd = fd;
+    result.fenceFd = fenceFd;
     result.width = texture->size().width();
     result.height = texture->size().height();
     result.fourcc = static_cast<uint32_t>(fourcc);
@@ -455,26 +475,27 @@ SnapAssistThumbnailCapture::exportTextureToDmabuf(KWin::GLTexture* texture) cons
 
 void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const DmabufExport& exported)
 {
-    // SPIKE SYNC CAVEAT: the exported dma-buf aliases KWin's reused
-    // OffscreenQuickScene FBO — there is no fence yet. Captures are sequential
-    // (one in flight at a time) and the daemon imports before the next
-    // capture's update() overwrites the buffer; the D-Bus round-trip latency
-    // dwarfs the GPU import, so the race window is negligible. Explicit fences
-    // + a buffer pool are a later increment.
+    // The exported dma-buf aliases KWin's reused OffscreenQuickScene FBO, so it
+    // ships with a render-completion fence (exported.fenceFd): the daemon waits
+    // on it before sampling, which makes repeated/live capture correct rather
+    // than relying on D-Bus round-trip latency outrunning the GPU. (A buffer
+    // pool to decouple producer/consumer is a later increment.)
     const QString compositorHandle = p.internalId.toString();
 
     QDBusMessage msg = QDBusMessage::createMethodCall(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setWindowThumbnailDmabuf"));
-    // QDBusUnixFileDescriptor dup()s the fd in its constructor; we close our
-    // original after queuing the call.
+    // QDBusUnixFileDescriptor dup()s each fd in its constructor; we close our
+    // originals after queuing the call.
     msg << compositorHandle << exported.width << exported.height << static_cast<uint>(exported.fourcc)
         << static_cast<qulonglong>(exported.modifier) << static_cast<uint>(exported.stride)
-        << static_cast<uint>(exported.offset) << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fd));
+        << static_cast<uint>(exported.offset) << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fd))
+        << QVariant::fromValue(QDBusUnixFileDescriptor(exported.fenceFd));
 
     QDBusPendingCall pending =
         QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SnapAssistThumbnailPostTimeoutMs);
     ::close(exported.fd);
+    ::close(exported.fenceFd);
 
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     // Same accepted-gated recently-posted contract as the raw-pixel path: only

@@ -32,6 +32,11 @@ struct DmabufThumbnailDesc
     uint64_t modifier = 0; ///< DRM format modifier (DRM_FORMAT_MOD_* / vendor-specific).
     uint32_t stride = 0; ///< Plane 0 row stride in bytes.
     uint32_t offset = 0; ///< Plane 0 byte offset.
+    /// Borrowed sync_file fence fd that signals when the producer's GPU render
+    /// into @ref fd has completed. The importer MUST wait on it before
+    /// sampling so a repeated/live producer can't be read mid-render. Same
+    /// borrowed-for-the-call lifetime as @ref fd. -1 = no fence supplied.
+    int fenceFd = -1;
 };
 
 } // namespace PlasmaZones

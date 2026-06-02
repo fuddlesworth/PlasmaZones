@@ -311,7 +311,7 @@ bool OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int
 
 bool OverlayAdaptor::setWindowThumbnailDmabuf(const QString& compositorHandle, int width, int height, uint drmFormat,
                                               qulonglong modifier, uint stride, uint offset,
-                                              const QDBusUnixFileDescriptor& fd)
+                                              const QDBusUnixFileDescriptor& fd, const QDBusUnixFileDescriptor& fenceFd)
 {
     if (!m_overlayService) {
         return false;
@@ -327,20 +327,21 @@ bool OverlayAdaptor::setWindowThumbnailDmabuf(const QString& compositorHandle, i
                           << "(handle len=" << compositorHandle.size() << ")";
         return false;
     }
-    if (!fd.isValid()) {
-        qCWarning(lcDbus) << "setWindowThumbnailDmabuf: invalid file descriptor (handle len=" << compositorHandle.size()
-                          << ")";
+    if (!fd.isValid() || !fenceFd.isValid()) {
+        qCWarning(lcDbus) << "setWindowThumbnailDmabuf: invalid dma-buf or fence fd (handle len="
+                          << compositorHandle.size() << ")";
         return false;
     }
     if (!authenticateKwinSender()) {
         return false;
     }
-    // fd is BORROWED: QDBusUnixFileDescriptor owns it and closes it when this
-    // call returns. The service's importer must dup() it if it needs the
-    // buffer past this call (the GPU import does); we hand the borrowed fd
-    // through unchanged.
+    // fd / fenceFd are BORROWED: the QDBusUnixFileDescriptors own them and close
+    // them when this call returns. The service's importer dup()s whatever it
+    // needs past the call (the GPU import dups the dma-buf; the fence is waited
+    // on during import); we hand the borrowed fds through unchanged.
     DmabufThumbnailDesc desc;
     desc.fd = fd.fileDescriptor();
+    desc.fenceFd = fenceFd.fileDescriptor();
     desc.width = width;
     desc.height = height;
     desc.fourcc = drmFormat;

@@ -15,6 +15,7 @@
 #include <QVulkanInstance>
 
 #include <array>
+#include <poll.h>
 #include <unistd.h>
 
 namespace PlasmaZones {
@@ -270,22 +271,48 @@ private:
     bool m_hasAlpha = true;
 };
 
-// ── Texture factory: owns the dup'd fd; imports on the render thread ─────────
+// Block until @p fenceFd (a sync_file) signals — i.e. the producer's GPU
+// render into the buffer has completed — so a subsequent import+sample never
+// reads a half-rendered frame. Bounded so a never-signaling fence can't wedge
+// the render thread; the cap is generous for a thumbnail render. No-op for an
+// absent fence (the producer guarantees one for the dma-buf path, but degrade
+// safely if it is missing). poll() does not consume the fd.
+void waitForFence(int fenceFd)
+{
+    if (fenceFd < 0) {
+        return;
+    }
+    constexpr int FenceTimeoutMs = 100;
+    pollfd pfd{};
+    pfd.fd = fenceFd;
+    pfd.events = POLLIN;
+    const int r = ::poll(&pfd, 1, FenceTimeoutMs);
+    if (r <= 0) {
+        qCWarning(lcOverlay) << "dmabuf import: fence wait timed out/failed (" << r
+                             << ") — sampling may show a partially-rendered frame";
+    }
+}
+
+// ── Texture factory: owns the dup'd fds; imports on the render thread ────────
 class DmabufTextureFactory : public QQuickTextureFactory
 {
 public:
     explicit DmabufTextureFactory(const DmabufThumbnailDesc& desc)
         : m_desc(desc)
     {
-        // Own an independent dup so the provider's stored fd lifetime is
+        // Own independent dups so the provider's stored fd lifetimes are
         // decoupled from this factory's.
         m_desc.fd = (desc.fd >= 0) ? ::dup(desc.fd) : -1;
+        m_desc.fenceFd = (desc.fenceFd >= 0) ? ::dup(desc.fenceFd) : -1;
     }
 
     ~DmabufTextureFactory() override
     {
         if (m_desc.fd >= 0) {
             ::close(m_desc.fd);
+        }
+        if (m_desc.fenceFd >= 0) {
+            ::close(m_desc.fenceFd);
         }
     }
 
@@ -303,6 +330,12 @@ public:
         if (!window || m_desc.fd < 0) {
             return nullptr;
         }
+        // Wait for the producer's GPU render into the buffer to complete before
+        // we import + sample it (correctness under repeated/live capture). The
+        // sync_file fd becomes readable when the fence signals; poll is a
+        // read-only op so the factory's fd stays valid for any re-import (an
+        // already-signaled fence returns immediately).
+        waitForFence(m_desc.fenceFd);
         QSGRendererInterface* rif = window->rendererInterface();
         if (!rif || rif->graphicsApi() != QSGRendererInterface::Vulkan) {
             qCWarning(lcOverlay) << "dmabuf import: scene graph is not on the Vulkan backend — "
@@ -381,14 +414,23 @@ QString DmabufTextureProvider::insert(const QString& compositorHandle, const Dma
     if (storedFd < 0) {
         return QString();
     }
+    // The fence is optional in storage (dup only when present); the factory and
+    // createTexture handle fenceFd < 0 as "no wait".
+    const int storedFenceFd = (desc.fenceFd >= 0) ? ::dup(desc.fenceFd) : -1;
     const QString key = normaliseHandle(compositorHandle);
     QMutexLocker lock(&m_mutex);
     auto existing = m_pending.find(key);
-    if (existing != m_pending.end() && existing->fd >= 0) {
-        ::close(existing->fd); // replace: drop the previous generation's fd
+    if (existing != m_pending.end()) {
+        if (existing->fd >= 0) {
+            ::close(existing->fd); // replace: drop the previous generation's fds
+        }
+        if (existing->fenceFd >= 0) {
+            ::close(existing->fenceFd);
+        }
     }
     DmabufThumbnailDesc owned = desc;
     owned.fd = storedFd;
+    owned.fenceFd = storedFenceFd;
     m_pending.insert(key, owned);
     const quint32 gen = ++m_generation;
     return makeUrl(key, gen);
@@ -422,6 +464,9 @@ void DmabufTextureProvider::clear()
     for (auto it = m_pending.begin(); it != m_pending.end(); ++it) {
         if (it->fd >= 0) {
             ::close(it->fd);
+        }
+        if (it->fenceFd >= 0) {
+            ::close(it->fenceFd);
         }
     }
     m_pending.clear();

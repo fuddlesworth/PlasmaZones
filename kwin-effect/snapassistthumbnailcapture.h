@@ -108,6 +108,7 @@ private:
     {
         bool ok = false;
         int fd = -1;
+        int fenceFd = -1; ///< sync_file fence: signals when the GL render completed.
         int width = 0;
         int height = 0;
         uint32_t fourcc = 0;

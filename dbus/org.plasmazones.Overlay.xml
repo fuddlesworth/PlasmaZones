@@ -177,6 +177,9 @@
             <arg name="fd" type="h" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="DMA-BUF file descriptor for plane 0. Borrowed for the call; the daemon dup()s it if the import needs the buffer afterward."/>
             </arg>
+            <arg name="fenceFd" type="h" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="sync_file fence fd that signals when the producer's GPU render into the buffer completes. The daemon waits on it before sampling so a repeated/live producer is not read mid-render. Borrowed for the call."/>
+            </arg>
             <arg name="accepted" type="b" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="True iff the daemon imported and stored the thumbnail. False when the dma-buf path is disabled (PLASMAZONES_DMABUF_THUMBNAILS unset), the driver/RHI backend can't import it, auth fails, or dimensions are out of range. On false the caller MUST fall back to setSnapAssistThumbnail."/>
             </arg>
