@@ -311,7 +311,8 @@ public:
     /// engine-mode gate. Returns an all-unset @ref ContextGapOverride when no
     /// matching rule fills a gap slot. Same owner-thread affinity as the rest
     /// of the registry.
-    ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity) const;
+    ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop,
+                                          const QString& activity) const override;
 
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());

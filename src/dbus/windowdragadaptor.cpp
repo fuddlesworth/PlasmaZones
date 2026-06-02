@@ -206,11 +206,11 @@ QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<PhosphorZone
     if (zones.isEmpty()) {
         return QRectF();
     }
-    QRectF combined =
-        GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zones.first(), screen, screenId, layout, m_settings);
+    QRectF combined = GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zones.first(), screen, screenId, layout,
+                                                               m_settings, m_layoutManager);
     for (int i = 1; i < zones.size(); ++i) {
-        combined = combined.united(
-            GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zones[i], screen, screenId, layout, m_settings));
+        combined = combined.united(GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zones[i], screen, screenId,
+                                                                            layout, m_settings, m_layoutManager));
     }
     return combined;
 }

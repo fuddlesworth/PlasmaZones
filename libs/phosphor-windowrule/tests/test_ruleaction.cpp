@@ -261,12 +261,22 @@ private Q_SLOTS:
         for (const QLatin1StringView type : {ActionType::SetBorderColor, ActionType::SetInactiveBorderColor}) {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));
-            o.insert(QStringLiteral("value"), QStringLiteral("red")); // not hex
+            o.insert(QStringLiteral("value"), QStringLiteral("red")); // named colour — hex-only boundary rejects
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
-            o.insert(QStringLiteral("value"), QStringLiteral("#ff00")); // wrong length
+            o.insert(QStringLiteral("value"), QStringLiteral("#ff00")); // length 5 ∉ {4,7,9}
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("#12345")); // length 6 ∉ {4,7,9}
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
             o.insert(QStringLiteral("value"), QStringLiteral("#gg0000")); // non-hex digits
             QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            // The standard QColor hex shapes the consumer parses are all accepted:
+            // #RGB (4), #RRGGBB (7), #AARRGGBB / #RRGGBBAA (9).
+            for (const QString good :
+                 {QStringLiteral("#abc"), QStringLiteral("#FF0000"), QStringLiteral("#80FF0000")}) {
+                o.insert(QStringLiteral("value"), good);
+                QVERIFY2(RuleAction::fromJson(o).has_value(),
+                         qPrintable(QStringLiteral("%1 %2").arg(QString::fromLatin1(type), good)));
+            }
             o.insert(QStringLiteral("value"), QStringLiteral("#FF0000"));
             const auto reloaded = RuleAction::fromJson(o);
             QVERIFY2(reloaded.has_value(), type.data());

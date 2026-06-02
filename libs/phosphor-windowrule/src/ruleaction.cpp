@@ -48,7 +48,14 @@ bool hasNumberInRange(const QJsonObject& params, QLatin1StringView key, double m
     return d >= 0.0 && d <= maxValue;
 }
 
-/// Validates that @p params has a "#RRGGBB" hex colour string at @p key.
+/// Validates that @p params has a `#`-prefixed hex colour string at @p key.
+/// Accepts the standard QColor hex shapes the effect-side consumer parses via
+/// `QColor(QString)`: `#RGB` (4), `#RRGGBB` (7) and `#AARRGGBB` / `#RRGGBBAA`
+/// (9). The picker only emits `#RRGGBB`; the wider set keeps a hand-edited
+/// payload (short form, alpha) from being silently dropped on load while still
+/// rejecting non-hex/garbage. Named colours ("red") are intentionally NOT
+/// accepted here — the boundary stays hex-only even though the consumer's
+/// QColor would resolve them.
 bool hasHexColor(const QJsonObject& params, QLatin1StringView key)
 {
     const QJsonValue v = params.value(key);
@@ -56,7 +63,7 @@ bool hasHexColor(const QJsonObject& params, QLatin1StringView key)
         return false;
     }
     const QString s = v.toString();
-    if (s.size() != 7 || s.at(0) != QLatin1Char('#')) {
+    if ((s.size() != 4 && s.size() != 7 && s.size() != 9) || s.at(0) != QLatin1Char('#')) {
         return false;
     }
     for (int i = 1; i < s.size(); ++i) {

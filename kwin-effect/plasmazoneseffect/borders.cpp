@@ -367,7 +367,12 @@ void PlasmaZonesEffect::markWindowSnapped(const QString& windowId, const QString
     // recorded above is then harmless — if the window later closes, slotWindowClosed
     // clears m_snapBorder for it. No border is drawn (nothing to draw on) and none
     // is needed; updateAllBorders() iterates only live windows so it simply skips it.
-    if (w) {
+    //
+    // Border overlays are visual-only, so skip the off-desktop case (consistent
+    // with updateAllBorders): an OutlinedBorderItem for an invisible window is
+    // wasted work. When the user switches to that window's desktop, the
+    // desktopChanged → updateAllBorders connection rebuilds its border.
+    if (w && w->isOnCurrentDesktop()) {
         updateWindowBorder(windowId, w);
     }
 }

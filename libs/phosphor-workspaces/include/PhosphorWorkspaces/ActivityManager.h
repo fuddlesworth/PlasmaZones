@@ -24,6 +24,14 @@ public:
 
     QString currentActivity() const;
     static bool isAvailable();
+
+    /// Returns @p manager's current activity, or an empty string when @p
+    /// manager is null OR the activities backend is unavailable (headless
+    /// sessions where a deref would otherwise read a never-connected D-Bus
+    /// backend). Centralises the
+    /// `(mgr && isAvailable()) ? mgr->currentActivity() : QString()` guard
+    /// shared by the daemon's context-resolution sites.
+    static QString currentActivityOrEmpty(const ActivityManager* manager);
     QStringList activities() const;
     QString activityName(const QString& activityId) const;
     QString activityIcon(const QString& activityId) const;

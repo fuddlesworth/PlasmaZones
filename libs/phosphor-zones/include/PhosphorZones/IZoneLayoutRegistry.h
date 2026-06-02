@@ -24,6 +24,7 @@
 #include <phosphorzones_export.h>
 
 #include <PhosphorLayoutApi/ILayoutSourceRegistry.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
 
 #include <QString>
@@ -122,6 +123,23 @@ public:
 
     virtual int currentVirtualDesktop() const = 0;
     virtual QString currentActivity() const = 0;
+
+    /// Resolve the per-context gap override (zone padding + outer gaps) that
+    /// window rules pin for the (@p screenId, @p virtualDesktop, @p activity)
+    /// context — the same resolution the daemon's geometry resolver uses on the
+    /// snap-commit path. Context-aware geometry consumers (drag preview, empty-
+    /// zone overlay, zone-detection query) call this through the interface so
+    /// their geometry matches the committed result. The default returns an empty
+    /// override (no rule gaps); a registry that does not model context rules —
+    /// e.g. a fixture stub — keeps the legacy per-screen/layout/global cascade.
+    virtual ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop,
+                                                  const QString& activity) const
+    {
+        Q_UNUSED(screenId);
+        Q_UNUSED(virtualDesktop);
+        Q_UNUSED(activity);
+        return {};
+    }
 
 Q_SIGNALS:
     // Catalog mutation. @c addLayout / @c duplicateLayout fire `layoutAdded`;

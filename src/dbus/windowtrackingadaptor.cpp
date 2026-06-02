@@ -74,7 +74,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layo
             return vdm ? vdm->currentDesktop() : 0;
         },
         [am = m_activityManager]() -> QString {
-            return (am && PhosphorWorkspaces::ActivityManager::isAvailable()) ? am->currentActivity() : QString();
+            return PhosphorWorkspaces::ActivityManager::currentActivityOrEmpty(am);
         });
 
     // Create business logic service
