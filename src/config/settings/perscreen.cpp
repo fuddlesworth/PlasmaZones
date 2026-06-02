@@ -29,17 +29,18 @@ QVariant validatePerScreenValue(const QString& key, const QVariant& value)
         return (v >= 0 && v <= static_cast<int>(ZoneSelectorSizeMode::Manual)) ? QVariant(v) : QVariant();
     }
     if (key == QLatin1String(K::MaxRows))
-        return QVariant(qBound(1, value.toInt(), 10));
+        return QVariant(qBound(ConfigDefaults::maxRowsMin(), value.toInt(), ConfigDefaults::maxRowsMax()));
     if (key == QLatin1String(K::PreviewWidth))
-        return QVariant(qBound(80, value.toInt(), 400));
+        return QVariant(qBound(ConfigDefaults::previewWidthMin(), value.toInt(), ConfigDefaults::previewWidthMax()));
     if (key == QLatin1String(K::PreviewHeight))
-        return QVariant(qBound(60, value.toInt(), 300));
+        return QVariant(qBound(ConfigDefaults::previewHeightMin(), value.toInt(), ConfigDefaults::previewHeightMax()));
     if (key == QLatin1String(K::PreviewLockAspect))
         return QVariant(value.toBool());
     if (key == QLatin1String(K::GridColumns))
-        return QVariant(qBound(1, value.toInt(), 10));
+        return QVariant(qBound(ConfigDefaults::gridColumnsMin(), value.toInt(), ConfigDefaults::gridColumnsMax()));
     if (key == QLatin1String(K::TriggerDistance))
-        return QVariant(qBound(10, value.toInt(), 200));
+        return QVariant(
+            qBound(ConfigDefaults::triggerDistanceMin(), value.toInt(), ConfigDefaults::triggerDistanceMax()));
     return QVariant();
 }
 
@@ -189,11 +190,24 @@ QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString
 }
 
 const QLatin1String kPerScreenSnappingKeys[] = {
-    PerScreenSnappingKey::SnapAssistEnabled,           PerScreenSnappingKey::ZoneSelectorEnabled,
-    PerScreenSnappingKey::ZoneSelectorTriggerDistance, PerScreenSnappingKey::ZoneSelectorPosition,
-    PerScreenSnappingKey::ZoneSelectorLayoutMode,      PerScreenSnappingKey::ZoneSelectorSizeMode,
-    PerScreenSnappingKey::ZoneSelectorMaxRows,         PerScreenSnappingKey::ZoneSelectorPreviewWidth,
+    PerScreenSnappingKey::SnapAssistEnabled,
+    PerScreenSnappingKey::ZoneSelectorEnabled,
+    PerScreenSnappingKey::ZoneSelectorTriggerDistance,
+    PerScreenSnappingKey::ZoneSelectorPosition,
+    PerScreenSnappingKey::ZoneSelectorLayoutMode,
+    PerScreenSnappingKey::ZoneSelectorSizeMode,
+    PerScreenSnappingKey::ZoneSelectorMaxRows,
+    PerScreenSnappingKey::ZoneSelectorPreviewWidth,
     PerScreenSnappingKey::ZoneSelectorPreviewHeight,
+    // Snapping gaps (per-screen) — without these the Gaps card's overrides would
+    // not be re-loaded on next launch even after the validator accepts the write.
+    PerScreenSnappingKey::ZonePadding,
+    PerScreenSnappingKey::OuterGap,
+    PerScreenSnappingKey::UsePerSideOuterGap,
+    PerScreenSnappingKey::OuterGapTop,
+    PerScreenSnappingKey::OuterGapBottom,
+    PerScreenSnappingKey::OuterGapLeft,
+    PerScreenSnappingKey::OuterGapRight,
 };
 
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
@@ -218,6 +232,26 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
         return QVariant(qBound(ConfigDefaults::previewWidthMin(), value.toInt(), ConfigDefaults::previewWidthMax()));
     if (key == K::ZoneSelectorPreviewHeight)
         return QVariant(qBound(ConfigDefaults::previewHeightMin(), value.toInt(), ConfigDefaults::previewHeightMax()));
+    // Per-screen snapping gaps (the Gaps card on Snapping → Window → Appearance).
+    // Each key clamps against its own ConfigDefaults bounds — mirroring the
+    // per-side handling in the autotile validator above; a uniform startsWith
+    // would clamp Top/Bottom/Left/Right to the wrong range when those bounds
+    // diverge from the uniform OuterGap bounds.
+    if (key == K::ZonePadding)
+        return QVariant(qBound(ConfigDefaults::zonePaddingMin(), value.toInt(), ConfigDefaults::zonePaddingMax()));
+    if (key == K::OuterGap)
+        return QVariant(qBound(ConfigDefaults::outerGapMin(), value.toInt(), ConfigDefaults::outerGapMax()));
+    if (key == K::OuterGapTop)
+        return QVariant(qBound(ConfigDefaults::outerGapTopMin(), value.toInt(), ConfigDefaults::outerGapTopMax()));
+    if (key == K::OuterGapBottom)
+        return QVariant(
+            qBound(ConfigDefaults::outerGapBottomMin(), value.toInt(), ConfigDefaults::outerGapBottomMax()));
+    if (key == K::OuterGapLeft)
+        return QVariant(qBound(ConfigDefaults::outerGapLeftMin(), value.toInt(), ConfigDefaults::outerGapLeftMax()));
+    if (key == K::OuterGapRight)
+        return QVariant(qBound(ConfigDefaults::outerGapRightMin(), value.toInt(), ConfigDefaults::outerGapRightMax()));
+    if (key == K::UsePerSideOuterGap)
+        return QVariant(value.toBool());
     return QVariant();
 }
 
@@ -228,6 +262,10 @@ QVariant readPerScreenSnappingEntry(PhosphorConfig::IGroup& group, const QString
         return QVariant(group.readBool(key, ConfigDefaults::snapAssistEnabled()));
     if (key == K::ZoneSelectorEnabled)
         return QVariant(group.readBool(key, ConfigDefaults::zoneSelectorEnabled()));
+    // UsePerSideOuterGap is a bool; the int gap keys (ZonePadding/OuterGap/per-side)
+    // fall through to readInt below, which is the correct type for them.
+    if (key == K::UsePerSideOuterGap)
+        return QVariant(group.readBool(key, ConfigDefaults::usePerSideOuterGap()));
     return QVariant(group.readInt(key, 0));
 }
 

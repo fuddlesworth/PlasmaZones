@@ -223,11 +223,14 @@ qt_add_qml_module(plasmazones-settings
         qml/Toast.qml
         qml/KeyboardShortcutOverlay.qml
         qml/GeneralPage.qml
-        qml/SnappingZonesPage.qml
-        qml/SnappingWindowAppearancePage.qml
-        qml/SnappingEffectsPage.qml
-        qml/SnappingBehaviorPage.qml
+        # Snapping, organised by subject (Overlay / Zone Selector / Window),
+        # each with a Behavior + Appearance page. Window Appearance also hosts
+        # the per-screen Gaps; Shaders lives under Configuration.
+        qml/SnappingOverlayBehaviorPage.qml
+        qml/SnappingOverlayAppearancePage.qml
         qml/SnappingZoneSelectorPage.qml
+        qml/SnappingWindowBehaviorPage.qml
+        qml/SnappingWindowAppearancePage.qml
         qml/TilingAppearancePage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml

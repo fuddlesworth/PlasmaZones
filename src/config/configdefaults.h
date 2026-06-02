@@ -592,6 +592,17 @@ public:
     {
         return 400;
     }
+    // Zone-selector preview-size presets (Small / Large). Medium reuses the
+    // default previewWidth() (180). Used by the Small/Medium/Large quick-size
+    // buttons so the widths aren't hard-coded in QML.
+    static constexpr int previewWidthSmall()
+    {
+        return 120;
+    }
+    static constexpr int previewWidthLarge()
+    {
+        return 260;
+    }
     static int previewHeight()
     {
         return 101;

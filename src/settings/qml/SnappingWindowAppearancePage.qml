@@ -11,9 +11,29 @@ SettingsFlickable {
     id: root
 
     readonly property var settingsBridge: settingsController.snappingWindowAppearancePage
+    // Per-screen snapping gap/padding helper. Only the Gaps card below is
+    // per-screen; the colour / decoration / border cards are global. The monitor
+    // selector is placed directly above Gaps so its scope reads unambiguously.
+
+    function snappingSettingValue(key, globalValue) {
+        return snappingHelper.settingValue(key, globalValue);
+    }
+
+    function writeSnappingSetting(key, value, globalSetter) {
+        snappingHelper.writeSetting(key, value, globalSetter);
+    }
 
     contentHeight: content.implicitHeight
     clip: true
+
+    PerScreenOverrideHelper {
+        id: snappingHelper
+
+        appSettings: settingsController
+        getterMethod: "getPerScreenSnappingSettings"
+        setterMethod: "setPerScreenSnappingSetting"
+        clearerMethod: "clearPerScreenSnappingSettings"
+    }
 
     ColumnLayout {
         id: content
@@ -156,6 +176,76 @@ SettingsFlickable {
                         }
                     }
                 }
+            }
+        }
+
+        // =================================================================
+        // Gaps (per-screen) — monitor selector scopes only the card below.
+        // =================================================================
+        MonitorSelectorSection {
+            Layout.fillWidth: true
+            appSettings: settingsController
+            selectedScreenName: snappingHelper.selectedScreenName
+            hasOverrides: snappingHelper.hasOverrides
+            onSelectedScreenNameChanged: snappingHelper.selectedScreenName = selectedScreenName
+            onResetClicked: snappingHelper.clearOverrides()
+        }
+
+        GapsSettingsCard {
+            Layout.fillWidth: true
+            // Snapping uses "Zone padding" / "Edge gap" labels and has no Smart
+            // gaps. Zone-padding bounds come from zonePaddingMin/Max; the edge /
+            // per-side gaps from gapMin/Max — each matching its validator clamp.
+            primaryGapLabel: i18n("Zone padding")
+            primaryGapDescription: i18n("Space between snapped windows")
+            outerGapLabel: i18n("Edge gap")
+            outerGapDescription: i18n("Space from screen edges to snapped windows")
+            showSmartGaps: false
+            gapMin: root.settingsBridge.gapMin
+            gapMax: root.settingsBridge.gapMax
+            primaryGapMin: root.settingsBridge.zonePaddingMin
+            primaryGapMax: root.settingsBridge.zonePaddingMax
+            primaryGapValue: root.snappingSettingValue("ZonePadding", appSettings.zonePadding)
+            outerGapValue: root.snappingSettingValue("OuterGap", appSettings.outerGap)
+            usePerSideOuterGap: root.snappingSettingValue("UsePerSideOuterGap", appSettings.usePerSideOuterGap)
+            outerGapTopValue: root.snappingSettingValue("OuterGapTop", appSettings.outerGapTop)
+            outerGapBottomValue: root.snappingSettingValue("OuterGapBottom", appSettings.outerGapBottom)
+            outerGapLeftValue: root.snappingSettingValue("OuterGapLeft", appSettings.outerGapLeft)
+            outerGapRightValue: root.snappingSettingValue("OuterGapRight", appSettings.outerGapRight)
+            onPrimaryGapModified: value => {
+                return root.writeSnappingSetting("ZonePadding", value, function (v) {
+                    appSettings.zonePadding = v;
+                });
+            }
+            onOuterGapModified: value => {
+                return root.writeSnappingSetting("OuterGap", value, function (v) {
+                    appSettings.outerGap = v;
+                });
+            }
+            onUsePerSideOuterGapToggled: checked => {
+                return root.writeSnappingSetting("UsePerSideOuterGap", checked, function (v) {
+                    appSettings.usePerSideOuterGap = v;
+                });
+            }
+            onOuterGapTopModified: value => {
+                return root.writeSnappingSetting("OuterGapTop", value, function (v) {
+                    appSettings.outerGapTop = v;
+                });
+            }
+            onOuterGapBottomModified: value => {
+                return root.writeSnappingSetting("OuterGapBottom", value, function (v) {
+                    appSettings.outerGapBottom = v;
+                });
+            }
+            onOuterGapLeftModified: value => {
+                return root.writeSnappingSetting("OuterGapLeft", value, function (v) {
+                    appSettings.outerGapLeft = v;
+                });
+            }
+            onOuterGapRightModified: value => {
+                return root.writeSnappingSetting("OuterGapRight", value, function (v) {
+                    appSettings.outerGapRight = v;
+                });
             }
         }
     }

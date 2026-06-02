@@ -22,7 +22,7 @@ namespace PlasmaZones {
 
 void SettingsController::setActivePage(const QString& page)
 {
-    // Resolve parent category names (e.g. "snapping" → "snapping-zones")
+    // Resolve parent category names (e.g. "snapping" → "snapping-overlay-behavior")
     const QString resolved = parentPageRedirects().value(page, page);
 
     if (!validPageNames().contains(resolved)) {
