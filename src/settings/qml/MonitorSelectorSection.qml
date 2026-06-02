@@ -28,7 +28,7 @@ ColumnLayout {
     // (virtual screens like "id/vs:0" are collapsed to their physical parent "id").
     // Uses imperative JS because QML declarative bindings can't express set-deduplication.
     readonly property var _filteredScreens: {
-        var all = appSettings.screens;
+        var all = appSettings.screens || [];
         if (!physicalOnly)
             return all;
 
@@ -119,8 +119,15 @@ ColumnLayout {
             // "All Monitors" option
             Rectangle {
                 visible: root.showAllMonitors
-                width: allMonitorContent.implicitWidth + Kirigami.Units.largeSpacing * 2
-                height: allMonitorContent.implicitHeight + Kirigami.Units.largeSpacing
+                // Size via Layout.* (not width/height) so the RowLayout actually
+                // lays the tiles out side by side — plain width/height on a layout
+                // child is overridden to the implicit (0) size, which collapsed the
+                // tiles on top of each other once a second monitor appeared.
+                // fillHeight equalises every tile to the tallest (the per-monitor
+                // tiles carry an extra "Primary" badge row).
+                Layout.preferredWidth: allMonitorContent.implicitWidth + Kirigami.Units.largeSpacing * 2
+                Layout.preferredHeight: allMonitorContent.implicitHeight + Kirigami.Units.largeSpacing
+                Layout.fillHeight: true
                 radius: Kirigami.Units.smallSpacing
                 color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMonitorMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
                 border.width: Math.round(Screen.devicePixelRatio)
@@ -188,8 +195,9 @@ ColumnLayout {
                     readonly property string screenName: modelData.name || ""
                     readonly property bool isSelected: root.selectedScreenName === screenName
 
-                    width: monitorContent.implicitWidth + Kirigami.Units.largeSpacing * 2
-                    height: monitorContent.implicitHeight + Kirigami.Units.largeSpacing
+                    Layout.preferredWidth: monitorContent.implicitWidth + Kirigami.Units.largeSpacing * 2
+                    Layout.preferredHeight: monitorContent.implicitHeight + Kirigami.Units.largeSpacing
+                    Layout.fillHeight: true
                     radius: Kirigami.Units.smallSpacing
                     color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : monitorMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
                     border.width: Math.round(Screen.devicePixelRatio)
@@ -236,8 +244,8 @@ ColumnLayout {
 
                         Rectangle {
                             Layout.alignment: Qt.AlignHCenter
-                            width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
-                            height: primaryLabel.implicitHeight + 2
+                            Layout.preferredWidth: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+                            Layout.preferredHeight: primaryLabel.implicitHeight + Kirigami.Units.smallSpacing
                             radius: height / 2
                             color: (modelData.isPrimary || false) ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15) : "transparent"
 

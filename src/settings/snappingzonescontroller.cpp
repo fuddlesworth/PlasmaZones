@@ -39,6 +39,16 @@ int SnappingZonesController::borderRadiusMax() const
     return ConfigDefaults::borderRadiusMax();
 }
 
+double SnappingZonesController::labelFontScaleMin() const
+{
+    return ConfigDefaults::labelFontSizeScaleMin();
+}
+
+double SnappingZonesController::labelFontScaleMax() const
+{
+    return ConfigDefaults::labelFontSizeScaleMax();
+}
+
 void SnappingZonesController::loadColorsFromPywal()
 {
     // Honour $XDG_CACHE_HOME via QStandardPaths rather than hardcoding

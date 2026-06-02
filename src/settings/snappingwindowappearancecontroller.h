@@ -24,6 +24,16 @@ class SnappingWindowAppearanceController : public PhosphorSettingsUi::PageContro
     Q_PROPERTY(int snapWindowBorderWidthMax READ snapWindowBorderWidthMax CONSTANT)
     Q_PROPERTY(int snapWindowBorderRadiusMin READ snapWindowBorderRadiusMin CONSTANT)
     Q_PROPERTY(int snapWindowBorderRadiusMax READ snapWindowBorderRadiusMax CONSTANT)
+    // Snapping gaps (zone padding + outer/edge gaps) moved onto Window →
+    // Appearance (per-screen, beside the global border/title-bar cards). Each
+    // field is bounded by the SAME ConfigDefaults accessor the per-screen
+    // validator clamps against (zonePadding* for the padding spin box, outerGap*
+    // for every edge/per-side gap) so the UI range and the clamp range can never
+    // drift apart.
+    Q_PROPERTY(int zonePaddingMin READ zonePaddingMin CONSTANT)
+    Q_PROPERTY(int zonePaddingMax READ zonePaddingMax CONSTANT)
+    Q_PROPERTY(int gapMin READ gapMin CONSTANT)
+    Q_PROPERTY(int gapMax READ gapMax CONSTANT)
 
 public:
     explicit SnappingWindowAppearanceController(QObject* parent = nullptr)
@@ -57,6 +67,22 @@ public:
     int snapWindowBorderRadiusMax() const
     {
         return ConfigDefaults::snapWindowBorderRadiusMax();
+    }
+    int zonePaddingMin() const
+    {
+        return ConfigDefaults::zonePaddingMin();
+    }
+    int zonePaddingMax() const
+    {
+        return ConfigDefaults::zonePaddingMax();
+    }
+    int gapMin() const
+    {
+        return ConfigDefaults::outerGapMin();
+    }
+    int gapMax() const
+    {
+        return ConfigDefaults::outerGapMax();
     }
 };
 

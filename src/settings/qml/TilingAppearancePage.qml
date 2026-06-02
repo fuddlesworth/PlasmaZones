@@ -11,9 +11,32 @@ SettingsFlickable {
     id: root
 
     readonly property var settingsBridge: settingsController.tilingAppearancePage
+    readonly property int gapMax: root.settingsBridge.autotileGapMax
+    // Per-screen override helper. Only the Gaps card below is per-screen; the
+    // colour / decoration / border cards are global. The monitor selector is
+    // placed directly above Gaps so its scope reads unambiguously.
+    property alias selectedScreenName: psHelper.selectedScreenName
+    readonly property alias hasOverrides: psHelper.hasOverrides
+
+    function settingValue(key, globalValue) {
+        return psHelper.settingValue(key, globalValue);
+    }
+
+    function writeSetting(key, value, globalSetter) {
+        psHelper.writeSetting(key, value, globalSetter);
+    }
 
     contentHeight: content.implicitHeight
     clip: true
+
+    PerScreenOverrideHelper {
+        id: psHelper
+
+        appSettings: settingsController
+        getterMethod: "getPerScreenAutotileSettings"
+        setterMethod: "setPerScreenAutotileSetting"
+        clearerMethod: "clearPerScreenAutotileSettings"
+    }
 
     ColumnLayout {
         id: content
@@ -41,11 +64,10 @@ SettingsFlickable {
 
                         checked: appSettings.autotileUseSystemBorderColors
                         accessibleName: i18n("Use system accent color")
-                        onToggled: function(newValue) {
+                        onToggled: function (newValue) {
                             appSettings.autotileUseSystemBorderColors = newValue;
                         }
                     }
-
                 }
 
                 SettingsSeparator {
@@ -64,7 +86,6 @@ SettingsFlickable {
                             activeBorderColorDialog.open();
                         }
                     }
-
                 }
 
                 SettingsSeparator {
@@ -83,11 +104,8 @@ SettingsFlickable {
                             inactiveBorderColorDialog.open();
                         }
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -110,15 +128,12 @@ SettingsFlickable {
 
                         checked: appSettings.autotileHideTitleBars
                         accessibleName: i18n("Hide title bars on tiled windows")
-                        onToggled: function(newValue) {
+                        onToggled: function (newValue) {
                             appSettings.autotileHideTitleBars = newValue;
                         }
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -129,7 +144,7 @@ SettingsFlickable {
             headerText: i18n("Borders")
             showToggle: true
             toggleChecked: appSettings.autotileShowBorder
-            onToggleClicked: (checked) => {
+            onToggleClicked: checked => {
                 return appSettings.autotileShowBorder = checked;
             }
             collapsible: true
@@ -145,15 +160,13 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileBorderWidthMin
                         to: root.settingsBridge.autotileBorderWidthMax
                         value: appSettings.autotileBorderWidth
-                        onValueModified: (value) => {
+                        onValueModified: value => {
                             return appSettings.autotileBorderWidth = value;
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Corner radius")
@@ -163,17 +176,81 @@ SettingsFlickable {
                         from: root.settingsBridge.autotileBorderRadiusMin
                         to: root.settingsBridge.autotileBorderRadiusMax
                         value: appSettings.autotileBorderRadius
-                        onValueModified: (value) => {
+                        onValueModified: value => {
                             return appSettings.autotileBorderRadius = value;
                         }
                     }
-
                 }
-
             }
-
         }
 
+        // =================================================================
+        // Gaps (per-screen) — monitor selector scopes only the card below.
+        // =================================================================
+        MonitorSelectorSection {
+            Layout.fillWidth: true
+            appSettings: settingsController
+            selectedScreenName: root.selectedScreenName
+            hasOverrides: root.hasOverrides
+            onSelectedScreenNameChanged: root.selectedScreenName = selectedScreenName
+            onResetClicked: psHelper.clearOverrides()
+        }
+
+        GapsSettingsCard {
+            Layout.fillWidth: true
+            gapMax: root.gapMax
+            gapMin: root.settingsBridge.autotileGapMin
+            primaryGapMin: root.settingsBridge.autotileInnerGapMin
+            primaryGapMax: root.settingsBridge.autotileInnerGapMax
+            primaryGapValue: root.settingValue("InnerGap", appSettings.autotileInnerGap)
+            outerGapValue: root.settingValue("OuterGap", appSettings.autotileOuterGap)
+            usePerSideOuterGap: root.settingValue("UsePerSideOuterGap", appSettings.autotileUsePerSideOuterGap)
+            smartGapsValue: root.settingValue("SmartGaps", appSettings.autotileSmartGaps)
+            outerGapTopValue: root.settingValue("OuterGapTop", appSettings.autotileOuterGapTop)
+            outerGapBottomValue: root.settingValue("OuterGapBottom", appSettings.autotileOuterGapBottom)
+            outerGapLeftValue: root.settingValue("OuterGapLeft", appSettings.autotileOuterGapLeft)
+            outerGapRightValue: root.settingValue("OuterGapRight", appSettings.autotileOuterGapRight)
+            onPrimaryGapModified: value => {
+                return root.writeSetting("InnerGap", value, function (v) {
+                    appSettings.autotileInnerGap = v;
+                });
+            }
+            onOuterGapModified: value => {
+                return root.writeSetting("OuterGap", value, function (v) {
+                    appSettings.autotileOuterGap = v;
+                });
+            }
+            onUsePerSideOuterGapToggled: checked => {
+                return root.writeSetting("UsePerSideOuterGap", checked, function (v) {
+                    appSettings.autotileUsePerSideOuterGap = v;
+                });
+            }
+            onOuterGapTopModified: value => {
+                return root.writeSetting("OuterGapTop", value, function (v) {
+                    appSettings.autotileOuterGapTop = v;
+                });
+            }
+            onOuterGapBottomModified: value => {
+                return root.writeSetting("OuterGapBottom", value, function (v) {
+                    appSettings.autotileOuterGapBottom = v;
+                });
+            }
+            onOuterGapLeftModified: value => {
+                return root.writeSetting("OuterGapLeft", value, function (v) {
+                    appSettings.autotileOuterGapLeft = v;
+                });
+            }
+            onOuterGapRightModified: value => {
+                return root.writeSetting("OuterGapRight", value, function (v) {
+                    appSettings.autotileOuterGapRight = v;
+                });
+            }
+            onSmartGapsToggled: checked => {
+                return root.writeSetting("SmartGaps", checked, function (v) {
+                    appSettings.autotileSmartGaps = v;
+                });
+            }
+        }
     }
 
     // =====================================================================
@@ -192,5 +269,4 @@ SettingsFlickable {
         title: i18n("Choose Inactive Border Color")
         onAccepted: appSettings.autotileInactiveBorderColor = selectedColor
     }
-
 }

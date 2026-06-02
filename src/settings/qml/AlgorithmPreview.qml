@@ -32,8 +32,11 @@ Item {
     // when multiple properties change in the same frame
     property var zones: []
     property string zoneNumberDisplay: "all"
-    // Cache availableAlgorithms() to avoid calling it on every binding evaluation
-    property var _cachedAlgos: root.appSettings ? root.appSettings.availableAlgorithms() : []
+    // Read the availableAlgorithms PROPERTY (not a call): it is exposed as both a
+    // Q_PROPERTY and a same-named Q_INVOKABLE, so `availableAlgorithms()` resolves
+    // to the property value and errors with "is not a function". The property has
+    // a NOTIFY, so the Connections below refresh this cache when the list changes.
+    property var _cachedAlgos: root.appSettings ? (root.appSettings.availableAlgorithms || []) : []
     // Computed once at the root level (not per-delegate) to avoid N redundant
     // C++ calls inside the Repeater delegate.
     readonly property bool _currentAlgoSupportsMasterCount: {
@@ -41,7 +44,6 @@ Item {
         for (var i = 0; i < algos.length; i++) {
             if (algos[i].id === root.algorithmId && algos[i].supportsMasterCount)
                 return true;
-
         }
         return false;
     }
@@ -50,7 +52,6 @@ Item {
         for (var i = 0; i < algos.length; i++) {
             if (algos[i].id === root.algorithmId && algos[i].producesOverlappingZones)
                 return true;
-
         }
         return false;
     }
@@ -67,7 +68,6 @@ Item {
             // the first call clears the interrupt flag, so the second succeeds.
             if (root.zones.length === 0 && root.windowCount > 0)
                 root.zones = root.appSettings.generateAlgorithmPreview(root.algorithmId, root.windowCount, root.splitRatio, root.masterCount);
-
         } else {
             root.zones = [];
         }
@@ -81,7 +81,7 @@ Item {
 
     Connections {
         function onAvailableAlgorithmsChanged() {
-            root._cachedAlgos = root.appSettings.availableAlgorithms();
+            root._cachedAlgos = root.appSettings.availableAlgorithms || [];
         }
 
         target: root.appSettings
@@ -123,5 +123,4 @@ Item {
         font: Kirigami.Theme.smallFont
         opacity: 0.5
     }
-
 }
