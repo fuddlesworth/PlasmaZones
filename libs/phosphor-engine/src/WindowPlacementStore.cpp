@@ -96,7 +96,8 @@ bool WindowPlacementStore::record(WindowPlacement incoming)
 }
 
 std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowId, const QString& appId,
-                                                          const std::function<bool(const WindowPlacement&)>& accept)
+                                                          const std::function<bool(const WindowPlacement&)>& accept,
+                                                          const std::function<bool(const WindowPlacement&)>& preferred)
 {
     const auto matches = [&](const WindowPlacement& p) {
         return !accept || accept(p);
@@ -122,18 +123,31 @@ std::optional<WindowPlacement> WindowPlacementStore::take(const QString& windowI
         }
     }
 
-    // 2. appId FIFO (close/reopen, new uuid) — oldest accepted entry.
+    // 2. appId FIFO (close/reopen, new uuid) — oldest accepted entry, but a
+    //    `preferred` entry (also accepted) outranks a merely-accepted older one.
     if (!appId.isEmpty()) {
         auto it = m_byApp.find(appId);
         if (it != m_byApp.end()) {
             QList<WindowPlacement>& bucket = it.value();
+            const auto consumeAt = [&](int i) {
+                WindowPlacement p = bucket.takeAt(i);
+                if (bucket.isEmpty()) {
+                    m_byApp.erase(it);
+                }
+                return p;
+            };
+            // First pass: oldest entry satisfying accept AND preferred.
+            if (preferred) {
+                for (int i = 0; i < bucket.size(); ++i) {
+                    if (matches(bucket.at(i)) && preferred(bucket.at(i))) {
+                        return consumeAt(i);
+                    }
+                }
+            }
+            // Second pass: oldest merely-accepted entry.
             for (int i = 0; i < bucket.size(); ++i) {
                 if (matches(bucket.at(i))) {
-                    WindowPlacement p = bucket.takeAt(i);
-                    if (bucket.isEmpty()) {
-                        m_byApp.erase(it);
-                    }
-                    return p;
+                    return consumeAt(i);
                 }
             }
         }

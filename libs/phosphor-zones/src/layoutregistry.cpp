@@ -81,6 +81,11 @@ void LayoutRegistry::setSnappingPreferredProvider(std::function<bool()> provider
     m_snappingPreferredProvider = std::move(provider);
 }
 
+bool LayoutRegistry::snappingPreferred() const
+{
+    return m_snappingPreferredProvider && m_snappingPreferredProvider();
+}
+
 AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntry() const
 {
     // Level-1 global default. Resolution order:
@@ -111,7 +116,7 @@ AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntry() const
     // the KCM/UI is expected to surface "stale default" UX. Adding
     // membership validation here would silently swallow that signal —
     // see testLevel1Default_snapWithUnknownUuid_layoutForScreenFallsThrough.
-    if (m_snappingPreferredProvider && m_snappingPreferredProvider()) {
+    if (snappingPreferred()) {
         AssignmentEntry e;
         e.mode = AssignmentEntry::Snapping;
         if (m_defaultLayoutIdProvider) {

@@ -254,6 +254,61 @@ private Q_SLOTS:
         QCOMPARE(store.size(), 0); // consumed
     }
 
+    void testTake_preferredOutranksOlderAcceptedSibling()
+    {
+        // Regression: cross-screen snapped restore at login. A window snapped on
+        // screen DP-1 reopens (new uuid) on screen DP-2 (KWin placed the session
+        // window on a different output). The appId bucket holds an OLDER contentless
+        // `free` record (empty screen) plus the NEWER `snapped` record on DP-1.
+        // Without the `preferred` ranking, plain FIFO consumes the older free record
+        // first and the window never returns to its zone. With it, the snapped
+        // record wins even though it is newer AND on a different screen.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("ghastty|old"), QStringLiteral("ghastty"), WindowPlacement::stateFree(),
+                          QStringLiteral("snap"), QString())); // empty screen, older
+        store.record(make(QStringLiteral("ghastty|snapped"), QStringLiteral("ghastty"), WindowPlacement::stateSnapped(),
+                          QStringLiteral("snap"),
+                          QStringLiteral("DP-1"))); // newer, snapped on DP-1
+
+        const auto accept = [](const WindowPlacement& p) {
+            if (p.slotFor(QStringLiteral("snap")).state == WindowPlacement::stateSnapped()) {
+                return true; // snapped: eligible cross-screen
+            }
+            return p.screenId.isEmpty() || p.screenId == QStringLiteral("DP-2");
+        };
+        const auto preferred = [](const WindowPlacement& p) {
+            return p.slotFor(QStringLiteral("snap")).state == WindowPlacement::stateSnapped();
+        };
+
+        auto p = store.take(QStringLiteral("ghastty|new"), QStringLiteral("ghastty"), accept, preferred);
+        QVERIFY(p.has_value());
+        QCOMPARE(p->windowId, QStringLiteral("ghastty|snapped"));
+        QCOMPARE(p->slotFor(QStringLiteral("snap")).state, QString(WindowPlacement::stateSnapped()));
+        QCOMPARE(p->screenId, QStringLiteral("DP-1")); // restores to its recorded screen, not the opening DP-2
+
+        // The older free record remains for a later free/floating restore.
+        QCOMPARE(store.size(), 1);
+    }
+
+    void testTake_preferredFallsBackToAcceptedWhenNoPreferredMatch()
+    {
+        // When no record satisfies `preferred`, the oldest merely-accepted record is
+        // still consumed — `preferred` only re-ranks, it never filters.
+        WindowPlacementStore store;
+        store.record(make(QStringLiteral("app|1"), QStringLiteral("app"), WindowPlacement::stateFree(),
+                          QStringLiteral("snap"), QStringLiteral("DP-2")));
+        const auto accept = [](const WindowPlacement& p) {
+            return p.screenId.isEmpty() || p.screenId == QStringLiteral("DP-2");
+        };
+        const auto preferred = [](const WindowPlacement& p) {
+            return p.slotFor(QStringLiteral("snap")).state == WindowPlacement::stateSnapped();
+        };
+        auto p = store.take(QStringLiteral("app|new"), QStringLiteral("app"), accept, preferred);
+        QVERIFY(p.has_value());
+        QCOMPARE(p->windowId, QStringLiteral("app|1"));
+        QCOMPARE(store.size(), 0);
+    }
+
     void testRecord_evictsOldestBeyondMaxPerApp()
     {
         // The per-app cap drops the OLDEST record when exceeded. 17 instances of one

@@ -447,6 +447,17 @@ private:
         return PhosphorCompositor::AutotileStateHelpers::isTiledWindow(m_snapBorder, windowId);
     }
 
+    /**
+     * @brief True if SNAP is currently hiding this window's title bar (it is in the
+     * snap BorderState borderless set). The autotile→snap cleanup consults this so it
+     * drops its own tracking without calling setNoBorder(false) — which would un-hide
+     * a title bar the per-mode snapping appearance wants hidden.
+     */
+    bool isWindowSnapBorderless(const QString& windowId) const
+    {
+        return PhosphorCompositor::AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
+    }
+
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;

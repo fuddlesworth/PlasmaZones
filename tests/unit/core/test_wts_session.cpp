@@ -187,6 +187,44 @@ private Q_SLOTS:
         QVERIFY(secondCall.isEmpty()); // Buffer consumed on first call
     }
 
+    // Regression: daemon off->on while in autotile, then swap to snapping. The
+    // window's snap zones live ONLY in the durable WindowPlacement record after a
+    // restart — the live m_snapState map is cold. populateResnapBufferForAllScreens
+    // must still resnap it from the durable record; otherwise it emits no geometry,
+    // the effect never marks the window snapped, and the per-mode snapping border /
+    // title-bar appearance is never applied.
+    void testResnapBuffer_durableRecordWhenLiveSnapMapCold()
+    {
+        const QString windowId = QStringLiteral("app1|111");
+
+        // Durable snapped record, but NO live assignWindowToZone (cold live map).
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = windowId;
+        rec.appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+        rec.screenId = QStringLiteral("DP-1");
+        rec.virtualDesktop = 0;
+        PhosphorEngine::EngineSlot snapSlot;
+        snapSlot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        snapSlot.zoneIds = QStringList{m_zoneIds[0]};
+        rec.engines.insert(QStringLiteral("snap"), snapSlot);
+        m_service->placementStore().record(rec);
+
+        QVERIFY(m_service->zonesForWindow(windowId).isEmpty()); // live map is cold
+
+        // autotile->snapping swap on DP-1 (no autotile screens excluded).
+        m_service->populateResnapBufferForAllScreens({}, {QStringLiteral("DP-1")});
+
+        const QVector<PhosphorEngine::ResnapEntry> buf = m_service->takeResnapBuffer();
+        bool found = false;
+        for (const PhosphorEngine::ResnapEntry& e : buf) {
+            if (e.windowId == windowId) {
+                found = true;
+                QVERIFY(e.zonePosition > 0);
+            }
+        }
+        QVERIFY2(found, "durable-recorded snap window must enter the resnap buffer when the live map is cold");
+    }
+
     // =====================================================================
     // P1: Rotation
     // =====================================================================

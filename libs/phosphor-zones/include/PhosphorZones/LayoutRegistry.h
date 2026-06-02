@@ -262,6 +262,14 @@ public:
      */
     void setSnappingPreferredProvider(std::function<bool()> provider);
 
+    /// True when the snapping-preferred provider is wired AND reports true — i.e.
+    /// snapping is globally enabled (the daemon wires the provider to
+    /// `ISettings::snappingEnabled`). Mirrors the internal default-assignment
+    /// branch's `m_snappingPreferredProvider && m_snappingPreferredProvider()`
+    /// test, exposed so other engines can gate cross-engine coordination on the
+    /// global snap toggle. When unset, returns false (no provider ⇒ not preferred).
+    bool snappingPreferred() const;
+
     // ─── Assignments (per-context routing) ────────────────────────────────
 
     /// Get the previous active layout (before the most recent

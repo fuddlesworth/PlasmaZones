@@ -118,23 +118,61 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
+    using PhosphorEngine::WindowPlacement;
+
+    // A snapped record's RECORDED screen (its own screenId, or the opening screen
+    // when unscreened) is what governs whether it may snap-restore — not the screen
+    // the window happens to open on. True only when that recorded screen is in
+    // snapping mode, resolved in the RECORD'S OWN (desktop, activity) context.
+    // Keying on the record's context — not the live current desktop/activity — is
+    // load-bearing for cross-engine agreement: AutotileEngine::windowOpened runs the
+    // reciprocal gate over the SAME record fields, so both engines compute an
+    // identical verdict regardless of per-screen virtual-desktop overrides. (No
+    // layout manager → permissive, matching the unit-test path.)
+    const auto recordedSnapScreenIsSnapping = [&](const WindowPlacement& p) {
+        if (p.slotFor(engineId()).state != WindowPlacement::stateSnapped()) {
+            return false;
+        }
+        if (!m_layoutManager) {
+            return true;
+        }
+        const QString rec = p.screenId.isEmpty() ? screenId : p.screenId;
+        return m_layoutManager->modeForScreen(rec, p.virtualDesktop, p.activity)
+            == PhosphorZones::AssignmentEntry::Mode::Snapping;
+    };
+
     // Screen-mode ownership gate (BEFORE the store branch). A window opening on an
-    // AUTOTILE-mode screen is owned by the autotile engine — snap must not restore
-    // it, even when a stale snap record (snapped/floated/free from a prior snap-mode
-    // session on this screen) still exists in the store. Without this, snap commits
-    // that stale record on reopen, which both wrongly snaps an autotile window AND
-    // overwrites its autotile record via the store's mutual-exclusivity invariant,
-    // defeating autotile's own float restore in insertWindow(). Each engine restores
-    // only on the screens its mode owns; floating in one mode is independent of the
-    // other. (Autotile never steals snap-screen windows — it only processes windows
-    // on its active screens — so only the snap side needs this guard.)
+    // AUTOTILE-mode screen is normally owned by the autotile engine — snap must not
+    // restore a stale record onto it (which would both wrongly snap an autotile
+    // window AND overwrite its autotile record via the store's mutual-exclusivity
+    // invariant, defeating autotile's own float restore in insertWindow()).
+    // EXCEPTION: a window may carry a SNAPPED record whose RECORDED screen is itself
+    // in snapping mode — i.e. it was snapped on another (snap) monitor and KWin
+    // merely opened the session window on this autotile screen. That window must
+    // still restore cross-screen to its snap monitor (mirrors main, which gated the
+    // defer on the SAVED screen, not the opening one). So defer ONLY when no such
+    // cross-screen snap restore is pending; the store branch below then consumes the
+    // snapped record and restores it to its recorded screen. A same-screen snapped
+    // record (recorded screen == this autotile screen) is NOT snapping, so the peek
+    // misses and we correctly defer, leaving the record for autotile.
     if (m_layoutManager
         && m_layoutManager->modeForScreen(screenId, currentVirtualDesktop(), currentActivity())
             != PhosphorZones::AssignmentEntry::Mode::Snapping) {
+        bool crossScreenSnapRestorePending = false;
+        if (m_windowTracker) {
+            const QString appId = m_windowTracker->currentAppIdFor(windowId);
+            crossScreenSnapRestorePending =
+                m_windowTracker->placementStore().peek(windowId, appId, recordedSnapScreenIsSnapping).has_value();
+        }
+        if (!crossScreenSnapRestorePending) {
+            qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                << "resolveWindowRestore:" << windowId << "opens on non-snap-mode screen" << screenId
+                << "— snap defers to the owning engine";
+            return SnapResult::noSnap();
+        }
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "resolveWindowRestore:" << windowId << "opens on non-snap-mode screen" << screenId
-            << "— snap defers to the owning engine";
-        return SnapResult::noSnap();
+            << "but carries a cross-screen snap restore — not deferring";
     }
 
     // Unified placement store — the single authoritative restore record for this
@@ -150,7 +188,6 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // autotile's own open path. Falls through to the legacy skip + chain when the
     // store has no record (windows persisted under the old keys before migration).
     if (m_windowTracker) {
-        using PhosphorEngine::WindowPlacement;
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
         // ONE record per window (both engines' slots + the shared free geometry).
         // take() consumes it (multi-instance FIFO); we then re-record it bound to
@@ -159,9 +196,36 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         // window's autotile slot. Binding the live id is also the consumption: a
         // second instance of the same app no longer uuid-matches and takes the
         // next FIFO entry.
-        auto rec = m_windowTracker->placementStore().take(windowId, appId, [&](const WindowPlacement& p) {
-            return p.screenId.isEmpty() || p.screenId == screenId;
-        });
+        auto rec = m_windowTracker->placementStore().take(
+            windowId, appId,
+            [&](const WindowPlacement& p) {
+                // A SNAPPED record carries its own authoritative screen + zone, so
+                // it is eligible regardless of which monitor the window happens to
+                // open on. KWin can place a session window on a different output at
+                // login (e.g. a window snapped on screen A reopens on screen B); the
+                // window must still return to the screen + zone it was snapped to.
+                // This mirrors main's calculateRestoreFromSession, which keyed the
+                // restore by appId and honoured the saved screen (`savedScreen =
+                // entry.screenId ?: callerScreen`), explicitly supporting cross-screen
+                // restore migration. Gating snapped records on the OPENING screen —
+                // which the unified-store rewrite introduced — stranded such windows
+                // on the wrong monitor, unsnapped. The RECORDED screen must still be
+                // in snapping mode, though: a snapped record whose own screen is now
+                // autotile-owned must not snap-restore there (the early gate leaves it
+                // for autotile). A floating/free position is screen-local, so those
+                // records stay gated on the opening screen.
+                if (p.slotFor(engineId()).state == WindowPlacement::stateSnapped()) {
+                    return recordedSnapScreenIsSnapping(p);
+                }
+                return p.screenId.isEmpty() || p.screenId == screenId;
+            },
+            [&](const WindowPlacement& p) {
+                // Among an app's FIFO records, restore a snapped placement ahead of a
+                // contentless free/floating sibling that is merely older — otherwise a
+                // stale free record (empty screen, no zone) is consumed first and the
+                // window never returns to its zone.
+                return recordedSnapScreenIsSnapping(p);
+            });
         if (rec) {
             // Same window across a daemon restart (uuid-exact) vs a reopened instance
             // (appId FIFO). Only the former re-records — keeping the FULL record (the

@@ -56,48 +56,40 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     const QHash<QString, QString>& snapScreens = m_snapState->screenAssignments();
     const QHash<QString, int>& snapDesktops = m_snapState->desktopAssignments();
 
-    for (auto it = snapZones.constBegin(); it != snapZones.constEnd(); ++it) {
-        const QString& windowId = it.key();
-        const QStringList& zoneIds = it.value();
+    // Per-window candidate processing, shared by the live and durable passes below.
+    const auto addCandidate = [&](const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                                  int virtualDesktop) {
         if (zoneIds.isEmpty() || isWindowFloating(windowId))
-            continue;
-
-        const QString screenId = snapScreens.value(windowId);
+            return;
         if (screenId.isEmpty())
-            continue;
-
+            return;
         // Skip windows on excluded screens (e.g. autotile screens)
         if (excludeScreens.contains(screenId))
-            continue;
-
+            return;
         // When include-filter is set, only process windows on the specified screens
         if (!includeScreens.isEmpty() && !includeScreens.contains(screenId))
-            continue;
-
+            return;
         // Desktop filter: a per-desktop layout change should resnap only the
         // windows on that desktop. virtualDesktop==0 means sticky / unknown
         // (visible on every desktop) so include those regardless of the filter.
-        if (desktopFilter > 0) {
-            const int windowDesktop = snapDesktops.value(windowId, 0);
-            if (windowDesktop != 0 && windowDesktop != desktopFilter)
-                continue;
-        }
+        if (desktopFilter > 0 && virtualDesktop != 0 && virtualDesktop != desktopFilter)
+            return;
 
         if (addedIds.contains(windowId))
-            continue;
+            return;
         addedIds.insert(windowId);
 
         // Look up the zone position from the global map
         const QString& primaryZoneId = zoneIds.first();
         int position = globalZoneIdToPosition.value(primaryZoneId, 0);
         if (position <= 0)
-            continue;
+            return;
 
         ResnapEntry entry;
         entry.windowId = windowId;
         entry.zonePosition = position;
         entry.screenId = screenId;
-        entry.virtualDesktop = snapDesktops.value(windowId, 0);
+        entry.virtualDesktop = virtualDesktop;
 
         // Multi-zone: collect all positions
         if (zoneIds.size() > 1) {
@@ -109,6 +101,28 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         }
 
         newBuffer.append(entry);
+    };
+
+    // 1. Live snap assignments — this session's snaps (retained while a window is
+    // autotiled, which is why the non-restart autotile→snap swap finds them here).
+    for (auto it = snapZones.constBegin(); it != snapZones.constEnd(); ++it) {
+        addCandidate(it.key(), it.value(), snapScreens.value(it.key()), snapDesktops.value(it.key(), 0));
+    }
+
+    // 2. Restart-robustness: a window snapped in a PRIOR session and then autotiled
+    // has its snap zones only in the durable WindowPlacement record — the live
+    // m_snapState map above is cold after a daemon restart. Without this pass an
+    // autotile→snapping swap right after a restart resnaps nothing (empty buffer →
+    // no applyGeometriesBatch → the effect never marks the windows snapped, so the
+    // per-mode snap border / title-bar appearance is never applied). Mirrors the
+    // live-or-durable fallback in recordedSnapZones().
+    for (const PhosphorEngine::WindowPlacement& rec : m_placementStore.records()) {
+        if (addedIds.contains(rec.windowId))
+            continue;
+        const PhosphorEngine::EngineSlot snapSlot = rec.slotFor(QStringLiteral("snap"));
+        if (snapSlot.state != PhosphorEngine::WindowPlacement::stateSnapped())
+            continue;
+        addCandidate(rec.windowId, snapSlot.zoneIds, rec.screenId, rec.virtualDesktop);
     }
 
     if (!newBuffer.isEmpty()) {

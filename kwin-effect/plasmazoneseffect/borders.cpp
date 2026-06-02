@@ -261,15 +261,26 @@ void PlasmaZonesEffect::markWindowSnapped(const QString& windowId, const QString
     AutotileStateHelpers::addTiledOnScreen(m_snapBorder, screenId, windowId);
 
     KWin::EffectWindow* w = findWindowById(windowId);
-    // Title-bar hiding mirrors AutotileHandler::setWindowBorderless: skip CSD
-    // windows (no server-side decoration) and only call setNoBorder once.
-    if (m_snapBorder.hideTitleBars && w && w->hasDecoration()) {
+    KWin::Window* kw = w ? w->window() : nullptr;
+    // userCanSetNoBorder() — not hasDecoration() — is the correct test for "may
+    // this window's server-side title bar be toggled off." It reports whether KWin
+    // ALLOWS the no-border toggle, so it stays true for a normal SSD window even
+    // while that window is CURRENTLY borderless — exactly the autotile→snap handoff
+    // case, where the window arrives already borderless (autotile stripped its
+    // decoration) and hasDecoration() therefore reads false. It is false for windows
+    // that have no server-side title bar to hide in the first place — client-side-
+    // decorated apps (GTK/Electron) and other non-toggleable windows (override-
+    // redirect, or decoration forced by a window rule). Using hasDecoration() here
+    // skipped the handoff, so snap never recorded the borderless ownership and the
+    // deferred restoreWindowBorders un-hid the title bar autotile had hidden.
+    // (AutotileHandler::setWindowBorderless still gates on hasDecoration(); the snap
+    // side intentionally diverges because only it must survive the already-borderless
+    // handoff.)
+    if (m_snapBorder.hideTitleBars && kw && kw->userCanSetNoBorder()) {
         const bool wasBorderless = AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
         AutotileStateHelpers::addBorderlessOnScreen(m_snapBorder, screenId, windowId);
         if (!wasBorderless) {
-            if (KWin::Window* kw = w->window()) {
-                hideTitleBarFillingZone(kw);
-            }
+            hideTitleBarFillingZone(kw);
         }
     }
     // A null w means the window is gone (closed mid-snap); the bucket entry

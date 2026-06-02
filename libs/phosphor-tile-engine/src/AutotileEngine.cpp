@@ -1941,6 +1941,58 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
     qCInfo(PhosphorTileEngine::lcTileEngine)
         << "windowOpened:" << windowId << "screen=" << screenId << "minSize=" << minWidth << "x" << minHeight;
 
+    // Cross-engine coordination (the reciprocal of SnapEngine::resolveWindowRestore's
+    // recorded-screen ownership gate). On FIRST observation, if this window carries a
+    // SNAPPED placement record whose RECORDED screen is itself in snapping mode, snap
+    // will restore it cross-screen to that monitor — it only landed on this autotile
+    // screen because KWin's session restore placed it here. Autotile must NOT track or
+    // tile it, or both engines would claim the same window (snap moves it to its snap
+    // monitor while autotile tiles it here). Bail BEFORE m_windowToStateKey is set so
+    // autotile leaves no trace. The peek does NOT consume the record — snap's restore
+    // is the consumer. A snapped record whose recorded screen is THIS (autotile) screen
+    // is not in snapping mode, so the check fails and autotile keeps the window — the
+    // screen's own mode owns it, symmetric with snap's same-screen defer.
+    //
+    // Restricted to windows NOT already autotile-tracked: a window autotile already
+    // manages (re-emitted on a runtime screen/desktop move, or explicitly handed off)
+    // is autotile's — its snap slot is then frozen cross-mode memory, not a pending
+    // restore. Deferring such a window would both yank a live tile and strand a ghost
+    // in its current TilingState (the cross-screen cleanup below is skipped on an early
+    // return). Only a first-observation open — the login/session-restore case — races
+    // snap, and that is the only case this guard fires for.
+    //
+    // Gated on snappingPreferred() (the global snap toggle): when snapping is disabled,
+    // SnapEngine::resolveWindowRestore returns early (isEnabled() false) and will NEVER
+    // claim the window, so deferring here would strand it unmanaged. In that state
+    // autotile keeps the window and tiles it normally.
+    if (!screenId.isEmpty() && m_windowTracker && m_layoutManager && m_layoutManager->snappingPreferred()
+        && !m_windowToStateKey.contains(windowId)) {
+        const QString appId = currentAppIdFor(windowId);
+        if (!appId.isEmpty() && appId != windowId) {
+            const auto snapCrossRestorePending = [&](const PhosphorEngine::WindowPlacement& p) {
+                if (p.slotFor(QStringLiteral("snap")).state != PhosphorEngine::WindowPlacement::stateSnapped()) {
+                    return false;
+                }
+                // Resolve the recorded screen's mode in the RECORD'S OWN (desktop,
+                // activity) context — the same fields snap's reciprocal gate
+                // (SnapEngine::recordedSnapScreenIsSnapping) reads off the same record.
+                // Keying both engines on the record (not on each engine's live current
+                // desktop, which can differ under per-screen virtual-desktop overrides)
+                // guarantees they reach an identical verdict, so a window is never both
+                // deferred-and-claimed or both-skipped.
+                const QString recScreen = p.screenId.isEmpty() ? screenId : p.screenId;
+                return m_layoutManager->modeForScreen(recScreen, p.virtualDesktop, p.activity)
+                    == PhosphorZones::AssignmentEntry::Mode::Snapping;
+            };
+            if (m_windowTracker->placementStore().peek(windowId, appId, snapCrossRestorePending).has_value()) {
+                qCInfo(PhosphorTileEngine::lcTileEngine)
+                    << "windowOpened:" << windowId << "on autotile screen" << screenId
+                    << "defers to snap — carries a cross-screen snap restore";
+                return;
+            }
+        }
+    }
+
     // If the window is already tracked on a DIFFERENT screen (e.g., dragged from
     // VS2 to VS1), remove it from the old screen's PhosphorTiles::TilingState first. Without this,
     // the window remains in the old PhosphorTiles::TilingState as a ghost entry — the old screen

@@ -51,8 +51,17 @@ public:
     /// the exact-windowId match before the appId FIFO (oldest first). The matched
     /// record is REMOVED (consumed) and returned. `accept` lets the caller reject
     /// cross-screen / disabled-context / wrong-kind candidates.
+    ///
+    /// `preferred` (optional) ranks the appId-FIFO branch ONLY: when supplied, the
+    /// oldest entry satisfying BOTH `accept` and `preferred` is consumed first, and
+    /// only if none qualifies does the oldest merely-accepted entry win. The
+    /// exact-windowId match is unaffected — a window's own record is always used in
+    /// whatever state it holds. Lets a caller restore the most meaningful record
+    /// (e.g. a snapped placement) ahead of a contentless free/floating sibling that
+    /// is merely older in the FIFO.
     std::optional<WindowPlacement> take(const QString& windowId, const QString& appId,
-                                        const std::function<bool(const WindowPlacement&)>& accept = {});
+                                        const std::function<bool(const WindowPlacement&)>& accept = {},
+                                        const std::function<bool(const WindowPlacement&)>& preferred = {});
 
     /// Non-consuming lookup (unlike take): the record for the exact windowId, else
     /// the NEWEST record in the appId bucket whose `accept` passes. Leaves the
