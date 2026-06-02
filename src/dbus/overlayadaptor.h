@@ -88,8 +88,8 @@ public Q_SLOTS:
     void hideSnapAssist();
     bool isSnapAssistVisible();
     bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height, const QByteArray& pixels);
-    bool setSnapAssistThumbnailDmabuf(const QString& compositorHandle, int width, int height, uint drmFormat,
-                                      qulonglong modifier, uint stride, uint offset, const QDBusUnixFileDescriptor& fd);
+    bool setWindowThumbnailDmabuf(const QString& compositorHandle, int width, int height, uint drmFormat,
+                                  qulonglong modifier, uint stride, uint offset, const QDBusUnixFileDescriptor& fd);
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);

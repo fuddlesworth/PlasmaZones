@@ -209,7 +209,7 @@ private:
 
     /// Opt-in zero-copy GPU path (PLASMAZONES_DMABUF_THUMBNAILS). When set,
     /// the scene is built in ExportMode::Texture and each capture is exported
-    /// as a dma-buf and posted via setSnapAssistThumbnailDmabuf instead of the
+    /// as a dma-buf and posted via setWindowThumbnailDmabuf instead of the
     /// raw-ARGB32 setSnapAssistThumbnail. Initialised from the env var at
     /// construction; cleared by @ref onDmabufRejected if the path proves
     /// unavailable at runtime, after which the session uses the pixel path.

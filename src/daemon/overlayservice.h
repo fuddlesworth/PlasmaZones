@@ -70,7 +70,7 @@ class AnimationShaderRegistry;
 namespace PlasmaZones {
 class ShaderRegistry;
 class SnapAssistThumbnailProvider;
-class SnapAssistDmabufTextureProvider;
+class DmabufTextureProvider;
 }
 namespace PhosphorScreens {
 class ScreenManager;
@@ -377,7 +377,7 @@ public:
     bool isSnapAssistVisible() const override;
     bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                 const QByteArray& pixels) override;
-    bool setSnapAssistThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) override;
+    bool setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) override;
 
     // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());
@@ -677,9 +677,9 @@ private:
     // ownership pattern as m_thumbnailProvider: constructed eagerly, ownership
     // released to the QQmlEngine in engineConfigurator, borrowed atomic pointer
     // nulled when the engine tears it down. Registered under the separate
-    // SnapAssistDmabufTextureProvider::ProviderId (Texture-type) image scheme.
-    std::unique_ptr<SnapAssistDmabufTextureProvider> m_dmabufTextureProviderOwned;
-    std::atomic<SnapAssistDmabufTextureProvider*> m_dmabufTextureProvider{nullptr};
+    // DmabufTextureProvider::ProviderId (Texture-type) image scheme.
+    std::unique_ptr<DmabufTextureProvider> m_dmabufTextureProviderOwned;
+    std::atomic<DmabufTextureProvider*> m_dmabufTextureProvider{nullptr};
     // Single-shot idle-grace timer: started on every hideSnapAssist and
     // stopped on showSnapAssist. If snap-assist stays dismissed long enough
     // for it to fire, it clears the thumbnail cache so its bounded (~6 MB

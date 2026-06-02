@@ -362,17 +362,17 @@ private:
 
 } // namespace
 
-SnapAssistDmabufTextureProvider::SnapAssistDmabufTextureProvider()
+DmabufTextureProvider::DmabufTextureProvider()
     : QQuickImageProvider(QQuickImageProvider::Texture)
 {
 }
 
-SnapAssistDmabufTextureProvider::~SnapAssistDmabufTextureProvider()
+DmabufTextureProvider::~DmabufTextureProvider()
 {
     clear();
 }
 
-QString SnapAssistDmabufTextureProvider::insert(const QString& compositorHandle, const DmabufThumbnailDesc& desc)
+QString DmabufTextureProvider::insert(const QString& compositorHandle, const DmabufThumbnailDesc& desc)
 {
     if (compositorHandle.isEmpty() || desc.fd < 0) {
         return QString();
@@ -394,8 +394,7 @@ QString SnapAssistDmabufTextureProvider::insert(const QString& compositorHandle,
     return makeUrl(key, gen);
 }
 
-QQuickTextureFactory* SnapAssistDmabufTextureProvider::requestTexture(const QString& id, QSize* size,
-                                                                      const QSize& requestedSize)
+QQuickTextureFactory* DmabufTextureProvider::requestTexture(const QString& id, QSize* size, const QSize& requestedSize)
 {
     Q_UNUSED(requestedSize)
     const QString key = normaliseHandle(id.section(QLatin1Char('/'), 0, 0));
@@ -417,7 +416,7 @@ QQuickTextureFactory* SnapAssistDmabufTextureProvider::requestTexture(const QStr
     return new DmabufTextureFactory(desc);
 }
 
-void SnapAssistDmabufTextureProvider::clear()
+void DmabufTextureProvider::clear()
 {
     QMutexLocker lock(&m_mutex);
     for (auto it = m_pending.begin(); it != m_pending.end(); ++it) {
@@ -428,12 +427,12 @@ void SnapAssistDmabufTextureProvider::clear()
     m_pending.clear();
 }
 
-QString SnapAssistDmabufTextureProvider::makeUrl(const QString& handle, quint32 generation)
+QString DmabufTextureProvider::makeUrl(const QString& handle, quint32 generation)
 {
     return QStringLiteral("image://%1/%2/%3").arg(QString::fromLatin1(ProviderId)).arg(handle).arg(generation);
 }
 
-QString SnapAssistDmabufTextureProvider::normaliseHandle(const QString& handle)
+QString DmabufTextureProvider::normaliseHandle(const QString& handle)
 {
     if (handle.size() >= 2 && handle.startsWith(QLatin1Char('{')) && handle.endsWith(QLatin1Char('}'))) {
         return handle.mid(1, handle.size() - 2);

@@ -465,7 +465,7 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
 
     QDBusMessage msg = QDBusMessage::createMethodCall(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setSnapAssistThumbnailDmabuf"));
+        PhosphorProtocol::Service::Interface::Overlay, QStringLiteral("setWindowThumbnailDmabuf"));
     // QDBusUnixFileDescriptor dup()s the fd in its constructor; we close our
     // original after queuing the call.
     msg << compositorHandle << exported.width << exported.height << static_cast<uint>(exported.fourcc)
@@ -486,11 +486,11 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
         const QString handle = p.internalId.toString();
         QDBusPendingReply<bool> reply = *w;
         if (reply.isError()) {
-            qCDebug(lcSnapAssistCapture) << "setSnapAssistThumbnailDmabuf D-Bus call failed for" << handle << ":"
+            qCDebug(lcSnapAssistCapture) << "setWindowThumbnailDmabuf D-Bus call failed for" << handle << ":"
                                          << reply.error().message();
             onDmabufRejected(p);
         } else if (!reply.value()) {
-            qCDebug(lcSnapAssistCapture) << "setSnapAssistThumbnailDmabuf rejected by daemon for" << handle;
+            qCDebug(lcSnapAssistCapture) << "setWindowThumbnailDmabuf rejected by daemon for" << handle;
             onDmabufRejected(p);
         } else {
             m_dmabufConsecutiveFailures = 0;

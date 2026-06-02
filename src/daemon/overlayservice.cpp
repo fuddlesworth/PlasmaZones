@@ -172,7 +172,7 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
     // thumbnail provider (PLASMAZONES_DMABUF_THUMBNAILS). Always constructed so
     // the borrowed pointer is non-null; it only ever receives descriptors when
     // the env gate is on and the kwin-effect takes the dma-buf path.
-    m_dmabufTextureProviderOwned = std::make_unique<SnapAssistDmabufTextureProvider>();
+    m_dmabufTextureProviderOwned = std::make_unique<DmabufTextureProvider>();
     m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
 
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
@@ -215,10 +215,10 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
 
                 // Mirror for the dma-buf (Texture-type) provider.
                 if (!m_dmabufTextureProviderOwned) {
-                    m_dmabufTextureProviderOwned = std::make_unique<SnapAssistDmabufTextureProvider>();
+                    m_dmabufTextureProviderOwned = std::make_unique<DmabufTextureProvider>();
                     m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
                 }
-                engine.addImageProvider(QString::fromLatin1(SnapAssistDmabufTextureProvider::ProviderId),
+                engine.addImageProvider(QString::fromLatin1(DmabufTextureProvider::ProviderId),
                                         m_dmabufTextureProviderOwned.release());
 
                 QObject::connect(&engine, &QObject::destroyed, this, [this]() {

@@ -17,33 +17,36 @@ namespace PlasmaZones {
  *        as GPU textures — the zero-copy counterpart to the QImage-based
  *        SnapAssistThumbnailProvider.
  *
- * The kwin-effect exports each rendered thumbnail as a dma-buf and hands the fd
- * to the daemon via @c setSnapAssistThumbnailDmabuf. @ref insert stores the
- * descriptor (taking ownership of a @c dup of the fd) keyed by compositor
- * handle and returns a QML URL under @c image://plasmazones-snapassist-gpu/.
- * When QML loads that URL, @ref requestTexture hands back a QQuickTextureFactory
- * whose @c createTexture (on the render thread) imports the dma-buf into a
- * VkImage, wraps it in a QRhiTexture, and exposes it as a QSGTexture — no
- * read-back, no re-upload.
+ * General window-thumbnail transport: not tied to any one feature. Snap-assist
+ * is the current (only) consumer, but the import path is reusable by future
+ * preview features (e.g. a window-scroll/overview strip).
+ *
+ * A producer (the kwin-effect today) exports each rendered thumbnail as a
+ * dma-buf and hands the fd to the daemon via @c setWindowThumbnailDmabuf.
+ * @ref insert stores the descriptor (taking ownership of a @c dup of the fd)
+ * keyed by compositor handle and returns a QML URL under
+ * @c image://plasmazones-dmabuf-thumbnail/. When QML loads that URL,
+ * @ref requestTexture hands back a QQuickTextureFactory whose @c createTexture
+ * (on the render thread) imports the dma-buf into a VkImage, wraps it in a
+ * QRhiTexture, and exposes it as a QSGTexture — no read-back, no re-upload.
  *
  * Spike scope: Vulkan RHI backend only (the daemon's default). On the OpenGL
- * fallback backend the factory returns no texture and the candidate shows its
- * icon — the effect's accepted=false contract then re-captures via the
- * raw-pixel path on the next snap-assist.
+ * fallback backend the factory returns no texture and the consumer falls back
+ * to its raw-pixel path (the effect's accepted=false contract re-captures).
  *
  * Thread-safety: @ref insert / @ref clear run on the GUI thread (D-Bus slot);
  * @ref requestTexture runs on Qt's image-loader thread. All access to the
  * pending map goes through @ref m_mutex. The actual GPU import happens later,
  * on the scene-graph render thread, inside the returned factory.
  */
-class SnapAssistDmabufTextureProvider : public QQuickImageProvider
+class DmabufTextureProvider : public QQuickImageProvider
 {
 public:
     /// QML provider id — the host segment of @c image://<id>/...
-    static constexpr const char* ProviderId = "plasmazones-snapassist-gpu";
+    static constexpr const char* ProviderId = "plasmazones-dmabuf-thumbnail";
 
-    SnapAssistDmabufTextureProvider();
-    ~SnapAssistDmabufTextureProvider() override;
+    DmabufTextureProvider();
+    ~DmabufTextureProvider() override;
 
     /**
      * @brief Store the dma-buf descriptor for @p compositorHandle and return

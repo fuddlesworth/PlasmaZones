@@ -309,9 +309,9 @@ bool OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int
     return m_overlayService->setSnapAssistThumbnail(compositorHandle, width, height, pixels);
 }
 
-bool OverlayAdaptor::setSnapAssistThumbnailDmabuf(const QString& compositorHandle, int width, int height,
-                                                  uint drmFormat, qulonglong modifier, uint stride, uint offset,
-                                                  const QDBusUnixFileDescriptor& fd)
+bool OverlayAdaptor::setWindowThumbnailDmabuf(const QString& compositorHandle, int width, int height, uint drmFormat,
+                                              qulonglong modifier, uint stride, uint offset,
+                                              const QDBusUnixFileDescriptor& fd)
 {
     if (!m_overlayService) {
         return false;
@@ -323,13 +323,13 @@ bool OverlayAdaptor::setSnapAssistThumbnailDmabuf(const QString& compositorHandl
     // path's 1024² ceiling.
     static constexpr int MaxDimension = 1024;
     if (width <= 0 || height <= 0 || width > MaxDimension || height > MaxDimension) {
-        qCWarning(lcDbus) << "setSnapAssistThumbnailDmabuf: rejecting out-of-range dimensions" << width << "x" << height
+        qCWarning(lcDbus) << "setWindowThumbnailDmabuf: rejecting out-of-range dimensions" << width << "x" << height
                           << "(handle len=" << compositorHandle.size() << ")";
         return false;
     }
     if (!fd.isValid()) {
-        qCWarning(lcDbus) << "setSnapAssistThumbnailDmabuf: invalid file descriptor (handle len="
-                          << compositorHandle.size() << ")";
+        qCWarning(lcDbus) << "setWindowThumbnailDmabuf: invalid file descriptor (handle len=" << compositorHandle.size()
+                          << ")";
         return false;
     }
     if (!authenticateKwinSender()) {
@@ -347,7 +347,7 @@ bool OverlayAdaptor::setSnapAssistThumbnailDmabuf(const QString& compositorHandl
     desc.modifier = modifier;
     desc.stride = stride;
     desc.offset = offset;
-    return m_overlayService->setSnapAssistThumbnailDmabuf(compositorHandle, desc);
+    return m_overlayService->setWindowThumbnailDmabuf(compositorHandle, desc);
 }
 
 bool OverlayAdaptor::authenticateKwinSender()

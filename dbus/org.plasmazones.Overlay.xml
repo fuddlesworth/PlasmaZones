@@ -151,7 +151,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True iff the daemon stored the thumbnail in its LRU cache. False on auth failure, oversize-payload rejection, dimension/byte-count mismatch, or post-shutdown engine teardown. Callers use this to decide whether to mark the handle as recently-posted; a false reply must NOT be treated as success."/>
             </arg>
         </method>
-        <method name="setSnapAssistThumbnailDmabuf">
+        <method name="setWindowThumbnailDmabuf">
             <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail as a single-plane DMA-BUF (zero-copy GPU path) instead of raw pixels. Experimental: the daemon only accepts it when started with PLASMAZONES_DMABUF_THUMBNAILS set, otherwise returns false and the caller must fall back to setSnapAssistThumbnail. Authenticated against /proc/&lt;pid&gt;/exe like the raw-pixel method. The fd is consumed/duplicated by the daemon's GPU import; the caller may close its copy after the call returns."/>
             <arg name="compositorHandle" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString(), braced form)."/>

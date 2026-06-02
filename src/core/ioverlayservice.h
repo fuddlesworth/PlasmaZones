@@ -138,7 +138,7 @@ public:
     ///         off, driver/RHI backend unsupported, or import failed) — the
     ///         caller MUST then fall back to @ref setSnapAssistThumbnail so a
     ///         preview still appears.
-    virtual bool setSnapAssistThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) = 0;
+    virtual bool setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) = 0;
 
     // Layout picker overlay (interactive layout browser)
     virtual void hideLayoutPicker() = 0;

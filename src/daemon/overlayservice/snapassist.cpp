@@ -293,7 +293,7 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     return updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
 }
 
-bool OverlayService::setSnapAssistThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc)
+bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc)
 {
     // Experimental zero-copy GPU thumbnail path (Phase-0 spike). Gated behind
     // an env var so the default build behaves exactly as before: the kwin-
@@ -316,7 +316,7 @@ bool OverlayService::setSnapAssistThumbnailDmabuf(const QString& compositorHandl
     if (providerUrl.isEmpty()) {
         return false;
     }
-    qCDebug(lcOverlay) << "setSnapAssistThumbnailDmabuf: stored dma-buf for" << compositorHandle << desc.width << "x"
+    qCDebug(lcOverlay) << "setWindowThumbnailDmabuf: stored dma-buf for" << compositorHandle << desc.width << "x"
                        << desc.height << "fourcc=0x" << QString::number(desc.fourcc, 16);
     // Same store-then-apply contract as the raw-pixel path: the handle is held
     // even if snap-assist isn't currently open; the URL is pushed into the live
@@ -342,7 +342,7 @@ bool OverlayService::applyCandidateThumbnailUrl(const QString& compositorHandle,
     // Provider insert succeeded - handle is held even if snap-assist isn't
     // currently open. Provider URL stays valid until eviction. Shared by the
     // raw-pixel (updateSnapAssistCandidateThumbnail) and dma-buf
-    // (setSnapAssistThumbnailDmabuf) paths.
+    // (setWindowThumbnailDmabuf) paths.
     if (!m_snapAssistVisible || m_snapAssistScreenId.isEmpty()) {
         return true;
     }
