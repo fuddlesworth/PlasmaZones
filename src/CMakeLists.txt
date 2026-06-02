@@ -410,6 +410,10 @@ set(plasmazones_daemon_SRCS
     daemon/dmabuftextureprovider.h
     daemon/dmabuffencewaiter.cpp
     daemon/dmabuffencewaiter.h
+    # OpenGL-RHI fallback import (EGL dma-buf -> GL texture). Isolated TU so its
+    # epoxy GL/EGL headers don't mix with the Vulkan + Qt RHI headers.
+    daemon/dmabufglimport.cpp
+    daemon/dmabufglimport.h
     daemon/shortcutmanager.cpp
     daemon/shortcutmanager.h
     daemon/zoneselectorcontroller.cpp
@@ -467,6 +471,18 @@ find_package(Vulkan)
 if(Vulkan_FOUND)
     target_link_libraries(plasmazonesd PRIVATE Vulkan::Vulkan)
 endif()
+
+# libepoxy: EGL/GL entry points for the OpenGL-RHI dma-buf import fallback
+# (daemon/dmabufglimport.cpp). Only that TU includes epoxy headers.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(Epoxy REQUIRED IMPORTED_TARGET epoxy)
+target_link_libraries(plasmazonesd PRIVATE PkgConfig::Epoxy)
+
+# Keep the epoxy TU out of the Unity (jumbo) build: epoxy/gl.h must be the
+# first GL include and refuses to coexist with GL/gl.h, which jumbo-grouping
+# with the Vulkan + Qt RHI sources would pull in. Standalone TU keeps its
+# EGL/GL headers fully isolated.
+set_source_files_properties(daemon/dmabufglimport.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 install(TARGETS plasmazonesd DESTINATION ${KDE_INSTALL_BINDIR})
 

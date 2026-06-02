@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dmabuftextureprovider.h"
+#include "dmabufglimport.h"
 #include "../core/logging.h"
 
 #include <vulkan/vulkan.h>
@@ -15,6 +16,7 @@
 #include <QVulkanInstance>
 
 #include <array>
+#include <functional>
 #include <unistd.h>
 
 namespace PlasmaZones {
@@ -229,10 +231,10 @@ public:
     // once), and once the copy has run the producer is free to reuse its
     // buffer. src is only read during that one copy, so a later producer
     // overwrite of the aliased buffer is harmless.
-    DmabufQsgTexture(const ImportedImage& imported, QRhiTexture* src, QRhiTexture* dst, QSize size, bool hasAlpha)
-        : m_imported(imported)
-        , m_src(src)
+    DmabufQsgTexture(QRhiTexture* src, QRhiTexture* dst, std::function<void()> releaseImport, QSize size, bool hasAlpha)
+        : m_src(src)
         , m_dst(dst)
+        , m_releaseImport(std::move(releaseImport))
         , m_size(size)
         , m_hasAlpha(hasAlpha)
     {
@@ -241,14 +243,11 @@ public:
     ~DmabufQsgTexture() override
     {
         delete m_dst; // owned copy
-        delete m_src; // wrapper over the imported VkImage (does not own it)
-        if (m_imported.df && m_imported.device != VK_NULL_HANDLE) {
-            if (m_imported.image != VK_NULL_HANDLE) {
-                m_imported.df->vkDestroyImage(m_imported.device, m_imported.image, nullptr);
-            }
-            if (m_imported.memory != VK_NULL_HANDLE) {
-                m_imported.df->vkFreeMemory(m_imported.device, m_imported.memory, nullptr);
-            }
+        delete m_src; // wrapper over the imported native texture (does not own it)
+        if (m_releaseImport) {
+            // Frees the backend import resources on the render thread: the
+            // Vulkan VkImage/VkDeviceMemory, or the GL texture + EGLImage.
+            m_releaseImport();
         }
     }
 
@@ -287,9 +286,9 @@ public:
     }
 
 private:
-    ImportedImage m_imported;
     QRhiTexture* m_src = nullptr;
     QRhiTexture* m_dst = nullptr;
+    std::function<void()> m_releaseImport;
     QSize m_size;
     bool m_hasAlpha = true;
     bool m_copied = false;
@@ -337,15 +336,8 @@ public:
         // DmabufFenceWaiter), so the buffer is already fully rendered by the
         // time QML loads the URL and this import runs.
         QSGRendererInterface* rif = window->rendererInterface();
-        if (!rif || rif->graphicsApi() != QSGRendererInterface::Vulkan) {
-            qCWarning(lcOverlay) << "dmabuf import: scene graph is not on the Vulkan backend — "
-                                    "dma-buf thumbnails need Vulkan (candidate falls back to icon)";
-            return nullptr;
-        }
         QRhi* rhi = window->rhi();
-        QVulkanInstance* inst = window->vulkanInstance();
-        auto* devicePtr = static_cast<VkDevice*>(rif->getResource(window, QSGRendererInterface::DeviceResource));
-        if (!rhi || !inst || !devicePtr || *devicePtr == VK_NULL_HANDLE) {
+        if (!rif || !rhi) {
             return nullptr;
         }
         const FormatMapping fmt = mapDrmFormat(m_desc.fourcc);
@@ -354,26 +346,57 @@ public:
             return nullptr;
         }
 
-        const ImportedImage imported = importDmabuf(*devicePtr, inst, m_desc, fmt.vkFormat);
-        if (!imported.valid()) {
+        // Import the dma-buf into a native texture per RHI backend, capturing a
+        // backend-specific release into the QSGTexture. The rest (copy src->dst,
+        // QSGTexture wrap) is backend-agnostic.
+        quint64 nativeObject = 0;
+        int nativeLayout = 0;
+        std::function<void()> release;
+        const QSGRendererInterface::GraphicsApi api = rif->graphicsApi();
+        if (api == QSGRendererInterface::Vulkan) {
+            QVulkanInstance* inst = window->vulkanInstance();
+            auto* devicePtr = static_cast<VkDevice*>(rif->getResource(window, QSGRendererInterface::DeviceResource));
+            if (!inst || !devicePtr || *devicePtr == VK_NULL_HANDLE) {
+                return nullptr;
+            }
+            const ImportedImage imported = importDmabuf(*devicePtr, inst, m_desc, fmt.vkFormat);
+            if (!imported.valid()) {
+                return nullptr;
+            }
+            nativeObject = reinterpret_cast<quint64>(imported.image);
+            nativeLayout = static_cast<int>(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            release = [imported]() {
+                destroyImported(imported);
+            };
+        } else if (api == QSGRendererInterface::OpenGL) {
+            GlDmabufImport gl = importDmabufToGlTexture(m_desc);
+            if (!gl.ok) {
+                return nullptr;
+            }
+            nativeObject = static_cast<quint64>(gl.textureId);
+            nativeLayout = 0;
+            release = std::move(gl.release);
+        } else {
+            qCWarning(lcOverlay) << "dmabuf import: unsupported RHI backend" << int(api)
+                                 << "(candidate falls back to pixels)";
             return nullptr;
         }
 
         const QSize size(m_desc.width, m_desc.height);
-        // src: wraps the imported dma-buf as a transfer source (aliases the
-        // producer buffer, read only during the one-time copy below).
+        // src: wraps the imported native texture as a transfer source (aliases
+        // the producer buffer, read only during the one-time copy below).
         QRhiTexture* src = rhi->newTexture(fmt.rhiFormat, size, 1, QRhiTexture::UsedAsTransferSource);
         if (!src) {
-            destroyImported(imported);
+            release();
             return nullptr;
         }
         QRhiTexture::NativeTexture native;
-        native.object = reinterpret_cast<quint64>(imported.image);
-        native.layout = static_cast<int>(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        native.object = nativeObject;
+        native.layout = nativeLayout;
         if (!src->createFrom(native)) {
             qCWarning(lcOverlay) << "dmabuf import: QRhiTexture::createFrom failed";
             delete src;
-            destroyImported(imported);
+            release();
             return nullptr;
         }
         // dst: our OWN sampled texture; DmabufQsgTexture copies src -> dst on
@@ -383,10 +406,10 @@ public:
             qCWarning(lcOverlay) << "dmabuf import: owned destination texture creation failed";
             delete dst;
             delete src;
-            destroyImported(imported);
+            release();
             return nullptr;
         }
-        return new DmabufQsgTexture(imported, src, dst, size, fmt.hasAlpha);
+        return new DmabufQsgTexture(src, dst, std::move(release), size, fmt.hasAlpha);
     }
 
 private:
