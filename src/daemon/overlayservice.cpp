@@ -28,6 +28,7 @@
 #include <QDBusConnection>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QByteArrayList>
 #include <QQmlEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -228,6 +229,18 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,
         .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
+        // Zero-copy dma-buf thumbnail import (PLASMAZONES_DMABUF_THUMBNAILS)
+        // needs these device extensions enabled on the overlay windows' QRhi
+        // Vulkan device; without them vkGetMemoryFdPropertiesKHR is unavailable
+        // and the import fails. Only requested when the experimental gate is
+        // on, so default builds keep Qt's stock device. Qt enables only the
+        // physically-supported subset.
+        .vulkanDeviceExtensions = qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS")
+            ? QByteArrayList{QByteArrayLiteral("VK_KHR_external_memory_fd"),
+                             QByteArrayLiteral("VK_EXT_external_memory_dma_buf"),
+                             QByteArrayLiteral("VK_EXT_image_drm_format_modifier"),
+                             QByteArrayLiteral("VK_KHR_image_format_list")}
+            : QByteArrayList{},
     });
 
     // ShellHost was constructed earlier (before setupSurfaceAnimator)
