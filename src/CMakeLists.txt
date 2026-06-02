@@ -408,6 +408,8 @@ set(plasmazones_daemon_SRCS
     # dma-bufs handed from the kwin-effect as Vulkan-backed QSGTextures.
     daemon/dmabuftextureprovider.cpp
     daemon/dmabuftextureprovider.h
+    daemon/dmabuffencewaiter.cpp
+    daemon/dmabuffencewaiter.h
     daemon/shortcutmanager.cpp
     daemon/shortcutmanager.h
     daemon/zoneselectorcontroller.cpp

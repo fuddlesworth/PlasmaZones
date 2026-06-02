@@ -14,6 +14,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../snapassistthumbnailprovider.h"
 #include "../dmabuftextureprovider.h"
+#include "../dmabuffencewaiter.h"
 #include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>
@@ -21,6 +22,8 @@
 #include <QQmlEngine>
 #include <QKeyEvent>
 #include <QTimer>
+
+#include <unistd.h>
 #include <QUrl>
 
 #include <PhosphorLayer/Surface.h>
@@ -318,10 +321,30 @@ bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, c
     }
     qCDebug(lcOverlay) << "setWindowThumbnailDmabuf: stored dma-buf for" << compositorHandle << desc.width << "x"
                        << desc.height << "fourcc=0x" << QString::number(desc.fourcc, 16);
-    // Same store-then-apply contract as the raw-pixel path: the handle is held
-    // even if snap-assist isn't currently open; the URL is pushed into the live
-    // candidate list when it is.
-    return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+
+    // Reveal-gate on the render-completion fence: only push the URL into the
+    // live candidate list once the producer's GPU render has finished, so QML
+    // never loads (and the render thread never imports) a half-rendered buffer.
+    // The wait is event-driven (DmabufFenceWaiter / QSocketNotifier) — no
+    // busy-poll, no blocked thread. Without a fence, reveal immediately.
+    if (desc.fenceFd < 0) {
+        return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+    }
+    const int fenceDup = ::dup(desc.fenceFd);
+    if (fenceDup < 0) {
+        // Can't watch the fence — reveal now rather than drop the thumbnail.
+        return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+    }
+    // 1 s bound: a thumbnail render completes in well under a frame; the cap
+    // only guards against a producer that crashed mid-render (waiter self-
+    // cleans without revealing). The DmabufFenceWaiter owns fenceDup.
+    auto* waiter = new DmabufFenceWaiter(fenceDup, /*timeoutMs=*/1000, this);
+    const QString handle = compositorHandle;
+    connect(waiter, &DmabufFenceWaiter::ready, this, [this, handle, providerUrl]() {
+        applyCandidateThumbnailUrl(handle, providerUrl);
+    });
+    // Accepted: the daemon stored the buffer and will reveal it when ready.
+    return true;
 }
 
 bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image)
