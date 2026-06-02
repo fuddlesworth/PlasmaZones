@@ -12,12 +12,14 @@
 #include <QUuid>
 #include <QVector>
 
+#include <cstdint>
 #include <memory>
 
 class QImage;
 
 namespace KWin {
 class OffscreenQuickScene;
+class GLTexture;
 }
 
 namespace PlasmaZones {
@@ -94,8 +96,35 @@ private Q_SLOTS:
     void processNext();
 
 private:
+    /// Single-plane DMA-BUF exported from a rendered thumbnail texture (the
+    /// ExportMode::Texture path). @c ok is false when the compositor is not on
+    /// an EGL/GL backend or the driver lacks EGL_MESA_image_dma_buf_export, in
+    /// which case the candidate is dropped (snap-assist shows its icon) — the
+    /// spike is opt-in via PLASMAZONES_DMABUF_THUMBNAILS so there is no
+    /// per-candidate fallback to the raw-pixel path (that would need a second
+    /// render in Image mode).
+    struct DmabufExport
+    {
+        bool ok = false;
+        int fd = -1;
+        int width = 0;
+        int height = 0;
+        uint32_t fourcc = 0;
+        uint64_t modifier = 0;
+        uint32_t stride = 0;
+        uint32_t offset = 0;
+    };
+
     void ensureScene();
     void postThumbnail(const QUuid& internalId, const QImage& image);
+    void postThumbnailDmabuf(const QUuid& internalId, const DmabufExport& exported);
+
+    /// Export a rendered thumbnail texture (from OffscreenQuickScene in
+    /// ExportMode::Texture) to a single-plane dma-buf via
+    /// EGL_MESA_image_dma_buf_export. Must be called with KWin's GL/EGL
+    /// context current (i.e. right after OffscreenQuickScene::update()).
+    /// Returns {ok=false} on any failure; the caller drops the candidate.
+    DmabufExport exportTextureToDmabuf(KWin::GLTexture* texture) const;
 
     /// Common cleanup for early-bail paths in @ref processNext and the
     /// @ref attemptCapture timer lambda: drop the in-flight queue and
@@ -168,6 +197,12 @@ private:
     static_assert(RecentPostedCapacity > 0,
                   "RecentPostedCapacity must be positive — the eviction loop in markRecentlyPosted "
                   "assumes the just-inserted handle survives the capacity check.");
+
+    /// Opt-in zero-copy GPU path (PLASMAZONES_DMABUF_THUMBNAILS). When set,
+    /// the scene is built in ExportMode::Texture and each capture is exported
+    /// as a dma-buf and posted via setSnapAssistThumbnailDmabuf instead of
+    /// the raw-ARGB32 setSnapAssistThumbnail. Latched once at construction.
+    bool m_dmabufEnabled = false;
 
     std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
     QQueue<Pending> m_queue;
