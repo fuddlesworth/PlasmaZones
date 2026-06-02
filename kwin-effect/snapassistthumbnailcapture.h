@@ -98,11 +98,12 @@ private Q_SLOTS:
 private:
     /// Single-plane DMA-BUF exported from a rendered thumbnail texture (the
     /// ExportMode::Texture path). @c ok is false when the compositor is not on
-    /// an EGL/GL backend or the driver lacks EGL_MESA_image_dma_buf_export, in
-    /// which case the candidate is dropped (snap-assist shows its icon) — the
-    /// spike is opt-in via PLASMAZONES_DMABUF_THUMBNAILS so there is no
-    /// per-candidate fallback to the raw-pixel path (that would need a second
-    /// render in Image mode).
+    /// an EGL/GL backend or the driver lacks EGL_MESA_image_dma_buf_export.
+    /// Per-export failures and daemon import rejections are counted; after
+    /// @ref DmabufFailureThreshold consecutive failures the capture switches
+    /// the whole session back to the raw-pixel path (@ref onDmabufRejected) so
+    /// an unsupported setup degrades to working pixel thumbnails instead of
+    /// stranding candidates on icons.
     struct DmabufExport
     {
         bool ok = false;
@@ -115,9 +116,23 @@ private:
         uint32_t offset = 0;
     };
 
+    struct Pending
+    {
+        QUuid internalId;
+        QSize maxSize;
+    };
+
     void ensureScene();
     void postThumbnail(const QUuid& internalId, const QImage& image);
-    void postThumbnailDmabuf(const QUuid& internalId, const DmabufExport& exported);
+    void postThumbnailDmabuf(const Pending& p, const DmabufExport& exported);
+
+    /// Record a dma-buf capture failure (export failure or daemon import
+    /// rejection) for @p p. After @ref DmabufFailureThreshold consecutive
+    /// failures, permanently switches this session to the raw-pixel path:
+    /// clears @c m_dmabufEnabled, resets the scene (so it rebuilds in
+    /// ExportMode::Image), and re-enqueues @p p so it re-captures via pixels.
+    /// Pure state mutation — the caller owns kicking @ref processNext.
+    void onDmabufRejected(const Pending& p);
 
     /// Export a rendered thumbnail texture (from OffscreenQuickScene in
     /// ExportMode::Texture) to a single-plane dma-buf via
@@ -133,12 +148,6 @@ private:
     /// dispatch would silently wedge the queue forever, so every error
     /// exit must route through here (or set both fields inline).
     void dropQueueAndIdle();
-
-    struct Pending
-    {
-        QUuid internalId;
-        QSize maxSize;
-    };
 
     /// Read back the current scene buffer for @p p; on a null buffer, retry
     /// once with a longer delay before giving up. Compositor stalls
@@ -200,9 +209,15 @@ private:
 
     /// Opt-in zero-copy GPU path (PLASMAZONES_DMABUF_THUMBNAILS). When set,
     /// the scene is built in ExportMode::Texture and each capture is exported
-    /// as a dma-buf and posted via setSnapAssistThumbnailDmabuf instead of
-    /// the raw-ARGB32 setSnapAssistThumbnail. Latched once at construction.
+    /// as a dma-buf and posted via setSnapAssistThumbnailDmabuf instead of the
+    /// raw-ARGB32 setSnapAssistThumbnail. Initialised from the env var at
+    /// construction; cleared by @ref onDmabufRejected if the path proves
+    /// unavailable at runtime, after which the session uses the pixel path.
     bool m_dmabufEnabled = false;
+    /// Consecutive dma-buf capture failures (export or daemon rejection).
+    /// Reset on success; triggers the session fallback at
+    /// @ref DmabufFailureThreshold.
+    int m_dmabufConsecutiveFailures = 0;
 
     std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
     QQueue<Pending> m_queue;

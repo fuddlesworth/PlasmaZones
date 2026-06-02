@@ -50,6 +50,11 @@ constexpr int RENDER_SETTLE_MS = 16;
 /// short enough that the user still sees the thumbnail before the eye
 /// notices the fallback icon.
 constexpr int RENDER_RETRY_MS = 64;
+/// Consecutive dma-buf capture failures (export failure or daemon import
+/// rejection) before the session permanently falls back to the raw-pixel path.
+/// >1 so a single transient bad frame doesn't disable the zero-copy path,
+/// while a genuine capability gap (every frame fails) trips it quickly.
+constexpr int DmabufFailureThreshold = 2;
 
 QUrl thumbnailQmlUrl()
 {
@@ -273,11 +278,14 @@ void SnapAssistThumbnailCapture::attemptCapture(Pending p, int delayMs, int retr
                 return;
             }
             if (exported.ok) {
-                postThumbnailDmabuf(p.internalId, exported);
+                postThumbnailDmabuf(p, exported);
             } else {
                 qCDebug(lcSnapAssistCapture)
-                    << "captureCandidates:" << p.internalId.toString()
-                    << "dma-buf export failed after retry — leaving handle unposted (icon fallback)";
+                    << "captureCandidates:" << p.internalId.toString() << "dma-buf export failed after retry";
+                // Count export failures toward the session fallback (may
+                // re-enqueue p in pixel mode); the trailing kick below advances
+                // the queue and picks up any re-enqueued candidate.
+                onDmabufRejected(p);
             }
             QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
             return;
@@ -445,15 +453,15 @@ SnapAssistThumbnailCapture::exportTextureToDmabuf(KWin::GLTexture* texture) cons
     return result;
 }
 
-void SnapAssistThumbnailCapture::postThumbnailDmabuf(const QUuid& internalId, const DmabufExport& exported)
+void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const DmabufExport& exported)
 {
     // SPIKE SYNC CAVEAT: the exported dma-buf aliases KWin's reused
-    // OffscreenQuickScene FBO — there is no fence. Captures are sequential
+    // OffscreenQuickScene FBO — there is no fence yet. Captures are sequential
     // (one in flight at a time) and the daemon imports before the next
     // capture's update() overwrites the buffer; the D-Bus round-trip latency
-    // dwarfs the GPU import, so the race window is negligible for the opt-in
-    // spike. A buffer pool + explicit fences are a later increment.
-    const QString compositorHandle = internalId.toString();
+    // dwarfs the GPU import, so the race window is negligible. Explicit fences
+    // + a buffer pool are a later increment.
+    const QString compositorHandle = p.internalId.toString();
 
     QDBusMessage msg = QDBusMessage::createMethodCall(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
@@ -470,26 +478,50 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const QUuid& internalId, co
 
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
     // Same accepted-gated recently-posted contract as the raw-pixel path: only
-    // mark the handle when the daemon confirms it imported+stored the buffer,
-    // so a rejection (dma-buf disabled, import unsupported, auth failure)
-    // re-captures on the next snap-assist instead of stranding on an icon.
-    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                     [this, internalId, compositorHandle](QDBusPendingCallWatcher* w) {
-                         w->deleteLater();
-                         QDBusPendingReply<bool> reply = *w;
-                         if (reply.isError()) {
-                             qCDebug(lcSnapAssistCapture) << "setSnapAssistThumbnailDmabuf D-Bus call failed for"
-                                                          << compositorHandle << ":" << reply.error().message();
-                             return;
-                         }
-                         if (!reply.value()) {
-                             qCDebug(lcSnapAssistCapture)
-                                 << "setSnapAssistThumbnailDmabuf rejected by daemon for" << compositorHandle
-                                 << "— leaving handle out of recently-posted set so the next snap-assist re-captures.";
-                             return;
-                         }
-                         markRecentlyPosted(internalId);
-                     });
+    // mark the handle when the daemon confirms it imported+stored the buffer.
+    // A rejection (or transport error) feeds onDmabufRejected, which counts
+    // toward the session fallback to the raw-pixel path.
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, p](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QString handle = p.internalId.toString();
+        QDBusPendingReply<bool> reply = *w;
+        if (reply.isError()) {
+            qCDebug(lcSnapAssistCapture) << "setSnapAssistThumbnailDmabuf D-Bus call failed for" << handle << ":"
+                                         << reply.error().message();
+            onDmabufRejected(p);
+        } else if (!reply.value()) {
+            qCDebug(lcSnapAssistCapture) << "setSnapAssistThumbnailDmabuf rejected by daemon for" << handle;
+            onDmabufRejected(p);
+        } else {
+            m_dmabufConsecutiveFailures = 0;
+            markRecentlyPosted(p.internalId);
+        }
+        // onDmabufRejected may have re-enqueued p (pixel-mode re-capture); if no
+        // capture is in flight, kick the queue so it isn't left stranded.
+        if (!m_busy && !m_queue.isEmpty()) {
+            QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
+        }
+    });
+}
+
+void SnapAssistThumbnailCapture::onDmabufRejected(const Pending& p)
+{
+    if (!m_dmabufEnabled) {
+        return; // already fell back to the pixel path this session
+    }
+    ++m_dmabufConsecutiveFailures;
+    if (m_dmabufConsecutiveFailures < DmabufFailureThreshold) {
+        qCDebug(lcSnapAssistCapture) << "dma-buf capture failed (" << m_dmabufConsecutiveFailures
+                                     << "consecutive) — will retry dma-buf on the next candidate";
+        return;
+    }
+    qCWarning(lcSnapAssistCapture)
+        << "dma-buf thumbnails repeatedly unavailable (export or daemon import failing) — falling back to "
+           "raw-pixel thumbnails for the rest of this session.";
+    m_dmabufEnabled = false;
+    m_dmabufConsecutiveFailures = 0;
+    m_scene.reset(); // ensureScene() rebuilds in ExportMode::Image
+    m_queue.enqueue(p); // re-capture this candidate via the pixel path
 }
 
 } // namespace PlasmaZones
