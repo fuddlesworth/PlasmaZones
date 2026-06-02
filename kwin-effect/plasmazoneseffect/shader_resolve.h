@@ -142,8 +142,12 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluato
  * the caller can skip the merge entirely.
  *
  * Applies to ANY matched window (snapped OR floating), mirroring
- * `resolveWindowOpacity`. Defence-in-depth re-validation matches the load-time
- * descriptor validators in ruleaction.cpp.
+ * `resolveWindowOpacity`. The bool/int re-reads here mirror the load-time
+ * descriptor validators in ruleaction.cpp (defence-in-depth). The colour reads
+ * are intentionally broader: they parse via `QColor(QString)`, which accepts
+ * any `QColor::isValid()` form (`#RGB`, named colours, …), whereas the load-time
+ * `hasHexColor` validator admits only `#RRGGBB` — a hand-edited payload that
+ * slips a wider form past load is still safe to render.
  */
 struct ResolvedWindowAppearance
 {
