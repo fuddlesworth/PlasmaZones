@@ -70,6 +70,7 @@ class AnimationShaderRegistry;
 namespace PlasmaZones {
 class ShaderRegistry;
 class SnapAssistThumbnailProvider;
+class SnapAssistDmabufTextureProvider;
 }
 namespace PhosphorScreens {
 class ScreenManager;
@@ -672,6 +673,13 @@ private:
     // rather than relying on the single-threaded teardown invariant.
     std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
     std::atomic<SnapAssistThumbnailProvider*> m_thumbnailProvider{nullptr};
+    // Zero-copy GPU thumbnail provider (PLASMAZONES_DMABUF_THUMBNAILS). Same
+    // ownership pattern as m_thumbnailProvider: constructed eagerly, ownership
+    // released to the QQmlEngine in engineConfigurator, borrowed atomic pointer
+    // nulled when the engine tears it down. Registered under the separate
+    // SnapAssistDmabufTextureProvider::ProviderId (Texture-type) image scheme.
+    std::unique_ptr<SnapAssistDmabufTextureProvider> m_dmabufTextureProviderOwned;
+    std::atomic<SnapAssistDmabufTextureProvider*> m_dmabufTextureProvider{nullptr};
     // Single-shot idle-grace timer: started on every hideSnapAssist and
     // stopped on showSnapAssist. If snap-assist stays dismissed long enough
     // for it to fire, it clears the thumbnail cache so its bounded (~6 MB
@@ -903,6 +911,12 @@ private:
      *          False if the provider was torn down (engine destroyed) or the
      *          image was null after format conversion. */
     bool updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image);
+
+    /** Push a resolved thumbnail image:// URL into the live snap-assist
+     *  candidate list (and QML) for @p compositorHandle. Shared tail of the
+     *  raw-pixel and dma-buf thumbnail paths. @return true (the URL is already
+     *  stored in its provider regardless of whether snap-assist is visible). */
+    bool applyCandidateThumbnailUrl(const QString& compositorHandle, const QString& providerUrl);
 
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland

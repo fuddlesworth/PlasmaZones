@@ -404,6 +404,10 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/internal.h
     daemon/snapassistthumbnailprovider.cpp
     daemon/snapassistthumbnailprovider.h
+    # Zero-copy GPU thumbnail path (PLASMAZONES_DMABUF_THUMBNAILS): imports
+    # dma-bufs handed from the kwin-effect as Vulkan-backed QSGTextures.
+    daemon/dmabuftextureprovider.cpp
+    daemon/dmabuftextureprovider.h
     daemon/shortcutmanager.cpp
     daemon/shortcutmanager.h
     daemon/zoneselectorcontroller.cpp
@@ -452,6 +456,15 @@ target_link_libraries(plasmazonesd
 
 # Qt6::GuiPrivate (QRhi) for daemon's include of zoneshadernoderhi.h (warmShaderBakeCacheForPaths)
 target_link_libraries(plasmazonesd PRIVATE Qt6::GuiPrivate Qt6::ShaderToolsPrivate)
+
+# Vulkan headers for the dma-buf thumbnail import (dmabuftextureprovider.cpp).
+# Only the headers + function pointers are used (entry points are resolved via
+# QVulkanInstance / vkGetDeviceProcAddr), so this is headers-only — but linking
+# the imported target is the clean way to pick up the include dirs.
+find_package(Vulkan)
+if(Vulkan_FOUND)
+    target_link_libraries(plasmazonesd PRIVATE Vulkan::Vulkan)
+endif()
 
 install(TARGETS plasmazonesd DESTINATION ${KDE_INSTALL_BINDIR})
 

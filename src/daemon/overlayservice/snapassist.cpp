@@ -13,6 +13,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../snapassistthumbnailprovider.h"
+#include "../dmabuftextureprovider.h"
 #include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>
@@ -304,16 +305,23 @@ bool OverlayService::setSnapAssistThumbnailDmabuf(const QString& compositorHandl
     if (!dmabufEnabled) {
         return false;
     }
-    // Increment 1 (transport backbone): the borrowed fd + descriptor arrive
-    // here intact. The Vulkan/EGL import into a QRhiTexture (and its display
-    // through the snap-assist image provider) lands in a later increment;
-    // until then we acknowledge receipt and return false so the raw-pixel
-    // fallback stays authoritative and nothing renders from an unimported
-    // buffer. Dimension bounds are validated at the D-Bus boundary.
-    qCInfo(lcOverlay) << "setSnapAssistThumbnailDmabuf: received dma-buf for" << compositorHandle << desc.width << "x"
-                      << desc.height << "fourcc=0x" << QString::number(desc.fourcc, 16) << "modifier=" << desc.modifier
-                      << "stride=" << desc.stride << "(GPU import not yet wired - falling back to pixels)";
-    return false;
+    auto* provider = m_dmabufTextureProvider.load(std::memory_order_acquire);
+    if (!provider || desc.fd < 0) {
+        return false;
+    }
+    // Store the descriptor (the provider dups the borrowed fd) and resolve the
+    // GPU image:// URL. The actual Vulkan import happens lazily on the render
+    // thread when QML loads that URL through the texture provider.
+    const QString providerUrl = provider->insert(compositorHandle, desc);
+    if (providerUrl.isEmpty()) {
+        return false;
+    }
+    qCDebug(lcOverlay) << "setSnapAssistThumbnailDmabuf: stored dma-buf for" << compositorHandle << desc.width << "x"
+                       << desc.height << "fourcc=0x" << QString::number(desc.fourcc, 16);
+    // Same store-then-apply contract as the raw-pixel path: the handle is held
+    // even if snap-assist isn't currently open; the URL is pushed into the live
+    // candidate list when it is.
+    return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
 }
 
 bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image)
@@ -326,8 +334,15 @@ bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& composito
     if (providerUrl.isEmpty()) {
         return false;
     }
-    // Cache insert succeeded - handle is held even if snap-assist isn't
-    // currently open. Provider URL stays valid until LRU eviction.
+    return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+}
+
+bool OverlayService::applyCandidateThumbnailUrl(const QString& compositorHandle, const QString& providerUrl)
+{
+    // Provider insert succeeded - handle is held even if snap-assist isn't
+    // currently open. Provider URL stays valid until eviction. Shared by the
+    // raw-pixel (updateSnapAssistCandidateThumbnail) and dma-buf
+    // (setSnapAssistThumbnailDmabuf) paths.
     if (!m_snapAssistVisible || m_snapAssistScreenId.isEmpty()) {
         return true;
     }
@@ -400,6 +415,9 @@ void OverlayService::hideSnapAssist()
         connect(m_snapAssistCacheTrimTimer, &QTimer::timeout, this, [this]() {
             if (auto* provider = m_thumbnailProvider.load(std::memory_order_acquire)) {
                 provider->clear();
+            }
+            if (auto* gpuProvider = m_dmabufTextureProvider.load(std::memory_order_acquire)) {
+                gpuProvider->clear();
             }
         });
     }

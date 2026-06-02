@@ -4,6 +4,7 @@
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
 #include "snapassistthumbnailprovider.h"
+#include "dmabuftextureprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorOverlay/ShellHost.h>
@@ -166,6 +167,13 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
     m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
     m_thumbnailProvider.store(m_thumbnailProviderOwned.get(), std::memory_order_release);
 
+    // Same eager-construct + engine-handover pattern for the zero-copy GPU
+    // thumbnail provider (PLASMAZONES_DMABUF_THUMBNAILS). Always constructed so
+    // the borrowed pointer is non-null; it only ever receives descriptors when
+    // the env gate is on and the kwin-effect takes the dma-buf path.
+    m_dmabufTextureProviderOwned = std::make_unique<SnapAssistDmabufTextureProvider>();
+    m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
+
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
@@ -203,8 +211,18 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
                 }
                 engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId),
                                         m_thumbnailProviderOwned.release());
+
+                // Mirror for the dma-buf (Texture-type) provider.
+                if (!m_dmabufTextureProviderOwned) {
+                    m_dmabufTextureProviderOwned = std::make_unique<SnapAssistDmabufTextureProvider>();
+                    m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
+                }
+                engine.addImageProvider(QString::fromLatin1(SnapAssistDmabufTextureProvider::ProviderId),
+                                        m_dmabufTextureProviderOwned.release());
+
                 QObject::connect(&engine, &QObject::destroyed, this, [this]() {
                     m_thumbnailProvider.store(nullptr, std::memory_order_release);
+                    m_dmabufTextureProvider.store(nullptr, std::memory_order_release);
                 });
             },
         .pipelineCachePath = pipelineCachePath,
