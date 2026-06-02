@@ -244,8 +244,8 @@ ColumnLayout {
 
                         Rectangle {
                             Layout.alignment: Qt.AlignHCenter
-                            width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
-                            height: primaryLabel.implicitHeight + 2
+                            Layout.preferredWidth: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+                            Layout.preferredHeight: primaryLabel.implicitHeight + Kirigami.Units.smallSpacing
                             radius: height / 2
                             color: (modelData.isPrimary || false) ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15) : "transparent"
 

@@ -34,6 +34,10 @@ class SnappingZonesController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
+    // Zone-label font-scale slider bounds (as a 0..1+ multiplier — the QML
+    // works in percent, multiplying by 100).
+    Q_PROPERTY(double labelFontScaleMin READ labelFontScaleMin CONSTANT)
+    Q_PROPERTY(double labelFontScaleMax READ labelFontScaleMax CONSTANT)
 
 public:
     explicit SnappingZonesController(ISettings& settings, QObject* parent = nullptr);
@@ -53,6 +57,8 @@ public:
     int borderWidthMax() const;
     int borderRadiusMin() const;
     int borderRadiusMax() const;
+    double labelFontScaleMin() const;
+    double labelFontScaleMax() const;
 
     /// Import colors from the user's pywal output
     /// (`~/.cache/wal/colors.json`). Emits `colorImportSuccess()` on

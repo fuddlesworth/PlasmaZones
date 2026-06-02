@@ -222,10 +222,14 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
         int v = value.toInt();
         return (v >= 0 && v <= 8) ? QVariant(v) : QVariant();
     }
-    if (key == K::ZoneSelectorLayoutMode)
-        return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorLayoutMode::Vertical)));
-    if (key == K::ZoneSelectorSizeMode)
-        return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorSizeMode::Manual)));
+    if (key == K::ZoneSelectorLayoutMode) {
+        int v = value.toInt();
+        return (v >= 0 && v <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) ? QVariant(v) : QVariant();
+    }
+    if (key == K::ZoneSelectorSizeMode) {
+        int v = value.toInt();
+        return (v >= 0 && v <= static_cast<int>(ZoneSelectorSizeMode::Manual)) ? QVariant(v) : QVariant();
+    }
     if (key == K::ZoneSelectorMaxRows)
         return QVariant(qBound(ConfigDefaults::maxRowsMin(), value.toInt(), ConfigDefaults::maxRowsMax()));
     if (key == K::ZoneSelectorPreviewWidth)

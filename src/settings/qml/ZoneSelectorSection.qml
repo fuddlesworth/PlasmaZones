@@ -433,7 +433,7 @@ ColumnLayout {
                         }
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("Approximately 10% of screen width (120-280px)")
+                        ToolTip.text: i18n("Size scales automatically with your screen resolution")
                     }
 
                     Button {

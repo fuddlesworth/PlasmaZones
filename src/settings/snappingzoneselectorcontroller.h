@@ -36,8 +36,6 @@ class SnappingZoneSelectorController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int gridColumnsMax READ gridColumnsMax CONSTANT)
     Q_PROPERTY(int maxRowsMin READ maxRowsMin CONSTANT)
     Q_PROPERTY(int maxRowsMax READ maxRowsMax CONSTANT)
-    Q_PROPERTY(int gapMin READ gapMin CONSTANT)
-    Q_PROPERTY(int gapMax READ gapMax CONSTANT)
 
 public:
     explicit SnappingZoneSelectorController(QObject* parent = nullptr)
@@ -107,14 +105,6 @@ public:
     int maxRowsMax() const
     {
         return ConfigDefaults::maxRowsMax();
-    }
-    int gapMin() const
-    {
-        return ConfigDefaults::outerGapMin();
-    }
-    int gapMax() const
-    {
-        return ConfigDefaults::outerGapMax();
     }
 };
 

@@ -338,8 +338,8 @@ SettingsFlickable {
                         description: i18n("Size multiplier for zone label text")
 
                         SettingsSlider {
-                            from: 25
-                            to: 300
+                            from: root.zonesBridge.labelFontScaleMin * 100
+                            to: root.zonesBridge.labelFontScaleMax * 100
                             stepSize: 5
                             value: appSettings.labelFontSizeScale * 100
                             onMoved: value => {
@@ -445,7 +445,7 @@ SettingsFlickable {
                             to: root.effectsBridge.shaderFrameRateMax
                             value: appSettings.shaderFrameRate
                             valueSuffix: " fps"
-                            labelWidth: 55
+                            labelWidth: Kirigami.Units.gridUnit * 4
                             onMoved: value => {
                                 return appSettings.shaderFrameRate = Math.round(value);
                             }
@@ -490,7 +490,7 @@ SettingsFlickable {
                             stepSize: 2
                             value: appSettings.audioSpectrumBarCount
                             valueSuffix: ""
-                            labelWidth: 55
+                            labelWidth: Kirigami.Units.gridUnit * 4
                             onMoved: value => {
                                 return appSettings.audioSpectrumBarCount = Math.round(value);
                             }
