@@ -221,9 +221,18 @@ ImportedImage importDmabuf(VkDevice device, QVulkanInstance* inst, const DmabufT
 class DmabufQsgTexture : public QSGTexture
 {
 public:
-    DmabufQsgTexture(const ImportedImage& imported, QRhiTexture* rhiTexture, QSize size, bool hasAlpha)
+    // @p src wraps the imported dma-buf (a transfer source aliasing the
+    // producer buffer); @p dst is our OWN sampled texture. On the first frame
+    // we copy src -> dst, then Qt only ever samples dst. This decouples the
+    // displayed texture from the producer buffer: each candidate gets an
+    // independent copy (so snap-assist can show many distinct thumbnails at
+    // once), and once the copy has run the producer is free to reuse its
+    // buffer. src is only read during that one copy, so a later producer
+    // overwrite of the aliased buffer is harmless.
+    DmabufQsgTexture(const ImportedImage& imported, QRhiTexture* src, QRhiTexture* dst, QSize size, bool hasAlpha)
         : m_imported(imported)
-        , m_rhiTexture(rhiTexture)
+        , m_src(src)
+        , m_dst(dst)
         , m_size(size)
         , m_hasAlpha(hasAlpha)
     {
@@ -231,7 +240,8 @@ public:
 
     ~DmabufQsgTexture() override
     {
-        delete m_rhiTexture; // does not own the VkImage (createFrom wraps it)
+        delete m_dst; // owned copy
+        delete m_src; // wrapper over the imported VkImage (does not own it)
         if (m_imported.df && m_imported.device != VK_NULL_HANDLE) {
             if (m_imported.image != VK_NULL_HANDLE) {
                 m_imported.df->vkDestroyImage(m_imported.device, m_imported.image, nullptr);
@@ -244,11 +254,11 @@ public:
 
     qint64 comparisonKey() const override
     {
-        return static_cast<qint64>(reinterpret_cast<quintptr>(m_rhiTexture));
+        return static_cast<qint64>(reinterpret_cast<quintptr>(m_dst));
     }
     QRhiTexture* rhiTexture() const override
     {
-        return m_rhiTexture;
+        return m_dst;
     }
     QSize textureSize() const override
     {
@@ -263,11 +273,26 @@ public:
         return false;
     }
 
+    void commitTextureOperations(QRhi* rhi, QRhiResourceUpdateBatch* resourceUpdates) override
+    {
+        Q_UNUSED(rhi)
+        if (m_copied || !m_src || !m_dst || !resourceUpdates) {
+            return;
+        }
+        // Record the GPU->GPU copy of the imported dma-buf into our owned
+        // texture, in Qt's own frame/batch (no nested QRhi frame, no CPU
+        // readback). After this executes the producer buffer is no longer read.
+        resourceUpdates->copyTexture(m_dst, m_src);
+        m_copied = true;
+    }
+
 private:
     ImportedImage m_imported;
-    QRhiTexture* m_rhiTexture = nullptr;
+    QRhiTexture* m_src = nullptr;
+    QRhiTexture* m_dst = nullptr;
     QSize m_size;
     bool m_hasAlpha = true;
+    bool m_copied = false;
 };
 
 // ── Texture factory: owns the dup'd fd; imports on the render thread ─────────
@@ -334,21 +359,34 @@ public:
             return nullptr;
         }
 
-        QRhiTexture* rhiTexture = rhi->newTexture(fmt.rhiFormat, QSize(m_desc.width, m_desc.height), 1, {});
-        if (!rhiTexture) {
+        const QSize size(m_desc.width, m_desc.height);
+        // src: wraps the imported dma-buf as a transfer source (aliases the
+        // producer buffer, read only during the one-time copy below).
+        QRhiTexture* src = rhi->newTexture(fmt.rhiFormat, size, 1, QRhiTexture::UsedAsTransferSource);
+        if (!src) {
             destroyImported(imported);
             return nullptr;
         }
         QRhiTexture::NativeTexture native;
         native.object = reinterpret_cast<quint64>(imported.image);
         native.layout = static_cast<int>(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        if (!rhiTexture->createFrom(native)) {
+        if (!src->createFrom(native)) {
             qCWarning(lcOverlay) << "dmabuf import: QRhiTexture::createFrom failed";
-            delete rhiTexture;
+            delete src;
             destroyImported(imported);
             return nullptr;
         }
-        return new DmabufQsgTexture(imported, rhiTexture, QSize(m_desc.width, m_desc.height), fmt.hasAlpha);
+        // dst: our OWN sampled texture; DmabufQsgTexture copies src -> dst on
+        // the first frame, after which the producer buffer can be reused.
+        QRhiTexture* dst = rhi->newTexture(fmt.rhiFormat, size, 1, {});
+        if (!dst || !dst->create()) {
+            qCWarning(lcOverlay) << "dmabuf import: owned destination texture creation failed";
+            delete dst;
+            delete src;
+            destroyImported(imported);
+            return nullptr;
+        }
+        return new DmabufQsgTexture(imported, src, dst, size, fmt.hasAlpha);
     }
 
 private:

@@ -12,6 +12,7 @@
 #include <QUuid>
 #include <QVector>
 
+#include <array>
 #include <cstdint>
 #include <memory>
 
@@ -123,7 +124,11 @@ private:
         QSize maxSize;
     };
 
-    void ensureScene();
+    /// Pick (and lazily create) the producer scene for the next capture and
+    /// set it as @ref m_activeScene's source. In the dma-buf path this
+    /// round-robins across the pool; in the raw-pixel path it always returns
+    /// slot 0. Returns nullptr only if scene creation failed.
+    KWin::OffscreenQuickScene* acquireSceneForCapture();
     void postThumbnail(const QUuid& internalId, const QImage& image);
     void postThumbnailDmabuf(const Pending& p, const DmabufExport& exported);
 
@@ -220,7 +225,17 @@ private:
     /// @ref DmabufFailureThreshold.
     int m_dmabufConsecutiveFailures = 0;
 
-    std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
+    /// Small producer pool of capture scenes. In the dma-buf path consecutive
+    /// captures round-robin across the pool so a producer buffer isn't reused
+    /// until ScenePoolSize captures later — long enough for the daemon to have
+    /// copied it into its own per-candidate texture (see DmabufQsgTexture). The
+    /// raw-pixel path uses slot 0 only (bufferAsImage copies immediately, so no
+    /// producer-buffer aliasing). @ref m_activeScene is the slot driving the
+    /// current in-flight capture (a borrowed pointer into the pool).
+    static constexpr int ScenePoolSize = 3;
+    std::array<std::unique_ptr<KWin::OffscreenQuickScene>, ScenePoolSize> m_scenePool;
+    int m_poolNext = 0;
+    KWin::OffscreenQuickScene* m_activeScene = nullptr;
     QQueue<Pending> m_queue;
     /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership via the set,
     /// O(1) oldest-first eviction via the queue. Kept strictly in sync.
