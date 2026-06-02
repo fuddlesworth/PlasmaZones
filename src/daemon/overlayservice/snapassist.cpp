@@ -31,6 +31,13 @@ namespace PlasmaZones {
 
 namespace {
 
+/// Grace period before a dismissed snap-assist's thumbnail cache is trimmed.
+/// Long enough that any interactive continuation (dismiss → re-trigger,
+/// multi-zone fill, cross-screen move) restarts the timer first and keeps the
+/// warm cache; short enough that the bounded cache doesn't linger for the rest
+/// of the session after the user is done snapping.
+constexpr int SnapAssistCacheTrimDelayMs = 30000;
+
 /// Convert PhosphorProtocol::EmptyZoneList to QVariantList for QML property push
 QVariantList emptyZonesToVariantList(const PhosphorProtocol::EmptyZoneList& zones)
 {
@@ -146,6 +153,12 @@ void OverlayService::showSnapAssist(const QString& screenId, const PhosphorProto
 
     m_snapAssistScreenId = screenId;
     m_snapAssistVisible = true;
+
+    // Snap-assist is in active use again - cancel any pending cache trim so
+    // the continuation lookups below (urlFor) hit the warm cache.
+    if (m_snapAssistCacheTrimTimer) {
+        m_snapAssistCacheTrimTimer->stop();
+    }
 
     // Hide the zone selector for the specific virtual screen where snap
     // assist is showing - selectors on adjacent VS of the same physical
@@ -349,6 +362,24 @@ void OverlayService::hideSnapAssist()
     // showZoneSelectorSlotOnScreen short-circuit (which checks
     // slot->isVisible() - true mid-animation), risking visible
     // overlap or missed re-shows.
+
+    // Schedule a delayed trim of the thumbnail cache. A rapid re-show
+    // (continuation / multi-zone fill / cross-screen move) restarts this
+    // timer in showSnapAssist before it fires, preserving the warm cache;
+    // a genuine end-of-use lets it fire and release the cached pixels. The
+    // cross-screen handoff path routes through onSnapAssistSlotHideCompleted
+    // (not here), so monitor switches never start the trim.
+    if (!m_snapAssistCacheTrimTimer) {
+        m_snapAssistCacheTrimTimer = new QTimer(this);
+        m_snapAssistCacheTrimTimer->setSingleShot(true);
+        m_snapAssistCacheTrimTimer->setInterval(SnapAssistCacheTrimDelayMs);
+        connect(m_snapAssistCacheTrimTimer, &QTimer::timeout, this, [this]() {
+            if (auto* provider = m_thumbnailProvider.load(std::memory_order_acquire)) {
+                provider->clear();
+            }
+        });
+    }
+    m_snapAssistCacheTrimTimer->start();
 }
 
 bool OverlayService::isSnapAssistVisible() const

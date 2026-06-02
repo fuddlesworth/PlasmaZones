@@ -671,6 +671,13 @@ private:
     // rather than relying on the single-threaded teardown invariant.
     std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
     std::atomic<SnapAssistThumbnailProvider*> m_thumbnailProvider{nullptr};
+    // Single-shot idle-grace timer: started on every hideSnapAssist and
+    // stopped on showSnapAssist. If snap-assist stays dismissed long enough
+    // for it to fire, it clears the thumbnail cache so its bounded (~6 MB
+    // worst-case) pixel buffers don't sit resident for the rest of the
+    // session. Rapid dismiss/re-show continuations restart it before it
+    // fires, keeping the warm cache. Lazily created (parented to this).
+    QTimer* m_snapAssistCacheTrimTimer = nullptr;
     // Layout Picker (interactive layout browser). Post-shell-migration
     // the picker is an Item slot inside the per-screen passive shell;
     // these track which screen's shell currently shows it (singleton
