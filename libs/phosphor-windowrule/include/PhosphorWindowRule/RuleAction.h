@@ -295,9 +295,9 @@ inline bool isAnimationOverrideAction(const QString& type)
 }
 
 /// True when @p type is one of the six per-window border / title-bar
-/// appearance override actions. Grouped here so the effect's rule-fetch
-/// filter and the editor's action grouping share one definition — adding a
-/// seventh appearance override only updates this helper.
+/// appearance override actions. Grouped here so `isEffectRuleAction` (which
+/// admits these to the effect's rule set) has one definition to delegate to —
+/// adding a seventh appearance override only updates this helper.
 inline bool isBorderAppearanceAction(const QString& type)
 {
     return type == SetHideTitleBar || type == SetBorderVisible || type == SetBorderWidth || type == SetBorderRadius

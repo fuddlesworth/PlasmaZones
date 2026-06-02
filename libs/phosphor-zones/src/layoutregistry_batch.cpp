@@ -12,17 +12,11 @@
 #include "layoutregistry_rulehelpers_p.h"
 #include "zoneslogging.h"
 
-#include <PhosphorScreens/ScreenIdentity.h>
-#include <PhosphorScreens/VirtualScreen.h>
-
 #include <PhosphorWindowRule/ContextRuleBridge.h>
-#include <PhosphorWindowRule/MatchExpression.h>
 #include <PhosphorWindowRule/RuleAction.h>
-#include <PhosphorWindowRule/WindowQuery.h>
 #include <PhosphorWindowRule/WindowRule.h>
 
-#include <algorithm>
-#include <optional>
+#include <utility>
 
 namespace PhosphorZones {
 

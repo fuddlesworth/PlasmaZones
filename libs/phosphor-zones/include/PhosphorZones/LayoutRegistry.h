@@ -582,7 +582,7 @@ private:
     /// @p emitDesktop / @p emitActivity are the context the closing
     /// @c layoutAssigned signal is computed under, and @p label names the
     /// family in log output. Only ever instantiated from
-    /// layoutregistry_assignments.cpp, where it is defined.
+    /// layoutregistry_batch.cpp, where it is defined alongside its callers.
     template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
     void applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
                                FamilyFn familyMatches, int emitDesktop, const QString& emitActivity, const char* label);

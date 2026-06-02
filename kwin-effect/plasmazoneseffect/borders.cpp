@@ -253,6 +253,14 @@ void PlasmaZonesEffect::updateAllBorders()
             reconcileRuleHiddenTitleBar(wid, w);
         }
     }
+    // When no rules remain, the per-window reconcile above is skipped (haveRules
+    // is false), so a title bar a now-removed SetHideTitleBar rule hid would stay
+    // hidden until effect teardown. Restore every rule-hidden title bar in that
+    // case — restoreAllRuleHiddenTitleBars is a no-op when the set is already
+    // empty (the common no-rules path), so this costs nothing when nothing is hidden.
+    if (!haveRules) {
+        restoreAllRuleHiddenTitleBars();
+    }
 }
 
 void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w)
