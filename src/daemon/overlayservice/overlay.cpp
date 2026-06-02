@@ -20,6 +20,7 @@
 #include <QScreen>
 #include <QQmlEngine>
 #include <QQmlComponent>
+#include <QImage>
 #include <QMutexLocker>
 #include <QPointer>
 
@@ -30,6 +31,31 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
+
+namespace {
+
+// Collapse a dismissed overlay slot's full-screen texture buffers to a 1x1
+// placeholder so the labels (and wallpaper) QImages - up to tens of MB per
+// shader-enabled screen at 4K - are released while the overlay is hidden
+// rather than pinned on the persistent slot property for the whole session.
+// The next show() rebuilds them via createOverlayWindow ->
+// updateLabelsTextureForWindow / applyShaderInfoToWindow. Callers MUST also
+// reset PerScreenOverlayState::labelsTextureHash to 0 so the hash compare in
+// updateLabelsTextureForWindow does not short-circuit the rebuild and leave
+// the 1x1 placeholder showing with no labels.
+void releaseOverlaySlotTextures(QQuickItem* slot)
+{
+    if (!slot) {
+        return;
+    }
+    QImage placeholder(1, 1, QImage::Format_ARGB32);
+    placeholder.fill(Qt::transparent);
+    const QVariant placeholderVar = QVariant::fromValue(placeholder);
+    writeQmlProperty(slot, QStringLiteral("labelsTexture"), placeholderVar);
+    writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), placeholderVar);
+}
+
+} // namespace
 
 void OverlayService::destroyIfTypeMismatch(const QString& screenId)
 {
@@ -576,13 +602,17 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             sit->overlayGeomConnection = {};
             sit->overlayPhysScreen = nullptr;
             sit->overlayGeometry = QRect();
-            // labelsTextureHash is intentionally NOT cleared - the
-            // QML labelsTexture property still holds the previously-
-            // built image, and updateLabelsTextureForWindow's hash
-            // compare on the next show() will detect any genuine
-            // input change and rebuild only then. Zeroing the hash
-            // would force a redundant 23 MB QImage rebuild on every
-            // hide/show cycle even for unchanged zone inputs.
+            // Release the full-screen labels/wallpaper QImage buffers the
+            // persistent slot property would otherwise keep resident for the
+            // whole session while hidden. Zeroing labelsTextureHash forces
+            // updateLabelsTextureForWindow to rebuild on the next show()
+            // instead of short-circuiting on the now-1x1 placeholder (which
+            // would render no labels). The trade is one ZoneLabelTextureBuilder
+            // rebuild per drag-start vs. tens of MB held idle per screen; the
+            // warm drag-pause path (setIdleForDragPause) is untouched and keeps
+            // the texture warm mid-drag.
+            releaseOverlaySlotTextures(sit->mainOverlaySlot());
+            sit->labelsTextureHash = 0;
             writeQmlProperty(sit->mainOverlaySlot(), QStringLiteral("loaded"), false);
             sit->mainOverlaySlot()->setVisible(false);
             syncPassiveShellSurfaceState(screenIdCopy);
@@ -595,6 +625,10 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         it->overlayGeomConnection = {};
         it->overlayPhysScreen = nullptr;
         it->overlayGeometry = QRect();
+        // Mirror the shell-surface path: release the full-screen texture
+        // buffers and reset the hash so the next show() rebuilds correctly.
+        releaseOverlaySlotTextures(slot);
+        it->labelsTextureHash = 0;
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
         slot->setVisible(false);
         syncPassiveShellSurfaceState(screenId);
