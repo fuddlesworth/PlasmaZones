@@ -82,10 +82,10 @@ struct PHOSPHORWINDOWRULE_EXPORT RuleAction
  * The schema carries enough information for the editor UI to render an
  * input widget without the UI layer hand-maintaining a parallel per-type
  * switch. `kind` is a UI-side hint string (the canonical kinds are
- * `string`, `number`, `percent`, `enum`, plus the picker-aware kinds
- * `snappingLayout`, `tilingAlgorithm`, `animationEvent`, `shaderEffect`,
- * `curveEditor`); QML loaders dispatch on it. Labels stay in the GPL
- * settings layer because they need translation through PzI18n::tr —
+ * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
+ * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
+ * `shaderEffect`, `curveEditor`); QML loaders dispatch on it. Labels stay in
+ * the GPL settings layer because they need translation through PzI18n::tr —
  * the lib only owns the structural part of the schema.
  *
  * The optional fields are populated by kind:
@@ -93,6 +93,11 @@ struct PHOSPHORWINDOWRULE_EXPORT RuleAction
  *     and `scale` (stored = display * scale; e.g. percent uses 0.01).
  *   - `enum` carries `enumWireValues` — the wire strings the picker
  *     offers; labels for each are translated upstream.
+ *   - `bool` is a toggle (wire value is a JSON bool); may carry
+ *     `defaultDisplay` (1.0 → seed true, 0.0 → seed false).
+ *   - `color` is a `#RRGGBB` hex string; seeded by the settings layer's
+ *     `defaultPayloadFor` "color" branch (defaultDisplay is a double, so it
+ *     cannot carry a colour seed).
  *   - picker-aware kinds carry no schema state — the QML loader knows
  *     to swap in the catalogue-driven ComboBox.
  */
