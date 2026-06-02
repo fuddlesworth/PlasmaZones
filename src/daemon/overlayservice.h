@@ -376,6 +376,7 @@ public:
     bool isSnapAssistVisible() const override;
     bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                 const QByteArray& pixels) override;
+    bool setSnapAssistThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) override;
 
     // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());

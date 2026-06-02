@@ -292,6 +292,30 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     return updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
 }
 
+bool OverlayService::setSnapAssistThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc)
+{
+    // Experimental zero-copy GPU thumbnail path (Phase-0 spike). Gated behind
+    // an env var so the default build behaves exactly as before: the kwin-
+    // effect only takes the dma-buf path when its own gate is set, and the
+    // daemon refuses it here unless explicitly enabled. Returning false makes
+    // the effect fall back to the raw-pixel setSnapAssistThumbnail path, so a
+    // preview always appears regardless of dma-buf support.
+    static const bool dmabufEnabled = qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS");
+    if (!dmabufEnabled) {
+        return false;
+    }
+    // Increment 1 (transport backbone): the borrowed fd + descriptor arrive
+    // here intact. The Vulkan/EGL import into a QRhiTexture (and its display
+    // through the snap-assist image provider) lands in a later increment;
+    // until then we acknowledge receipt and return false so the raw-pixel
+    // fallback stays authoritative and nothing renders from an unimported
+    // buffer. Dimension bounds are validated at the D-Bus boundary.
+    qCInfo(lcOverlay) << "setSnapAssistThumbnailDmabuf: received dma-buf for" << compositorHandle << desc.width << "x"
+                      << desc.height << "fourcc=0x" << QString::number(desc.fourcc, 16) << "modifier=" << desc.modifier
+                      << "stride=" << desc.stride << "(GPU import not yet wired - falling back to pixels)";
+    return false;
+}
+
 bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image)
 {
     auto* thumbProvider = m_thumbnailProvider.load(std::memory_order_acquire);
