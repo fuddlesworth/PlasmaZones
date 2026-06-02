@@ -310,6 +310,28 @@ private Q_SLOTS:
         o.insert(QStringLiteral("value"), false);
         QVERIFY(RuleAction::fromJson(o).has_value());
     }
+
+    void testNewActions_rejectStrayKeys()
+    {
+        // The new border/gap family all declare `allowedKeys = {Value}`; pin
+        // that an otherwise-valid payload carrying an unexpected extra key is
+        // rejected, so the strict-key path is exercised for this family (not
+        // just for the pre-existing SetEngineMode in testJson_rejectsInvalidParams).
+        const auto rejectsStray = [](QLatin1StringView type, const QJsonValue& goodValue) {
+            QJsonObject ok;
+            ok.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            ok.insert(QStringLiteral("value"), goodValue);
+            QVERIFY2(RuleAction::fromJson(ok).has_value(), type.data());
+            QJsonObject stray = ok;
+            stray.insert(QStringLiteral("width"), 4); // not in allowedKeys
+            QVERIFY2(!RuleAction::fromJson(stray).has_value(), type.data());
+        };
+        rejectsStray(ActionType::SetBorderWidth, QJsonValue(4));
+        rejectsStray(ActionType::SetHideTitleBar, QJsonValue(true));
+        rejectsStray(ActionType::SetBorderColor, QJsonValue(QStringLiteral("#FF0000")));
+        rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
+        rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
+    }
 };
 
 QTEST_MAIN(TestRuleAction)

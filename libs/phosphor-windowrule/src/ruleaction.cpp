@@ -640,22 +640,24 @@ void ActionRegistry::registerBuiltins()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
     });
-    for (const QLatin1StringView perSide : {ActionType::SetOuterGapTop, ActionType::SetOuterGapBottom,
-                                            ActionType::SetOuterGapLeft, ActionType::SetOuterGapRight}) {
-        // Each per-side gap maps to its own slot; the slot id mirrors the
-        // action type tail. Built from a table so the four registrations stay
-        // in lockstep (same validator, kind, bounds).
-        const QString slot = [perSide]() -> QString {
-            if (perSide == ActionType::SetOuterGapTop)
-                return QString(ActionSlot::OuterGapTop);
-            if (perSide == ActionType::SetOuterGapBottom)
-                return QString(ActionSlot::OuterGapBottom);
-            if (perSide == ActionType::SetOuterGapLeft)
-                return QString(ActionSlot::OuterGapLeft);
-            return QString(ActionSlot::OuterGapRight);
-        }();
+    // Each per-side gap maps to its own slot. The {type, slot} pairs live in a
+    // single table so type and slot stay in lockstep per row — adding a side is
+    // one row, with no parallel mapping to keep in sync and no silent
+    // fall-through to the wrong slot if a row is mistyped.
+    struct PerSideGap
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+    };
+    for (const PerSideGap& perSide : {
+             PerSideGap{ActionType::SetOuterGapTop, ActionSlot::OuterGapTop},
+             PerSideGap{ActionType::SetOuterGapBottom, ActionSlot::OuterGapBottom},
+             PerSideGap{ActionType::SetOuterGapLeft, ActionSlot::OuterGapLeft},
+             PerSideGap{ActionType::SetOuterGapRight, ActionSlot::OuterGapRight},
+         }) {
+        const QString slot = QString(perSide.slot);
         registerAction(ActionDescriptor{
-            .type = QString(perSide),
+            .type = QString(perSide.type),
             .slotFor =
                 [slot](const QJsonObject&) {
                     return slot;

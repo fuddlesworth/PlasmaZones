@@ -236,11 +236,17 @@ void PlasmaZonesEffect::updateAllBorders()
     const bool haveRules = !m_shaderManager.animationRuleSet().isEmpty();
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
-        if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
+        if (!w || w->isDeleted()) {
             continue;
         }
         const QString wid = getWindowId(w);
-        if (haveRules || resolveBorderStateFor(wid)) {
+        // Border overlays are visual, so only build them for windows on the
+        // current desktop. Title-bar hiding (setNoBorder) is a persistent
+        // decoration-state change that survives desktop switches, so reconcile
+        // it for ALL windows the rule may match — otherwise a SetHideTitleBar
+        // rule added while the matched window sits on another virtual desktop
+        // would not take effect until that window is next activated.
+        if (w->isOnCurrentDesktop() && (haveRules || resolveBorderStateFor(wid))) {
             updateWindowBorder(wid, w);
         }
         if (haveRules) {
