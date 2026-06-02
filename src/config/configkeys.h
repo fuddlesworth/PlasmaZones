@@ -58,16 +58,23 @@ public:
     PZ_CONFIG_GROUP(updatesGroup, "Updates")
 
     // Snapping sub-groups
-    PZ_CONFIG_GROUP(snappingAppearanceGroup, "Snapping.Appearance")
+    PZ_CONFIG_GROUP(snappingZonesGroup, "Snapping.Zones")
     PZ_CONFIG_GROUP(snappingBehaviorGroup, "Snapping.Behavior")
     PZ_CONFIG_GROUP(snappingBehaviorZoneSpanGroup, "Snapping.Behavior.ZoneSpan")
     PZ_CONFIG_GROUP(snappingBehaviorSnapAssistGroup, "Snapping.Behavior.SnapAssist")
     PZ_CONFIG_GROUP(snappingBehaviorDisplayGroup, "Snapping.Behavior.Display")
     PZ_CONFIG_GROUP(snappingBehaviorWindowHandlingGroup, "Snapping.Behavior.WindowHandling")
+    PZ_CONFIG_GROUP(snappingZonesColorsGroup, "Snapping.Zones.Colors")
+    PZ_CONFIG_GROUP(snappingZonesOpacityGroup, "Snapping.Zones.Opacity")
+    PZ_CONFIG_GROUP(snappingZonesBorderGroup, "Snapping.Zones.Border")
+    PZ_CONFIG_GROUP(snappingZonesLabelsGroup, "Snapping.Zones.Labels")
+    // Snapping window appearance — the post-snap window's border / title-bar
+    // decoration (parallel to Tiling.Appearance.*, distinct from the
+    // Snapping.Zones.* drag-time zone overlay above).
+    PZ_CONFIG_GROUP(snappingAppearanceGroup, "Snapping.Appearance")
     PZ_CONFIG_GROUP(snappingAppearanceColorsGroup, "Snapping.Appearance.Colors")
-    PZ_CONFIG_GROUP(snappingAppearanceOpacityGroup, "Snapping.Appearance.Opacity")
-    PZ_CONFIG_GROUP(snappingAppearanceBorderGroup, "Snapping.Appearance.Border")
-    PZ_CONFIG_GROUP(snappingAppearanceLabelsGroup, "Snapping.Appearance.Labels")
+    PZ_CONFIG_GROUP(snappingAppearanceDecorationsGroup, "Snapping.Appearance.Decorations")
+    PZ_CONFIG_GROUP(snappingAppearanceBordersGroup, "Snapping.Appearance.Borders")
     PZ_CONFIG_GROUP(snappingEffectsGroup, "Snapping.Effects")
     PZ_CONFIG_GROUP(snappingZoneSelectorGroup, "Snapping.ZoneSelector")
     PZ_CONFIG_GROUP(snappingGapsGroup, "Snapping.Gaps")
@@ -111,27 +118,18 @@ public:
     // config.json) to avoid write contention with user preference saves.
     // Owned by WindowTrackingAdaptor and saved via its debounced save cycle.
     //
-    // Autotile data is split across three locations:
-    //   1. Tiling.Algorithm group (Settings, config.json) — global defaults:
-    //      algorithm, splitRatio, masterCount, maxWindows, splitRatioStep,
-    //      perAlgorithmSettings
-    //   2. AutotileScreen:<id> groups (Settings, config.json) — per-screen
-    //      overrides for masterCount, splitRatio, algorithm
-    //   3. WindowTracking.AutotileWindowOrders (WTA, session.json) — per-context
-    //      window order and floating state
-    //
-    // Settings (1, 2) are user preferences. WindowTracking (3) is session state.
-    // Settings::reset() deletes session.json and per-screen groups.
+    // Autotile preferences live in two Settings (config.json) locations:
+    //   1. Tiling.Algorithm group — global defaults: algorithm, splitRatio,
+    //      masterCount, maxWindows, splitRatioStep, perAlgorithmSettings
+    //   2. AutotileScreen:<id> groups — per-screen overrides for masterCount,
+    //      splitRatio, algorithm
+    // Both are user preferences. Per-WINDOW autotile restore state (tiled position,
+    // floated geometry) is NOT here — it lives in WindowTracking.WindowPlacements
+    // alongside snap restore state (see below). Settings::reset() deletes
+    // session.json and per-screen groups.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Snap mode — zone assignments and restore queues
     PZ_CONFIG_KEY(activeLayoutIdKey, "ActiveLayoutId")
-    PZ_CONFIG_KEY(windowZoneAssignmentsFullKey, "WindowZoneAssignmentsFull")
-    PZ_CONFIG_KEY(pendingRestoreQueuesKey, "PendingRestoreQueues")
-
-    // Snap mode — pre-tile geometry (for float-toggle restore)
-    PZ_CONFIG_KEY(preTileGeometriesFullKey, "PreTileGeometriesFull")
-    PZ_CONFIG_KEY(preTileGeometriesKey, "PreTileGeometries")
 
     // Snap mode — last used zone info
     PZ_CONFIG_KEY(lastUsedZoneIdKey, "LastUsedZoneId")
@@ -139,17 +137,25 @@ public:
     PZ_CONFIG_KEY(lastUsedZoneClassKey, "LastUsedZoneClass")
     PZ_CONFIG_KEY(lastUsedDesktopKey, "LastUsedDesktop")
 
-    // Snap mode — pre-float state (for unfloating after session restore)
-    PZ_CONFIG_KEY(preFloatZoneAssignmentsKey, "PreFloatZoneAssignments")
-    PZ_CONFIG_KEY(preFloatScreenAssignmentsKey, "PreFloatScreenAssignments")
-
-    // Snap mode — user-snapped classes
+    // User-snapped classes
     PZ_CONFIG_KEY(userSnappedClassesKey, "UserSnappedClasses")
 
-    // Autotile mode — per-context window order and floating state
+    // Unified, engine-agnostic per-window placement record (WindowPlacementStore) —
+    // the SOLE persisted per-window restore key for both snap and autotile.
+    PZ_CONFIG_KEY(windowPlacementsKey, "WindowPlacements")
+
+    // Legacy per-window restore keys — superseded by WindowPlacements. Retained
+    // ONLY so saveState() can deleteKey() them, scrubbing them from any session.json
+    // written by an older build. Never written, never read.
+    PZ_CONFIG_KEY(windowZoneAssignmentsFullKey, "WindowZoneAssignmentsFull")
+    PZ_CONFIG_KEY(pendingRestoreQueuesKey, "PendingRestoreQueues")
+    PZ_CONFIG_KEY(preTileGeometriesFullKey, "PreTileGeometriesFull")
+    PZ_CONFIG_KEY(preTileGeometriesKey, "PreTileGeometries")
+    PZ_CONFIG_KEY(preFloatZoneAssignmentsKey, "PreFloatZoneAssignments")
+    PZ_CONFIG_KEY(preFloatScreenAssignmentsKey, "PreFloatScreenAssignments")
     PZ_CONFIG_KEY(autotileWindowOrdersKey, "AutotileWindowOrders")
-    // Autotile mode — pending restore queue for close/reopen window preservation
     PZ_CONFIG_KEY(autotilePendingRestoresKey, "AutotilePendingRestores")
+    PZ_CONFIG_KEY(floatRestoreQueuesKey, "FloatRestoreQueues")
 
     // Obsolete keys (cleaned up on save to prevent stale data)
     PZ_CONFIG_KEY(obsoleteFloatingWindowsKey, "FloatingWindows")
@@ -208,7 +214,7 @@ public:
     PZ_CONFIG_KEY(defaultLayoutIdKey, "DefaultLayoutId")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Appearance.Colors
+    // Config Keys — Snapping.Zones.Colors
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(useSystemKey, "UseSystem")
@@ -217,21 +223,21 @@ public:
     PZ_CONFIG_KEY(borderKey, "Border")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Appearance.Opacity
+    // Config Keys — Snapping.Zones.Opacity
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(activeKey, "Active")
     // (also uses inactiveKey)
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Appearance.Border
+    // Config Keys — Snapping.Zones.Border
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(widthKey, "Width")
     PZ_CONFIG_KEY(radiusKey, "Radius")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.Appearance.Labels
+    // Config Keys — Snapping.Zones.Labels
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(fontColorKey, "FontColor")
@@ -314,19 +320,19 @@ public:
     PZ_CONFIG_KEY(lockedScreensKey, "LockedScreens")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Colors
+    // Config Keys — Tiling.Appearance.Colors + Snapping.Appearance.Colors
     // ═══════════════════════════════════════════════════════════════════════════
 
     // (uses useSystemKey, activeKey, inactiveKey)
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Decorations
+    // Config Keys — Tiling.Appearance.Decorations + Snapping.Appearance.Decorations
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(hideTitleBarsKey, "HideTitleBars")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Tiling.Appearance.Borders
+    // Config Keys — Tiling.Appearance.Borders + Snapping.Appearance.Borders
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(showBorderKey, "ShowBorder")
@@ -683,6 +689,23 @@ public:
         PZ_CONFIG_GROUP(v3assignmentGroupPrefix, "Assignment:")
         PZ_CONFIG_GROUP(v3quickLayoutsGroup, "QuickLayouts")
         PZ_CONFIG_GROUP(v3modeTrackingGroup, "ModeTracking")
+
+        // v3 zone-overlay groups — renamed to Snapping.Zones.* by
+        // migrateV3ToV4; frozen OLD paths the migration reads from.
+        PZ_CONFIG_GROUP(v3SnappingAppearanceColorsGroup, "Snapping.Appearance.Colors")
+        PZ_CONFIG_GROUP(v3SnappingAppearanceOpacityGroup, "Snapping.Appearance.Opacity")
+        PZ_CONFIG_GROUP(v3SnappingAppearanceBorderGroup, "Snapping.Appearance.Border")
+        PZ_CONFIG_GROUP(v3SnappingAppearanceLabelsGroup, "Snapping.Appearance.Labels")
+
+        // v4 zone-overlay destination paths — frozen NEW paths migrateV3ToV4
+        // writes to. Frozen (not the live ConfigDefaults::snappingZones*Group()
+        // accessors) so a future rename of those live accessors can't silently
+        // retarget this historical migration step to a path no migrated config
+        // ever had on disk — same freeze policy as the v2→v3 step's write site.
+        PZ_CONFIG_GROUP(v4SnappingZonesColorsGroup, "Snapping.Zones.Colors")
+        PZ_CONFIG_GROUP(v4SnappingZonesOpacityGroup, "Snapping.Zones.Opacity")
+        PZ_CONFIG_GROUP(v4SnappingZonesBorderGroup, "Snapping.Zones.Border")
+        PZ_CONFIG_GROUP(v4SnappingZonesLabelsGroup, "Snapping.Zones.Labels")
 
         // v4 legacy keys/groups — used ONLY by migration code.
         //

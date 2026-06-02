@@ -8,7 +8,6 @@
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/isettings.h"
-#include "../../core/screenmoderouter.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 
@@ -56,7 +55,7 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
     shouldSnap = false;
 
     // Empty windowId is a precondition violation that the sibling slots
-    // (snapToAppRule, snapToEmptyZone, restoreToPersistedZone) all guard;
+    // (snapToAppRule, snapToEmptyZone, resolveWindowRestore) all guard;
     // mirror their early-return so the input contract is symmetric across
     // the snap-restore family.
     if (windowId.isEmpty()) {
@@ -154,45 +153,9 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
     qCInfo(lcDbusWindow) << "Auto-assign snapping window" << windowId << "to empty zone" << result.zoneId;
 }
 
-void SnapAdaptor::restoreToPersistedZone(const QString& windowId, const QString& screenId, bool sticky, int& snapX,
-                                         int& snapY, int& snapWidth, int& snapHeight, bool& shouldRestore)
-{
-    snapX = snapY = snapWidth = snapHeight = 0;
-    shouldRestore = false;
-
-    if (!m_adaptor || !m_adaptor->service()) {
-        return;
-    }
-
-    if (m_settings && !m_settings->restoreWindowsToZonesOnLogin()) {
-        qCDebug(lcDbusWindow) << "Session zone restoration disabled by setting";
-        return;
-    }
-
-    if (windowId.isEmpty()) {
-        return;
-    }
-
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "restoreToPersistedZone")) {
-        return;
-    }
-
-    if (!m_engine) {
-        return;
-    }
-
-    SnapResult result = m_engine->calculateRestoreFromSession(windowId, screenId, sticky);
-    if (!result.shouldSnap) {
-        return;
-    }
-
-    if (!applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldRestore)) {
-        return;
-    }
-    // Consume the pending assignment so other windows of the same class won't restore to this zone
-    m_adaptor->service()->consumePendingAssignment(windowId);
-    qCInfo(lcDbusWindow) << "Restoring window" << windowId << "to zone(s)" << result.zoneIds;
-}
+// restoreToPersistedZone removed — session zone restoration is served by the
+// unified WindowPlacementStore via resolveWindowRestore. The old D-Bus slot had
+// no remaining caller (the effect uses resolveWindowRestore).
 
 void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
                                        int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
@@ -240,7 +203,7 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     }
 
     // Global snapping kill-switch — see discussion #461 item 2. Every snapTo*
-    // / restoreToPersistedZone / resolveWindowRestore D-Bus slot funnels
+    // / resolveWindowRestore D-Bus slot funnels
     // through here, so a single gate suppresses all auto-snap-on-open paths
     // when the user has turned snapping off entirely. Mirrors the
     // engine-internal gate in SnapEngine::resolveWindowRestore.
@@ -268,8 +231,9 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         // current desktop. Every calculator feeding this path either snaps a
         // window opening now on the current desktop (calculateSnapToAppRule /
         // calculateSnapToEmptyZone) or refuses outright when the saved desktop
-        // is not the current one — calculateRestoreFromSession and
-        // calculateSnapToLastZone both return noSnap on a desktop mismatch. A
+        // is not the current one — the WindowPlacementStore restore block gates
+        // on screen and disabled-context (restoring onto the current desktop),
+        // and calculateSnapToLastZone returns noSnap on a desktop mismatch. A
         // restored window therefore lands on the current desktop/activity.
         // Resolver's handleFor pulls (currentVirtualDesktop, currentActivity)
         // from the daemon's VDM/AM — same values the snap engine sees on

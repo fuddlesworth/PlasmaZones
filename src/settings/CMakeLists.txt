@@ -41,6 +41,10 @@ set(plasmazones_settings_SRCS
     # RuleStore) — extracted from settingscontroller.cpp so the central
     # TU stays under the 800-line cap (CLAUDE.md).
     settingscontroller_dbuswire.cpp
+    # Active-page navigation + per-page dirty tracking + external-edit
+    # envelope — extracted from settingscontroller.cpp so the central TU
+    # stays under the 800-line cap (CLAUDE.md).
+    settingscontroller_pagestate.cpp
     # RAII begin/endExternalEdit wrapper — extracted from
     # settingscontroller.h so the header stays under the 800-line cap.
     externaleditscope.h
@@ -85,8 +89,10 @@ set(plasmazones_settings_SRCS
     editorpagecontroller.cpp
     generalpagecontroller.h
     generalpagecontroller.cpp
-    snappingappearancecontroller.h
-    snappingappearancecontroller.cpp
+    snappingzonescontroller.h
+    snappingzonescontroller.cpp
+    snappingwindowappearancecontroller.h
+    snappingwindowappearancecontroller.cpp
     snappingbehaviorcontroller.h
     snappingbehaviorcontroller.cpp
     snappingeffectscontroller.h
@@ -217,7 +223,8 @@ qt_add_qml_module(plasmazones-settings
         qml/Toast.qml
         qml/KeyboardShortcutOverlay.qml
         qml/GeneralPage.qml
-        qml/SnappingAppearancePage.qml
+        qml/SnappingZonesPage.qml
+        qml/SnappingWindowAppearancePage.qml
         qml/SnappingEffectsPage.qml
         qml/SnappingBehaviorPage.qml
         qml/SnappingZoneSelectorPage.qml

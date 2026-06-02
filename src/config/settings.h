@@ -316,6 +316,20 @@ public:
                    NOTIFY autotileInactiveBorderColorChanged)
     Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
                    setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
+    Q_PROPERTY(bool snapWindowHideTitleBars READ snapWindowHideTitleBars WRITE setSnapWindowHideTitleBars NOTIFY
+                   snapWindowHideTitleBarsChanged)
+    Q_PROPERTY(bool snapWindowShowBorder READ snapWindowShowBorder WRITE setSnapWindowShowBorder NOTIFY
+                   snapWindowShowBorderChanged)
+    Q_PROPERTY(int snapWindowBorderWidth READ snapWindowBorderWidth WRITE setSnapWindowBorderWidth NOTIFY
+                   snapWindowBorderWidthChanged)
+    Q_PROPERTY(int snapWindowBorderRadius READ snapWindowBorderRadius WRITE setSnapWindowBorderRadius NOTIFY
+                   snapWindowBorderRadiusChanged)
+    Q_PROPERTY(QColor snapWindowBorderColor READ snapWindowBorderColor WRITE setSnapWindowBorderColor NOTIFY
+                   snapWindowBorderColorChanged)
+    Q_PROPERTY(QColor snapWindowInactiveBorderColor READ snapWindowInactiveBorderColor WRITE
+                   setSnapWindowInactiveBorderColor NOTIFY snapWindowInactiveBorderColorChanged)
+    Q_PROPERTY(bool snapWindowUseSystemBorderColors READ snapWindowUseSystemBorderColors WRITE
+                   setSnapWindowUseSystemBorderColors NOTIFY snapWindowUseSystemBorderColorsChanged)
     Q_PROPERTY(int autotileStickyWindowHandling READ autotileStickyWindowHandlingInt WRITE
                    setAutotileStickyWindowHandlingInt NOTIFY autotileStickyWindowHandlingChanged)
     Q_PROPERTY(int autotileDragBehavior READ autotileDragBehaviorInt WRITE setAutotileDragBehaviorInt NOTIFY
@@ -828,6 +842,20 @@ public:
     void setAutotileInactiveBorderColor(const QColor& color) override;
     bool autotileUseSystemBorderColors() const override;
     void setAutotileUseSystemBorderColors(bool use) override;
+    bool snapWindowHideTitleBars() const override;
+    void setSnapWindowHideTitleBars(bool hide) override;
+    bool snapWindowShowBorder() const override;
+    void setSnapWindowShowBorder(bool show) override;
+    int snapWindowBorderWidth() const override;
+    void setSnapWindowBorderWidth(int width) override;
+    int snapWindowBorderRadius() const override;
+    void setSnapWindowBorderRadius(int radius) override;
+    QColor snapWindowBorderColor() const override;
+    void setSnapWindowBorderColor(const QColor& color) override;
+    QColor snapWindowInactiveBorderColor() const override;
+    void setSnapWindowInactiveBorderColor(const QColor& color) override;
+    bool snapWindowUseSystemBorderColors() const override;
+    void setSnapWindowUseSystemBorderColors(bool use) override;
     StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
     int autotileStickyWindowHandlingInt() const;
@@ -1045,6 +1073,7 @@ public:
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     Q_INVOKABLE void applySystemColorScheme();
     void applyAutotileBorderSystemColor();
+    void applySnapWindowBorderSystemColor();
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via

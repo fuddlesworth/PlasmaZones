@@ -99,10 +99,11 @@ void Daemon::initializeAutotile()
 
         // Per-mode float state: when autotile releases windows back to snap mode:
         // 1. Clear autotile-originated floats (overflow + user-float-in-autotile) —
-        //    autotile floats don't persist into snap mode. The engine saves them
-        //    in m_savedFloatingWindows for restoration on re-entry.
-        // 2. Restore snap-mode floats that were saved when entering autotile —
-        //    snap floats persist across autotile sessions.
+        //    autotile floats don't persist into snap mode. The autotile slot in each
+        //    window's placement record was snapshotted at release (setAutotileScreens)
+        //    so re-entry restores from it.
+        // 2. Restore snap-mode floats from each window's placement record (snap slot),
+        //    captured when the screen last left snapping — the single source of truth.
         // Must check isModeSpecificFloated BEFORE clearing the marker.
         connect(m_autotileEngine.get(), &PlacementEngineBase::windowsReleased, this,
                 [this](const QStringList& windowIds, const QSet<QString>& releasedScreenIds) {
@@ -132,21 +133,61 @@ void Daemon::initializeAutotile()
                                 m_windowTrackingAdaptor->setWindowFloating(windowId, false);
                             }
                             m_autotileEngine->clearModeSpecificFloatMarker(windowId);
-                            // Restore snap-mode floats that were saved when entering autotile.
-                            // Float state is set immediately (lightweight cache update), but
-                            // geometry restore is deferred to the batched resnap signal to
-                            // avoid individual D-Bus signals queuing behind the resnap.
-                            if (m_snapEngine->restoreSavedModeFloat(windowId)) {
+                            // Restore the snap-mode float from the SINGLE source of truth — the
+                            // window's placement record (its snap slot), captured when the screen
+                            // last left snapping. No parallel saved-float set. Float state is set
+                            // immediately; geometry restore is deferred to the batched resnap
+                            // signal to avoid individual D-Bus signals queuing behind the resnap.
+                            const auto rec = wts->placementStore().peek(windowId, wts->currentAppIdFor(windowId));
+                            const PhosphorEngine::EngineSlot snapSlot =
+                                rec ? rec->slotFor(QStringLiteral("snap")) : PhosphorEngine::EngineSlot{};
+                            const bool snapFloat = snapSlot.state == PhosphorEngine::WindowPlacement::stateFloating();
+                            // A window SNAPPED in snapping mode, then floated in autotile, keeps its
+                            // snap-engine state — float is PER ENGINE. Such a window is excluded from
+                            // the captured autotile tile order (floated windows aren't ordered), so the
+                            // order-driven resnap and buildAutotileRestoreEntries never see it; without
+                            // this branch it falls through every restore path and keeps its autotile-
+                            // float geometry on return to snapping (the "still floated" bug). Gated on
+                            // wasAutotileFloated so order-driven (tiled, non-floated) windows — which the
+                            // order-resnap path already handles — are not double-snapped here.
+                            const bool snapSnapped = wasAutotileFloated
+                                && snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()
+                                && !snapSlot.zoneIds.isEmpty();
+                            if (snapFloat) {
                                 qCInfo(lcDaemon) << "windowsReleased: restoring snap-float for" << windowId;
                                 m_windowTrackingAdaptor->setWindowFloating(windowId, true);
-                                QString screen = wts->screenAssignments().value(windowId);
-                                auto geo = wts->validatedUnmanagedGeometry(windowId, screen);
-                                if (geo) {
+                                const QString screen = wts->screenAssignments().value(windowId);
+                                QRect g = rec->freeGeometryFor(screen.isEmpty() ? rec->screenId : screen);
+                                if (!g.isValid()) {
+                                    g = rec->anyFreeGeometry();
+                                }
+                                if (g.isValid()) {
                                     ZoneAssignmentEntry entry;
                                     entry.windowId = windowId;
                                     entry.targetZoneId = RestoreSentinel;
-                                    entry.targetGeometry = *geo;
+                                    entry.targetGeometry = g;
                                     m_pendingSnapFloatRestores.append(entry);
+                                }
+                            } else if (snapSnapped) {
+                                const QString screen = wts->screenAssignments().value(windowId);
+                                const QString restoreScreen = screen.isEmpty() ? rec->screenId : screen;
+                                const QRect geo = wts->resolveZoneGeometry(snapSlot.zoneIds, restoreScreen);
+                                if (geo.isValid()) {
+                                    qCInfo(lcDaemon) << "windowsReleased: restoring snap-zone for" << windowId
+                                                     << "zones=" << snapSlot.zoneIds << "screen=" << restoreScreen;
+                                    // Float is already cleared above for autotile-floated windows; this
+                                    // window returns to its snapped state, not floating. Multiple windows
+                                    // may legitimately share a zone, so no cross-window zone dedup here.
+                                    ZoneAssignmentEntry entry;
+                                    entry.windowId = windowId;
+                                    entry.targetZoneId = snapSlot.zoneIds.first();
+                                    entry.targetZoneIds = snapSlot.zoneIds;
+                                    entry.targetGeometry = geo;
+                                    entry.targetScreenId = restoreScreen;
+                                    m_pendingSnapFloatRestores.append(entry);
+                                } else {
+                                    qCWarning(lcDaemon) << "windowsReleased: snap-zone restore for" << windowId
+                                                        << "failed — zone geometry unresolved for" << snapSlot.zoneIds;
                                 }
                             } else {
                                 qCDebug(lcDaemon) << "windowsReleased: no snap-float to restore for" << windowId
@@ -340,6 +381,27 @@ void Daemon::initializeAutotile()
                     m_windowTrackingAdaptor ? m_windowTrackingAdaptor->service() : nullptr;
                 QSet<QString> resnappedWindows;
                 QVector<ZoneAssignmentEntry> allResnapEntries;
+
+                // Zones already reserved by the windowsReleased snap-zone restores
+                // (branch b — windows floated in autotile, which are absent from the
+                // tile order). Feed them to the order-resnap so its positional
+                // fallback never re-uses a reserved zone — the two-windows-one-zone
+                // collision. Also mark those windows as resnapped so
+                // buildAutotileRestoreEntries doesn't additionally emit a pre-tile
+                // geometry restore for them.
+                QStringList preClaimedZoneIds;
+                for (const ZoneAssignmentEntry& e : m_pendingSnapFloatRestores) {
+                    if (e.targetZoneId.isEmpty() || e.targetZoneId == RestoreSentinel) {
+                        continue; // float restore (no zone claimed)
+                    }
+                    if (e.targetZoneIds.isEmpty()) {
+                        preClaimedZoneIds.append(e.targetZoneId);
+                    } else {
+                        preClaimedZoneIds.append(e.targetZoneIds);
+                    }
+                    resnappedWindows.insert(e.windowId);
+                }
+
                 for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
                     if (it.key().desktop != desktop || it.key().activity != activity) {
                         continue;
@@ -354,26 +416,34 @@ void Daemon::initializeAutotile()
                     // Filter out floating windows — windowsReleased already
                     // restored their snap-float state. Resnapping them would override
                     // the restored float with a zone snap.
-                    // Also skip windows with no zone assignment (never snapped before
-                    // autotile) — they get pre-autotile geometry via buildAutotileRestoreEntries + emitBatchedResnap.
+                    // Also skip windows that were never snapped — they get pre-autotile
+                    // geometry via buildAutotileRestoreEntries + emitBatchedResnap.
+                    // "Never snapped" is judged by recordedSnapZones (live assignment
+                    // OR the durable record snap slot), NOT the live cache alone: after
+                    // a daemon restart the live cache is cold, so a live-only check
+                    // would treat every previously-snapped window as never-snapped and
+                    // float-restore it instead of resnapping to its zone.
                     QStringList windowOrder;
                     for (const QString& windowId : fullOrder) {
                         if (wts && wts->isWindowFloating(windowId)) {
                             continue;
                         }
-                        if (wts && wts->zoneAssignments().value(windowId).isEmpty()) {
+                        if (wts && wts->recordedSnapZones(windowId).isEmpty()) {
                             continue;
                         }
                         windowOrder.append(windowId);
                     }
 
-                    PhosphorZones::Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(resnapScreenId);
-                    int zoneCount = screenLayout ? screenLayout->zoneCount() : 0;
-                    for (int i = 0; i < std::min(static_cast<int>(windowOrder.size()), zoneCount); ++i) {
-                        resnappedWindows.insert(windowOrder.at(i));
+                    QVector<ZoneAssignmentEntry> entries = concreteSnap->calculateResnapEntriesFromAutotileOrder(
+                        windowOrder, resnapScreenId, preClaimedZoneIds);
+                    // Derive the exclusion set from the entries actually produced —
+                    // not a min(windows, zoneCount) guess. With zones pre-claimed by
+                    // branch-b restores, fewer windows get a zone; a window that got
+                    // none must remain eligible for buildAutotileRestoreEntries (its
+                    // pre-tile geometry) rather than being silently dropped.
+                    for (const ZoneAssignmentEntry& e : entries) {
+                        resnappedWindows.insert(e.windowId);
                     }
-                    QVector<ZoneAssignmentEntry> entries =
-                        concreteSnap->calculateResnapEntriesFromAutotileOrder(windowOrder, resnapScreenId);
                     allResnapEntries.append(entries);
                 }
                 // Batch float-restore entries into the resnap signal:
@@ -707,15 +777,14 @@ void Daemon::finalizeStartup()
         m_autotileEngine->loadState();
     }
 
-    // Now that AutotileEngine::loadState has deserialized
-    // m_pendingAutotileRestores, re-run the exclusion-rule prune so any
-    // persisted entries for apps that an Exclude rule covers are dropped
-    // here too. The snap side already got pruned by the init-prologue
-    // priming call at daemon.cpp's setExcludeRuleSet/setRules/prune
-    // sequence (run synchronously before the rulesChanged subscription
-    // wires); this call also touches the autotile queues that didn't
-    // exist at that earlier point. Patterns derive from the unified
-    // WindowRule store via PhosphorWindowRule::ExclusionRules.
+    // Now that AutotileEngine::loadState has restored autotile placement records,
+    // re-run the exclusion-rule prune so any loaded WindowPlacement records for apps
+    // an Exclude rule covers are dropped from the unified store. The init-prologue
+    // priming call (daemon.cpp's setExcludeRuleSet/setRules/prune sequence, run
+    // synchronously before the rulesChanged subscription wires) already pruned what
+    // was loaded then; this re-run covers records that landed during the later
+    // autotile load. Patterns derive from the unified WindowRule store via
+    // PhosphorWindowRule::ExclusionRules; the WTA prune removeIf's the placement store.
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->pruneExcludedPendingRestores(
             PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom(m_excludeRuleSet));
@@ -850,14 +919,11 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
                 wts->clearPreFloatZoneForWindow(windowId);
             }
         } else {
-            // If the window was snap-mode-floated (not autotile-floated)
-            // and autotile is clearing it, save for snap-mode restoration.
-            bool wasFloating = wts->isWindowFloating(windowId);
-            bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
-            if (wasFloating && !wasAutotileFloated) {
-                m_snapEngine->saveModeFloat(windowId);
-                qCInfo(lcDaemon) << "Saved snap-float for" << windowId << "(autotile clearing stale snap-float)";
-            }
+            // The window's snap-mode float (if any) already lives in its placement
+            // record's snap slot — captured at the mode-switch snapshot / save time —
+            // so there is no parallel saved-float set to update here. The record is
+            // the single source of truth and drives the float restore on return to
+            // snapping (see windowsReleased).
             m_windowTrackingAdaptor->setWindowFloating(windowId, false);
             m_autotileEngine->clearModeSpecificFloatMarker(windowId);
         }
@@ -921,12 +987,8 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
             wts->clearPreFloatZoneForWindow(windowId);
         }
     } else {
-        bool wasFloating = wts->isWindowFloating(windowId);
-        bool wasAutotileFloated = m_autotileEngine->isModeSpecificFloated(windowId);
-        if (wasFloating && !wasAutotileFloated) {
-            m_snapEngine->saveModeFloat(windowId);
-            qCInfo(lcDaemon) << "Saved snap-float for" << windowId << "(passive sync clearing stale snap-float)";
-        }
+        // Snap-mode float persists in the placement record's snap slot (single
+        // source of truth); nothing to save into a parallel set here.
         m_windowTrackingAdaptor->setWindowFloating(windowId, false);
         m_autotileEngine->clearModeSpecificFloatMarker(windowId);
     }

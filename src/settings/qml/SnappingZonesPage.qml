@@ -11,10 +11,8 @@ SettingsFlickable {
     id: root
 
     // Page-scoped bounds + color-import actions live on the sub-controller.
-    readonly property var settingsBridge: settingsController.snappingAppearancePage
+    readonly property var settingsBridge: settingsController.snappingZonesPage
     readonly property int opacitySliderMax: 100
-    readonly property int borderWidthMax: root.settingsBridge.borderWidthMax
-    readonly property int borderRadiusMax: root.settingsBridge.borderRadiusMax
 
     contentHeight: content.implicitHeight
     clip: true
@@ -51,15 +49,13 @@ SettingsFlickable {
 
                             checked: appSettings.useSystemColors
                             accessibleName: i18n("Use system accent color")
-                            onToggled: function(newValue) {
+                            onToggled: function (newValue) {
                                 appSettings.useSystemColors = newValue;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         visible: !useSystemColorsSwitch.checked
@@ -73,7 +69,6 @@ SettingsFlickable {
                                 highlightColorDialog.open();
                             }
                         }
-
                     }
 
                     SettingsSeparator {
@@ -92,7 +87,6 @@ SettingsFlickable {
                                 inactiveColorDialog.open();
                             }
                         }
-
                     }
 
                     SettingsSeparator {
@@ -111,7 +105,6 @@ SettingsFlickable {
                                 borderColorDialog.open();
                             }
                         }
-
                     }
 
                     SettingsSeparator {
@@ -137,9 +130,7 @@ SettingsFlickable {
                                 icon.name: "document-open"
                                 onClicked: colorFileDialog.open()
                             }
-
                         }
-
                     }
 
                     Kirigami.InlineMessage {
@@ -157,11 +148,8 @@ SettingsFlickable {
                         interval: 3000
                         onTriggered: colorImportMessage.visible = false
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -189,15 +177,13 @@ SettingsFlickable {
                             from: 0
                             to: root.opacitySliderMax
                             value: appSettings.activeOpacity * root.opacitySliderMax
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return appSettings.activeOpacity = value / root.opacitySliderMax;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Inactive opacity")
@@ -207,17 +193,13 @@ SettingsFlickable {
                             from: 0
                             to: root.opacitySliderMax
                             value: appSettings.inactiveOpacity * root.opacitySliderMax
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return appSettings.inactiveOpacity = value / root.opacitySliderMax;
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -243,17 +225,15 @@ SettingsFlickable {
 
                         SettingsSpinBox {
                             from: root.settingsBridge.borderWidthMin
-                            to: root.borderWidthMax
+                            to: root.settingsBridge.borderWidthMax
                             value: appSettings.borderWidth
-                            onValueModified: (value) => {
+                            onValueModified: value => {
                                 return appSettings.borderWidth = value;
                             }
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Border radius")
@@ -261,19 +241,15 @@ SettingsFlickable {
 
                         SettingsSpinBox {
                             from: root.settingsBridge.borderRadiusMin
-                            to: root.borderRadiusMax
+                            to: root.settingsBridge.borderRadiusMax
                             value: appSettings.borderRadius
-                            onValueModified: (value) => {
+                            onValueModified: value => {
                                 return appSettings.borderRadius = value;
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // =================================================================
@@ -305,7 +281,6 @@ SettingsFlickable {
                                 labelFontColorDialog.open();
                             }
                         }
-
                     }
 
                     SettingsSeparator {
@@ -348,13 +323,10 @@ SettingsFlickable {
                                     appSettings.labelFontStrikeout = false;
                                 }
                             }
-
                         }
-
                     }
 
-                    SettingsSeparator {
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Label scale")
@@ -365,19 +337,14 @@ SettingsFlickable {
                             to: 300
                             stepSize: 5
                             value: appSettings.labelFontSizeScale * 100
-                            onMoved: (value) => {
+                            onMoved: value => {
                                 return appSettings.labelFontSizeScale = value / 100;
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // =====================================================================
@@ -430,14 +397,13 @@ SettingsFlickable {
         title: i18n("Import Colors from File")
         nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
-        onAccepted: root.settingsBridge.loadColorsFromFile(selectedFile.toString().replace(/^file:\/\/+/, "/"))
+        onAccepted: root.settingsBridge.loadColorsFromFile(settingsController.urlToLocalFile(selectedFile))
     }
 
     Kirigami.PromptDialog {
         id: colorImportErrorDialog
 
         title: i18n("Color Import Failed")
-        subtitle: ""
         standardButtons: Kirigami.Dialog.Ok
         preferredWidth: Math.min(Kirigami.Units.gridUnit * 30, parent.width * 0.8)
     }
@@ -457,5 +423,4 @@ SettingsFlickable {
 
         target: root.settingsBridge
     }
-
 }

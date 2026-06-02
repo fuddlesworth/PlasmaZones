@@ -7,18 +7,14 @@
  *
  * Tests verify that ConfigDefaults accessors return the expected values and
  * that all numeric defaults fall within their declared min/max bounds.
- *
- * CMake target (not yet added to CMakeLists.txt):
- *   add_executable(test_configdefaults test_configdefaults.cpp)
- *   target_link_libraries(test_configdefaults PRIVATE Qt6::Test Qt6::Core KF6::ConfigCore plasmazones_core)
- *   add_test(NAME ConfigDefaults COMMAND test_configdefaults)
- *   set_tests_properties(ConfigDefaults PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
  */
 
 #include <QTest>
 
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/core/constants.h"
+
+#include <PhosphorZones/ZoneDefaults.h>
 
 using namespace PlasmaZones;
 
@@ -156,6 +152,10 @@ private Q_SLOTS:
         QVERIFY(ConfigDefaults::autotileBorderWidth() <= ConfigDefaults::autotileBorderWidthMax());
         QVERIFY(ConfigDefaults::autotileBorderRadius() >= ConfigDefaults::autotileBorderRadiusMin());
         QVERIFY(ConfigDefaults::autotileBorderRadius() <= ConfigDefaults::autotileBorderRadiusMax());
+        QVERIFY(ConfigDefaults::snapWindowBorderWidth() >= ConfigDefaults::snapWindowBorderWidthMin());
+        QVERIFY(ConfigDefaults::snapWindowBorderWidth() <= ConfigDefaults::snapWindowBorderWidthMax());
+        QVERIFY(ConfigDefaults::snapWindowBorderRadius() >= ConfigDefaults::snapWindowBorderRadiusMin());
+        QVERIFY(ConfigDefaults::snapWindowBorderRadius() <= ConfigDefaults::snapWindowBorderRadiusMax());
         QVERIFY(ConfigDefaults::autotileOuterGapTop() >= ConfigDefaults::autotileOuterGapTopMin());
         QVERIFY(ConfigDefaults::autotileOuterGapTop() <= ConfigDefaults::autotileOuterGapTopMax());
         QVERIFY(ConfigDefaults::autotileOuterGapBottom() >= ConfigDefaults::autotileOuterGapBottomMin());
@@ -190,6 +190,35 @@ private Q_SLOTS:
     void testAutotileMasterCount_default_is1()
     {
         QCOMPARE(ConfigDefaults::autotileMasterCount(), 1);
+    }
+
+    /**
+     * Snapped-window appearance defaults must be IDENTICAL to the autotile*
+     * window appearance defaults — the two modes start a window from the same
+     * chrome (every snapWindow* default delegates to its autotile* counterpart).
+     * Assert each pair is equal rather than pinning literals so a single change
+     * to an autotile default moves both in lockstep without staling this test.
+     * The concrete shipped values are pinned separately below.
+     */
+    void testSnapWindowAppearance_defaults()
+    {
+        QCOMPARE(ConfigDefaults::snapWindowHideTitleBars(), ConfigDefaults::autotileHideTitleBars());
+        QCOMPARE(ConfigDefaults::snapWindowShowBorder(), ConfigDefaults::autotileShowBorder());
+        QCOMPARE(ConfigDefaults::snapWindowUseSystemBorderColors(), ConfigDefaults::autotileUseSystemBorderColors());
+        QCOMPARE(ConfigDefaults::snapWindowBorderColor(), ConfigDefaults::autotileBorderColor());
+        QCOMPARE(ConfigDefaults::snapWindowInactiveBorderColor(), ConfigDefaults::autotileInactiveBorderColor());
+        QCOMPARE(ConfigDefaults::snapWindowBorderWidth(), ConfigDefaults::autotileBorderWidth());
+        QCOMPARE(ConfigDefaults::snapWindowBorderRadius(), ConfigDefaults::autotileBorderRadius());
+
+        // Pin the concrete shipped defaults (shared by both modes): title bars
+        // and the border are OFF, width 2, radius 8. Colors are compared against
+        // the zone color accessors so a palette change can't stale the test.
+        QCOMPARE(ConfigDefaults::snapWindowHideTitleBars(), false);
+        QCOMPARE(ConfigDefaults::snapWindowShowBorder(), false);
+        QCOMPARE(ConfigDefaults::snapWindowBorderColor(), ConfigDefaults::highlightColor());
+        QCOMPARE(ConfigDefaults::snapWindowInactiveBorderColor(), ConfigDefaults::inactiveColor());
+        QCOMPARE(ConfigDefaults::snapWindowBorderWidth(), ::PhosphorZones::ZoneDefaults::BorderWidth);
+        QCOMPARE(ConfigDefaults::snapWindowBorderRadius(), ::PhosphorZones::ZoneDefaults::BorderRadius);
     }
 };
 

@@ -1467,6 +1467,11 @@ constexpr QLatin1StringView kStashSnappingDesktopsField{"snappingDesktops"};
 constexpr QLatin1StringView kStashAutotileDesktopsField{"autotileDesktops"};
 constexpr QLatin1StringView kStashSnappingActivitiesField{"snappingActivities"};
 constexpr QLatin1StringView kStashAutotileActivitiesField{"autotileActivities"};
+
+// Forward declaration — defined alongside the other dot-path JSON helpers in
+// the anonymous namespace below `migrateV3ToV4`. migrateV3ToV4 calls it to
+// rename the Snapping.Appearance.* zone-overlay groups to Snapping.Zones.*.
+void moveGroupAtPath(QJsonObject& root, const QString& fromDotPath, const QString& toDotPath);
 } // namespace
 
 void ConfigMigration::migrateV3ToV4(QJsonObject& root)
@@ -1674,6 +1679,23 @@ void ConfigMigration::migrateV3ToV4(QJsonObject& root)
         root[kV4AnimationExclusionStashKey()] = animationExclusionStash;
     }
 
+    // v3.1 renamed the "Snapping › Appearance" page to "Zones" (it configures the
+    // drag-time zone overlay). Move its config groups Snapping.Appearance.* ->
+    // Snapping.Zones.* so the freed Snapping.Appearance.* namespace can hold the
+    // new snapped-window appearance settings (mirroring Tiling.Appearance.*).
+    // Both source and destination use FROZEN Legacy accessors — never the live
+    // ConfigDefaults::snappingZones*Group() accessors — so a future rename of
+    // those live group names can't silently retarget this historical step to a
+    // path no migrated config ever produced (same freeze policy as v2→v3).
+    moveGroupAtPath(root, ConfigKeys::Legacy::v3SnappingAppearanceColorsGroup(),
+                    ConfigKeys::Legacy::v4SnappingZonesColorsGroup());
+    moveGroupAtPath(root, ConfigKeys::Legacy::v3SnappingAppearanceOpacityGroup(),
+                    ConfigKeys::Legacy::v4SnappingZonesOpacityGroup());
+    moveGroupAtPath(root, ConfigKeys::Legacy::v3SnappingAppearanceBorderGroup(),
+                    ConfigKeys::Legacy::v4SnappingZonesBorderGroup());
+    moveGroupAtPath(root, ConfigKeys::Legacy::v3SnappingAppearanceLabelsGroup(),
+                    ConfigKeys::Legacy::v4SnappingZonesLabelsGroup());
+
     // Stamp literal 4 — see migrateV1ToV2 for why this isn't ConfigSchemaVersion.
     root[ConfigKeys::versionKey()] = 4;
 }
@@ -1694,6 +1716,85 @@ QJsonObject groupObjectAtPath(const QJsonObject& root, const QString& dotPath)
         obj = obj.value(segment).toObject();
     }
     return obj;
+}
+
+/// Set the nested object at @p segments within @p root to @p value, reading
+/// out, mutating, and writing back each level so sibling sub-groups at any
+/// ancestor are preserved and intermediate objects are created on demand.
+void setGroupAtSegments(QJsonObject& root, const QStringList& segments, const QJsonObject& value)
+{
+    // Materialise the chain of ancestor objects top-down so each can be
+    // rewritten bottom-up with its mutated child (QJsonObject is a value type;
+    // value() returns copies, so we must reassign back up the chain).
+    QList<QJsonObject> chain;
+    chain.reserve(segments.size());
+    QJsonObject node = root;
+    for (int i = 0; i < segments.size() - 1; ++i) {
+        chain.append(node);
+        node = node.value(segments.at(i)).toObject();
+    }
+    chain.append(node);
+
+    // Bottom-up rebuild: place the value at the leaf, then fold each level
+    // back into its parent.
+    chain.last()[segments.last()] = value;
+    for (int i = segments.size() - 2; i >= 0; --i) {
+        chain[i][segments.at(i)] = chain.at(i + 1);
+    }
+    root = chain.first();
+}
+
+/// Remove the nested object at @p segments within @p root, then prune any
+/// ancestor object that became empty as a result — but never an ancestor that
+/// still holds other sub-groups (e.g. don't drop "Snapping" while
+/// Behavior/Effects remain).
+void removeGroupAtSegments(QJsonObject& root, const QStringList& segments)
+{
+    QList<QJsonObject> chain;
+    chain.reserve(segments.size());
+    QJsonObject node = root;
+    for (int i = 0; i < segments.size() - 1; ++i) {
+        chain.append(node);
+        node = node.value(segments.at(i)).toObject();
+    }
+    chain.append(node);
+
+    chain.last().remove(segments.last());
+    for (int i = segments.size() - 2; i >= 0; --i) {
+        if (chain.at(i + 1).isEmpty()) {
+            chain[i].remove(segments.at(i));
+        } else {
+            chain[i][segments.at(i)] = chain.at(i + 1);
+        }
+    }
+    root = chain.first();
+}
+
+/// Move the nested object at @p fromDotPath to @p toDotPath within @p root,
+/// creating destination ancestors and pruning now-empty source ancestors.
+/// No-op when the source object is absent/empty. Used by migrateV3ToV4 to
+/// rename Snapping.Appearance.* zone-overlay groups to Snapping.Zones.*.
+/// If the destination already exists it is overwritten wholesale (source
+/// wins) — this cannot arise for a genuine v3 config since the destination
+/// namespace did not exist before v4.
+void moveGroupAtPath(QJsonObject& root, const QString& fromDotPath, const QString& toDotPath)
+{
+    const QStringList fromSegments = fromDotPath.split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    const QStringList toSegments = toDotPath.split(QLatin1Char('.'), Qt::SkipEmptyParts);
+    if (fromSegments.isEmpty() || toSegments.isEmpty()) {
+        return;
+    }
+
+    // Read the source leaf via segment navigation. An absent or empty object
+    // contributes nothing and (per the no-op contract) must not create a
+    // husk at the destination — bail before touching anything.
+    const QJsonObject leaf = groupObjectAtPath(root, fromDotPath);
+    if (leaf.isEmpty()) {
+        return;
+    }
+
+    setGroupAtSegments(root, toSegments, leaf);
+    removeGroupAtSegments(root, fromSegments);
 }
 
 /// Parse a comma-separated disable list, dropping empties / whitespace.

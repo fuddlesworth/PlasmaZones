@@ -237,6 +237,65 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Snap-window decoration keys (per-mode window appearance). The KWin
+    // effect fetches these via the D-Bus getSettings batch to decorate
+    // snap-managed windows; they are registered with REGISTER_BOOL/INT/
+    // COLOR_SETTING in initializeRegistry(), so they resolve on a stub
+    // backend. If the adaptor allow-list dropped any of the seven the effect
+    // would silently fall back to defaults — pin the whole set here so an
+    // omission breaks the build's test gate. Mirrors the gap/overlay batch
+    // test above: every requested key must come back, valid, with the right
+    // wire type (color keys serialize to a HexArgb string).
+    // ─────────────────────────────────────────────────────────────────────
+    void testGetSettings_snapWindowKeys_allReturnedWithTypes()
+    {
+        const QStringList keys{
+            QStringLiteral("snapWindowHideTitleBars"),         QStringLiteral("snapWindowShowBorder"),
+            QStringLiteral("snapWindowBorderWidth"),           QStringLiteral("snapWindowBorderRadius"),
+            QStringLiteral("snapWindowBorderColor"),           QStringLiteral("snapWindowInactiveBorderColor"),
+            QStringLiteral("snapWindowUseSystemBorderColors"),
+        };
+
+        const QVariantMap result = m_adaptor->getSettings(keys);
+
+        QCOMPARE(result.size(), keys.size());
+        for (const QString& k : keys) {
+            QVERIFY2(result.contains(k), qPrintable(QStringLiteral("missing key: %1").arg(k)));
+            QVERIFY2(result.value(k).isValid(), qPrintable(QStringLiteral("invalid variant for: %1").arg(k)));
+        }
+        // Bool / int / color wire types — color keys serialize to a string via
+        // the REGISTER_COLOR_SETTING getter (QColor::name(HexArgb)).
+        QCOMPARE(result.value(QStringLiteral("snapWindowHideTitleBars")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("snapWindowShowBorder")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("snapWindowUseSystemBorderColors")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("snapWindowBorderWidth")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("snapWindowBorderRadius")).metaType().id(), QMetaType::Int);
+        QCOMPARE(result.value(QStringLiteral("snapWindowBorderColor")).metaType().id(), QMetaType::QString);
+        QCOMPARE(result.value(QStringLiteral("snapWindowInactiveBorderColor")).metaType().id(), QMetaType::QString);
+
+        // Values mirror the stub's snapWindow* getters, proving each key is
+        // wired to its own accessor rather than collapsed onto a neighbour. The
+        // int (width 2 / radius 0) and color (white / black) keys hold mutually
+        // distinct values, so any swap among them flips a mirror. Among the three
+        // bools only showBorder (false) differs from hideTitleBars/useSystem
+        // (both true) — two booleans cannot encode three distinct values — so the
+        // bool mirrors catch any swap involving showBorder; a hideTitleBars↔
+        // useSystem swap is instead pinned by the verified-correct production
+        // registration and the per-key metaType assertions above.
+        QCOMPARE(result.value(QStringLiteral("snapWindowBorderWidth")).toInt(), m_settings->snapWindowBorderWidth());
+        QCOMPARE(result.value(QStringLiteral("snapWindowBorderRadius")).toInt(), m_settings->snapWindowBorderRadius());
+        QCOMPARE(QColor(result.value(QStringLiteral("snapWindowBorderColor")).toString()),
+                 m_settings->snapWindowBorderColor());
+        QCOMPARE(QColor(result.value(QStringLiteral("snapWindowInactiveBorderColor")).toString()),
+                 m_settings->snapWindowInactiveBorderColor());
+        QCOMPARE(result.value(QStringLiteral("snapWindowHideTitleBars")).toBool(),
+                 m_settings->snapWindowHideTitleBars());
+        QCOMPARE(result.value(QStringLiteral("snapWindowShowBorder")).toBool(), m_settings->snapWindowShowBorder());
+        QCOMPARE(result.value(QStringLiteral("snapWindowUseSystemBorderColors")).toBool(),
+                 m_settings->snapWindowUseSystemBorderColors());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Phase 5: setPerScreenSettings batch surface.
     //
     // The contract mirrors setSettings (global batch): empty map returns
@@ -350,6 +409,8 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     CountingStubSettings* m_settings = nullptr;
+    // CountingStubSettings publicly inherits StubSettings, whose snapWindow*
+    // getters back the value assertions in testGetSettings_snapWindowKeys_*.
     QObject* m_parent = nullptr;
     SettingsAdaptor* m_adaptor = nullptr;
 };

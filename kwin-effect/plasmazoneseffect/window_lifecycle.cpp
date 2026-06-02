@@ -379,6 +379,13 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
     m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
 
+    // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
+    // the window is being destroyed, so no setNoBorder/removeWindowBorder is
+    // needed here (the border item is removed just below and the title bar
+    // dies with the window).
+    PhosphorCompositor::AutotileStateHelpers::removeFromAllScreens(m_snapBorder, closedWindowId);
+    m_snapBorder.zoneGeometries.remove(closedWindowId);
+
     // Remove the window's border item (parent WindowItem is being destroyed anyway,
     // but clean up our tracking hash to avoid stale entries).
     removeWindowBorder(closedWindowId);
@@ -562,8 +569,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             m_trackedScreenPerWindow[safeW] = newScreenId;
 
             // Skip during drag — the drag system owns state transitions.
-            // Autotile drag handles VS transfers in dragStopped (line 262-285).
-            // Snapping drag handles cross-screen unsnap in dragStopped via daemon.
+            // Autotile drag handles VS transfers via the drag-policy-changed path.
+            // Snapping drag handles cross-screen unsnap on drag-stop via the daemon.
             if (m_dragTracker->isDragging()) {
                 return;
             }

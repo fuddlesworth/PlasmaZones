@@ -33,31 +33,6 @@ class LayoutRegistry;
 
 namespace PhosphorTileEngine {
 
-/**
- * @brief Saved position for a window removed from autotile, keyed by appId.
- *
- * When a window closes while autotiled, its position is captured so that
- * reopening the same app restores it to the same tiling position. Analogous
- * to snapping's PendingRestoreQueues but for autotile's order-based model.
- */
-struct PendingAutotileRestore
-{
-    PendingAutotileRestore() = default;
-    PendingAutotileRestore(int pos, PhosphorEngine::TilingStateKey ctx, bool floating)
-        : position(pos)
-        , context(std::move(ctx))
-        , wasFloating(floating)
-    {
-    }
-
-    int position = -1; ///< Index in window order at time of removal
-    PhosphorEngine::TilingStateKey context; ///< Screen/desktop/activity where the window was tiled
-    bool wasFloating = false; ///< Whether the window was floating when removed
-};
-
-/// Maximum pending restore entries per appId (prevents unbounded growth).
-constexpr int MaxPendingRestoresPerApp = 16;
-
 class AutotileConfig;
 
 class NavigationController;
@@ -188,7 +163,30 @@ public:
      * window should enter the drag-insert preview (tiled windows reorder;
      * floating / untracked windows drag free and float on drop as before).
      */
-    bool isWindowTiled(const QString& windowId) const override;
+    bool isWindowTiled(const QString& rawWindowId) const override;
+
+    /**
+     * @brief Authoritative per-window autotile float state.
+     *
+     * Returns true iff the window is tracked by autotile AND its owning
+     * TilingState marks it floating. This is the autotile engine's half of the
+     * per-engine float contract: the daemon's WTS float resolver consults this
+     * for windows whose current screen mode is Autotile (the snap half is
+     * SnapState::isFloating). Distinct from isModeSpecificFloated(), which
+     * reports the mode-transition MARKER (autotile-originated float), not the
+     * live TilingState float.
+     */
+    bool isWindowFloatingInAutotile(const QString& windowId) const;
+
+    /**
+     * @brief All windows currently floating in autotile across every tracked state.
+     *
+     * Used by the daemon's WTS floating-windows aggregator so the engine-agnostic
+     * floatingWindows() enumeration (effect float-cache seed, getAllWindowStates)
+     * still sees autotile floats now that they live in TilingState rather than the
+     * old shared WTS set.
+     */
+    QStringList allFloatingWindows() const;
 
     // IPlacementEngine
     bool isActiveOnScreen(const QString& screenId) const override;
@@ -388,12 +386,10 @@ public:
      * @brief Save tiling state via persistence delegate (IPlacementEngine contract)
      *
      * Delegates to the save function set by setPersistenceDelegate().
-     * Wired by the daemon to WTA's saveState(), which triggers a full WTA save
-     * including both snap and autotile state. Autotile window orders are embedded
-     * in WTA's save cycle via setTilingStateDelegates — this method exists to
-     * satisfy the IPlacementEngine interface. For autotile-only persistence,
-     * the placementChanged signal → WTA::scheduleSaveState() connection is the
-     * primary path.
+     * Wired by the daemon to WTA's saveState(). Per-window autotile restore state
+     * is persisted by the common WindowPlacementStore (each window's tiled position
+     * is captured into the store); the placementChanged → WTA::scheduleSaveState()
+     * connection is what triggers that save.
      */
     void saveState() override;
 
@@ -401,8 +397,9 @@ public:
      * @brief Load tiling state via persistence delegate (IPlacementEngine contract)
      *
      * Delegates to the load function set by setPersistenceDelegate().
-     * Wired by the daemon to WTA's loadState(), which triggers a full WTA load
-     * including autotile window order restoration via setTilingStateDelegates.
+     * Wired by the daemon to WTA's loadState(). Autotiled windows reopen at their
+     * saved position from the unified WindowPlacementStore (insertWindow consumes
+     * the record), not from a separate window-order key.
      */
     void loadState() override;
 
@@ -422,16 +419,6 @@ public:
         m_persistLoadFn = std::move(loadFn);
     }
 
-    /**
-     * @brief Set callback to query daemon-side window floating state
-     *
-     * Used by toggleWindowFloat to adopt untracked floating windows into autotile.
-     */
-    void setIsWindowFloatingFn(std::function<bool(const QString&)> fn) override
-    {
-        m_isWindowFloatingFn = std::move(fn);
-    }
-
     // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
     QString engineId() const override
     {
@@ -443,108 +430,6 @@ public:
     {
         const auto it = m_windowToStateKey.constFind(canonicalizeForLookup(windowId));
         return it == m_windowToStateKey.constEnd() ? QString() : it.value().screenId;
-    }
-
-    /**
-     * @brief Serialize per-context autotile window orders to JSON
-     *
-     * Forwarded to SettingsBridge. Called by WTA's save cycle via persistence delegate.
-     * masterCount/splitRatio are NOT included — Settings owns those.
-     */
-    QJsonArray serializeWindowOrders() const override;
-
-    /**
-     * @brief Deserialize per-context autotile window orders from JSON
-     *
-     * Forwarded to SettingsBridge. Restores window order and floating state.
-     *
-     * @param orders JSON array produced by serializeWindowOrders()
-     */
-    void deserializeWindowOrders(const QJsonArray& orders) override;
-
-    /**
-     * @brief Serialize pending autotile restore queues to JSON
-     *
-     * Forwarded to SettingsBridge. Returns appId-keyed pending restore entries.
-     */
-    QJsonObject serializePendingRestores() const override;
-
-    /**
-     * @brief Deserialize pending autotile restore queues from JSON
-     *
-     * Forwarded to SettingsBridge. Restores close/reopen queue.
-     */
-    void deserializePendingRestores(const QJsonObject& obj) override;
-
-    /**
-     * @brief Drop pending-restore queues whose appId matches any exclusion pattern.
-     *
-     * Mirror of PhosphorPlacement::WindowTrackingService::pruneExcludedPendingRestores
-     * for the autotile side. Patterns are compared via
-     * PhosphorIdentity::WindowId::appIdMatches. The snap engine uses the same
-     * predicate when it gates runtime restores against the user's unified
-     * WindowRule store's Exclude rules, so the disk-pruning verdict here
-     * matches what the runtime would already do.
-     *
-     * The existing ShouldPersistRestorePredicate filters entries by disabled
-     * context across screen, desktop, and activity but is blind to the
-     * Exclude-rule axis. Entries authored before the user added an
-     * Application-subject Exclude rule remain on disk and bloat
-     * AutotilePendingRestores until this method runs at the next save.
-     *
-     * The engine is settings-agnostic by design to keep the LGPL boundary
-     * clean. It takes plain patterns and does NOT mark dirty. The WTA caller
-     * wraps this and calls service()->markDirty(DirtyAutotilePending) when
-     * the return value is greater than zero, so the next debounced save
-     * persists the prune.
-     *
-     * @param exclusionPatterns AppId patterns derived from `Exclude`-action
-     *                          WindowRules via
-     *                          `PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom`.
-     *                          Empty patterns are skipped. An empty list
-     *                          is a no-op.
-     * @return number of appId entries fully removed.
-     */
-    int pruneExcludedPendingRestores(const QStringList& exclusionPatterns);
-
-    /**
-     * @brief Predicate consulted before persisting or honoring a pending restore.
-     *
-     * Returns true to keep the entry, false to drop it. Mirrors the snap-side
-     * PhosphorPlacement::WindowTrackingService::ShouldTrackPredicate but adds
-     * an activity parameter because autotile pending-restore entries carry an
-     * activity tag (snap does not — see SnapState).
-     *
-     * Applied at three points:
-     *   1. removeWindow() — live write gate: a closed window on a disabled
-     *      context is never appended to m_pendingAutotileRestores in the first
-     *      place. Matches snap's gate in WindowTrackingService::windowClosed.
-     *   2. serializePendingRestores() — drops in-memory entries that became
-     *      disabled mid-session before they reach disk.
-     *   3. deserializePendingRestores() — drops on-disk entries authored under
-     *      an older config or by a daemon that didn't have the gate.
-     *
-     * The engine library is intentionally settings-agnostic (LGPL boundary),
-     * so the daemon adaptor injects the predicate. When unset the engine
-     * behaves as if every context is active — the historical default that
-     * unit tests rely on.
-     */
-    using ShouldPersistRestorePredicate =
-        std::function<bool(const QString& screenId, int desktop, const QString& activity)>;
-
-    /**
-     * @brief Inject the persist-restore gate. See ShouldPersistRestorePredicate.
-     *
-     * Ownership: the caller is responsible for keeping any captured state
-     * (e.g. `this` pointers to a settings adaptor) valid for the lifetime of
-     * this AutotileEngine. If the captured object is destroyed before the
-     * engine, clear the predicate first (`setShouldPersistRestorePredicate({})`)
-     * — otherwise a subsequent removeWindow()/serialize()/deserialize() call
-     * dereferences freed memory.
-     */
-    void setShouldPersistRestorePredicate(ShouldPersistRestorePredicate predicate)
-    {
-        m_shouldPersistRestorePredicate = std::move(predicate);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -813,6 +698,8 @@ public:
     void moveFocusedToPosition(int position, const PhosphorEngine::NavigationContext& ctx) override;
     void rotateWindows(bool clockwise, const PhosphorEngine::NavigationContext& ctx) override;
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
+    void reapplyManagedWindowAppearance() override;
+    std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
     void snapAllWindows(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
     void cycleFocus(bool forward, const PhosphorEngine::NavigationContext& ctx) override;
@@ -865,23 +752,6 @@ public:
      * @param windowIds Window IDs in desired order (zone-number ascending)
      */
     void setInitialWindowOrder(const QString& screenId, const QStringList& windowIds) override;
-
-    /**
-     * @brief Clear saved floating state for windows that are actively zone-snapped.
-     *
-     * Called during snapping → autotile transitions so that windows the user
-     * re-snapped in manual mode aren't incorrectly restored as floating.
-     *
-     * @param windowIds Windows to remove from the saved floating set
-     */
-    void clearSavedFloatingForWindows(const QStringList& windowIds) override;
-
-    /**
-     * @brief Clear ALL saved floating state (used when autotile is disabled globally)
-     *
-     * Prevents stale entries from incorrectly floating windows on next activation.
-     */
-    void clearAllSavedFloating() override;
 
     /**
      * @brief Get the current tiled window order for a screen
@@ -1104,9 +974,9 @@ public:
     // Autotile-float origin tracking (ephemeral, not persisted)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void markAutotileFloated(const QString& windowId);
-    void clearAutotileFloated(const QString& windowId);
-    bool isAutotileFloated(const QString& windowId) const;
+    void markAutotileFloated(const QString& rawWindowId);
+    void clearAutotileFloated(const QString& rawWindowId);
+    bool isAutotileFloated(const QString& rawWindowId) const;
 
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
@@ -1118,18 +988,10 @@ private Q_SLOTS:
     void onScreenGeometryChanged(const QString& screenId);
     void onLayoutChanged(PhosphorZones::Layout* layout);
 
-protected:
-    void onWindowClaimed(const QString& windowId) override;
-    void onWindowReleased(const QString& windowId) override;
-    void onWindowFloated(const QString& windowId) override;
-    void onWindowUnfloated(const QString& windowId) override;
-
 private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
-    void removeSavedFloatingEntry(const QString& windowId);
-    void pruneStaleRestores(const QString& appId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
     void applyTiling(const QString& screenId);
@@ -1246,24 +1108,6 @@ private:
     bool cleanupPendingOrderIfResolved(const QString& screenId);
 
     /**
-     * @brief Schedule promotion of saved window orders for the current context
-     *
-     * Coalesced via zero-delay timer so that simultaneous desktop+activity switches
-     * (both calling this method) result in a single promotion after both
-     * m_currentDesktop and m_currentActivity are set to their final values.
-     */
-    void schedulePromoteSavedWindowOrders();
-
-    /**
-     * @brief Promote saved window orders for the current context into pending orders
-     *
-     * Moves orders from m_savedWindowOrders (populated by deserializeWindowOrders
-     * for all contexts) into m_pendingInitialOrders so windows arriving on the
-     * new desktop get their saved ordering.
-     */
-    void promoteSavedWindowOrders();
-
-    /**
      * @brief Validate that a windowId is not empty, logging a warning if it is
      * @param windowId Window ID to validate
      * @param operation Operation name for the warning message
@@ -1363,7 +1207,6 @@ private:
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
-    std::function<bool(const QString&)> m_isWindowFloatingFn;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
@@ -1401,11 +1244,6 @@ private:
     // than a new (empty) key after a desktop switch.
     QHash<QString, int> m_screenDesktopOverride;
 
-    // Floating window IDs preserved across mode switches, per desktop/activity.
-    // When autotile is deactivated, floated windows are saved here so that
-    // re-enabling autotile restores them as floating regardless of screen.
-    QHash<PhosphorEngine::TilingStateKey, QSet<QString>> m_savedFloatingWindows;
-
     // Pre-seeded window order for snapping → autotile transitions.
     // Keyed by stable EDID-based screen ID (PhosphorScreens::ScreenIdentity::identifierFor).
     // Consumed by insertWindow() as windows arrive; also cleaned up by
@@ -1416,37 +1254,14 @@ private:
     // wins even when arrival order differs. Set by setInitialWindowOrder
     // (mode transition: the daemon intentionally pre-computed an order from
     // the previous mode's zones, and that order MUST be preserved).
-    // Cleared after the order is fully consumed. Entries from the
-    // deserialize / promoteSavedWindowOrders paths are NOT in this set —
-    // for those, the saved position is "advisory": honored only when it
-    // appends at the current tail, otherwise insertPosition takes over.
-    // This is the behaviour users expect from their "After existing" /
-    // "After focused" / "As main window" preference for new windows.
+    // Cleared after the order is fully consumed. Entries seeded by
+    // setInitialWindowOrder (mode transition) are the strict ones; advisory
+    // entries reconstructed per-window from the placement store are NOT in this
+    // set — for those the saved position is honored only when it appends at the
+    // current tail, otherwise insertPosition takes over. This is the behaviour
+    // users expect from their "After existing" / "After focused" / "As main
+    // window" preference for new windows.
     QSet<QString> m_strictInitialOrderScreens;
-
-    // Saved window orders from session persistence, keyed by full context.
-    // On desktop/activity switch, orders for the new context are promoted into
-    // m_pendingInitialOrders so windows arriving on the new desktop get their
-    // saved ordering. Consumed once per context (removed after promotion).
-    QHash<PhosphorEngine::TilingStateKey, QStringList> m_savedWindowOrders;
-
-    // Pending restore queue for windows removed from autotile (close/reopen).
-    // Keyed by appId (stable across KWin restarts). Multiple entries per appId
-    // support multi-instance apps; consumed FIFO by insertWindow().
-    // Analogous to snapping's PendingRestoreQueues.
-    QHash<QString, QList<PendingAutotileRestore>> m_pendingAutotileRestores;
-
-    // Disabled-context gate injected by the daemon adaptor. See
-    // ShouldPersistRestorePredicate. Empty until the daemon wires it; while
-    // empty every (screen, desktop, activity) tuple is treated as active —
-    // the behaviour unit tests rely on.
-    ShouldPersistRestorePredicate m_shouldPersistRestorePredicate{};
-
-    // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
-    // simultaneous desktop+activity switches. Without coalescing, the first
-    // call (after setCurrentDesktop) would promote using the stale activity,
-    // potentially consuming the wrong specific-activity entry.
-    QTimer m_promoteOrdersTimer;
 
     // Per-screen overflow tracking with O(1) reverse-index lookups.
     OverflowManager m_overflow;

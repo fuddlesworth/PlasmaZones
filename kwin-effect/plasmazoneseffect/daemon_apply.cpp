@@ -116,6 +116,15 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
                                                        QStringLiteral("recordSnapIntent"),
                                                        {getWindowId(targetWindow), true});
 
+        // Snap-assist placed the window in a zone — record it in snapping's
+        // border set, but only for a resolved snap-mode screen. An empty
+        // (unresolved) or autotile-managed screen is owned by AutotileHandler,
+        // so recording it here would double-track the window — same
+        // discriminator as slotApplyGeometryRequested / the async snap path.
+        if (!screenId.isEmpty() && !m_autotileHandler->isAutotileScreen(screenId)) {
+            markWindowSnapped(getWindowId(targetWindow), screenId);
+        }
+
         // Snap Assist continuation: only for manual-mode screens.
         // Autotile screens manage their own window placement; showing snap assist
         // after an autotile resnap is incorrect (the daemon silently ignores the
@@ -153,6 +162,8 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             // not an in-zone resize.
             applySnapGeometry(w, sizeOnlyGeo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                               PhosphorAnimation::ProfilePaths::WindowSnapOut);
+            // Drag-out unsnap: the window left zone-managed sizing.
+            clearWindowSnapped(windowId);
         }
         return;
     }
@@ -184,7 +195,18 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Store pre-snap geometry before first snap (idempotent — skips if already stored).
     // The daemon handles windowSnapped/recordSnapIntent internally, but only the effect
     // knows the window's current frame geometry for pre-tile storage.
-    if (!zoneId.isEmpty()) {
+    //
+    // ONLY when the window is actually MOVING into the zone: a window already at
+    // the target geometry has no meaningful pre-snap rect to capture (its current
+    // frame IS the zone). Without this guard, a re-apply of the zone geometry for
+    // an already-snapped window — e.g. reapplyWindowAppearance() re-emitting each
+    // snapped window's geometry on daemon reconnect — would store the ZONE rect as
+    // the pre-tile geometry, clobbering the real pre-snap position the window
+    // floats back to (Meta+F then teleports it to the zone instead of its float
+    // spot). The idempotent daemon-side check normally protects this, but on a
+    // daemon restart the reapply can race ahead of the disk-persisted pre-tile
+    // load; the move-check makes it robust regardless of ordering.
+    if (!zoneId.isEmpty() && w->frameGeometry().toRect() != geometry) {
         // Capture frame geometry synchronously BEFORE applySnapGeometry moves the window.
         // ensurePreSnapGeometryStored is async (D-Bus hasPreTileGeometry check) — without
         // pre-capturing, the callback would read the post-move geometry instead of the
@@ -198,6 +220,23 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     applySnapGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                       zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
                                        : PhosphorAnimation::ProfilePaths::WindowSnapIn);
+    // Track snapping's own border set (mirrors how autotile records at its
+    // tile-apply) using a discriminator analogous to the batch path
+    // (slotApplyGeometriesBatch). The batch path discriminates on screenId (empty =
+    // float/restore) and clears any stale float marker before marking snapped; this
+    // single-window path uses the empty zoneId as the float discriminator, since it
+    // is only reached for explicit snap commits (which legitimately un-float) and
+    // float-restores (which arrive with an empty zoneId). A window can never land in
+    // both the snap and autotile border sets:
+    //   - empty zoneId         → float-restore: leave snapping's set
+    //   - empty/autotile screen → autotile-managed or unresolved: leave the set
+    //                             (AutotileHandler tracks autotile-screen windows)
+    //   - snap-mode screen      → snap commit
+    if (zoneId.isEmpty() || screenId.isEmpty() || m_autotileHandler->isAutotileScreen(screenId)) {
+        clearWindowSnapped(windowId);
+    } else {
+        markWindowSnapped(windowId, screenId);
+    }
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven
     // navigation, the daemon handles zone bookkeeping internally before emitting
     // applyGeometryRequested. For legacy callers (autotile float restore via
@@ -308,6 +347,36 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const PhosphorProtocol::WindowG
             });
             applySnapGeometry(p.window, p.geometry, /*allowDuringDrag=*/false,
                               /*skipAnimation=*/false, batchProfilePath);
+            // Snapping owns its border set (mirrors autotile). The daemon
+            // supplies a non-empty authoritative screenId only for real
+            // placements; an EMPTY screenId marks a float/restore entry
+            // (overflow __restore__, autotile float-restore) — never a snap
+            // commit. Use p.screenId directly: a current-screen fallback would
+            // misclassify a float-restore as a snap and leave a stale border.
+            //   - empty screenId      → float/restore: leave snapping's set
+            //   - autotile-mode screen → now autotile-managed: leave snap set
+            //                            (AutotileHandler tracks it)
+            //   - snap-mode screen     → snap commit (unless floating)
+            const QString batchWid = getWindowId(p.window);
+            if (p.screenId.isEmpty() || m_autotileHandler->isAutotileScreen(p.screenId)) {
+                clearWindowSnapped(batchWid);
+            } else {
+                // Real snap commit on a snap-mode screen. The daemon emits a non-empty
+                // authoritative screenId ONLY for genuine placements; float/restore
+                // entries carry an EMPTY screenId and are handled above. So this window
+                // is being snapped and is no longer floating — even if the effect's
+                // float cache is stale (e.g. a window snapped straight from a
+                // floated-in-autotile state via the daemon's windowsReleased snap-zone
+                // restore). Clear the stale float marker BEFORE marking snapped,
+                // mirroring the single-window applyGeometry path. Without this the float
+                // flag survives, markWindowSnapped never sets the snap border, and the
+                // next snap→autotile saves the zone rect as the pre-tile float-back —
+                // poisoning the float geometry with the snapped rect. setWindowFloating
+                // is an idempotent local FloatingCache write (no signal/D-Bus), so it is
+                // called unconditionally — no need to read-guard a no-op overwrite.
+                m_navigationHandler->setWindowFloating(batchWid, false);
+                markWindowSnapped(batchWid, p.screenId);
+            }
         },
         [this, savedStack, action]() {
             // Restore z-order after all geometries applied
@@ -410,7 +479,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
             QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
 
             // User-initiated snap commands override floating state.
-            // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
+            // windowSnapped() on the daemon clears floating inside SnapEngine::commitSnap (clearFloatingForSnap).
 
             // Always use EDID-based screen ID for comparison
             QString winScreen = getWindowScreenId(w);
@@ -582,6 +651,26 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     // because m_dragFloatedWindowIds still has the entry from the original drag.
     if (!isFloating) {
         m_dragFloatedWindowIds.remove(windowId);
+    } else {
+        // Backstop: a window that becomes floating is no longer snap-managed.
+        // Covers float paths that don't emit applyGeometryRequested with an
+        // empty zoneId (e.g. a float toggle when no pre-tile geometry is
+        // stored, so applyGeometryForFloat sends nothing). Idempotent — a
+        // no-op if the window wasn't snap-tracked.
+        clearWindowSnapped(windowId);
+
+        // Invalidate any stale instant-restore entry for this app. The
+        // m_snapRestoreCache is a single-shot latency cache populated at
+        // daemon-ready from the daemon's pending restores. Once a window
+        // floats, its saved zone no longer applies: windowClosed() will NOT
+        // persist a PendingRestore for a floating window (it should reopen
+        // floating). But a stale cache entry would still "Instant snap restore"
+        // the reopened window into its old zone WITHOUT a daemon commit
+        // (resolveWindowRestore finds nothing), leaving a ghost — visually
+        // snapped but untracked. Dropping the entry makes the reopen take the
+        // authoritative daemon path so the window stays floating. Keyed by
+        // appId to survive the window's identity change across close/reopen.
+        m_snapRestoreCache.remove(::PhosphorIdentity::WindowId::extractAppId(windowId));
     }
 }
 

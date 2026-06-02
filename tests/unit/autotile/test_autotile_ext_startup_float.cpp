@@ -3,6 +3,7 @@
 
 #include <QTest>
 #include <QCoreApplication>
+#include <QRect>
 #include <QSignalSpy>
 
 #include <PhosphorTileEngine/AutotileEngine.h>
@@ -10,7 +11,6 @@
 #include <PhosphorTileEngine/AutotileConfig.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
-#include "core/constants.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;

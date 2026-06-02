@@ -139,8 +139,10 @@ private Q_SLOTS:
 
         QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
         QJsonObject snapping = root.value(QStringLiteral("Snapping")).toObject();
-        QJsonObject appearance = snapping.value(QStringLiteral("Appearance")).toObject();
-        QJsonObject colors = appearance.value(QStringLiteral("Colors")).toObject();
+        // The v3→v4 step renames the zone-overlay groups Snapping.Appearance.*
+        // → Snapping.Zones.*, so the fully-migrated config lands them here.
+        QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
+        QJsonObject colors = zones.value(QStringLiteral("Colors")).toObject();
 
         // Colors should be converted to hex
         QString highlight = colors.value(QStringLiteral("Highlight")).toString();
@@ -324,8 +326,9 @@ private Q_SLOTS:
         QCOMPARE(gaps.value(QStringLiteral("Inner")).toInt(), 8);
         QCOMPARE(gaps.value(QStringLiteral("Outer")).toInt(), 4);
 
-        QJsonObject appearance = snapping.value(QStringLiteral("Appearance")).toObject();
-        QJsonObject opacity = appearance.value(QStringLiteral("Opacity")).toObject();
+        // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
+        QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
+        QJsonObject opacity = zones.value(QStringLiteral("Opacity")).toObject();
         QCOMPARE(opacity.value(QStringLiteral("Active")).toDouble(), 0.3);
     }
 
@@ -979,14 +982,15 @@ private Q_SLOTS:
             QCOMPARE(g->readBool(QStringLiteral("Enabled")), true);
         }
         {
-            auto g = backend->group(QStringLiteral("Snapping.Appearance.Colors"));
+            // Zone-overlay groups land under Snapping.Zones.* after the v3→v4 rename.
+            auto g = backend->group(QStringLiteral("Snapping.Zones.Colors"));
             QColor c = g->readColor(QStringLiteral("Highlight"));
             QCOMPARE(c.red(), 82);
             QCOMPARE(c.green(), 148);
             QCOMPARE(c.blue(), 226);
         }
         {
-            auto g = backend->group(QStringLiteral("Snapping.Appearance.Opacity"));
+            auto g = backend->group(QStringLiteral("Snapping.Zones.Opacity"));
             QCOMPARE(g->readDouble(QStringLiteral("Active")), 0.3);
         }
     }

@@ -156,7 +156,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Appearance Settings
+    // Zone Overlay (Snapping.Zones.*) Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
     static bool useSystemColors()
@@ -1001,11 +1001,11 @@ public:
     }
     static bool autotileHideTitleBars()
     {
-        return true;
+        return false;
     }
     static bool autotileShowBorder()
     {
-        return true;
+        return false;
     }
     static int autotileBorderWidth()
     {
@@ -1021,7 +1021,7 @@ public:
     }
     static int autotileBorderRadius()
     {
-        return 0;
+        return ::PhosphorZones::ZoneDefaults::BorderRadius;
     }
     static constexpr int autotileBorderRadiusMin()
     {
@@ -1042,6 +1042,55 @@ public:
     static bool autotileUseSystemBorderColors()
     {
         return true;
+    }
+
+    // Snapping window appearance — the snapped window's border / title-bar
+    // decoration (stored under Snapping.Appearance.*). Every default delegates to
+    // its autotile* counterpart so the two modes start from identical window
+    // appearance: a single edit to the autotile default moves both in lockstep.
+    static bool snapWindowHideTitleBars()
+    {
+        return autotileHideTitleBars();
+    }
+    static bool snapWindowShowBorder()
+    {
+        return autotileShowBorder();
+    }
+    static int snapWindowBorderWidth()
+    {
+        return autotileBorderWidth();
+    }
+    static constexpr int snapWindowBorderWidthMin()
+    {
+        return autotileBorderWidthMin();
+    }
+    static constexpr int snapWindowBorderWidthMax()
+    {
+        return autotileBorderWidthMax();
+    }
+    static int snapWindowBorderRadius()
+    {
+        return autotileBorderRadius();
+    }
+    static constexpr int snapWindowBorderRadiusMin()
+    {
+        return autotileBorderRadiusMin();
+    }
+    static constexpr int snapWindowBorderRadiusMax()
+    {
+        return autotileBorderRadiusMax();
+    }
+    static QColor snapWindowBorderColor()
+    {
+        return autotileBorderColor();
+    }
+    static QColor snapWindowInactiveBorderColor()
+    {
+        return autotileInactiveBorderColor();
+    }
+    static bool snapWindowUseSystemBorderColors()
+    {
+        return autotileUseSystemBorderColors();
     }
     static int autotileStickyWindowHandling()
     {

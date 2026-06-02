@@ -794,6 +794,60 @@ public:
     void setAutotileUseSystemBorderColors(bool) override
     {
     }
+    bool snapWindowHideTitleBars() const override
+    {
+        // Distinct from snapWindowShowBorder so the D-Bus batch test can detect a
+        // registration swap between the two adjacent bool keys via value-mirroring.
+        return true;
+    }
+    void setSnapWindowHideTitleBars(bool) override
+    {
+    }
+    bool snapWindowShowBorder() const override
+    {
+        return false;
+    }
+    void setSnapWindowShowBorder(bool) override
+    {
+    }
+    int snapWindowBorderWidth() const override
+    {
+        return 2;
+    }
+    void setSnapWindowBorderWidth(int) override
+    {
+    }
+    int snapWindowBorderRadius() const override
+    {
+        return 0;
+    }
+    void setSnapWindowBorderRadius(int) override
+    {
+    }
+    QColor snapWindowBorderColor() const override
+    {
+        return Qt::white;
+    }
+    void setSnapWindowBorderColor(const QColor&) override
+    {
+    }
+    QColor snapWindowInactiveBorderColor() const override
+    {
+        // A distinct, valid color (active is white) so the D-Bus batch test can
+        // round-trip it through HexArgb and catch an active/inactive swap.
+        return Qt::black;
+    }
+    void setSnapWindowInactiveBorderColor(const QColor&) override
+    {
+    }
+    bool snapWindowUseSystemBorderColors() const override
+    {
+        // Distinct from snapWindowShowBorder for the same batch-test swap detection.
+        return true;
+    }
+    void setSnapWindowUseSystemBorderColors(bool) override
+    {
+    }
     StickyWindowHandling autotileStickyWindowHandling() const override
     {
         return StickyWindowHandling::TreatAsNormal;
