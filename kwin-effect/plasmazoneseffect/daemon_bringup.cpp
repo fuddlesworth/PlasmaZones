@@ -58,8 +58,8 @@ void PlasmaZonesEffect::slotDaemonReady()
     }
     if (m_bridgeRegistrationInFlight) {
         // A registerBridge async call is already pending. The Introspect-
-        // probe path at line ~782 and the daemonReady D-Bus signal can
-        // both fire slotDaemonReady before the FIRST registerBridge reply
+        // probe path (effect ctor, lifecycle.cpp) and the daemonReady D-Bus
+        // signal can both fire slotDaemonReady before the FIRST registerBridge reply
         // sets m_daemonServiceRegistered. Without this gate, a daemon
         // racing its own readiness signal against an Introspect probe
         // would receive TWO registerBridge calls in flight, then both
@@ -367,9 +367,24 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             // still function as a fallback.
             m_daemonReadyRestoresDone = true;
 
+            // Re-drive per-window chrome (snap border / hidden title bar,
+            // autotile border) for windows the daemon already considers managed.
             QDBusPendingReply<QStringList> reply = *w;
             QSet<QString> trackedAppIds;
             if (reply.isValid()) {
+                // On daemon loss the effect cleared its window-appearance state
+                // (restoreAllSnapBorderless / AutotileHandler::restoreAllBorderless)
+                // and restored every title bar; already-tracked windows are NOT in
+                // the untracked-restore set below, so their chrome would never come
+                // back without this. Daemon-driven and engine-common: the daemon
+                // re-emits each engine's placement geometry, which routes through the
+                // normal snap-commit / tile-request paths. Fired only on a VALID
+                // reply — that proves the daemon's placement state is populated. The
+                // windows are already in their zones, so nothing moves.
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("reapplyWindowAppearance"), {}, QStringLiteral("reapplyWindowAppearance"));
+
                 const QStringList trackedWindows = reply.value();
                 for (const QString& windowId : trackedWindows) {
                     QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
@@ -629,13 +644,15 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     // autotileHideTitleBars needs extra logic when toggled off — delegate to handler
     loadSettingAsync(QStringLiteral("autotileHideTitleBars"), [this](const QVariant& v) {
-        m_autotileHandler->updateHideTitleBarsSetting(v.toBool());
-        updateAllBorders();
+        if (m_autotileHandler->updateHideTitleBarsSetting(v.toBool())) {
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileShowBorder"), [this](const QVariant& v) {
-        m_autotileHandler->updateShowBorderSetting(v.toBool());
-        updateAllBorders();
+        if (m_autotileHandler->updateShowBorderSetting(v.toBool())) {
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
@@ -660,17 +677,73 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderColor"), [this](const QVariant& v) {
-        m_autotileHandler->setBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        const QColor c(v.toString());
+        if (m_autotileHandler->borderColor() != c) {
+            m_autotileHandler->setBorderColor(c);
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileInactiveBorderColor"), [this](const QVariant& v) {
-        m_autotileHandler->setInactiveBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        const QColor c(v.toString());
+        if (m_autotileHandler->inactiveBorderColor() != c) {
+            m_autotileHandler->setInactiveBorderColor(c);
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         m_autotileHandler->setFocusFollowsMouse(v.toBool());
+    });
+
+    // Snapped-window border settings — feed the effect's parallel snap
+    // BorderState (m_snapBorder), mirroring the autotile* block above. When
+    // snapWindowUseSystemBorderColors is on the daemon writes the resolved
+    // accent into the colour keys, so (like autotile) the effect only reads the
+    // resolved colours and never the use-system flag.
+    // Each setter guards on a changed value before re-walking the stacking
+    // order in updateAllBorders / re-toggling title bars — matching the
+    // "only act on change" convention the autotile width/radius setters use.
+    loadSettingAsync(QStringLiteral("snapWindowHideTitleBars"), [this](const QVariant& v) {
+        const bool hide = v.toBool();
+        if (m_snapBorder.hideTitleBars != hide) {
+            updateSnapHideTitleBars(hide);
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowShowBorder"), [this](const QVariant& v) {
+        const bool show = v.toBool();
+        if (m_snapBorder.showBorder != show) {
+            m_snapBorder.showBorder = show;
+            updateAllBorders();
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowBorderWidth"), [this](const QVariant& v) {
+        const int bw = qBound(0, v.toInt(), 10);
+        if (m_snapBorder.width != bw) {
+            m_snapBorder.width = bw;
+            updateAllBorders();
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowBorderRadius"), [this](const QVariant& v) {
+        const int br = qBound(0, v.toInt(), 20);
+        if (m_snapBorder.radius != br) {
+            m_snapBorder.radius = br;
+            updateAllBorders();
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowBorderColor"), [this](const QVariant& v) {
+        const QColor c(v.toString());
+        if (m_snapBorder.color != c) {
+            m_snapBorder.color = c;
+            updateAllBorders();
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowInactiveBorderColor"), [this](const QVariant& v) {
+        const QColor c(v.toString());
+        if (m_snapBorder.inactiveColor != c) {
+            m_snapBorder.inactiveColor = c;
+            updateAllBorders();
+        }
     });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization

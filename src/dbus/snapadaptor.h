@@ -23,7 +23,6 @@ class SnapEngine;
 
 namespace PlasmaZones {
 
-class ScreenModeRouter;
 class WindowTrackingAdaptor;
 class ISettings;
 
@@ -33,7 +32,7 @@ class ISettings;
  * Provides D-Bus interface: org.plasmazones.Snap
  *
  * Owns the snap-specific D-Bus surface: commit/uncommit, snap-restore
- * (appRule / persisted / emptyZone / lastZone / resolveWindowRestore),
+ * (appRule / emptyZone / lastZone / resolveWindowRestore),
  * resnap, calculateSnapAllWindows, windowsSnappedBatch, snap-mode navigation
  * (move/focus/swap/push/snap-by-number/rotate/cycle/restore),
  * snap-mode convenience (moveWindowToZone, swapWindowsById), and
@@ -144,15 +143,10 @@ public Q_SLOTS:
                          int& snapWidth, int& snapHeight, bool& shouldSnap);
 
     /**
-     * @brief Restore a window to its persisted zone from the previous session
-     */
-    void restoreToPersistedZone(const QString& windowId, const QString& screenId, bool sticky, int& snapX, int& snapY,
-                                int& snapWidth, int& snapHeight, bool& shouldRestore);
-
-    /**
      * @brief Run the full 4-level snap-restore fallback chain in one call
      * @param windowKind Structural kind of the opening window (0=Unknown, 1=Normal, 2=Transient).
-     *                   Forwarded to SnapEngine for the kind-match gate.
+     *                   Forwarded to SnapEngine for protocol compatibility; the unified
+     *                   placement record now carries the kind, so it no longer gates restore.
      */
     void resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind, int& snapX,
                               int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);

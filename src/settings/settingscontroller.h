@@ -62,13 +62,14 @@ class ShaderRegistry;
 #include "editorpagecontroller.h"
 #include "externaleditscope.h"
 #include "generalpagecontroller.h"
-#include "snappingappearancecontroller.h"
+#include "snappingzonescontroller.h"
 #include "snappingbehaviorcontroller.h"
 #include "snappingeffectscontroller.h"
 #include "snappingshaderspagecontroller.h"
 #include "snappingzoneselectorcontroller.h"
 #include "stagingservice.h"
 #include "tilingalgorithmcontroller.h"
+#include "snappingwindowappearancecontroller.h"
 #include "tilingappearancecontroller.h"
 #include "tilingbehaviorcontroller.h"
 #include "windowrulecontroller.h"
@@ -108,9 +109,11 @@ class SettingsController : public QObject
     Q_PROPERTY(SnappingBehaviorController* snappingBehaviorPage READ snappingBehaviorPage CONSTANT)
     Q_PROPERTY(TilingBehaviorController* tilingBehaviorPage READ tilingBehaviorPage CONSTANT)
     Q_PROPERTY(SnappingZoneSelectorController* snappingZoneSelectorPage READ snappingZoneSelectorPage CONSTANT)
-    Q_PROPERTY(SnappingAppearanceController* snappingAppearancePage READ snappingAppearancePage CONSTANT)
+    Q_PROPERTY(SnappingZonesController* snappingZonesPage READ snappingZonesPage CONSTANT)
     Q_PROPERTY(SnappingEffectsController* snappingEffectsPage READ snappingEffectsPage CONSTANT)
     Q_PROPERTY(SnappingShadersPageController* snappingShadersPage READ snappingShadersPage CONSTANT)
+    Q_PROPERTY(
+        SnappingWindowAppearanceController* snappingWindowAppearancePage READ snappingWindowAppearancePage CONSTANT)
     Q_PROPERTY(TilingAppearanceController* tilingAppearancePage READ tilingAppearancePage CONSTANT)
     Q_PROPERTY(TilingAlgorithmController* tilingAlgorithmPage READ tilingAlgorithmPage CONSTANT)
     Q_PROPERTY(GeneralPageController* generalPage READ generalPage CONSTANT)
@@ -147,13 +150,10 @@ public:
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
-    /// Parent name → set of leaf child page names. Covers top-level
-    /// sidebar parents (snapping / tiling / animations) AND mid-level
-    /// virtual parents (animations-surfaces / animations-library)
-    /// whose children don't share their name prefix. Drives the
-    /// dirty-state propagation in `isPageDirty` via direct-membership
-    /// lookup. Keep in sync with the QML `_childItems` buckets in
-    /// Main.qml.
+    /// Parent name → set of leaf child page names. Covers top-level sidebar
+    /// parents (snapping / tiling / animations) AND mid-level virtual parents
+    /// (animations-surfaces / animations-library) whose children don't share
+    /// their name prefix. Drives dirty-state propagation in `isPageDirty`.
     static const QHash<QString, QSet<QString>>& pageGroupChildren();
 
     bool needsSave() const
@@ -336,10 +336,7 @@ public:
     {
         return m_snappingZoneSelectorPage;
     }
-    SnappingAppearanceController* snappingAppearancePage() const
-    {
-        return m_snappingAppearancePage;
-    }
+    SnappingZonesController* snappingZonesPage() const;
     SnappingEffectsController* snappingEffectsPage() const
     {
         return m_snappingEffectsPage;
@@ -348,6 +345,7 @@ public:
     {
         return m_snappingShadersPage.get();
     }
+    SnappingWindowAppearanceController* snappingWindowAppearancePage() const;
     TilingAppearanceController* tilingAppearancePage() const
     {
         return m_tilingAppearancePage;
@@ -595,8 +593,9 @@ private:
     SnappingBehaviorController* m_snappingBehaviorPage = nullptr;
     TilingBehaviorController* m_tilingBehaviorPage = nullptr;
     SnappingZoneSelectorController* m_snappingZoneSelectorPage = nullptr;
-    SnappingAppearanceController* m_snappingAppearancePage = nullptr;
+    SnappingZonesController* m_snappingZonesPage = nullptr;
     SnappingEffectsController* m_snappingEffectsPage = nullptr;
+    SnappingWindowAppearanceController* m_snappingWindowAppearancePage = nullptr;
     TilingAppearanceController* m_tilingAppearancePage = nullptr;
     GeneralPageController* m_generalPage = nullptr;
     /// Parented to `this` so Qt manages lifetime; the raw pointer is fine

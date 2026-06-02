@@ -6,11 +6,19 @@
 #include <QSignalSpy>
 
 #include <PhosphorEngine/IPlacementEngine.h>
+#include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/TilingState.h>
+#include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 #include "../helpers/AutotileTestHelpers.h"
+#include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"
+#include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
@@ -239,6 +247,112 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAutotileScreens({QLatin1String(Screen1)});
         QCOMPARE(engine.screenForTrackedWindow(QStringLiteral("never-seen")), QString());
+    }
+
+    // =========================================================================
+    // Cross-engine coordination: a window that opens on an autotile screen but
+    // carries a SNAPPED record whose recorded screen is in snapping mode is being
+    // cross-restored by snap. Autotile must NOT track or tile it (or both engines
+    // claim the same window), and must NOT consume the record (snap is the
+    // consumer). Reciprocal of SnapEngine::resolveWindowRestore's recorded-screen
+    // ownership gate.
+    // =========================================================================
+
+    void testWindowOpened_defersCrossScreenSnapRestoreToSnap()
+    {
+        // root parents the registry so it outlives the engine/wts that borrow it.
+        QObject root;
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        PhosphorZones::LayoutRegistry* layout =
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
+        PlasmaZones::StubZoneDetector zoneDet;
+        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        layout->setSnappingPreferredProvider([] {
+            return true;
+        }); // snapping globally enabled
+
+        const QString autotileScreen = QStringLiteral("DP-2");
+        const QString snapScreen = QStringLiteral("DP-1"); // snapping by default
+        engine.setAutotileScreens({autotileScreen});
+
+        // DP-2 is autotile mode; DP-1 stays snapping (the registry default).
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        layout->setAssignmentEntryDirect(autotileScreen, 0, QString(), autotile);
+
+        // A window snapped on the SNAP monitor DP-1, recorded in the store.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = snapScreen;
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        wts.placementStore().record(rec);
+
+        // KWin reopens it (new uuid) on the AUTOTILE monitor DP-2.
+        engine.windowOpened(QStringLiteral("app|new"), autotileScreen);
+        QCoreApplication::processEvents();
+
+        QVERIFY2(!engine.isWindowTracked(QStringLiteral("app|new")),
+                 "autotile must not track a window snap will cross-restore");
+        PhosphorTiles::TilingState* state = engine.tilingStateForScreen(autotileScreen);
+        QVERIFY2(!state || !state->containsWindow(QStringLiteral("app|new")),
+                 "the deferred window must not be tiled on the autotile screen");
+        QVERIFY2(wts.placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "deferring must not consume the snapped record — snap is the consumer");
+
+        // Control: a window with NO cross-screen snap record IS tracked/tiled.
+        engine.windowOpened(QStringLiteral("other|1"), autotileScreen);
+        QCoreApplication::processEvents();
+        QVERIFY2(engine.isWindowTracked(QStringLiteral("other|1")),
+                 "a normal window on the autotile screen must still be tiled");
+    }
+
+    void testWindowOpened_globalSnappingDisabled_tilesInsteadOfOrphaning()
+    {
+        // When snapping is globally disabled, snap's resolveWindowRestore returns
+        // early and never claims the window — so autotile must NOT defer, or the
+        // window would be stranded unmanaged. Autotile keeps and tiles it.
+        QObject root;
+        PlasmaZones::TestHelpers::IsolatedConfigGuard guard;
+        PhosphorZones::LayoutRegistry* layout =
+            PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"), &root);
+        PlasmaZones::StubZoneDetector zoneDet;
+        PhosphorPlacement::WindowTrackingService wts(layout, &zoneDet, nullptr, nullptr);
+        AutotileEngine engine(layout, &wts, nullptr, PlasmaZones::TestHelpers::testRegistry());
+
+        layout->setSnappingPreferredProvider([] {
+            return false;
+        }); // snapping globally DISABLED
+
+        const QString autotileScreen = QStringLiteral("DP-2");
+        engine.setAutotileScreens({autotileScreen});
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        layout->setAssignmentEntryDirect(autotileScreen, 0, QString(), autotile);
+
+        // Snapped record on the (still Snapping-assigned) DP-1.
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        wts.placementStore().record(rec);
+
+        engine.windowOpened(QStringLiteral("app|new"), autotileScreen);
+        QCoreApplication::processEvents();
+
+        QVERIFY2(engine.isWindowTracked(QStringLiteral("app|new")),
+                 "with snapping globally disabled, autotile must tile the window — not defer to a dead snap");
     }
 };
 

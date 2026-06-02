@@ -45,7 +45,7 @@ ColumnLayout {
     readonly property int effectivePreviewWidth: {
         var sm = effectiveSizeMode;
         if (sm === 0)
-            return Math.round(180 * (safeAspectRatio / (16 / 9)));
+            return Math.round(root.constants.zoneSelectorPreviewMedium * (safeAspectRatio / (16 / 9)));
 
         return settingValue("PreviewWidth", appSettings.zoneSelectorPreviewWidth);
     }
@@ -97,11 +97,10 @@ ColumnLayout {
         SettingsSwitch {
             checked: appSettings.zoneSelectorEnabled
             accessibleName: i18n("Enable zone selector popup")
-            onToggled: function(newValue) {
+            onToggled: function (newValue) {
                 appSettings.zoneSelectorEnabled = newValue;
             }
         }
-
     }
 
     MonitorSelectorSection {
@@ -142,8 +141,8 @@ ColumnLayout {
                         anchors.top: parent.top
                         position: root.effectivePosition
                         enabled: appSettings.zoneSelectorEnabled
-                        onPositionSelected: function(newPosition) {
-                            root.writeSetting("Position", newPosition, function(v) {
+                        onPositionSelected: function (newPosition) {
+                            root.writeSetting("Position", newPosition, function (v) {
                                 appSettings.zoneSelectorPosition = v;
                             });
                         }
@@ -159,11 +158,9 @@ ColumnLayout {
                         opacity: 0.7
                         font: Kirigami.Theme.smallFont
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 // Trigger distance
                 SettingsRow {
@@ -181,7 +178,7 @@ ColumnLayout {
                             to: root.constants.zoneSelectorTriggerMax
                             stepSize: 10
                             Accessible.name: i18n("Trigger distance")
-                            onMoved: root.writeSetting("TriggerDistance", value, function(v) {
+                            onMoved: root.writeSetting("TriggerDistance", value, function (v) {
                                 appSettings.zoneSelectorTriggerDistance = v;
                             })
 
@@ -190,24 +187,18 @@ ColumnLayout {
                                 when: !triggerSlider.pressed
                                 restoreMode: Binding.RestoreNone
                             }
-
                         }
 
                         Label {
                             text: root.effectiveTriggerDistance + " px"
-                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
+                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + Kirigami.Units.largeSpacing
                             horizontalAlignment: Text.AlignRight
                             font: Kirigami.Theme.fixedWidthFont
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // Layout Arrangement card - wrapped in Item for stable sizing
@@ -236,22 +227,25 @@ ColumnLayout {
                         Accessible.name: i18n("Arrangement")
                         textRole: "text"
                         valueRole: "value"
-                        model: [{
-                            "text": i18n("Grid"),
-                            "value": 0
-                        }, {
-                            "text": i18n("Horizontal"),
-                            "value": 1
-                        }, {
-                            "text": i18n("Vertical"),
-                            "value": 2
-                        }]
+                        model: [
+                            {
+                                "text": i18n("Grid"),
+                                "value": 0
+                            },
+                            {
+                                "text": i18n("Horizontal"),
+                                "value": 1
+                            },
+                            {
+                                "text": i18n("Vertical"),
+                                "value": 2
+                            }
+                        ]
                         currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
-                        onActivated: root.writeSetting("LayoutMode", currentValue, function(v) {
+                        onActivated: root.writeSetting("LayoutMode", currentValue, function (v) {
                             appSettings.zoneSelectorLayoutMode = v;
                         })
                     }
-
                 }
 
                 SettingsSeparator {
@@ -268,13 +262,12 @@ ColumnLayout {
                         to: root.constants.zoneSelectorGridColumnsMax
                         value: root.effectiveGridColumns
                         unitText: ""
-                        onValueModified: (value) => {
-                            return root.writeSetting("GridColumns", value, function(v) {
+                        onValueModified: value => {
+                            return root.writeSetting("GridColumns", value, function (v) {
                                 appSettings.zoneSelectorGridColumns = v;
                             });
                         }
                     }
-
                 }
 
                 SettingsSeparator {
@@ -288,22 +281,18 @@ ColumnLayout {
 
                     SettingsSpinBox {
                         from: root.constants.zoneSelectorMaxRowsMin
-                        to: 10
+                        to: root.constants.zoneSelectorMaxRowsMax
                         value: root.effectiveMaxRows
                         unitText: ""
-                        onValueModified: (value) => {
-                            return root.writeSetting("MaxRows", value, function(v) {
+                        onValueModified: value => {
+                            return root.writeSetting("MaxRows", value, function (v) {
                                 appSettings.zoneSelectorMaxRows = v;
                             });
                         }
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // Preview Size card - wrapped in Item for stable sizing
@@ -343,7 +332,12 @@ ColumnLayout {
                             border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.4)
                             border.width: 1
 
-                            // Sample zones
+                            // Sample zones. The small integer literals below
+                            // (2px inset, 1px inter-zone gap, 2px corner radius,
+                            // 1px borders, the 20px label-visibility threshold)
+                            // are intentional fixed drawing dimensions of this
+                            // miniature preview — diagram detail, not layout
+                            // spacing, so they are deliberately not theme-scaled.
                             Row {
                                 anchors.fill: parent
                                 anchors.margins: 2
@@ -369,13 +363,9 @@ ColumnLayout {
                                             opacity: 0.5
                                             visible: parent.width >= 20
                                         }
-
                                     }
-
                                 }
-
                             }
-
                         }
 
                         // Size label
@@ -387,9 +377,7 @@ ColumnLayout {
                             font: Kirigami.Theme.fixedWidthFont
                             opacity: 0.7
                         }
-
                     }
-
                 }
 
                 // Size selection - segmented button style
@@ -401,7 +389,10 @@ ColumnLayout {
                     // Track explicit Custom mode selection
                     property bool customModeActive: false
                     // Track which size is selected
-                    // 0=Auto, 1=Small(120), 2=Medium(180), 3=Large(260), 4=Custom
+                    // 0=Auto, 1=Small, 2=Medium, 3=Large, 4=Custom. A preset is
+                    // considered selected when the width is within half a slider
+                    // step (stepSize 10 → 5px) of that preset's value.
+                    readonly property int presetMatchTolerance: 5
                     property int selectedSize: {
                         if (root.effectiveSizeMode === 0)
                             return 0;
@@ -412,15 +403,15 @@ ColumnLayout {
 
                         // Explicit Custom selection
                         var w = root.effectivePreviewWidth;
-                        if (Math.abs(w - 120) <= 5)
+                        if (Math.abs(w - root.constants.zoneSelectorPreviewSmall) <= presetMatchTolerance)
                             return 1;
 
                         // Small
-                        if (Math.abs(w - 180) <= 5)
+                        if (Math.abs(w - root.constants.zoneSelectorPreviewMedium) <= presetMatchTolerance)
                             return 2;
 
                         // Medium
-                        if (Math.abs(w - 260) <= 5)
+                        if (Math.abs(w - root.constants.zoneSelectorPreviewLarge) <= presetMatchTolerance)
                             return 3;
 
                         // Large
@@ -436,13 +427,13 @@ ColumnLayout {
                         highlighted: parent.selectedSize === 0
                         onClicked: {
                             sizeButtonRow.customModeActive = false;
-                            root.writeSetting("SizeMode", 0, function(v) {
+                            root.writeSetting("SizeMode", 0, function (v) {
                                 appSettings.zoneSelectorSizeMode = v;
                             });
                         }
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("Approximately 10% of screen width (120-280px)")
+                        ToolTip.text: i18n("Size scales automatically with your screen resolution")
                     }
 
                     Button {
@@ -451,19 +442,19 @@ ColumnLayout {
                         highlighted: parent.selectedSize === 1
                         onClicked: {
                             sizeButtonRow.customModeActive = false;
-                            root.writeSetting("SizeMode", 1, function(v) {
+                            root.writeSetting("SizeMode", 1, function (v) {
                                 appSettings.zoneSelectorSizeMode = v;
                             });
-                            root.writeSetting("PreviewWidth", 120, function(v) {
+                            root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewSmall, function (v) {
                                 appSettings.zoneSelectorPreviewWidth = v;
                             });
-                            root.writeSetting("PreviewHeight", Math.round(120 / root.safeAspectRatio), function(v) {
+                            root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewSmall / root.safeAspectRatio), function (v) {
                                 appSettings.zoneSelectorPreviewHeight = v;
                             });
                         }
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("120px width")
+                        ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewSmall)
                     }
 
                     Button {
@@ -472,19 +463,19 @@ ColumnLayout {
                         highlighted: parent.selectedSize === 2
                         onClicked: {
                             sizeButtonRow.customModeActive = false;
-                            root.writeSetting("SizeMode", 1, function(v) {
+                            root.writeSetting("SizeMode", 1, function (v) {
                                 appSettings.zoneSelectorSizeMode = v;
                             });
-                            root.writeSetting("PreviewWidth", 180, function(v) {
+                            root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewMedium, function (v) {
                                 appSettings.zoneSelectorPreviewWidth = v;
                             });
-                            root.writeSetting("PreviewHeight", Math.round(180 / root.safeAspectRatio), function(v) {
+                            root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewMedium / root.safeAspectRatio), function (v) {
                                 appSettings.zoneSelectorPreviewHeight = v;
                             });
                         }
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("180px width")
+                        ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewMedium)
                     }
 
                     Button {
@@ -493,19 +484,19 @@ ColumnLayout {
                         highlighted: parent.selectedSize === 3
                         onClicked: {
                             sizeButtonRow.customModeActive = false;
-                            root.writeSetting("SizeMode", 1, function(v) {
+                            root.writeSetting("SizeMode", 1, function (v) {
                                 appSettings.zoneSelectorSizeMode = v;
                             });
-                            root.writeSetting("PreviewWidth", 260, function(v) {
+                            root.writeSetting("PreviewWidth", root.constants.zoneSelectorPreviewLarge, function (v) {
                                 appSettings.zoneSelectorPreviewWidth = v;
                             });
-                            root.writeSetting("PreviewHeight", Math.round(260 / root.safeAspectRatio), function(v) {
+                            root.writeSetting("PreviewHeight", Math.round(root.constants.zoneSelectorPreviewLarge / root.safeAspectRatio), function (v) {
                                 appSettings.zoneSelectorPreviewHeight = v;
                             });
                         }
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
-                        ToolTip.text: i18n("260px width")
+                        ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewLarge)
                     }
 
                     Button {
@@ -514,7 +505,7 @@ ColumnLayout {
                         highlighted: parent.selectedSize === 4
                         onClicked: {
                             sizeButtonRow.customModeActive = true;
-                            root.writeSetting("SizeMode", 1, function(v) {
+                            root.writeSetting("SizeMode", 1, function (v) {
                                 appSettings.zoneSelectorSizeMode = v;
                             });
                         }
@@ -522,7 +513,6 @@ ColumnLayout {
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: i18n("Custom size with slider")
                     }
-
                 }
 
                 // Custom size slider - only visible when Custom is selected
@@ -546,13 +536,13 @@ ColumnLayout {
                         stepSize: 10
                         Accessible.name: i18n("Preview size")
                         onMoved: {
-                            root.writeSetting("PreviewWidth", value, function(v) {
+                            root.writeSetting("PreviewWidth", value, function (v) {
                                 appSettings.zoneSelectorPreviewWidth = v;
                             });
                             // Always maintain aspect ratio
                             var newHeight = Math.round(value / root.safeAspectRatio);
                             newHeight = Math.max(root.constants.zoneSelectorPreviewHeightMin, Math.min(root.constants.zoneSelectorPreviewHeightMax, newHeight));
-                            root.writeSetting("PreviewHeight", newHeight, function(v) {
+                            root.writeSetting("PreviewHeight", newHeight, function (v) {
                                 appSettings.zoneSelectorPreviewHeight = v;
                             });
                         }
@@ -562,16 +552,14 @@ ColumnLayout {
                             when: !customSizeSlider.pressed
                             restoreMode: Binding.RestoreNone
                         }
-
                     }
 
                     Label {
                         text: root.effectivePreviewWidth + " px"
-                        Layout.preferredWidth: 55
+                        Layout.preferredWidth: root.constants.sliderValueLabelWidth + Kirigami.Units.largeSpacing
                         horizontalAlignment: Text.AlignRight
                         font: Kirigami.Theme.fixedWidthFont
                     }
-
                 }
 
                 // Info text for auto mode
@@ -584,11 +572,7 @@ ColumnLayout {
                     font: Kirigami.Theme.smallFont
                     horizontalAlignment: Text.AlignHCenter
                 }
-
             }
-
         }
-
     }
-
 }

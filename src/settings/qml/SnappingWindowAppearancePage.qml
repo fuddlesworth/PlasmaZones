@@ -1,0 +1,269 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Dialogs
+import QtQuick.Layouts
+import org.kde.kirigami as Kirigami
+
+SettingsFlickable {
+    id: root
+
+    readonly property var settingsBridge: settingsController.snappingWindowAppearancePage
+    // Per-screen snapping gap/padding helper. Only the Gaps card below is
+    // per-screen; the colour / decoration / border cards are global. The monitor
+    // selector is placed directly above Gaps so its scope reads unambiguously.
+
+    function snappingSettingValue(key, globalValue) {
+        return snappingHelper.settingValue(key, globalValue);
+    }
+
+    function writeSnappingSetting(key, value, globalSetter) {
+        snappingHelper.writeSetting(key, value, globalSetter);
+    }
+
+    contentHeight: content.implicitHeight
+    clip: true
+
+    PerScreenOverrideHelper {
+        id: snappingHelper
+
+        appSettings: settingsController
+        getterMethod: "getPerScreenSnappingSettings"
+        setterMethod: "setPerScreenSnappingSetting"
+        clearerMethod: "clearPerScreenSnappingSettings"
+    }
+
+    ColumnLayout {
+        id: content
+
+        width: parent.width
+        spacing: Kirigami.Units.largeSpacing
+
+        // =================================================================
+        // Colors Card
+        // =================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Colors")
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Use system accent color")
+                    description: i18n("Derive border colors from your system color scheme")
+
+                    SettingsSwitch {
+                        id: useSystemColorsSwitch
+
+                        checked: appSettings.snapWindowUseSystemBorderColors
+                        accessibleName: i18n("Use system accent color")
+                        onToggled: function (newValue) {
+                            appSettings.snapWindowUseSystemBorderColors = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {
+                    visible: !useSystemColorsSwitch.checked
+                }
+
+                SettingsRow {
+                    visible: !useSystemColorsSwitch.checked
+                    title: i18n("Active border color")
+                    description: i18n("Border color for the focused snapped window")
+
+                    ColorSwatchRow {
+                        color: appSettings.snapWindowBorderColor
+                        onClicked: {
+                            activeBorderColorDialog.selectedColor = appSettings.snapWindowBorderColor;
+                            activeBorderColorDialog.open();
+                        }
+                    }
+                }
+
+                SettingsSeparator {
+                    visible: !useSystemColorsSwitch.checked
+                }
+
+                SettingsRow {
+                    visible: !useSystemColorsSwitch.checked
+                    title: i18n("Inactive border color")
+                    description: i18n("Border color for unfocused snapped windows")
+
+                    ColorSwatchRow {
+                        color: appSettings.snapWindowInactiveBorderColor
+                        onClicked: {
+                            inactiveBorderColorDialog.selectedColor = appSettings.snapWindowInactiveBorderColor;
+                            inactiveBorderColorDialog.open();
+                        }
+                    }
+                }
+            }
+        }
+
+        // =================================================================
+        // Decorations Card
+        // =================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Decorations")
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Hide title bars")
+                    description: i18n("Remove window title bars while snapped, restored when floating")
+
+                    SettingsSwitch {
+                        checked: appSettings.snapWindowHideTitleBars
+                        accessibleName: i18n("Hide title bars on snapped windows")
+                        onToggled: function (newValue) {
+                            appSettings.snapWindowHideTitleBars = newValue;
+                        }
+                    }
+                }
+            }
+        }
+
+        // =================================================================
+        // Borders Card
+        // =================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Borders")
+            showToggle: true
+            toggleChecked: appSettings.snapWindowShowBorder
+            onToggleClicked: checked => {
+                return appSettings.snapWindowShowBorder = checked;
+            }
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Border width")
+                    description: i18n("Thickness of colored borders around snapped windows")
+
+                    SettingsSpinBox {
+                        from: root.settingsBridge.snapWindowBorderWidthMin
+                        to: root.settingsBridge.snapWindowBorderWidthMax
+                        value: appSettings.snapWindowBorderWidth
+                        onValueModified: value => {
+                            return appSettings.snapWindowBorderWidth = value;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Corner radius")
+                    description: i18n("Roundness of border corners (0 for square)")
+
+                    SettingsSpinBox {
+                        from: root.settingsBridge.snapWindowBorderRadiusMin
+                        to: root.settingsBridge.snapWindowBorderRadiusMax
+                        value: appSettings.snapWindowBorderRadius
+                        onValueModified: value => {
+                            return appSettings.snapWindowBorderRadius = value;
+                        }
+                    }
+                }
+            }
+        }
+
+        // =================================================================
+        // Gaps (per-screen) — monitor selector scopes only the card below.
+        // =================================================================
+        MonitorSelectorSection {
+            Layout.fillWidth: true
+            appSettings: settingsController
+            selectedScreenName: snappingHelper.selectedScreenName
+            hasOverrides: snappingHelper.hasOverrides
+            onSelectedScreenNameChanged: snappingHelper.selectedScreenName = selectedScreenName
+            onResetClicked: snappingHelper.clearOverrides()
+        }
+
+        GapsSettingsCard {
+            Layout.fillWidth: true
+            // Snapping uses "Zone padding" / "Edge gap" labels and has no Smart
+            // gaps. Zone-padding bounds come from zonePaddingMin/Max; the edge /
+            // per-side gaps from gapMin/Max — each matching its validator clamp.
+            primaryGapLabel: i18n("Zone padding")
+            primaryGapDescription: i18n("Space between snapped windows")
+            outerGapLabel: i18n("Edge gap")
+            outerGapDescription: i18n("Space from screen edges to snapped windows")
+            showSmartGaps: false
+            gapMin: root.settingsBridge.gapMin
+            gapMax: root.settingsBridge.gapMax
+            primaryGapMin: root.settingsBridge.zonePaddingMin
+            primaryGapMax: root.settingsBridge.zonePaddingMax
+            primaryGapValue: root.snappingSettingValue("ZonePadding", appSettings.zonePadding)
+            outerGapValue: root.snappingSettingValue("OuterGap", appSettings.outerGap)
+            usePerSideOuterGap: root.snappingSettingValue("UsePerSideOuterGap", appSettings.usePerSideOuterGap)
+            outerGapTopValue: root.snappingSettingValue("OuterGapTop", appSettings.outerGapTop)
+            outerGapBottomValue: root.snappingSettingValue("OuterGapBottom", appSettings.outerGapBottom)
+            outerGapLeftValue: root.snappingSettingValue("OuterGapLeft", appSettings.outerGapLeft)
+            outerGapRightValue: root.snappingSettingValue("OuterGapRight", appSettings.outerGapRight)
+            onPrimaryGapModified: value => {
+                return root.writeSnappingSetting("ZonePadding", value, function (v) {
+                    appSettings.zonePadding = v;
+                });
+            }
+            onOuterGapModified: value => {
+                return root.writeSnappingSetting("OuterGap", value, function (v) {
+                    appSettings.outerGap = v;
+                });
+            }
+            onUsePerSideOuterGapToggled: checked => {
+                return root.writeSnappingSetting("UsePerSideOuterGap", checked, function (v) {
+                    appSettings.usePerSideOuterGap = v;
+                });
+            }
+            onOuterGapTopModified: value => {
+                return root.writeSnappingSetting("OuterGapTop", value, function (v) {
+                    appSettings.outerGapTop = v;
+                });
+            }
+            onOuterGapBottomModified: value => {
+                return root.writeSnappingSetting("OuterGapBottom", value, function (v) {
+                    appSettings.outerGapBottom = v;
+                });
+            }
+            onOuterGapLeftModified: value => {
+                return root.writeSnappingSetting("OuterGapLeft", value, function (v) {
+                    appSettings.outerGapLeft = v;
+                });
+            }
+            onOuterGapRightModified: value => {
+                return root.writeSnappingSetting("OuterGapRight", value, function (v) {
+                    appSettings.outerGapRight = v;
+                });
+            }
+        }
+    }
+
+    // =====================================================================
+    // Color Dialogs
+    // =====================================================================
+    ColorDialog {
+        id: activeBorderColorDialog
+
+        title: i18n("Choose Active Border Color")
+        onAccepted: appSettings.snapWindowBorderColor = selectedColor
+    }
+
+    ColorDialog {
+        id: inactiveBorderColorDialog
+
+        title: i18n("Choose Inactive Border Color")
+        onAccepted: appSettings.snapWindowInactiveBorderColor = selectedColor
+    }
+}

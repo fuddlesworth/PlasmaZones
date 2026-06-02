@@ -401,6 +401,15 @@ public Q_SLOTS:
     /// from windows that no longer exist (closed between save and daemon restart).
     void pruneStaleWindows(const QStringList& aliveWindowIds);
 
+    /// Re-drive compositor-side per-window appearance (snap border / hidden
+    /// title bar, autotile border) for every window each engine manages. Called
+    /// by the KWin effect once the daemon is ready: on a daemon or effect
+    /// restart the compositor drops its window-chrome state, so it must be
+    /// re-applied from the daemon's authoritative placement state. Delegates to
+    /// the common IPlacementEngine::reapplyManagedWindowAppearance() on both
+    /// engines — does not move windows.
+    void reapplyWindowAppearance();
+
     /**
      * Get typed list of empty zones for Snap Assist continuation
      * @param screenId Screen ID (e.g. DP-1)
@@ -534,37 +543,18 @@ public Q_SLOTS:
      */
     void scheduleSaveState();
 
-    /**
-     * @brief Set tiling state serialization delegates
-     *
-     * These delegates are called during saveState()/loadState() to include
-     * autotile per-screen tiling state alongside window tracking state.
-     *
-     * @param serializeFn Returns JSON array of per-screen tiling states
-     * @param deserializeFn Restores tiling states from JSON array
-     */
-    // MOC misparses std::function<void(const QJsonArray&)> as function<const void(QJsonArray&)>,
-    // generating code that fails to compile. This method is not a signal/slot, but MOC still
-    // processes all public member declarations in Q_OBJECT classes. Guard is required.
-    //
-    // Note: hiding the declarations from MOC ALSO suppresses Qt meta-object
-    // visibility for these methods — they cannot be invoked via
-    // QMetaObject::invokeMethod or bound from QML. Both are internal C++
-    // wiring (the daemon hands its tiling persistence callbacks here at
-    // startup); no external caller should rely on meta-object access.
-#ifndef Q_MOC_RUN
-    void setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
-                                 std::function<void(const QJsonArray&)> deserializeFn);
+    /// Unified placement capture orchestrator: ask each engine for @p windowId's
+    /// current placement, stamp it with the live frame geometry, and record it in
+    /// the WindowPlacementStore (or clear the record if no engine manages it).
+    /// Shadow-written in P1; the single funnel every state-change + close hook
+    /// calls so the persisted record always reflects the window's live state.
+    void captureWindowPlacement(const QString& windowId);
 
-    /**
-     * @brief Set delegates for autotile pending restore queue persistence
-     *
-     * Separate from tiling state delegates — pending restores have their own
-     * config key to keep the window-orders array homogeneous.
-     */
-    void setTilingPendingRestoreDelegates(std::function<QJsonObject()> serializeFn,
-                                          std::function<void(const QJsonObject&)> deserializeFn);
-#endif
+    /// Re-capture every open floating window's live geometry into the unified
+    /// store at save time (no per-move hook fires for drags). Called before the
+    /// dirty snapshot in saveState so a dragged floated window persists its
+    /// current position across a daemon restart.
+    void refreshOpenWindowPlacements();
 
     /**
      * @brief Load window tracking state from disk
@@ -588,40 +578,32 @@ public:
     // `handleWindowClosed`. Every caller is in-process and reaches them
     // via direct C++ invocation through the daemon, NOT through D-Bus.
     /**
-     * @brief Drop snap and autotile pending-restore queues for excluded appIds.
+     * @brief Drop unified WindowPlacement records for excluded appIds.
      *
-     * Walks the snap and autotile pending-restore queues and asks both
-     * engines to remove any appId matching one of @p patterns. Marks
-     * DirtyPendingRestores or DirtyAutotilePending as appropriate so the
-     * next debounced save persists the pruned state.
+     * Single `placementStore().removeIf(...)` over the unified store, dropping any
+     * record whose appId matches one of @p patterns (via
+     * PhosphorIdentity::WindowId::appIdMatches), across BOTH engines' records — there
+     * is no longer a per-engine pending-restore queue to walk. Marks
+     * DirtyWindowPlacements when anything was removed so the next debounced save
+     * persists the pruned store.
      *
-     * Plain `public:` (not Q_SLOTS): the bus surface deliberately
-     * excludes this — every caller is in-process and reaches it via
-     * direct C++ invocation through the daemon. Same pattern as
-     * `WindowDragAdaptor::clearForCompositorReconnect`.
+     * Plain `public:` (not Q_SLOTS): the bus surface deliberately excludes this —
+     * every caller is in-process and reaches it via direct C++ invocation through the
+     * daemon. Same pattern as `WindowDragAdaptor::clearForCompositorReconnect`.
      *
-     * Called from three daemon-side sites — WTA's own constructor no
-     * longer runs the prune (the snap queues are loaded before the rule
-     * store has been filtered; the daemon kicks the prune from the
-     * init prologue after WTA::loadState completes in init order).
-     *   1. Daemon::init's init-prologue priming call — drains queue
-     *      entries WTA::loadState just populated. Runs once, synchronously,
-     *      before the `rulesChanged` subscription connects. The autotile
-     *      queue is not yet loaded at this point, so the autotile-side
-     *      prune is a no-op here.
+     * Called from three daemon-side sites:
+     *   1. Daemon::init's init-prologue priming call — runs once, synchronously,
+     *      before the `rulesChanged` subscription connects, pruning what loadState
+     *      just deserialized into the store.
      *   2. Daemon::init's `refilterExcludeRules` lambda, fired on every
-     *      `WindowRuleStore::rulesChanged` whose post-filter Exclude
-     *      slice differs from the cached one — equality-guarded so
-     *      non-Exclude rule edits don't walk the queues unnecessarily.
-     *      Drives live settings-app rule edits into the prune.
-     *   3. Daemon::finalizeStartup, after AutotileEngine::loadState has
-     *      populated the autotile queue, so the autotile-side prune
-     *      actually has something to process.
-     * The daemon derives @p patterns from the unified WindowRule store
-     * via `PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom`.
+     *      `WindowRuleStore::rulesChanged` whose post-filter Exclude slice differs
+     *      from the cached one (equality-guarded). Drives live rule edits into the prune.
+     *   3. Daemon::finalizeStartup, after AutotileEngine::loadState has restored its
+     *      placement records, so any autotile records loaded then are pruned too.
+     * The daemon derives @p patterns from the unified WindowRule store via
+     * `PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom`.
      *
-     * Calling this before either engine is wired is safe. Engines that are
-     * missing contribute zero removals. An empty @p patterns short-circuits.
+     * Safe to call at any time. An empty @p patterns short-circuits.
      */
     void pruneExcludedPendingRestores(const QStringList& patterns);
 
@@ -675,7 +657,7 @@ Q_SIGNALS:
      * 1. The active layout becomes available after startup
      * 2. There are pending zone assignments waiting to be applied
      *
-     * The KWin effect should respond by calling restoreToPersistedZone()
+     * The KWin effect should respond by calling resolveWindowRestore()
      * for all visible windows that haven't yet been tracked.
      *
      * @note This solves startup timing issues where windows appear before
@@ -878,8 +860,8 @@ private:
      * The activity parameter is optional and defaults to empty — snap-mode
      * storage carries no per-window activity tag (SnapState does not track it)
      * so snap callers leave it unset and the activity-mode disable list never
-     * applies to them. Autotile pending-restore filtering passes the entry's
-     * activity tag explicitly via the engine's ShouldPersistRestorePredicate.
+     * applies to them. The WindowPlacementStore serialize keep-predicate passes
+     * each record's activity tag explicitly so autotile records gate correctly.
      */
     bool isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
                                     const QString& activity = QString()) const;
@@ -891,7 +873,7 @@ private:
      */
     int currentDesktop() const;
 
-    // clearFloatingStateForSnap was removed — PhosphorPlacement::WindowTrackingService::commitSnap
+    // clearFloatingStateForSnap was removed — PhosphorSnapEngine::SnapEngine::commitSnap
     // now handles floating-state clearing internally (and emits
     // windowFloatingClearedForSnap which the adaptor relays to its own
     // windowFloatingChanged D-Bus signal).
@@ -928,14 +910,6 @@ private:
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
     QPointer<PhosphorEngine::PlacementEngineBase> m_autotileEngine;
     QPointer<PhosphorSnapEngine::SnapEngine> m_cachedSnapEngine;
-
-    // Pre-tile geometries loaded by loadState BEFORE m_snapEngine was
-    // wired (the ctor calls loadState, but setEngines is called later by
-    // the daemon). Replayed into the snap engine the moment setEngines
-    // wires it. Without this buffer, every restart silently drops the
-    // persisted unmanaged-geometry map and breaks drag-out-unsnap
-    // pre-snap-size restore across sessions.
-    QHash<QString, PhosphorEngine::PlacementEngineBase::UnmanagedEntry> m_pendingUnmanagedGeometries;
 
     // Central dispatcher: adaptor methods route lifecycle / resnap /
     // restore calls through this instead of direct engine pointer checks.
@@ -997,12 +971,6 @@ private:
     // async worker, so hitting the sync path indicates either a test
     // harness or an unexpected misconfiguration.
     bool m_syncFallbackWarned = false;
-
-    // Tiling state serialization delegates (autotile engine → WTA persistence)
-    std::function<QJsonArray()> m_serializeTilingStatesFn;
-    std::function<void(const QJsonArray&)> m_deserializeTilingStatesFn;
-    std::function<QJsonObject()> m_serializePendingRestoresFn;
-    std::function<void(const QJsonObject&)> m_deserializePendingRestoresFn;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Startup timing coordination

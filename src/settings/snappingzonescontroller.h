@@ -11,11 +11,13 @@ namespace PlasmaZones {
 
 class ISettings;
 
-/// Q_PROPERTY surface for the "Snapping → Appearance" settings page.
+/// Q_PROPERTY surface for the "Snapping → Zones" settings page (the
+/// drag-time zone overlay).
 ///
 /// Exposed as a child Q_PROPERTY on SettingsController. Two responsibilities:
-///   1. Expose border-width / border-radius slider bounds as CONSTANTs
-///      (ConfigDefaults delegation, mirrors SnappingZoneSelectorController).
+///   1. Expose the zone-overlay border-width / border-radius slider bounds as
+///      CONSTANTs, delegating directly to ConfigDefaults::borderWidthMin/Max and
+///      borderRadiusMin/Max.
 ///   2. Own the color-import action surface: `loadColorsFromPywal()` and
 ///      `loadColorsFromFile(path)`, plus their `colorImportError(msg)` /
 ///      `colorImportSuccess()` signals. Each successful import emits
@@ -24,7 +26,7 @@ class ISettings;
 ///      Q_PROPERTY on Settings and mark dirty through the meta-loop, but
 ///      the top-level load path needs the explicit signal to cover any
 ///      batched writes that don't individually trip a NOTIFY.
-class SnappingAppearanceController : public PhosphorSettingsUi::PageController
+class SnappingZonesController : public PhosphorSettingsUi::PageController
 {
     Q_OBJECT
 
@@ -32,9 +34,13 @@ class SnappingAppearanceController : public PhosphorSettingsUi::PageController
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int borderRadiusMax READ borderRadiusMax CONSTANT)
+    // Zone-label font-scale slider bounds (as a 0..1+ multiplier — the QML
+    // works in percent, multiplying by 100).
+    Q_PROPERTY(double labelFontScaleMin READ labelFontScaleMin CONSTANT)
+    Q_PROPERTY(double labelFontScaleMax READ labelFontScaleMax CONSTANT)
 
 public:
-    explicit SnappingAppearanceController(ISettings& settings, QObject* parent = nullptr);
+    explicit SnappingZonesController(ISettings& settings, QObject* parent = nullptr);
 
     bool isDirty() const override
     {
@@ -51,6 +57,8 @@ public:
     int borderWidthMax() const;
     int borderRadiusMin() const;
     int borderRadiusMax() const;
+    double labelFontScaleMin() const;
+    double labelFontScaleMax() const;
 
     /// Import colors from the user's pywal output
     /// (`~/.cache/wal/colors.json`). Emits `colorImportSuccess()` on

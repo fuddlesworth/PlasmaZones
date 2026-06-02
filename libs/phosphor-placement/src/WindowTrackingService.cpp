@@ -127,8 +127,9 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     const bool desktopChanged = (previousDesktop != virtualDesktop);
 
     m_snapState->assignWindowToZones(windowId, validZoneIds, screenId, virtualDesktop);
-    // Mirror SnapState::assignWindowToZones's own floating-set removal at the
-    // WTS layer (SnapState.cpp:171). The two sets are independent — assigning
+    // Mirror SnapState::assignWindowToZones's own floating-set removal (it removes
+    // the window from its m_floatingWindows) at the WTS layer. The two sets are
+    // independent — assigning
     // a window to zones implicitly un-floats it in SnapState, but the WTS
     // m_floatingWindows entry would survive without this clear, leaving
     // isWindowFloating() returning true via the appId fallback even though
@@ -239,6 +240,9 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     };
 
     removeHash(m_windowStickyStates);
+    // m_floatingWindows is the legacy fallback set — empty in production once the
+    // per-engine float resolver/writer are wired (the engines own float state), so
+    // this is a no-op there; kept for the unwired / unit-test path.
     removeSet(m_floatingWindows);
 
     if (m_snapEngine) {
@@ -318,21 +322,87 @@ std::optional<QRect> WindowTrackingService::validateGeometryForScreen(const QRec
 std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
                                                                        bool exactOnly) const
 {
-    if (windowId.isEmpty() || !m_snapEngine) {
+    if (windowId.isEmpty()) {
         return std::nullopt;
     }
-    if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
-        return validateGeometryForScreen(m_snapEngine->unmanagedGeometry(windowId),
-                                         m_snapEngine->unmanagedScreen(windowId), screenId);
+    // SINGLE source of truth for the float-back: the placement record's SHARED
+    // per-screen free geometry. (The legacy per-engine m_unmanagedGeometries store
+    // is no longer consulted — two parallel stores drifted and leaked the zone/tile
+    // rect into float.) Free geometry is shared across modes, so snap and autotile
+    // resolve the same value; prefer this screen's remembered spot, then any other
+    // screen's (cross-screen validated).
+    const QString appId = exactOnly ? QString() : currentAppIdFor(windowId);
+    const auto rec = m_placementStore.peek(windowId, appId);
+    if (!rec) {
+        return std::nullopt;
     }
-    if (!exactOnly) {
-        const QString appId = currentAppIdFor(windowId);
-        if (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId)) {
-            return validateGeometryForScreen(m_snapEngine->unmanagedGeometry(appId),
-                                             m_snapEngine->unmanagedScreen(appId), screenId);
+    const QRect exact = rec->freeGeometryFor(screenId);
+    if (exact.isValid()) {
+        return validateGeometryForScreen(exact, screenId, screenId);
+    }
+    for (auto it = rec->freeGeometryByScreen.constBegin(); it != rec->freeGeometryByScreen.constEnd(); ++it) {
+        if (it.value().isValid()) {
+            return validateGeometryForScreen(it.value(), it.key(), screenId);
         }
     }
     return std::nullopt;
+}
+
+void WindowTrackingService::recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
+                                               bool overwrite)
+{
+    if (windowId.isEmpty() || screenId.isEmpty() || !geometry.isValid()) {
+        return;
+    }
+    // INVARIANT (WindowPlacement::freeGeometryByScreen): this map holds ONLY a
+    // genuine free/floating frame and is FROZEN while the window occupies a ZONE
+    // (snapped) — a snapped window's live frame IS the zone rect, so recording it
+    // here would overwrite the float-back with the snapped geometry (the per-mode
+    // geometry leak the unified record exists to prevent). This is the SINGLE write
+    // point into the shared free geometry, so the guard lives here, not at each
+    // caller. `isWindowSnapped` stays true for a floating-with-preserved-zone
+    // window, so AND with `!isWindowFloating` — "snapped AND not floating" = actually
+    // occupying the zone. (The autotile-tiled case is NOT gated here: a window that
+    // is on an autotile screen but not yet tiled — a fresh spawn — legitimately has a
+    // free frame, and "autotile mode + not floating" cannot tell that apart from a
+    // tiled window. The effect's saveAndRecordPreAutotileGeometry guards the tiled
+    // case at capture time instead.)
+    if (isWindowSnapped(windowId) && !isWindowFloating(windowId)) {
+        qCDebug(lcPlacement) << "recordFreeGeometry: refusing snapped frame for" << windowId
+                             << "— float-back stays frozen while it occupies a zone";
+        return;
+    }
+    const QString appId = currentAppIdFor(windowId);
+    if (appId.isEmpty()) {
+        return;
+    }
+    if (!overwrite) {
+        const auto existing = m_placementStore.peek(windowId, appId);
+        if (existing && existing->freeGeometryFor(screenId).isValid()) {
+            return; // first-capture-wins
+        }
+    }
+    // A geometry-only partial: no engine slot, so record()'s merge leaves the
+    // managed context (screen/desktop/activity) untouched and only updates this
+    // screen's free geometry.
+    PhosphorEngine::WindowPlacement p;
+    p.windowId = windowId;
+    p.appId = appId;
+    p.screenId = screenId;
+    p.freeGeometryByScreen.insert(screenId, geometry);
+    if (m_placementStore.record(p)) {
+        markDirty(DirtyWindowPlacements);
+    }
+}
+
+void WindowTrackingService::clearFreeGeometry(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    if (m_placementStore.clearFreeGeometry(windowId)) {
+        markDirty(DirtyWindowPlacements);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -341,6 +411,16 @@ std::optional<QRect> WindowTrackingService::validatedUnmanagedGeometry(const QSt
 
 bool WindowTrackingService::isWindowFloating(const QString& windowId) const
 {
+    // Per-engine answer: when the daemon has wired the resolver, the float bit
+    // is the float state of the engine that owns the window's CURRENT screen
+    // mode (SnapState::isFloating for Snapping, TilingState::isFloating for
+    // Autotile). A window floated in autotile is NOT floating in snap, and the
+    // converse, so the two engines never share a bit.
+    if (m_engineFloatResolver) {
+        return m_engineFloatResolver(windowId);
+    }
+
+    // Legacy fallback (unit tests / early init before engines are wired):
     // Try full window ID first (runtime - distinguishes multiple instances)
     if (m_floatingWindows.contains(windowId)) {
         return true;
@@ -361,8 +441,8 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
     // defeats the delta-write design when the call was a no-op.
     //
     // Use the appId-aware `isWindowFloating` predicate (which checks both
-    // the full windowId AND the session-restored appId fallback at
-    // line 309-318). A naive `m_floatingWindows.contains(windowId)` would
+    // the full windowId AND the session-restored appId fallback — see
+    // isWindowFloating's appId branch). A naive `m_floatingWindows.contains(windowId)` would
     // return false when only the appId entry exists post-session-restore,
     // letting the early-return short-circuit the cleanup path below — the
     // appId entry would never be removed and isWindowFloating would keep
@@ -373,6 +453,18 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         return;
     }
 
+    // Per-engine routing: when wired, the write lands ONLY in the engine that
+    // owns the window's current screen mode — floating a window in autotile
+    // must NOT set the snap-mode float bit and vice versa. The daemon's writer
+    // resolves the owning engine and mutates that engine's authoritative float
+    // store (SnapState / TilingState).
+    if (m_engineFloatWriter) {
+        m_engineFloatWriter(windowId, floating);
+        return;
+    }
+
+    // Legacy fallback (unit tests / early init before engines are wired):
+    // maintain the shared set + snap state directly.
     if (floating) {
         m_floatingWindows.insert(windowId);
     } else {
@@ -388,9 +480,10 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         m_snapState->setFloating(windowId, floating);
     }
 
-    // Floating state is ephemeral and NOT persisted (saveload.cpp:257-259
-    // explicitly skips writing it — `obsoleteFloatingWindowsKey` exists
-    // only to delete any pre-ephemeral remnant on disk). Calling
+    // Floating state is ephemeral and NOT persisted — WindowTrackingAdaptor's
+    // save path never writes it, and its load path only deletes the obsolete
+    // `obsoleteFloatingWindowsKey` to remove any pre-ephemeral remnant on disk.
+    // Calling
     // scheduleSaveState() here used to OR DirtyAll into the dirty mask
     // and trigger a debounced full state rewrite of every OTHER persisted
     // field for nothing — every Meta+F toggle / drag-to-float would
@@ -400,6 +493,11 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
 
 QStringList WindowTrackingService::floatingWindows() const
 {
+    // Per-engine aggregation when wired: floats now live in each engine's
+    // authoritative store (SnapState / TilingState), not the legacy shared set.
+    if (m_engineFloatLister) {
+        return m_engineFloatLister();
+    }
     return m_floatingWindows.values();
 }
 
@@ -538,6 +636,29 @@ const QHash<QString, QStringList>& WindowTrackingService::zoneAssignments() cons
     return m_snapState->zoneAssignments();
 }
 
+QStringList WindowTrackingService::recordedSnapZones(const QString& windowId) const
+{
+    // Prefer the live, runtime assignment — it reflects this session's snaps.
+    if (m_snapState) {
+        const QStringList live = m_snapState->zoneAssignments().value(windowId);
+        if (!live.isEmpty()) {
+            return live;
+        }
+    }
+    // Cold cache (post-restart, or after handoffRelease cleared the live map):
+    // fall back to the DURABLE snap slot in the placement record. windowId is the
+    // exact `appId|uuid`; KWin uuids are stable across a daemon restart, so peek's
+    // exact-id branch resolves the right window (the appId fallback is for relogin).
+    const auto rec = m_placementStore.peek(windowId, currentAppIdFor(windowId));
+    if (rec) {
+        const PhosphorEngine::EngineSlot snapSlot = rec->slotFor(QStringLiteral("snap"));
+        if (snapSlot.state == PhosphorEngine::WindowPlacement::stateSnapped()) {
+            return snapSlot.zoneIds;
+        }
+    }
+    return {};
+}
+
 const QHash<QString, QString>& WindowTrackingService::screenAssignments() const
 {
     Q_ASSERT(m_snapState);
@@ -553,9 +674,9 @@ const QHash<QString, int>& WindowTrackingService::desktopAssignments() const
 // The lastUsed* accessors are read during the WTA constructor's loadState()
 // call — which runs BEFORE Daemon::init wires SnapState via setSnapState().
 // Returning a sentinel (empty string / 0) when SnapState isn't yet
-// attached lets early-init readers (the setLastUsedZone restore at
-// saveload.cpp~792) pass through harmlessly instead of asserting and
-// crashing the daemon on startup. The snap-engine's own lastUsedZone
+// attached lets early-init readers (the setLastUsedZone restore in
+// WindowTrackingAdaptor::loadState) pass through harmlessly instead of
+// asserting and crashing the daemon on startup. The snap-engine's own lastUsedZone
 // state is loaded later from KConfig through its persistence delegate
 // once SnapState is wired, so the early-init read here can only ever
 // produce a "no last zone yet" result anyway.
