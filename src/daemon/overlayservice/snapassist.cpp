@@ -354,9 +354,8 @@ bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, c
     // rare-edge cost of the async reveal; the buffer is still cached, so a later
     // snap-assist for the same window can reuse it via urlFor.
     auto* waiter = new DmabufFenceWaiter(fenceDup, /*timeoutMs=*/1000, this);
-    const QString handle = compositorHandle;
-    connect(waiter, &DmabufFenceWaiter::ready, this, [this, handle, providerUrl]() {
-        applyCandidateThumbnailUrl(handle, providerUrl);
+    connect(waiter, &DmabufFenceWaiter::ready, this, [this, compositorHandle, providerUrl]() {
+        applyCandidateThumbnailUrl(compositorHandle, providerUrl);
     });
     return true;
 }
