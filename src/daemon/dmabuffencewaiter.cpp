@@ -43,9 +43,8 @@ void DmabufFenceWaiter::finish(bool signaled)
         return; // notifier and timeout race — first wins
     }
     m_done = true;
-    if (m_notifier) {
-        m_notifier->setEnabled(false);
-    }
+    // m_notifier is created in the ctor and never nulled, so it is always live here.
+    m_notifier->setEnabled(false);
     if (signaled) {
         Q_EMIT ready();
     } else {

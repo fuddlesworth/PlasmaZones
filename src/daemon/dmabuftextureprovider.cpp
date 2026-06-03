@@ -30,10 +30,10 @@ constexpr uint32_t drmFourcc(char a, char b, char c, char d)
     return static_cast<uint32_t>(a) | (static_cast<uint32_t>(b) << 8) | (static_cast<uint32_t>(c) << 16)
         | (static_cast<uint32_t>(d) << 24);
 }
-const uint32_t DrmFormatARGB8888 = drmFourcc('A', 'R', '2', '4');
-const uint32_t DrmFormatABGR8888 = drmFourcc('A', 'B', '2', '4');
-const uint32_t DrmFormatXRGB8888 = drmFourcc('X', 'R', '2', '4');
-const uint32_t DrmFormatXBGR8888 = drmFourcc('X', 'B', '2', '4');
+constexpr uint32_t DrmFormatARGB8888 = drmFourcc('A', 'R', '2', '4');
+constexpr uint32_t DrmFormatABGR8888 = drmFourcc('A', 'B', '2', '4');
+constexpr uint32_t DrmFormatXRGB8888 = drmFourcc('X', 'R', '2', '4');
+constexpr uint32_t DrmFormatXBGR8888 = drmFourcc('X', 'B', '2', '4');
 // DrmFormatModInvalid is shared via dmabufthumbnail.h (PlasmaZones namespace).
 
 struct FormatMapping
