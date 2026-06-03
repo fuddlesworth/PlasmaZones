@@ -140,16 +140,14 @@ using namespace animations_controller_detail;
 
 AnimationsPageController::AnimationsPageController(PhosphorAnimationShaders::AnimationShaderRegistry* shaderRegistry,
                                                    ISettings* settings, QObject* parent)
-    // FIXME(audit): PageController id "animations" is ALSO the navigation
-    // parent id that SettingsController::parentPageRedirects() maps to
-    // "animations-general". The dual-purpose id works today (setActivePage
-    // resolves the parent before storing it) but obscures the distinction
-    // between "navigate to the parent" and "address the staging
-    // controller". See the matching FIXME(audit) in
-    // settingscontroller_pageregistration.cpp at the regPage(m_animationsPage,
-    // …) site for the proposed fix (rename the staging controller's id to
-    // "animations-staging" so the two surfaces are independent).
-    : PhosphorSettingsUi::PageController(QStringLiteral("animations"), parent)
+    // Id is the headless staging-domain identity, deliberately distinct from
+    // the "animations" sidebar nav-parent. The controller is wired into the
+    // framework via registerDomain() (NOT registerPage) — see the
+    // registration site in settingscontroller_pageregistration.cpp. Keeping
+    // the two ids separate means QML / D-Bus callers can address the nav
+    // parent ("animations", which redirects to "animations-general") without
+    // colliding with this staging controller's own identity.
+    : PhosphorSettingsUi::PageController(QStringLiteral("animations-staging"), parent)
     , m_shaderRegistry(shaderRegistry)
     , m_settings(settings)
 {

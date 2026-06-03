@@ -113,12 +113,13 @@ void SettingsController::save()
 
     // WindowRuleController and AnimationsPageController are registered
     // as their own StagingDomains and the framework's applyAllAsync
-    // walks them directly. The registration happens in
-    // settingscontroller_pageregistration.cpp via regPage(...) →
-    // ApplicationController::registerPage(...) → trackDomain(...),
-    // which connects dirtyChanged + appends the controller to
-    // m_domains. No explicit registerDomain() call on these two —
-    // their PageController identity is sufficient. Their own apply()
+    // walks them directly. Both registrations happen in
+    // settingscontroller_pageregistration.cpp and route through
+    // trackDomain() (which connects dirtyChanged + appends the
+    // controller to m_domains): WindowRuleController via regPage(...) →
+    // ApplicationController::registerPage(...), and AnimationsPageController
+    // via an explicit registerDomain(...) call (it is a headless staging
+    // controller, distinct from the "animations" nav-parent node). Their own apply()
     // methods drive the async D-Bus push (windowrules) and the
     // snapshot clear (animations). Calling commit/commitPending here
     // would double-dispatch (and for window rules, ALSO send a
