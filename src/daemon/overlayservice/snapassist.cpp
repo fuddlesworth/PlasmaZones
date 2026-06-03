@@ -326,7 +326,12 @@ bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, c
     // live candidate list once the producer's GPU render has finished, so QML
     // never loads (and the render thread never imports) a half-rendered buffer.
     // The wait is event-driven (DmabufFenceWaiter / QSocketNotifier) — no
-    // busy-poll, no blocked thread. Without a fence, reveal immediately.
+    // busy-poll, no blocked thread.
+    //
+    // No-fence branch: the D-Bus boundary currently requires a valid fence fd
+    // (OverlayAdaptor rejects an invalid one), so fenceFd < 0 only arises for a
+    // hypothetical direct (non-D-Bus) C++ caller; reveal immediately as a
+    // defensive fallback.
     if (desc.fenceFd < 0) {
         return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
     }
@@ -336,14 +341,23 @@ bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, c
         return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
     }
     // 1 s bound: a thumbnail render completes in well under a frame; the cap
-    // only guards against a producer that crashed mid-render (waiter self-
-    // cleans without revealing). The DmabufFenceWaiter owns fenceDup.
+    // only guards against a producer that crashed mid-render. The
+    // DmabufFenceWaiter owns fenceDup and self-deletes on signal or timeout
+    // (so per-candidate waiters live at most ~1 s — bounded, not leaked).
+    //
+    // accepted=true is returned now (deferred-reveal contract: stored, will
+    // reveal when the fence signals), unlike the raw-pixel path which returns
+    // true only after storing. NOTE the divergence from the dedup re-capture
+    // contract: if this fence times out (only on a hung/crashed producer) the
+    // reveal is dropped, yet the producer already saw accepted=true and won't
+    // re-capture until its recently-posted window rolls past. Accepted as a
+    // rare-edge cost of the async reveal; the buffer is still cached, so a later
+    // snap-assist for the same window can reuse it via urlFor.
     auto* waiter = new DmabufFenceWaiter(fenceDup, /*timeoutMs=*/1000, this);
     const QString handle = compositorHandle;
     connect(waiter, &DmabufFenceWaiter::ready, this, [this, handle, providerUrl]() {
         applyCandidateThumbnailUrl(handle, providerUrl);
     });
-    // Accepted: the daemon stored the buffer and will reveal it when ready.
     return true;
 }
 

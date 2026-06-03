@@ -235,6 +235,10 @@ private:
     static constexpr int ScenePoolSize = 3;
     std::array<std::unique_ptr<KWin::OffscreenQuickScene>, ScenePoolSize> m_scenePool;
     int m_poolNext = 0;
+    /// Export mode the live pool slots were built for. When it diverges from
+    /// m_dmabufEnabled (a runtime fallback to pixels), acquireSceneForCapture
+    /// rebuilds the pool at the next idle capture — never mid-flight.
+    bool m_poolBuiltForTextureMode = false;
     KWin::OffscreenQuickScene* m_activeScene = nullptr;
     QQueue<Pending> m_queue;
     /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership via the set,

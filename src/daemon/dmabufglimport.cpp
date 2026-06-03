@@ -71,8 +71,21 @@ GlDmabufImport importDmabufToGlTexture(const DmabufThumbnailDesc& desc)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    // Clear any stale GL error so the post-bind check reflects only this call,
+    // then verify the EGLImage actually bound — a driver can reject the format
+    // here, and returning ok=true with an unbacked texture would silently copy
+    // garbage. Mirror the Vulkan path's per-step result checking.
+    while (glGetError() != GL_NO_ERROR) { }
     glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, static_cast<GLeglImageOES>(image));
+    const GLenum bindError = glGetError();
     glBindTexture(GL_TEXTURE_2D, 0);
+    if (bindError != GL_NO_ERROR) {
+        qCWarning(lcOverlay) << "dmabuf GL import: glEGLImageTargetTexture2DOES failed, GL error 0x"
+                             << QString::number(bindError, 16);
+        glDeleteTextures(1, &texture);
+        eglDestroyImageKHR(dpy, image);
+        return result;
+    }
 
     result.ok = true;
     result.textureId = texture;

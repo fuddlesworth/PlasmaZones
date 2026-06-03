@@ -396,7 +396,7 @@ bool OverlayAdaptor::authenticateKwinSender()
         // registration re-fires the pre-warm. Demoted from qCWarning to keep
         // routine session churn out of the warning channel; actual auth
         // rejections still log at warning level inside @ref validateExeAndTrust.
-        qCDebug(lcDbus) << "setSnapAssistThumbnail: GetConnectionUnixProcessID failed for" << sender << "—"
+        qCDebug(lcDbus) << "authenticateKwinSender: GetConnectionUnixProcessID failed for" << sender << "—"
                         << pidReplyMsg.errorMessage();
         return false;
     }

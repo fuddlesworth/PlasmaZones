@@ -27,12 +27,13 @@ namespace PlasmaZones {
  * keyed by compositor handle and returns a QML URL under
  * @c image://plasmazones-dmabuf-thumbnail/. When QML loads that URL,
  * @ref requestTexture hands back a QQuickTextureFactory whose @c createTexture
- * (on the render thread) imports the dma-buf into a VkImage, wraps it in a
- * QRhiTexture, and exposes it as a QSGTexture — no read-back, no re-upload.
+ * (on the render thread) imports the dma-buf into a GPU texture, copies it into
+ * an owned texture, and exposes it as a QSGTexture — no read-back, no re-upload.
  *
- * Spike scope: Vulkan RHI backend only (the daemon's default). On the OpenGL
- * fallback backend the factory returns no texture and the consumer falls back
- * to its raw-pixel path (the effect's accepted=false contract re-captures).
+ * RHI backends: Vulkan (the daemon's default, via VK_EXT_external_memory_dma_buf)
+ * and OpenGL (via EGL_EXT_image_dma_buf_import; see dmabufglimport). Any other
+ * backend returns no texture and the consumer falls back to its raw-pixel path
+ * (the effect's accepted=false contract re-captures).
  *
  * Thread-safety: @ref insert / @ref clear run on the GUI thread (D-Bus slot);
  * @ref requestTexture runs on Qt's image-loader thread. All access to the
@@ -49,12 +50,18 @@ public:
     ~DmabufTextureProvider() override;
 
     /**
-     * @brief Store the dma-buf descriptor for @p compositorHandle and return
-     *        the QML URL naming this generation.
+     * @brief Store the dma-buf descriptor for @p compositorHandle and return its
+     *        QML URL.
      *
-     * Takes ownership of a @c dup of @c desc.fd; any previous descriptor for
-     * the same handle is closed and replaced. Returns an empty string when the
-     * fd is invalid or the handle is empty.
+     * The URL embeds a monotonic generation counter purely as a cache-buster so
+     * QML's QQuickPixmap cache re-fetches when a fresh buffer arrives; it is NOT
+     * a version selector. The store is keyed by handle, so @ref requestTexture
+     * always serves the latest buffer for a handle regardless of the generation
+     * in the requested URL (latest-wins — matching SnapAssistThumbnailProvider).
+     *
+     * Takes ownership of a @c dup of @c desc.fd; any previous descriptor for the
+     * same handle is closed and replaced. Returns an empty string when the fd is
+     * invalid or the handle is empty.
      */
     QString insert(const QString& compositorHandle, const DmabufThumbnailDesc& desc);
 

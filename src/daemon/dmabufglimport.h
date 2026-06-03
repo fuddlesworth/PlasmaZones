@@ -29,8 +29,9 @@ struct GlDmabufImport
  * @brief Import a single-plane dma-buf into a GL_TEXTURE_2D via EGL.
  *
  * Must be called on the scene-graph render thread with the OpenGL-RHI context
- * current (eglGetCurrentDisplay()/eglGetCurrentContext() resolve the daemon's
- * GL backend). Does not take ownership of @c desc.fd (EGL references the buffer
+ * current (the import resolves the daemon's GL backend via
+ * eglGetCurrentDisplay(); the EGLImage itself is created with EGL_NO_CONTEXT).
+ * Does not take ownership of @c desc.fd (EGL references the buffer
  * independently; the caller still owns/closes the fd). Returns {ok=false} on
  * any failure. Isolated in its own TU so the EGL/GL (epoxy) headers never mix
  * with the Vulkan + Qt RHI headers in dmabuftextureprovider.cpp.

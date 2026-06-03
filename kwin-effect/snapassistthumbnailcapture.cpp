@@ -184,6 +184,20 @@ void SnapAssistThumbnailCapture::dropQueueAndIdle()
 
 KWin::OffscreenQuickScene* SnapAssistThumbnailCapture::acquireSceneForCapture()
 {
+    // Rebuild the pool here (the safe point) if the export mode changed since it
+    // was built — e.g. onDmabufRejected flipped m_dmabufEnabled to fall back to
+    // pixels. This runs only BETWEEN captures (processNext is gated by m_busy
+    // and only fires after the previous capture's attemptCapture completed), so
+    // no slot is in-flight and tearing the pool down cannot dangle m_activeScene
+    // or destroy a scene whose buffer the daemon is still copying.
+    if (m_poolBuiltForTextureMode != m_dmabufEnabled) {
+        for (auto& s : m_scenePool) {
+            s.reset();
+        }
+        m_activeScene = nullptr;
+        m_poolNext = 0;
+        m_poolBuiltForTextureMode = m_dmabufEnabled;
+    }
     // dma-buf path: round-robin across the producer pool so a buffer isn't
     // reused until ScenePoolSize captures later (the daemon owns per-candidate
     // copies, but the copy of capture i must run before its buffer is reused —
@@ -291,6 +305,12 @@ void SnapAssistThumbnailCapture::attemptCapture(Pending p, int delayMs, int retr
                 // the queue and picks up any re-enqueued candidate.
                 onDmabufRejected(p);
             }
+            // Advance the queue now — the dma-buf post (if any) is async; we do
+            // not wait for its reply to start the next capture. The reply lambda
+            // has its own guarded kick (only fires when idle) solely to drain a
+            // candidate that onDmabufRejected re-enqueued after the queue had
+            // already emptied. processNext is idempotent on an empty queue, so
+            // the two kick sites never double-dispatch real work.
             QTimer::singleShot(0, this, &SnapAssistThumbnailCapture::processNext);
             return;
         }
@@ -451,13 +471,21 @@ SnapAssistThumbnailCapture::exportTextureToDmabuf(KWin::GLTexture* texture) cons
     // before sampling (correctness under repeated/live capture). If the driver
     // can't produce one, fail the export — the capability fallback then switches
     // the session to the raw-pixel path.
+    //
+    // Ordering: m_activeScene->update() (issued earlier this call) renders into
+    // this texture on the current GL context's command stream. eglCreateSync
+    // with EGL_SYNC_NATIVE_FENCE_ANDROID inserts the fence into that same
+    // stream AFTER those render commands, then glFlush() flushes the stream to
+    // the GPU so the fence is schedulable and eglDupNativeFenceFDANDROID can
+    // return a real sync_file. The fence therefore signals only once the render
+    // it follows has completed — exactly the guarantee the daemon relies on.
     const EGLSyncKHR sync = eglCreateSyncKHR(dpy, EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
     if (sync == EGL_NO_SYNC_KHR) {
         qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: native fence sync unavailable";
         ::close(fd);
         return result;
     }
-    glFlush(); // push the fence into the GL command stream so it can signal
+    glFlush(); // flush the stream (render + fence) to the GPU so the fence can signal
     const int fenceFd = eglDupNativeFenceFDANDROID(dpy, sync);
     eglDestroySyncKHR(dpy, sync);
     if (fenceFd < 0) {
@@ -545,13 +573,11 @@ void SnapAssistThumbnailCapture::onDmabufRejected(const Pending& p)
            "raw-pixel thumbnails for the rest of this session.";
     m_dmabufEnabled = false;
     m_dmabufConsecutiveFailures = 0;
-    // Drop the Texture-mode producer pool; acquireSceneForCapture() rebuilds
-    // slot 0 in ExportMode::Image. m_activeScene pointed into the pool.
-    for (auto& slot : m_scenePool) {
-        slot.reset();
-    }
-    m_activeScene = nullptr;
-    m_poolNext = 0;
+    // Do NOT tear down the pool here: this can run from the async D-Bus reply
+    // lambda while a *different* capture is in flight (and resetting the slot it
+    // uses would dangle m_activeScene / destroy a buffer the daemon hasn't
+    // copied). The mode flip is picked up by acquireSceneForCapture(), which
+    // rebuilds the pool in ExportMode::Image at the next (idle) capture.
     m_queue.enqueue(p); // re-capture this candidate via the pixel path
 }
 

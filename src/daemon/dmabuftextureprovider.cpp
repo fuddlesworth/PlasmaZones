@@ -131,12 +131,17 @@ ImportedImage importDmabuf(VkDevice device, QVulkanInstance* inst, const DmabufT
     imageInfo.tiling = haveModifier ? VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT : VK_IMAGE_TILING_LINEAR;
     imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    // SPIKE LAYOUT CAVEAT: a correct external-buffer import acquires the image
-    // from VK_QUEUE_FAMILY_FOREIGN_EXT with a queue-ownership + layout
-    // transition barrier before sampling. We start UNDEFINED and tell the RHI
-    // the image is SHADER_READ_ONLY_OPTIMAL (below); on NVIDIA this commonly
-    // samples correctly, but a missing FOREIGN-acquire barrier is the first
-    // thing to add if /verify shows black/garbage thumbnails.
+    // initialLayout is UNDEFINED, yet createFrom() (below) declares the image's
+    // current layout to the RHI as SHADER_READ_ONLY_OPTIMAL — deliberately, not
+    // UNDEFINED. QRhi issues a layout transition before using src as a copy
+    // source, and a transition *from* UNDEFINED may discard contents, which
+    // would lose the imported thumbnail; declaring a defined source layout keeps
+    // that transition content-preserving. Strict cross-driver correctness would
+    // additionally acquire the image from VK_QUEUE_FAMILY_FOREIGN_EXT (the
+    // producer's queue) with an ownership + layout barrier. That foreign-queue
+    // acquire is omitted here as a documented portability constraint: it is
+    // validated against the NVIDIA proprietary stack, which samples correctly
+    // without it.
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     VkImage image = VK_NULL_HANDLE;
@@ -323,7 +328,9 @@ public:
     }
     int textureByteCount() const override
     {
-        return m_desc.width * m_desc.height * 4;
+        // qsizetype intermediate so the 4 bpp multiply can't overflow int even
+        // if the dimension ceiling is ever raised; bounded to <=1024^2 today.
+        return static_cast<int>(static_cast<qsizetype>(m_desc.width) * m_desc.height * 4);
     }
 
     QSGTexture* createTexture(QQuickWindow* window) const override
