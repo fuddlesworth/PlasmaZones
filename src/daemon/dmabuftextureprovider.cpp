@@ -129,7 +129,17 @@ ImportedImage importDmabuf(VkDevice device, QVulkanInstance* inst, const DmabufT
     imageInfo.arrayLayers = 1;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = haveModifier ? VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT : VK_IMAGE_TILING_LINEAR;
-    imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+    // TRANSFER_SRC is mandatory: the imported image is consumed only as the
+    // source of a GPU->GPU copy into our owned sampled texture (see
+    // DmabufQsgTexture::commitTextureOperations, which records copyTexture(dst,
+    // src) with src declared UsedAsTransferSource). createFrom() adopts this
+    // VkImage as-is — it does NOT recreate it — so the RHI's transfer-source
+    // intent is only honoured if the underlying image was created with
+    // TRANSFER_SRC usage. Without it the copy reads an image never created for
+    // transfer use: undefined behaviour that, on the NVIDIA release driver,
+    // yields a blank texture with no validation error. SAMPLED is retained for
+    // any backend path that samples the wrapper directly.
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     // initialLayout is UNDEFINED, yet createFrom() (below) declares the image's
     // current layout to the RHI as SHADER_READ_ONLY_OPTIMAL — deliberately, not
@@ -415,6 +425,8 @@ public:
             release();
             return nullptr;
         }
+        qCDebug(lcOverlay) << "dmabuf import: created GPU thumbnail texture" << size << "fourcc=0x"
+                           << QString::number(m_desc.fourcc, 16) << "backend=" << int(api);
         return new DmabufQsgTexture(src, dst, std::move(release), size, fmt.hasAlpha);
     }
 
