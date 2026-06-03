@@ -11,6 +11,7 @@
 // layer-shell surfaces).
 
 #include "plasmazones_export.h"
+#include "dmabufthumbnail.h"
 
 #include <PhosphorProtocol/ZoneTypes.h>
 
@@ -125,6 +126,19 @@ public:
     ///         daemon never actually stored.
     virtual bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                         const QByteArray& pixels) = 0;
+
+    /// Deliver a thumbnail as an imported DMA-BUF (zero-copy GPU path), the
+    /// alternative to the raw-ARGB32 @ref setSnapAssistThumbnail above. @p desc
+    /// carries a borrowed single-plane dma-buf fd plus its DRM
+    /// format/modifier/stride; the fd is valid only for the duration of this
+    /// call. The implementation imports it into a GPU texture for display.
+    ///
+    /// @return true iff the implementation imported and stored the thumbnail.
+    ///         False when the dma-buf path is unavailable (experimental gate
+    ///         off, driver/RHI backend unsupported, or import failed) — the
+    ///         caller MUST then fall back to @ref setSnapAssistThumbnail so a
+    ///         preview still appears.
+    virtual bool setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) = 0;
 
     // Layout picker overlay (interactive layout browser)
     virtual void hideLayoutPicker() = 0;
