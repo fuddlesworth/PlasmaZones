@@ -303,15 +303,14 @@ private:
 class DmabufTextureFactory : public QQuickTextureFactory
 {
 public:
+    // Takes OWNERSHIP of desc.fd (already an independent dup made by the
+    // provider under its lock — see requestTexture). The fence is NOT needed
+    // here: the consumer (OverlayService, via DmabufFenceWaiter) only reveals
+    // the thumbnail URL after the producer's render has completed, so by the
+    // time QML loads it and we import, the buffer is already finished.
     explicit DmabufTextureFactory(const DmabufThumbnailDesc& desc)
         : m_desc(desc)
     {
-        // Own an independent dup so the provider's stored fd lifetime is
-        // decoupled from this factory's. The fence is NOT needed here: the
-        // consumer (OverlayService, via DmabufFenceWaiter) only reveals the
-        // thumbnail URL after the producer's render has completed, so by the
-        // time QML loads it and we import, the buffer is already finished.
-        m_desc.fd = (desc.fd >= 0) ? ::dup(desc.fd) : -1;
         m_desc.fenceFd = -1;
     }
 
@@ -485,12 +484,23 @@ QQuickTextureFactory* DmabufTextureProvider::requestTexture(const QString& id, Q
             }
             return nullptr;
         }
-        desc = it.value(); // shares the provider-owned fd; the factory dups it
+        desc = it.value();
+        // dup the stored fd UNDER the lock and hand the factory its own copy.
+        // requestTexture runs on Qt's image-loader thread while insert()/clear()
+        // run on the GUI thread; duping after releasing the lock would race a
+        // concurrent insert/clear that closes (and possibly recycles) the fd.
+        desc.fd = ::dup(it->fd);
+    }
+    if (desc.fd < 0) {
+        if (size) {
+            *size = QSize(0, 0);
+        }
+        return nullptr;
     }
     if (size) {
         *size = QSize(desc.width, desc.height);
     }
-    return new DmabufTextureFactory(desc);
+    return new DmabufTextureFactory(desc); // takes ownership of the dup'd fd
 }
 
 void DmabufTextureProvider::clear()

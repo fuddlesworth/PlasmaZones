@@ -77,8 +77,12 @@ private:
     static QString makeUrl(const QString& handle, quint32 generation);
 
     mutable QMutex m_mutex;
-    /// Keyed by normalised (unbraced) handle. Each entry owns a dup'd fd which
-    /// is closed on replacement, eviction, or clear().
+    /// Keyed by normalised (unbraced) handle. Each entry owns a dup'd fd, closed
+    /// on replacement (re-insert for the same handle) or clear(). Entries are
+    /// NOT individually evicted; the map is bounded by the consumer's
+    /// idle-grace trim, which clear()s it after snap-assist stays dismissed
+    /// (see OverlayService's trim timer). In practice the live count tracks the
+    /// snap-assist candidate set (a handful), not session history.
     QHash<QString, DmabufThumbnailDesc> m_pending;
     quint32 m_generation = 0;
 };
