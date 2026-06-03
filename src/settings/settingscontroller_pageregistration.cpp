@@ -93,18 +93,20 @@ void SettingsController::buildApplicationController()
     // Animations / Window Rules pages that follow.
     regVirtual(QStringLiteral("placement"), QString(), PzI18n::tr("Placement"), QString(),
                QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
-    // DESIGN-NOTE: m_animationsPage carries PageController id "animations"
-    // (see the AnimationsPageController ctor in animationspagecontroller.cpp)
-    // which is ALSO the navigation-parent id we redirect to
-    // "animations-general" via parentPageRedirects(). The round-trip works
-    // today because setActivePage resolves the parent before storing
-    // m_activePage, but the dual role means QML or D-Bus callers can't
-    // distinguish "navigate to the Animations parent (and land on its first
-    // child)" from "address the staging controller's own id". Consider
-    // splitting: keep the parent navigation handle as "animations" and
-    // rename the controller id to something like "animations-staging" so
-    // the two surfaces are independent.
-    regPage(m_animationsPage, QString(), PzI18n::tr("Animations"), QString(), QStringLiteral("media-playback-start"));
+    // "animations" is a no-QML drill-down parent — register it as a virtual
+    // navigation node (like display / placement / snapping / tiling), NOT as
+    // m_animationsPage's own id. The AnimationsPageController is the staging
+    // controller for animation edits; it carries the distinct id
+    // "animations-staging" and is wired into the framework's dirty/apply
+    // machinery as a headless domain below. Splitting the two means the nav
+    // handle ("animations", redirected to "animations-general") and the
+    // staging controller are independently addressable by QML / D-Bus.
+    regVirtual(QStringLiteral("animations"), QString(), PzI18n::tr("Animations"), QString(),
+               QStringLiteral("media-playback-start"));
+    // Headless staging domain — trackDomain() connects dirtyChanged + appends
+    // to m_domains so applyAllAsync walks it, exactly as registerPage would
+    // have, but without claiming a sidebar/registry id of its own.
+    m_app->registerDomain(m_animationsPage);
     // Window Rules is a top-level leaf (its old "Rules" parent retired after
     // the v4 fold left a single rule surface). Divider after it closes the
     // feature block and opens the tools-and-meta block below.

@@ -18,9 +18,9 @@
 
 namespace PlasmaZones {
 
-QList<ScreenInfo> fetchScreens(bool* daemonUnavailable)
+QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable)
 {
-    QList<ScreenInfo> result;
+    QList<PhosphorScreens::ScreenInfo> result;
     if (daemonUnavailable)
         *daemonUnavailable = false;
 
@@ -47,7 +47,7 @@ QList<ScreenInfo> fetchScreens(bool* daemonUnavailable)
         const QStringList screenNames = screenReply.arguments().first().toStringList();
 
         for (const QString& screenName : screenNames) {
-            ScreenInfo info;
+            PhosphorScreens::ScreenInfo info;
             info.name = screenName;
             // Compare physical parent for virtual screens (primary is always a physical ID)
             QString physName = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenName);
@@ -142,7 +142,7 @@ QList<ScreenInfo> fetchScreens(bool* daemonUnavailable)
         result.clear();
         QScreen* primaryScreen = QGuiApplication::primaryScreen();
         for (QScreen* screen : QGuiApplication::screens()) {
-            ScreenInfo info;
+            PhosphorScreens::ScreenInfo info;
             info.name = screen->name();
             info.isPrimary = (screen == primaryScreen);
             info.manufacturer = screen->manufacturer();
