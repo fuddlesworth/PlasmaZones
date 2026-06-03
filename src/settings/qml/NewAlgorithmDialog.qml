@@ -302,7 +302,7 @@ Kirigami.Dialog {
                             }
 
                             Label {
-                                text: i18n("(editable later in the .js file)")
+                                text: i18n("(editable later in the .luau file)")
                                 font: Kirigami.Theme.smallFont
                                 opacity: 0.4
                             }

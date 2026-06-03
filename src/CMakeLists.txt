@@ -179,8 +179,6 @@ set_source_files_properties(
 target_link_libraries(plasmazones_core
     PUBLIC
         Qt6::Core
-        # Qt6::Qml is PUBLIC because ScriptedAlgorithm.h exposes QJSEngine/QJSValue types
-        Qt6::Qml
         Qt6::Quick
         Qt6::Gui
         Qt6::DBus

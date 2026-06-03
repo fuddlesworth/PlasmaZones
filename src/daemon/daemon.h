@@ -687,7 +687,7 @@ private:
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
-    // Scripted algorithm loader (file watcher for user-defined JS algorithms).
+    // Scripted algorithm loader (file watcher for user-defined Luau algorithms).
     // m_algorithmRegistry is declared up at the top of the member block with
     // m_layoutManager — see the DECLARATION ORDER INVARIANT comment there.
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;

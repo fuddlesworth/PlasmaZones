@@ -17,7 +17,7 @@ using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
 /**
- * @brief Tests for Spiral, Monocle, and Rows tiling algorithms (all JS-based via registry)
+ * @brief Tests for Spiral, Monocle, and Rows tiling algorithms (all Luau-based via registry)
  */
 class TestTilingAlgoSpiralMonocle : public QObject
 {
@@ -196,7 +196,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // MonocleAlgorithm tests (JS-based via registry)
+    // MonocleAlgorithm tests (Luau-based via registry)
     // =========================================================================
 
     void testMonocle_metadata()
@@ -251,7 +251,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // RowsAlgorithm tests (JS-based via registry)
+    // RowsAlgorithm tests (Luau-based via registry)
     // =========================================================================
 
     void testRows_metadata()

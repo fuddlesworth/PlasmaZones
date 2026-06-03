@@ -54,8 +54,9 @@ namespace PhosphorTileEngine {
 /**
  * @brief Core engine for automatic window tiling.
  *
- * Coordinates per-screen PhosphorTiles::TilingState, invokes tiling algorithms (Master-Stack,
- * Columns, BSP), and applies calculated zone geometries to window positions.
+ * Coordinates per-screen PhosphorTiles::TilingState, invokes the active tiling
+ * algorithm (a Luau script, via the PhosphorTiles::TilingAlgorithm interface),
+ * and applies calculated zone geometries to window positions.
  * Only tiles windows on screens where autotiling is enabled.
  *
  * @see PhosphorTiles::TilingAlgorithm, PhosphorTiles::TilingState, PhosphorTiles::AlgorithmRegistry
@@ -91,9 +92,9 @@ public:
      * an Electron/CEF app renames itself mid-session.
      *
      * Side effect: installs a live-class resolver on every PhosphorTiles::TilingAlgorithm in
-     * the PhosphorTiles::AlgorithmRegistry so PhosphorTiles::ScriptedAlgorithm's lifecycle hooks see the
+     * the PhosphorTiles::AlgorithmRegistry so PhosphorTiles::LuauTileAlgorithm's lifecycle hooks see the
      * current appId on each tiled window. Future algorithm registrations
-     * (hot-reloaded JS algorithms) pick up the resolver from the
+     * (hot-reloaded Luau algorithms) pick up the resolver from the
      * algorithmRegistered signal bound inside this method.
      *
      * Must be set before start. Not owned.

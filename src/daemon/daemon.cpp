@@ -230,9 +230,9 @@ Daemon::Daemon(QObject* parent)
     // layout-source bundle below can bind its autotile source to it. The
     // registry was previously a process-global singleton; per-daemon
     // ownership is the plugin-architecture-friendly shape (see
-    // project_plugin_based_compositor.md). Built-in algorithms register
-    // automatically in the constructor; scripted algorithms are loaded
-    // later by ScriptedAlgorithmLoader during init().
+    // project_plugin_based_compositor.md). The bundled algorithms ship as Luau
+    // scripts and are loaded (with user scripts) by ScriptedAlgorithmLoader
+    // during init().
     // Pass nullptr as Qt parent: the unique_ptr owns lifetime and the
     // rest of this ctor follows that convention (see comment above on
     // m_layoutManager et al.).

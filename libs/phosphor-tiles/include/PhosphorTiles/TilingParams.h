@@ -90,12 +90,12 @@ struct TilingParams
  * @brief Build per-window metadata from a TilingState
  *
  * Shared between AutotileEngine (for TilingParams construction) and
- * ScriptedAlgorithm (for lifecycle hook JS state). Identifies the focused
+ * LuauTileAlgorithm (for lifecycle hook state). Identifies the focused
  * window; app class is resolved via the caller-supplied @p appIdResolver so
  * live class lookups hit the WindowRegistry instead of parsing stale strings.
  *
  * TilingState::m_windowOrder contains bare instance ids; parsing them as
- * "appId|uuid" would hand hex strings to user-authored JS algorithms. The
+ * "appId|uuid" would hand hex strings to user-authored Luau algorithms. The
  * resolver lets each caller plug in whatever knows the live class for a
  * given instance id (typically AutotileEngine::currentAppIdFor bound as a
  * lambda, which consults the shared WindowRegistry).

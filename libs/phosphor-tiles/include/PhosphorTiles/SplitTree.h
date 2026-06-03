@@ -250,7 +250,7 @@ private:
     };
     /// Maximum runtime tree depth for insert operations and recursion guards.
     /// Uses the global constant from AutotileDefaults so that C++ SplitTree,
-    /// JS applyTreeGeometry, and serialization all agree on the depth limit.
+    /// the pz applyTreeGeometry, and serialization all agree on the depth limit.
     static constexpr int MaxRuntimeTreeDepth = AutotileDefaults::MaxRuntimeTreeDepth;
 
     InsertReady prepareInsert(const QString& windowId);

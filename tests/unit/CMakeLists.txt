@@ -126,13 +126,33 @@ pz_add_test(test_algorithm_registry autotile/test_algorithm_registry.cpp)
 target_compile_definitions(test_algorithm_registry PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_algorithm_registry_custom autotile/test_algorithm_registry_custom.cpp)
 target_compile_definitions(test_algorithm_registry_custom PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_scripted_algorithm autotile/test_scripted_algorithm.cpp)
-target_compile_definitions(test_scripted_algorithm PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
-pz_add_test(test_metadata_parsing autotile/test_metadata_parsing.cpp)
-target_link_libraries(test_metadata_parsing PRIVATE Qt6::Qml)
 pz_add_test(test_split_tree autotile/test_split_tree.cpp)
 target_compile_definitions(test_split_tree PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_scripted_algorithm_loader autotile/test_scripted_algorithm_loader.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# scripting/ - PhosphorScripting (embedded Luau host)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Manual target: a library unit test that links only PhosphorScripting, not the
+# app core (plasmazones_core).
+add_executable(test_luau_engine scripting/test_luau_engine.cpp)
+set_target_properties(test_luau_engine PROPERTIES AUTOMOC ON)
+target_link_libraries(test_luau_engine PRIVATE Qt6::Test Qt6::Core PhosphorScripting::PhosphorScripting)
+add_test(NAME test_luau_engine COMMAND test_luau_engine)
+
+add_executable(test_luau_tile_algorithm scripting/test_luau_tile_algorithm.cpp)
+set_target_properties(test_luau_tile_algorithm PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_tile_algorithm PRIVATE "PZ_LUAU_TEST_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/scripting\"")
+target_link_libraries(test_luau_tile_algorithm PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_tile_algorithm COMMAND test_luau_tile_algorithm)
+
+# Golden parity harness: ported Luau algorithms vs the committed golden fixture
+# (originally captured from the JS engine's byte-identical output).
+add_executable(test_luau_parity scripting/test_luau_parity.cpp)
+set_target_properties(test_luau_parity PROPERTIES AUTOMOC ON)
+target_compile_definitions(test_luau_parity PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+target_link_libraries(test_luau_parity PRIVATE Qt6::Test Qt6::Core PhosphorTiles::PhosphorTiles)
+add_test(NAME test_luau_parity COMMAND test_luau_parity)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ - Autotile Engine Tests (core, master, minsize, overflow)

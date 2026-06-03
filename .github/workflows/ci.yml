@@ -9,9 +9,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, v3]
+    branches: [main, develop, v3, v3.1, v3.2]
   pull_request:
-    branches: [main, v3]
+    branches: [main, v3, v3.1, v3.2]
     # `labeled` is opt-in for the draft-PKGBUILD job below — it gates
     # on `github.event.label.name == 'build-draft'`. The other jobs
     # (build / lint / nix) skip the `labeled` action subtype via their
@@ -222,6 +222,60 @@ jobs:
           else
             echo "No QML files changed — skipping qmlformat"
           fi
+
+  # ─── Luau static analysis: type-check + lint the bundled tiling algorithms
+  # and the pz standard library with luau-analyze. Catches parse and type
+  # errors (a broken bundled .luau would otherwise only surface at runtime as
+  # a silently-skipped algorithm). The analyzer is built from the committed
+  # vendored Luau (extern/luau-*.tar.gz) so the lint/type ruleset is pinned exactly to
+  # the runtime we ship — analysis stays deterministic across CI runs and only
+  # changes when we deliberately bump the vendored Luau.
+  #
+  # The bundled algorithms consume `pz` as an injected global; data/algorithms/
+  # .luaurc declares it so the analyzer resolves it (pz.luau itself *defines*
+  # the global and is analyzed under the default config, which luau-analyze
+  # picks per-file from the nearest .luaurc).
+  luau-analyze:
+    name: Luau analyze
+    # Same trigger gate as build / lint.
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'labeled' && github.event.action != 'unlabeled')
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Setup (Arch)
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm
+          # cmake/ninja/gcc build luau-analyze from the vendored source; git is
+          # needed because the base image doesn't ship it.
+          pacman -S --noconfirm --needed git cmake ninja gcc
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build luau-analyze from vendored Luau
+        run: |
+          set -euo pipefail
+          # Luau is vendored as a committed tarball; extract it before building
+          # the analyzer CLI from it (same source the runtime links).
+          mkdir -p luau-src
+          tar xzf extern/luau-*.tar.gz -C luau-src --strip-components=1
+          cmake -S luau-src -B luau-cli -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLUAU_BUILD_CLI=ON \
+            -DLUAU_BUILD_TESTS=OFF \
+            -DLUAU_BUILD_WEB=OFF
+          cmake --build luau-cli --target Luau.Analyze.CLI --parallel "$(nproc)"
+
+      - name: Analyze bundled algorithms + pz stdlib
+        run: |
+          set -euo pipefail
+          # Non-zero exit on any parse/type error fails the job. Lint findings
+          # are advisory (lintErrors:false in .luaurc) but still printed.
+          ./luau-cli/luau-analyze \
+            data/algorithms/*.luau \
+            libs/phosphor-tiles/src/pz/pz.luau
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Nix Flake CI (x86_64 + aarch64)
