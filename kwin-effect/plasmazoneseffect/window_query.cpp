@@ -7,6 +7,7 @@
 #include <PhosphorProtocol/WindowTypeEnum.h>
 
 #include <effect/effecthandler.h>
+#include <virtualdesktops.h>
 #include <window.h>
 
 #include <sys/types.h> // pid_t
@@ -55,12 +56,18 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     return WindowType::Unknown;
 }
 
-PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w)
+PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId)
 {
     PhosphorWindowRule::WindowQuery query;
     if (!w) {
         return query;
     }
+    // Context fields — let a window-domain rule pin screen / desktop / activity
+    // (e.g. "red border on monitor 2"). screenId is resolved by the caller (the
+    // effect member getWindowScreenId — not reachable from this free helper);
+    // virtualDesktop / activity are derived here, mirroring the daemon-side
+    // setWindowMetadata derivation in window_identity.cpp (0 / "" = all/unknown).
+    query.screenId = screenId;
     // `WindowQuery` fields are `std::optional` — leaving a field disengaged
     // makes a predicate over it inert (returns false). Engaging it with an
     // empty string instead would silently match `Equals ""` and `Regex "^$"`,
@@ -128,6 +135,21 @@ PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w)
     // surprise rules that target "is the window maximized."
     if (kw) {
         query.isMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
+    }
+    // virtualDesktop: first desktop's 1-based x11 number (0 = all/unknown).
+    // activity: first activity UUID (empty = all/unknown). Both mirror the
+    // daemon-side setWindowMetadata derivation in window_identity.cpp so a
+    // window-domain rule pinning VirtualDesktop / Activity resolves the same
+    // way the context cascade does.
+    if (kw) {
+        const QList<KWin::VirtualDesktop*> desktops = kw->desktops();
+        if (!desktops.isEmpty() && desktops.first()) {
+            query.virtualDesktop = static_cast<int>(desktops.first()->x11DesktopNumber());
+        }
+    }
+    const QStringList activities = w->activities();
+    if (!activities.isEmpty()) {
+        query.activity = activities.first();
     }
     return query;
 }

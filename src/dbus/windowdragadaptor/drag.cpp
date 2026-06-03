@@ -127,7 +127,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 
                 for (auto* zone : layout->zones()) {
                     QRect zoneRect = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId,
-                                                                             layout, m_settings);
+                                                                             layout, m_settings, m_layoutManager);
 
                     // Use class constants for tolerances
                     int xDiff = std::abs(m_originalGeometry.x() - zoneRect.x());
@@ -438,8 +438,8 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_zoneDetector->highlightZone(result.primaryZone);
             m_overlayService->highlightZone(zoneId);
 
-            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(m_screenManager, result.primaryZone, screen,
-                                                                            screenId, layout, m_settings);
+            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(
+                m_screenManager, result.primaryZone, screen, screenId, layout, m_settings, m_layoutManager);
             m_currentMultiZoneGeometry = QRect();
         }
     } else {

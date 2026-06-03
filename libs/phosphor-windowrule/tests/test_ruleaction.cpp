@@ -104,6 +104,15 @@ private Q_SLOTS:
             ActionType::SetSnappingLayout,
             ActionType::SetTilingAlgorithm,
             ActionType::DisableEngine,
+            // Gap overrides are context-domain — resolved during the
+            // screen/desktop/activity pass, never per-window.
+            ActionType::SetZonePadding,
+            ActionType::SetOuterGap,
+            ActionType::SetUsePerSideOuterGap,
+            ActionType::SetOuterGapTop,
+            ActionType::SetOuterGapBottom,
+            ActionType::SetOuterGapLeft,
+            ActionType::SetOuterGapRight,
         };
         for (const QLatin1StringView type : contextTypes) {
             const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
@@ -125,6 +134,14 @@ private Q_SLOTS:
             ActionType::OverrideAnimationTiming,
             ActionType::OverrideAnimationCurve,
             ActionType::SetOpacity,
+            // Border / title-bar overrides are window-domain — resolved per
+            // window in the effect, applicable to any matched window.
+            ActionType::SetHideTitleBar,
+            ActionType::SetBorderVisible,
+            ActionType::SetBorderWidth,
+            ActionType::SetBorderRadius,
+            ActionType::SetBorderColor,
+            ActionType::SetInactiveBorderColor,
         };
         for (const QLatin1StringView type : windowTypes) {
             const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
@@ -198,6 +215,132 @@ private Q_SLOTS:
             obj.insert(QLatin1StringView("mode"), QString::fromLatin1(token.data(), token.size()));
             QVERIFY2(RuleAction::fromJson(obj).has_value(), token.data());
         }
+    }
+
+    // ── border / title-bar appearance actions ──
+
+    void testBorderBoolActions_requireBool()
+    {
+        for (const QLatin1StringView type : {ActionType::SetHideTitleBar, ActionType::SetBorderVisible}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            // A number is NOT a bool — must be rejected.
+            o.insert(QStringLiteral("value"), 1);
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), true);
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+        }
+    }
+
+    void testBorderNumberActions_range()
+    {
+        QJsonObject w;
+        w.insert(QStringLiteral("type"), QString(ActionType::SetBorderWidth));
+        w.insert(QStringLiteral("value"), 15); // > max 10
+        QVERIFY(!RuleAction::fromJson(w).has_value());
+        w.insert(QStringLiteral("value"), -1);
+        QVERIFY(!RuleAction::fromJson(w).has_value());
+        // A JSON bool is NOT a number — hasNumberInRange uses isDouble(), which
+        // is false for a bool. Pin the rejection so a future widening of the
+        // number validator (e.g. isDouble() || isBool()) fails the suite.
+        w.insert(QStringLiteral("value"), true);
+        QVERIFY(!RuleAction::fromJson(w).has_value());
+        w.insert(QStringLiteral("value"), 4);
+        QVERIFY(RuleAction::fromJson(w).has_value());
+
+        QJsonObject r;
+        r.insert(QStringLiteral("type"), QString(ActionType::SetBorderRadius));
+        r.insert(QStringLiteral("value"), 25); // > max 20
+        QVERIFY(!RuleAction::fromJson(r).has_value());
+        r.insert(QStringLiteral("value"), 20);
+        QVERIFY(RuleAction::fromJson(r).has_value());
+    }
+
+    void testBorderColorActions_requireHex()
+    {
+        for (const QLatin1StringView type : {ActionType::SetBorderColor, ActionType::SetInactiveBorderColor}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), QStringLiteral("red")); // named colour — hex-only boundary rejects
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("#ff00")); // length 5 ∉ {4,7,9}
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("#12345")); // length 6 ∉ {4,7,9}
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), QStringLiteral("#gg0000")); // non-hex digits
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            // The standard QColor hex shapes the consumer parses are all accepted:
+            // #RGB (4), #RRGGBB (7), #AARRGGBB (9 — QColor reads 9-digit hex alpha-first).
+            for (const QString good :
+                 {QStringLiteral("#abc"), QStringLiteral("#FF0000"), QStringLiteral("#80FF0000")}) {
+                o.insert(QStringLiteral("value"), good);
+                QVERIFY2(RuleAction::fromJson(o).has_value(),
+                         qPrintable(QStringLiteral("%1 %2").arg(QString::fromLatin1(type), good)));
+            }
+            o.insert(QStringLiteral("value"), QStringLiteral("#FF0000"));
+            const auto reloaded = RuleAction::fromJson(o);
+            QVERIFY2(reloaded.has_value(), type.data());
+            // Genuine round-trip: serialise the parsed action back out and
+            // re-parse, asserting toJson→fromJson is stable (re-parsing the
+            // same input `o` would only prove fromJson is deterministic).
+            const auto roundTripped = RuleAction::fromJson(reloaded->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(*roundTripped, *reloaded);
+        }
+    }
+
+    // ── gap actions (context-domain) ──
+
+    void testGapNumberActions_range()
+    {
+        for (const QLatin1StringView type :
+             {ActionType::SetZonePadding, ActionType::SetOuterGap, ActionType::SetOuterGapTop,
+              ActionType::SetOuterGapBottom, ActionType::SetOuterGapLeft, ActionType::SetOuterGapRight}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), -5);
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 600); // > kMaxGap (500)
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 0);
+            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
+            o.insert(QStringLiteral("value"), 12);
+            const auto reloaded = RuleAction::fromJson(o);
+            QVERIFY2(reloaded.has_value(), type.data());
+            QCOMPARE(reloaded->params.value(QStringLiteral("value")).toInt(), 12);
+        }
+    }
+
+    void testGapPerSideToggle_requiresBool()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QString(ActionType::SetUsePerSideOuterGap));
+        o.insert(QStringLiteral("value"), QStringLiteral("yes"));
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QStringLiteral("value"), false);
+        QVERIFY(RuleAction::fromJson(o).has_value());
+    }
+
+    void testNewActions_rejectStrayKeys()
+    {
+        // The new border/gap family all declare `allowedKeys = {Value}`; pin
+        // that an otherwise-valid payload carrying an unexpected extra key is
+        // rejected, so the strict-key path is exercised for this family (not
+        // just for the pre-existing SetEngineMode in testJson_rejectsInvalidParams).
+        const auto rejectsStray = [](QLatin1StringView type, const QJsonValue& goodValue) {
+            QJsonObject ok;
+            ok.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            ok.insert(QStringLiteral("value"), goodValue);
+            QVERIFY2(RuleAction::fromJson(ok).has_value(), type.data());
+            QJsonObject stray = ok;
+            stray.insert(QStringLiteral("width"), 4); // not in allowedKeys
+            QVERIFY2(!RuleAction::fromJson(stray).has_value(), type.data());
+        };
+        rejectsStray(ActionType::SetBorderWidth, QJsonValue(4));
+        rejectsStray(ActionType::SetHideTitleBar, QJsonValue(true));
+        rejectsStray(ActionType::SetBorderColor, QJsonValue(QStringLiteral("#FF0000")));
+        rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
+        rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
     }
 };
 

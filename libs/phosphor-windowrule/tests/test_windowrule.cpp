@@ -199,6 +199,33 @@ private Q_SLOTS:
         QVERIFY(r.validationIssues().isEmpty());
     }
 
+    void testValidationIssues_gapActionWithWindowMatch()
+    {
+        // Gap overrides are context-domain — pairing one with a window-property
+        // match silently never fires (the gap is resolved during the windowless
+        // context pass). The validator must flag it just like the engine/layout
+        // context actions.
+        const WindowRule r =
+            makeRule(QStringLiteral("konsole padding"), 200,
+                     MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("org.kde.konsole")),
+                     {zonePadding(0)});
+        const auto issues = r.validationIssues();
+        QCOMPARE(issues.size(), 1);
+        QCOMPARE(issues.first().code, ValidationIssue::Code::ContextActionWithWindowMatch);
+        QCOMPARE(issues.first().actionType, QString(ActionType::SetZonePadding));
+    }
+
+    void testValidationIssues_gapActionWithContextMatch()
+    {
+        // Gap override + context-only match → valid: "zero padding on activity
+        // X" is exactly the intended use of a context gap rule.
+        const WindowRule r =
+            makeRule(QStringLiteral("gaming no gaps"), 510,
+                     MatchExpression::makeLeaf(Field::Activity, Operator::Equals, QStringLiteral("gaming-uuid")),
+                     {zonePadding(0)});
+        QVERIFY(r.validationIssues().isEmpty());
+    }
+
     void testValidationIssues_multipleActionsEachFlaggedIndependently()
     {
         // Two context-domain actions on a window match → two issues, each

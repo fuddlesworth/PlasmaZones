@@ -8,6 +8,7 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorWindowRule/WindowQuery.h>
 
+#include <QColor>
 #include <QString>
 
 #include <optional>
@@ -127,5 +128,45 @@ PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRul
  */
 std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                           const PhosphorWindowRule::WindowQuery& query, const QString& windowId);
+
+/**
+ * @brief Per-window border / title-bar appearance override — the runtime
+ *        consumer for the SetBorder* / SetHideTitleBar rules.
+ *
+ * Each field is set only when an enabled rule whose match resolves for
+ * @p query fills the corresponding slot with a valid param (bool for
+ * hideTitleBar/showBorder, an int in the descriptor range for width/radius, a
+ * parseable `#RRGGBB` for the colours). Unset fields mean "no override — fall
+ * back to the global snap/autotile border state." Returns `std::nullopt` when
+ * @p query is windowless / @p windowId is empty / no rule fills any slot, so
+ * the caller can skip the merge entirely.
+ *
+ * Applies to ANY matched window (snapped OR floating), mirroring
+ * `resolveWindowOpacity`. The bool/int re-reads here mirror the load-time
+ * descriptor validators in ruleaction.cpp (defence-in-depth). The colour reads
+ * parse via `QColor(QString)`, which accepts the same hex shapes the load-time
+ * `hasHexColor` validator admits (`#RGB`, `#RRGGBB`, `#AARRGGBB`) plus named
+ * colours; the load boundary stays hex-only, so a named colour can only reach
+ * this reader through an in-process path that bypassed load — still safe, since
+ * any `QColor::isValid()` result renders fine.
+ */
+struct ResolvedWindowAppearance
+{
+    std::optional<bool> hideTitleBar;
+    std::optional<bool> showBorder;
+    std::optional<int> borderWidth;
+    std::optional<int> borderRadius;
+    std::optional<QColor> borderColor;
+    std::optional<QColor> inactiveBorderColor;
+
+    bool any() const
+    {
+        return hideTitleBar || showBorder || borderWidth || borderRadius || borderColor || inactiveBorderColor;
+    }
+};
+
+std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRule::RuleEvaluator& evaluator,
+                                                                const PhosphorWindowRule::WindowQuery& query,
+                                                                const QString& windowId);
 
 } // namespace PlasmaZones

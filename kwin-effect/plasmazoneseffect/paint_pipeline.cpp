@@ -260,7 +260,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // the whole animation. setTranslucent() clears the opaque region
         // so every frame fully recomposites under the window.
         data.setTranslucent();
-    } else if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
+    } else if (w && m_shaderManager.hasOpacityRules()) {
         // SetOpacity-only case: a rule may dim this window via
         // `data.setOpacity()` in paintWindow below, but with neither an
         // animation, shader transition, nor restore suppression in
@@ -280,8 +280,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // dropped at postPaintScreen.
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
-            const auto opacity =
-                resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w), getWindowId(w));
+            const auto opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(),
+                                                      windowRuleQueryFor(w, getWindowScreenId(w)), getWindowId(w));
             m_shaderManager.cacheFrameOpacity(w, opacity);
             if (opacity && *opacity < 1.0) {
                 data.setTranslucent();
@@ -381,7 +381,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // to keep default-state cost to two pointer reads; without it, every
     // paintWindow call churns the rule evaluator's per-window cache for
     // zero benefit.
-    if (!m_shaderManager.animationRuleSet().isEmpty()) {
+    if (m_shaderManager.hasOpacityRules()) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
             // Reuse the per-frame cache populated by prePaintWindow above.
@@ -392,8 +392,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (m_shaderManager.frameOpacityCached(w)) {
                 opacity = m_shaderManager.cachedFrameOpacity(w);
             } else {
-                opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w),
-                                               getWindowId(w));
+                opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(),
+                                               windowRuleQueryFor(w, getWindowScreenId(w)), getWindowId(w));
                 m_shaderManager.cacheFrameOpacity(w, opacity);
             }
             if (opacity) {

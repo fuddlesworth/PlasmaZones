@@ -44,6 +44,7 @@
 #include <vector>
 
 #include <PhosphorWindowRule/ContextRuleBridge.h>
+#include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/RuleEvaluator.h>
 #include <PhosphorWindowRule/WindowQuery.h>
 #include <PhosphorWindowRule/WindowRule.h>
@@ -629,6 +630,53 @@ private Q_SLOTS:
             QVERIFY(entry.snappingLayout.isEmpty());
             QCOMPARE(entry.tilingAlgorithm, QStringLiteral("bsp"));
         }
+    }
+
+    // ─── Context-rule gap overrides ──────────────────────────────────────
+    // Gaps are context-domain but, unlike engine-mode assignments, resolve
+    // PER SLOT — so a zone-padding rule and a separate outer-gap rule on the
+    // same context BOTH apply, and there is no engine-mode gate.
+
+    void testContextGaps_perSlotComposition()
+    {
+        const auto intGapAction = [](QLatin1StringView type, int value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), value);
+            return a;
+        };
+        const auto gapRule = [](const QString& name, int priority, const QString& screenId,
+                                const QList<PWR::RuleAction>& actions) {
+            PWR::WindowRule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = actions;
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        // Higher-priority rule sets ONLY zone padding; lower-priority rule sets
+        // ONLY the outer gap. Different slots → both must apply (no shadowing),
+        // and neither carries an engine-mode action.
+        const PWR::WindowRule pad = gapRule(QStringLiteral("pad"), 400, QStringLiteral("DP-1"),
+                                            {intGapAction(PWR::ActionType::SetZonePadding, 0)});
+        const PWR::WindowRule gap = gapRule(QStringLiteral("gap"), 300, QStringLiteral("DP-1"),
+                                            {intGapAction(PWR::ActionType::SetOuterGap, 12)});
+        QVERIFY(f.store->setAllRules({pad, gap}));
+
+        const PhosphorZones::ContextGapOverride resolved =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(resolved.zonePadding.has_value());
+        QCOMPARE(*resolved.zonePadding, 0);
+        QVERIFY(resolved.outerGap.has_value()); // separate slot — composes, not shadowed
+        QCOMPARE(*resolved.outerGap, 12);
+        QVERIFY(!resolved.usePerSideOuterGap.has_value());
+
+        // A context the rules do not pin → no override (cascade falls through).
+        QVERIFY(f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 };
 

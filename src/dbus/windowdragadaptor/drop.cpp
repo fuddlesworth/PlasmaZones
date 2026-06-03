@@ -512,9 +512,11 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     const int desktopFilter = desktopAtDrop > 0 ? desktopAtDrop : m_layoutManager->currentVirtualDesktop();
     QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId, desktopFilter);
     PhosphorProtocol::EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(
-        m_screenManager, layout, screenId, releaseScreen, m_settings, [&occupied](const PhosphorZones::Zone* z) {
+        m_screenManager, layout, screenId, releaseScreen, m_settings,
+        [&occupied](const PhosphorZones::Zone* z) {
             return !occupied.contains(z->id());
-        });
+        },
+        m_layoutManager);
 
     if (emptyZones.isEmpty()) {
         return;

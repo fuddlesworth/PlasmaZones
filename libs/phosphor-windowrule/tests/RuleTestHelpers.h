@@ -81,6 +81,30 @@ inline RuleAction setOpacity(double value)
     return a;
 }
 
+inline RuleAction borderWidth(int px)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetBorderWidth);
+    a.params.insert(ActionParam::Value, px);
+    return a;
+}
+
+inline RuleAction borderColor(const QString& hex)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetBorderColor);
+    a.params.insert(ActionParam::Value, hex);
+    return a;
+}
+
+inline RuleAction zonePadding(int px)
+{
+    RuleAction a;
+    a.type = QString(ActionType::SetZonePadding);
+    a.params.insert(ActionParam::Value, px);
+    return a;
+}
+
 inline WindowRule makeRule(const QString& name, int priority, const MatchExpression& match,
                            const QList<RuleAction>& actions)
 {

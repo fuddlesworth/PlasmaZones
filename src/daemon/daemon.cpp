@@ -966,7 +966,7 @@ bool Daemon::init()
     // Window tracking adaptor - window-zone assignments
     m_windowTrackingAdaptor =
         new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_screenManager.get(), m_settings.get(),
-                                  m_virtualDesktopManager.get(), this);
+                                  m_virtualDesktopManager.get(), m_activityManager.get(), this);
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
 

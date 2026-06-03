@@ -48,6 +48,7 @@ class SnapNavigationTargetResolver;
 
 namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
+class ActivityManager;
 }
 
 namespace PlasmaZones {
@@ -76,6 +77,7 @@ public:
                                    PhosphorZones::IZoneDetector* zoneDetector,
                                    PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                                    PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager,
+                                   PhosphorWorkspaces::ActivityManager* activityManager = nullptr,
                                    QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override;
 
@@ -903,6 +905,7 @@ private:
     /// → isContextDisabled)` cascade rebuild in `saveload.cpp`.
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
+    PhosphorWorkspaces::ActivityManager* m_activityManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
 
     // Engine references for per-screen routing (set via setEngines())

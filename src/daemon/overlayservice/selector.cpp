@@ -658,7 +658,7 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
             PhosphorZones::Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
                 QRect result = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, physScreen, screenId,
-                                                                       selectedLayout, m_settings);
+                                                                       selectedLayout, m_settings, m_layoutManager);
                 if (result.isValid()) {
                     return result;
                 }

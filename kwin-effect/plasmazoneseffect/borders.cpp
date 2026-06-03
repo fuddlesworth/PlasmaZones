@@ -11,8 +11,12 @@
 #include <window.h>
 
 #include "../autotilehandler.h"
+#include "shader_resolve.h"
+#include "window_query.h"
 
 #include <PhosphorCompositor/AutotileState.h>
+
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -86,14 +90,31 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // Remove existing border for this window first
     removeWindowBorder(windowId);
 
-    // Resolve which mode (autotile / snap) manages this window and draw with
-    // that mode's border settings. nullptr → neither mode shows a border for it.
+    // Base appearance from the owning mode (autotile / snap). nullptr → no mode
+    // currently draws a border for this window (floating, or its mode's border
+    // is off) — a per-window rule may still force one on below.
     const PhosphorCompositor::BorderState* state = resolveBorderStateFor(windowId);
-    if (!state) {
+
+    // Per-window rule override — applies to ANY matched window, snapped or
+    // floating (mirrors SetOpacity). Resolved against the same evaluator the
+    // opacity / animation rules use; gated on a non-empty rule set so windows
+    // with no rules pay nothing.
+    std::optional<ResolvedWindowAppearance> ovr;
+    if (w && !m_shaderManager.animationRuleSet().isEmpty()) {
+        ovr = resolveWindowAppearance(m_shaderManager.animationRuleEvaluator(),
+                                      windowRuleQueryFor(w, getWindowScreenId(w)), windowId);
+    }
+
+    // Merge: a rule field wins; otherwise fall back to the owning mode's value
+    // (or "no border" when the window has no owning border state).
+    // resolveBorderStateFor only returns non-null when that mode SHOWS a
+    // border, so a non-null `state` means baseShows == true.
+    const bool show = (ovr && ovr->showBorder) ? *ovr->showBorder : (state != nullptr);
+    if (!show) {
         return;
     }
 
-    const int bw = state->width;
+    const int bw = (ovr && ovr->borderWidth) ? *ovr->borderWidth : (state ? state->width : 0);
     if (bw <= 0) {
         return;
     }
@@ -102,10 +123,20 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    // Choose color: active for focused window, inactive for others
+    // Choose color: active for focused window, inactive for others.
+    const QColor activeColor = (ovr && ovr->borderColor) ? *ovr->borderColor : (state ? state->color : QColor());
+    // Inactive falls back to the active rule colour when a rule supplies only
+    // an active colour AND the window has no owning mode (floating): without
+    // this a rule-bordered floating window would lose its border entirely when
+    // it loses focus (invalid inactiveColor → early-return below). A snapped
+    // window still inherits its mode's inactive colour.
+    const QColor inactiveColor = (ovr && ovr->inactiveBorderColor) ? *ovr->inactiveBorderColor
+        : state                                                    ? state->inactiveColor
+        : (ovr && ovr->borderColor)                                ? *ovr->borderColor
+                                                                   : QColor();
     KWin::EffectWindow* active = KWin::effects->activeWindow();
     const bool isFocused = (w == active);
-    const QColor bc = isFocused ? state->color : state->inactiveColor;
+    const QColor bc = isFocused ? activeColor : inactiveColor;
     if (!bc.isValid() || bc.alpha() == 0) {
         return;
     }
@@ -115,7 +146,7 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
     // by borderWidth so the border draws fully inside the frame (no clipping).
     const QRectF frame = w->frameGeometry();
     const KWin::RectF innerRect(bw, bw, frame.width() - 2.0 * bw, frame.height() - 2.0 * bw);
-    const int br = state->radius;
+    const int br = (ovr && ovr->borderRadius) ? *ovr->borderRadius : (state ? state->radius : 0);
     const KWin::BorderOutline outline(bw, bc, KWin::BorderRadius(br));
 
     KWin::WindowItem* windowItem = w->windowItem();
@@ -197,16 +228,73 @@ void PlasmaZonesEffect::updateAllBorders()
     clearAllBorders();
 
     // Iterate all effect windows and create borders for any window managed by
-    // a mode (autotile or snap) that currently shows borders. Per-window
-    // resolution lets the two modes carry independent width/colour/radius.
+    // a mode (autotile or snap) that currently shows borders, OR matched by a
+    // per-window border rule (which can draw on an otherwise-borderless /
+    // floating window). updateWindowBorder self-gates on the merged effective
+    // appearance, so calling it when rules exist is safe; reconcile the rule
+    // title-bar override in the same pass so it tracks context changes.
+    const bool haveRules = !m_shaderManager.animationRuleSet().isEmpty();
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
-        if (!w || w->isDeleted() || !w->isOnCurrentDesktop()) {
+        if (!w || w->isDeleted()) {
             continue;
         }
         const QString wid = getWindowId(w);
-        if (resolveBorderStateFor(wid)) {
+        // Border overlays are visual, so only build them for windows on the
+        // current desktop. Title-bar hiding (setNoBorder) is a persistent
+        // decoration-state change that survives desktop switches, so reconcile
+        // it for ALL windows the rule may match — otherwise a SetHideTitleBar
+        // rule added while the matched window sits on another virtual desktop
+        // would not take effect until that window is next activated.
+        if (w->isOnCurrentDesktop() && (haveRules || resolveBorderStateFor(wid))) {
             updateWindowBorder(wid, w);
+        }
+        if (haveRules) {
+            reconcileRuleHiddenTitleBar(wid, w);
+        }
+    }
+    // When no rules remain, the per-window reconcile above is skipped (haveRules
+    // is false), so a title bar a now-removed SetHideTitleBar rule hid would stay
+    // hidden until effect teardown. Restore every rule-hidden title bar in that
+    // case — restoreAllRuleHiddenTitleBars is a no-op when the set is already
+    // empty (the common no-rules path), so this costs nothing when nothing is hidden.
+    if (!haveRules) {
+        restoreAllRuleHiddenTitleBars();
+    }
+}
+
+void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w)
+{
+    using namespace PhosphorCompositor;
+    if (!w || windowId.isEmpty()) {
+        return;
+    }
+    // A rule SetHideTitleBar override only ever ADDS hiding (hide == true).
+    // hide == false / unset means "no override" and defers to the snap/autotile
+    // borderless management — the rule layer never force-shows a title bar that
+    // a mode hid, so it can't fight that mode's authoritative decoration state.
+    const std::optional<ResolvedWindowAppearance> ovr = resolveWindowAppearance(
+        m_shaderManager.animationRuleEvaluator(), windowRuleQueryFor(w, getWindowScreenId(w)), windowId);
+    const bool ruleWantsHide = ovr && ovr->hideTitleBar && *ovr->hideTitleBar;
+    KWin::Window* kw = w->window();
+    const bool weHidIt = m_ruleHiddenTitleBars.contains(windowId);
+    // A window snap/autotile already manages borderless must not be physically
+    // toggled by the rule layer (it owns the decoration); we only track intent.
+    const bool modeBorderless = AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId)
+        || m_autotileHandler->isBorderlessWindow(windowId);
+
+    if (ruleWantsHide) {
+        if (!weHidIt && kw && kw->userCanSetNoBorder()) {
+            m_ruleHiddenTitleBars.insert(windowId);
+            if (!modeBorderless) {
+                kw->setNoBorder(true);
+            }
+        }
+    } else if (weHidIt) {
+        m_ruleHiddenTitleBars.remove(windowId);
+        // Restore the decoration unless a mode still wants it borderless.
+        if (kw && !modeBorderless) {
+            kw->setNoBorder(false);
         }
     }
 }
@@ -287,7 +375,12 @@ void PlasmaZonesEffect::markWindowSnapped(const QString& windowId, const QString
     // recorded above is then harmless — if the window later closes, slotWindowClosed
     // clears m_snapBorder for it. No border is drawn (nothing to draw on) and none
     // is needed; updateAllBorders() iterates only live windows so it simply skips it.
-    if (w) {
+    //
+    // Border overlays are visual-only, so skip the off-desktop case (consistent
+    // with updateAllBorders): an OutlinedBorderItem for an invisible window is
+    // wasted work. When the user switches to that window's desktop, the
+    // desktopChanged → updateAllBorders connection rebuilds its border.
+    if (w && w->isOnCurrentDesktop()) {
         updateWindowBorder(windowId, w);
     }
 }
@@ -388,6 +481,29 @@ void PlasmaZonesEffect::restoreAllSnapBorderless()
     m_snapBorder.borderlessWindowsByScreen.clear();
     m_snapBorder.tiledWindowsByScreen.clear();
     m_snapBorder.zoneGeometries.clear();
+}
+
+void PlasmaZonesEffect::restoreAllRuleHiddenTitleBars()
+{
+    using namespace PhosphorCompositor;
+    // Symmetric with restoreAllSnapBorderless: on daemon loss / effect teardown
+    // the authoritative window-rule state is gone, so restore every title bar a
+    // SetHideTitleBar rule hid and drop the set. Skip a window a mode still
+    // wants borderless — that mode's own teardown (restoreAllSnapBorderless /
+    // AutotileHandler::restoreAllBorderless) owns its restore, and a double
+    // setNoBorder(false) would fight it.
+    for (const QString& windowId : m_ruleHiddenTitleBars) {
+        if (AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId)
+            || m_autotileHandler->isBorderlessWindow(windowId)) {
+            continue;
+        }
+        if (KWin::EffectWindow* w = findWindowById(windowId)) {
+            if (KWin::Window* kw = w->window()) {
+                kw->setNoBorder(false);
+            }
+        }
+    }
+    m_ruleHiddenTitleBars.clear();
 }
 
 } // namespace PlasmaZones
