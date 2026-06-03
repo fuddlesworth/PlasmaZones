@@ -122,9 +122,13 @@ public:
      */
     void drainPendingBorderlessRestore();
 
-    // Settings update: toggle hide-title-bars with border restore on disable
-    void updateHideTitleBarsSetting(bool enabled);
-    void updateShowBorderSetting(bool enabled);
+    // Settings update: toggle hide-title-bars with border restore on disable.
+    // Returns true if the value actually changed (so the caller can skip a
+    // redundant updateAllBorders() stacking-order walk on a no-op reload).
+    bool updateHideTitleBarsSetting(bool enabled);
+    /// Returns true if the value actually changed (so the caller can skip a
+    /// redundant updateAllBorders() stacking-order walk on a no-op reload).
+    bool updateShowBorderSetting(bool enabled);
 
     // Focus follows mouse: focus autotile window under cursor
     void setFocusFollowsMouse(bool enabled);
@@ -204,6 +208,13 @@ public:
     void setBorderRadius(int r)
     {
         m_border.radius = r;
+    }
+    /// Read-only view of the autotile border state. The effect's mode-aware
+    /// border resolution reads this alongside the parallel snap BorderState so
+    /// each window draws with the settings of the mode that manages it.
+    const BorderState& borderState() const
+    {
+        return m_border;
     }
     QRect applyBorderInset(const QRect& geo) const
     {

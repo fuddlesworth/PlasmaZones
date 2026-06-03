@@ -4,6 +4,7 @@
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
 #include "snapassistthumbnailprovider.h"
+#include "dmabuftextureprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorOverlay/ShellHost.h>
@@ -27,6 +28,7 @@
 #include <QDBusConnection>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QByteArrayList>
 #include <QQmlEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -166,6 +168,13 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
     m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
     m_thumbnailProvider.store(m_thumbnailProviderOwned.get(), std::memory_order_release);
 
+    // Same eager-construct + engine-handover pattern for the zero-copy GPU
+    // thumbnail provider (PLASMAZONES_DMABUF_THUMBNAILS). Always constructed so
+    // the borrowed pointer is non-null; it only ever receives descriptors when
+    // the env gate is on and the kwin-effect takes the dma-buf path.
+    m_dmabufTextureProviderOwned = std::make_unique<DmabufTextureProvider>();
+    m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
+
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
@@ -203,13 +212,35 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
                 }
                 engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId),
                                         m_thumbnailProviderOwned.release());
+
+                // Mirror for the dma-buf (Texture-type) provider.
+                if (!m_dmabufTextureProviderOwned) {
+                    m_dmabufTextureProviderOwned = std::make_unique<DmabufTextureProvider>();
+                    m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
+                }
+                engine.addImageProvider(QString::fromLatin1(DmabufTextureProvider::ProviderId),
+                                        m_dmabufTextureProviderOwned.release());
+
                 QObject::connect(&engine, &QObject::destroyed, this, [this]() {
                     m_thumbnailProvider.store(nullptr, std::memory_order_release);
+                    m_dmabufTextureProvider.store(nullptr, std::memory_order_release);
                 });
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,
         .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
+        // Zero-copy dma-buf thumbnail import (PLASMAZONES_DMABUF_THUMBNAILS)
+        // needs these device extensions enabled on the overlay windows' QRhi
+        // Vulkan device; without them vkGetMemoryFdPropertiesKHR is unavailable
+        // and the import fails. Only requested when the experimental gate is
+        // on, so default builds keep Qt's stock device. Qt enables only the
+        // physically-supported subset.
+        .vulkanDeviceExtensions = qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS")
+            ? QByteArrayList{QByteArrayLiteral("VK_KHR_external_memory_fd"),
+                             QByteArrayLiteral("VK_EXT_external_memory_dma_buf"),
+                             QByteArrayLiteral("VK_EXT_image_drm_format_modifier"),
+                             QByteArrayLiteral("VK_KHR_image_format_list")}
+            : QByteArrayList{},
     });
 
     // ShellHost was constructed earlier (before setupSurfaceAnimator)

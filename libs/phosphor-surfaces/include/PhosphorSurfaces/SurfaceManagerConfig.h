@@ -5,6 +5,7 @@
 
 #include <PhosphorSurfaces/phosphorsurfaces_export.h>
 
+#include <QByteArrayList>
 #include <QString>
 #include <QVersionNumber>
 
@@ -38,6 +39,13 @@ struct PHOSPHORSURFACES_EXPORT SurfaceManagerConfig
     // Vulkan API version for the fallback instance (only used when
     // vulkanInstance is null and the graphics API is Vulkan).
     QVersionNumber vulkanApiVersion = QVersionNumber(1, 1);
+
+    // Extra Vulkan device extensions to request on every window's QRhi device
+    // (via QQuickGraphicsConfiguration::setDeviceExtensions). Qt enables only
+    // those the physical device actually supports, so listing an unsupported
+    // one is harmless. Empty by default; callers that import external buffers
+    // (e.g. dma-buf window thumbnails) populate it with the import extensions.
+    QByteArrayList vulkanDeviceExtensions;
 };
 
 } // namespace PhosphorSurfaces

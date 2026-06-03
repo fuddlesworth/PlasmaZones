@@ -128,9 +128,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 switch (outcome.action) {
                 case PhosphorProtocol::DragOutcome::NoOp:
                 case PhosphorProtocol::DragOutcome::CancelSnap:
+                    // Daemon handled any internal cleanup. CancelSnap returns
+                    // the window to its pre-drag state, so its snap-managed
+                    // status is unchanged — nothing for the effect to retrack.
+                    break;
+
                 case PhosphorProtocol::DragOutcome::NotifyDragOutUnsnap:
-                    // Daemon handled any internal cleanup. Nothing for the
-                    // effect to paint.
+                    // Window was dragged out of its zone — no longer snap-managed.
+                    clearWindowSnapped(windowId);
                     break;
 
                 case PhosphorProtocol::DragOutcome::ApplyFloat: {
@@ -152,6 +157,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         break;
                     }
                     m_autotileHandler->handleDragToFloat(safeWindow, windowId, dropScreenId);
+                    // Window is now floating — drop it from snapping's set.
+                    clearWindowSnapped(windowId);
                     // Note: m_dragFloatedWindowIds is intentionally NOT re-set here.
                     // See dragStopped handler — the marker is cleared at drag end
                     // because the daemon's drag-end float path (setWindowFloat →
@@ -183,6 +190,16 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                         }
                     }
                     applySnapGeometry(safeWindow, snapGeometry);
+                    // Drag-drop snap committed — record in snapping's border set,
+                    // but only for a resolved snap-mode screen. An empty
+                    // (unresolved) or autotile-managed screen is owned by
+                    // AutotileHandler, so recording it here would double-track the
+                    // window — same discriminator as the other snap-commit paths.
+                    if (const QString scr =
+                            !outcome.targetScreenId.isEmpty() ? outcome.targetScreenId : getWindowScreenId(safeWindow);
+                        !scr.isEmpty() && !m_autotileHandler->isAutotileScreen(scr)) {
+                        markWindowSnapped(windowId, scr);
+                    }
                     break;
                 }
 
@@ -208,6 +225,8 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // Drag-to-unsnap: window leaves zone-managed sizing, restore pre-snap dimensions.
                     applySnapGeometry(safeWindow, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
                                       PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                    // Drag-to-unsnap: window left zone-managed sizing.
+                    clearWindowSnapped(windowId);
                     break;
                 }
                 }
@@ -274,6 +293,15 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                         // ternary fall-through to QRectF() is unreachable.
                         ensurePreSnapGeometryStored(window, windowId, window->frameGeometry());
                     applySnapGeometry(window, geo, false, skipAnimation);
+                    // Async snap (keyboard / empty-zone / last-zone / auto-fill)
+                    // committed — record in snapping's border set, but only for
+                    // a resolved snap-mode screen (autotile windows are tracked
+                    // by AutotileHandler; an empty screen is left untracked,
+                    // mirroring the batch path's discriminator).
+                    if (const QString asyncScr = getWindowScreenId(window);
+                        !asyncScr.isEmpty() && !m_autotileHandler->isAutotileScreen(asyncScr)) {
+                        markWindowSnapped(windowId, asyncScr);
+                    }
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {
                         onSnapSuccess(windowId, args[1].toString());
@@ -470,7 +498,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         // resolver call below — matches the shape `shouldAnimateWindow`
         // uses for its rule-override gate, so a rule that gates the
         // animation also resolves its curve / timing / shader slots.
-        const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window);
+        const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window, getWindowScreenId(window));
         const auto& baseProfile = m_windowAnimator->profile();
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;

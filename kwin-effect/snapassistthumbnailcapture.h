@@ -12,12 +12,15 @@
 #include <QUuid>
 #include <QVector>
 
+#include <array>
+#include <cstdint>
 #include <memory>
 
 class QImage;
 
 namespace KWin {
 class OffscreenQuickScene;
+class GLTexture;
 }
 
 namespace PlasmaZones {
@@ -94,8 +97,55 @@ private Q_SLOTS:
     void processNext();
 
 private:
-    void ensureScene();
+    /// Single-plane DMA-BUF exported from a rendered thumbnail texture (the
+    /// ExportMode::Texture path). @c ok is false when the compositor is not on
+    /// an EGL/GL backend or the driver lacks EGL_MESA_image_dma_buf_export.
+    /// Per-export failures and daemon import rejections are counted; after
+    /// @ref DmabufFailureThreshold consecutive failures the capture switches
+    /// the whole session back to the raw-pixel path (@ref onDmabufRejected) so
+    /// an unsupported setup degrades to working pixel thumbnails instead of
+    /// stranding candidates on icons.
+    struct DmabufExport
+    {
+        bool ok = false;
+        int fd = -1;
+        int fenceFd = -1; ///< sync_file fence: signals when the GL render completed.
+        int width = 0;
+        int height = 0;
+        uint32_t fourcc = 0;
+        uint64_t modifier = 0;
+        uint32_t stride = 0;
+        uint32_t offset = 0;
+    };
+
+    struct Pending
+    {
+        QUuid internalId;
+        QSize maxSize;
+    };
+
+    /// Pick (and lazily create) the producer scene for the next capture and
+    /// set it as @ref m_activeScene's source. In the dma-buf path this
+    /// round-robins across the pool; in the raw-pixel path it always returns
+    /// slot 0. Returns nullptr only if scene creation failed.
+    KWin::OffscreenQuickScene* acquireSceneForCapture();
     void postThumbnail(const QUuid& internalId, const QImage& image);
+    void postThumbnailDmabuf(const Pending& p, const DmabufExport& exported);
+
+    /// Record a dma-buf capture failure (export failure or daemon import
+    /// rejection) for @p p. After @ref DmabufFailureThreshold consecutive
+    /// failures, permanently switches this session to the raw-pixel path:
+    /// clears @c m_dmabufEnabled, resets the scene (so it rebuilds in
+    /// ExportMode::Image), and re-enqueues @p p so it re-captures via pixels.
+    /// Pure state mutation — the caller owns kicking @ref processNext.
+    void onDmabufRejected(const Pending& p);
+
+    /// Export a rendered thumbnail texture (from OffscreenQuickScene in
+    /// ExportMode::Texture) to a single-plane dma-buf via
+    /// EGL_MESA_image_dma_buf_export. Must be called with KWin's GL/EGL
+    /// context current (i.e. right after OffscreenQuickScene::update()).
+    /// Returns {ok=false} on any failure; the caller drops the candidate.
+    DmabufExport exportTextureToDmabuf(KWin::GLTexture* texture) const;
 
     /// Common cleanup for early-bail paths in @ref processNext and the
     /// @ref attemptCapture timer lambda: drop the in-flight queue and
@@ -104,12 +154,6 @@ private:
     /// dispatch would silently wedge the queue forever, so every error
     /// exit must route through here (or set both fields inline).
     void dropQueueAndIdle();
-
-    struct Pending
-    {
-        QUuid internalId;
-        QSize maxSize;
-    };
 
     /// Read back the current scene buffer for @p p; on a null buffer, retry
     /// once with a longer delay before giving up. Compositor stalls
@@ -169,7 +213,33 @@ private:
                   "RecentPostedCapacity must be positive — the eviction loop in markRecentlyPosted "
                   "assumes the just-inserted handle survives the capacity check.");
 
-    std::unique_ptr<KWin::OffscreenQuickScene> m_scene;
+    /// Opt-in zero-copy GPU path (PLASMAZONES_DMABUF_THUMBNAILS). When set,
+    /// the scene is built in ExportMode::Texture and each capture is exported
+    /// as a dma-buf and posted via setWindowThumbnailDmabuf instead of the
+    /// raw-ARGB32 setSnapAssistThumbnail. Initialised from the env var at
+    /// construction; cleared by @ref onDmabufRejected if the path proves
+    /// unavailable at runtime, after which the session uses the pixel path.
+    bool m_dmabufEnabled = false;
+    /// Consecutive dma-buf capture failures (export or daemon rejection).
+    /// Reset on success; triggers the session fallback at
+    /// @ref DmabufFailureThreshold.
+    int m_dmabufConsecutiveFailures = 0;
+
+    /// Small producer pool of capture scenes. In the dma-buf path consecutive
+    /// captures round-robin across the pool so a producer buffer isn't reused
+    /// until ScenePoolSize captures later — long enough for the daemon to have
+    /// copied it into its own per-candidate texture (see DmabufQsgTexture). The
+    /// raw-pixel path uses slot 0 only (bufferAsImage copies immediately, so no
+    /// producer-buffer aliasing). @ref m_activeScene is the slot driving the
+    /// current in-flight capture (a borrowed pointer into the pool).
+    static constexpr int ScenePoolSize = 3;
+    std::array<std::unique_ptr<KWin::OffscreenQuickScene>, ScenePoolSize> m_scenePool;
+    int m_poolNext = 0;
+    /// Export mode the live pool slots were built for. When it diverges from
+    /// m_dmabufEnabled (a runtime fallback to pixels), acquireSceneForCapture
+    /// rebuilds the pool at the next idle capture — never mid-flight.
+    bool m_poolBuiltForTextureMode = false;
+    KWin::OffscreenQuickScene* m_activeScene = nullptr;
     QQueue<Pending> m_queue;
     /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership via the set,
     /// O(1) oldest-first eviction via the queue. Kept strictly in sync.

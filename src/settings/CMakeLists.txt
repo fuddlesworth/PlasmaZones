@@ -41,6 +41,10 @@ set(plasmazones_settings_SRCS
     # RuleStore) — extracted from settingscontroller.cpp so the central
     # TU stays under the 800-line cap (CLAUDE.md).
     settingscontroller_dbuswire.cpp
+    # Active-page navigation + per-page dirty tracking + external-edit
+    # envelope — extracted from settingscontroller.cpp so the central TU
+    # stays under the 800-line cap (CLAUDE.md).
+    settingscontroller_pagestate.cpp
     # RAII begin/endExternalEdit wrapper — extracted from
     # settingscontroller.h so the header stays under the 800-line cap.
     externaleditscope.h
@@ -85,8 +89,10 @@ set(plasmazones_settings_SRCS
     editorpagecontroller.cpp
     generalpagecontroller.h
     generalpagecontroller.cpp
-    snappingappearancecontroller.h
-    snappingappearancecontroller.cpp
+    snappingzonescontroller.h
+    snappingzonescontroller.cpp
+    snappingwindowappearancecontroller.h
+    snappingwindowappearancecontroller.cpp
     snappingbehaviorcontroller.h
     snappingbehaviorcontroller.cpp
     snappingeffectscontroller.h
@@ -217,10 +223,14 @@ qt_add_qml_module(plasmazones-settings
         qml/Toast.qml
         qml/KeyboardShortcutOverlay.qml
         qml/GeneralPage.qml
-        qml/SnappingAppearancePage.qml
-        qml/SnappingEffectsPage.qml
-        qml/SnappingBehaviorPage.qml
+        # Snapping, organised by subject (Overlay / Zone Selector / Window),
+        # each with a Behavior + Appearance page. Window Appearance also hosts
+        # the per-screen Gaps; Shaders lives under Configuration.
+        qml/SnappingOverlayBehaviorPage.qml
+        qml/SnappingOverlayAppearancePage.qml
         qml/SnappingZoneSelectorPage.qml
+        qml/SnappingWindowBehaviorPage.qml
+        qml/SnappingWindowAppearancePage.qml
         qml/TilingAppearancePage.qml
         qml/TilingBehaviorPage.qml
         qml/TilingAlgorithmPage.qml

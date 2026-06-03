@@ -82,10 +82,10 @@ struct PHOSPHORWINDOWRULE_EXPORT RuleAction
  * The schema carries enough information for the editor UI to render an
  * input widget without the UI layer hand-maintaining a parallel per-type
  * switch. `kind` is a UI-side hint string (the canonical kinds are
- * `string`, `number`, `percent`, `enum`, plus the picker-aware kinds
- * `snappingLayout`, `tilingAlgorithm`, `animationEvent`, `shaderEffect`,
- * `curveEditor`); QML loaders dispatch on it. Labels stay in the GPL
- * settings layer because they need translation through PzI18n::tr —
+ * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
+ * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
+ * `shaderEffect`, `curveEditor`); QML loaders dispatch on it. Labels stay in
+ * the GPL settings layer because they need translation through PzI18n::tr —
  * the lib only owns the structural part of the schema.
  *
  * The optional fields are populated by kind:
@@ -93,6 +93,11 @@ struct PHOSPHORWINDOWRULE_EXPORT RuleAction
  *     and `scale` (stored = display * scale; e.g. percent uses 0.01).
  *   - `enum` carries `enumWireValues` — the wire strings the picker
  *     offers; labels for each are translated upstream.
+ *   - `bool` is a toggle (wire value is a JSON bool); may carry
+ *     `defaultDisplay` (1.0 → seed true, 0.0 → seed false).
+ *   - `color` is a `#RRGGBB` hex string; seeded by the settings layer's
+ *     `defaultPayloadFor` "color" branch (defaultDisplay is a double, so it
+ *     cannot carry a colour seed).
  *   - picker-aware kinds carry no schema state — the QML loader knows
  *     to swap in the catalogue-driven ComboBox.
  */
@@ -255,6 +260,30 @@ inline constexpr QLatin1StringView SetOpacity{"setOpacity"};
 /// settings lists by the v3→v4 chain.
 inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 
+// ── Per-window border / title-bar appearance overrides (domain Window) ──
+// Effect-side per-window overrides of the global snap appearance. Each is its
+// own slot so independent rules cascade per-property (a width rule and a
+// colour rule on separate rules both apply). Applied to ANY matched window
+// (snapped or floating), mirroring SetOpacity.
+inline constexpr QLatin1StringView SetHideTitleBar{"setHideTitleBar"};
+inline constexpr QLatin1StringView SetBorderVisible{"setBorderVisible"};
+inline constexpr QLatin1StringView SetBorderWidth{"setBorderWidth"};
+inline constexpr QLatin1StringView SetBorderRadius{"setBorderRadius"};
+inline constexpr QLatin1StringView SetBorderColor{"setBorderColor"};
+inline constexpr QLatin1StringView SetInactiveBorderColor{"setInactiveBorderColor"};
+
+// ── Per-context gap overrides (domain Context) ──
+// Resolved daemon-side at zone-geometry time as the highest-precedence gap
+// layer (rule > per-screen > layout > global). Match on screen / desktop /
+// activity; per-property to mirror the PerScreenSnappingKey set.
+inline constexpr QLatin1StringView SetZonePadding{"setZonePadding"};
+inline constexpr QLatin1StringView SetOuterGap{"setOuterGap"};
+inline constexpr QLatin1StringView SetUsePerSideOuterGap{"setUsePerSideOuterGap"};
+inline constexpr QLatin1StringView SetOuterGapTop{"setOuterGapTop"};
+inline constexpr QLatin1StringView SetOuterGapBottom{"setOuterGapBottom"};
+inline constexpr QLatin1StringView SetOuterGapLeft{"setOuterGapLeft"};
+inline constexpr QLatin1StringView SetOuterGapRight{"setOuterGapRight"};
+
 /// True when @p type is one of the three OverrideAnimation* action wire
 /// strings — shader / timing / curve. The trio shares the same cascade
 /// (animation event resolution + per-window scope) so call-sites repeatedly
@@ -263,6 +292,16 @@ inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 inline bool isAnimationOverrideAction(const QString& type)
 {
     return type == OverrideAnimationShader || type == OverrideAnimationTiming || type == OverrideAnimationCurve;
+}
+
+/// True when @p type is one of the six per-window border / title-bar
+/// appearance override actions. Grouped here so `isEffectRuleAction` (which
+/// admits these to the effect's rule set) has one definition to delegate to —
+/// adding a seventh appearance override only updates this helper.
+inline bool isBorderAppearanceAction(const QString& type)
+{
+    return type == SetHideTitleBar || type == SetBorderVisible || type == SetBorderWidth || type == SetBorderRadius
+        || type == SetBorderColor || type == SetInactiveBorderColor;
 }
 
 /// True when @p type is one of the actions the KWin effect's **shader
@@ -279,7 +318,7 @@ inline bool isAnimationOverrideAction(const QString& type)
 /// path's `hasAnyMatch` query to filter on action type.
 inline bool isEffectRuleAction(const QString& type)
 {
-    return isAnimationOverrideAction(type) || type == SetOpacity;
+    return isAnimationOverrideAction(type) || type == SetOpacity || isBorderAppearanceAction(type);
 }
 } // namespace ActionType
 
@@ -317,6 +356,22 @@ inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
 inline constexpr QLatin1StringView Opacity{"opacity"};
+// Per-window border / title-bar appearance slots (one per property so
+// independent rules cascade per-property).
+inline constexpr QLatin1StringView HideTitleBar{"hide-title-bar"};
+inline constexpr QLatin1StringView BorderVisible{"border-visible"};
+inline constexpr QLatin1StringView BorderWidth{"border-width"};
+inline constexpr QLatin1StringView BorderRadius{"border-radius"};
+inline constexpr QLatin1StringView BorderColor{"border-color"};
+inline constexpr QLatin1StringView InactiveBorderColor{"inactive-border-color"};
+// Per-context gap slots (mirror the PerScreenSnappingKey set).
+inline constexpr QLatin1StringView ZonePadding{"zone-padding"};
+inline constexpr QLatin1StringView OuterGap{"outer-gap"};
+inline constexpr QLatin1StringView UsePerSideOuterGap{"use-per-side-outer-gap"};
+inline constexpr QLatin1StringView OuterGapTop{"outer-gap-top"};
+inline constexpr QLatin1StringView OuterGapBottom{"outer-gap-bottom"};
+inline constexpr QLatin1StringView OuterGapLeft{"outer-gap-left"};
+inline constexpr QLatin1StringView OuterGapRight{"outer-gap-right"};
 // Animation slots are event-scoped: "anim-shader:<event>" / "anim-timing:<event>"
 // / "anim-curve:<event>". Curve and timing are split so they can be overridden
 // independently per event — `resolveAnimationMotionProfile` reads the curve

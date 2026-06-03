@@ -237,8 +237,8 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Uses the layout's geometry preference: available area (excluding panels/taskbars)
     // or full screen geometry depending on useFullScreenGeometry setting.
     // Calculate zone geometry with gaps, auto-resolving virtual screen geometry
-    QRectF geom =
-        GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, physScreen, screenId, layout, m_settings);
+    QRectF geom = GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, physScreen, screenId, layout,
+                                                           m_settings, m_layoutManager);
 
     // Convert to overlay-local coordinates: virtual screens use the overlay rect origin,
     // physical screens use the QScreen origin

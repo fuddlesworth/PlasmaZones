@@ -51,45 +51,6 @@ SnapEngine::GapParams SnapEngine::resolveGapParams() const
 // header (forward-declared in SnapEngine.h).
 SnapEngine::~SnapEngine() = default;
 
-void SnapEngine::onWindowClaimed(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-    // PlacementEngineBase is the single store for unmanaged geometry.
-    // No WTS propagation needed.
-}
-
-void SnapEngine::onWindowReleased(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-    // PlacementEngineBase is the single store for unmanaged geometry.
-    // No WTS propagation needed.
-}
-
-void SnapEngine::onWindowFloated(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-}
-
-void SnapEngine::onWindowUnfloated(const QString& windowId)
-{
-    Q_UNUSED(windowId)
-}
-
-void SnapEngine::saveSnapFloating(const QString& windowId)
-{
-    m_savedSnapFloatingWindows.insert(windowId);
-}
-
-bool SnapEngine::restoreSnapFloating(const QString& windowId)
-{
-    return m_savedSnapFloatingWindows.remove(windowId);
-}
-
-void SnapEngine::clearSavedSnapFloating()
-{
-    m_savedSnapFloatingWindows.clear();
-}
-
 void SnapEngine::markWindowReported(const QString& windowId)
 {
     if (!windowId.isEmpty()) {
@@ -100,14 +61,6 @@ void SnapEngine::markWindowReported(const QString& windowId)
 int SnapEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 {
     int pruned = PlacementEngineBase::pruneStaleWindows(aliveWindowIds);
-    for (auto it = m_savedSnapFloatingWindows.begin(); it != m_savedSnapFloatingWindows.end();) {
-        if (!aliveWindowIds.contains(*it)) {
-            it = m_savedSnapFloatingWindows.erase(it);
-            ++pruned;
-        } else {
-            ++it;
-        }
-    }
     for (auto it = m_effectReportedWindows.begin(); it != m_effectReportedWindows.end();) {
         if (!aliveWindowIds.contains(*it)) {
             it = m_effectReportedWindows.erase(it);
@@ -243,7 +196,7 @@ void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 
 // SnapEngine::assignToZones was removed — its two callers (windowOpened
 // in lifecycle.cpp, unfloatToZone in float.cpp) now go through
-// WindowTrackingService::commitSnap / commitMultiZoneSnap which run the
+// SnapEngine::commitSnap / commitMultiZoneSnap which run the
 // full snap orchestration (clear floating, assign zone, emit state
 // change). The raw-assign path was the last thin wrapper that bypassed
 // the orchestration layer.
@@ -274,6 +227,39 @@ void SnapEngine::rotateWindows(bool clockwise, const NavigationContext& ctx)
 void SnapEngine::reapplyLayout(const NavigationContext& /*ctx*/)
 {
     resnapToNewLayout();
+}
+
+void SnapEngine::reapplyManagedWindowAppearance()
+{
+    if (!m_snapState) {
+        return;
+    }
+    // Re-emit the current zone geometry for every snapped, non-floating window.
+    // The compositor routes a non-empty-zoneId applyGeometryRequested through
+    // its snap-commit path (markWindowSnapped), which re-hides the title bar and
+    // redraws the snap border. The window is already in its zone, so the
+    // compositor's applySnapGeometry no-ops the move — this only re-drives the
+    // chrome the compositor dropped on bridge reconnect. No zone reassignment.
+    const QStringList snapped = m_snapState->snappedWindows();
+    for (const QString& windowId : snapped) {
+        if (m_snapState->isFloating(windowId)) {
+            continue;
+        }
+        const QStringList zoneIds = m_snapState->zonesForWindow(windowId);
+        if (zoneIds.isEmpty()) {
+            continue;
+        }
+        const QString screenId = m_snapState->screenAssignments().value(windowId);
+        if (screenId.isEmpty()) {
+            continue;
+        }
+        const QRect geo = m_windowTracker->resolveZoneGeometry(zoneIds, screenId);
+        if (!geo.isValid()) {
+            continue;
+        }
+        Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneIds.first(), screenId,
+                                      false);
+    }
 }
 
 void SnapEngine::snapAllWindows(const NavigationContext& ctx)

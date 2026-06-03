@@ -205,6 +205,9 @@ void Settings::load()
     if (autotileUseSystemBorderColors()) {
         applyAutotileBorderSystemColor();
     }
+    if (snapWindowUseSystemBorderColors()) {
+        applySnapWindowBorderSystemColor();
+    }
 
     qCInfo(lcConfig) << "Settings loaded";
 
@@ -337,7 +340,7 @@ void Settings::purgeStaleKeys()
     // Compute the set of paths the Store claims. These must not be
     // blanket-deleted because Store::write has already persisted authoritative
     // values and no subsequent save*Config call will rewrite them. Their
-    // ancestor paths ("Snapping" for "Snapping.Appearance.Colors") must also
+    // ancestor paths ("Snapping" for "Snapping.Zones.Colors") must also
     // survive as intermediate JSON nodes.
     //
     // `storeKeyPathPrefixes` covers schema keys that hold OBJECT values
@@ -381,7 +384,7 @@ void Settings::purgeStaleKeys()
     // (evicts stale leftovers from renamed / removed keys).
     //
     // Store ancestor groups (e.g. "Snapping" when the schema declares
-    // "Snapping.Appearance.Colors"): declared set is empty, so every scalar
+    // "Snapping.Zones.Colors"): declared set is empty, so every scalar
     // leaf key gets deleted. save*Config will rewrite valid scalars a moment
     // later; sub-objects (the actual Store-claimed descendants) are preserved
     // because we only touch non-object children.
@@ -632,53 +635,53 @@ void Settings::setAudioSpectrumBarCount(int count)
 
 // ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
 // Colors group
-PZ_STORE_GET(bool, useSystemColors, snappingAppearanceColorsGroup, useSystemKey, bool)
+PZ_STORE_GET(bool, useSystemColors, snappingZonesColorsGroup, useSystemKey, bool)
 void Settings::setUseSystemColors(bool use)
 {
     if (useSystemColors() == use) {
         return;
     }
-    m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
+    m_store->write(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey(), use);
     if (use) {
         applySystemColorScheme();
     }
     Q_EMIT useSystemColorsChanged();
     Q_EMIT settingsChanged();
 }
-PZ_STORE_GET(QColor, highlightColor, snappingAppearanceColorsGroup, highlightKey, QColor)
-PZ_STORE_SET_COLOR(setHighlightColor, snappingAppearanceColorsGroup, highlightKey, highlightColorChanged)
-PZ_STORE_GET(QColor, inactiveColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
-PZ_STORE_SET_COLOR(setInactiveColor, snappingAppearanceColorsGroup, inactiveKey, inactiveColorChanged)
-PZ_STORE_GET(QColor, borderColor, snappingAppearanceColorsGroup, borderKey, QColor)
-PZ_STORE_SET_COLOR(setBorderColor, snappingAppearanceColorsGroup, borderKey, borderColorChanged)
+PZ_STORE_GET(QColor, highlightColor, snappingZonesColorsGroup, highlightKey, QColor)
+PZ_STORE_SET_COLOR(setHighlightColor, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
+PZ_STORE_GET(QColor, inactiveColor, snappingZonesColorsGroup, inactiveKey, QColor)
+PZ_STORE_SET_COLOR(setInactiveColor, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
+PZ_STORE_GET(QColor, borderColor, snappingZonesColorsGroup, borderKey, QColor)
+PZ_STORE_SET_COLOR(setBorderColor, snappingZonesColorsGroup, borderKey, borderColorChanged)
 
 // Labels group
-PZ_STORE_GET(QColor, labelFontColor, snappingAppearanceLabelsGroup, fontColorKey, QColor)
-PZ_STORE_SET_COLOR(setLabelFontColor, snappingAppearanceLabelsGroup, fontColorKey, labelFontColorChanged)
-PZ_STORE_GET(QString, labelFontFamily, snappingAppearanceLabelsGroup, fontFamilyKey, QString)
-PZ_STORE_SET_STRING(setLabelFontFamily, snappingAppearanceLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
-PZ_STORE_GET(qreal, labelFontSizeScale, snappingAppearanceLabelsGroup, fontSizeScaleKey, double)
-PZ_STORE_SET_DOUBLE(setLabelFontSizeScale, snappingAppearanceLabelsGroup, fontSizeScaleKey, labelFontSizeScaleChanged)
-PZ_STORE_GET(int, labelFontWeight, snappingAppearanceLabelsGroup, fontWeightKey, int)
-PZ_STORE_SET_INT(setLabelFontWeight, snappingAppearanceLabelsGroup, fontWeightKey, labelFontWeightChanged)
-PZ_STORE_GET(bool, labelFontItalic, snappingAppearanceLabelsGroup, fontItalicKey, bool)
-PZ_STORE_SET_BOOL(setLabelFontItalic, snappingAppearanceLabelsGroup, fontItalicKey, labelFontItalicChanged)
-PZ_STORE_GET(bool, labelFontUnderline, snappingAppearanceLabelsGroup, fontUnderlineKey, bool)
-PZ_STORE_SET_BOOL(setLabelFontUnderline, snappingAppearanceLabelsGroup, fontUnderlineKey, labelFontUnderlineChanged)
-PZ_STORE_GET(bool, labelFontStrikeout, snappingAppearanceLabelsGroup, fontStrikeoutKey, bool)
-PZ_STORE_SET_BOOL(setLabelFontStrikeout, snappingAppearanceLabelsGroup, fontStrikeoutKey, labelFontStrikeoutChanged)
+PZ_STORE_GET(QColor, labelFontColor, snappingZonesLabelsGroup, fontColorKey, QColor)
+PZ_STORE_SET_COLOR(setLabelFontColor, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
+PZ_STORE_GET(QString, labelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, QString)
+PZ_STORE_SET_STRING(setLabelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
+PZ_STORE_GET(qreal, labelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, double)
+PZ_STORE_SET_DOUBLE(setLabelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, labelFontSizeScaleChanged)
+PZ_STORE_GET(int, labelFontWeight, snappingZonesLabelsGroup, fontWeightKey, int)
+PZ_STORE_SET_INT(setLabelFontWeight, snappingZonesLabelsGroup, fontWeightKey, labelFontWeightChanged)
+PZ_STORE_GET(bool, labelFontItalic, snappingZonesLabelsGroup, fontItalicKey, bool)
+PZ_STORE_SET_BOOL(setLabelFontItalic, snappingZonesLabelsGroup, fontItalicKey, labelFontItalicChanged)
+PZ_STORE_GET(bool, labelFontUnderline, snappingZonesLabelsGroup, fontUnderlineKey, bool)
+PZ_STORE_SET_BOOL(setLabelFontUnderline, snappingZonesLabelsGroup, fontUnderlineKey, labelFontUnderlineChanged)
+PZ_STORE_GET(bool, labelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, bool)
+PZ_STORE_SET_BOOL(setLabelFontStrikeout, snappingZonesLabelsGroup, fontStrikeoutKey, labelFontStrikeoutChanged)
 
 // Opacity group
-PZ_STORE_GET(qreal, activeOpacity, snappingAppearanceOpacityGroup, activeKey, double)
-PZ_STORE_SET_DOUBLE(setActiveOpacity, snappingAppearanceOpacityGroup, activeKey, activeOpacityChanged)
-PZ_STORE_GET(qreal, inactiveOpacity, snappingAppearanceOpacityGroup, inactiveKey, double)
-PZ_STORE_SET_DOUBLE(setInactiveOpacity, snappingAppearanceOpacityGroup, inactiveKey, inactiveOpacityChanged)
+PZ_STORE_GET(qreal, activeOpacity, snappingZonesOpacityGroup, activeKey, double)
+PZ_STORE_SET_DOUBLE(setActiveOpacity, snappingZonesOpacityGroup, activeKey, activeOpacityChanged)
+PZ_STORE_GET(qreal, inactiveOpacity, snappingZonesOpacityGroup, inactiveKey, double)
+PZ_STORE_SET_DOUBLE(setInactiveOpacity, snappingZonesOpacityGroup, inactiveKey, inactiveOpacityChanged)
 
 // Border group
-PZ_STORE_GET(int, borderWidth, snappingAppearanceBorderGroup, widthKey, int)
-PZ_STORE_SET_INT(setBorderWidth, snappingAppearanceBorderGroup, widthKey, borderWidthChanged)
-PZ_STORE_GET(int, borderRadius, snappingAppearanceBorderGroup, radiusKey, int)
-PZ_STORE_SET_INT(setBorderRadius, snappingAppearanceBorderGroup, radiusKey, borderRadiusChanged)
+PZ_STORE_GET(int, borderWidth, snappingZonesBorderGroup, widthKey, int)
+PZ_STORE_SET_INT(setBorderWidth, snappingZonesBorderGroup, widthKey, borderWidthChanged)
+PZ_STORE_GET(int, borderRadius, snappingZonesBorderGroup, radiusKey, int)
+PZ_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadiusChanged)
 
 // Effects group (blur lives here for historical reasons)
 PZ_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
@@ -2437,6 +2440,38 @@ PZ_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey,
 PZ_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
 PZ_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
 
+// Snapping.Appearance — the snapped window's border / title-bar (parallel to
+// Tiling.Appearance above; distinct from the Snapping.Zones.* drag overlay).
+PZ_STORE_GET(QColor, snapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, QColor)
+PZ_STORE_SET_COLOR(setSnapWindowBorderColor, snappingAppearanceColorsGroup, activeKey, snapWindowBorderColorChanged)
+PZ_STORE_GET(QColor, snapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
+PZ_STORE_SET_COLOR(setSnapWindowInactiveBorderColor, snappingAppearanceColorsGroup, inactiveKey,
+                   snapWindowInactiveBorderColorChanged)
+
+PZ_STORE_GET(bool, snapWindowUseSystemBorderColors, snappingAppearanceColorsGroup, useSystemKey, bool)
+void Settings::setSnapWindowUseSystemBorderColors(bool use)
+{
+    if (snapWindowUseSystemBorderColors() == use) {
+        return;
+    }
+    m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
+    if (use) {
+        applySnapWindowBorderSystemColor();
+    }
+    Q_EMIT snapWindowUseSystemBorderColorsChanged();
+    Q_EMIT settingsChanged();
+}
+
+PZ_STORE_GET(bool, snapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
+PZ_STORE_SET_BOOL(setSnapWindowHideTitleBars, snappingAppearanceDecorationsGroup, hideTitleBarsKey,
+                  snapWindowHideTitleBarsChanged)
+PZ_STORE_GET(bool, snapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, bool)
+PZ_STORE_SET_BOOL(setSnapWindowShowBorder, snappingAppearanceBordersGroup, showBorderKey, snapWindowShowBorderChanged)
+PZ_STORE_GET(int, snapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, int)
+PZ_STORE_SET_INT(setSnapWindowBorderWidth, snappingAppearanceBordersGroup, widthKey, snapWindowBorderWidthChanged)
+PZ_STORE_GET(int, snapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, int)
+PZ_STORE_SET_INT(setSnapWindowBorderRadius, snappingAppearanceBordersGroup, radiusKey, snapWindowBorderRadiusChanged)
+
 // ── reset / color helpers ────────────────────────────────────────────────────
 
 void Settings::reset()
@@ -2863,6 +2898,16 @@ void Settings::applyAutotileBorderSystemColor()
     // truth (and the NOTIFY signals fire as a side effect).
     setAutotileBorderColor(highlightColor());
     setAutotileInactiveBorderColor(inactiveColor());
+}
+
+void Settings::applySnapWindowBorderSystemColor()
+{
+    // Mirror applyAutotileBorderSystemColor: adopt the zone highlight/inactive
+    // colors (which themselves track the system accent) so the snapped-window
+    // border follows the system accent. Route through the setters so the Store
+    // stays the source of truth and NOTIFY signals fire.
+    setSnapWindowBorderColor(highlightColor());
+    setSnapWindowInactiveBorderColor(inactiveColor());
 }
 
 #undef PZ_STORE_GET

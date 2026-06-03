@@ -23,6 +23,14 @@ Item {
     id: root
 
     required property ApplicationController controller
+    /** Edge gutter applied around every loaded page so page content
+     *  (cards, rows, breadcrumb-aligned headers) has breathing room
+     *  instead of running flush to the chrome separators / window
+     *  edge. Defaults to largeSpacing to match the UnsavedChangesFooter
+     *  content inset and the breadcrumb row, so the breadcrumb, page
+     *  body, and footer all share one left/right gutter. Consumers can
+     *  override (e.g. a full-bleed page host) by reassigning. */
+    property real contentMargins: Kirigami.Units.largeSpacing
     // `pageData()` returns an empty QVariantMap when the id is unknown
     // (e.g. mid-startup before registration completes, or a stale id
     // restored from disk). An empty map marshals to a non-null JS
@@ -41,6 +49,7 @@ Item {
         id: pageLoader
 
         anchors.fill: parent
+        anchors.margins: root.contentMargins
         active: root.currentEntry !== null
         // Async loading lets the chrome stay responsive during page
         // instantiation — important for heavy pages (motion-set list,

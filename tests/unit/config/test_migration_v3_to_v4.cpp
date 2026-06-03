@@ -19,6 +19,9 @@
  *     `AppId AppIdMatches` Exclude rules,
  *   - the v3 animation-application rules fold into animation-override rules
  *     and the animation exclusion lists fold into `ExcludeAnimations` rules,
+ *   - the zone-overlay appearance groups are renamed from
+ *     `Snapping.Appearance.*` to `Snapping.Zones.*` (key-for-key move,
+ *     absent-source no-op, idempotent, coexisting with the folds above),
  *   - config.json is stamped `_version == 4`,
  *   - the conversion is idempotent (running twice is a no-op).
  *
@@ -44,6 +47,7 @@
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/config/configkeys.h"
 #include "../../../src/config/configmigration.h"
+#include "../../../src/config/settings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorWindowRule/ContextRuleBridge.h>
@@ -1961,6 +1965,188 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QCOMPARE(animationExclusionRules(rulesFromWindowRules()).size(), 0);
+    }
+
+    // ─── Zone-overlay group rename: Snapping.Appearance.* → Snapping.Zones.* ─
+    //
+    // v3.1 renamed the "Snapping › Appearance" page (drag-time zone overlay)
+    // to "Zones", moving its config groups so the freed Snapping.Appearance.*
+    // namespace can hold the new snapped-window appearance settings. The move
+    // folds into the EXISTING migrateV3ToV4 — no schema bump. These pins
+    // assert the on-disk config.json shape; the four group/key names are
+    // inline-literal pins so the test is an INDEPENDENT WITNESS of the rename.
+
+private:
+    /// A v3 config carrying populated zone-overlay groups under the OLD
+    /// Snapping.Appearance.* paths, plus a sibling Snapping.Behavior group so
+    /// the prune step is exercised against a non-empty "Snapping" parent.
+    QJsonObject makeV3ConfigWithZoneAppearance()
+    {
+        QJsonObject root;
+        root.insert(QStringLiteral("_version"), 3);
+
+        QJsonObject colors;
+        colors.insert(QStringLiteral("UseSystem"), false);
+        QJsonObject opacity;
+        opacity.insert(QStringLiteral("Active"), 0.5);
+        QJsonObject border;
+        border.insert(QStringLiteral("Width"), 3);
+        QJsonObject labels;
+        labels.insert(QStringLiteral("FontFamily"), QStringLiteral("X"));
+
+        QJsonObject appearance;
+        appearance.insert(QStringLiteral("Colors"), colors);
+        appearance.insert(QStringLiteral("Opacity"), opacity);
+        appearance.insert(QStringLiteral("Border"), border);
+        appearance.insert(QStringLiteral("Labels"), labels);
+
+        // A sibling sub-group that must survive (and keep "Snapping" alive).
+        QJsonObject behavior;
+        behavior.insert(QStringLiteral("ToggleActivation"), true);
+
+        QJsonObject snapping;
+        snapping.insert(QStringLiteral("Appearance"), appearance);
+        snapping.insert(QStringLiteral("Behavior"), behavior);
+        root.insert(QStringLiteral("Snapping"), snapping);
+
+        return root;
+    }
+
+private Q_SLOTS:
+
+    void testZoneRename_movesGroupsToZonesNamespace()
+    {
+        IsolatedConfigGuard guard;
+        writeJson(ConfigDefaults::configFilePath(), makeV3ConfigWithZoneAppearance());
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
+        QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), 4);
+
+        const QJsonObject snapping = cfg.value(QStringLiteral("Snapping")).toObject();
+
+        // The four zone sub-groups now live under Snapping.Zones.* with their
+        // exact keys/values preserved.
+        const QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
+        QCOMPARE(zones.value(QStringLiteral("Colors")).toObject().value(QStringLiteral("UseSystem")).toBool(), false);
+        QVERIFY(qFuzzyCompare(
+            zones.value(QStringLiteral("Opacity")).toObject().value(QStringLiteral("Active")).toDouble(), 0.5));
+        QCOMPARE(zones.value(QStringLiteral("Border")).toObject().value(QStringLiteral("Width")).toInt(), 3);
+        QCOMPARE(zones.value(QStringLiteral("Labels")).toObject().value(QStringLiteral("FontFamily")).toString(),
+                 QStringLiteral("X"));
+
+        // The old Snapping.Appearance group is gone entirely — no husk lingers.
+        QVERIFY2(!snapping.contains(QStringLiteral("Appearance")),
+                 "the old Snapping.Appearance zone-overlay group must be removed by the rename");
+
+        // The "Snapping" parent survives because Behavior still lives there.
+        QVERIFY(snapping.contains(QStringLiteral("Behavior")));
+        QCOMPARE(
+            snapping.value(QStringLiteral("Behavior")).toObject().value(QStringLiteral("ToggleActivation")).toBool(),
+            true);
+
+        // End-state collision check: the NEW snap-window appearance settings reuse the
+        // freed Snapping.Appearance.Colors namespace. The v3 zone-overlay value
+        // (UseSystem=false) was relocated to Snapping.Zones above, so a Settings loaded
+        // from the migrated config must read snapWindowUseSystemBorderColors() as the
+        // SHIPPED DEFAULT — proving no stale v3 zone value bleeds into the new key.
+        Settings settings;
+        QCOMPARE(settings.snapWindowUseSystemBorderColors(), ConfigDefaults::snapWindowUseSystemBorderColors());
+    }
+
+    void testZoneRename_absentSourceIsNoOp()
+    {
+        IsolatedConfigGuard guard;
+        // A v3 config with no Snapping.Appearance group at all.
+        QJsonObject cfg;
+        cfg.insert(QStringLiteral("_version"), 3);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject after = readJson(ConfigDefaults::configFilePath());
+        const QJsonObject snapping = after.value(QStringLiteral("Snapping")).toObject();
+        // No Snapping.Zones group is fabricated from absent input.
+        QVERIFY2(!snapping.contains(QStringLiteral("Zones")),
+                 "absent Snapping.Appearance must NOT fabricate a Snapping.Zones group");
+        QVERIFY(!snapping.contains(QStringLiteral("Appearance")));
+    }
+
+    void testZoneRename_v4VersionGatePreventsRemove()
+    {
+        IsolatedConfigGuard guard;
+
+        // An already-v4 config whose zone groups are at the NEW Snapping.Zones.*
+        // paths. The v4 version gate short-circuits migrateV3ToV4 entirely (the
+        // move code is never reached), so the groups must not be moved or
+        // duplicated and no Snapping.Appearance group is resurrected.
+        QJsonObject zonesColors;
+        zonesColors.insert(QStringLiteral("UseSystem"), true);
+        QJsonObject zones;
+        zones.insert(QStringLiteral("Colors"), zonesColors);
+        QJsonObject snapping;
+        snapping.insert(QStringLiteral("Zones"), zones);
+        QJsonObject cfg;
+        cfg.insert(QStringLiteral("_version"), 4);
+        cfg.insert(QStringLiteral("Snapping"), snapping);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject after = readJson(ConfigDefaults::configFilePath());
+        const QJsonObject snappingAfter = after.value(QStringLiteral("Snapping")).toObject();
+        // Still at Snapping.Zones, value intact, and no Snapping.Appearance
+        // resurrected.
+        QCOMPARE(snappingAfter.value(QStringLiteral("Zones"))
+                     .toObject()
+                     .value(QStringLiteral("Colors"))
+                     .toObject()
+                     .value(QStringLiteral("UseSystem"))
+                     .toBool(),
+                 true);
+        QVERIFY(!snappingAfter.contains(QStringLiteral("Appearance")));
+    }
+
+    void testZoneRename_coexistsWithExclusionsAndDisableFold()
+    {
+        IsolatedConfigGuard guard;
+
+        // A full v3 fixture (Display.*Disabled* + Snapping default + assignments)
+        // ADDITIONALLY carrying the zone-overlay groups. The zone move must not
+        // disturb the existing disable-list / assignment fold.
+        QJsonObject cfg = makeV3Config();
+        QJsonObject snapping = cfg.value(QStringLiteral("Snapping")).toObject();
+        QJsonObject colors;
+        colors.insert(QStringLiteral("UseSystem"), false);
+        QJsonObject appearance;
+        appearance.insert(QStringLiteral("Colors"), colors);
+        snapping.insert(QStringLiteral("Appearance"), appearance);
+        cfg.insert(QStringLiteral("Snapping"), snapping);
+        writeJson(ConfigDefaults::configFilePath(), cfg);
+        writeJson(assignmentsPath(), makeAssignments());
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        // The existing disable-list fold still produces its 5 DisableEngine
+        // rules (same assertion as testDisableListRules).
+        const QList<QJsonObject> disabled = disableRules(rulesFromWindowRules());
+        QCOMPARE(disabled.size(), 5);
+
+        // The Display group is still drained empty.
+        const QJsonObject after = readJson(ConfigDefaults::configFilePath());
+        QVERIFY(!after.contains(QStringLiteral("Display")));
+
+        // And the zone move landed alongside it.
+        const QJsonObject snappingAfter = after.value(QStringLiteral("Snapping")).toObject();
+        QVERIFY(!snappingAfter.contains(QStringLiteral("Appearance")));
+        QCOMPARE(snappingAfter.value(QStringLiteral("Zones"))
+                     .toObject()
+                     .value(QStringLiteral("Colors"))
+                     .toObject()
+                     .value(QStringLiteral("UseSystem"))
+                     .toBool(),
+                 false);
     }
 };
 

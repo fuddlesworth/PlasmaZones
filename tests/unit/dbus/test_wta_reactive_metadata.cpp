@@ -130,7 +130,8 @@ private Q_SLOTS:
         m_registry = new PhosphorEngine::WindowRegistry(nullptr);
 
         m_parent = new QObject(nullptr);
-        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_parent);
+        m_wta =
+            new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr, m_parent);
         m_wta->setWindowRegistry(m_registry);
 
         m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, nullptr, nullptr);

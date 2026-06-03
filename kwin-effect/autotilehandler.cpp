@@ -619,10 +619,44 @@ void AutotileHandler::onDaemonReady()
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreAutotileForDesktopMove.clear();
     m_pendingCloses.clear();
+
+    // Re-send the effect's durable pre-autotile geometry cache to the freshly
+    // (re)connected daemon. The daemon's pre-tile / float-back store
+    // (m_unmanagedGeometries) is an in-session cache it does NOT persist on its
+    // own, so a daemon restart wipes it — and saveGeometryForWindow's idempotency
+    // guard means the effect never re-sends on its own. The effect survives daemon
+    // restarts and still holds each window's true pre-autotile frame here, so it is
+    // the authoritative source to repopulate the daemon. Without this, windows
+    // already auto-tiled when the daemon restarts have no pre-autotile position to
+    // return to on autotile→snap or drag-to-float — they stay stranded at their
+    // tiled rect. overwrite=false so anything the daemon already restored from its
+    // own persisted records wins.
+    if (m_effect->m_daemonServiceRegistered) {
+        int resent = 0;
+        for (auto scrIt = m_preAutotileGeometries.constBegin(); scrIt != m_preAutotileGeometries.constEnd(); ++scrIt) {
+            const QString& screenId = scrIt.key();
+            for (auto winIt = scrIt.value().constBegin(); winIt != scrIt.value().constEnd(); ++winIt) {
+                const QRectF& geo = winIt.value();
+                if (geo.width() <= 0 || geo.height() <= 0) {
+                    continue;
+                }
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("storePreTileGeometry"),
+                    {winIt.key(), static_cast<int>(geo.x()), static_cast<int>(geo.y()), static_cast<int>(geo.width()),
+                     static_cast<int>(geo.height()), screenId, false},
+                    QStringLiteral("storePreTileGeometry"));
+                ++resent;
+            }
+        }
+        if (resent > 0) {
+            qCInfo(lcEffect) << "Re-sent" << resent << "pre-autotile geometries to daemon after reconnect";
+        }
+    }
 }
 
-// handleAutotileFloatToggle removed: float toggle is now routed through
-// the unified WTA toggleFloatForWindow method via slotToggleWindowFloatRequested.
+// handleAutotileFloatToggle removed: float toggle is now daemon-local via
+// WindowTrackingAdaptor::toggleWindowFloat (which emits applyGeometryRequested).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // D-Bus signal connections and settings

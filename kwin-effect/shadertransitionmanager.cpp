@@ -21,6 +21,26 @@ void ShaderTransitionManager::rebuildAnimationRuleSet()
     // observes the change and discards stale `(windowId, revision)` cache
     // entries on next access.
     m_animationRuleSet.setRules(m_windowRuleAnimationRules);
+
+    // Recompute the SetOpacity-presence gate for the per-frame opacity resolve
+    // (see hasOpacityRules()). Only enabled rules count — a disabled opacity
+    // rule resolves to no override, so it must not force the per-window query
+    // build every frame.
+    m_hasOpacityRules = false;
+    for (const PhosphorWindowRule::WindowRule& rule : m_windowRuleAnimationRules) {
+        if (!rule.enabled) {
+            continue;
+        }
+        for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
+            if (action.type == PhosphorWindowRule::ActionType::SetOpacity) {
+                m_hasOpacityRules = true;
+                break;
+            }
+        }
+        if (m_hasOpacityRules) {
+            break;
+        }
+    }
 }
 
 void ShaderTransitionManager::setWindowRuleAnimationRules(QList<PhosphorWindowRule::WindowRule> rules)

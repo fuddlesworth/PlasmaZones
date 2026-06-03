@@ -1401,7 +1401,7 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // also resolves its slot. Caching across resolver calls is built
     // into the evaluator's `resolveCached(windowId, …)` path; the query
     // here is only the match input, not the cache key.
-    const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window);
+    const PhosphorWindowRule::WindowQuery query = windowRuleQueryFor(window, getWindowScreenId(window));
     const QString windowId = getWindowId(window);
     const auto& profileTree = m_shaderManager.profileTree();
     // Per-event base duration. The daemon mirrors its motion
@@ -1620,7 +1620,6 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
         }
 
         QList<PhosphorWindowRule::WindowRule> animationRules;
-        bool hasSetOpacity = false;
         for (const PhosphorWindowRule::WindowRule& rule : setOpt->rules()) {
             if (!rule.enabled) {
                 // Skip disabled rules — they exist in the store but must not
@@ -1629,26 +1628,14 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
                 // rule-set size minimal and the priority-order index smaller.)
                 continue;
             }
-            // Two-phase per-rule scan: (1) admit the rule to the evaluator
-            // if ANY action is effect-consumed, (2) flag hasSetOpacity if
-            // ANY action is SetOpacity. The previous shape broke after the
-            // first effect-action match, so a rule with actions
-            // [OverrideAnimationShader, SetOpacity] would admit on the first
-            // match and skip the SetOpacity flag — silently re-introducing
-            // the asymmetric repaint bug for rules that carry SetOpacity
-            // alongside an animation override. Functionally equivalent to
-            // the prior-rule scan above — both detect "any SetOpacity in
-            // any enabled rule"; the prior scan early-exits on first
-            // SetOpacity match, this scan walks each rule fully because
-            // it tracks two predicates (admission and SetOpacity-flag) per
-            // rule.
+            // Admit the rule to the evaluator if ANY action is effect-consumed
+            // (the OverrideAnimation* triple, SetOpacity, or a SetBorder* /
+            // SetHideTitleBar appearance action — see isEffectRuleAction).
             bool admitted = false;
             for (const PhosphorWindowRule::RuleAction& action : rule.actions) {
                 if (PhosphorWindowRule::ActionType::isEffectRuleAction(action.type)) {
                     admitted = true;
-                    if (action.type == PhosphorWindowRule::ActionType::SetOpacity) {
-                        hasSetOpacity = true;
-                    }
+                    break;
                 }
             }
             if (admitted) {
@@ -1656,8 +1643,19 @@ void PlasmaZonesEffect::loadWindowRuleAnimationsFromDbus()
             }
         }
         m_shaderManager.setWindowRuleAnimationRules(std::move(animationRules));
+        // The new-state SetOpacity predicate is computed by rebuildAnimationRuleSet
+        // (see ShaderTransitionManager::hasOpacityRules) — read it back rather than
+        // re-scanning the rule list a second time here.
+        const bool hasSetOpacity = m_shaderManager.hasOpacityRules();
         qCDebug(lcEffect) << "loadWindowRuleAnimationsFromDbus: forwarded" << m_shaderManager.animationRuleSet().count()
                           << "total animation rules to the evaluator";
+
+        // Per-window border / title-bar rules ride the same animation rule set
+        // (isEffectRuleAction admits them). Refresh borders so an edited /
+        // added / removed SetBorder* / SetHideTitleBar rule applies immediately
+        // — updateAllBorders re-merges every window and reconciles rule-hidden
+        // title bars against the fresh evaluator.
+        updateAllBorders();
 
         // Update the drag-gate exclusion rule set from the same unified
         // payload — `loadWindowRuleAnimationsFromDbus` is the effect's one

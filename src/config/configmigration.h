@@ -43,6 +43,11 @@ namespace PlasmaZones {
 ///     knobs (excludeTransientWindows / minimumWindowWidth /
 ///     minimumWindowHeight) move to the General page. See
 ///     docs/window-rule-refactor-design.md §8.
+///     Additionally renames the drag-time zone-overlay groups
+///     Snapping.Appearance.{Colors,Opacity,Border,Labels} → Snapping.Zones.*,
+///     freeing the Snapping.Appearance.* namespace for the new per-window
+///     snapped-window decoration settings (snapWindow*). See moveGroupAtPath
+///     in configmigration.cpp.
 inline constexpr int ConfigSchemaVersion = 4;
 
 class PLASMAZONES_EXPORT ConfigMigration

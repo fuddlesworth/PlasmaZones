@@ -120,6 +120,18 @@ public:
         return m_animationRuleSet;
     }
 
+    /// True when at least one enabled rule carries a `SetOpacity` action.
+    /// The per-frame opacity resolve in `prePaintWindow`/`paintWindow` builds a
+    /// `WindowQuery` (appId normalisation + screen/desktop/activity derivation)
+    /// for every visible window — wasted work when the user's effect rules are
+    /// all `OverrideAnimation*`/border/gap and never dim. Gate the resolve on
+    /// this flag so the hot path costs two pointer reads in that common case.
+    /// Recomputed by `rebuildAnimationRuleSet()` on every rule-set change.
+    bool hasOpacityRules() const
+    {
+        return m_hasOpacityRules;
+    }
+
     /// Per-event motion-profile tree mirrored from the daemon's
     /// PhosphorProfileRegistry over D-Bus (`motionProfileTree`). Holds
     /// the per-event base durations (window.open, window.close, …) that
@@ -322,6 +334,11 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════
     PhosphorWindowRule::WindowRuleSet m_animationRuleSet;
     PhosphorWindowRule::RuleEvaluator m_animationRuleEvaluator{m_animationRuleSet};
+
+    // Cached "any enabled rule carries SetOpacity" predicate — recomputed in
+    // rebuildAnimationRuleSet() so the per-frame opacity resolve can skip the
+    // WindowQuery build entirely when no opacity rule exists. See hasOpacityRules().
+    bool m_hasOpacityRules = false;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Texture Cache

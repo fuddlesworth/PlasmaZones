@@ -70,6 +70,7 @@ class AnimationShaderRegistry;
 namespace PlasmaZones {
 class ShaderRegistry;
 class SnapAssistThumbnailProvider;
+class DmabufTextureProvider;
 }
 namespace PhosphorScreens {
 class ScreenManager;
@@ -376,6 +377,7 @@ public:
     bool isSnapAssistVisible() const override;
     bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height,
                                 const QByteArray& pixels) override;
+    bool setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc) override;
 
     // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());
@@ -671,6 +673,22 @@ private:
     // rather than relying on the single-threaded teardown invariant.
     std::unique_ptr<SnapAssistThumbnailProvider> m_thumbnailProviderOwned;
     std::atomic<SnapAssistThumbnailProvider*> m_thumbnailProvider{nullptr};
+    // Zero-copy GPU thumbnail provider (PLASMAZONES_DMABUF_THUMBNAILS). Same
+    // ownership pattern as m_thumbnailProvider: constructed eagerly, ownership
+    // released to the QQmlEngine in engineConfigurator, borrowed atomic pointer
+    // nulled when the engine tears it down. Registered under the separate
+    // DmabufTextureProvider::ProviderId (Texture-type) image scheme. The full
+    // delete→null teardown-window safety analysis above (no-event-loop-pumping
+    // during ~QQmlEngine + std::atomic null-out) applies identically here.
+    std::unique_ptr<DmabufTextureProvider> m_dmabufTextureProviderOwned;
+    std::atomic<DmabufTextureProvider*> m_dmabufTextureProvider{nullptr};
+    // Single-shot idle-grace timer: started on every hideSnapAssist and
+    // stopped on showSnapAssist. If snap-assist stays dismissed long enough
+    // for it to fire, it clears the thumbnail cache so its bounded (~6 MB
+    // worst-case) pixel buffers don't sit resident for the rest of the
+    // session. Rapid dismiss/re-show continuations restart it before it
+    // fires, keeping the warm cache. Lazily created (parented to this).
+    QTimer* m_snapAssistCacheTrimTimer = nullptr;
     // Layout Picker (interactive layout browser). Post-shell-migration
     // the picker is an Item slot inside the per-screen passive shell;
     // these track which screen's shell currently shows it (singleton
@@ -895,6 +913,12 @@ private:
      *          False if the provider was torn down (engine destroyed) or the
      *          image was null after format conversion. */
     bool updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image);
+
+    /** Push a resolved thumbnail image:// URL into the live snap-assist
+     *  candidate list (and QML) for @p compositorHandle. Shared tail of the
+     *  raw-pixel and dma-buf thumbnail paths. @return true (the URL is already
+     *  stored in its provider regardless of whether snap-assist is visible). */
+    bool applyCandidateThumbnailUrl(const QString& compositorHandle, const QString& providerUrl);
 
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland

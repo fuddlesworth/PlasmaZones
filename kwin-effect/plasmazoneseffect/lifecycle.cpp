@@ -483,6 +483,15 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, m_screenChangeHandler.get(),
             &ScreenChangeHandler::scheduleClientAreaReport);
 
+    // Border overlays are built only for current-desktop windows (markWindowSnapped
+    // and updateAllBorders both gate on isOnCurrentDesktop), so the overlay for a
+    // window snapped while on another desktop isn't created until that desktop
+    // becomes current. Rebuild on every desktop switch so those borders appear
+    // without waiting for the window to be re-activated.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, [this]() {
+        updateAllBorders();
+    });
+
     // Belt-and-suspenders: windowClosed removes animations, but if a deferred
     // timer re-adds one between windowClosed and windowDeleted, the Item tree
     // will be torn down while an animation entry still references the window.
@@ -729,6 +738,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
         // Restore borderless and monocle-maximized windows — daemon state is gone
         m_autotileHandler->restoreAllBorderless();
+        restoreAllSnapBorderless();
+        restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
@@ -841,6 +852,8 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
     // Guard against compositor teardown — effects may outlive the stacking order.
     if (KWin::effects) {
         m_autotileHandler->restoreAllBorderless();
+        restoreAllSnapBorderless();
+        restoreAllRuleHiddenTitleBars();
         m_autotileHandler->restoreAllMonocleMaximized();
         clearAllBorders();
     }

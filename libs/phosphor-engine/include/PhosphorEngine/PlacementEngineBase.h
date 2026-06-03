@@ -3,71 +3,38 @@
 
 #pragma once
 
+#include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <phosphorengine_export.h>
 
-#include <QHash>
-#include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
 #include <QSet>
 #include <QString>
-#include <QVariantMap>
+#include <QStringList>
 
 namespace PhosphorEngine {
 
-enum class WindowState {
-    Unmanaged,
-    EngineOwned,
-    Floated
-};
-
 /// Abstract base class for placement engines.
 ///
-/// Handles universal mechanics that every engine needs identically:
-/// window state FSM (unmanaged / engine-owned / floated), unmanaged
-/// geometry capture/restore, and float geometry bookkeeping.
+/// Handles the universal mechanics every engine shares: settings injection and
+/// stale-window pruning. Float-back / free geometry is NOT stored here — it lives
+/// in the single unified WindowPlacementStore (one record per window, shared
+/// freeGeometryByScreen), reached through IWindowTrackingService. The previous
+/// per-engine m_unmanagedGeometries store was removed: two parallel float-back
+/// stores drifted and leaked the zone/tile rect into float restores.
 ///
-/// Engines subclass this and implement only the placement-specific
-/// hooks: where to put a window, how to remember placement for
-/// unfloat, etc. The base class ensures consistent state transitions
-/// regardless of engine type.
+/// Engines subclass this and implement the placement-specific hooks.
 class PHOSPHORENGINE_EXPORT PlacementEngineBase : public QObject, public IPlacementEngine
 {
     Q_OBJECT
 
 public:
-    struct UnmanagedEntry
-    {
-        QRect geometry;
-        QString screenId;
-    };
-
-    WindowState windowState(const QString& windowId) const;
-
-    void claimWindow(const QString& windowId, const QRect& geometry, const QString& screenId, bool overwrite = false);
-    void releaseWindow(const QString& windowId);
-    void floatWindow(const QString& windowId);
-    void unfloatWindow(const QString& windowId);
-
-    QRect unmanagedGeometry(const QString& windowId) const;
-    QString unmanagedScreen(const QString& windowId) const;
-    bool hasUnmanagedGeometry(const QString& windowId) const;
-    void clearUnmanagedGeometry(const QString& windowId);
-    void forgetWindow(const QString& windowId);
-    void storeUnmanagedGeometry(const QString& windowId, const QRect& geometry, const QString& screenId,
-                                bool overwrite = false);
-
-    const QHash<QString, UnmanagedEntry>& unmanagedGeometries() const
-    {
-        return m_unmanagedGeometries;
-    }
-    void setUnmanagedGeometries(const QHash<QString, UnmanagedEntry>& geos);
+    /// Drop any per-engine bookkeeping for windows not in @p aliveWindowIds.
+    /// The base keeps no per-window state of its own now, so it returns 0;
+    /// engines override and add their own pruning (then call the base).
     virtual int pruneStaleWindows(const QSet<QString>& aliveWindowIds);
-
-    QJsonObject serializeBaseState() const;
-    void deserializeBaseState(const QJsonObject& state);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings — universal pattern for all engines
@@ -91,14 +58,8 @@ public:
 protected:
     explicit PlacementEngineBase(QObject* parent = nullptr);
 
-    virtual void onWindowClaimed(const QString& windowId) = 0;
-    virtual void onWindowReleased(const QString& windowId) = 0;
-    virtual void onWindowFloated(const QString& windowId) = 0;
-    virtual void onWindowUnfloated(const QString& windowId) = 0;
-
 Q_SIGNALS:
     void geometryRestoreRequested(const QString& windowId, const QRect& geometry, const QString& screenId);
-    void windowStateTransitioned(const QString& windowId, WindowState oldState, WindowState newState);
 
     void navigationFeedback(bool success, const QString& action, const QString& reason, const QString& sourceId,
                             const QString& targetId, const QString& screenId);
@@ -126,8 +87,6 @@ Q_SIGNALS:
     void settingsPersistRequested();
 
 private:
-    QHash<QString, UnmanagedEntry> m_unmanagedGeometries;
-    QHash<QString, WindowState> m_windowStates;
     QPointer<QObject> m_engineSettings;
 };
 

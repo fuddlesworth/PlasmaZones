@@ -31,6 +31,7 @@ pz_add_test(test_window_registry core/test_window_registry.cpp)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_window_tracking_snap core/test_window_tracking_snap.cpp)
 pz_add_test(test_window_tracking_float core/test_window_tracking_float.cpp)
+pz_add_test(test_window_placement_store core/test_window_placement_store.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ - Session Persistence Tests
@@ -82,7 +83,7 @@ target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus pla
 add_test(NAME test_snap_engine COMMAND test_snap_engine)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# core/ - PlacementEngineBase Tests (LGPL shared library FSM + serialization)
+# core/ - PlacementEngineBase Tests (LGPL shared engine base: settings injection + base prune)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_placement_engine_base core/test_placement_engine_base.cpp)
 target_link_libraries(test_placement_engine_base PRIVATE Qt6::Test Qt6::Core PhosphorEngine)
@@ -166,7 +167,6 @@ pz_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
 pz_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_order_cycling.cpp)
 target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
-pz_add_test(test_autotile_engine_pending_restore_filter autotile/test_autotile_engine_pending_restore_filter.cpp)
 pz_add_test(test_autotile_drag_insert autotile/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_handoff autotile/test_autotile_handoff.cpp)

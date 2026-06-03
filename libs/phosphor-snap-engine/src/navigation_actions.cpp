@@ -73,7 +73,7 @@ QString resolveNavScreen(INavigationStateProvider* navState, const QString& wind
                     // identifier still resolves on the live screen set.
                     if (PhosphorScreens::ScreenIdentity::findByIdOrName(physId)) {
                         // `service` is already non-null per the outer
-                        // guard at line 64; no need to re-check it here.
+                        // guard above; no need to re-check it here.
                         auto* mgr = service->screenManager();
                         if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
                             return storedScreen;
@@ -414,7 +414,9 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
         return;
     }
     uncommitSnap(windowId);
-    clearUnmanagedGeometry(windowId);
+    if (m_windowTracker) {
+        m_windowTracker->clearFreeGeometry(windowId);
+    }
     Q_EMIT applyGeometryRequested(windowId, result.x, result.y, result.width, result.height, QString(), screenId,
                                   false);
 }
@@ -446,8 +448,9 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     // whatever's already stored untouched.
     if (m_navState && m_snapState->isFloating(windowId)) {
         QRect geo = m_navState->frameGeometry(windowId);
-        if (geo.isValid()) {
-            storeUnmanagedGeometry(windowId, geo, screenId, /*overwrite=*/true);
+        if (geo.isValid() && m_windowTracker) {
+            // Single float-back store: the unified record's shared free geometry.
+            m_windowTracker->recordFreeGeometry(windowId, screenId, geo, /*overwrite=*/true);
         }
     }
 

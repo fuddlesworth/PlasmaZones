@@ -262,6 +262,14 @@ public:
      */
     void setSnappingPreferredProvider(std::function<bool()> provider);
 
+    /// True when the snapping-preferred provider is wired AND reports true — i.e.
+    /// snapping is globally enabled (the daemon wires the provider to
+    /// `ISettings::snappingEnabled`). Mirrors the internal default-assignment
+    /// branch's `m_snappingPreferredProvider && m_snappingPreferredProvider()`
+    /// test, exposed so other engines can gate cross-engine coordination on the
+    /// global snap toggle. When unset, returns false (no provider ⇒ not preferred).
+    bool snappingPreferred() const;
+
     // ─── Assignments (per-context routing) ────────────────────────────────
 
     /// Get the previous active layout (before the most recent
@@ -293,6 +301,18 @@ public:
     {
         return layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
     }
+
+    /// Resolve the per-context gap override for (screen, desktop, activity) by
+    /// evaluating a windowless WindowQuery through the RuleEvaluator and
+    /// reading the gap action slots (ZonePadding / OuterGap /
+    /// UsePerSideOuterGap / per-side). Unlike @ref resolveAssignmentEntry this
+    /// is a PER-SLOT read across all matching context rules (not a single
+    /// winning rule), so independent gap rules compose and there is no
+    /// engine-mode gate. Returns an all-unset @ref ContextGapOverride when no
+    /// matching rule fills a gap slot. Same owner-thread affinity as the rest
+    /// of the registry.
+    ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop,
+                                          const QString& activity) const override;
 
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
@@ -562,7 +582,7 @@ private:
     /// @p emitDesktop / @p emitActivity are the context the closing
     /// @c layoutAssigned signal is computed under, and @p label names the
     /// family in log output. Only ever instantiated from
-    /// layoutregistry_assignments.cpp, where it is defined.
+    /// layoutregistry_batch.cpp, where it is defined alongside its callers.
     template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
     void applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
                                FamilyFn familyMatches, int emitDesktop, const QString& emitActivity, const char* label);
@@ -627,6 +647,15 @@ private:
     /// dropped wholesale whenever this no longer matches
     /// @c m_ruleStore->ruleSet().revision() — see @ref resolveAssignmentEntry.
     mutable quint64 m_contextResolveCacheRevision = 0;
+
+    /// Hot-path cache for @ref resolveContextGaps, keyed and revision-invalidated
+    /// exactly like @c m_contextResolveCache. Separate cache because gaps read a
+    /// per-slot ResolvedActions walk (not the single-winner assignment walk),
+    /// and the geometry path resolves the same (screen, desktop, activity) tuple
+    /// twice per op (padding + outer gaps) — and N× inside a multi-zone snap —
+    /// so memoizing collapses those repeats to one walk per rule-set revision.
+    mutable QHash<ContextResolveKey, ContextGapOverride> m_contextGapCache;
+    mutable quint64 m_contextGapCacheRevision = 0;
 
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
     /// Empty = provider disabled. Returns the user's default autotile

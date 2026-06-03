@@ -566,9 +566,7 @@ int Daemon::currentDesktop() const
 
 QString Daemon::currentActivity() const
 {
-    return (m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable())
-        ? m_activityManager->currentActivity()
-        : QString();
+    return PhosphorWorkspaces::ActivityManager::currentActivityOrEmpty(m_activityManager.get());
 }
 
 bool Daemon::isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const

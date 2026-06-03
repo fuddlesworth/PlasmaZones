@@ -118,7 +118,7 @@ PhosphorProtocol::ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometryForScree
     // deriving from QScreen which always yields the physical screen ID
     QString resolvedScreenId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
     QRect snapped = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, resolvedScreenId, zoneLayout,
-                                                            m_settings);
+                                                            m_settings, m_layoutManager);
 
     return PhosphorProtocol::ZoneGeometryRect::fromRect(snapped);
 }
@@ -362,7 +362,7 @@ PhosphorProtocol::NamedZoneGeometryList ZoneDetectionAdaptor::getAllZoneGeometri
     for (auto* zone : layout->zones()) {
         // Use geometry with gaps (matches snap behavior), auto-resolving virtual screen geometry
         QRect snapped = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, resolvedScreenId, layout,
-                                                                m_settings);
+                                                                m_settings, m_layoutManager);
         PhosphorProtocol::NamedZoneGeometry entry;
         entry.zoneId = zone->id().toString();
         entry.x = snapped.x();

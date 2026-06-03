@@ -9,6 +9,7 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorPlacement/IGeometryResolver.h>
 #include <PhosphorPlacement/PlacementConfig.h>
 #include <PhosphorProtocol/WindowTypes.h>
@@ -122,6 +123,17 @@ public:
         m_snapState = state;
     }
 
+    /// The unified, engine-agnostic placement store (one WindowPlacement record
+    /// per window). Both engines reach it via this service; the WTA persists it.
+    PhosphorEngine::WindowPlacementStore& placementStore() override
+    {
+        return m_placementStore;
+    }
+    const PhosphorEngine::WindowPlacementStore& placementStore() const
+    {
+        return m_placementStore;
+    }
+
     /**
      * @brief Predicate type for "is this snap-mode context active?".
      *
@@ -166,11 +178,13 @@ public:
     }
 
     /**
-     * @brief Wire the snap-mode placement engine for unmanaged geometry queries.
+     * @brief Wire the snap-mode placement engine.
      *
-     * PlacementEngineBase is the single store for pre-tile (unmanaged) geometry.
-     * WTS delegates to this engine for geometry lookup, store, and clear
-     * operations used by the D-Bus facade and persistence layer.
+     * Float-back / free geometry is SHARED across modes and lives in the single
+     * unified WindowPlacementStore (freeGeometryByScreen), not per-engine — so this
+     * pointer is not the geometry store (validatedUnmanagedGeometry reads the record
+     * directly). Retained for the engine reference used elsewhere (stale-window
+     * pruning, the D-Bus facade's snapEngine() accessor).
      *
      * Must be set after construction. Not owned.
      */
@@ -182,6 +196,34 @@ public:
     PhosphorEngine::PlacementEngineBase* snapEngine() const
     {
         return m_snapEngine.data();
+    }
+
+    /**
+     * @brief Predicate: is the window currently in Autotile mode?
+     *
+     * Injected by the daemon (engine-/settings-agnostic LGPL boundary). The
+     * single owning-engine signal used by the capture funnel and float
+     * routing (see isWindowInAutotileMode). When unset, every window is
+     * treated as snap-mode.
+     */
+    using AutotileModePredicate = std::function<bool(const QString& windowId)>;
+    void setAutotileModePredicate(AutotileModePredicate predicate)
+    {
+        m_autotileModePredicate = std::move(predicate);
+    }
+
+    /**
+     * @brief True if the window's CURRENT screen mode is autotile.
+     * The single owning-engine signal — the same predicate that routes the float
+     * resolver, the float writer, and validatedUnmanagedGeometry. Exposed so the
+     * capture funnel (WindowTrackingAdaptor::captureWindowPlacement) picks the
+     * owning engine the SAME way, instead of a divergent isWindowTracked() check
+     * that disagrees mid-mode-flip. Returns false when the predicate is unwired
+     * (snap-only tests / early init).
+     */
+    bool isWindowInAutotileMode(const QString& windowId) const
+    {
+        return m_autotileModePredicate && m_autotileModePredicate(windowId);
     }
 
     /**
@@ -276,7 +318,7 @@ public:
      * on the target screen (size clamped to fit). On-screen geometries are
      * returned as-is; off-screen geometries are nudged to the nearest screen.
      *
-     * @param geo             Saved geometry (e.g. from PlacementEngineBase::unmanagedGeometry)
+     * @param geo             Saved geometry (e.g. a window's recorded free geometry)
      * @param savedScreen     Screen connector name at capture time (may be empty)
      * @param currentScreenName Screen where the window currently is
      * @return Adjusted geometry, or nullopt if @p geo is invalid
@@ -285,11 +327,11 @@ public:
                                                    const QString& currentScreenName) const;
 
     /**
-     * @brief Look up unmanaged geometry from the snap engine with appId fallback and validate.
+     * @brief Look up a window's free (unmanaged) geometry from the unified
+     *        WindowPlacementStore, with appId fallback, and validate it.
      *
      * Combines the windowId lookup, appId fallback, and cross-screen validation
-     * into a single call. Returns nullopt if no geometry is found or if the
-     * snap engine is not wired.
+     * into a single call. Returns nullopt if no geometry is recorded.
      *
      * @param windowId        Full window ID
      * @param screenId        Screen where the window currently is (for cross-screen adjustment)
@@ -298,17 +340,68 @@ public:
     std::optional<QRect> validatedUnmanagedGeometry(const QString& windowId, const QString& screenId,
                                                     bool exactOnly = false) const override;
 
+    /// Write the window's shared free/float geometry into the unified record (the
+    /// single float-back store). See IWindowTrackingService::recordFreeGeometry.
+    void recordFreeGeometry(const QString& windowId, const QString& screenId, const QRect& geometry,
+                            bool overwrite) override;
+
+    /// Clear a window's shared free/float geometry from the record. See
+    /// IWindowTrackingService::clearFreeGeometry.
+    void clearFreeGeometry(const QString& windowId) override;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
+     * @brief Per-engine float resolver/writer.
+     *
+     * Float state is genuinely per-engine: a window floated in autotile mode is
+     * NOT floating in snapping mode and vice versa. The authoritative store lives
+     * in each engine (SnapState::isFloating / TilingState::isFloating), keyed by
+     * the screen's current mode. The placement library is intentionally engine-
+     * and settings-agnostic (LGPL boundary), so the daemon injects a resolver
+     * (reader) and writer that route to the engine owning the window's CURRENT
+     * screen mode.
+     *
+     * When unset (unit tests / early init before the engines are wired), the
+     * service falls back to the legacy shared `m_floatingWindows` set so existing
+     * single-engine tests keep their historical behaviour.
+     */
+    using EngineFloatResolver = std::function<bool(const QString& windowId)>;
+    using EngineFloatWriter = std::function<void(const QString& windowId, bool floating)>;
+    using EngineFloatLister = std::function<QStringList()>;
+
+    void setEngineFloatResolver(EngineFloatResolver resolver)
+    {
+        m_engineFloatResolver = std::move(resolver);
+    }
+    void setEngineFloatWriter(EngineFloatWriter writer)
+    {
+        m_engineFloatWriter = std::move(writer);
+    }
+    /// Aggregates both engines' floating windows for the engine-agnostic
+    /// floatingWindows() enumeration. See setEngineFloatResolver rationale.
+    void setEngineFloatLister(EngineFloatLister lister)
+    {
+        m_engineFloatLister = std::move(lister);
+    }
+
+    /**
      * @brief Check if a window is floating (excluded from snapping)
+     *
+     * Delegates to the per-engine resolver when wired; otherwise falls back to
+     * the legacy shared floating set.
      */
     bool isWindowFloating(const QString& windowId) const override;
 
     /**
      * @brief Set window floating state
+     *
+     * Routes to the engine owning the window's current screen mode via the
+     * injected writer when wired; otherwise updates the legacy shared set and
+     * the snap state directly.
+     *
      * @param windowId Full window ID
      * @param floating true to float, false to unfloat
      */
@@ -493,40 +586,6 @@ public:
      */
     bool consumePendingAssignment(const QString& windowId) override;
 
-    /**
-     * @brief Drop pending-restore queues whose appId matches any exclusion
-     *        pattern.
-     *
-     * The snap engine already refuses to honor a pending restore for an
-     * excluded app at runtime. See resolveWindowRestore in
-     * phosphor-snap-engine/lifecycle.cpp. So the entries are functionally
-     * dead, yet they still live on disk in PendingRestoreQueues until the
-     * next save cycle. Their persistence generates one "pending snap:" log
-     * line per entry at every daemon startup, and bloats session state
-     * with values that can never be replayed. This method walks the queues
-     * and removes appIds that match any pattern via
-     * PhosphorIdentity::WindowId::appIdMatches. That is the same predicate
-     * the snap engine itself uses. When any removal happens it marks
-     * DirtyPendingRestores so the next debounced save persists the pruned
-     * set.
-     *
-     * Called from the daemon at startup (kicked eagerly at the same
-     * point the unified rule store's rules-changed subscription is
-     * wired) and from the daemon's finalizeStartup once
-     * AutotileEngine::loadState has populated the autotile queue. Live
-     * edits to the rule store re-trigger via the same subscription.
-     *
-     * @param exclusionPatterns AppId patterns extracted from the
-     *                          unified rule store's Exclude rules via
-     *                          PhosphorWindowRule::ExclusionRules. Empty
-     *                          patterns and an empty list are no-ops.
-     * @return number of appId entries fully removed. The queue may have
-     *         contained multiple PendingRestores for one appId. One
-     *         removal counts once. This mirrors the shape of
-     *         m_pendingRestoreQueues' QHash.
-     */
-    int pruneExcludedPendingRestores(const QStringList& exclusionPatterns);
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
     // ═══════════════════════════════════════════════════════════════════════════
@@ -614,7 +673,8 @@ public:
      * @brief Migrate window screen assignments from physical to virtual screen IDs
      *
      * Windows snapped before virtual screens were configured have physical screen IDs
-     * in m_windowScreenAssignments. When virtual screens are active, all per-screen
+     * in SnapState's screen assignments (m_snapState->screenAssignments()). When
+     * virtual screens are active, all per-screen
      * lookups use virtual IDs, so these windows become invisible to zone occupancy
      * checks, snap assist, float/unfloat, etc.
      *
@@ -700,11 +760,12 @@ public:
      * Used by the KWin effect to cache expected snap positions so that
      * windows can be teleported to their zone immediately on windowAdded,
      * eliminating the visible "flash" from KWin's session-restored position.
-     * Only the first entry per appId is returned (FIFO consumption order).
-     * Entries whose saved screen is currently in autotile mode are skipped:
-     * the effect cache is a snap-mode-only fast path, and autotile on the
-     * saved screen will own placement. Validates layout/desktop context so
-     * the cache never contains geometries the async resolver would reject.
+     * Sourced from the unified WindowPlacementStore's snapped records; for a
+     * multi-instance appId the lowest-sequence (FIFO-head) record is chosen
+     * deterministically. Entries whose saved screen is currently in autotile
+     * mode are skipped: the effect cache is a snap-mode-only fast path, and
+     * autotile on the saved screen will own placement. Validates desktop
+     * context so the cache never contains geometries the async resolver rejects.
      */
     QHash<QString, PendingRestoreTarget> pendingRestoreGeometries() const;
 
@@ -737,6 +798,10 @@ public:
      * @return Map of windowId -> zoneIds (list of zone UUIDs)
      */
     const QHash<QString, QStringList>& zoneAssignments() const override;
+
+    /// Live snap zones if present, else the durable placement-record snap slot.
+    /// See IWindowTrackingService::recordedSnapZones.
+    QStringList recordedSnapZones(const QString& windowId) const override;
 
     /**
      * @brief Get all screen assignments for persistence
@@ -838,19 +903,31 @@ public:
     // immediately after populating in-memory state so the first real save
     // doesn't redundantly write back what we just loaded.
     // ═══════════════════════════════════════════════════════════════════════
+    // NOTE: several bits below (DirtyZoneAssignments, DirtyPendingRestores,
+    // DirtyPreTileGeometries, DirtyPreFloatZones, DirtyPreFloatScreens,
+    // DirtyAutotileOrders, DirtyAutotilePending) no longer have a dedicated save
+    // block — their legacy keys were collapsed into DirtyWindowPlacements. The
+    // runtime mutators that still OR them in are retained because the act of
+    // marking ANY bit schedules a save, and saveState()'s refreshOpenWindowPlacements()
+    // re-derives the affected per-window state into the placement record. They are
+    // therefore "schedule a save" triggers, not independent persisted fields; only
+    // DirtyActiveLayoutId / DirtyLastUsedZone / DirtyUserSnapped / DirtyWindowPlacements
+    // map to their own on-disk key.
     enum DirtyField : uint32_t {
         DirtyNone = 0,
         DirtyActiveLayoutId = 1u << 0,
-        DirtyZoneAssignments = 1u << 1, // zones + screens + desktops (always written together)
-        DirtyPendingRestores = 1u << 2,
-        DirtyPreTileGeometries = 1u << 3,
+        DirtyZoneAssignments = 1u << 1, // legacy save-trigger → DirtyWindowPlacements
+        DirtyPendingRestores = 1u << 2, // legacy save-trigger → DirtyWindowPlacements
+        DirtyPreTileGeometries = 1u << 3, // legacy save-trigger → DirtyWindowPlacements
         DirtyLastUsedZone = 1u << 4,
-        DirtyPreFloatZones = 1u << 5,
-        DirtyPreFloatScreens = 1u << 6,
+        DirtyPreFloatZones = 1u << 5, // legacy save-trigger → DirtyWindowPlacements
+        DirtyPreFloatScreens = 1u << 6, // legacy save-trigger → DirtyWindowPlacements
         DirtyUserSnapped = 1u << 7,
-        DirtyAutotileOrders = 1u << 8,
-        DirtyAutotilePending = 1u << 9,
-        DirtyAll = 0x3FFu,
+        DirtyAutotileOrders = 1u << 8, // legacy save-trigger → DirtyWindowPlacements
+        DirtyAutotilePending = 1u << 9, // legacy save-trigger → DirtyWindowPlacements
+        // bit 10 reserved (was DirtyFloatRestores, removed with the FloatRestoreQueues key)
+        DirtyWindowPlacements = 1u << 11, ///< unified WindowPlacementStore (sole per-window restore state)
+        DirtyAll = 0xFFFu, // covers bits 0-11 incl. the reserved bit 10
     };
     using DirtyMask = uint32_t;
 
@@ -979,6 +1056,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorZones::IZoneDetector* m_zoneDetector;
     PhosphorSnapEngine::SnapState* m_snapState = nullptr;
+    PhosphorEngine::WindowPlacementStore m_placementStore;
     IGeometryResolver* m_geometryResolver;
     PlacementConfig m_config;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
@@ -987,10 +1065,21 @@ private:
     PhosphorEngine::WindowRegistry* m_windowRegistry = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     QPointer<PhosphorEngine::PlacementEngineBase> m_snapEngine;
+    AutotileModePredicate m_autotileModePredicate{};
 
     // Floating windows: full windowId at runtime, appId for session-restored entries
-    // Converted from windowId to appId on window close for persistence
+    // Converted from windowId to appId on window close for persistence.
+    //
+    // LEGACY FALLBACK ONLY: used when no per-engine resolver/writer is wired
+    // (unit tests / early init). In production the daemon injects
+    // m_engineFloatResolver / m_engineFloatWriter and this set is never read or
+    // written by isWindowFloating / setWindowFloating.
     QSet<QString> m_floatingWindows;
+
+    // Daemon-injected per-engine float reader/writer/lister. See setEngineFloatResolver.
+    EngineFloatResolver m_engineFloatResolver{};
+    EngineFloatWriter m_engineFloatWriter{};
+    EngineFloatLister m_engineFloatLister{};
 
     // Session persistence: consumption queue (appId -> list of pending restores, consumed FIFO)
     QHash<QString, QList<PendingRestore>> m_pendingRestoreQueues;

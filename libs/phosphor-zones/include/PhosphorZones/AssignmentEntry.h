@@ -173,6 +173,34 @@ struct AssignmentEntry
 };
 
 /**
+ * @brief Per-context gap override resolved from window rules.
+ *
+ * Unlike @ref AssignmentEntry (which is engine-mode/layout centric and gated
+ * on a SetEngineMode action), gap overrides are independent per-property
+ * window-rule actions resolved per slot. Each field is set only when a
+ * matching context rule fills the corresponding gap slot, so an unset field
+ * falls through to the next precedence layer (per-screen → layout → global).
+ * The daemon maps a populated override into a PerScreenSnappingKey-shaped map
+ * for @c GeometryUtils::getEffectiveOuterGaps / getEffectiveZonePadding.
+ */
+struct ContextGapOverride
+{
+    std::optional<int> zonePadding;
+    std::optional<int> outerGap;
+    std::optional<bool> usePerSideOuterGap;
+    std::optional<int> outerGapTop;
+    std::optional<int> outerGapBottom;
+    std::optional<int> outerGapLeft;
+    std::optional<int> outerGapRight;
+
+    bool isEmpty() const
+    {
+        return !zonePadding && !outerGap && !usePerSideOuterGap && !outerGapTop && !outerGapBottom && !outerGapLeft
+            && !outerGapRight;
+    }
+};
+
+/**
  * @brief Canonical wire-string for an @ref AssignmentEntry::Mode.
  *
  * The wire vocabulary lives next to the enum so every persister/consumer

@@ -41,16 +41,22 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w);
 ///     `isMinimized`, `isFullscreen`, `isSticky`. `isMaximized` is engaged
 ///     only when the underlying `KWin::Window*` exists (EffectWindow has
 ///     no direct maximized accessor).
-///   - **Always disengaged**: the context fields `screenId`,
-///     `virtualDesktop`, `activity` — call sites here are window-scoped
-///     consumers (exclusion gates, animation rule-override gates,
-///     per-window animation resolvers) that match on attributes of the
-///     window itself, not the desktop / activity context it currently
-///     lives on. Context-keyed cascade resolution routes through
-///     `ContextRuleBridge` instead.
+///   - **Context fields** `screenId` / `virtualDesktop` / `activity`: these
+///     ARE matchable `MatchExpression` fields, so a window-domain rule may
+///     legitimately pin them (e.g. "no title bar + red border on monitor 2",
+///     "zero opacity on activity X"). `virtualDesktop` / `activity` are derived
+///     from the window itself (first desktop's x11 number; first activity UUID;
+///     0 / empty meaning all/unknown — matching the daemon-side
+///     `setWindowMetadata` derivation). `screenId` requires the effect's
+///     output→stable-id resolution, which is not available to this free
+///     helper, so the caller passes it via @p screenId (typically
+///     `getWindowScreenId(w)`); left empty it stays disengaged. NOTE: a window
+///     query carrying a populated context only ENABLES context-pinned
+///     window-domain rules to match — it does not affect the windowless
+///     context cascade, which routes through `ContextRuleBridge`.
 ///
 /// Confined to the effect translation unit so the LGPL phosphor-windowrule
 /// library never sees a KWin type.
-PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w);
+PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const QString& screenId = {});
 
 } // namespace PlasmaZones

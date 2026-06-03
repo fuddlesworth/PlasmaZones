@@ -77,10 +77,10 @@ placementEngineRouter.bind("snap", snap);
 
 ## Design notes
 
-- **Inherits `PlacementEngineBase`.** The Unmanaged / EngineOwned /
-  Floated FSM lives once in the base class; this engine only adds
-  the manual-zone-specific decisions (which zone, when to auto-snap,
-  how to navigate).
+- **Inherits `PlacementEngineBase`.** The base provides the shared
+  plumbing (settings injection, stale-window pruning, common signals);
+  this engine only adds the manual-zone-specific decisions (which zone,
+  when to auto-snap, how to navigate).
 - **Typed interfaces, not `QObject*` + invokeMethod.** Daemon dispatch
   uses the narrow `INavigationStateProvider` and `IZoneAdjacencyResolver`
   contracts — strictly typed, no string method names, no opaque

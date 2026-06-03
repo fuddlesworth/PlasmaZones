@@ -23,6 +23,7 @@
 #include <PhosphorWindowRule/RuleEvaluator.h>
 #include <PhosphorWindowRule/WindowQuery.h>
 
+#include <QColor>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QtGlobal>
@@ -228,6 +229,82 @@ std::optional<qreal> resolveWindowOpacity(const PhosphorWindowRule::RuleEvaluato
         return std::nullopt;
     }
     return value;
+}
+
+std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWindowRule::RuleEvaluator& evaluator,
+                                                                const PhosphorWindowRule::WindowQuery& query,
+                                                                const QString& windowId)
+{
+    // Same short-circuit rationale as resolveWindowOpacity: a windowless query
+    // can't match a window predicate, and windowId keys the per-window cache.
+    if (!query.hasWindow() || windowId.isEmpty()) {
+        return std::nullopt;
+    }
+    const PhosphorWindowRule::ResolvedActions resolved = evaluator.resolveCached(windowId, query);
+
+    // Each reader re-validates the param type even though the load-time
+    // descriptor validators already did — defence in depth against a
+    // programmatically-built / hand-edited payload that bypassed the parser
+    // (see the equivalent rationale in resolveWindowOpacity).
+    const auto boolSlot = [&resolved](QLatin1StringView slot) -> std::optional<bool> {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return std::nullopt;
+        }
+        const QJsonValue v = action->params.value(PhosphorWindowRule::ActionParam::Value);
+        if (!v.isBool()) {
+            return std::nullopt;
+        }
+        return v.toBool();
+    };
+    // Upper bounds mirror the load-time descriptor validators in
+    // ruleaction.cpp (kMaxBorderWidth / kMaxBorderRadius) so the consumer
+    // re-validation is genuinely symmetric — a programmatically-built /
+    // hand-edited payload with width:5000 is rejected here, not drawn.
+    constexpr double kMaxBorderWidth = 10.0;
+    constexpr double kMaxBorderRadius = 20.0;
+    const auto intSlot = [&resolved](QLatin1StringView slot, double maxValue) -> std::optional<int> {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return std::nullopt;
+        }
+        const QJsonValue v = action->params.value(PhosphorWindowRule::ActionParam::Value);
+        if (!v.isDouble()) {
+            return std::nullopt;
+        }
+        const double d = v.toDouble();
+        if (d < 0.0 || d > maxValue) {
+            return std::nullopt;
+        }
+        return static_cast<int>(d);
+    };
+    const auto colorSlot = [&resolved](QLatin1StringView slot) -> std::optional<QColor> {
+        const auto action = resolved.slot(QString(slot));
+        if (!action) {
+            return std::nullopt;
+        }
+        const QJsonValue v = action->params.value(PhosphorWindowRule::ActionParam::Value);
+        if (!v.isString()) {
+            return std::nullopt;
+        }
+        const QColor color(v.toString());
+        if (!color.isValid()) {
+            return std::nullopt;
+        }
+        return color;
+    };
+
+    ResolvedWindowAppearance out;
+    out.hideTitleBar = boolSlot(PhosphorWindowRule::ActionSlot::HideTitleBar);
+    out.showBorder = boolSlot(PhosphorWindowRule::ActionSlot::BorderVisible);
+    out.borderWidth = intSlot(PhosphorWindowRule::ActionSlot::BorderWidth, kMaxBorderWidth);
+    out.borderRadius = intSlot(PhosphorWindowRule::ActionSlot::BorderRadius, kMaxBorderRadius);
+    out.borderColor = colorSlot(PhosphorWindowRule::ActionSlot::BorderColor);
+    out.inactiveBorderColor = colorSlot(PhosphorWindowRule::ActionSlot::InactiveBorderColor);
+    if (!out.any()) {
+        return std::nullopt;
+    }
+    return out;
 }
 
 } // namespace PlasmaZones

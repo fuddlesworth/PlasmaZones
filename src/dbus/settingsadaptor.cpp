@@ -680,6 +680,18 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_COLOR_SETTING("autotileInactiveBorderColor", autotileInactiveBorderColor, setAutotileInactiveBorderColor)
     REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
                           setAutotileUseSystemBorderColors)
+
+    // Snapping window decoration settings (on ISettings interface)
+    REGISTER_BOOL_SETTING("snapWindowHideTitleBars", snapWindowHideTitleBars, setSnapWindowHideTitleBars)
+    REGISTER_BOOL_SETTING("snapWindowShowBorder", snapWindowShowBorder, setSnapWindowShowBorder)
+    REGISTER_INT_SETTING("snapWindowBorderWidth", snapWindowBorderWidth, setSnapWindowBorderWidth)
+    REGISTER_INT_SETTING("snapWindowBorderRadius", snapWindowBorderRadius, setSnapWindowBorderRadius)
+    REGISTER_COLOR_SETTING("snapWindowBorderColor", snapWindowBorderColor, setSnapWindowBorderColor)
+    REGISTER_COLOR_SETTING("snapWindowInactiveBorderColor", snapWindowInactiveBorderColor,
+                           setSnapWindowInactiveBorderColor)
+    REGISTER_BOOL_SETTING("snapWindowUseSystemBorderColors", snapWindowUseSystemBorderColors,
+                          setSnapWindowUseSystemBorderColors)
+
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
     m_getters[QStringLiteral("autotileStickyWindowHandling")] = [this]() {
         return static_cast<int>(m_settings->autotileStickyWindowHandling());

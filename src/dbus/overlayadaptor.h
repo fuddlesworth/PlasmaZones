@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QDBusContext>
+#include <QDBusUnixFileDescriptor>
 #include <QSet>
 #include <QString>
 
@@ -87,6 +88,9 @@ public Q_SLOTS:
     void hideSnapAssist();
     bool isSnapAssistVisible();
     bool setSnapAssistThumbnail(const QString& compositorHandle, int width, int height, const QByteArray& pixels);
+    bool setWindowThumbnailDmabuf(const QString& compositorHandle, int width, int height, uint drmFormat,
+                                  qulonglong modifier, uint stride, uint offset, const QDBusUnixFileDescriptor& fd,
+                                  const QDBusUnixFileDescriptor& fenceFd);
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
