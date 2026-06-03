@@ -51,10 +51,12 @@
   # -- KDE Frameworks 6 --
   kdePackages,           # The kdePackages scope for KF6 + Plasma
 
-  # -- Optional: Vulkan headers (build-time only, for QRhi/Vulkan backend) --
-  # The CMakeLists marks this OPTIONAL; the build succeeds without it but the
-  # Vulkan render backend won't be available at runtime. nixpkgs convention is
-  # to include it so distribution packages always have the backend enabled.
+  # -- Vulkan headers (build-time, required by the daemon) --
+  # The dma-buf thumbnail daemon path hard-requires the Vulkan SDK via
+  # find_package(Vulkan REQUIRED) in src/CMakeLists.txt (dmabuftextureprovider.cpp
+  # includes <vulkan/vulkan.h> unconditionally), so a daemon build without these
+  # headers fails at configure time. (Qt's separate QVulkanInstance render backend
+  # is still QT_CONFIG(vulkan)-guarded/optional — a distinct concern from this SDK.)
   vulkan-headers,
 
   # -- Caller-supplied source --
@@ -128,10 +130,11 @@ stdenv.mkDerivation (finalAttrs: {
     # for the zwlr_layer_shell_v1 protocol implementation.
     wayland               # libwayland-client
 
-    # ── Optional: Vulkan headers (build-time only) ────────────────────────────
-    # Needed for QVulkanInstance (Vulkan RHI backend). The build is OPTIONAL
-    # per CMakeLists; we include it unconditionally so Nix packages always
-    # enable the Vulkan path. Only headers are needed — no runtime lib.
+    # ── Vulkan headers (build-time, required by the daemon) ───────────────────
+    # Hard build requirement: the dma-buf thumbnail daemon path uses
+    # find_package(Vulkan REQUIRED) (src/CMakeLists.txt) and includes
+    # <vulkan/vulkan.h> unconditionally, so the daemon won't configure without
+    # these. Only headers are needed — no runtime lib.
     vulkan-headers
   ]
   ++ lib.optionals withKdeFrameworks [
