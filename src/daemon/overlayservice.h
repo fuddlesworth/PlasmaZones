@@ -677,7 +677,9 @@ private:
     // ownership pattern as m_thumbnailProvider: constructed eagerly, ownership
     // released to the QQmlEngine in engineConfigurator, borrowed atomic pointer
     // nulled when the engine tears it down. Registered under the separate
-    // DmabufTextureProvider::ProviderId (Texture-type) image scheme.
+    // DmabufTextureProvider::ProviderId (Texture-type) image scheme. The full
+    // delete→null teardown-window safety analysis above (no-event-loop-pumping
+    // during ~QQmlEngine + std::atomic null-out) applies identically here.
     std::unique_ptr<DmabufTextureProvider> m_dmabufTextureProviderOwned;
     std::atomic<DmabufTextureProvider*> m_dmabufTextureProvider{nullptr};
     // Single-shot idle-grace timer: started on every hideSnapAssist and

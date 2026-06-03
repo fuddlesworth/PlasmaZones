@@ -17,6 +17,10 @@ DmabufFenceWaiter::DmabufFenceWaiter(int fenceFd, int timeoutMs, QObject* parent
 {
     // A signaled sync_file is level-triggered readable; we disable the notifier
     // in finish() and self-delete, so activated() fires at most once.
+    // QSocketNotifier::Read also fires on an error condition on the fd, which it
+    // can't distinguish from "signaled" — acceptable here: the buffer is already
+    // posted, so the worst case is revealing the thumbnail a frame early, never
+    // reading a torn buffer (the caller only reaches this path with a valid dup).
     m_notifier = new QSocketNotifier(fenceFd, QSocketNotifier::Read, this);
     connect(m_notifier, &QSocketNotifier::activated, this, [this]() {
         finish(/*signaled=*/true);

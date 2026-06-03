@@ -34,7 +34,7 @@ const uint32_t DrmFormatARGB8888 = drmFourcc('A', 'R', '2', '4');
 const uint32_t DrmFormatABGR8888 = drmFourcc('A', 'B', '2', '4');
 const uint32_t DrmFormatXRGB8888 = drmFourcc('X', 'R', '2', '4');
 const uint32_t DrmFormatXBGR8888 = drmFourcc('X', 'B', '2', '4');
-constexpr uint64_t DrmFormatModInvalid = 0x00ffffffffffffffULL;
+// DrmFormatModInvalid is shared via dmabufthumbnail.h (PlasmaZones namespace).
 
 struct FormatMapping
 {
@@ -478,6 +478,9 @@ QString DmabufTextureProvider::insert(const QString& compositorHandle, const Dma
     owned.fd = storedFd;
     owned.fenceFd = -1; // the fence is consumed by the consumer's reveal-gate, not stored here
     m_pending.insert(key, owned);
+    // Pure cache-buster (see header): wrap after 2^32 inserts is benign because
+    // requestTexture serves the latest buffer per handle regardless of the
+    // generation in the URL, so a recycled value can't select a stale buffer.
     const quint32 gen = ++m_generation;
     return makeUrl(key, gen);
 }
@@ -528,7 +531,11 @@ void DmabufTextureProvider::clear()
 
 QString DmabufTextureProvider::makeUrl(const QString& handle, quint32 generation)
 {
-    return QStringLiteral("image://%1/%2/%3").arg(QString::fromLatin1(ProviderId)).arg(handle).arg(generation);
+    // Single multi-arg .arg() substitutes all placeholders in one pass, so a
+    // handle containing a literal "%N" can't be re-substituted by a later
+    // chained .arg() (chaining is a known QString footgun on dynamic middle
+    // args). Handles are KWin window ids, but build the URL defensively anyway.
+    return QStringLiteral("image://%1/%2/%3").arg(QString::fromLatin1(ProviderId), handle, QString::number(generation));
 }
 
 QString DmabufTextureProvider::normaliseHandle(const QString& handle)

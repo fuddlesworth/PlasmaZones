@@ -466,11 +466,12 @@ target_link_libraries(plasmazonesd PRIVATE Qt6::GuiPrivate Qt6::ShaderToolsPriva
 # Vulkan headers for the dma-buf thumbnail import (dmabuftextureprovider.cpp).
 # Only the headers + function pointers are used (entry points are resolved via
 # QVulkanInstance / vkGetDeviceProcAddr), so this is headers-only — but linking
-# the imported target is the clean way to pick up the include dirs.
-find_package(Vulkan)
-if(Vulkan_FOUND)
-    target_link_libraries(plasmazonesd PRIVATE Vulkan::Vulkan)
-endif()
+# the imported target is the clean way to pick up the include dirs. REQUIRED:
+# dmabuftextureprovider.cpp #includes <vulkan/vulkan.h> unconditionally and is
+# always compiled into the daemon, so a missing Vulkan SDK must fail at configure
+# time with a clear message rather than as an opaque header-not-found compile error.
+find_package(Vulkan REQUIRED)
+target_link_libraries(plasmazonesd PRIVATE Vulkan::Vulkan)
 
 # libepoxy: EGL/GL entry points for the OpenGL-RHI dma-buf import fallback
 # (daemon/dmabufglimport.cpp). Only that TU includes epoxy headers.

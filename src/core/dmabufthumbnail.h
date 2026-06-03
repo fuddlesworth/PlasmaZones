@@ -7,6 +7,11 @@
 
 namespace PlasmaZones {
 
+/// DRM "no/invalid modifier" sentinel (DRM_FORMAT_MOD_INVALID). Defined here so
+/// the Vulkan importer (dmabuftextureprovider.cpp) and the OpenGL importer
+/// (dmabufglimport.cpp) share one definition instead of each redeclaring it.
+constexpr uint64_t DrmFormatModInvalid = 0x00ffffffffffffffULL;
+
 /**
  * @brief Single-plane DMA-BUF descriptor for a window thumbnail.
  *

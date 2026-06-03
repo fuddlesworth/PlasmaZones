@@ -166,7 +166,7 @@ void SnapAssistThumbnailCapture::bumpRecency(const QUuid& handle)
     // no-op'ing here. Compiles to nothing in release.
     Q_ASSERT_X(m_recentlyPostedSet.contains(handle), "bumpRecency",
                "called for a handle not in the set — set/queue invariant broken");
-    // QQueue::removeOne is O(n) over n=RecentPostedCapacity (24); trivially
+    // QQueue::removeOne is O(n) over n=RecentPostedCapacity; trivially
     // cheap for this cadence. Returns false if @p handle isn't present —
     // in that case skip the enqueue, otherwise we'd add a duplicate and
     // break the set/queue size invariant. (In debug builds the assert above
@@ -180,6 +180,10 @@ void SnapAssistThumbnailCapture::dropQueueAndIdle()
 {
     m_queue.clear();
     m_busy = false;
+    // Drop the borrowed scene pointer too: nothing is in flight after this, so
+    // clearing it keeps the late-bound member symmetric with the pool-rebuild
+    // path (which also nulls it) rather than leaving a stale borrow into a slot.
+    m_activeScene = nullptr;
 }
 
 KWin::OffscreenQuickScene* SnapAssistThumbnailCapture::acquireSceneForCapture()
@@ -432,8 +436,30 @@ SnapAssistThumbnailCapture::exportTextureToDmabuf(KWin::GLTexture* texture) cons
         qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: no current EGL context (non-EGL backend)";
         return result;
     }
+    // Verify the driver actually provides the EGL entry points this path calls
+    // BEFORE calling any of them. With libepoxy a missing entry point resolves
+    // to a stub that abort()s the process rather than returning an error, so
+    // without these guards a driver lacking dma-buf export or native-fence sync
+    // would CRASH the compositor the first time the env-gated path runs —
+    // instead of returning {ok=false} and taking the raw-pixel fallback the
+    // comments below rely on.
+    if (!epoxy_has_egl_extension(dpy, "EGL_KHR_image_base")
+        || !epoxy_has_egl_extension(dpy, "EGL_MESA_image_dma_buf_export")
+        || !epoxy_has_egl_extension(dpy, "EGL_KHR_fence_sync")
+        || !epoxy_has_egl_extension(dpy, "EGL_ANDROID_native_fence_sync")) {
+        qCDebug(lcSnapAssistCapture)
+            << "exportTextureToDmabuf: required EGL dma-buf/fence extensions unavailable — using raw-pixel path";
+        return result;
+    }
     if (texture->target() != GL_TEXTURE_2D) {
         qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: unexpected texture target" << texture->target();
+        return result;
+    }
+    if (texture->size().isEmpty()) {
+        // A zero-sized FBO texture would export a w=0/h=0 buffer the daemon is
+        // guaranteed to reject — fail early (routes to retry, then fallback)
+        // rather than allocate and ship an EGLImage + fd + fence for nothing.
+        qCDebug(lcSnapAssistCapture) << "exportTextureToDmabuf: zero-sized texture" << texture->size();
         return result;
     }
     // Wrap the GL texture as an EGLImage, then export its backing dma-buf.
@@ -510,8 +536,9 @@ void SnapAssistThumbnailCapture::postThumbnailDmabuf(const Pending& p, const Dma
     // The exported dma-buf aliases KWin's reused OffscreenQuickScene FBO, so it
     // ships with a render-completion fence (exported.fenceFd): the daemon waits
     // on it before sampling, which makes repeated/live capture correct rather
-    // than relying on D-Bus round-trip latency outrunning the GPU. (A buffer
-    // pool to decouple producer/consumer is a later increment.)
+    // than relying on D-Bus round-trip latency outrunning the GPU. The producer
+    // scene pool (acquireSceneForCapture) gives the daemon's copy-on-import a
+    // margin before a buffer is reused.
     const QString compositorHandle = p.internalId.toString();
 
     QDBusMessage msg = QDBusMessage::createMethodCall(

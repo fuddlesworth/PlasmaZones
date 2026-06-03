@@ -15,14 +15,21 @@
 
 namespace PlasmaZones {
 
-namespace {
-constexpr uint64_t DrmFormatModInvalid = 0x00ffffffffffffffULL;
-} // namespace
+// DrmFormatModInvalid is shared via dmabufthumbnail.h (PlasmaZones namespace).
 
 GlDmabufImport importDmabufToGlTexture(const DmabufThumbnailDesc& desc)
 {
     GlDmabufImport result;
     if (desc.fd < 0 || desc.width <= 0 || desc.height <= 0) {
+        return result;
+    }
+    // stride/offset are uint32, but the EGL_LINUX_DMA_BUF attribute list takes
+    // EGLint (signed 32-bit). A value >= 2^31 would narrow to a negative attrib
+    // and hand EGL a garbage plane layout. The producer controls these
+    // independently of width/height, so reject out-of-range values rather than
+    // silently corrupt the import.
+    if (desc.stride > 0x7fffffffu || desc.offset > 0x7fffffffu) {
+        qCWarning(lcOverlay) << "dmabuf GL import: stride/offset exceed EGLint range";
         return result;
     }
     EGLDisplay dpy = eglGetCurrentDisplay();

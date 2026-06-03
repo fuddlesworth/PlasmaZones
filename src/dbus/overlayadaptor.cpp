@@ -316,6 +316,14 @@ bool OverlayAdaptor::setWindowThumbnailDmabuf(const QString& compositorHandle, i
     if (!m_overlayService) {
         return false;
     }
+    // Authenticate the sender BEFORE inspecting the payload, so an
+    // unauthenticated peer can't drive the validation logic. (The raw-pixel
+    // sibling deliberately bounds its payload size pre-auth to cap marshalling
+    // cost of a multi-MB blob; a dma-buf carries no inline payload, so there is
+    // no reason to validate before authenticating here.)
+    if (!authenticateKwinSender()) {
+        return false;
+    }
     // No marshalling-size guard is needed here (unlike the raw-pixel path):
     // a dma-buf is a kernel handle, not an inline byte array, so there is no
     // large payload to deserialise. Bound the dimensions before import to
@@ -330,9 +338,6 @@ bool OverlayAdaptor::setWindowThumbnailDmabuf(const QString& compositorHandle, i
     if (!fd.isValid() || !fenceFd.isValid()) {
         qCWarning(lcDbus) << "setWindowThumbnailDmabuf: invalid dma-buf or fence fd (handle len="
                           << compositorHandle.size() << ")";
-        return false;
-    }
-    if (!authenticateKwinSender()) {
         return false;
     }
     // fd / fenceFd are BORROWED: the QDBusUnixFileDescriptors own them and close

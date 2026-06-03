@@ -351,9 +351,15 @@ bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, c
     // contract: if this fence times out (only on a hung/crashed producer) the
     // reveal is dropped, yet the producer already saw accepted=true and won't
     // re-capture until its recently-posted window rolls past. Accepted as a
-    // rare-edge cost of the async reveal; the buffer is still cached, so a later
-    // snap-assist for the same window can reuse it via urlFor.
+    // rare-edge cost of the async reveal. (Unlike the raw-pixel provider, the
+    // dma-buf provider is NOT consulted by showSnapAssist's warm-cache pass —
+    // only m_thumbnailProvider is — so a dropped reveal is recovered only once
+    // the producer re-posts the handle, not from the still-stored descriptor.)
     auto* waiter = new DmabufFenceWaiter(fenceDup, /*timeoutMs=*/1000, this);
+    // The reveal is matched by handle against the CURRENT candidate list when it
+    // fires (up to ~1 s later): if snap-assist was dismissed, or re-shown for a
+    // different window set that doesn't include this handle, applyCandidate-
+    // ThumbnailUrl is a harmless no-op. Same window → same thumbnail content.
     connect(waiter, &DmabufFenceWaiter::ready, this, [this, compositorHandle, providerUrl]() {
         applyCandidateThumbnailUrl(compositorHandle, providerUrl);
     });
