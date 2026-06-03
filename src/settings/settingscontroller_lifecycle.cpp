@@ -119,9 +119,9 @@ void SettingsController::save()
     // controller to m_domains): WindowRuleController via regPage(...) →
     // ApplicationController::registerPage(...), and AnimationsPageController
     // via an explicit registerDomain(...) call (it is a headless staging
-    // controller, distinct from the "animations" nav-parent node). Their own apply()
-    // methods drive the async D-Bus push (windowrules) and the
-    // snapshot clear (animations). Calling commit/commitPending here
+    // controller, distinct from the "animations" nav-parent node).
+    // Their own apply() methods drive the async D-Bus push (windowrules)
+    // and the snapshot clear (animations). Calling commit/commitPending here
     // would double-dispatch (and for window rules, ALSO send a
     // synchronous setAllRules over D-Bus *before* the async one
     // returned, hitting the daemon twice in the same save tick). The
