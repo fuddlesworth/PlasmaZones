@@ -647,12 +647,15 @@ add_custom_target(uninstall
 # Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
-# Vulkan headers are needed at build time for QVulkanInstance (Vulkan backend support).
-# OPTIONAL so PlasmaZones builds silently on systems without Vulkan dev packages -
-# the Vulkan backend simply won't be available at runtime.
-# All Vulkan-specific C++ code is guarded with #if QT_CONFIG(vulkan).
-# Note: packaging specs (PKGBUILD, debian/control, rpm .spec, nix) list Vulkan as a
-# hard BuildRequires to ensure the backend is always available in distribution packages.
+# Qt's WrapVulkanHeaders backs the QVulkanInstance Vulkan-backend support, which
+# is guarded throughout with #if QT_CONFIG(vulkan); it stays OPTIONAL here so that
+# backend degrades gracefully when absent.
+# NOTE: this does NOT make the whole build Vulkan-optional. The dma-buf thumbnail
+# daemon path hard-requires the Vulkan SDK via find_package(Vulkan REQUIRED) in
+# src/CMakeLists.txt (dmabuftextureprovider.cpp includes <vulkan/vulkan.h>
+# unconditionally), so a daemon build without the Vulkan SDK fails at configure time.
+# Packaging specs (PKGBUILD, debian/control, rpm .spec, nix) already list Vulkan as a
+# hard BuildRequires, so distribution packages are unaffected.
 set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
 
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)

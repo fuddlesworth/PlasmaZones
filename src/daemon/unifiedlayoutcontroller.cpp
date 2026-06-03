@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "unifiedlayoutcontroller.h"
+// Full definition required: the header stores a QPointer<ScreenManager> (only
+// forward-declared there), and QPointer construction/deref needs the complete
+// QObject-derived type. Previously satisfied transitively via the Unity build;
+// included directly so it doesn't depend on jumbo-grouping order.
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include "../config/settings.h"
 #include "../core/constants.h"

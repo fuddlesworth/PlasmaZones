@@ -13,6 +13,8 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../snapassistthumbnailprovider.h"
+#include "../dmabuftextureprovider.h"
+#include "../dmabuffencewaiter.h"
 #include <QGuiApplication>
 #include <QImage>
 #include <QQuickWindow>
@@ -20,6 +22,8 @@
 #include <QQmlEngine>
 #include <QKeyEvent>
 #include <QTimer>
+
+#include <unistd.h>
 #include <QUrl>
 
 #include <PhosphorLayer/Surface.h>
@@ -292,6 +296,76 @@ bool OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, int
     return updateSnapAssistCandidateThumbnail(compositorHandle, std::move(image));
 }
 
+bool OverlayService::setWindowThumbnailDmabuf(const QString& compositorHandle, const DmabufThumbnailDesc& desc)
+{
+    // Experimental zero-copy GPU thumbnail path (Phase-0 spike). Gated behind
+    // an env var so the default build behaves exactly as before: the kwin-
+    // effect only takes the dma-buf path when its own gate is set, and the
+    // daemon refuses it here unless explicitly enabled. Returning false makes
+    // the effect fall back to the raw-pixel setSnapAssistThumbnail path, so a
+    // preview always appears regardless of dma-buf support.
+    static const bool dmabufEnabled = qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS");
+    if (!dmabufEnabled) {
+        return false;
+    }
+    auto* provider = m_dmabufTextureProvider.load(std::memory_order_acquire);
+    if (!provider || desc.fd < 0) {
+        return false;
+    }
+    // Store the descriptor (the provider dups the borrowed fd) and resolve the
+    // GPU image:// URL. The actual Vulkan import happens lazily on the render
+    // thread when QML loads that URL through the texture provider.
+    const QString providerUrl = provider->insert(compositorHandle, desc);
+    if (providerUrl.isEmpty()) {
+        return false;
+    }
+    qCDebug(lcOverlay) << "setWindowThumbnailDmabuf: stored dma-buf for" << compositorHandle << desc.width << "x"
+                       << desc.height << "fourcc=0x" << QString::number(desc.fourcc, 16);
+
+    // Reveal-gate on the render-completion fence: only push the URL into the
+    // live candidate list once the producer's GPU render has finished, so QML
+    // never loads (and the render thread never imports) a half-rendered buffer.
+    // The wait is event-driven (DmabufFenceWaiter / QSocketNotifier) — no
+    // busy-poll, no blocked thread.
+    //
+    // No-fence branch: the D-Bus boundary currently requires a valid fence fd
+    // (OverlayAdaptor rejects an invalid one), so fenceFd < 0 only arises for a
+    // hypothetical direct (non-D-Bus) C++ caller; reveal immediately as a
+    // defensive fallback.
+    if (desc.fenceFd < 0) {
+        return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+    }
+    const int fenceDup = ::dup(desc.fenceFd);
+    if (fenceDup < 0) {
+        // Can't watch the fence — reveal now rather than drop the thumbnail.
+        return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+    }
+    // 1 s bound: a thumbnail render completes in well under a frame; the cap
+    // only guards against a producer that crashed mid-render. The
+    // DmabufFenceWaiter owns fenceDup and self-deletes on signal or timeout
+    // (so per-candidate waiters live at most ~1 s — bounded, not leaked).
+    //
+    // accepted=true is returned now (deferred-reveal contract: stored, will
+    // reveal when the fence signals), unlike the raw-pixel path which returns
+    // true only after storing. NOTE the divergence from the dedup re-capture
+    // contract: if this fence times out (only on a hung/crashed producer) the
+    // reveal is dropped, yet the producer already saw accepted=true and won't
+    // re-capture until its recently-posted window rolls past. Accepted as a
+    // rare-edge cost of the async reveal. (Unlike the raw-pixel provider, the
+    // dma-buf provider is NOT consulted by showSnapAssist's warm-cache pass —
+    // only m_thumbnailProvider is — so a dropped reveal is recovered only once
+    // the producer re-posts the handle, not from the still-stored descriptor.)
+    auto* waiter = new DmabufFenceWaiter(fenceDup, /*timeoutMs=*/1000, this);
+    // The reveal is matched by handle against the CURRENT candidate list when it
+    // fires (up to ~1 s later): if snap-assist was dismissed, or re-shown for a
+    // different window set that doesn't include this handle, applyCandidate-
+    // ThumbnailUrl is a harmless no-op. Same window → same thumbnail content.
+    connect(waiter, &DmabufFenceWaiter::ready, this, [this, compositorHandle, providerUrl]() {
+        applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+    });
+    return true;
+}
+
 bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image)
 {
     auto* thumbProvider = m_thumbnailProvider.load(std::memory_order_acquire);
@@ -302,8 +376,15 @@ bool OverlayService::updateSnapAssistCandidateThumbnail(const QString& composito
     if (providerUrl.isEmpty()) {
         return false;
     }
-    // Cache insert succeeded - handle is held even if snap-assist isn't
-    // currently open. Provider URL stays valid until LRU eviction.
+    return applyCandidateThumbnailUrl(compositorHandle, providerUrl);
+}
+
+bool OverlayService::applyCandidateThumbnailUrl(const QString& compositorHandle, const QString& providerUrl)
+{
+    // Provider insert succeeded - handle is held even if snap-assist isn't
+    // currently open. Provider URL stays valid until eviction. Shared by the
+    // raw-pixel (updateSnapAssistCandidateThumbnail) and dma-buf
+    // (setWindowThumbnailDmabuf) paths.
     if (!m_snapAssistVisible || m_snapAssistScreenId.isEmpty()) {
         return true;
     }
@@ -376,6 +457,9 @@ void OverlayService::hideSnapAssist()
         connect(m_snapAssistCacheTrimTimer, &QTimer::timeout, this, [this]() {
             if (auto* provider = m_thumbnailProvider.load(std::memory_order_acquire)) {
                 provider->clear();
+            }
+            if (auto* gpuProvider = m_dmabufTextureProvider.load(std::memory_order_acquire)) {
+                gpuProvider->clear();
             }
         });
     }
