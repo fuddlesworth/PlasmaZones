@@ -274,6 +274,11 @@ struct ShaderTransition
     /// skip the morph uniforms.
     QRectF fromGeometry;
     QRectF toGeometry;
+    /// Set true when a morph transition begins (wired in applySnapGeometry);
+    /// the first morph paint captures the still-old window content into
+    /// `oldSnapshot` and clears this. The window content is captured before
+    /// the moveResize configure round-trips, so it holds the OLD frame.
+    bool needsSnapshot = false;
     /// Snapshot of the window's content captured at `fromGeometry` (old size)
     /// just before the `moveResize`, bound as `uOldWindow` so the shader can
     /// cross-fade the old content out while the live new content fades in.

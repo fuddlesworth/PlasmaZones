@@ -5,10 +5,16 @@
 #include "shader_internal.h"
 #include "window_query.h"
 
+#include <core/output.h>
+#include <core/rendertarget.h>
+#include <core/renderviewport.h>
 #include <effect/effecthandler.h>
+#include <opengl/glframebuffer.h>
 #include <opengl/glshader.h>
 #include <opengl/glshadermanager.h>
 #include <opengl/gltexture.h>
+#include <scene/item.h>
+#include <scene/windowitem.h>
 
 #include <QDate>
 #include <QDateTime>
@@ -402,6 +408,16 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         }
     }
 
+    // Re-entrancy guard: captureOldWindowSnapshot below calls
+    // effects->drawWindow, which walks the chain back through our
+    // OffscreenEffect::drawWindow (to render the raw window into our capture
+    // FBO). Don't apply the C++ transform or any morph processing during that
+    // raw pass — just continue the chain plainly.
+    if (m_capturingSnapshot) {
+        KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+        return;
+    }
+
     m_windowAnimator->applyTransform(w, data);
 
     auto* st = m_shaderManager.findTransition(w);
@@ -411,6 +427,19 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // the transition. Without the mutation, `iFrame` would stay at 0 and
         // `iTimeDelta` would always read 0.
         auto& transition = *st;
+        // Phase 0: capture the OLD window content on the first morph frame,
+        // before the moveResize configure round-trips and the client re-renders
+        // at the new size. Capture-only frame — we render the snapshot into our
+        // own FBO and return WITHOUT drawing the window to screen this frame, so
+        // there is exactly one effects->drawWindow per paintWindow (avoiding the
+        // chain-iterator re-entrancy that ghost-trails the surface-extent path).
+        // One skipped frame at the very start of a snap is imperceptible. If
+        // capture fails, needsSnapshot is cleared inside the helper and the
+        // morph shader falls back to no cross-fade.
+        if (transition.needsSnapshot && !transition.oldSnapshot) {
+            captureOldWindowSnapshot(transition, w);
+            return;
+        }
         // Two progress sources, picked by the transition's mode (see
         // ShaderTransition's docstring). Lifecycle events (window.*)
         // started via tryBeginShaderForEvent set durationMs > 0 and drive
@@ -942,11 +971,80 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
+void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, KWin::EffectWindow* window)
+{
+    // Mirrors KWin's OffscreenData::maybeRender (offscreeneffect.cpp): render the
+    // window into an offscreen FBO sized to its expanded geometry × screen scale,
+    // via effects->drawWindow. We temporarily bypass our morph shader so the
+    // captured texture is the RAW old window content (the cross-fade source) —
+    // drawing with the morph shader here would sample an unbound uOldWindow.
+    const KWin::LogicalOutput* const screen = window->screen();
+    const qreal scale = screen ? screen->scale() : 1.0;
+    const QRectF logicalGeometry = window->expandedGeometry();
+    const QSize textureSize = (logicalGeometry.size() * scale).toSize();
+    if (textureSize.isEmpty()) {
+        transition.needsSnapshot = false;
+        return;
+    }
+
+    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+    if (!tex) {
+        // Allocation failed — give up on the cross-fade; the morph shader reads
+        // a transparent uOldWindow and falls back to no cross-fade.
+        transition.needsSnapshot = false;
+        return;
+    }
+    tex->setFilter(GL_LINEAR);
+    tex->setWrapMode(GL_CLAMP_TO_EDGE);
+
+    KWin::GLFramebuffer fbo(tex.get());
+    if (!fbo.valid()) {
+        transition.needsSnapshot = false;
+        return;
+    }
+
+    // Bypass the morph shader for the raw capture, restore it afterwards.
+    KWin::GLShader* const morphShader = transition.cached ? transition.cached->shader.get() : nullptr;
+    setShader(window, nullptr);
+
+    m_capturingSnapshot = true;
+    {
+        KWin::RenderTarget renderTarget(&fbo);
+        KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
+        KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        // Keep the window item renderable for the duration of the capture draw.
+        KWin::ItemEffect keepRenderable(window->windowItem());
+        KWin::WindowPaintData captureData;
+        captureData.setOpacity(1.0);
+        const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
+        // Route through effects->drawWindow (not OffscreenEffect::drawWindow) so
+        // KWin's draw-chain iterator is advanced correctly — same rationale as
+        // the on-screen draw paths. The re-entrant paintWindow short-circuits on
+        // m_capturingSnapshot and draws the window plainly into this FBO.
+        KWin::effects->drawWindow(renderTarget, viewport, window, captureMask, KWin::Region::infinite(), captureData);
+        KWin::GLFramebuffer::popFramebuffer();
+    }
+    m_capturingSnapshot = false;
+
+    setShader(window, morphShader);
+
+    transition.oldSnapshot = std::move(tex);
+    transition.needsSnapshot = false;
+}
+
 void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data,
                               KWin::WindowQuadList& quads)
 {
     Q_UNUSED(mask)
     Q_UNUSED(data)
+
+    // During an old-content snapshot capture the window must be drawn with its
+    // natural, undeformed quad (a raw copy). Leave `quads` untouched.
+    if (m_capturingSnapshot) {
+        return;
+    }
 
     // Defensive: KWin may dispatch a paint to us for a window already
     // marked deleted (slot ordering vs. our windowDeleted handler). The

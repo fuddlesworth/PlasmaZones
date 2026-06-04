@@ -138,6 +138,16 @@ protected:
     // its own geometry).
     void apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data, KWin::WindowQuadList& quads) override;
 
+    // Capture the redirected window's current (pre-moveResize) content into a
+    // GLTexture for the geometry-morph cross-fade. Replicates KWin's
+    // OffscreenData::maybeRender: render the window into our own FBO via
+    // effects->drawWindow (our morph shader temporarily bypassed so the copy
+    // is the raw old content), then store the texture in
+    // `transition.oldSnapshot` (bound as uOldWindow). Called once on the first
+    // morph paint, while the content is still old (the moveResize configure
+    // hasn't round-tripped).
+    void captureOldWindowSnapshot(ShaderTransition& transition, KWin::EffectWindow* window);
+
 private Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow* w);
     void slotWindowClosed(KWin::EffectWindow* w);
@@ -756,6 +766,10 @@ private:
     Qt::KeyboardModifiers m_currentModifiers = Qt::NoModifier;
     Qt::MouseButtons m_currentMouseButtons = Qt::NoButton;
     bool m_keyboardGrabbed = false;
+    // Re-entrancy guard: true while captureOldWindowSnapshot's drawWindow walks
+    // the chain, so paint/apply hooks behave plainly during the raw capture
+    // pass (no morph quad deform / re-capture).
+    bool m_capturingSnapshot = false;
 
     // D-Bus communication uses QDBusMessage::createMethodCall exclusively
     // (no QDBusInterface) to avoid synchronous D-Bus introspection that blocks
