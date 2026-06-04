@@ -82,11 +82,12 @@ namespace {
 namespace PAL = PhosphorAnimationLayer;
 namespace PAS = PhosphorAnimationShaders;
 
-/// Resolve a path against the shader profile tree. A default-constructed
-/// tree (empty baseline + no overrides) resolves every path to an empty
-/// effect id, equivalent to "no shader leg" - motion runs alone, identical
-/// to the pre-shader-wireup behaviour. The setSettings() handler later
-/// re-registers configs with the live tree once settings exist.
+/// Resolve a path's shader effect id, applying the built-in per-event default
+/// via `resolveShaderWithDefault`. A default-constructed tree (empty baseline +
+/// no overrides) therefore resolves overlay show/hide paths to their default
+/// ("fade") and every other path to empty ("no shader leg" - motion runs
+/// alone). The setSettings() handler later re-registers configs with the live
+/// tree once settings exist, applying any user overrides on top.
 ///
 /// **Source-of-truth note.** The settings UI gates its shader picker on
 /// `src/core/animationshadersupportedpaths.h::shaderSupportedEventPaths`,
@@ -140,19 +141,24 @@ PAL::SurfaceAnimator::Config buildDefaultConfig()
 PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
-    return PAL::SurfaceAnimator::Config{.showProfile = PP::OsdShow,
-                                        .hideProfile = PP::OsdHide,
-                                        .showScaleProfile = PP::OsdShow,
-                                        .hideScaleProfile = PP::OsdHide,
-                                        .showScaleFrom = 0.92,
-                                        .hideScaleTo = 0.96,
-                                        .showShaderEffectId = resolveShaderEffect(tree, PP::OsdShow),
-                                        .hideShaderEffectId = resolveShaderEffect(tree, PP::OsdHide),
-                                        .showShaderProfile = PP::OsdShow,
-                                        .hideShaderProfile = PP::OsdHide,
-                                        // fade scaleAmount = 1 - showScaleFrom (0.92) / 1 - hideScaleTo (0.96)
-                                        .showShaderParameters = resolveShaderParameters(tree, PP::OsdShow, 0.08),
-                                        .hideShaderParameters = resolveShaderParameters(tree, PP::OsdHide, 0.04)};
+    // Scale envelope, shared by the C++ scale-leg fallback (showScaleFrom /
+    // hideScaleTo) and the fade shader's scaleAmount seed (1 - the scale value),
+    // so retuning the envelope keeps both in lockstep.
+    constexpr double kShowScaleFrom = 0.92;
+    constexpr double kHideScaleTo = 0.96;
+    return PAL::SurfaceAnimator::Config{
+        .showProfile = PP::OsdShow,
+        .hideProfile = PP::OsdHide,
+        .showScaleProfile = PP::OsdShow,
+        .hideScaleProfile = PP::OsdHide,
+        .showScaleFrom = kShowScaleFrom,
+        .hideScaleTo = kHideScaleTo,
+        .showShaderEffectId = resolveShaderEffect(tree, PP::OsdShow),
+        .hideShaderEffectId = resolveShaderEffect(tree, PP::OsdHide),
+        .showShaderProfile = PP::OsdShow,
+        .hideShaderProfile = PP::OsdHide,
+        .showShaderParameters = resolveShaderParameters(tree, PP::OsdShow, 1.0 - kShowScaleFrom),
+        .hideShaderParameters = resolveShaderParameters(tree, PP::OsdHide, 1.0 - kHideScaleTo)};
 }
 
 /// LayoutPicker: OSD-style fade-and-pop shape with a softer scale
@@ -174,20 +180,23 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
 PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
+    // Scale envelope (softer than the OSD's 0.92→1 since the picker is larger),
+    // shared by the C++ scale-leg fallback and the fade scaleAmount seed.
+    constexpr double kShowScaleFrom = 0.94;
+    constexpr double kHideScaleTo = 0.97;
     return PAL::SurfaceAnimator::Config{
         .showProfile = PP::PopupLayoutPickerShow,
         .hideProfile = PP::PopupLayoutPickerHide,
         .showScaleProfile = PP::PopupLayoutPickerShow,
         .hideScaleProfile = PP::PopupLayoutPickerHide,
-        .showScaleFrom = 0.94,
-        .hideScaleTo = 0.97,
+        .showScaleFrom = kShowScaleFrom,
+        .hideScaleTo = kHideScaleTo,
         .showShaderEffectId = resolveShaderEffect(tree, PP::PopupLayoutPickerShow),
         .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupLayoutPickerHide),
         .showShaderProfile = PP::PopupLayoutPickerShow,
         .hideShaderProfile = PP::PopupLayoutPickerHide,
-        // fade scaleAmount = 1 - showScaleFrom (0.94) / 1 - hideScaleTo (0.97)
-        .showShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerShow, 0.06),
-        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerHide, 0.03)};
+        .showShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerShow, 1.0 - kShowScaleFrom),
+        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerHide, 1.0 - kHideScaleTo)};
 }
 
 /// ZoneSelector: opacity-only show/hide. `keepMappedOnHide=true` so the
@@ -318,14 +327,15 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // the passive-shell surface scope does not collide with this config.
     //
     // Initial registration runs with an empty tree - m_settings is wired
-    // later via setSettings(). A default-constructed tree resolves every
-    // path to an empty effect id, so this pass installs motion-only
-    // configs (identical to the pre-shader-wireup behaviour). Once
-    // settings exist, setSettings calls applyShaderProfilesToAnimator
-    // again with the live tree, and connects shaderProfileTreeChanged
-    // for live-reload. This keeps the constructor's invariant ("animator
-    // is ready before any Surface is created") while deferring the
-    // shader wiring to the moment settings are available.
+    // later via setSettings(). A default-constructed tree resolves each
+    // path to its built-in default (overlay show/hide → "fade"; paths with
+    // no default → motion-only), so this pass installs the default shader
+    // configs. Once settings exist, setSettings calls
+    // applyShaderProfilesToAnimator again with the live tree (applying any
+    // user overrides), and connects shaderProfileTreeChanged for
+    // live-reload. This keeps the constructor's invariant ("animator is
+    // ready before any Surface is created") while deferring the live-tree
+    // wiring to the moment settings are available.
     applyShaderProfilesToAnimator(PAS::ShaderProfileTree{});
 }
 

@@ -901,10 +901,12 @@ private:
      * lookups - surfaces mid-animation keep the config they bound at
      * beginShow/beginHide. That mirrors motion-tree live-reload semantics.
      *
-     * A default-constructed tree (empty baseline + no overrides) silently
-     * resolves every path to an empty effect id - same end result as the
-     * pre-shader-wireup motion-only behaviour. Used during the initial
-     * @c setupSurfaceAnimator pass before @c m_settings is wired.
+     * A default-constructed tree (empty baseline + no overrides) resolves each
+     * path to its built-in default shader (via @c resolveShaderWithDefault):
+     * overlay show/hide paths to "fade", paths without a default to empty
+     * (motion-only). Used during the initial @c setupSurfaceAnimator pass
+     * before @c m_settings is wired; the live tree later applies user
+     * overrides on top.
      */
     void applyShaderProfilesToAnimator(const PhosphorAnimationShaders::ShaderProfileTree& tree);
 
