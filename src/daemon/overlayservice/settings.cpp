@@ -5,6 +5,7 @@
 #include "../overlayservice.h"
 #include "qml_property_names.h"
 #include <PhosphorAudio/IAudioSpectrumProvider.h>
+#include <PhosphorAnimation/SurfaceAnimator.h>
 #include <PhosphorRendering/ShaderCompiler.h>
 #include "../../core/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>

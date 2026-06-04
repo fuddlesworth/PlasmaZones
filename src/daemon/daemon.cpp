@@ -37,6 +37,7 @@
 #include <array>
 
 #include "overlayservice.h"
+#include "unifiedlayoutcontroller.h"
 #include "modetracker.h"
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
