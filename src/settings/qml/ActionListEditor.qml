@@ -45,7 +45,6 @@ ColumnLayout {
             var entry = editor.actionTypeOptions[i];
             if (entry.domain !== "context" || editor.matchIsContextOnly)
                 return entry;
-
         }
         return editor.actionTypeOptions.length > 0 ? editor.actionTypeOptions[0] : undefined;
     }
@@ -91,25 +90,33 @@ ColumnLayout {
         font.capitalization: Font.AllUppercase
     }
 
+    // Drive the row list off the action COUNT (an int), not the `actions`
+    // array itself. Every param edit round-trips through `_replaceAt`, which
+    // `.slice()`s the array and emits a NEW array reference; binding the
+    // Repeater `model` to that var array makes Qt reset the model and rebuild
+    // EVERY ActionRow on each keystroke — destroying and recreating the focused
+    // editor (e.g. an opacity / animation-duration SpinBox) so it loses focus
+    // and the user's input every time. An int `length` model only changes when
+    // rows are added/removed, so a value edit re-binds each row's `action` in
+    // place without recreating the delegate. This mirrors MatchExpressionEditor,
+    // whose child Repeater keys off `_children.length` for the same reason.
     Repeater {
-        model: editor.actions
+        model: editor.actions.length
 
         ActionRow {
             required property int index
-            required property var modelData
 
             Layout.fillWidth: true
-            action: modelData
+            action: editor.actions[index]
             controller: editor.controller
             actionTypeOptions: editor.actionTypeOptions
             appSettings: editor.appSettings
             matchIsContextOnly: editor.matchIsContextOnly
-            onActionEdited: function(updated) {
+            onActionEdited: function (updated) {
                 editor._replaceAt(index, updated);
             }
             onRemoveRequested: editor._removeAt(index)
         }
-
     }
 
     Label {
@@ -129,5 +136,4 @@ ColumnLayout {
         Accessible.name: i18n("Add an action to this rule")
         onClicked: editor._append()
     }
-
 }
