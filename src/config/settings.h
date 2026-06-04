@@ -495,6 +495,27 @@ public:
 
 public:
     explicit Settings(QObject* parent = nullptr);
+
+    /**
+     * @brief Standalone ctor that owns its config backend but BORROWS a
+     *        WindowRuleStore.
+     *
+     * Same standalone semantics as Settings(QObject*) — owns a freshly migrated
+     * config backend and leaves the CurveRegistry null (animation profiles parse
+     * through the process-static fallback) — but takes its WindowRuleStore from
+     * the caller instead of owning one. The settings app uses this so a single
+     * store is shared between this Settings instance (per-mode monitor disable
+     * lists, which persist in windowrules.json) and the SettingsController's
+     * in-process LayoutRegistry, eliminating the divergence two independent
+     * stores over the same file would otherwise allow.
+     *
+     * @param windowRuleStore Borrowed store; must outlive this Settings. A null
+     *        argument degrades to owning a store (same fallback the
+     *        backend-injecting ctor uses) so a misuse still yields a working
+     *        object.
+     * @param parent Parent QObject.
+     */
+    Settings(PhosphorWindowRule::WindowRuleStore* windowRuleStore, QObject* parent);
     ~Settings() override = default;
 
     // No singleton - use dependency injection instead

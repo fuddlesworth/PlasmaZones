@@ -52,6 +52,14 @@ if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
     find_package(PhosphorIdentity CONFIG REQUIRED)
 endif()
 
+# PhosphorFsLoader provides WatchedDirectorySet, which backs the opt-in
+# WindowRuleStoreWatcher. PRIVATE — the watcher's public header forward-declares
+# the fsloader type and never includes it, so consumers don't inherit the dep.
+# Core-only (no Gui), preserving this library's Core-only contract.
+if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
+    find_package(PhosphorFsLoader 0.1.0 REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -66,6 +74,7 @@ set(phosphorwindowrule_public_HDRS
     include/PhosphorWindowRule/WindowRuleSet.h
     include/PhosphorWindowRule/RuleEvaluator.h
     include/PhosphorWindowRule/WindowRuleStore.h
+    include/PhosphorWindowRule/WindowRuleStoreWatcher.h
     include/PhosphorWindowRule/WindowRuleLogging.h
     # In-memory bridges — public API, installed via the install(DIRECTORY)
     # glob below. Listed here so the target carries them as sources (IDE
@@ -87,6 +96,7 @@ set(phosphorwindowrule_SRCS
     src/windowruleset.cpp
     src/ruleevaluator.cpp
     src/windowrulestore.cpp
+    src/windowrulestorewatcher.cpp
     src/exclusionrules.cpp
 )
 
@@ -137,6 +147,9 @@ target_link_libraries(PhosphorWindowRule
         # WindowId::appIdMatches backs the AppIdMatches operator; PRIVATE
         # because no public PhosphorWindowRule header surfaces the type.
         PhosphorIdentity::PhosphorIdentity
+        # WatchedDirectorySet backs WindowRuleStoreWatcher; PRIVATE because the
+        # watcher's header forward-declares the type and the .cpp owns the dep.
+        PhosphorFsLoader::PhosphorFsLoader
 )
 
 set_target_properties(PhosphorWindowRule PROPERTIES

@@ -37,6 +37,7 @@ namespace PhosphorWindowRule {
 // every consumer of this controller to re-parse the WindowRuleStore
 // dependency graph.
 class WindowRuleStore;
+class WindowRuleStoreWatcher;
 }
 
 namespace PlasmaZones {
@@ -581,6 +582,12 @@ private:
     void refreshVirtualDesktops();
     void refreshActivities();
 
+    /// Single WindowRule store shared by m_settings (disable lists) and the
+    /// LayoutRegistry. Declared FIRST so it outlives all borrowers.
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_localRuleStore;
+    /// Opt-in cross-process auto-reload of m_localRuleStore on external writes
+    /// (mainly the no-daemon case). Declared after the store; tears down first.
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
     Settings m_settings;
     /// Per-page sub-controllers: expose the Q_PROPERTY surface for a single
     /// settings page each. Parented to `this`, so Qt handles cleanup via
@@ -673,12 +680,6 @@ private:
     //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
-    /// Owned WindowRule store backing the in-process LayoutRegistry's
-    /// assignment cascade. Declared before m_localLayoutManager so it
-    /// outlives the registry that borrows it (members destruct in reverse
-    /// declaration order). Points at the shared windowrules.json so the
-    /// settings app's local registry sees the same rule set the daemon writes.
-    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_localRuleStore;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
     PhosphorLayout::LayoutSourceBundle m_localSources;
     /// Owned here (not parented to `this`) so destruction runs via the

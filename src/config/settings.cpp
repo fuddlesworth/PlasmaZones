@@ -102,6 +102,27 @@ Settings::Settings(QObject* parent)
     load();
 }
 
+Settings::Settings(PhosphorWindowRule::WindowRuleStore* windowRuleStore, QObject* parent)
+    : ISettings(parent)
+    , m_ownedBackend(migrateAndCreateOwnedBackend())
+    , m_configBackend(m_ownedBackend.get())
+    , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
+    // Borrow the caller's store when provided; degrade to owning one when null
+    // (mirrors the backend-injecting ctor's defensive borrow-or-own so a stray
+    // null still yields a usable store rather than a null deref).
+    , m_ownedWindowRuleStore(windowRuleStore ? nullptr
+                                             : std::make_unique<PhosphorWindowRule::WindowRuleStore>(
+                                                   ConfigDefaults::windowRulesFilePath(), this))
+    , m_windowRuleStore(windowRuleStore ? windowRuleStore : m_ownedWindowRuleStore.get())
+{
+    // Standalone backend + process-static curve fallback (m_curveRegistry left
+    // null), exactly like Settings(QObject*); the only difference is the
+    // borrowed window-rule store. See that ctor's note on why identity is not
+    // preserved across the Settings ↔ daemon boundary in this configuration.
+    qCDebug(lcConfig) << "Settings constructed without explicit CurveRegistry — using process-static fallback.";
+    load();
+}
+
 // ── Helper Methods ───────────────────────────────────────────────────────────
 
 QString Settings::normalizeUuidString(const QString& uuidStr)
@@ -181,13 +202,16 @@ void Settings::load()
     // D-Bus call) surfaces — the per-mode signal re-emission below compares
     // against the pre-reload snapshot taken above.
     //
-    // Only reload when WE own the store. When the daemon shares its store
-    // with us, the daemon (or its WindowRuleAdaptor / LayoutRegistry) is
-    // the writer and load() here would clobber unflushed in-memory edits
-    // — exactly the dual-store race this borrow pattern exists to avoid.
-    // The borrowed-store path relies on the owning daemon to drive reloads
-    // (today: on-startup load; a future QFileSystemWatcher will handle
-    // cross-process reloads — see WindowRuleStore.h TODO).
+    // Only reload when WE own the store. When the store is borrowed (the
+    // daemon shares its single store with us, or the settings app's
+    // SettingsController owns it and lends it here), the OWNER is the writer
+    // and a load() here would clobber unflushed in-memory edits — exactly the
+    // dual-store race this borrow pattern exists to avoid. The borrowed-store
+    // path relies on the owner to drive reloads (the daemon via its on-startup
+    // load + WindowRuleAdaptor; the settings app via
+    // SettingsController::reloadLocalRuleStore on the daemon's rulesChanged
+    // D-Bus signal and on Discard, plus a WindowRuleStoreWatcher that reloads
+    // on external file writes when no daemon is running).
     if (m_ownedWindowRuleStore) {
         m_ownedWindowRuleStore->load();
     }
