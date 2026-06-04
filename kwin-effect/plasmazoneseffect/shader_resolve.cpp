@@ -91,9 +91,11 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
     // is preserved by ShaderProfile's own contract). Unfilled slot →
     // fall through to the per-event tree.
     PhosphorAnimationShaders::ShaderProfile profile;
+    bool shaderSlotFromRule = false;
     if (const auto action = resolved.slot(shaderSlotFor(eventPath))) {
         profile.effectId = action->params.value(ActionParam::EffectId).toString();
         profile.parameters = action->params.value(ActionParam::Params).toObject().toVariantMap();
+        shaderSlotFromRule = true;
     } else {
         profile = tree.resolve(eventPath);
     }
@@ -110,7 +112,7 @@ ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindow
                                 PhosphorAnimation::Limits::MaxAnimationDurationMs);
         }
     }
-    return ResolvedShaderAndDuration{std::move(profile), durationMs};
+    return ResolvedShaderAndDuration{std::move(profile), durationMs, shaderSlotFromRule};
 }
 
 PhosphorAnimation::Profile resolveAnimationMotionProfile(const PhosphorWindowRule::RuleEvaluator& evaluator,

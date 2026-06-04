@@ -115,6 +115,16 @@ struct CachedShader
             a.fill(-1);
             return a;
         }();
+    /// Geometry-morph uniform locations. The window moves instantly via
+    /// `moveResize`; the morph shader animates the visual transition by
+    /// interpolating the window quad from its old frame (`iFromRect`) to its
+    /// new frame (`iToRect`) by `iTime`, cross-fading a captured snapshot of
+    /// the old content (`uOldWindow`) into the live new content (`uTexture0`).
+    /// -1 when the shader doesn't read the uniform (linker dropped it) — a
+    /// non-morph shader leaves all three at -1 and pays nothing.
+    int iFromRectLoc = -1;
+    int iToRectLoc = -1;
+    int iOldWindowLoc = -1;
 };
 
 /// Per-window in-flight shader transition.
@@ -259,6 +269,35 @@ struct ShaderTransition
     double uAtRight = 1.0;
     double vAtTop = 0.0;
     double vAtBottom = 1.0;
+    /// ── Geometry-morph state (cross-fade old→new on snap/move/resize) ──
+    /// `fromGeometry` is the window's frame rect BEFORE the instant
+    /// `moveResize`; `toGeometry` is the destination rect (the live
+    /// `frameGeometry` once the configure lands). The morph shader
+    /// interpolates between them by progress, so daemon-driven geometry
+    /// changes animate via shader instead of the C++ `WindowAnimator`
+    /// translate+scale. Both invalid (default QRectF) for non-morph
+    /// transitions (window.open/close/etc.), which signals paintWindow to
+    /// skip the morph uniforms.
+    QRectF fromGeometry;
+    QRectF toGeometry;
+    /// Set true when a morph transition begins (wired in applySnapGeometry);
+    /// the first morph paint captures the still-old window content into
+    /// `oldSnapshot` and clears this. The window content is captured before
+    /// the moveResize configure round-trips, so it holds the OLD frame.
+    bool needsSnapshot = false;
+    /// Snapshot of the window's OLD content, bound as `uOldWindow` so the
+    /// shader can cross-fade the old content out while the live new content
+    /// fades in. Captured on the first morph paint AFTER the instant
+    /// `moveResize` — so it is sized to the window's current (post-moveResize)
+    /// `expandedGeometry`, but the buffer it holds is still the OLD content
+    /// because the client has not yet re-rendered for the configure. (The
+    /// matching new-geometry sub-rect `iAnchorRectInTexture` therefore maps
+    /// card-space uv into it correctly, same as for the live `uTexture0`.)
+    /// Owned per-transition (unique per capture, not path-keyed like
+    /// `userTextures`) and freed when the transition ends. Null when capture
+    /// was not requested or failed — paintWindow then binds a transparent
+    /// fallback (or the shader falls back to a non-cross-fade morph).
+    std::unique_ptr<KWin::GLTexture> oldSnapshot;
 };
 
 /// Pre-computed snap restore target for a pending app

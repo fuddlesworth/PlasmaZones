@@ -184,5 +184,17 @@ QString parentPath(const QString& path)
     return path.left(dotIdx);
 }
 
+QString defaultShaderEffectIdForPath(const QString& path)
+{
+    // Window move/resize events default to the geometry-morph shader so a
+    // window animates via shader cross-fade when it snaps/tiles/reflows. Every
+    // other event defaults to no shader.
+    if (path == WindowMove || path == WindowResize || path == WindowSnapIn || path == WindowSnapOut
+        || path == WindowSnapResize || path == WindowLayoutSwitch) {
+        return QStringLiteral("window-morph");
+    }
+    return QString();
+}
+
 } // namespace ProfilePaths
 } // namespace PhosphorAnimation

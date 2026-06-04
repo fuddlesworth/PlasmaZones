@@ -566,12 +566,51 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             // via `motionProfile` above (driving the animator's
             // duration), so the shader still terminates with the
             // rule-overridden snap motion.
-            const auto shaderProfile = PlasmaZones::resolveAnimationShaderAndDuration(
-                                           m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(),
-                                           getWindowId(window), query, profilePath, /*defaultDurationMs=*/0)
-                                           .profile;
+            const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
+                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), getWindowId(window), query,
+                profilePath, /*defaultDurationMs=*/0);
+            auto shaderProfile = resolved.profile;
+            if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
+                // No rule matched and no tree override resolved a shader for
+                // this move event — apply the built-in per-event default
+                // (window-morph for snap/move/resize) via the shared SSOT,
+                // which respects an explicit tree "None". Keeps the default
+                // consistent with what the settings UI shows
+                // (resolvedShaderProfile uses the same helper) without
+                // persisting it into config. Gated on `!shaderSlotFromRule`: a
+                // per-app window rule that set "None" (engaged-empty effectId)
+                // is a deliberate opt-out and must NOT be overridden here.
+                shaderProfile =
+                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);
+            }
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
+                // If the installed shader is a geometry morph (declares
+                // iFromRect), hand it the old/new frames and request the
+                // old-content snapshot. The morph then owns the visual
+                // geometry animation — it interpolates the drawn rect from
+                // oldFrame to targetFrame and cross-fades the old snapshot
+                // into the live new content — so paintWindow gates off the
+                // C++ WindowAnimator translate+scale for this window. The
+                // WindowAnimator still runs (durationMs == 0) purely to drive
+                // the morph's progress timeline.
+                if (auto* mt = m_shaderManager.findTransition(window);
+                    mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
+                    // Always retarget the morph to the new destination.
+                    mt->toGeometry = targetFrame;
+                    // On a RETARGET mid-morph, beginShaderTransition short-
+                    // circuits (same shader) and keeps the existing transition,
+                    // so its captured snapshot already holds the ORIGINAL old
+                    // content. Preserve it (and fromGeometry) and only redirect
+                    // the destination — re-capturing here would grab the
+                    // mid-morph/new content and collapse the cross-fade. Only a
+                    // fresh morph (no snapshot yet) anchors fromGeometry and
+                    // requests the capture.
+                    if (!mt->oldSnapshot) {
+                        mt->fromGeometry = QRectF(oldFrame);
+                        mt->needsSnapshot = true;
+                    }
+                }
             }
         }
 

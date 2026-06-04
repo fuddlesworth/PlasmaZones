@@ -194,7 +194,11 @@ QVariantMap AnimationsPageController::resolvedShaderProfile(const QString& path)
     if (!m_settings || path.isEmpty())
         return {};
     const ShaderProfileTree tree = m_settings->shaderProfileTree();
-    return shaderProfileToMap(tree.resolve(path));
+    // resolveShaderWithDefault (not bare resolve) so the built-in per-event
+    // default — window-morph for window-move events — shows as the current
+    // value for an unset event. A user override (incl. an explicit "None")
+    // still wins; the default is computed, never persisted.
+    return shaderProfileToMap(resolveShaderWithDefault(tree, path));
 }
 
 bool AnimationsPageController::setShaderOverride(const QString& path, const QString& effectId,
