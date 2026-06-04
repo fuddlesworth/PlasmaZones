@@ -50,6 +50,7 @@ private Q_SLOTS:
         QVERIFY(!q.valueForField(Field::Pid).has_value());
         QVERIFY(!q.valueForField(Field::WindowType).has_value());
         QVERIFY(!q.valueForField(Field::IsSticky).has_value());
+        QVERIFY(!q.valueForField(Field::IsFocused).has_value());
     }
 
     void testValueForField_presentWindowAttribute()

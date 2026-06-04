@@ -597,6 +597,13 @@ private:
 
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
+    // The window most recently passed to slotWindowActivated — i.e. the
+    // "previously active" window on the next focus change. Used to repaint the
+    // window that just lost focus so a focus-scoped (IsFocused) SetOpacity rule
+    // re-resolves on it; the window gaining focus is repainted via the slot's
+    // own argument. QPointer auto-nulls on window destruction.
+    QPointer<KWin::EffectWindow> m_lastActivatedWindow;
+
     // Windows whose server-side title bar a per-window-rule SetHideTitleBar
     // override hid (distinct from the snap/autotile borderless sets). Tracked
     // so reconcileRuleHiddenTitleBar can restore the decoration when the rule
