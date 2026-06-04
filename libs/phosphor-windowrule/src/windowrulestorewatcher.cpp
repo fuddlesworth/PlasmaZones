@@ -64,9 +64,10 @@ void WindowRuleStoreWatcher::start()
     if (m_started) {
         return;
     }
-    // WindowRuleStore permits (and only logs) construction with an empty path,
-    // which would make this watcher silently watch nothing. Surface that
-    // dead-watcher state rather than quietly registering an empty directory.
+    // WindowRuleStore asserts an empty path in debug and critically logs it in
+    // release (where it still constructs) — which would leave this watcher
+    // silently watching nothing. Surface that dead-watcher state rather than
+    // quietly registering an empty directory.
     const QString filePath = m_store->filePath();
     if (filePath.isEmpty()) {
         qCWarning(lcWindowRule) << "WindowRuleStoreWatcher: store has an empty file path — watcher is inert";
