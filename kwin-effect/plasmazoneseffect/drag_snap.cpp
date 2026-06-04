@@ -572,6 +572,21 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
                                            .profile;
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
+                // If the installed shader is a geometry morph (declares
+                // iFromRect), hand it the old/new frames and request the
+                // old-content snapshot. The morph then owns the visual
+                // geometry animation — it interpolates the drawn rect from
+                // oldFrame to targetFrame and cross-fades the old snapshot
+                // into the live new content — so paintWindow gates off the
+                // C++ WindowAnimator translate+scale for this window. The
+                // WindowAnimator still runs (durationMs == 0) purely to drive
+                // the morph's progress timeline.
+                if (auto* mt = m_shaderManager.findTransition(window);
+                    mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
+                    mt->fromGeometry = QRectF(oldFrame);
+                    mt->toGeometry = targetFrame;
+                    mt->needsSnapshot = true;
+                }
             }
         }
 

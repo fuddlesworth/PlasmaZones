@@ -418,7 +418,20 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         return;
     }
 
-    m_windowAnimator->applyTransform(w, data);
+    // Apply the C++ translate+scale geometry morph — UNLESS a shader
+    // geometry-morph owns this window's visual transition. A morph shader
+    // (one that declares iFromRect) interpolates the drawn rect itself and
+    // cross-fades old->new content, so letting WindowAnimator::applyTransform
+    // also translate+scale would double-transform the window. The animator's
+    // animation still exists (it drives the morph's progress timeline); we
+    // just skip its paint-data transform here.
+    {
+        const auto* morphSt = m_shaderManager.findTransition(w);
+        const bool shaderOwnsGeometry = morphSt && morphSt->cached && morphSt->cached->iFromRectLoc >= 0;
+        if (!shaderOwnsGeometry) {
+            m_windowAnimator->applyTransform(w, data);
+        }
+    }
 
     auto* st = m_shaderManager.findTransition(w);
     if (st && st->cached && st->cached->shader) {
