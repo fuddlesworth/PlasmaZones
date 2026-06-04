@@ -308,6 +308,29 @@ inline constexpr const char* kIAnchorPosInFbo = "iAnchorPosInFbo";
 /// via classic-GL `setUniform`.
 inline constexpr const char* kIAnchorRectInTexture = "iAnchorRectInTexture";
 
+/// `vec4 iFromRect` / `vec4 iToRect` — geometry-morph endpoints in
+/// logical screen pixels `(x, y, width, height)`. Used by the window
+/// move/resize morph: the window jumps to its destination instantly via
+/// `moveResize`, and the shader animates the visual transition by
+/// interpolating the drawn quad from `iFromRect` (old frame) to `iToRect`
+/// (new frame) by `iTime`, cross-fading the captured old content
+/// (`uOldWindow`) into the live new content. Both default to `(0,0,0,0)`
+/// for non-morph transitions (window.open/close/etc.), which a shader can
+/// treat as "no morph". kwin-effect: pushed via classic-GL `setUniform`;
+/// daemon: reserved in the UBO contract for source parity (the morph runs
+/// compositor-side, but the shared header declares them on both branches).
+inline constexpr const char* kIFromRect = "iFromRect";
+inline constexpr const char* kIToRect = "iToRect";
+
+/// `sampler2D uOldWindow` — snapshot of the window's content captured at
+/// the old frame size just before the instant `moveResize`. The morph
+/// shader cross-fades this (alpha `1 - iTime`) against the live new
+/// content in `uTexture0` (alpha `iTime`), each mapped at native aspect,
+/// so an aspect-ratio-changing resize doesn't stretch the content. Bound
+/// to a dedicated texture unit on the kwin path; a transparent 1×1
+/// fallback is bound when no snapshot was captured.
+inline constexpr const char* kUOldWindow = "uOldWindow";
+
 /// Maximum number of user-declared textures per animation effect.
 ///
 /// Each declared texture binds to one of the canonical samplers

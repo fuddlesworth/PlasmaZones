@@ -726,6 +726,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                         continue;
                     shader->setUniform(loc, transition.customColorsValues[slot]);
                 }
+                // Geometry-morph endpoints. The window already jumped to its
+                // destination via moveResize; the morph shader animates the
+                // visual transition by interpolating its drawn content from
+                // the old frame (iFromRect) to the new frame (iToRect) by
+                // iTime. Pushed in logical screen pixels (x, y, width, height).
+                // Non-morph transitions leave from/toGeometry default-invalid
+                // → zero vec4s, which morph shaders read as "no morph". Guarded
+                // on loc >= 0 so non-morph shaders (which don't declare these)
+                // pay nothing.
+                if (cached->iFromRectLoc >= 0) {
+                    const QRectF& f = transition.fromGeometry;
+                    shader->setUniform(cached->iFromRectLoc, QVector4D(f.x(), f.y(), f.width(), f.height()));
+                }
+                if (cached->iToRectLoc >= 0) {
+                    const QRectF& t = transition.toGeometry;
+                    shader->setUniform(cached->iToRectLoc, QVector4D(t.x(), t.y(), t.width(), t.height()));
+                }
                 // User textures: bind each cached GLTexture to texture
                 // unit (1 + slot) — TEXTURE0 holds the redirected window
                 // texture KWin's OffscreenData::paint binds during
@@ -773,6 +790,21 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                         tex->setWrapMode(wantWrap);
                         entry->lastAppliedWrap = wantWrap;
                     }
+                }
+                // Old-content snapshot (uOldWindow). Bound to a dedicated unit
+                // just past the user-texture slots so the morph shader can
+                // cross-fade the captured old content against the live
+                // redirected content (uTexture0). Wrap mode is set once at
+                // capture time (Phase 0), so no per-frame setWrapMode here.
+                // Only when the shader reads it AND a snapshot was captured;
+                // otherwise the shader's uOldWindow reads unit 0 / transparent
+                // and a morph shader falls back to no cross-fade.
+                if (cached->iOldWindowLoc >= 0 && transition.oldSnapshot) {
+                    constexpr int kOldSnapshotUnit =
+                        1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                    shader->setUniform(cached->iOldWindowLoc, kOldSnapshotUnit);
+                    glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnit);
+                    transition.oldSnapshot->bind();
                 }
                 // Restore TEXTURE0 as the active unit so KWin's
                 // OffscreenData::paint binds the redirected surface
