@@ -1182,8 +1182,9 @@ void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::Window
     // KWin's quad convention, which doesn't shift mid-transition. Without
     // the cache, every surface-extent shader pays the 3-vertex search +
     // 4 comparisons per quad per frame for its entire lifetime. `st` is
-    // already known non-null (early-returned at line 928), so the cache
-    // population reuses that handle instead of paying a second lookup.
+    // already known non-null (the early `!st || !st->surfaceExtent` guard at
+    // the top of apply() returned otherwise), so the cache population reuses
+    // that handle instead of paying a second lookup.
     if (!st->handednessCached) {
         const KWin::WindowQuad& srcQuad = quads.first();
         int topIdx = 0, bottomIdx = 0, leftIdx = 0, rightIdx = 0;
