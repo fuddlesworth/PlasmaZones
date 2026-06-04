@@ -39,5 +39,13 @@ void main() {
     // max() is belt-and-braces against a NaN reaching the rasteriser.
     vec2 rectSize = max(iAnchorRectInTexture.zw, vec2(1.0e-5));
     vTexCoord = (texCoord - iAnchorRectInTexture.xy) / rectSize;
-    gl_Position = vec4(position, 0.0, 1.0);
+    // Daemon animation shaders render DIRECT-TO-WINDOW (SurfaceAnimator's
+    // shaderItem is not layer-enabled), so nothing absorbs the per-backend
+    // NDC Y difference: OpenGL is Y-up-in-NDC, Vulkan is Y-down, and Qt-RHI
+    // does not normalise the NDC Y of geometry the shader emits. qt_Matrix
+    // carries that correction (identity on Vulkan, Y-flip on OpenGL) so the
+    // quad presents upright on both. NOTE: overlay/zone shaders (zone.vert)
+    // deliberately do NOT apply qt_Matrix — they render via layer.enabled and
+    // Qt's composite already corrects them; flipping there would invert them.
+    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
 }
