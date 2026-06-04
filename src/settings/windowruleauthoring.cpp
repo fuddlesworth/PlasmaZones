@@ -68,9 +68,6 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetBorderColor && key == ActionParam::Value) {
         return PzI18n::tr("Border color");
     }
-    if (type == ActionType::SetInactiveBorderColor && key == ActionParam::Value) {
-        return PzI18n::tr("Inactive border color");
-    }
     // Per-context gap overrides (all single-value, keyed ActionParam::Value).
     if (type == ActionType::SetZonePadding && key == ActionParam::Value) {
         return PzI18n::tr("Zone padding (px)");
@@ -229,9 +226,6 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetBorderColor) {
         return PzI18n::tr("Set border color");
-    }
-    if (type == ActionType::SetInactiveBorderColor) {
-        return PzI18n::tr("Set inactive border color");
     }
     if (type == ActionType::SetZonePadding) {
         return PzI18n::tr("Set zone padding");
@@ -449,7 +443,6 @@ QVariantList actionTypes()
         ActionType::SetBorderWidth,
         ActionType::SetBorderRadius,
         ActionType::SetBorderColor,
-        ActionType::SetInactiveBorderColor,
         ActionType::OverrideAnimationShader,
         ActionType::OverrideAnimationCurve,
         ActionType::OverrideAnimationTiming,
@@ -576,8 +569,8 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
         } else if (kind == QLatin1String("color")) {
             // Colour kind has no numeric `defaultDisplay` (that field is a
             // double); seed a valid `#RRGGBB` so a fresh rule passes the
-            // SetBorderColor / SetInactiveBorderColor validator before the user
-            // opens the picker. Neutral KDE accent blue.
+            // SetBorderColor validator before the user opens the picker.
+            // Neutral KDE accent blue.
             payload[key] = QStringLiteral("#3daee9");
         } else {
             // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,

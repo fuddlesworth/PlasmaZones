@@ -59,12 +59,14 @@ private Q_SLOTS:
         q.pid = 4242;
         q.windowType = WindowType::Dialog;
         q.isFullscreen = true;
+        q.isFocused = true;
 
         QCOMPARE(q.valueForField(Field::AppId)->toString(), QStringLiteral("firefox"));
         QCOMPARE(q.valueForField(Field::Pid)->toInt(), 4242);
         // WindowType resolves to its underlying int.
         QCOMPARE(q.valueForField(Field::WindowType)->toInt(), static_cast<int>(WindowType::Dialog));
         QCOMPARE(q.valueForField(Field::IsFullscreen)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::IsFocused)->toBool(), true);
     }
 
     void testValueForField_falseBoolIsStillPresent()

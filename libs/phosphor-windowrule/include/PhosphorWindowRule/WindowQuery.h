@@ -40,6 +40,7 @@ struct WindowQuery
     std::optional<bool> isFullscreen;
     std::optional<bool> isMinimized;
     std::optional<bool> isMaximized;
+    std::optional<bool> isFocused;
 
     // ── Context attributes — always present ──
     QString screenId;
@@ -52,7 +53,7 @@ struct WindowQuery
     {
         return appId.has_value() || windowClass.has_value() || title.has_value() || windowRole.has_value()
             || desktopFile.has_value() || pid.has_value() || windowType.has_value() || isSticky.has_value()
-            || isFullscreen.has_value() || isMinimized.has_value() || isMaximized.has_value();
+            || isFullscreen.has_value() || isMinimized.has_value() || isMaximized.has_value() || isFocused.has_value();
     }
 
     /**
@@ -97,6 +98,8 @@ struct WindowQuery
             return std::optional<QVariant>(activity);
         case Field::IsMaximized:
             return isMaximized ? std::optional<QVariant>(*isMaximized) : std::nullopt;
+        case Field::IsFocused:
+            return isFocused ? std::optional<QVariant>(*isFocused) : std::nullopt;
         }
         return std::nullopt;
     }

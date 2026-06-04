@@ -141,7 +141,6 @@ private Q_SLOTS:
             ActionType::SetBorderWidth,
             ActionType::SetBorderRadius,
             ActionType::SetBorderColor,
-            ActionType::SetInactiveBorderColor,
         };
         for (const QLatin1StringView type : windowTypes) {
             const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
@@ -258,7 +257,7 @@ private Q_SLOTS:
 
     void testBorderColorActions_requireHex()
     {
-        for (const QLatin1StringView type : {ActionType::SetBorderColor, ActionType::SetInactiveBorderColor}) {
+        for (const QLatin1StringView type : {ActionType::SetBorderColor}) {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));
             o.insert(QStringLiteral("value"), QStringLiteral("red")); // named colour — hex-only boundary rejects

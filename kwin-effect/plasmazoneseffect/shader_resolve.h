@@ -156,12 +156,14 @@ struct ResolvedWindowAppearance
     std::optional<bool> showBorder;
     std::optional<int> borderWidth;
     std::optional<int> borderRadius;
+    // Focus-dependent colour is resolved by the rule cascade itself: the
+    // WindowQuery carries the window's live `isFocused` state, so a
+    // focus-scoped colour rule only fills this slot in its matching state.
     std::optional<QColor> borderColor;
-    std::optional<QColor> inactiveBorderColor;
 
     bool any() const
     {
-        return hideTitleBar || showBorder || borderWidth || borderRadius || borderColor || inactiveBorderColor;
+        return hideTitleBar || showBorder || borderWidth || borderRadius || borderColor;
     }
 };
 

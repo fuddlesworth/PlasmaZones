@@ -585,18 +585,6 @@ void ActionRegistry::registerBuiltins()
         // defaultPayloadFor "color" branch, not via defaultDisplay (double).
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
     });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetInactiveBorderColor),
-        .slotFor = constantSlot(ActionSlot::InactiveBorderColor),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-    });
 
     // ── per-context gap slots (domain Context) ──
     // Resolved daemon-side at zone-geometry time (DaemonGeometryResolver) as

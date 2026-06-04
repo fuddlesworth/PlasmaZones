@@ -300,7 +300,6 @@ std::optional<ResolvedWindowAppearance> resolveWindowAppearance(const PhosphorWi
     out.borderWidth = intSlot(PhosphorWindowRule::ActionSlot::BorderWidth, kMaxBorderWidth);
     out.borderRadius = intSlot(PhosphorWindowRule::ActionSlot::BorderRadius, kMaxBorderRadius);
     out.borderColor = colorSlot(PhosphorWindowRule::ActionSlot::BorderColor);
-    out.inactiveBorderColor = colorSlot(PhosphorWindowRule::ActionSlot::InactiveBorderColor);
     if (!out.any()) {
         return std::nullopt;
     }

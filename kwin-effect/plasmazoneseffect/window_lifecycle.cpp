@@ -430,6 +430,23 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated
     notifyWindowActivated(w);
 
+    // Focus is a window-rule match input (Field::IsFocused), and both the
+    // border-appearance and opacity resolvers go through the evaluator's
+    // per-window match cache (resolveCached), which is keyed on
+    // (windowId, ruleSet revision) — neither of which moves on a focus
+    // change. Without dropping the cache, a window keeps the actions it
+    // resolved at its FIRST focus state forever (a `WHEN focused` border
+    // colour would never revert when the window loses focus). Mirror the
+    // windowClass / desktopFile invalidation: drop the whole cache so the
+    // re-resolve below (and the next per-frame opacity resolve) sees the new
+    // focus state. Gated on a non-empty rule set so the no-rules case pays
+    // nothing. The per-frame opacity cache clears every frame at
+    // prePaintScreen, so opacity-when-unfocused rules pick up the change on
+    // the activation repaint without extra work here.
+    if (!m_shaderManager.animationRuleSet().isEmpty()) {
+        m_shaderManager.animationRuleEvaluator().clearCache();
+    }
+
     // Recreate all borders so the active window gets the active color
     // and inactive windows get the inactive color.  A full recreate is
     // used instead of in-place setOutline() because the latter may not

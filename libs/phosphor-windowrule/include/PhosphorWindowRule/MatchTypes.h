@@ -36,12 +36,13 @@ enum class Field : int {
     Activity = 12,
     // Window state (appended — keeping enum values stable across versions)
     IsMaximized = 13,
+    IsFocused = 14, ///< true when the window is the focused / active window
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::IsMaximized) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::IsFocused) + 1;
 
 /// Match operators. Not every operator is valid against every field —
 /// validity is enforced by Predicate::isValid(), not the parser.
@@ -93,6 +94,8 @@ inline QString fieldToString(Field field)
         return QStringLiteral("activity");
     case Field::IsMaximized:
         return QStringLiteral("isMaximized");
+    case Field::IsFocused:
+        return QStringLiteral("isFocused");
     }
     return QStringLiteral("appId");
 }
@@ -116,6 +119,7 @@ inline std::optional<Field> fieldFromString(QStringView s)
         {QLatin1StringView("virtualDesktop"), Field::VirtualDesktop},
         {QLatin1StringView("activity"), Field::Activity},
         {QLatin1StringView("isMaximized"), Field::IsMaximized},
+        {QLatin1StringView("isFocused"), Field::IsFocused},
     };
     for (const auto& [token, field] : kTable) {
         if (s.compare(token, Qt::CaseInsensitive) == 0) {
@@ -193,6 +197,7 @@ inline bool fieldIsString(Field field)
     case Field::IsFullscreen:
     case Field::IsMinimized:
     case Field::IsMaximized:
+    case Field::IsFocused:
         return false;
     }
     return false;
@@ -208,7 +213,7 @@ inline bool fieldIsNumeric(Field field)
 inline bool fieldIsBool(Field field)
 {
     return field == Field::IsSticky || field == Field::IsFullscreen || field == Field::IsMinimized
-        || field == Field::IsMaximized;
+        || field == Field::IsMaximized || field == Field::IsFocused;
 }
 
 /// True if @p field describes the **context** a window appears in
