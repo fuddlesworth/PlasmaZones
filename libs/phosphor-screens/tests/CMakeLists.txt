@@ -45,6 +45,12 @@ ps_add_test(ps_test_resolver test_resolver.cpp)
 ps_add_test(ps_test_plasma_panel_source test_plasma_panel_source.cpp)
 ps_add_test(ps_test_dbusscreenadaptor test_dbusscreenadaptor.cpp)
 
+# These construct/exercise ScreenManager, which lives in the Runtime target
+# (its geometry sensors need PhosphorWayland); the pure-POD Core no longer
+# carries ScreenManager. Runtime re-exports Core, so the POD types stay available.
+target_link_libraries(ps_test_manager_lifecycle PRIVATE PhosphorScreens::Runtime)
+target_link_libraries(ps_test_screenmanager_geometry PRIVATE PhosphorScreens::Runtime)
+
 # These exercise the D-Bus surface (DBusScreenAdaptor, PlasmaPanelSource,
 # Resolver), so they link the full PhosphorScreens target rather than the
 # QtDBus-free core. PhosphorScreens carries Qt6::DBus PUBLIC.

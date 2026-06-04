@@ -166,10 +166,13 @@ target_link_libraries(PhosphorZones
         # composite window-id parsing; PRIVATE because the dep doesn't
         # leak through any public PhosphorZones header.
         PhosphorIdentity::PhosphorIdentity
-        # LayoutRegistry impl uses ScreenIdentity / VirtualScreen for
-        # the assignment-cascade screen-id normalisation. PRIVATE — no
-        # public header surfaces these types.
-        PhosphorScreens::Core
+        # GeometryUtils calls ScreenManager geometry queries, and LayoutRegistry
+        # uses ScreenIdentity / VirtualScreen for assignment-cascade screen-id
+        # normalisation — so this links the Runtime target (ScreenManager), which
+        # re-exports Core's POD types. PRIVATE: callers of the GeometryUtils
+        # functions that take a ScreenManager* pass one they already own and link
+        # PhosphorScreens themselves, so the dep need not propagate.
+        PhosphorScreens::Runtime
 )
 
 set_target_properties(PhosphorZones PROPERTIES
