@@ -583,9 +583,20 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
                 // the morph's progress timeline.
                 if (auto* mt = m_shaderManager.findTransition(window);
                     mt && mt->cached && mt->cached->iFromRectLoc >= 0) {
-                    mt->fromGeometry = QRectF(oldFrame);
+                    // Always retarget the morph to the new destination.
                     mt->toGeometry = targetFrame;
-                    mt->needsSnapshot = true;
+                    // On a RETARGET mid-morph, beginShaderTransition short-
+                    // circuits (same shader) and keeps the existing transition,
+                    // so its captured snapshot already holds the ORIGINAL old
+                    // content. Preserve it (and fromGeometry) and only redirect
+                    // the destination — re-capturing here would grab the
+                    // mid-morph/new content and collapse the cross-fade. Only a
+                    // fresh morph (no snapshot yet) anchors fromGeometry and
+                    // requests the capture.
+                    if (!mt->oldSnapshot) {
+                        mt->fromGeometry = QRectF(oldFrame);
+                        mt->needsSnapshot = true;
+                    }
                 }
             }
         }

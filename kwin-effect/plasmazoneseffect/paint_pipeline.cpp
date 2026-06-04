@@ -1020,8 +1020,18 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     // captured texture is the RAW old window content (the cross-fade source) —
     // drawing with the morph shader here would sample an unbound uOldWindow.
     const KWin::LogicalOutput* const screen = window->screen();
-    const qreal scale = screen ? screen->scale() : 1.0;
     const QRectF logicalGeometry = window->expandedGeometry();
+    qreal scale = screen ? screen->scale() : 1.0;
+    // Defensive size cap. The snapshot is sampled by normalised uv, so
+    // downscaling via a reduced capture scale costs only resolution (no
+    // distortion) — it keeps the texture within GL limits and bounds the
+    // transient memory of an oversized window. Normal windows (≤ output size)
+    // never hit this; it's a guard against pathological geometry.
+    constexpr qreal kMaxSnapshotDim = 8192.0;
+    const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * scale;
+    if (longestPx > kMaxSnapshotDim) {
+        scale *= kMaxSnapshotDim / longestPx;
+    }
     const QSize textureSize = (logicalGeometry.size() * scale).toSize();
     if (textureSize.isEmpty()) {
         transition.needsSnapshot = false;
