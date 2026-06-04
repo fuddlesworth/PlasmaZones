@@ -96,15 +96,27 @@ namespace PAS = PhosphorAnimationShaders;
 /// settings UI starts surfacing the picker on the new path.
 QString resolveShaderEffect(const PAS::ShaderProfileTree& tree, const QString& path)
 {
-    return tree.resolve(path).effectiveEffectId();
+    // Route through the SSOT so overlay show/hide paths pick up their built-in
+    // default ("fade") when the user has set no override — and a per-app/tree
+    // "None" is still respected (empty id → SurfaceAnimator's C++ legs run).
+    return PAS::resolveShaderWithDefault(tree, path).effectiveEffectId();
 }
 
-/// Resolve a path against the shader profile tree and extract the per-event
-/// parameter overrides. Empty map when the profile didn't override anything
-/// - the shader runs with its declared defaults from metadata.json.
-QVariantMap resolveShaderParameters(const PAS::ShaderProfileTree& tree, const QString& path)
+/// Resolve a path against the shader profile tree (via the built-in default)
+/// and extract the per-event parameter overrides. When the resolved shader is
+/// the built-in "fade" overlay default and the user left `scaleAmount` unset,
+/// seed it from @p fadeScaleAmount — the surface's prior C++ scale depth
+/// (1 - showScaleFrom on show, 1 - hideScaleTo on hide; 0.0 for opacity-only
+/// surfaces) — so the shader reproduces the surface's existing pop feel. A user
+/// override of the shader (to anything but fade) or of scaleAmount itself wins.
+QVariantMap resolveShaderParameters(const PAS::ShaderProfileTree& tree, const QString& path, double fadeScaleAmount)
 {
-    return tree.resolve(path).effectiveParameters();
+    const PAS::ShaderProfile resolved = PAS::resolveShaderWithDefault(tree, path);
+    QVariantMap params = resolved.effectiveParameters();
+    if (resolved.effectiveEffectId() == QLatin1String("fade") && !params.contains(QLatin1String("scaleAmount"))) {
+        params.insert(QStringLiteral("scaleAmount"), fadeScaleAmount);
+    }
+    return params;
 }
 
 /// Default config - empty. Surfaces that route through the animator
@@ -138,8 +150,9 @@ PAL::SurfaceAnimator::Config buildOsdConfig(const PAS::ShaderProfileTree& tree)
                                         .hideShaderEffectId = resolveShaderEffect(tree, PP::OsdHide),
                                         .showShaderProfile = PP::OsdShow,
                                         .hideShaderProfile = PP::OsdHide,
-                                        .showShaderParameters = resolveShaderParameters(tree, PP::OsdShow),
-                                        .hideShaderParameters = resolveShaderParameters(tree, PP::OsdHide)};
+                                        // fade scaleAmount = 1 - showScaleFrom (0.92) / 1 - hideScaleTo (0.96)
+                                        .showShaderParameters = resolveShaderParameters(tree, PP::OsdShow, 0.08),
+                                        .hideShaderParameters = resolveShaderParameters(tree, PP::OsdHide, 0.04)};
 }
 
 /// LayoutPicker: OSD-style fade-and-pop shape with a softer scale
@@ -172,8 +185,9 @@ PAL::SurfaceAnimator::Config buildLayoutPickerConfig(const PAS::ShaderProfileTre
         .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupLayoutPickerHide),
         .showShaderProfile = PP::PopupLayoutPickerShow,
         .hideShaderProfile = PP::PopupLayoutPickerHide,
-        .showShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerShow),
-        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerHide)};
+        // fade scaleAmount = 1 - showScaleFrom (0.94) / 1 - hideScaleTo (0.97)
+        .showShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerShow, 0.06),
+        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupLayoutPickerHide, 0.03)};
 }
 
 /// ZoneSelector: opacity-only show/hide. `keepMappedOnHide=true` so the
@@ -198,8 +212,9 @@ PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTre
         .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupZoneSelectorHide),
         .showShaderProfile = PP::PopupZoneSelectorShow,
         .hideShaderProfile = PP::PopupZoneSelectorHide,
-        .showShaderParameters = resolveShaderParameters(tree, PP::PopupZoneSelectorShow),
-        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupZoneSelectorHide)};
+        // Opacity-only surface (no scale leg) → fade scaleAmount 0.0 (pure fade).
+        .showShaderParameters = resolveShaderParameters(tree, PP::PopupZoneSelectorShow, 0.0),
+        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupZoneSelectorHide, 0.0)};
 }
 
 /// SnapAssist: full show/hide pair. Pre-unified-shell, snap-assist
@@ -222,21 +237,23 @@ PAL::SurfaceAnimator::Config buildZoneSelectorConfig(const PAS::ShaderProfileTre
 PAL::SurfaceAnimator::Config buildSnapAssistConfig(const PAS::ShaderProfileTree& tree)
 {
     namespace PP = PhosphorAnimation::ProfilePaths;
-    return PAL::SurfaceAnimator::Config{// Popup surface family - dedicated path. A user editing
-                                        // `popup.snapAssist.show.json` affects ONLY the snap
-                                        // assist; siblings are unaffected. Built-in default mirrors the
-                                        // prior `popup` (150 ms widget-out) so behaviour is
-                                        // preserved.
-                                        .showProfile = PP::PopupSnapAssistShow,
-                                        .hideProfile = PP::PopupSnapAssistHide,
-                                        .showScaleProfile = {},
-                                        .hideScaleProfile = {},
-                                        .showShaderEffectId = resolveShaderEffect(tree, PP::PopupSnapAssistShow),
-                                        .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupSnapAssistHide),
-                                        .showShaderProfile = PP::PopupSnapAssistShow,
-                                        .hideShaderProfile = PP::PopupSnapAssistHide,
-                                        .showShaderParameters = resolveShaderParameters(tree, PP::PopupSnapAssistShow),
-                                        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupSnapAssistHide)};
+    return PAL::SurfaceAnimator::Config{
+        // Popup surface family - dedicated path. A user editing
+        // `popup.snapAssist.show.json` affects ONLY the snap
+        // assist; siblings are unaffected. Built-in default mirrors the
+        // prior `popup` (150 ms widget-out) so behaviour is
+        // preserved.
+        .showProfile = PP::PopupSnapAssistShow,
+        .hideProfile = PP::PopupSnapAssistHide,
+        .showScaleProfile = {},
+        .hideScaleProfile = {},
+        .showShaderEffectId = resolveShaderEffect(tree, PP::PopupSnapAssistShow),
+        .hideShaderEffectId = resolveShaderEffect(tree, PP::PopupSnapAssistHide),
+        .showShaderProfile = PP::PopupSnapAssistShow,
+        .hideShaderProfile = PP::PopupSnapAssistHide,
+        // Opacity-only surface (no scale leg) → fade scaleAmount 0.0 (pure fade).
+        .showShaderParameters = resolveShaderParameters(tree, PP::PopupSnapAssistShow, 0.0),
+        .hideShaderParameters = resolveShaderParameters(tree, PP::PopupSnapAssistHide, 0.0)};
 }
 
 } // namespace

@@ -239,6 +239,38 @@ private Q_SLOTS:
         QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowClose).isEmpty());
     }
 
+    void testDefaultShaderForPathOverlayEvents()
+    {
+        // OSD + popup show/hide events default to the fade shader; others none.
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::OsdShow), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::OsdHide), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupZoneSelectorShow), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupZoneSelectorHide), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupLayoutPickerShow), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupLayoutPickerHide), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupSnapAssistShow), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupSnapAssistHide), QStringLiteral("fade"));
+        // The category roots and the OSD "pop" event carry no built-in default.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::Osd).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::Popup).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::OsdPop).isEmpty());
+    }
+
+    void testResolveWithDefaultUnsetOverlayEventGetsFade()
+    {
+        // Truly-unset overlay show/hide resolves to the built-in fade default;
+        // an explicit per-event "None" is still respected.
+        ShaderProfileTree tree;
+        QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::OsdShow).effectiveEffectId(),
+                 QStringLiteral("fade"));
+        QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::PopupSnapAssistHide).effectiveEffectId(),
+                 QStringLiteral("fade"));
+        ShaderProfile none;
+        none.effectId = QString();
+        tree.setOverride(PP::OsdShow, none);
+        QVERIFY(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::OsdShow).effectiveEffectId().isEmpty());
+    }
+
     void testResolveWithDefaultUnsetMoveEventGetsMorph()
     {
         // Truly-unset move event resolves to the built-in default.
