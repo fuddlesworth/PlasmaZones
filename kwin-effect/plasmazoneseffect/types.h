@@ -285,9 +285,14 @@ struct ShaderTransition
     /// `oldSnapshot` and clears this. The window content is captured before
     /// the moveResize configure round-trips, so it holds the OLD frame.
     bool needsSnapshot = false;
-    /// Snapshot of the window's content captured at `fromGeometry` (old size)
-    /// just before the `moveResize`, bound as `uOldWindow` so the shader can
-    /// cross-fade the old content out while the live new content fades in.
+    /// Snapshot of the window's OLD content, bound as `uOldWindow` so the
+    /// shader can cross-fade the old content out while the live new content
+    /// fades in. Captured on the first morph paint AFTER the instant
+    /// `moveResize` — so it is sized to the window's current (post-moveResize)
+    /// `expandedGeometry`, but the buffer it holds is still the OLD content
+    /// because the client has not yet re-rendered for the configure. (The
+    /// matching new-geometry sub-rect `iAnchorRectInTexture` therefore maps
+    /// card-space uv into it correctly, same as for the live `uTexture0`.)
     /// Owned per-transition (unique per capture, not path-keyed like
     /// `userTextures`) and freed when the transition ends. Null when capture
     /// was not requested or failed — paintWindow then binds a transparent
