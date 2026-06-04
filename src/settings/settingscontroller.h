@@ -585,8 +585,8 @@ private:
     /// Single WindowRule store shared by m_settings (disable lists) and the
     /// LayoutRegistry. Declared FIRST so it outlives all borrowers.
     std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_localRuleStore;
-    /// Opt-in cross-process auto-reload of m_localRuleStore (no-daemon case).
-    /// Declared after the store it borrows so it tears down first.
+    /// Opt-in cross-process auto-reload of m_localRuleStore on external writes
+    /// (mainly the no-daemon case). Declared after the store; tears down first.
     std::unique_ptr<PhosphorWindowRule::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
     Settings m_settings;
     /// Per-page sub-controllers: expose the Q_PROPERTY surface for a single
