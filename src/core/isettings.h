@@ -15,8 +15,6 @@
 #include "enums.h"
 #include "settings_interfaces.h"
 
-#include <PhosphorAnimation/ShaderProfileTree.h>
-
 #include <QColor>
 #include <QObject>
 #include <QString>
@@ -67,7 +65,8 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneSelectorSettings,
                                      public IWindowBehaviorSettings,
                                      public IDefaultLayoutSettings,
-                                     public IOrderingSettings
+                                     public IOrderingSettings,
+                                     public IAnimationSettings
 {
     Q_OBJECT
 
@@ -125,53 +124,21 @@ public:
     //   - IZoneSelectorSettings: zone selector UI configuration
     //   - IWindowBehaviorSettings: snap restore, sticky handling
     //   - IDefaultLayoutSettings: default layout ID
+    //   - IAnimationSettings: animation/shader-profile state + window filtering
     //
     // See settings_interfaces.h for the full API.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Animation settings (global — applies to snapping and autotiling)
+    // Animation + shader-profile settings are segregated into
+    // IAnimationSettings (mixed in above). The matching NOTIFY signals stay on
+    // this QObject (see Q_SIGNALS below): Qt forbids multiple QObject
+    // inheritance, so a consumer that needs an animation signal depends on
+    // ISettings, not IAnimationSettings alone.
     //
-    // FIXME(audit): consider extracting IAnimationSettings sub-interface —
-    // every method between here and `setShaderProfileTree` is purely about
-    // animation/shader-profile state. A focused sub-interface would let
-    // consumers (kwin-effect's animator, AnimationsPageController) depend on
-    // exactly that surface and remove the cross-cutting include of the full
-    // ISettings header. Deferred because it touches a large number of files;
-    // do not roll into an unrelated audit pass.
-    virtual bool animationsEnabled() const = 0;
-    virtual void setAnimationsEnabled(bool enabled) = 0;
-    virtual int animationDuration() const = 0;
-    virtual void setAnimationDuration(int duration) = 0;
-    virtual QString animationEasingCurve() const = 0;
-    virtual void setAnimationEasingCurve(const QString& curve) = 0;
-    virtual int animationMinDistance() const = 0;
-    virtual void setAnimationMinDistance(int distance) = 0;
-    virtual int animationSequenceMode() const = 0;
-    virtual void setAnimationSequenceMode(int mode) = 0;
-    virtual int animationStaggerInterval() const = 0;
-    virtual void setAnimationStaggerInterval(int ms) = 0;
-    virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
-    virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
-
-    // Animation window filtering — gates animations BEFORE the app-rule
-    // cascade. A class-pattern rule whose pattern matches the window's
-    // class overrides the filter at the resolver layer, so users can
-    // re-enable animations for a specific app even when it'd otherwise
-    // be excluded. Mirrors the snapping/tiling Exclusion settings but
-    // lives in its own namespace so the two filter sets can diverge.
-    virtual bool animationExcludeTransientWindows() const = 0;
-    virtual void setAnimationExcludeTransientWindows(bool exclude) = 0;
-    virtual bool animationExcludeNotificationsAndOsd() const = 0;
-    virtual void setAnimationExcludeNotificationsAndOsd(bool exclude) = 0;
-    virtual int animationMinimumWindowWidth() const = 0;
-    virtual void setAnimationMinimumWindowWidth(int width) = 0;
-    virtual int animationMinimumWindowHeight() const = 0;
-    virtual void setAnimationMinimumWindowHeight(int height) = 0;
-    // animationExcludedApplications / animationExcludedWindowClasses
-    // virtuals retired in v4 — the lists folded into ExcludeAnimations
-    // WindowRules; the KWin effect now derives its
-    // m_animationExclusionRuleSet from the unified rule store via
-    // PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom.
+    // animationExcludedApplications / animationExcludedWindowClasses virtuals
+    // retired in v4 — the lists folded into ExcludeAnimations WindowRules; the
+    // KWin effect now derives its m_animationExclusionRuleSet from the unified
+    // rule store via PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom.
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -421,11 +388,11 @@ Q_SIGNALS:
     void excludeTransientWindowsChanged();
     void minimumWindowWidthChanged();
     void minimumWindowHeightChanged();
-    // Animation window filtering — paired with the virtuals at the top
-    // of this interface. Same shape as the snapping/tiling exclusion
-    // signals; lives in its own change-set so animation-only consumers
-    // (the kwin-effect, the AnimationsPageController) don't have to
-    // discriminate when filtering NOTIFY traffic.
+    // Animation window filtering — paired with the IAnimationSettings
+    // virtuals. Same shape as the snapping/tiling exclusion signals; lives
+    // in its own change-set so animation-only consumers (the kwin-effect,
+    // the AnimationsPageController) don't have to discriminate when
+    // filtering NOTIFY traffic.
     void animationExcludeTransientWindowsChanged();
     void animationExcludeNotificationsAndOsdChanged();
     void animationMinimumWindowWidthChanged();
