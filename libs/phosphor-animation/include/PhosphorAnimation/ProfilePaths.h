@@ -139,9 +139,11 @@ PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 /// families default to a shader:
 ///   • Window MOVE/RESIZE (snap, tile, layout-switch, move, resize) →
 ///     "window-morph" (geometry cross-fade), run by the kwin-effect.
-///   • Overlay show/hide (osd.*, popup.{zoneSelector,layoutPicker,snapAssist}.*)
-///     → "fade" (fade-and-scale), run by the daemon SurfaceAnimator instead of
-///     its C++ opacity/scale legs.
+///   • Overlay show/hide leaves (osd.{show,hide},
+///     popup.{zoneSelector,layoutPicker,snapAssist}.{show,hide}) → "fade"
+///     (fade-and-scale), run by the daemon SurfaceAnimator instead of its C++
+///     opacity/scale legs. The category roots (osd, popup, osd.pop) carry no
+///     default.
 /// Every other event defaults to none. The default applies only when the user
 /// has set no override for the path or an ancestor (an explicit "None" is an
 /// override and is respected) — see `resolveShaderWithDefault` in
