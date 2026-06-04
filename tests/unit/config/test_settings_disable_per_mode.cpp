@@ -24,6 +24,8 @@
 #include "../../../src/core/settings_interfaces.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
+#include <PhosphorWindowRule/WindowRuleStore.h>
+
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using Mode = PhosphorZones::AssignmentEntry::Mode;
@@ -332,6 +334,51 @@ private Q_SLOTS:
         QVERIFY(reloaded.disabledDesktops(Mode::Autotile).isEmpty());
         QVERIFY(reloaded.disabledActivities(Mode::Snapping).isEmpty());
         QVERIFY(reloaded.disabledActivities(Mode::Autotile).isEmpty());
+    }
+
+    // =========================================================================
+    // Borrowed WindowRuleStore ctor — Settings shares the caller's store
+    //
+    // The settings app constructs Settings with a WindowRuleStore it owns
+    // elsewhere (SettingsController::m_localRuleStore) so the disable-list
+    // writes and the in-process LayoutRegistry read the SAME store instead of
+    // two independent copies over windowrules.json. These tests pin that the
+    // borrow ctor genuinely shares the caller's store (mutations land in it)
+    // and that a null argument degrades to owning one.
+    // =========================================================================
+
+    /// A disable-list write through a borrow-ctor Settings must land in the
+    /// caller's store object — proving the two reference the same instance, not
+    /// two independent copies over the same file.
+    void testBorrowedStore_writesLandInCallerStore()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorWindowRule::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+        QCOMPARE(store.count(), 0);
+
+        Settings settings(&store, nullptr);
+
+        settings.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});
+
+        // The disable rule landed in the BORROWED store, not an internal one.
+        QCOMPARE(store.count(), 1);
+        QVERIFY(settings.isMonitorDisabled(Mode::Snapping, QStringLiteral("DP-1")));
+
+        // Clearing it round-trips back through the same store.
+        settings.setDisabledMonitors(Mode::Snapping, {});
+        QCOMPARE(store.count(), 0);
+    }
+
+    /// A null store argument degrades to owning one (defensive parity with the
+    /// backend-injecting ctor) so a misuse still yields a working object.
+    void testBorrowedStore_nullDegradesToOwned()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings(nullptr, nullptr);
+
+        // No crash, and disable-lists work against the internally-owned store.
+        settings.setDisabledMonitors(Mode::Autotile, {QStringLiteral("DP-2")});
+        QVERIFY(settings.isMonitorDisabled(Mode::Autotile, QStringLiteral("DP-2")));
     }
 };
 

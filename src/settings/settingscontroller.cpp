@@ -37,6 +37,7 @@
 // type. The header forward-declares it to avoid pulling the
 // dependency graph into every consumer of SettingsController.
 #include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRule/WindowRuleStoreWatcher.h>
 
 #include "../core/shaderregistry.h"
 #include "snappingshaderspagecontroller.h"
@@ -131,9 +132,14 @@ SettingsController::~SettingsController()
 
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
+    // m_localRuleStore is constructed first (declared before m_settings) so the
+    // single shared store exists before m_settings borrows it. Parent stays
+    // null on m_settings — it is a value member, not a QObject child of `this`.
+    , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
+    , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRule::WindowRuleStoreWatcher>(*m_localRuleStore))
+    , m_settings(m_localRuleStore.get(), nullptr)
     , m_screenHelper(&m_settings, this)
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
-    , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
     , m_localLayoutManager(
           std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(), ConfigDefaults::layoutsSubdir()))
 {
@@ -153,6 +159,12 @@ SettingsController::SettingsController(QObject* parent)
     // doesn't require editing this file unless the engine demands a
     // service the KCM doesn't already publish.
     buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
+
+    // Begin watching windowrules.json for external writes. Complements the
+    // daemon's rulesChanged D-Bus signal (reloadLocalRuleStore) so the
+    // in-process LayoutRegistry's assignment cascade stays fresh even with no
+    // daemon running; the store's idempotent load() makes the overlap a no-op.
+    m_localRuleStoreWatcher->start();
 
     // Wire the layoutsChanged handler BEFORE the initial loadLayouts() so
     // any QFileSystemWatcher event landing in the window between load +

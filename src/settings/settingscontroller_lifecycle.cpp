@@ -54,6 +54,14 @@ void SettingsController::load()
     if (m_windowRulesPage)
         m_windowRulesPage->revert();
     m_settings.load();
+    // m_settings borrows the shared m_localRuleStore, so Settings::load() above
+    // deliberately does NOT reload it (the owner drives reloads — see the
+    // borrowed-store note in Settings::load()). As that owner, re-read
+    // windowrules.json here so Discard reverts the store to its on-disk state.
+    // Idempotent: WindowRuleStore::load() only emits when the content differs,
+    // mirroring the daemon-rulesChanged path in reloadLocalRuleStore().
+    if (m_localRuleStore)
+        m_localRuleStore->load();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
     // Clear staged state BEFORE m_loading=false so any NOTIFY emits

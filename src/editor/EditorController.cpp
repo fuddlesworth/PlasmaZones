@@ -17,6 +17,8 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
+#include <PhosphorWindowRule/WindowRuleStoreWatcher.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "../common/layoutpreviewserialize.h"
 #include "../core/constants.h"
@@ -49,6 +51,7 @@ EditorController::EditorController(QObject* parent)
     , m_undoController(new UndoController(this))
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localRuleStore(std::make_unique<PhosphorWindowRule::WindowRuleStore>(ConfigDefaults::windowRulesFilePath()))
+    , m_localRuleStoreWatcher(std::make_unique<PhosphorWindowRule::WindowRuleStoreWatcher>(*m_localRuleStore))
     , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(m_localRuleStore.get(),
                                                                            QStringLiteral("plasmazones/layouts")))
 {
@@ -67,6 +70,13 @@ EditorController::EditorController(QObject* parent)
     // doesn't require editing this file unless the engine demands a
     // service the editor doesn't already publish.
     buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
+
+    // Begin watching windowrules.json for external writes. The editor has no
+    // D-Bus rules-reload path, so without this its m_localRuleStore would serve
+    // the snapshot scanned at launch — the assignment cascade would ignore rule
+    // edits the daemon (or settings app) makes while the editor is open. The
+    // store's idempotent load() means a self-write or no-op change emits nothing.
+    m_localRuleStoreWatcher->start();
 
     // Discover + register user-authored scripted algorithms in the editor-
     // owned AlgorithmRegistry so standalone editor launches (daemon down)
