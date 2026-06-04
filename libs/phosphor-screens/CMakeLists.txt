@@ -93,7 +93,7 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
 endif()
 
-# Properties shared by both library targets.
+# Properties shared by all three library targets (Core, Runtime, umbrella).
 function(_phosphorscreens_target_defaults _target)
     set_target_properties(${_target} PROPERTIES
         VERSION ${PHOSPHORSCREENS_VERSION}
@@ -103,13 +103,13 @@ function(_phosphorscreens_target_defaults _target)
         UNITY_BUILD OFF
         AUTOMOC ON
         POSITION_INDEPENDENT_CODE ON
-        # PhosphorScreens.so links PhosphorScreensCore.so via its public
-        # interface. On distros that don't add KDE_INSTALL_LIBDIR to the
-        # default loader search path (e.g. /usr/local/lib), runtime load
-        # of PhosphorScreens.so would fail with "PhosphorScreensCore.so:
-        # cannot open shared object file". $ORIGIN tells the dynamic
-        # linker to look beside the loading .so first, which is exactly
-        # where both shipped libs live. BUILD_WITH_INSTALL_RPATH lets
+        # The shipped libraries link in a chain via their public interfaces:
+        # PhosphorScreens.so → PhosphorScreensRuntime.so → PhosphorScreensCore.so.
+        # On distros that don't add KDE_INSTALL_LIBDIR to the default loader
+        # search path (e.g. /usr/local/lib), runtime load of a downstream .so
+        # would fail with "...Core.so: cannot open shared object file". $ORIGIN
+        # tells the dynamic linker to look beside the loading .so first, which is
+        # exactly where all three shipped libs live. BUILD_WITH_INSTALL_RPATH lets
         # ctest dlopen the in-tree binaries without an explicit
         # LD_LIBRARY_PATH — without it, in-tree consumers (the demo,
         # the test runner) inherit CMake's empty build-tree rpath and

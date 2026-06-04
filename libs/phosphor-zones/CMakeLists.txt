@@ -44,10 +44,12 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
-# PhosphorScreens supplies ScreenIdentity (canonical id ↔ connector name)
-# and VirtualScreen helpers used by LayoutRegistry's assignment cascade.
-# PRIVATE because no public header leaks the type.
-if(NOT TARGET PhosphorScreens::Core)
+# PhosphorScreens supplies ScreenIdentity / VirtualScreen (LayoutRegistry's
+# assignment cascade) and ScreenManager geometry queries (GeometryUtils, whose
+# public GeometryUtils.h surfaces a ScreenManager*) — so this links the Runtime
+# target. PRIVATE: callers of the ScreenManager-taking GeometryUtils functions
+# own and link their own PhosphorScreens, so the dep need not propagate.
+if(NOT TARGET PhosphorScreens::Runtime)
     find_package(PhosphorScreens CONFIG REQUIRED)
 endif()
 
