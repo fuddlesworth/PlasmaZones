@@ -35,16 +35,12 @@ namespace PhosphorWindowRule {
  * a GPL→LGPL dependency inversion. It is a plain @c QObject (Qt6::Core only) —
  * it never derives a config location itself; the caller passes the path.
  *
- * @todo Add an opt-in @c QFileSystemWatcher so separate-process consumers
- *       (standalone @c plasmazones-settings, @c plasmazones-editor) that own
- *       their own store and have no D-Bus path to the daemon see external
- *       writes without a manual @ref load() call. The in-process race
- *       between Settings and LayoutRegistry / WindowRuleAdaptor is already
- *       fixed by sharing one store via the borrowing ctor in the daemon
- *       composition root; the watcher only addresses the cross-process
- *       case. Watcher must debounce (Qt fires multiple events per rename)
- *       and skip self-writes (track our own save() temp+rename so we don't
- *       reload on our own emission).
+ * Separate-process consumers that own their own store and have no D-Bus path to
+ * the daemon (standalone @c plasmazones-settings, @c plasmazones-editor) can
+ * opt into cross-process auto-reload via @ref WindowRuleStoreWatcher, which
+ * watches the file and drives @ref load() on external writes. The store's
+ * idempotent @ref load() (it emits only on a real content change) makes that
+ * watcher's self-write events harmless without any extra bookkeeping here.
  */
 class PHOSPHORWINDOWRULE_EXPORT WindowRuleStore : public QObject
 {
