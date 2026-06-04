@@ -5,6 +5,8 @@
 
 #include "PhosphorWindowRule/WindowRuleStore.h"
 
+#include "windowrulelogging.h"
+
 #include <PhosphorFsLoader/IScanStrategy.h>
 #include <PhosphorFsLoader/WatchedDirectorySet.h>
 
@@ -62,12 +64,20 @@ void WindowRuleStoreWatcher::start()
     if (m_started) {
         return;
     }
+    // WindowRuleStore permits (and only logs) construction with an empty path,
+    // which would make this watcher silently watch nothing. Surface that
+    // dead-watcher state rather than quietly registering an empty directory.
+    const QString filePath = m_store->filePath();
+    if (filePath.isEmpty()) {
+        qCWarning(lcWindowRule) << "WindowRuleStoreWatcher: store has an empty file path — watcher is inert";
+        return;
+    }
     m_started = true;
     // Watch the directory that holds windowrules.json. registerDirectory with
     // LiveReload::On installs the QFileSystemWatcher and runs one immediate
     // synchronous rescan (an idempotent reload if nothing changed since the
     // store's ctor load).
-    const QString dir = QFileInfo(m_store->filePath()).absolutePath();
+    const QString dir = QFileInfo(filePath).absolutePath();
     m_watcher->registerDirectory(dir, PhosphorFsLoader::LiveReload::On);
 }
 
