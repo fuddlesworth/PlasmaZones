@@ -16,6 +16,9 @@
 #include "settingscontroller.h"
 
 #include "../core/logging.h"
+#include "virtualscreenutils.h"
+
+#include "dbusutils.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>

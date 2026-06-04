@@ -18,6 +18,7 @@
 #include "../../core/utils.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include "../../dbus/layoutadaptor.h"
+#include "../../dbus/settingsadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../dbus/zonedetectionadaptor.h"
 

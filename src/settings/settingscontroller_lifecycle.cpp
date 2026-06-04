@@ -24,6 +24,7 @@
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
 #include "../core/utils.h"
+#include "dbusutils.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 

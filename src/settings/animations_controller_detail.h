@@ -10,10 +10,17 @@
 // QML consumption. Inline definitions here ensure both TUs get their own
 // copy without relying on unity-build TU merging for cross-TU linkage.
 
+#include "../core/logging.h"
+
 #include <PhosphorAnimation/AnimationShaderEffect.h>
+#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLatin1Char>
 #include <QLatin1String>
 #include <QString>
@@ -129,6 +136,90 @@ inline QString humanizeSegment(const QString& segment)
         out.append(cur);
     }
     return out;
+}
+
+// ProfileLoader's envelope helper reads the top-level `name` field to
+// assign the registry path (and strips it from the returned root). We
+// add it on write so the file is recognised. JSON keys are
+// QLatin1String per the project's Qt6 string-literal rule. `inline`
+// (external linkage, one definition) so the sibling TUs that consume
+// these helpers (animationspagecontroller{,_overrides,_shaders}.cpp)
+// all share one definition without relying on unity-build TU merging.
+inline constexpr QLatin1String JsonNameKey{"name"};
+
+/// Convert a `Profile` value to its `toJson()` shape as a QVariantMap.
+/// Sparse — only engaged fields appear, matching the wire format.
+inline QVariantMap profileToVariantMap(const PhosphorAnimation::Profile& profile)
+{
+    return profile.toJson().toVariantMap();
+}
+
+/// Read the JSON object at @p path. Returns an empty object on missing
+/// file / parse error / non-object root. The `name` field is stripped so
+/// the returned map matches the QML-facing Profile shape. Parse errors
+/// are logged so silent corruption surfaces in journalctl.
+inline QJsonObject readProfileJson(const QString& path)
+{
+    QFile file(path);
+    if (!file.exists())
+        return {};
+    if (!file.open(QIODevice::ReadOnly)) {
+        qCWarning(lcConfig) << "AnimationsPageController: cannot open profile" << path;
+        return {};
+    }
+    QJsonParseError err{};
+    const auto doc = QJsonDocument::fromJson(file.readAll(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        qCWarning(lcConfig) << "AnimationsPageController: failed to parse" << path << ":" << err.errorString();
+        return {};
+    }
+    QJsonObject obj = doc.object();
+    obj.remove(JsonNameKey);
+    return obj;
+}
+
+/// Merge fields from @p source into @p target without overwriting keys
+/// already present in @p target. Implements ProfileTree-style "deeper
+/// path wins" inheritance when called from leaf to root.
+inline void mergeMissingFields(QVariantMap& target, const QVariantMap& source)
+{
+    for (auto it = source.cbegin(); it != source.cend(); ++it) {
+        if (!target.contains(it.key())) {
+            target.insert(it.key(), it.value());
+        }
+    }
+}
+
+/// Fill any unset fields in @p profile with the `Profile::Default*`
+/// library constants so the QML side always reads a populated map.
+inline void fillLibraryDefaults(QVariantMap& profile)
+{
+    using P = PhosphorAnimation::Profile;
+    if (!profile.contains(QLatin1String(P::JsonFieldDuration))) {
+        profile.insert(QLatin1String(P::JsonFieldDuration), P::DefaultDuration);
+    }
+    if (!profile.contains(QLatin1String(P::JsonFieldMinDistance))) {
+        profile.insert(QLatin1String(P::JsonFieldMinDistance), P::DefaultMinDistance);
+    }
+    if (!profile.contains(QLatin1String(P::JsonFieldSequenceMode))) {
+        profile.insert(QLatin1String(P::JsonFieldSequenceMode), int(P::DefaultSequenceMode));
+    }
+    if (!profile.contains(QLatin1String(P::JsonFieldStaggerInterval))) {
+        profile.insert(QLatin1String(P::JsonFieldStaggerInterval), P::DefaultStaggerInterval);
+    }
+    // `curve` left unset → fill with the canonical library default
+    // (default-constructed `Easing` is OutCubic, matching
+    // `Profile::withDefaults()` and `AnimatedValue::defaultFallbackCurve()`).
+    // Without this, QML cards crashed with "Cannot read property of
+    // undefined" when no parent supplied a curve.
+    if (!profile.contains(QLatin1String(P::JsonFieldCurve))) {
+        // Cache the canonical default curve string. Constructing a fresh
+        // PhosphorAnimation::Easing() per call just to read its toString()
+        // is wasteful — the function-local static is initialised once,
+        // thread-safely under C++11.
+        static const QString kDefaultCurve = PhosphorAnimation::Easing().toString();
+        profile.insert(QLatin1String(P::JsonFieldCurve), kDefaultCurve);
+    }
 }
 
 } // namespace animations_controller_detail

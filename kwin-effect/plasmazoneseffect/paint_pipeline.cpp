@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../plasmazoneseffect.h"
+#include "../compositorclock.h"
 #include "shader_internal.h"
+#include "shader_resolve.h"
 #include "window_query.h"
 
 #include <effect/effecthandler.h>
