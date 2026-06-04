@@ -566,10 +566,20 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             // via `motionProfile` above (driving the animator's
             // duration), so the shader still terminates with the
             // rule-overridden snap motion.
-            const auto shaderProfile = PlasmaZones::resolveAnimationShaderAndDuration(
-                                           m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(),
-                                           getWindowId(window), query, profilePath, /*defaultDurationMs=*/0)
-                                           .profile;
+            auto shaderProfile = PlasmaZones::resolveAnimationShaderAndDuration(
+                                     m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(),
+                                     getWindowId(window), query, profilePath, /*defaultDurationMs=*/0)
+                                     .profile;
+            if (shaderProfile.effectiveEffectId().isEmpty()) {
+                // No rule or tree override resolved a shader for this move
+                // event — apply the built-in per-event default (window-morph
+                // for snap/move/resize) via the shared SSOT, which respects an
+                // explicit user "None". Keeps the default consistent with what
+                // the settings UI shows (resolvedShaderProfile uses the same
+                // helper) without persisting it into config.
+                shaderProfile =
+                    PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);
+            }
             if (!shaderProfile.effectiveEffectId().isEmpty()) {
                 beginShaderTransition(window, shaderProfile);
                 // If the installed shader is a geometry morph (declares

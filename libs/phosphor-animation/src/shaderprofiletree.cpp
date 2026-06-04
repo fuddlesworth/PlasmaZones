@@ -147,4 +147,30 @@ bool ShaderProfileTree::operator==(const ShaderProfileTree& other) const
     return true;
 }
 
+ShaderProfile resolveShaderWithDefault(const ShaderProfileTree& tree, const QString& path)
+{
+    ShaderProfile resolved = tree.resolve(path);
+    // A shader already resolved (a direct or inherited override set a non-empty
+    // effectId) — use it.
+    if (!resolved.effectiveEffectId().isEmpty()) {
+        return resolved;
+    }
+    // Empty effectId is ambiguous after resolve() (withDefaults normalises an
+    // unset optional to ""): it could be TRULY UNSET or an explicit "None".
+    // Distinguish via the overrides: if the path or any ancestor carries an
+    // override, the empty result was a deliberate decision (an engaged-empty
+    // "None", or a params-only override) — respect it and apply no default.
+    for (QString p = path; !p.isEmpty(); p = PhosphorAnimation::ProfilePaths::parentPath(p)) {
+        if (tree.hasOverride(p)) {
+            return resolved;
+        }
+    }
+    // Truly unset — apply the built-in per-event default (if any).
+    const QString def = PhosphorAnimation::ProfilePaths::defaultShaderEffectIdForPath(path);
+    if (!def.isEmpty()) {
+        resolved.effectId = def;
+    }
+    return resolved;
+}
+
 } // namespace PhosphorAnimationShaders

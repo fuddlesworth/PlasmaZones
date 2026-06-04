@@ -133,6 +133,19 @@ PHOSPHORANIMATION_EXPORT QStringList allBuiltInPaths();
 /// Walk @p path up one level ("window.open" -> "window" -> "global" -> "").
 PHOSPHORANIMATION_EXPORT QString parentPath(const QString& path);
 
+/// Built-in default shader effect id for an event @p path, or empty for none.
+///
+/// SSOT for "what shader does this event animate with out of the box". The
+/// window MOVE/RESIZE events (snap, tile, layout-switch, move, resize) default
+/// to the geometry-morph shader ("window-morph") so a window snapping into a
+/// zone animates via shader cross-fade by default; every other event defaults
+/// to none. The default applies only when the user has set no override for the
+/// path or an ancestor (an explicit "None" is an override and is respected) —
+/// see `resolveShaderWithDefault` in ShaderProfileTree.h. Consumed by both the
+/// kwin-effect resolution and the settings UI so the default both plays at
+/// runtime and shows as the current value in settings.
+PHOSPHORANIMATION_EXPORT QString defaultShaderEffectIdForPath(const QString& path);
+
 } // namespace ProfilePaths
 
 } // namespace PhosphorAnimation

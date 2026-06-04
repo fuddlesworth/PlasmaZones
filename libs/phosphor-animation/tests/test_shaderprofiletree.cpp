@@ -223,6 +223,69 @@ private Q_SLOTS:
         const ShaderProfile resolved = tree.resolve(PP::WindowOpen);
         QCOMPARE(*resolved.effectId, QStringLiteral("glitch"));
     }
+
+    // ─── resolveShaderWithDefault: built-in per-event default ───
+
+    void testDefaultShaderForPathMoveEvents()
+    {
+        // Move/resize events default to window-morph; others to none.
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapIn), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapOut), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapResize), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowMove), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowResize), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowLayoutSwitch), QStringLiteral("window-morph"));
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowOpen).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowClose).isEmpty());
+    }
+
+    void testResolveWithDefaultUnsetMoveEventGetsMorph()
+    {
+        // Truly-unset move event resolves to the built-in default.
+        ShaderProfileTree tree;
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        QCOMPARE(r.effectiveEffectId(), QStringLiteral("window-morph"));
+    }
+
+    void testResolveWithDefaultUnsetNonMoveEventStaysEmpty()
+    {
+        ShaderProfileTree tree;
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowOpen);
+        QVERIFY(r.effectiveEffectId().isEmpty());
+    }
+
+    void testResolveWithDefaultUserOverrideWins()
+    {
+        // A real user override beats the built-in default.
+        ShaderProfileTree tree;
+        ShaderProfile leaf;
+        leaf.effectId = QStringLiteral("slide");
+        tree.setOverride(PP::WindowSnapIn, leaf);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        QCOMPARE(r.effectiveEffectId(), QStringLiteral("slide"));
+    }
+
+    void testResolveWithDefaultExplicitNoneRespected()
+    {
+        // An explicit "None" (engaged-empty override) suppresses the default.
+        ShaderProfileTree tree;
+        ShaderProfile none;
+        none.effectId = QString(); // engaged-empty
+        tree.setOverride(PP::WindowSnapIn, none);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        QVERIFY(r.effectiveEffectId().isEmpty());
+    }
+
+    void testResolveWithDefaultInheritedOverrideRespected()
+    {
+        // An ancestor (window) override is inherited, not replaced by the default.
+        ShaderProfileTree tree;
+        ShaderProfile cat;
+        cat.effectId = QStringLiteral("dissolve");
+        tree.setOverride(PP::Window, cat);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        QCOMPARE(r.effectiveEffectId(), QStringLiteral("dissolve"));
+    }
 };
 
 QTEST_MAIN(TestShaderProfileTree)
