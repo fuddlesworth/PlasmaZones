@@ -380,6 +380,38 @@ private Q_SLOTS:
         settings.setDisabledMonitors(Mode::Autotile, {QStringLiteral("DP-2")});
         QVERIFY(settings.isMonitorDisabled(Mode::Autotile, QStringLiteral("DP-2")));
     }
+
+    /// A BORROWED store is NOT reloaded by Settings::load() — that is the owner's
+    /// job, which is the whole reason the borrow path exists (the guard at
+    /// Settings::load()). A peer's external write stays invisible through the
+    /// borrowed store until the OWNER explicitly reloads it.
+    void testBorrowedStore_settingsLoadDoesNotReloadIt()
+    {
+        IsolatedConfigGuard guard;
+        PhosphorWindowRule::WindowRuleStore store(ConfigDefaults::windowRulesFilePath());
+        Settings settings(&store, nullptr);
+
+        // Establish a known baseline on disk (the Settings ctor's config
+        // migration may have seeded windowrules.json, so don't assume empty).
+        QVERIFY(store.setAllRules({}));
+        QCOMPARE(store.count(), 0);
+
+        // A peer (a separate owned Settings over the same file) writes a disable
+        // rule to windowrules.json.
+        {
+            Settings peer;
+            peer.setDisabledMonitors(Mode::Snapping, {QStringLiteral("DP-1")});
+        }
+
+        // Settings::load() must NOT reload the borrowed store, so the peer's
+        // write is not yet visible through it.
+        settings.load();
+        QCOMPARE(store.count(), 0);
+
+        // The owner reloading explicitly picks it up.
+        store.load();
+        QVERIFY(store.count() > 0);
+    }
 };
 
 QTEST_MAIN(TestSettingsDisablePerMode)
