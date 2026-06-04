@@ -276,15 +276,39 @@ private Q_SLOTS:
         QVERIFY(r.effectiveEffectId().isEmpty());
     }
 
-    void testResolveWithDefaultInheritedOverrideRespected()
+    void testResolveWithDefaultInheritedRealShaderRespected()
     {
-        // An ancestor (window) override is inherited, not replaced by the default.
+        // An ancestor (window) that chose a REAL shader is inherited, not
+        // replaced by the default.
         ShaderProfileTree tree;
         ShaderProfile cat;
         cat.effectId = QStringLiteral("dissolve");
         tree.setOverride(PP::Window, cat);
         const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
         QCOMPARE(r.effectiveEffectId(), QStringLiteral("dissolve"));
+    }
+
+    void testResolveWithDefaultAncestorNoneDoesNotSuppressDefault()
+    {
+        // Regression: a category-level "None" ("window" → "") must NOT suppress
+        // the per-event built-in default — a snap event still defaults to
+        // window-morph. (Only a per-event override suppresses it.)
+        ShaderProfileTree tree;
+        ShaderProfile catNone;
+        catNone.effectId = QString(); // engaged-empty "None" at the category
+        tree.setOverride(PP::Window, catNone);
+        // A move event without its own override still gets the default.
+        QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn).effectiveEffectId(),
+                 QStringLiteral("window-morph"));
+        // A non-move window event correctly stays None under the category None.
+        QVERIFY(
+            PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMinimize).effectiveEffectId().isEmpty());
+        // A per-event None under the category still wins (no default).
+        ShaderProfile leafNone;
+        leafNone.effectId = QString();
+        tree.setOverride(PP::WindowSnapIn, leafNone);
+        QVERIFY(
+            PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn).effectiveEffectId().isEmpty());
     }
 };
 

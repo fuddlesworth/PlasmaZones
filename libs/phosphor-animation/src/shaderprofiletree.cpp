@@ -150,22 +150,23 @@ bool ShaderProfileTree::operator==(const ShaderProfileTree& other) const
 ShaderProfile resolveShaderWithDefault(const ShaderProfileTree& tree, const QString& path)
 {
     ShaderProfile resolved = tree.resolve(path);
-    // A shader already resolved (a direct or inherited override set a non-empty
-    // effectId) — use it.
+    // A real shader resolved — a direct override or an inherited NON-EMPTY
+    // ancestor (e.g. "window" → slide). Inheritance of a chosen shader wins.
     if (!resolved.effectiveEffectId().isEmpty()) {
         return resolved;
     }
-    // Empty effectId is ambiguous after resolve() (withDefaults normalises an
-    // unset optional to ""): it could be TRULY UNSET or an explicit "None".
-    // Distinguish via the overrides: if the path or any ancestor carries an
-    // override, the empty result was a deliberate decision (an engaged-empty
-    // "None", or a params-only override) — respect it and apply no default.
-    for (QString p = path; !p.isEmpty(); p = PhosphorAnimation::ProfilePaths::parentPath(p)) {
-        if (tree.hasOverride(p)) {
-            return resolved;
-        }
+    // Empty effectId. Apply the built-in per-event default UNLESS the user set
+    // THIS exact event — a direct override, typically an engaged-empty "None".
+    //
+    // Deliberately checks only the leaf, not ancestors: an ancestor "None"
+    // (e.g. a category-level "window" → "") means "no shader chosen for the
+    // category", which must NOT suppress a built-in default for a specific
+    // event like a snap/move. (An ancestor that chose a real shader was
+    // already returned above; only an ancestor "None" reaches here, and it
+    // should not win over the event default.) A per-event "None" still wins.
+    if (tree.hasOverride(path)) {
+        return resolved;
     }
-    // Truly unset — apply the built-in per-event default (if any).
     const QString def = PhosphorAnimation::ProfilePaths::defaultShaderEffectIdForPath(path);
     if (!def.isEmpty()) {
         resolved.effectId = def;
