@@ -566,17 +566,20 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             // via `motionProfile` above (driving the animator's
             // duration), so the shader still terminates with the
             // rule-overridden snap motion.
-            auto shaderProfile = PlasmaZones::resolveAnimationShaderAndDuration(
-                                     m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(),
-                                     getWindowId(window), query, profilePath, /*defaultDurationMs=*/0)
-                                     .profile;
-            if (shaderProfile.effectiveEffectId().isEmpty()) {
-                // No rule or tree override resolved a shader for this move
-                // event — apply the built-in per-event default (window-morph
-                // for snap/move/resize) via the shared SSOT, which respects an
-                // explicit user "None". Keeps the default consistent with what
-                // the settings UI shows (resolvedShaderProfile uses the same
-                // helper) without persisting it into config.
+            const auto resolved = PlasmaZones::resolveAnimationShaderAndDuration(
+                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), getWindowId(window), query,
+                profilePath, /*defaultDurationMs=*/0);
+            auto shaderProfile = resolved.profile;
+            if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
+                // No rule matched and no tree override resolved a shader for
+                // this move event — apply the built-in per-event default
+                // (window-morph for snap/move/resize) via the shared SSOT,
+                // which respects an explicit tree "None". Keeps the default
+                // consistent with what the settings UI shows
+                // (resolvedShaderProfile uses the same helper) without
+                // persisting it into config. Gated on `!shaderSlotFromRule`: a
+                // per-app window rule that set "None" (engaged-empty effectId)
+                // is a deliberate opt-out and must NOT be overridden here.
                 shaderProfile =
                     PhosphorAnimationShaders::resolveShaderWithDefault(m_shaderManager.profileTree(), profilePath);
             }

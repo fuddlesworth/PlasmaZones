@@ -310,6 +310,22 @@ private Q_SLOTS:
         QVERIFY(
             PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn).effectiveEffectId().isEmpty());
     }
+
+    void testResolveWithDefaultParamsOnlyLeafStillGetsDefault()
+    {
+        // A params-only leaf override (parameters set, effectId UNSET) is "no
+        // shader chosen" — the per-event default still applies, and the user's
+        // params overlay onto it. (Gated on the leaf's effectId engagement, not
+        // merely hasOverride.)
+        ShaderProfileTree tree;
+        ShaderProfile paramsOnly;
+        paramsOnly.parameters = QVariantMap({{QStringLiteral("speed"), 0.5}});
+        tree.setOverride(PP::WindowMove, paramsOnly);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMove);
+        QCOMPARE(r.effectiveEffectId(), QStringLiteral("window-morph"));
+        QVERIFY(r.parameters.has_value());
+        QCOMPARE(r.parameters->value(QStringLiteral("speed")).toDouble(), 0.5);
+    }
 };
 
 QTEST_MAIN(TestShaderProfileTree)

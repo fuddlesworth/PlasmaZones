@@ -32,8 +32,10 @@ void main() {
     gl_Position = modelViewProjectionMatrix * vec4(position, 0.0, 1.0);
 #else
     // Daemon path: the geometry morph runs compositor-side only; this branch
-    // exists so the shader bakes for the daemon target. Pass-through.
+    // exists so the shader bakes for the daemon target. Pass-through, but
+    // qt_Matrix carries the per-backend NDC Y-flip (identity on Vulkan, Y-flip
+    // on OpenGL) — mirror the sibling surface-extent verts (morph, bounce).
     vTexCoord = texCoord;
-    gl_Position = vec4(position, 0.0, 1.0);
+    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
 #endif
 }

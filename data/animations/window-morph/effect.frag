@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Window-morph fragment shader — shader-driven geometry move/resize.
 //
@@ -11,16 +11,19 @@
 // normalised rect coordinate, so each is shown at its own native aspect —
 // no non-uniform stretch like the C++ setXScale/setYScale path it replaces.
 //
-// Surface-extent shader: vTexCoord spans the output, iResolution is the
-// output size, and iSurfaceScreenPos.xy is the output origin in global
-// logical-screen pixels — the same space iFromRect/iToRect are pushed in
-// (window frame geometry). So a fragment's global screen position is
-// `iSurfaceScreenPos.xy + vTexCoord * iResolution`.
+// Surface-extent shader: apply() lays an output-spanning quad, so vTexCoord
+// spans the host output and iResolution is the output size. iFromRect/iToRect
+// are pushed in GLOBAL logical-screen pixels (window frame geometry), so a
+// fragment's global screen position is reconstructed from the OUTPUT origin:
+//   outputOrigin = iSurfaceScreenPos.xy - iAnchorPosInFbo
+// iSurfaceScreenPos.xy is the window/surface origin and iAnchorPosInFbo is the
+// window's top-left offset within that output, so their difference is the
+// output's global top-left. screenPx = outputOrigin + vTexCoord * iResolution.
 //
-// NOTE (first cut): the exact coordinate mapping (iResolution vs output,
-// iSurfaceScreenPos meaning, uOldWindow card sub-rect vs new) is pending
-// on-hardware validation — the morph runs compositor-side only and can't be
-// verified headlessly.
+// The old-content snapshot (uOldWindow) is captured at the window's CURRENT
+// (post-moveResize) expanded geometry, so iAnchorRectInTexture — the new
+// frame's sub-rect within the new expanded texture — maps card-space uv into
+// it correctly, exactly as it does for the live uTexture0.
 
 #version 450
 
@@ -54,8 +57,11 @@ void main() {
 #ifdef PLASMAZONES_KWIN
     float t = clamp(iTime, 0.0, 1.0);
 
-    // Fragment's global logical-screen position.
-    vec2 screenPx = iSurfaceScreenPos.xy + vTexCoord * max(iResolution, vec2(1.0));
+    // Fragment's global logical-screen position. Reconstruct from the OUTPUT
+    // origin (iSurfaceScreenPos.xy is the window origin; subtracting the
+    // window's in-output offset iAnchorPosInFbo yields the output's top-left).
+    vec2 outputOrigin = iSurfaceScreenPos.xy - iAnchorPosInFbo;
+    vec2 screenPx = outputOrigin + vTexCoord * max(iResolution, vec2(1.0));
 
     // Interpolated rect (old -> new), then normalise the fragment into it.
     vec4 rect = mix(iFromRect, iToRect, t);

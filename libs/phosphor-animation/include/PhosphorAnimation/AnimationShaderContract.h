@@ -58,7 +58,7 @@ namespace PhosphorAnimationShaders {
 ///   • Default branch (daemon path): `layout(std140, binding = 0) uniform
 ///     AnimationUniforms { ... };` — std140-aligned with
 ///     `PhosphorShaders::BaseUniforms` covering its full footprint
-///     (currently 688 bytes; pinned by BaseUniforms.h's static_asserts),
+///     (currently 672 bytes; pinned by BaseUniforms.h's static_asserts),
 ///     populated by Qt-RHI's binding=0 upload.
 ///
 ///   • `#ifdef PLASMAZONES_KWIN` branch (compositor path): plain

@@ -453,8 +453,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // before the moveResize configure round-trips and the client re-renders
         // at the new size. Capture-only frame — we render the snapshot into our
         // own FBO and return WITHOUT drawing the window to screen this frame, so
-        // there is exactly one effects->drawWindow per paintWindow (avoiding the
-        // chain-iterator re-entrancy that ghost-trails the surface-extent path).
+        // there is exactly one TOP-LEVEL on-screen effects->drawWindow per outer
+        // paintWindow (the capture's own drawWindow renders only into the
+        // snapshot FBO) — avoiding the chain-iterator re-entrancy that
+        // ghost-trails the surface-extent path.
         // One skipped frame at the very start of a snap is imperceptible. If
         // capture fails, needsSnapshot is cleared inside the helper and the
         // morph shader falls back to no cross-fade.
@@ -929,6 +931,15 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     continue;
                 }
                 glActiveTexture(GL_TEXTURE1 + slot);
+                glBindTexture(GL_TEXTURE_2D, 0);
+            }
+            // Same hygiene for the old-content snapshot unit (uOldWindow),
+            // bound just past the user-texture slots above for morph
+            // transitions — don't leave it dangling for the next effect.
+            if (cached->iOldWindowLoc >= 0 && transition.oldSnapshot) {
+                constexpr int kOldSnapshotUnit =
+                    1 + PhosphorAnimationShaders::AnimationShaderContract::kMaxUserTextureSlots;
+                glActiveTexture(GL_TEXTURE0 + kOldSnapshotUnit);
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
             glActiveTexture(GL_TEXTURE0);

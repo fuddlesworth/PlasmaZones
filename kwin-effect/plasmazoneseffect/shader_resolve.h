@@ -76,6 +76,12 @@ struct ResolvedShaderAndDuration
 {
     PhosphorAnimationShaders::ShaderProfile profile;
     int durationMs;
+    /// True when a window RULE filled the shader slot (verbatim, including an
+    /// engaged-empty "None" sentinel). False when the profile came from the
+    /// tree / baseline. Callers that apply a built-in per-event default must
+    /// NOT override a rule decision: a rule "None" is a deliberate per-app
+    /// opt-out, so the default only applies when no rule matched.
+    bool shaderSlotFromRule = false;
 };
 ResolvedShaderAndDuration resolveAnimationShaderAndDuration(const PhosphorWindowRule::RuleEvaluator& evaluator,
                                                             const PhosphorAnimationShaders::ShaderProfileTree& tree,
