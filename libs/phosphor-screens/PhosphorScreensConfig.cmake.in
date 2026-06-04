@@ -35,4 +35,15 @@ if(TARGET PhosphorScreens::PhosphorScreensCore AND NOT TARGET PhosphorScreens::C
     add_library(PhosphorScreens::Core ALIAS PhosphorScreens_CoreAliasWrapper)
 endif()
 
+# Same in-tree-alias re-creation for the Runtime target (ScreenManager +
+# Wayland), so downstream `find_package(PhosphorScreens)` consumers can spell
+# `PhosphorScreens::Runtime` exactly as in-tree add_subdirectory consumers do.
+if(TARGET PhosphorScreens::PhosphorScreensRuntime AND NOT TARGET PhosphorScreens::Runtime)
+    if(NOT TARGET PhosphorScreens_RuntimeAliasWrapper)
+        add_library(PhosphorScreens_RuntimeAliasWrapper INTERFACE)
+        target_link_libraries(PhosphorScreens_RuntimeAliasWrapper INTERFACE PhosphorScreens::PhosphorScreensRuntime)
+    endif()
+    add_library(PhosphorScreens::Runtime ALIAS PhosphorScreens_RuntimeAliasWrapper)
+endif()
+
 check_required_components(PhosphorScreens)

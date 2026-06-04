@@ -753,6 +753,8 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         cached.iFromRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIFromRect);
         cached.iToRectLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIToRect);
         cached.iOldWindowLoc = shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kUOldWindow);
+        cached.iWindowOpacityLoc =
+            shader->uniformLocation(PhosphorAnimationShaders::AnimationShaderContract::kIWindowOpacity);
         // Cache element locations for the per-effect declared parameter
         // slots: `customParams[0..kMaxCustomParams-1]` for float / int /
         // bool params, and `customColors[0..kMaxCustomColors-1]` for color

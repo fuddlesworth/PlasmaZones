@@ -15,6 +15,7 @@
 #include "../../core/constants.h"
 #include "../../core/utils.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorContext/ContextResolver.h>
 #include "../config/settings.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>

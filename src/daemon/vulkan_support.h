@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <QtCore/qglobal.h> // Ensure QT_CONFIG is defined regardless of include order
+#include <QtGui/qtguiglobal.h> // Ensure QT_CONFIG(vulkan)/QT_FEATURE_vulkan is defined regardless of include order
 
 #include <QVersionNumber>
 

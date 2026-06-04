@@ -75,6 +75,12 @@ struct CachedShader
     int iAnchorSizeLoc = -1;
     int iAnchorPosInFboLoc = -1;
     int iAnchorRectInTextureLoc = -1;
+    /// `iWindowOpacity` location — -1 when the shader never reads
+    /// `surfaceColor()` (so the GLSL linker dropped the uniform). paintWindow
+    /// pushes the rule-resolved opacity here every frame so a SetOpacity rule
+    /// dims the surface throughout the transition; the MapTexture-only shader
+    /// can't see `data.opacity()`.
+    int iWindowOpacityLoc = -1;
     // Slot counts sourced from AnimationShaderContract so a future change to
     // the contract (e.g. growing the customParams budget) can't silently
     // desync this cache from the translation + upload sites in

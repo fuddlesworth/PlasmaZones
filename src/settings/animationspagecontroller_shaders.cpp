@@ -20,6 +20,7 @@
 
 #include "../config/configdefaults.h"
 #include "../core/animationshadersupportedpaths.h"
+#include "../core/isettings.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../pz_i18n.h"

@@ -44,10 +44,12 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
-# PhosphorScreens supplies ScreenIdentity (canonical id ↔ connector name)
-# and VirtualScreen helpers used by LayoutRegistry's assignment cascade.
-# PRIVATE because no public header leaks the type.
-if(NOT TARGET PhosphorScreens::Core)
+# PhosphorScreens supplies ScreenIdentity / VirtualScreen (LayoutRegistry's
+# assignment cascade) and ScreenManager geometry queries (GeometryUtils, whose
+# public GeometryUtils.h surfaces a ScreenManager*) — so this links the Runtime
+# target. PRIVATE: callers of the ScreenManager-taking GeometryUtils functions
+# own and link their own PhosphorScreens, so the dep need not propagate.
+if(NOT TARGET PhosphorScreens::Runtime)
     find_package(PhosphorScreens CONFIG REQUIRED)
 endif()
 
@@ -166,10 +168,13 @@ target_link_libraries(PhosphorZones
         # composite window-id parsing; PRIVATE because the dep doesn't
         # leak through any public PhosphorZones header.
         PhosphorIdentity::PhosphorIdentity
-        # LayoutRegistry impl uses ScreenIdentity / VirtualScreen for
-        # the assignment-cascade screen-id normalisation. PRIVATE — no
-        # public header surfaces these types.
-        PhosphorScreens::Core
+        # GeometryUtils calls ScreenManager geometry queries, and LayoutRegistry
+        # uses ScreenIdentity / VirtualScreen for assignment-cascade screen-id
+        # normalisation — so this links the Runtime target (ScreenManager), which
+        # re-exports Core's POD types. PRIVATE: callers of the GeometryUtils
+        # functions that take a ScreenManager* pass one they already own and link
+        # PhosphorScreens themselves, so the dep need not propagate.
+        PhosphorScreens::Runtime
 )
 
 set_target_properties(PhosphorZones PROPERTIES

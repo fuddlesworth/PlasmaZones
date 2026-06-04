@@ -283,6 +283,13 @@ target_include_directories(PhosphorSettingsUiQml
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        # The generated <module>_qmltyperegistrations.cpp guards each registered
+        # type with `#if __has_include(<Header.h>)` using the BARE header name,
+        # so the header's own directory must be on the include path for a
+        # non-unity build (which compiles that TU alone) to resolve it. PRIVATE —
+        # consumers still use the <PhosphorSettingsUi/…> spelling above.
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorSettingsUi>
 )
 
 target_compile_features(PhosphorSettingsUiQml PUBLIC cxx_std_20)
@@ -362,6 +369,10 @@ if(PHOSPHOR_SETTINGS_UI_QML_INSTALL)
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
             $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+        PRIVATE
+            # Same bare-`__has_include(<Header.h>)` resolution as the
+            # PhosphorSettingsUiQml target above.
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorSettingsUi>
     )
 
     # The SHARED variant compiles the same sources under a different

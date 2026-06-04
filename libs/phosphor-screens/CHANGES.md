@@ -8,6 +8,37 @@ shape changes) so consumers can audit their binding code on upgrade. Library
 SOVERSION still follows semver; entries here flag the kind of behaviour
 churn that won't be caught by an ABI break.
 
+## Phase: Core split into Core (POD) + Runtime (ScreenManager)
+
+`PhosphorScreens::Core` previously bundled the pure POD/serialiser surface
+(`ScreenInfo`, `ScreenIdentity`, `Swapper`, `QtScreenProvider`, `VirtualScreen`,
+the config/panel interfaces) together with the live `ScreenManager`, whose
+LayerSurface-backed geometry sensors pull in `PhosphorWayland`. Every consumer
+that linked `::Core` therefore acquired `PhosphorWayland` at runtime even if it
+only touched POD types.
+
+### New target layering
+
+`ScreenManager` (and its header `Manager.h`) moved to a new
+`PhosphorScreens::Runtime` target. `::Core` is now pure POD — Qt6::Core/Gui only,
+no Wayland.
+
+| Consumer need                                              | Link target                |
+|------------------------------------------------------------|----------------------------|
+| Only POD types (ScreenInfo/ScreenIdentity/VirtualScreen/…) | `PhosphorScreens::Core`     |
+| Drives a `ScreenManager` (`Manager.h`)                     | `PhosphorScreens::Runtime`  |
+| D-Bus surface (DBusScreenAdaptor/Resolver/PlasmaPanelSource)| `PhosphorScreens::PhosphorScreens` |
+
+`Runtime` PUBLIC-links `Core`, and the umbrella `PhosphorScreens` now links
+`Runtime`, so existing consumers of those two targets are unaffected.
+
+**Action for downstream consumers:** a target that previously linked
+`PhosphorScreens::Core` *and* constructs/calls a `ScreenManager` must re-point to
+`PhosphorScreens::Runtime`. Consumers that only use POD types stay on `::Core`
+and shed the `PhosphorWayland` dependency. `Manager.h`'s export macro changed
+from `PHOSPHORSCREENSCORE_EXPORT` to `PHOSPHORSCREENSRUNTIME_EXPORT` (this macro
+name is internal to the header — no source change at call sites).
+
 ## Phase: phosphor-settings-ui scaffolding
 
 Context: lift-and-shift refactor extracting common QML/Qt6 settings

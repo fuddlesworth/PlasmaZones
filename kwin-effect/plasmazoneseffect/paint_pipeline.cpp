@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../plasmazoneseffect.h"
+#include "../compositorclock.h"
 #include "shader_internal.h"
+#include "shader_resolve.h"
 #include "window_query.h"
 
 #include <core/output.h>
@@ -240,7 +242,9 @@ void PlasmaZonesEffect::postPaintScreen()
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                                        std::chrono::milliseconds presentTime)
 {
-    if (w && (m_windowAnimator->hasAnimation(w) || m_shaderManager.hasTransition(w) || m_restoreSuppress.contains(w))) {
+    const bool transformDriven =
+        w && (m_windowAnimator->hasAnimation(w) || m_shaderManager.hasTransition(w) || m_restoreSuppress.contains(w));
+    if (transformDriven) {
         // Mark as transformed so paintWindow applies our translate+scale, and
         // so the OffscreenEffect redirect drives full-window repaints for the
         // shader leg's iTime advance even when the underlying window content
@@ -266,30 +270,35 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         // the whole animation. setTranslucent() clears the opaque region
         // so every frame fully recomposites under the window.
         data.setTranslucent();
-    } else if (w && m_shaderManager.hasOpacityRules()) {
-        // SetOpacity-only case: a rule may dim this window via
-        // `data.setOpacity()` in paintWindow below, but with neither an
-        // animation, shader transition, nor restore suppression in
-        // flight the branch above didn't fire setTranslucent(). Without
-        // it, KWin keeps the window's deviceOpaque region and skips
-        // recompositing whatever sits behind it — stale background
-        // pixels show through the dimmed window the moment anything
-        // behind it moves. Probe the rule cascade for an opacity < 1.0
-        // and clear the opaque region. Geometry is untouched
-        // (setTransformed deliberately NOT called) since SetOpacity is
-        // a pure alpha change.
-        //
-        // Resolve once per frame and cache: paintWindow below re-uses
-        // the same `(window, frame)` lookup, and walking the rule
-        // cascade twice per visible window per frame is wasted work
-        // for a hot path the project explicitly tracks. The cache is
-        // dropped at postPaintScreen.
+    }
+
+    // Resolve + cache the rule-resolved opacity for ANY window with
+    // SetOpacity rules, independent of whether a transition is in flight.
+    // Two consumers in paintWindow read this cache: the `data.setOpacity()`
+    // path (plain dimmed window) and the shader-transition draw, which
+    // pushes the value into the `iWindowOpacity` uniform so surfaceColor()
+    // dims the surface for the whole animation — a MapTexture-only custom
+    // shader can't see `data.opacity()`. This was previously an `else if`
+    // gated off the transform-driven branch above, so a window mid-
+    // transition never cached its opacity and the transition shader
+    // rendered it fully opaque until the animation settled, then snapped to
+    // the rule opacity. Resolve once per frame and cache (the cascade walk
+    // is the hot-path cost the project tracks); the cache drops at
+    // postPaintScreen.
+    if (w && m_shaderManager.hasOpacityRules()) {
         const QString winClass = w->windowClass();
         if (!isOwnOverlayClass(winClass) && !isPlasmaShellSurface(winClass)) {
             const auto opacity = resolveWindowOpacity(m_shaderManager.animationRuleEvaluator(),
                                                       windowRuleQueryFor(w, getWindowScreenId(w)), getWindowId(w));
             m_shaderManager.cacheFrameOpacity(w, opacity);
-            if (opacity && *opacity < 1.0) {
+            // Clear the deviceOpaque region so KWin recomposites whatever
+            // sits behind a dimmed window — without it, stale background
+            // pixels show through the moment anything behind moves. The
+            // transform-driven branch already did this for windows mid-
+            // transition; only the SetOpacity-only case needs it here.
+            // Geometry is untouched (no setTransformed) — SetOpacity is a
+            // pure alpha change.
+            if (!transformDriven && opacity && *opacity < 1.0) {
                 data.setTranslucent();
             }
         }
@@ -743,6 +752,25 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // converts surface-UV back to anchor-space — matching
                     // the daemon's surface-sized-FBO path.
                     shader->setUniform(cached->iAnchorPosInFboLoc, anchorUniforms.anchorPosInFbo);
+                }
+                if (cached->iWindowOpacityLoc >= 0) {
+                    // Feed the rule-resolved opacity so surfaceColor() dims
+                    // the surface for the entire transition. prePaintWindow
+                    // cached it this frame for any window with SetOpacity
+                    // rules; a nullopt entry (or no rules at all) means "no
+                    // rule matched this window" → full opacity. The custom
+                    // shader is compiled MapTexture-only and can't observe
+                    // data.opacity(), so this uniform is the only path that
+                    // applies the dim while the transition runs — without it
+                    // the window flashes fully opaque until the animation
+                    // settles, then snaps to the rule opacity.
+                    float winOpacity = 1.0f;
+                    if (m_shaderManager.frameOpacityCached(w)) {
+                        if (const auto cachedOpacity = m_shaderManager.cachedFrameOpacity(w)) {
+                            winOpacity = static_cast<float>(*cachedOpacity);
+                        }
+                    }
+                    shader->setUniform(cached->iWindowOpacityLoc, winOpacity);
                 }
                 if (cached->iAnchorRectInTextureLoc >= 0) {
                     // The anchor's UV sub-rect within uTexture0 (KWin's

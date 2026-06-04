@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "enums.h"
+#include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorEngine/IGeometrySettings.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <QString>
@@ -392,6 +393,55 @@ public:
 
     virtual QString defaultLayoutId() const = 0;
     virtual void setDefaultLayoutId(const QString& layoutId) = 0;
+};
+
+/**
+ * @brief Settings related to window animations and shader profiles
+ *        (global — applies to snapping and autotiling).
+ *
+ * Used by: KWin Effect (via D-Bus), the daemon overlay animator, and
+ * AnimationsPageController.
+ *
+ * NOTE: the matching NOTIFY signals (animationsEnabledChanged,
+ * shaderProfileTreeChanged, …) live on ISettings, the QObject that mixes this
+ * interface in — Qt forbids multiple QObject inheritance, so a consumer that
+ * needs an animation signal still depends on ISettings, not this interface
+ * alone.
+ */
+class PLASMAZONES_EXPORT IAnimationSettings
+{
+public:
+    virtual ~IAnimationSettings() = default;
+
+    virtual bool animationsEnabled() const = 0;
+    virtual void setAnimationsEnabled(bool enabled) = 0;
+    virtual int animationDuration() const = 0;
+    virtual void setAnimationDuration(int duration) = 0;
+    virtual QString animationEasingCurve() const = 0;
+    virtual void setAnimationEasingCurve(const QString& curve) = 0;
+    virtual int animationMinDistance() const = 0;
+    virtual void setAnimationMinDistance(int distance) = 0;
+    virtual int animationSequenceMode() const = 0;
+    virtual void setAnimationSequenceMode(int mode) = 0;
+    virtual int animationStaggerInterval() const = 0;
+    virtual void setAnimationStaggerInterval(int ms) = 0;
+    virtual PhosphorAnimationShaders::ShaderProfileTree shaderProfileTree() const = 0;
+    virtual void setShaderProfileTree(const PhosphorAnimationShaders::ShaderProfileTree& tree) = 0;
+
+    // Animation window filtering — gates animations BEFORE the app-rule
+    // cascade. A class-pattern rule whose pattern matches the window's class
+    // overrides the filter at the resolver layer, so users can re-enable
+    // animations for a specific app even when it'd otherwise be excluded.
+    // Mirrors the snapping/tiling Exclusion settings but lives in its own
+    // namespace so the two filter sets can diverge.
+    virtual bool animationExcludeTransientWindows() const = 0;
+    virtual void setAnimationExcludeTransientWindows(bool exclude) = 0;
+    virtual bool animationExcludeNotificationsAndOsd() const = 0;
+    virtual void setAnimationExcludeNotificationsAndOsd(bool exclude) = 0;
+    virtual int animationMinimumWindowWidth() const = 0;
+    virtual void setAnimationMinimumWindowWidth(int width) = 0;
+    virtual int animationMinimumWindowHeight() const = 0;
+    virtual void setAnimationMinimumWindowHeight(int height) = 0;
 };
 
 /**
