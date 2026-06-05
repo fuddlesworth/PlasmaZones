@@ -437,6 +437,67 @@ The sysfs + logind backend only covers internal panels and keyboard backlights; 
 
 ---
 
+### 2.5: `phosphor-service-notifications` *(planned)*
+
+The server side of `org.freedesktop.Notifications` (Desktop Notifications Spec 1.2) on the **session bus**, via `phosphor-dbus`. Namespace `PhosphorServiceNotifications`, export macro `PHOSPHORSERVICENOTIFICATIONS_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Notifications 1.0`. Table effort **L**: this is one of the larger Phase 2 libs because it owns notification lifecycle (id allocation, expiry, replace, close-reason bookkeeping) and decodes the full hint set, not just a read/write passthrough.
+
+Three structural firsts versus the prior service libs:
+
+- **First name-owning server.** 2.3 (bluetooth) exported an `Agent1` *object* that bluez calls back into, but bluez still owns the service. 2.5 acquires the well-known name `org.freedesktop.Notifications` and *is* the authoritative server for the interface. This is a name-acquisition concern the earlier libs never had: exactly one process may own the name, so a running `dunst` / `mako` / Plasma notification daemon is a hard conflict, not a degraded backend.
+- **Generated adaptor, not direct `ExportAllSlots`.** 2.3's agent had to be a direct `QObject` + `ExportAllSlots` because its interactive callbacks need `setDelayedReply`. The Notifications methods (`Notify`, `CloseNotification`, `GetCapabilities`, `GetServerInformation`) all reply **synchronously** (`Notify` allocates an id and returns it immediately), so there is no delayed-reply constraint, and per CLAUDE.md's D-Bus rule ("XML interface files → `qt6_add_dbus_adaptor()`") the server uses a generated adaptor from a checked-in `org.freedesktop.Notifications.xml`. The adaptor forwards to a plain `NotificationServer` QObject.
+- **First lib to link Qt::Gui.** Every prior service lib deliberately avoided `Qt::Gui` (state was non-visual). The `image-data` / `icon_data` hint (`(iiibiiay)`: width, height, rowstride, has-alpha, bits-per-sample, channels, pixel bytes) decodes to a `QImage`, which needs `Qt::Gui`. Scoped to image decode only: `QImage`, no widgets, no rendering.
+
+**Decisions taken up front** (see Unknowns for the rest):
+
+- **DI for testability.** `NotificationServer` takes an injectable `(QDBusConnection, serviceName)` defaulting to `sessionBus()` + `org.freedesktop.Notifications`, mirroring 2.3 / 2.4. Tests drive it over a private peer-to-peer `QDBusServer` (or an injected loopback connection) so the full ingest path runs with no real session daemon and no name conflict.
+- **Name-conflict policy: inert, with opt-in replace.** `registerService` is attempted once. On failure (another daemon owns the name) the server stays inert (`nameAcquired == false`), logs the conflict, and surfaces an empty model rather than fighting for the name. `ReplaceExisting` is NOT the default; the CLI demo exposes a `--replace` flag that opts into `QDBusConnectionInterface::registerService(..., Replace, AllowReplacement)` so taking over from another daemon is an explicit, observable choice. This matches the sibling "inert when the backend is unavailable" shape, with conflict standing in for absence.
+- **Server owns the full lifecycle.** Id allocation (monotonic, non-zero), `replaces_id` reuse (a Notify with `replaces_id != 0` updates the existing record in place rather than allocating), per-notification expiry timers (the spec's `expire_timeout`: `-1` server-default, `0` never-expire, `>0` explicit ms), and `NotificationClosed` reason codes (`1` expired, `2` dismissed-by-user, `3` closed by `CloseNotification`, `4` undefined) all live in the server, not the consumer.
+- **Decode, don't render.** Hints are decoded to typed fields (`urgency` 0/1/2, `category`, `desktop-entry`, `resident`, `transient`, `suppress-sound`, `value`, `x`/`y`) and `image-data` to a `QImage`; the body's optional markup is stored **raw**. Toast/center rendering, markup-to-HTML, and per-app rules are Phase 3.4 / 4.3, not here.
+
+**Milestones**
+
+1. **Skeleton + CMake plumbing + adaptor (S, ~1 day).** `libs/phosphor-service-notifications/` mirroring the 2.4 shape (`CMakeLists.txt`, `PhosphorServiceNotificationsConfig.cmake.in`, `include/PhosphorServiceNotifications/`, `src/`, `tests/`, `examples/phosphor-service-notifications-cli/`). Check in `src/org.freedesktop.Notifications.xml` and wire `qt6_add_dbus_adaptor` to generate the adaptor against the `NotificationServer` skeleton. Imperative `qmlregistration.cpp`, `std::call_once`-guarded, called from `src/shell/main.cpp` alongside the eight existing services. `BUILD_PHOSPHOR_SHELL`-gated. PUBLIC Qt6 Core / Qml / DBus / **Gui** (the `QImage` hint surfaces in a public header); `PhosphorDBus` PRIVATE for the hint `QDBusArgument` demarshalling.
+2. **`NotificationServer` facade + name acquisition (M, ~2-3 days).** Build the server on the injectable `(connection, service)`. Register the object at `/org/freedesktop/Notifications`, attempt `registerService`, expose `nameAcquired`. Implement the two static methods now: `GetServerInformation` → (`"Phosphor"`, `"phosphor-works"`, version, `"1.2"`) and `GetCapabilities` → the advertised set (`"body"`, `"body-markup"`, `"actions"`, `"icon-static"`, `"persistence"`, plus `"body-images"` / `"action-icons"` as the decode lands). Inert + empty when the name is taken.
+3. **`Notify` ingestion + `Notification` object (M, ~3-4 days).** Parse the eight `Notify` args, allocate an id (or honour `replaces_id`), decode hints into typed fields, store the record. The load-bearing piece is the `image-data` / `icon_data` / `image-path` resolution: the `(iiibiiay)` struct demarshals via `QDBusArgument` (the notifications analog of 2.3's nested `a{oa{sa{sv}}}` walk) into a `QImage`, with `image-path` / `app_icon` falling back through icon-theme lookup (reuse `phosphor-service-icontheme`). `Notification` is a parented `QObject` with `Q_PROPERTY`s for every decoded field, vended via `notificationAdded` / `notificationClosed`.
+4. **Expiry + close lifecycle (M, ~2-3 days).** Per-notification expiry timer honouring `expire_timeout` semantics. `CloseNotification(id)` plus user-dismiss and replace paths, each emitting `NotificationClosed(id, reason)` with the correct reason code. The consumer-driven side: `invokeAction(id, key)` emits `ActionInvoked(id, key)` and, for Wayland activation, `ActivationToken(id, token)`; these are `Q_INVOKABLE` (CLI now, toast in Phase 3.4), never exported on the bus, the same isolation 2.3 used to keep `respond*` off the `Agent1` interface.
+5. **`NotificationModel` (S-M, ~1-2 days).** `QAbstractListModel` over live notifications (host-backed model pattern from 2.2 / 2.3 / 2.4). Roles: `notification`, `id`, `appName`, `appIcon`, `summary`, `body`, `actions`, `urgency`, `category`, `desktopEntry`, `image`, `resident`, `transient`, `expireTimeout`, `timestamp`. Insert / remove on add / close; `dataChanged` on `replaces_id` update (no full reset). Role enum integers + names pinned by smoke test (the 2.0 sni-shell pattern).
+6. **QML registration + facade (S, ~1 day).** `Phosphor.Service.Notifications 1.0`: `NotificationServer` + `NotificationModel` instantiable (plain types, NOT singletons, per the no-singletons direction); `Notification` `qmlRegisterUncreatableType`. Action-invoke + activation-token surfaced on the server so a Phase-3 toast can bind them. Idempotent via `std::call_once`.
+7. **CLI demo: `examples/phosphor-service-notifications-cli/` (M, ~3 days).** Runs as the actual daemon: acquires the name (or `--replace` to take over), then logs every incoming `Notify` with decoded fields. Subcommands while running / against the live model: `watch` (default: stream incoming notifications), `list`, `close <id>`, `invoke <id> <action>`. `notify-send "hi" "body" -u critical` from a second terminal exercises the full path end to end. sysexits codes (0 / 64 / 1), same shape as the sibling CLIs.
+8. **Tests: smoke + role pinning (S-M, ~1-2 days).** No live session daemon on CI. A private peer-to-peer `QDBusServer` (or injected loopback connection) drives `Notify` / `CloseNotification` via synthetic `QDBusMessage`s and asserts: id allocation monotonic + non-zero, `replaces_id` updates in place, expiry fires `NotificationClosed` with reason `1`, explicit close gives reason `3`, `GetCapabilities` / `GetServerInformation` content, `image-data` decode from a crafted `(iiibiiay)` struct, urgency / category / desktop-entry hint decode, model role names + integers, inert construction when the name is unavailable (empty model, no crash, the `modelWithoutHostIsEmpty` shape). `QSKIP` the real-session-bus path.
+9. **README + Status (S, ~half day).** Sibling convention (SPDX → summary → Responsibility → Key types → Typical use → Design notes → Dependencies → Status). Status leads with `Phase 2.5: shipped.` on gate pass; cross-reference §2.1 for the shared milestone narrative and §2.3 for the server-object precedent.
+
+**Total effort:** L (≈ 3-4 weeks solo). Milestones 3 and 4 hold most of the wall-clock (hint decode + lifecycle); 1, 6, 8, 9 are mechanical given the 2.3 / 2.4 templates.
+
+**Dependencies**
+
+- A free `org.freedesktop.Notifications` name on the session bus (no other notification daemon running, or `--replace`).
+- `phosphor-dbus` (private link; `QDBusArgument` hint demarshalling). `phosphor-service-icontheme` (private link; `app_icon` / `image-path` resolution). Qt6 ≥ 6.6 Core / Qml / DBus / **Gui** (`QImage` only).
+- No external native dependency; the entire surface is D-Bus + Qt.
+
+**Risks**
+
+- **Name conflict.** The common case on a real desktop is that something already owns the name. The lib must stay inert (empty model, `nameAcquired == false`), never crash or busy-loop; `--replace` is the deliberate opt-in. Documented, not silent.
+- **`image-data` decode correctness.** The `(iiibiiay)` struct is easy to get wrong: rowstride vs width, premultiplied alpha, bits-per-sample, channel count. Decode once in the lib, pin it with a crafted-struct test, expose the result as a `QImage` so no consumer re-derives it.
+- **Expiry timer churn.** A burst of notifications creates many short timers; coalesce where possible and ensure the model emits per-row `dataChanged` / removal, not a reset, on each expiry.
+- **Qt::Gui creep.** Linking `Qt::Gui` is a first for a service lib; keep it scoped to `QImage` decode. No `QPixmap`, no widgets, no rendering, those belong to Phase 3.4.
+- **Markup in body.** The spec allows a limited HTML subset in `body`. Store it raw and advertise `body-markup`; rendering / sanitising is Phase 4.3, not a 2.5 concern.
+- **CI without a session bus.** The private-`QDBusServer` fixture makes ingest deterministic; the real-session path `QSKIP`s, same shape as the sibling daemon-dependent tests.
+
+**Unknowns to resolve before / during implementation**
+
+| # | Question | Recommended resolution |
+|---|----------|------------------------|
+| U1 | Generated adaptor or direct `ExportAllSlots`? | **Resolved: generated `qt6_add_dbus_adaptor` from a checked-in XML.** All four methods reply synchronously, so there is no `setDelayedReply` reason to hand-roll dispatch, and CLAUDE.md mandates XML → adaptor for this case. (2.3's direct export was driven solely by delayed replies.) |
+| U2 | Name-conflict policy when another daemon owns the name? | **Resolved: inert by default, opt-in `--replace`.** No forced `ReplaceExisting`; the lib surfaces `nameAcquired == false` and an empty model, the CLI flag makes takeover explicit. |
+| U3 | `image-data`: decode to `QImage` in the lib, or pass raw bytes to the UI? | **Resolved: decode in the lib to a `QImage` role.** Every consumer needs it and the decode is spec-fiddly; decode once. The raw hint stays available via a `properties()`-style accessor for advanced bindings, mirroring 2.1's U4 resolution. |
+| U4 | `body` markup: render in the lib or store raw? | **Resolved: store raw, advertise `body-markup` in `GetCapabilities`.** Markup-to-HTML / sanitising is the Phase 4.3 notification center (`markdown2html` port); the server never renders. |
+| U5 | History / persistence across restart? | **Resolved: in-memory only for 2.5.** On-disk history + DND + per-app rules are the Phase 4.3 notification center, which consumes this model. |
+| U6 | Is linking `Qt::Gui` acceptable for a service lib? | **Resolved: yes, scoped to `QImage` decode.** No widgets, no rendering. The alternative (raw bytes only) pushes the spec-fiddly decode onto every consumer, which is worse. |
+
+**Out of scope for 2.5.** The toast surface and notification center UI (Phase 3.4 / 4.3), per-app rules + their persistence (Phase 4.3), DND scheduling, actual audio playback for `suppress-sound` (the hint is decoded and surfaced; honouring it is a consumer concern), and markup rendering. The server stores and lifecycles notifications; it draws nothing.
+
+---
+
 ## Phase 3: UI primitives + first visible examples
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
