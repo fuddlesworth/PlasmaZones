@@ -3,8 +3,8 @@
 
 # phosphor-service-polkit
 
-A PolicyKit authentication agent for Phosphor-based desktop shells, via the
-`polkit-qt6` binding.
+A PolicyKit authentication agent, built on the `polkit-qt6` binding, for
+Phosphor-based desktop shells.
 
 ## Responsibility
 
