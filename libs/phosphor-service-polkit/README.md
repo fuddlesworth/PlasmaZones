@@ -54,13 +54,18 @@ PolkitAgent {
     Component.onCompleted: registerAgent()
 
     onAuthenticationRequested: (request) => authDialog.show(request)
+    // promptRequested is an EVENT, not a property change: it fires once per PAM
+    // prompt INCLUDING a same-text retry after a wrong answer. Drive the dialog's
+    // input field from it (not from a binding on request.prompt, which a
+    // same-text retry would not re-notify). echo is false for secrets.
+    onPromptRequested: (prompt, echo) => authDialog.askFor(prompt, echo)
     onAuthenticationCompleted: (gained) => authDialog.finish(gained)
 }
 
 AuthDialog {
     id: authDialog
-    // request.message + request.identities choose who; request.prompt is the
-    // PAM prompt (e.g. "Password: "), request.echo whether to show the input.
+    // request.message + request.identities choose who; askFor() shows each PAM
+    // prompt as it arrives.
     onAuthenticate: agent.authenticate()
     onAnswered: (text) => agent.respond(text)   // straight to PAM, never stored
     onDismissed: agent.cancel()
