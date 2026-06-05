@@ -503,6 +503,7 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorServiceBluetooth::PhosphorServiceBluetooth
             PhosphorServiceBrightness::PhosphorServiceBrightness
             PhosphorServiceNotifications::PhosphorServiceNotifications
+            PhosphorServicePolkit::PhosphorServicePolkit
             PhosphorLayer::PhosphorLayer
             PhosphorWayland::PhosphorWayland
             PhosphorRendering::PhosphorRendering
