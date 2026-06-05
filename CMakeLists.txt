@@ -453,6 +453,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-bluetooth) # BlueZ adapters / devices / pairing (Phase 2.3)
     add_subdirectory(libs/phosphor-service-brightness) # display / keyboard backlight brightness (Phase 2.4)
     add_subdirectory(libs/phosphor-service-notifications) # org.freedesktop.Notifications server (Phase 2.5)
+    add_subdirectory(libs/phosphor-service-polkit)        # PolicyKit authentication agent (Phase 2.6)
 endif()
 
 # Source directories
@@ -710,6 +711,14 @@ endif()
 # BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI can't link.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-notifications-cli)
+endif()
+
+# phosphor-service-polkit-cli. Acceptance harness for the phosphor-service-polkit
+# library (Phase 2.6). Runs as the session's PolicyKit authentication agent and
+# answers PAM prompts (trigger with `pkexec true`). Gated like the lib: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-polkit-cli)
 endif()
 
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
