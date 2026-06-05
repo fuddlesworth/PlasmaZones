@@ -93,7 +93,15 @@ PolkitAgent::PolkitAgent(QString sessionId, QString objectPath, QObject* parent)
 // Out-of-line: the Private dtor needs ListenerImpl complete, and ~Listener
 // unregisters the agent (there is no explicit unregister API), so destroying
 // this object releases the session.
-PolkitAgent::~PolkitAgent() = default;
+PolkitAgent::~PolkitAgent()
+{
+    // Complete any in-flight polkit result so a pending authentication does not
+    // dangle when the agent is destroyed mid-conversation. The Session +
+    // AuthRequest are QObject children, reclaimed by ~QObject; we deliberately do
+    // not run the signal-emitting settleActive() from the destructor.
+    if (d->result)
+        d->result->setCompleted();
+}
 
 bool PolkitAgent::registered() const
 {

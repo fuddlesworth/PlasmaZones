@@ -60,8 +60,10 @@ void PolkitDecodeTest::identitiesDecodeToDisplayStrings()
     const QStringList names = detail::identityNames(identities);
     QCOMPARE(names.size(), 1);
     // toString() is "unix-user:<uid>" for a UnixUserIdentity across polkit-qt6
-    // versions; assert the stable prefix rather than the NSS-dependent name form.
+    // versions; assert the stable prefix (not the NSS-dependent name form) plus a
+    // non-empty uid suffix, so a bare "unix-user:" could not pass.
     QVERIFY(names.at(0).startsWith(QStringLiteral("unix-user:")));
+    QVERIFY(names.at(0).size() > QStringLiteral("unix-user:").size());
 }
 
 void PolkitDecodeTest::emptyIdentitiesDecodeToEmptyList()

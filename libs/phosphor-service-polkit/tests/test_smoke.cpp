@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Milestone-1 smoke test for phosphor-service-polkit. Pins the plumbing
-// contract: QML-registration idempotency, the default object path, and inert
+// Smoke test for phosphor-service-polkit. Pins the plumbing contract:
+// QML-registration idempotency, the default object path, and inert
 // construction. registerAgent() is exercised against a deliberately bogus
 // session id so the test can never register as the real session's agent (which
 // would intercept the tester's authentications); it must fail and leave the
-// object inert. The request decode + PAM session paths need a live polkitd and
-// are exercised manually via the CLI demo in milestone 6.
+// object inert. The pure request decode is unit-tested in test_decode.cpp; the
+// full PAM session lifecycle needs a live polkitd and is exercised via the CLI
+// demo against pkexec.
 
 #include <PhosphorServicePolkit/AuthRequest.h>
 #include <PhosphorServicePolkit/PolkitAgent.h>
