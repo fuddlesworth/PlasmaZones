@@ -561,6 +561,7 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorServiceBrightness::PhosphorServiceBrightness
             PhosphorServiceNotifications::PhosphorServiceNotifications
             PhosphorServicePolkit::PhosphorServicePolkit
+            PhosphorServiceIdle::PhosphorServiceIdle
             PhosphorLayer::PhosphorLayer
             PhosphorWayland::PhosphorWayland
             PhosphorRendering::PhosphorRendering

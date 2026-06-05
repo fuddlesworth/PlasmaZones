@@ -568,6 +568,72 @@ The `polkit-qt6` API we build on:
 
 **Out of scope for 2.6.** The authentication **dialog UI** (Phase 3/4: the agent only surfaces the request + prompt a dialog binds), client-side `checkAuthorization` gating (U4), temporary-authorization management, and any credential storage. The agent drives the PAM conversation; it draws nothing and remembers nothing.
 
+### 2.7: `phosphor-service-idle` *(shipped)*
+
+A Wayland idle-management service: it watches the session for inactivity through a configurable multi-stage timeout policy, and it inhibits idle on request. Namespace `PhosphorServiceIdle`, export macro `PHOSPHORSERVICEIDLE_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Idle 1.0`. Table effort **S**.
+
+First **Wayland-client** service lib. Unlike 2.1 (libpipewire), 2.2 / 2.3 / 2.5 (D-Bus), 2.4 (sysfs + logind), and 2.6 (polkit-qt), this one is a pure Wayland client: it consumes `ext-idle-notify-v1` (idle notification) and `zwp-idle-inhibit-v1` (idle inhibition) globals from our own compositor. The closest code precedents are the foundation libs `phosphor-wayland` and `phosphor-layer`, not the prior service libs.
+
+> Backend note: the plan table (row 2.7) names only `idle-inhibit-unstable-v1`, but that protocol covers only the *inhibit* half (and is surface-bound). The *timeout / fired-at* half (the demo's "timeout config, fired-at log") is `ext-idle-notify-v1`. The service binds both.
+
+**What already exists (foundation tier).** `phosphor-wayland` already ships the raw protocol clients this service composes, so 2.7 does **not** re-vendor protocols or re-write `wl_registry` binding:
+
+- `PhosphorWayland::IdleNotifier`: an `ext-idle-notify-v1` consumer with `setTimeout(ms)`, `isIdle()`, and `idled()` / `resumed()` signals. One notifier is one timeout.
+- `PhosphorWayland::IdleInhibitor`: a `zwp-idle-inhibit-v1` client bound to a `QWindow` surface; inhibits while that surface is visible.
+- Both protocol XMLs (`ext-idle-notify-v1.xml`, `zwp-idle-inhibit-v1.xml`) are vendored under `libs/phosphor-wayland/protocols/` and code-generated there.
+- Both are currently registered for QML directly by the shell (`Phosphor.Shell.IdleNotifier` / `IdleInhibitor` in `shellengine.cpp`).
+
+So the service lib is the **policy layer** on top of those single-purpose primitives, not a new protocol binding.
+
+**What the service adds:**
+
+- A **multi-stage idle policy**: several escalating stages (e.g. dim, then lock-hint, then display-off), each backed by an `IdleNotifier` at its own timeout, driven by one coherent state machine that tracks the current stage, advances on each `idled()`, and resets to active on the first `resumed()`. The foundation `IdleNotifier` is single-timeout; the service composes N of them into a monotonic ladder.
+- **Programmatic, surface-less inhibition** with reference-counted cookies, so callers ("a video is playing", "a long copy is running") can inhibit idle without owning a visible surface, and inhibition lifts only when the last cookie is released. (See U2 for how surface-less inhibit maps onto the surface-bound `zwp-idle-inhibit-v1`.)
+- A QML / CLI facade (`IdleService`) exposing the live state, the configured stages, an inhibit toggle, and a fired-at log.
+
+**Decisions taken up front** (see Unknowns for the rest):
+
+- **Compose the foundation primitives, do not fork them.** Link `PhosphorWayland`; build the policy on `IdleNotifier` / `IdleInhibitor`. No protocol XML in this lib.
+- **Single instantiable host, no model.** Like 2.6 (single active request), the service is one `IdleService` host object with the current `state`, the `stages` it monitors, and signals; not a `QAbstractListModel`.
+- **DI for testability.** The state machine is driven by an injectable idle-source seam (an interface the real `IdleNotifier` adapter implements and a fake satisfies), so the stage-ladder logic is unit-tested with simulated idle / resume edges and no live compositor.
+- **Inert without the globals.** If the compositor advertises neither global (`IdleNotifier::isSupported()` / `IdleInhibitor::isSupported()` false), the host constructs, reports unsupported, and stays inert (the 2.x no-crash-on-missing-backend shape).
+
+**Milestones**
+
+1. **Skeleton + CMake plumbing (S, ~1 day).** `libs/phosphor-service-idle/` mirroring the 2.6 shape (`CMakeLists.txt`, `PhosphorServiceIdleConfig.cmake.in`, `include/PhosphorServiceIdle/`, `src/`, `tests/`, `examples/phosphor-service-idle-cli/`). Link `PhosphorWayland` (PRIVATE) + Qt6 Core / Qml. (The lib is non-visual: U2 resolved inhibition to disarming the monitors rather than holding a surface-bound inhibitor, so no `QWindow` / Gui is needed; only the CLI links Gui, for `QGuiApplication`.) Imperative `qmlregistration.cpp`, `std::call_once`-guarded, called from `src/shell/main.cpp` alongside the ten existing services. `BUILD_PHOSPHOR_SHELL`-gated.
+2. **Idle-source seam + stage state machine (S-M, ~1-2 days).** Define `IIdleSource` (timeout setter + `idled` / `resumed` signals) implemented by an adapter over `PhosphorWayland::IdleNotifier`. `IdleStateMachine` owns an ordered list of stages, arms one source per stage, advances the current stage on `idled()`, and resets to active on `resumed()`. Pure logic, fully testable on a fake source.
+3. **Inhibition aggregation (S, ~1 day).** Ref-counted `inhibit()` / `release(cookie)` surface; while any cookie is held, idle monitoring is paused (or an inhibitor is armed, per U2). `inhibited` property + change signal.
+4. **QML facade + `IdleService` host (S, ~1 day).** `Phosphor.Service.Idle 1.0`: `IdleService` instantiable (plain type, not a singleton); `state` (active / idle-stage-N), `stages` config, `inhibited`, `inhibit()` / `release()` `Q_INVOKABLE`, `idled(stage)` / `resumed()` signals. Resolve coexistence with the shell's existing direct `Phosphor.Shell.IdleNotifier` / `IdleInhibitor` regs (U4).
+5. **CLI demo `examples/phosphor-service-idle-cli/` (S, ~1 day).** Configures one or more timeouts from flags, logs each stage fire with a wall-clock timestamp (the "fired-at log"), and offers an inhibit toggle (e.g. a `--inhibit-for <s>` flag or stdin). Run it, stop touching input, watch stages fire; move the mouse, watch it resume.
+6. **Tests: smoke + state machine (S, ~1 day).** Unit-test the stage ladder on the fake source (single stage; multi-stage monotonic advance; resume-from-any-stage reset; reconfigure while idle), the inhibit ref-count (nested inhibit / release; release-unknown-cookie no-op), and inert construction when unsupported. `QSKIP` the live-compositor path.
+7. **README + Status (S, ~half day).** Sibling convention; "Phase 2.7: shipped" on gate pass; cross-reference `phosphor-wayland` for the underlying primitives and §2.6 for the single-host (no-model) shape.
+
+**Total effort:** S (≈ 1 week). Most of the protocol cost was already paid in `phosphor-wayland`; the new work is the state machine (milestone 2) and the facade. Milestones 1, 4, 5, 7 are mechanical given the 2.6 templates.
+
+**Dependencies**
+
+- `phosphor-wayland` (PRIVATE link; provides `IdleNotifier` / `IdleInhibitor` + the generated protocol code). No new `wayland-protocols` dependency; the XMLs are already vendored in `phosphor-wayland`.
+- Qt6 ≥ 6.6 Core / Qml. Gui is not a lib dependency (U2 resolved to disarm-the-monitors inhibition, so no `QWindow` / surface-bound inhibitor); the CLI links Gui for `QGuiApplication`. No `phosphor-dbus` unless the optional `org.freedesktop.ScreenSaver` surface lands (U3).
+
+**Risks**
+
+- **Overlap with the existing shell wiring.** The shell already binds `Phosphor.Shell.IdleNotifier` / `IdleInhibitor` directly. Land 2.7 without breaking that: either the service composes them and the shell migrates to `Phosphor.Service.Idle`, or both coexist with a documented split. (Resolved post-2.7 per U4: the duplicate session monitor `Phosphor.Shell.IdleNotifier` was removed from the shell, leaving `IdleService` as the single session monitor; the surface-bound `Phosphor.Shell.IdleInhibitor` stays.)
+- **Surface-less inhibit.** `zwp-idle-inhibit-v1` is surface-bound by design; a programmatic, surface-less inhibit has no direct protocol mapping. Options: pause / disarm the notifiers while inhibited (works for our own `ext-idle-notify` monitoring but does not inhibit other clients' idle), or hold a hidden inhibitor surface. Resolve in U2.
+- **Single source of truth.** If both the shell and the service monitor idle, the compositor sees two notifications and "idle" can flap. Keep exactly one armed monitor per timeout.
+- **No live compositor on CI.** The protocol path needs our compositor; keep the state machine behind the injectable seam and `QSKIP` the live path, validated through the CLI against a running session.
+
+**Unknowns to resolve before / during implementation**
+
+| # | Question | Lean |
+|---|----------|------|
+| U1 | Stage config shape: a flat `(name, timeoutMs)` list on the host, or richer per-stage actions (dim %, lock, dpms)? | Lean a flat ordered `(name, timeoutMs)` list for 2.7. The action mapping (what *happens* at each stage) is a Phase 3/4 shell-policy concern; the service reports *which* stage fired, the shell decides what to do. |
+| U2 | Surface-less inhibition: disarm the notifiers, or hold a hidden inhibitor surface? | Lean disarm-the-monitors for 2.7 (simplest; covers the shell's own idle actions); revisit a real `zwp-idle-inhibit` surface if we need to inhibit *other* clients' idle too. |
+| U3 | Expose a D-Bus `org.freedesktop.ScreenSaver` / `org.freedesktop.PowerManagement.Inhibit` server so third-party apps can inhibit idle the standard way? | Out of scope for 2.7 (the table is Wayland-only); a thin `phosphor-dbus` adaptor over the same ref-counted inhibit core can land later, like 2.6's deferred `Authority` client. |
+| U4 | Do the shell's existing `Phosphor.Shell.IdleNotifier` / `IdleInhibitor` QML regs stay, or migrate to `Phosphor.Service.Idle`? | **Resolved: the session monitor migrates, the surface-bound inhibitor stays.** `Phosphor.Shell.IdleNotifier` is dropped from `shellengine.cpp` (it was registered but had no QML consumer); session-wide idle monitoring is now owned by `Phosphor.Service.Idle`'s `IdleService`, so a single monitor arms each timeout. `Phosphor.Shell.IdleInhibitor` (surface-bound `zwp-idle-inhibit-v1`) stays a foundation primitive because the service's `inhibit()` is surface-less and does not replace a window keeping its own output awake. |
+| U5 | Default stage ladder (timeouts) shipped by the lib, or supplied entirely by the shell / settings? | Lean: the lib ships no policy (empty stage list by default); the shell / settings supply timeouts. The service is mechanism, not policy, matching the 2.x "surface state, do not decide" stance. |
+
+**Out of scope for 2.7.** The visual idle actions (dim animation, lock screen, DPMS / display power), any power-management or suspend coupling (that is 2.10 session / logind), and the D-Bus inhibit server (U3). The service times inactivity and reports stage transitions; the shell decides what each stage does.
+
 ---
 
 ## Phase 3: UI primitives + first visible examples

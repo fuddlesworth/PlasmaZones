@@ -55,8 +55,8 @@ above it re-exports a few from sibling libraries, so shell QML needs a
 single import:
 
 - `ShaderBackground`: animated shader surface (from `phosphor-rendering`).
-- `IdleInhibitor`, `IdleNotifier`: idle inhibition and idle detection
-  (from `phosphor-wayland`).
+- `IdleInhibitor`: surface-bound idle inhibition (from `phosphor-wayland`).
+  Session-wide idle detection lives in `Phosphor.Service.Idle`'s `IdleService`.
 - `ForeignToplevel`: one entry of the `Toplevels` window list
   (uncreatable; vended by `Toplevels`).
 
