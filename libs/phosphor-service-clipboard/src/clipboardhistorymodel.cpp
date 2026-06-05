@@ -116,7 +116,7 @@ void ClipboardHistoryModel::setEntries(const QList<ClipboardEntry>& entries)
     beginResetModel();
     m_entries = entries;
     // m_maxEntries is clamped to >= 0 in setMaxEntries, so the cap always applies.
-    if (m_entries.size() > m_maxEntries)
+    if (m_entries.size() > static_cast<qsizetype>(m_maxEntries))
         m_entries.erase(m_entries.begin() + m_maxEntries, m_entries.end());
     endResetModel();
     if (m_entries.size() != before)
@@ -289,12 +289,9 @@ QString ClipboardHistoryModel::makePreview(const QByteArray& content, const QStr
     if (!isTextType(mimeType)) {
         return QStringLiteral("[%1, %2 bytes]").arg(mimeType).arg(content.size());
     }
-    QString text = QString::fromUtf8(content);
-    // Collapse to a single trimmed line for the preview.
-    text.replace(QLatin1Char('\n'), QLatin1Char(' '));
-    text.replace(QLatin1Char('\r'), QLatin1Char(' '));
-    text.replace(QLatin1Char('\t'), QLatin1Char(' '));
-    text = text.simplified();
+    // Collapse all runs of whitespace (newlines, tabs, spaces) to single spaces
+    // and trim, so the preview is a single line.
+    QString text = QString::fromUtf8(content).simplified();
     if (text.size() > kPreviewMaxChars)
         text = text.left(kPreviewMaxChars) + QStringLiteral("...");
     return text;

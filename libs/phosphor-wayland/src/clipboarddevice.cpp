@@ -26,6 +26,14 @@ Q_LOGGING_CATEGORY(lcClipboardDevice, "phosphorwayland.clipboarddevice")
 namespace PhosphorWayland {
 
 namespace {
+// Upper bound on a single clipboard payload we buffer in memory. Clipboard
+// content is untrusted external input: any application can own the selection, so
+// without a ceiling a hostile or runaway producer could stream unbounded bytes
+// down the pipe and exhaust memory. A selection larger than this is dropped and
+// delivered as a failed (empty) read rather than truncated, so a partial image
+// or document is never recorded.
+constexpr qint64 kMaxReadBytes = 100 * 1024 * 1024; // 100 MiB
+
 // One in-flight asynchronous read of an offer over a pipe.
 struct ReadContext
 {
@@ -223,6 +231,13 @@ void ClipboardDevice::Private::startRead(const QString& mimeType, int readFd)
         for (;;) {
             const ssize_t n = ::read(raw->fd, chunk, sizeof(chunk));
             if (n > 0) {
+                if (raw->buffer.size() + n > kMaxReadBytes) {
+                    qCWarning(lcClipboardDevice) << "clipboard payload for" << raw->mimeType << "exceeds"
+                                                 << kMaxReadBytes << "bytes; dropping the selection";
+                    Q_EMIT owner->dataReceived(raw->mimeType, QByteArray());
+                    finishRead(raw);
+                    return;
+                }
                 raw->buffer.append(chunk, static_cast<int>(n));
                 continue;
             }

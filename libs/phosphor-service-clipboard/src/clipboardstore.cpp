@@ -19,6 +19,12 @@
 namespace PhosphorServiceClipboard {
 
 namespace {
+// Upper bound on a single blob we read back into memory on load. Blobs we write
+// are already bounded (the live read path caps payload size), so a blob larger
+// than this is corrupt or tampered; skip it rather than load it and risk
+// exhausting memory at startup.
+constexpr qint64 kMaxBlobBytes = 100 * 1024 * 1024; // 100 MiB
+
 QString blobHash(const QByteArray& content)
 {
     return QString::fromLatin1(QCryptographicHash::hash(content, QCryptographicHash::Sha256).toHex());
@@ -102,6 +108,8 @@ QList<ClipboardEntry> ClipboardStore::load() const
         QFile blob(blobs.filePath(hash));
         if (!blob.open(QIODevice::ReadOnly))
             continue; // a missing blob means a corrupt entry; skip it.
+        if (blob.size() > kMaxBlobBytes)
+            continue; // corrupt or tampered oversize blob; skip it.
 
         ClipboardEntry entry;
         entry.content = blob.readAll();

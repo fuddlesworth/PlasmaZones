@@ -8,13 +8,10 @@ namespace PhosphorServiceClipboard {
 WaylandClipboardSource::WaylandClipboardSource(QObject* parent)
     : IClipboardSource(parent)
 {
-    connect(&m_device, &PhosphorWayland::ClipboardDevice::selectionChanged, this, [this](const QStringList& mimeTypes) {
-        Q_EMIT selectionChanged(mimeTypes);
-    });
-    connect(&m_device, &PhosphorWayland::ClipboardDevice::dataReceived, this,
-            [this](const QString& mimeType, const QByteArray& data) {
-                Q_EMIT dataReceived(mimeType, data);
-            });
+    // The device's signals carry the same payloads as the seam's, so forward them
+    // directly rather than through relay lambdas.
+    connect(&m_device, &PhosphorWayland::ClipboardDevice::selectionChanged, this, &IClipboardSource::selectionChanged);
+    connect(&m_device, &PhosphorWayland::ClipboardDevice::dataReceived, this, &IClipboardSource::dataReceived);
 }
 
 void WaylandClipboardSource::receive(const QString& mimeType)

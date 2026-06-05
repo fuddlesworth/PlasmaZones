@@ -11,9 +11,12 @@ function(_phosphorserviceclipboard_test target source)
             PhosphorServiceClipboard::PhosphorServiceClipboard
     )
     add_test(NAME ${target} COMMAND ${target})
+    # Isolate XDG_DATA_HOME to a build-tree dir: constructing ClipboardService
+    # loads the on-disk history, so the test must never read the real user's
+    # clipboard directory.
     set_tests_properties(${target}
         PROPERTIES
-            ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/test-xdg-data-${target}"
             LABELS "phosphorserviceclipboard"
     )
 endfunction()

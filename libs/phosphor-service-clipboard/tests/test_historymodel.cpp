@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Unit test for the clipboard history model. It drives the model with a fake
 // clipboard source that delivers selection / data edges directly, so the whole
@@ -112,6 +112,15 @@ private Q_SLOTS:
     void binaryPreviewIsPlaceholder();
     void removeAndClear();
     void asyncSameMimeReadsAreNotMisattributed();
+    void historyChangedFiresOnMutations();
+    void setEntriesTrimsWithoutResave();
+    void roleNamesAndRolesMap();
+    void previewTruncatesLongText();
+    void dedupDistinguishesMimeType();
+    void prefersImageFallback();
+    void removeAtOutOfRangeIsNoOp();
+    void setMaxEntriesBoundaries();
+    void dataWithInvalidIndexIsEmpty();
 };
 
 void ClipboardHistoryModelTest::startsEmpty()
@@ -291,6 +300,171 @@ void ClipboardHistoryModelTest::asyncSameMimeReadsAreNotMisattributed()
     QCOMPARE(model.data(model.index(0), ClipboardHistoryModel::PreviewRole).toString(), QStringLiteral("BBB"));
     QCOMPARE(model.data(model.index(1), ClipboardHistoryModel::PreviewRole).toString(), QStringLiteral("AAA"));
     QVERIFY(!source.flushNext()); // no stale third read
+}
+
+void ClipboardHistoryModelTest::historyChangedFiresOnMutations()
+{
+    FakeClipboardSource source;
+    ClipboardHistoryModel model;
+    model.setSource(&source);
+    QSignalSpy historySpy(&model, &ClipboardHistoryModel::historyChanged);
+
+    source.pushText(utf8("a")); // new capture
+    QCOMPARE(historySpy.count(), 1);
+    source.pushText(utf8("b")); // new capture
+    QCOMPARE(historySpy.count(), 2);
+    source.pushText(utf8("a")); // dedup move-to-front still changes persisted order
+    QCOMPARE(historySpy.count(), 3);
+
+    model.removeAt(0); // removal
+    QCOMPARE(historySpy.count(), 4);
+    model.clear(); // clear
+    QCOMPARE(historySpy.count(), 5);
+}
+
+void ClipboardHistoryModelTest::setEntriesTrimsWithoutResave()
+{
+    ClipboardHistoryModel model;
+    model.setMaxEntries(2);
+    QSignalSpy historySpy(&model, &ClipboardHistoryModel::historyChanged);
+    QSignalSpy countSpy(&model, &ClipboardHistoryModel::countChanged);
+
+    QList<ClipboardEntry> seed;
+    for (int i = 0; i < 5; ++i) {
+        ClipboardEntry entry;
+        entry.content = QByteArray::number(i);
+        entry.mimeType = QStringLiteral("text/plain");
+        entry.preview = QString::number(i);
+        seed.append(entry);
+    }
+    model.setEntries(seed);
+
+    QCOMPARE(model.rowCount(), 2); // trimmed to the cap
+    QCOMPARE(countSpy.count(), 1); // count went 0 -> 2
+    // A load seeds the model but must NOT look like a user mutation, or the host
+    // would immediately re-save what it just read.
+    QCOMPARE(historySpy.count(), 0);
+}
+
+void ClipboardHistoryModelTest::roleNamesAndRolesMap()
+{
+    FakeClipboardSource source;
+    ClipboardHistoryModel model;
+    model.setSource(&source);
+    source.pushSelection({QStringLiteral("text/plain;charset=utf-8"), QStringLiteral("text/plain")},
+                         {{QStringLiteral("text/plain;charset=utf-8"), utf8("hi")}});
+    QCOMPARE(model.rowCount(), 1);
+
+    const QHash<int, QByteArray> roles = model.roleNames();
+    QCOMPARE(roles.value(ClipboardHistoryModel::PreviewRole), QByteArrayLiteral("preview"));
+    QCOMPARE(roles.value(ClipboardHistoryModel::MimeTypeRole), QByteArrayLiteral("mimeType"));
+    QCOMPARE(roles.value(ClipboardHistoryModel::OfferedTypesRole), QByteArrayLiteral("offeredTypes"));
+    QCOMPARE(roles.value(ClipboardHistoryModel::TimestampRole), QByteArrayLiteral("timestamp"));
+
+    const QModelIndex idx = model.index(0);
+    // DisplayRole aliases the preview so a plain view shows something readable.
+    QCOMPARE(model.data(idx, Qt::DisplayRole), model.data(idx, ClipboardHistoryModel::PreviewRole));
+    QCOMPARE(model.data(idx, ClipboardHistoryModel::OfferedTypesRole).toStringList(),
+             (QStringList{QStringLiteral("text/plain;charset=utf-8"), QStringLiteral("text/plain")}));
+    QVERIFY(model.data(idx, ClipboardHistoryModel::TimestampRole).toDateTime().isValid());
+}
+
+void ClipboardHistoryModelTest::previewTruncatesLongText()
+{
+    FakeClipboardSource source;
+    ClipboardHistoryModel model;
+    model.setSource(&source);
+
+    // Multi-line, whitespace-heavy, and longer than the 120-char preview cap.
+    const QByteArray longText = QByteArray("line one\nline two\t") + QByteArray(200, 'x');
+    source.pushText(longText);
+    QCOMPARE(model.rowCount(), 1);
+
+    const QString preview = model.data(model.index(0), ClipboardHistoryModel::PreviewRole).toString();
+    QVERIFY(!preview.contains(QLatin1Char('\n'))); // collapsed to a single line
+    QVERIFY(!preview.contains(QLatin1Char('\t')));
+    QVERIFY(preview.endsWith(QStringLiteral("..."))); // truncated
+    QCOMPARE(preview.size(), 123); // 120 chars + "..."
+}
+
+void ClipboardHistoryModelTest::dedupDistinguishesMimeType()
+{
+    FakeClipboardSource source;
+    ClipboardHistoryModel model;
+    model.setSource(&source);
+
+    // Identical bytes under two different MIME types are distinct entries, not a
+    // dedup: dedup keys on (content, mimeType).
+    const QByteArray bytes = utf8("same bytes");
+    source.pushSelection({QStringLiteral("text/plain;charset=utf-8")},
+                         {{QStringLiteral("text/plain;charset=utf-8"), bytes}});
+    source.pushSelection({QStringLiteral("image/png")}, {{QStringLiteral("image/png"), bytes}});
+    QCOMPARE(model.rowCount(), 2);
+}
+
+void ClipboardHistoryModelTest::prefersImageFallback()
+{
+    FakeClipboardSource source;
+    ClipboardHistoryModel model;
+    model.setSource(&source);
+
+    // No text and no image/png: a non-png image type is chosen over an unknown
+    // type, exercising the generic-image fallback tier of preferredMimeType.
+    source.pushSelection(
+        {QStringLiteral("application/x-foo"), QStringLiteral("image/jpeg")},
+        {{QStringLiteral("image/jpeg"), utf8("JPEGDATA")}, {QStringLiteral("application/x-foo"), utf8("FOO")}});
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(model.data(model.index(0), ClipboardHistoryModel::MimeTypeRole).toString(), QStringLiteral("image/jpeg"));
+}
+
+void ClipboardHistoryModelTest::removeAtOutOfRangeIsNoOp()
+{
+    FakeClipboardSource source;
+    ClipboardHistoryModel model;
+    model.setSource(&source);
+    source.pushText(utf8("only"));
+
+    QSignalSpy countSpy(&model, &ClipboardHistoryModel::countChanged);
+    QSignalSpy historySpy(&model, &ClipboardHistoryModel::historyChanged);
+    model.removeAt(-1);
+    model.removeAt(99);
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(countSpy.count(), 0); // the guard must not emit
+    QCOMPARE(historySpy.count(), 0); // nor trigger a re-save
+}
+
+void ClipboardHistoryModelTest::setMaxEntriesBoundaries()
+{
+    FakeClipboardSource source;
+    ClipboardHistoryModel model;
+    model.setSource(&source);
+    source.pushText(utf8("1"));
+    source.pushText(utf8("2"));
+    QCOMPARE(model.rowCount(), 2);
+
+    QSignalSpy historySpy(&model, &ClipboardHistoryModel::historyChanged);
+    QSignalSpy countSpy(&model, &ClipboardHistoryModel::countChanged);
+
+    model.setMaxEntries(0); // a zero cap empties the model
+    QCOMPARE(model.rowCount(), 0);
+    QCOMPARE(historySpy.count(), 1); // eviction changes the persisted history
+    QCOMPARE(countSpy.count(), 1);
+
+    model.setMaxEntries(-5); // negative is clamped to zero: a no-op on an empty model
+    QCOMPARE(model.rowCount(), 0);
+    QCOMPARE(historySpy.count(), 1); // nothing evicted, no emit
+}
+
+void ClipboardHistoryModelTest::dataWithInvalidIndexIsEmpty()
+{
+    FakeClipboardSource source;
+    ClipboardHistoryModel model;
+    model.setSource(&source);
+    source.pushText(utf8("x"));
+
+    QVERIFY(!model.data(QModelIndex(), ClipboardHistoryModel::PreviewRole).isValid());
+    QVERIFY(!model.data(model.index(5), ClipboardHistoryModel::PreviewRole).isValid()); // row out of range
+    QVERIFY(!model.data(model.index(0), Qt::UserRole + 999).isValid()); // unknown role
 }
 
 QTEST_GUILESS_MAIN(ClipboardHistoryModelTest)

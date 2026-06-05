@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Unit test for the on-disk clipboard store. It round-trips entries through a
 // temporary directory (no real user data), pinning the persistence contract:
@@ -40,6 +40,10 @@ private Q_SLOTS:
     void prunesOrphanBlobs();
     void emptySaveClearsHistory();
     void corruptIndexLoadsEmpty();
+    void offeredTypesRoundTrip();
+    void tamperedBlobReferenceIsSkipped();
+    void missingBlobFileIsSkipped();
+    void identicalContentSharesOneBlob();
 };
 
 void ClipboardStoreTest::emptyOnFirstRun()
@@ -150,6 +154,70 @@ void ClipboardStoreTest::corruptIndexLoadsEmpty()
     index.close();
 
     QVERIFY(ClipboardStore(path).load().isEmpty());
+}
+
+void ClipboardStoreTest::offeredTypesRoundTrip()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("store"));
+    QVERIFY(ClipboardStore(path).save({textEntry("v", QStringLiteral("v"))}));
+
+    const QList<ClipboardEntry> loaded = ClipboardStore(path).load();
+    QCOMPARE(loaded.size(), 1);
+    // The full offered-types list round-trips by value, not just by count.
+    QCOMPARE(loaded.at(0).offeredTypes,
+             (QStringList{QStringLiteral("text/plain;charset=utf-8"), QStringLiteral("text/plain")}));
+}
+
+void ClipboardStoreTest::tamperedBlobReferenceIsSkipped()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("store"));
+    QVERIFY(QDir().mkpath(path));
+    QFile index(QDir(path).filePath(QStringLiteral("index.json")));
+    QVERIFY(index.open(QIODevice::WriteOnly));
+    // A tampered index whose blob reference is a path-traversal string, not a
+    // SHA-256 hex digest, must be rejected and never resolved as a file path.
+    index.write(R"([{"mime":"text/plain","preview":"x","timestamp":0,"blob":"../../../../etc/passwd"}])");
+    index.close();
+
+    QVERIFY(ClipboardStore(path).load().isEmpty());
+}
+
+void ClipboardStoreTest::missingBlobFileIsSkipped()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("store"));
+    QVERIFY(QDir().mkpath(path));
+    QFile index(QDir(path).filePath(QStringLiteral("index.json")));
+    QVERIFY(index.open(QIODevice::WriteOnly));
+    // A valid-looking (64 hex) hash whose blob file does not exist is a corrupt
+    // entry and is skipped rather than loaded.
+    const QString hash(64, QLatin1Char('a'));
+    index.write(
+        QStringLiteral(R"([{"mime":"text/plain","preview":"x","timestamp":0,"blob":"%1"}])").arg(hash).toUtf8());
+    index.close();
+
+    QVERIFY(ClipboardStore(path).load().isEmpty());
+}
+
+void ClipboardStoreTest::identicalContentSharesOneBlob()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("store"));
+    const QDir blobs(QDir(path).filePath(QStringLiteral("blobs")));
+
+    ClipboardStore store(path);
+    // Two entries with identical content but distinct previews hash to one blob.
+    QVERIFY(store.save({textEntry("dup", QStringLiteral("first")), textEntry("dup", QStringLiteral("second"))}));
+    QCOMPARE(blobs.entryList(QDir::Files).size(), 1);
+
+    // Dropping one entry must NOT prune the shared blob the other still references.
+    QVERIFY(store.save({textEntry("dup", QStringLiteral("first"))}));
+    QCOMPARE(blobs.entryList(QDir::Files).size(), 1);
+    const QList<ClipboardEntry> loaded = store.load();
+    QCOMPARE(loaded.size(), 1);
+    QCOMPARE(loaded.at(0).content, QByteArray("dup"));
 }
 
 QTEST_GUILESS_MAIN(ClipboardStoreTest)
