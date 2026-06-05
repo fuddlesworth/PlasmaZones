@@ -506,6 +506,65 @@ Three structural firsts versus the prior service libs:
 
 ---
 
+### 2.6: `phosphor-service-polkit` *(planned)*
+
+A PolicyKit **authentication agent** via the `polkit-qt6` binding. Namespace `PhosphorServicePolkit`, export macro `PHOSPHORSERVICEPOLKIT_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Polkit 1.0`. Table effort **M**. Unlike the data-source service libs (2.1-2.4), and like 2.5, this one is a callback target: `polkitd` calls into us when an app requests a privileged action, and we drive the PAM conversation that authenticates the user.
+
+Two structural notes versus the prior service libs:
+
+- **Single active request, no model.** polkit serialises authentication: the agent handles one request at a time. So the facade exposes a single *active* `AuthRequest` plus signals, not a `QAbstractListModel` (the notifications-style list shape does not apply). The closest precedent is 2.3's `Agent1` (a callback object with interactive, deferred responses keyed to a request), not 2.5's server-with-a-model.
+- **Security-sensitive.** This library handles authentication. It surfaces the request and a `respond(password)` path but never stores, logs, or echoes the password; the password flows straight into `Agent::Session::setResponse`. The plan-table's "accepts a hardcoded password" is strictly a CLI-demo convenience, fenced behind an explicit flag and never in the library.
+
+The `polkit-qt6` API we build on:
+- `PolkitQt1::Agent::Listener` (abstract): subclass it, override `initiateAuthentication(actionId, message, iconName, Details, cookie, Identity::List, AsyncResult*)`, `initiateAuthenticationFinish()`, `cancelAuthentication()`; register with `registerListener(subject, objectPath)` for the session `Subject`. The `AsyncResult*` MUST be completed when the flow ends.
+- `PolkitQt1::Agent::Session`: drives one PAM conversation. `initiate()` starts it; the `request(prompt, echo)` signal carries each PAM prompt; `setResponse(password)` answers; `completed(gainedAuthorization)` / `showError` / `showInfo` report progress; `cancel()` aborts. Constructed with the chosen `Identity`, the `cookie`, and the `AsyncResult`.
+
+**Decisions taken up front** (see Unknowns for the rest):
+
+- **DI for testability.** The agent takes an injectable `Subject` (default: the current session) and an injectable object path, so registration can be exercised without owning the real session, and the request/response state machine can be driven without a live `polkitd`.
+- **Inert on registration failure.** Exactly one agent serves a session; if the desktop's agent (KDE / GNOME / `polkit-gnome`) already holds it, `registerListener` fails and the agent surfaces `registered() == false` and stays inert, mirroring 2.5's name-conflict-is-inert shape. Taking over (stopping the desktop agent) is the operator's choice, surfaced in the CLI demo, not forced.
+- **Surface the request, never the secret.** `AuthRequest` carries actionId / message / iconName / details / the chosen identity / the current PAM prompt + echo flag. `respond(password)` and `cancel()` are `Q_INVOKABLE` for a UI; the password is passed straight through and never retained.
+- **Link Core + Agent, not Gui.** `PolkitQt6-1::Core` + `::Agent` only; the `::Gui` action-button widgets are a different (Phase 3/4 UI) concern. (`Qt6::Gui` still arrives transitively via the agent lib.)
+
+**Milestones**
+
+1. **Skeleton + CMake plumbing (S, ~1 day).** `libs/phosphor-service-polkit/` mirroring the 2.5 shape (`CMakeLists.txt`, `PhosphorServicePolkitConfig.cmake.in`, `include/PhosphorServicePolkit/`, `src/`, `tests/`, `examples/phosphor-service-polkit-cli/`). `find_package(PolkitQt6-1 REQUIRED)`; link `PolkitQt6-1::Core` + `PolkitQt6-1::Agent`. Imperative `qmlregistration.cpp`, `std::call_once`-guarded, called from `src/shell/main.cpp` alongside the nine existing services. `BUILD_PHOSPHOR_SHELL`-gated.
+2. **`PolkitAgent` listener + registration (M, ~2-3 days).** Subclass `Listener`. Build on an injectable `(Subject, objectPath)`; `registerListener` for the session subject, expose `registered`. Implement the three overrides as a skeleton (store the `AsyncResult` + `cookie`, complete immediately or reject) so the lib links and registers; inert + `registered() == false` when another agent owns the session.
+3. **`initiateAuthentication` ingestion + typed `AuthRequest` (M, ~2-3 days).** Decode the callback into an `AuthRequest` (actionId, message, iconName, `Details` → `QVariantMap`, cookie, identities → typed list), store the pending `AsyncResult` keyed by cookie (the 2.3 keyed-request precedent), and surface the active request via signals. Identity selection (default: first identity; multi-identity selection is a UI affordance).
+4. **`Session` / PAM conversation (M, ~2-3 days).** Wrap `Agent::Session`: `initiate()` on accept; relay `request(prompt, echo)` as a Qt signal; `respond(password)` → `setResponse`; `completed(gained)` → complete the `AsyncResult` + emit result + clear the active request; `cancel()` and `showError` / `showInfo` paths. `cancelAuthentication()` from polkit tears down the in-flight session.
+5. **QML facade (S, ~1 day).** `Phosphor.Service.Polkit 1.0`: the agent host instantiable (plain type, not a singleton), `AuthRequest` `qmlRegisterUncreatableType`. `respond` / `cancel` `Q_INVOKABLE`, never exported on any bus (the 2.3 / 2.5 isolation pattern).
+6. **CLI demo `examples/phosphor-service-polkit-cli/` (M, ~3 days).** Runs as the standalone agent: registers, logs each incoming request (action, message, identities, PAM prompt), and with an explicit `--password <pw>` (demo only, loudly documented) auto-answers. `pkexec true` (or any polkit action) from another terminal exercises the full path end to end; `--replace`-style guidance when the desktop agent owns the session.
+7. **Tests: smoke (S-M, ~1-2 days).** No live `polkitd` on CI. Pin what is deterministic: inert construction (no crash when registration fails / no daemon), the `Details` → `QVariantMap` decode, `AuthRequest` field surfaces and identity selection, and the session state machine where it can be driven without PAM (`request` → `respond` → `completed` wiring via a fake/injected session seam). `QSKIP` the daemon-dependent registration + real-PAM paths.
+8. **README + Status (S, ~half day).** Sibling convention; "Phase 2.6: shipped" on gate pass; cross-reference §2.3 for the agent-callback precedent and §2.5 for the inert-on-conflict shape.
+
+**Total effort:** M (≈ 2-3 weeks). Milestones 3-4 (the request decode + the PAM session relay) hold the wall-clock; 1, 5, 7, 8 are mechanical given the 2.5 templates.
+
+**Dependencies**
+
+- `polkit-qt6` ≥ the distro's PolkitQt6-1 (Core + Agent), discovered via `find_package(PolkitQt6-1)`. A running `polkitd` on the system bus for the live path (the lib loads inert without it).
+- Qt6 ≥ 6.6 Core / Qml (Gui arrives transitively via `PolkitQt6-1::Agent`). No `phosphor-dbus` (polkit-qt owns its D-Bus).
+
+**Risks**
+
+- **Agent-conflict.** A desktop session almost always already has an agent (KDE / GNOME). Registration then fails; the lib must stay inert, never crash or busy-loop, and the demo documents stopping the desktop agent to test. The inert path is the common case on a real desktop.
+- **AsyncResult lifetime.** Every `initiateAuthentication` MUST eventually complete its `AsyncResult` (success, error, or cancel) or polkit's auth dialog hangs; a dropped or double completion corrupts the flow. Key it by cookie, complete exactly once, with explicit `cancelAuthentication` handling (the 2.3 delayed-reply discipline).
+- **Password handling.** The secret must never be retained, logged, or echoed; it flows straight into `setResponse`. The `request(prompt, echo)` echo flag is honoured by the UI, not the lib. Audit this surface specifically.
+- **PAM in tests.** Real authentication needs PAM + a daemon, untestable on CI. Keep the testable seam (request decode, state machine) injectable; `QSKIP` the rest, validated manually through the CLI against a real `pkexec`.
+
+**Unknowns to resolve before / during implementation**
+
+| # | Question | Lean |
+|---|----------|------|
+| U1 | `Subject` for registration: `UnixSessionSubject` from the session id, or from the process pid? | Lean session-id (the agent serves the whole session); injectable so tests pass a synthetic subject. Confirm against a polkit-qt example. |
+| U2 | Object path for the exported agent. | A Phosphor-namespaced path (e.g. `/org/phosphor/PolicyKit1/AuthenticationAgent`), constant + injectable. |
+| U3 | Multi-identity handling: pick the first, or surface the list for selection? | Surface the list on `AuthRequest`; default-select the first; the Phase-3/4 dialog can offer a chooser. |
+| U4 | Also expose the **client** side (`Authority::checkAuthorization`) for the shell to gate its own privileged actions, or agent-only? | Agent-only for 2.6 (the table's scope); a thin `Authority` query wrapper can land later if a consumer needs it. |
+| U5 | Registration-failure policy when a desktop agent owns the session: inert, or offer takeover? | Inert by default (cannot force-replace a polkit agent the way a bus name allows); the CLI documents stopping the desktop agent. |
+
+**Out of scope for 2.6.** The authentication **dialog UI** (Phase 3/4: the agent only surfaces the request + prompt a dialog binds), client-side `checkAuthorization` gating (U4), temporary-authorization management, and any credential storage. The agent drives the PAM conversation; it draws nothing and remembers nothing.
+
+---
+
 ## Phase 3: UI primitives + first visible examples
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
