@@ -563,6 +563,7 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorServicePolkit::PhosphorServicePolkit
             PhosphorServiceIdle::PhosphorServiceIdle
             PhosphorServiceClipboard::PhosphorServiceClipboard
+            PhosphorServiceLock::PhosphorServiceLock
             PhosphorLayer::PhosphorLayer
             PhosphorWayland::PhosphorWayland
             PhosphorRendering::PhosphorRendering
