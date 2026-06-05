@@ -157,9 +157,19 @@ void PolkitAgent::authenticate()
     connect(session, &PolkitQt1::Agent::Session::request, this, [this](const QString& prompt, bool echo) {
         if (!d->request)
             return;
-        d->request->m_prompt = prompt;
-        d->request->m_echo = echo;
-        Q_EMIT d->request->promptChanged();
+        // Update the display properties with change-guarded notifies, then emit
+        // the answer-now EVENT. The event fires every time (including a same-text
+        // retry after a wrong answer), which the change-guarded prompt property
+        // would not re-notify.
+        if (d->request->m_prompt != prompt) {
+            d->request->m_prompt = prompt;
+            Q_EMIT d->request->promptChanged();
+        }
+        if (d->request->m_echo != echo) {
+            d->request->m_echo = echo;
+            Q_EMIT d->request->echoChanged();
+        }
+        Q_EMIT promptRequested(prompt, echo);
     });
     connect(session, &PolkitQt1::Agent::Session::completed, this, [this](bool gained) {
         onSessionCompleted(gained);

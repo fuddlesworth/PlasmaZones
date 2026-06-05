@@ -90,6 +90,11 @@ Q_SIGNALS:
     void activeRequestChanged();
     /// A new authentication request arrived (also reflected in `activeRequest`).
     void authenticationRequested(PhosphorServicePolkit::AuthRequest* request);
+    /// PAM is asking for input: answer it with `respond()`. This is an EVENT, not
+    /// a property change, so it fires once per request including a same-text
+    /// retry after a wrong answer (which `activeRequest`'s change-guarded `prompt`
+    /// would not re-notify). @p echo is false for secrets (do not echo input).
+    void promptRequested(const QString& prompt, bool echo);
     /// The PAM conversation finished; @p gainedAuthorization is true when the
     /// user authenticated successfully.
     void authenticationCompleted(bool gainedAuthorization);

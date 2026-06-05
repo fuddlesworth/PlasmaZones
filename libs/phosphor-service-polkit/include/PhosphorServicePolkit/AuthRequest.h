@@ -40,7 +40,7 @@ class PHOSPHORSERVICEPOLKIT_EXPORT AuthRequest : public QObject
     Q_PROPERTY(QStringList identities READ identities CONSTANT)
     Q_PROPERTY(int selectedIdentity READ selectedIdentity WRITE setSelectedIdentity NOTIFY selectedIdentityChanged)
     Q_PROPERTY(QString prompt READ prompt NOTIFY promptChanged)
-    Q_PROPERTY(bool echo READ echo NOTIFY promptChanged)
+    Q_PROPERTY(bool echo READ echo NOTIFY echoChanged)
 
 public:
     [[nodiscard]] QString actionId() const
@@ -70,7 +70,7 @@ public:
         return m_identities;
     }
     /// Index into `identities` of the identity the user will authenticate as
-    /// (default 0). The agent uses it to build the PAM session in milestone 4.
+    /// (default 0). `authenticate()` uses it to build the PAM session.
     [[nodiscard]] int selectedIdentity() const
     {
         return m_selectedIdentity;
@@ -94,6 +94,7 @@ public:
 Q_SIGNALS:
     void selectedIdentityChanged();
     void promptChanged();
+    void echoChanged();
 
 private:
     Q_DISABLE_COPY_MOVE(AuthRequest)

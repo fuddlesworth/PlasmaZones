@@ -7,8 +7,8 @@
 #include <PhosphorServiceMpris/QmlRegistration.h>
 #include <PhosphorServiceNetwork/QmlRegistration.h>
 #include <PhosphorServiceNotifications/QmlRegistration.h>
-#include <PhosphorServicePolkit/QmlRegistration.h>
 #include <PhosphorServicePipeWire/QmlRegistration.h>
+#include <PhosphorServicePolkit/QmlRegistration.h>
 #include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorShell/ShellEngine.h>
