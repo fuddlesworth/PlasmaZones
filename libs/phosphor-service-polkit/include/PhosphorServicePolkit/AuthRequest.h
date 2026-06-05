@@ -75,7 +75,7 @@ public:
     {
         return m_selectedIdentity;
     }
-    /// Clamped to a valid index; out-of-range values are ignored.
+    /// Out-of-range indices are ignored (the current selection is kept).
     void setSelectedIdentity(int index);
 
     /// The current PAM prompt to show the user (e.g. "Password: "), updated by
