@@ -462,6 +462,21 @@ add_executable(test_shader_include_resolver ui/test_shader_include_resolver.cpp)
 target_link_libraries(test_shader_include_resolver PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
 add_test(NAME test_shader_include_resolver COMMAND test_shader_include_resolver)
 
+# Pins buildParamPreamble's generated `#define pz_<id> <accessor>` block:
+# declaration-order auto-slotting (must match the lane the runtime uploads to),
+# independent scalar/color/image pools, and skip-don't-break on bad input.
+add_executable(test_shader_param_preamble ui/test_shader_param_preamble.cpp)
+target_link_libraries(test_shader_param_preamble PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
+add_test(NAME test_shader_param_preamble COMMAND test_shader_param_preamble)
+
+# End-to-end: every built-in animation shader must still bake once its
+# generated `#define pz_<id> ...` preamble is spliced in — proving the
+# generated accessors compile against the real animation UBO across all packs.
+add_executable(test_animation_shader_preamble_bake ui/test_animation_shader_preamble_bake.cpp)
+target_link_libraries(test_animation_shader_preamble_bake PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_animation_shader_preamble_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_animation_shader_preamble_bake COMMAND test_animation_shader_preamble_bake)
+
 # Cross-checks that every animation shader's `#define <paramId>
 # customParams[N].xyzw` (or customColors[N]) line agrees with the
 # allocation order an in-order walk of metadata.json's `parameters[]`

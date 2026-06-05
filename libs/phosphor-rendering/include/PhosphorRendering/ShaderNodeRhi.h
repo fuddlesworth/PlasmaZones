@@ -242,6 +242,18 @@ public:
     // ── Include Paths ──────────────────────────────────────────────────
     void setShaderIncludePaths(const QStringList& paths);
 
+    // ── Parameter preamble (T1.1: generated `#define pz_<id> ...`) ─────
+    /// Set the generated named-parameter preamble that is spliced after the
+    /// fragment shader's `#version` line at load time (via
+    /// `PhosphorShaders::spliceAfterVersion`), so authors read a parameter by
+    /// name instead of hand-decoding a `customParams[N].xyzw` lane. The empty
+    /// default is a no-op splice, so non-adopting shaders bake byte-identically
+    /// to before. The preamble is folded into the bake-cache key, so two
+    /// effects sharing a `.frag` but differing in generated defines never
+    /// collide, and a metadata param edit (which changes the preamble without
+    /// touching the `.frag` mtime) still invalidates the cache.
+    void setParamPreamble(const QString& preamble);
+
     /// Normalize wrap mode string to "clamp", "repeat", or "mirror" (static
     /// helper, safe to call from any thread — operates on its arguments only).
     /// Unknown / empty inputs fall back to "clamp" — that fallback is
@@ -326,6 +338,11 @@ private:
 
     // ── Shader Include Paths ───────────────────────────────────────────
     QStringList m_shaderIncludePaths;
+
+    // ── Parameter preamble (generated `#define pz_<id> ...`) ───────────
+    /// Spliced after `#version` into the fragment source at load time and
+    /// fingerprinted into the bake-cache key. Empty = no-op.
+    QString m_paramPreamble;
 
     // ── RHI Core Resources ─────────────────────────────────────────────
     std::unique_ptr<QRhiBuffer> m_vbo;
@@ -536,10 +553,18 @@ struct WarmShaderBakeResult
  * @param vertexPath    Path to the vertex shader file
  * @param fragmentPath  Path to the fragment shader file
  * @param includePaths  Directories to search for #include directives
+ * @param paramPreamble Generated `#define pz_<id> ...` block spliced after the
+ *                      fragment shader's `#version` (T1.1). MUST match what the
+ *                      live `ShaderNodeRhi::loadFragmentShader` splices for the
+ *                      same effect, since both compute the same bake-cache key
+ *                      (which is fingerprinted on the preamble) — a mismatch
+ *                      would let this warm entry serve the wrong SPIR-V to the
+ *                      live load. Empty (the default) is a no-op splice.
  * @return success and error message for UI reporting
  */
 PHOSPHORRENDERING_EXPORT WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath,
                                                                           const QString& fragmentPath,
-                                                                          const QStringList& includePaths = {});
+                                                                          const QStringList& includePaths = {},
+                                                                          const QString& paramPreamble = {});
 
 } // namespace PhosphorRendering

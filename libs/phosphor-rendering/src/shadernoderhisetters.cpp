@@ -4,6 +4,7 @@
 #include "internal.h"
 
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QFileInfo>
 #include <cmath>
@@ -522,6 +523,12 @@ bool ShaderNodeRhi::loadFragmentShader(const QString& path)
             : QString(QStringLiteral("Fragment shader include: ") + err);
         return false;
     }
+    // Splice the generated named-param preamble AFTER include expansion (T1.1)
+    // so its `#line` fixup math, which is based on the resolver's raw line
+    // positions, isn't disturbed. Empty preamble = no-op (returns the source
+    // unchanged). The preamble is folded into the bake-cache key below, so a
+    // cache hit can never serve SPIR-V baked with a different preamble.
+    m_fragmentShaderSource = PhosphorShaders::spliceAfterVersion(m_fragmentShaderSource, m_paramPreamble);
     m_fragmentPath = path;
     m_fragmentMtime = mtime;
     m_fragmentIncludedPaths = std::move(includedPaths);
@@ -594,6 +601,20 @@ void ShaderNodeRhi::invalidateUniforms()
 void ShaderNodeRhi::setShaderIncludePaths(const QStringList& paths)
 {
     m_shaderIncludePaths = paths;
+}
+
+void ShaderNodeRhi::setParamPreamble(const QString& preamble)
+{
+    if (m_paramPreamble == preamble) {
+        return;
+    }
+    m_paramPreamble = preamble;
+    // The preamble is spliced inside loadFragmentShader and folded into the
+    // bake-cache key, so a change must force a reload+rebake — marking dirty
+    // alone (without a re-load) would re-bake the already-spliced cached
+    // source. The owning ShaderEffect re-invokes loadFragmentShader on its
+    // next updatePaintNode when dirty, which re-splices with the new preamble.
+    m_shaderDirty = true;
 }
 
 // ============================================================================

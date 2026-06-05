@@ -62,6 +62,7 @@ set(phosphorshaders_public_HDRS
     include/PhosphorShaders/IUniformExtension.h
     include/PhosphorShaders/IWallpaperProvider.h
     include/PhosphorShaders/ShaderIncludeResolver.h
+    include/PhosphorShaders/ShaderParamPreamble.h
     include/PhosphorShaders/ShaderRegistry.h
 )
 
@@ -75,6 +76,7 @@ set(phosphorshaders_camelcase_HDRS
 
 set(phosphorshaders_SRCS
     src/shaderincluderesolver.cpp
+    src/shaderparampreamble.cpp
     src/shaderregistry.cpp
     src/wallpaperprovider.cpp
 )

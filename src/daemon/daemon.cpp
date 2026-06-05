@@ -660,6 +660,13 @@ bool Daemon::init()
                 return;
             }
             const QString effectId = info.id;
+            // T1.1: warm-bake with the SAME generated preamble SurfaceAnimator
+            // splices at runtime, so the warm entry's cache key (fingerprinted
+            // on the preamble) matches the live load — otherwise the live bake
+            // would miss this entry, or worse, a key collision would serve the
+            // wrong SPIR-V. Computed on the GUI thread (reads `info`) and
+            // captured by value into the bake-thread lambda.
+            const QString paramPreamble = PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(info);
             auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
             connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
                     [watcher, effectId]() {
@@ -669,9 +676,9 @@ bool Daemon::init()
                         }
                         watcher->deleteLater();
                     });
-            watcher->setFuture(
-                QtConcurrent::run(&m_shaderBakePool, [vertPath, fragPath = info.fragmentShaderPath, includePaths]() {
-                    return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths);
+            watcher->setFuture(QtConcurrent::run(
+                &m_shaderBakePool, [vertPath, fragPath = info.fragmentShaderPath, includePaths, paramPreamble]() {
+                    return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths, paramPreamble);
                 }));
         };
         connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,

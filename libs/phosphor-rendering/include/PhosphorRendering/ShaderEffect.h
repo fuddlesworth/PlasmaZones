@@ -596,6 +596,19 @@ public:
         return m_shaderIncludePaths;
     }
 
+    // ── Parameter preamble (T1.1: generated `#define pz_<id> ...`) ─────
+
+    /** Set the generated named-parameter preamble spliced after `#version`
+     *  into the fragment source at load time, so authors read a parameter by
+     *  name (`pz_speed`) instead of a `customParams[N].xyzw` lane. Empty (the
+     *  default) is a no-op. Forwarded to the render node and folded into its
+     *  bake-cache key; a change forces a reload so the new defines take. */
+    void setParamPreamble(const QString& preamble);
+    QString paramPreamble() const
+    {
+        return m_paramPreamble;
+    }
+
     // ── Status ───────────────────────────────────────────────────────
 
     Status status() const
@@ -723,6 +736,7 @@ private:
     QUrl m_vertexShaderUrl;
     QVariantMap m_shaderParams;
     QStringList m_shaderIncludePaths;
+    QString m_paramPreamble; ///< Generated `#define pz_<id> ...` block (T1.1); empty = none.
 
     // QPointer because the source item is owned by the QML scene, not
     // the ShaderEffect — a torn-down source must auto-null rather than

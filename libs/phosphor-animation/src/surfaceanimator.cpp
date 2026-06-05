@@ -479,6 +479,14 @@ void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
         shaderItem->setShaderIncludePaths(shaderIncludePaths);
     }
     shaderItem->setShaderSource(QUrl::fromLocalFile(effect.fragmentShaderPath));
+    // T1.1: generate the named-param preamble (`#define pz_<id> ...`) from the
+    // effect's declared parameters and hand it to the shader item, which splices
+    // it after `#version` at bake time. The slot allocation mirrors
+    // translateAnimationParams exactly, so `pz_<id>` resolves to the same UBO
+    // lane the per-leg setShaderParams uploads to. Empty when the effect declares
+    // no parameters — a no-op splice, so legacy packs that hand-write their own
+    // `#define`s are unaffected (distinct `pz_`-prefixed names, no collision).
+    shaderItem->setParamPreamble(PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(effect));
     if (!effect.vertexShaderPath.isEmpty()) {
         shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
     }

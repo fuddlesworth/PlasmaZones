@@ -132,6 +132,19 @@ public:
     /// overload.
     static QVariantMap translateAnimationParams(const AnimationShaderEffect& effect, const QVariantMap& friendlyParams);
 
+    /// Build the generated `#define pz_<id> <glsl-accessor>` preamble for
+    /// @p effect's declared parameters so authors read a parameter by name
+    /// (`pz_speed`) instead of hand-decoding a `customParams[N].xyzw` lane.
+    ///
+    /// The slot allocation mirrors `translateAnimationParams` exactly — color
+    /// params fill `customColors[N]`, everything else fills
+    /// `customParams[N].<xyzw>`, both in metadata declaration order — so the
+    /// macro a shader reads resolves to the same UBO lane the value is
+    /// uploaded to. Both runtimes splice the result after the shader's
+    /// `#version` line (via `PhosphorShaders::spliceAfterVersion`). Returns an
+    /// empty string when the effect declares no parameters.
+    static QString paramPreamble(const AnimationShaderEffect& effect);
+
 Q_SIGNALS:
     void effectsChanged();
 

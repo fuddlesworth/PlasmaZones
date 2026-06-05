@@ -4,6 +4,8 @@
 #include <PhosphorAnimation/AnimationShaderContract.h>
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 
+#include <PhosphorShaders/ShaderParamPreamble.h>
+
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 
 #include <QColor>
@@ -659,6 +661,26 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const QString& eff
                                                               const QVariantMap& friendlyParams) const
 {
     return translateAnimationParams(effect(effectId), friendlyParams);
+}
+
+QString AnimationShaderRegistry::paramPreamble(const AnimationShaderEffect& effect)
+{
+    // Mirror translateAnimationParams' allocation exactly: color params take
+    // the customColors pool, everything else the customParams scalar pool,
+    // both auto-numbered in declaration order. buildParamPreamble advances the
+    // two pools independently, so the generated macro for each param resolves
+    // to the same UBO lane translateAnimationParams uploads its value to.
+    QList<PhosphorShaders::PreambleParam> params;
+    params.reserve(effect.parameters.size());
+    for (const auto& p : effect.parameters) {
+        PhosphorShaders::PreambleParam entry;
+        entry.id = p.id;
+        entry.pool = (p.type == QLatin1String("color")) ? PhosphorShaders::PreambleParam::Pool::Color
+                                                        : PhosphorShaders::PreambleParam::Pool::Scalar;
+        entry.explicitSlot = -1; // animation packs always auto-slot by declaration order
+        params.append(entry);
+    }
+    return PhosphorShaders::buildParamPreamble(params);
 }
 
 } // namespace PhosphorAnimationShaders
