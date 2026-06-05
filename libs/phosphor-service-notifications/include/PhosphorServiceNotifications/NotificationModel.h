@@ -15,10 +15,10 @@ namespace PhosphorServiceNotifications {
 
 /// List model over a `NotificationServer`'s live notifications. Bind `server`,
 /// then drive a `ListView` / `Repeater` off the rows. Rows are kept in
-/// ascending-id order (the same order the server vends): a new notification
-/// appends (ids are monotonic), a `replaces_id` update mutates the row in place
-/// and forwards as `dataChanged`, and a close removes the row. The model does
-/// NOT own the notifications; the server does.
+/// ascending-id order (the same order the server vends): a new notification is
+/// inserted at its id-sorted position, a `replaces_id` update mutates the row in
+/// place and forwards as `dataChanged`, and a close removes the row. The model
+/// does NOT own the notifications; the server does.
 class PHOSPHORSERVICENOTIFICATIONS_EXPORT NotificationModel : public QAbstractListModel
 {
     Q_OBJECT

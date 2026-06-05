@@ -146,10 +146,17 @@ void NotificationModel::onNotificationAdded(Notification* notification)
 {
     if (!notification || m_rows.contains(notification))
         return;
-    // Ids are monotonic, so a fresh notification always sorts last: append.
-    const int row = static_cast<int>(m_rows.size());
+    // Insert at the ascending-id position the server vends from (its QMap),
+    // rather than assuming the new id is always the largest. Ids are monotonic in
+    // the common case (so this lands at the end), but allocateId() reuses a freed
+    // low id after a uint wrap; finding the slot keeps the model's order matching
+    // notifications() unconditionally. m_rows is small, so a linear scan matches
+    // the close path's lookup.
+    int row = 0;
+    while (row < m_rows.size() && m_rows.at(row)->id() < notification->id())
+        ++row;
     beginInsertRows({}, row, row);
-    m_rows.append(notification);
+    m_rows.insert(row, notification);
     connectNotification(notification);
     endInsertRows();
     Q_EMIT countChanged();

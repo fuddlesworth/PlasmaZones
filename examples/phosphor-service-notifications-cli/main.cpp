@@ -263,10 +263,13 @@ int cmdInfo()
         return kRuntime;
     }
     const QVariantList a = info.arguments();
-    if (a.size() == 4) {
-        out() << "server: " << a.at(0).toString() << " (" << a.at(1).toString() << ") version " << a.at(2).toString()
-              << ", spec " << a.at(3).toString() << "\n";
+    if (a.size() != 4) {
+        err() << "GetServerInformation returned an unexpected reply (" << a.size() << " args)\n";
+        err().flush();
+        return kRuntime;
     }
+    out() << "server: " << a.at(0).toString() << " (" << a.at(1).toString() << ") version " << a.at(2).toString()
+          << ", spec " << a.at(3).toString() << "\n";
     QDBusReply<QStringList> caps = iface.call(QStringLiteral("GetCapabilities"));
     if (caps.isValid())
         out() << "capabilities: " << caps.value().join(QLatin1String(", ")) << "\n";
