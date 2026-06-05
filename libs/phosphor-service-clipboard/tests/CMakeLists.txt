@@ -43,3 +43,20 @@ set_tests_properties(test_phosphorserviceclipboard_historymodel
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         LABELS "phosphorserviceclipboard"
 )
+
+# Store unit test: round-trips entries through a temp directory (no real user
+# data). Compiles clipboardstore.cpp directly; no lib link, no compositor.
+add_executable(test_phosphorserviceclipboard_store
+    test_store.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/clipboardstore.cpp
+)
+target_include_directories(test_phosphorserviceclipboard_store
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_link_libraries(test_phosphorserviceclipboard_store PRIVATE Qt6::Test)
+add_test(NAME test_phosphorserviceclipboard_store COMMAND test_phosphorserviceclipboard_store)
+set_tests_properties(test_phosphorserviceclipboard_store
+    PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        LABELS "phosphorserviceclipboard"
+)
