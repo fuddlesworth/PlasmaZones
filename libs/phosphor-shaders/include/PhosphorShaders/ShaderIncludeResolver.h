@@ -31,9 +31,19 @@ public:
     ///        for cache invalidation) — without this, a cache keyed only
     ///        on the top-level shader's mtime serves stale baked SPIR-V
     ///        when an included header changes.
+    /// @param outSourcePaths If non-null, populated as a GLSL source-string
+    ///        legend: element @c i is the path of source-string number @c i as
+    ///        referenced by the `#line <n> <i>` directives this resolver emits
+    ///        around each inlined include. Index 0 is the top-level source —
+    ///        left empty because the resolver is handed only the source text
+    ///        and its directory, not the top-level file's path, so the caller
+    ///        (which knows which file it asked to expand) fills index 0.
+    ///        Consumers map a glslang / driver diagnostic of the form
+    ///        `<i>:<line>` back to `<path>:<line>`.
     /// @return Expanded source, or empty string on error
     static QString expandIncludes(const QString& source, const QString& currentFileDir, const QStringList& includePaths,
-                                  QString* outError = nullptr, QStringList* outIncludedPaths = nullptr);
+                                  QString* outError = nullptr, QStringList* outIncludedPaths = nullptr,
+                                  QStringList* outSourcePaths = nullptr);
 };
 
 } // namespace PhosphorShaders

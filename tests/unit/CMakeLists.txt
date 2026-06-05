@@ -455,6 +455,13 @@ target_link_libraries(test_animation_shader_bake PRIVATE Qt6::Test Qt6::Core Qt6
 target_compile_definitions(test_animation_shader_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_bake COMMAND test_animation_shader_bake)
 
+# Pins ShaderIncludeResolver's #line bracketing + source-string legend so a
+# glslang / driver diagnostic maps back to the author's file:line instead of a
+# line in the flattened include blob.
+add_executable(test_shader_include_resolver ui/test_shader_include_resolver.cpp)
+target_link_libraries(test_shader_include_resolver PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
+add_test(NAME test_shader_include_resolver COMMAND test_shader_include_resolver)
+
 # Cross-checks that every animation shader's `#define <paramId>
 # customParams[N].xyzw` (or customColors[N]) line agrees with the
 # allocation order an in-order walk of metadata.json's `parameters[]`
