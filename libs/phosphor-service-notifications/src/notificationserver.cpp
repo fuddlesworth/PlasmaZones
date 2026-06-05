@@ -10,6 +10,7 @@
 #include <PhosphorServiceIconTheme/IconThemeResolver.h>
 
 #include <QDBusArgument>
+#include <QDBusConnectionInterface>
 #include <QDateTime>
 #include <QHash>
 #include <QLoggingCategory>
@@ -177,12 +178,35 @@ NotificationServer::NotificationServer(QDBusConnection connection, QString servi
     // Acquire the well-known name. Exactly one process may own it, so this fails
     // when another daemon (dunst / mako / Plasma) already holds it; we then stay
     // inert (nameAcquired == false) rather than fighting for the name. Taking
-    // over from another daemon is an explicit opt-in exposed by the CLI demo
-    // (milestone 7), not a default here.
-    d->nameAcquired = d->connection.registerService(d->service);
-    if (!d->nameAcquired) {
+    // over from another daemon is an explicit opt-in (acquireName(true), the CLI
+    // demo's --replace), not a default here.
+    if (!acquireName(false)) {
         qCInfo(lcNotificationServer) << "another notification daemon owns" << d->service << "- staying inert";
     }
+}
+
+bool NotificationServer::acquireName(bool replaceExisting)
+{
+    if (d->nameAcquired)
+        return true;
+
+    QDBusConnectionInterface* iface = d->connection.interface();
+    if (!iface) {
+        // No bus daemon (peer-to-peer connection, e.g. tests): a plain attempt
+        // is all that applies, and well-known names don't really exist there.
+        d->nameAcquired = d->connection.registerService(d->service);
+    } else {
+        const QDBusConnectionInterface::RegisterServiceReply reply =
+            iface->registerService(d->service,
+                                   replaceExisting ? QDBusConnectionInterface::ReplaceExistingService
+                                                   : QDBusConnectionInterface::DontQueueService,
+                                   QDBusConnectionInterface::DontAllowReplacement);
+        d->nameAcquired = reply == QDBusConnectionInterface::ServiceRegistered;
+    }
+
+    if (d->nameAcquired)
+        Q_EMIT nameAcquiredChanged();
+    return d->nameAcquired;
 }
 
 NotificationServer::~NotificationServer()

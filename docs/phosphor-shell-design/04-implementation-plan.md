@@ -437,7 +437,7 @@ The sysfs + logind backend only covers internal panels and keyboard backlights; 
 
 ---
 
-### 2.5: `phosphor-service-notifications` *(in progress: milestones 1+2, 3, 4, 5, 6 landed)*
+### 2.5: `phosphor-service-notifications` *(in progress: milestones 1+2, 3, 4, 5, 6, 7 landed)*
 
 > Note: milestone 2 (NotificationServer facade + name acquisition + the static
 > `GetServerInformation` / `GetCapabilities`) shipped inside the milestone-1

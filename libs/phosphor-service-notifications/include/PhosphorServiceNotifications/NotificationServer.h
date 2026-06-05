@@ -61,6 +61,13 @@ public:
     /// notification server. False when another daemon holds it (see class docs).
     [[nodiscard]] bool nameAcquired() const;
 
+    /// (Re)acquire the well-known name. The constructor calls this with
+    /// @p replaceExisting false (inert when the name is taken). A daemon that
+    /// wants to take over from another notification server (the CLI's `--replace`
+    /// path) calls it with true, which succeeds when the current owner allows
+    /// replacement. Returns `nameAcquired()`. A no-op once the name is held.
+    bool acquireName(bool replaceExisting = false);
+
     /// The well-known name + object path defined by the spec.
     [[nodiscard]] static QString serviceName();
     [[nodiscard]] static QString objectPath();
