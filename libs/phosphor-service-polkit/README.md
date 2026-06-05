@@ -103,7 +103,7 @@ pkexec true
 - `polkit-qt6` (Core + Agent), discovered via `find_package(PolkitQt6-1)`. A
   running `polkitd` on the system bus for the live path (the lib loads inert
   without it). The polkit-qt6 GUI action-button widgets are not used.
-- Qt6 ≥ 6.6 (Core, Qml). Gui arrives transitively via polkit-qt6's agent library.
+- Qt6 ≥ 6.6 (Core, Qml).
 
 ## Status
 

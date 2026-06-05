@@ -108,11 +108,19 @@ void PolkitSmokeTest::authenticateWithNoRequestIsNoop()
 
 void PolkitSmokeTest::respondWithNoSessionIsNoop()
 {
-    // Answering when no conversation is running must not crash or emit anything.
+    // Answering when no conversation is running must not crash, mutate the active
+    // request, or emit any conversation signal.
     PolkitAgent agent(bogusSession(), PolkitAgent::defaultObjectPath());
     QSignalSpy errorSpy(&agent, &PolkitAgent::authenticationError);
+    QSignalSpy completedSpy(&agent, &PolkitAgent::authenticationCompleted);
+    QSignalSpy promptSpy(&agent, &PolkitAgent::promptRequested);
+    QSignalSpy cancelledSpy(&agent, &PolkitAgent::authenticationCancelled);
     agent.respond(QStringLiteral("not-a-real-password"));
     QCOMPARE(errorSpy.count(), 0);
+    QCOMPARE(completedSpy.count(), 0);
+    QCOMPARE(promptSpy.count(), 0);
+    QCOMPARE(cancelledSpy.count(), 0);
+    QVERIFY(agent.activeRequest() == nullptr);
 }
 
 QTEST_GUILESS_MAIN(PolkitSmokeTest)

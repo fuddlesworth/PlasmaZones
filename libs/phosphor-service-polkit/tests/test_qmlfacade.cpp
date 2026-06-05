@@ -55,8 +55,9 @@ void PolkitQmlFacadeTest::moduleLoadsAndAgentBinds()
     QVERIFY2(root != nullptr, qPrintable(component.errorString())); // module + types resolved
 
     // A bare agent has not registered and has no active request: confirms both
-    // properties (and the AuthRequest-typed activeRequest property) are readable
-    // through QML.
+    // properties are readable through QML and that activeRequest is null on a
+    // bare agent. Binding a live AuthRequest needs polkitd, exercised via the CLI
+    // demo against pkexec.
     QCOMPARE(root->property("agentRegistered").toBool(), false);
     QCOMPARE(root->property("hasActiveRequest").toBool(), false);
 }

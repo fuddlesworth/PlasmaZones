@@ -25,6 +25,7 @@
 
 #include <QCoreApplication>
 #include <QObject>
+#include <QScopeGuard>
 #include <QStringList>
 #include <QTextStream>
 
@@ -84,8 +85,12 @@ QString readResponse(bool echo)
     termios masked = original;
     masked.c_lflag &= ~static_cast<tcflag_t>(ECHO);
     tcsetattr(fd, TCSANOW, &masked);
+    // Restore the terminal on every exit path so a future early return can never
+    // leave echo disabled.
+    const auto restore = qScopeGuard([fd, &original] {
+        tcsetattr(fd, TCSANOW, &original);
+    });
     const QString line = in.readLine();
-    tcsetattr(fd, TCSANOW, &original);
     out() << "\n"; // the user's (un-echoed) newline
     out().flush();
     return line;

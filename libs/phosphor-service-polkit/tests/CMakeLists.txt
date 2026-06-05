@@ -26,7 +26,8 @@ _phosphorservicepolkit_test(test_phosphorservicepolkit_smoke test_smoke.cpp)
 
 # QML facade test: a real QQmlEngine imports the module and proves the
 # imperative registration yields a usable facade (PolkitAgent instantiates and
-# binds; the AuthRequest-typed activeRequest property is readable).
+# binds; its registered / activeRequest properties read through QML, with
+# activeRequest null on a bare agent).
 _phosphorservicepolkit_test(test_phosphorservicepolkit_qmlfacade test_qmlfacade.cpp)
 
 # Decode unit test: drives the internal Details/Identity -> Qt-types decode with

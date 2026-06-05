@@ -99,8 +99,15 @@ PolkitAgent::~PolkitAgent()
     // dangle when the agent is destroyed mid-conversation. The Session +
     // AuthRequest are QObject children, reclaimed by ~QObject; we deliberately do
     // not run the signal-emitting settleActive() from the destructor.
-    if (d->result)
-        d->result->setCompleted();
+    //
+    // Sever the session first so its asynchronous completed() can never re-enter
+    // onSessionCompleted() during teardown, and clear the result as we complete
+    // it so "polkit's result is completed exactly once" holds by construction
+    // rather than by trusting ~Session to stay silent.
+    if (d->session)
+        d->session->disconnect(this);
+    if (auto* result = std::exchange(d->result, nullptr))
+        result->setCompleted();
 }
 
 bool PolkitAgent::registered() const

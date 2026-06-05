@@ -29,11 +29,11 @@ include(GenerateExportHeader)
 # Core / Qml: the QObject + QML surface. PolkitQt6-1 (Core + Agent) is the
 # backend; it is PRIVATE because the polkit-qt types are wrapped inside the .cpp
 # (the public PolkitAgent header is a plain QObject with no polkit-qt types), so
-# consumers neither include nor link polkit-qt. Qt6::Gui is pulled transitively
-# by PolkitQt6-1::Agent but is not part of our interface. The polkit-qt6 GUI
-# action-button widgets (PolkitQt6-1::Gui) are a Phase 3/4 UI concern and are
-# NOT linked.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml Gui)
+# consumers neither include nor link polkit-qt. No Qt Gui type is used, and
+# PolkitQt6-1::Agent does not pull Qt6::Gui transitively, so Gui is not a
+# dependency. The polkit-qt6 GUI action-button widgets (PolkitQt6-1::Gui) are a
+# Phase 3/4 UI concern and are NOT linked.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
 find_package(PolkitQt6-1 REQUIRED)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
