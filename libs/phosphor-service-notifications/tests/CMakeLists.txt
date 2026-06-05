@@ -29,3 +29,9 @@ _phosphorservicenotifications_test(test_phosphorservicenotifications_smoke test_
 # imperative registration yields a usable facade (NotificationModel instantiates
 # and binds, the Notification.Urgency enum resolves, model.count is reactive).
 _phosphorservicenotifications_test(test_phosphorservicenotifications_qmlfacade test_qmlfacade.cpp)
+
+# Wire test: drives Notify / CloseNotification / GetServerInformation across a
+# peer-to-peer D-Bus connection so arguments go through real marshalling. This
+# is the only place the image-data (iiibiiay) hint decode can be exercised (an
+# in-process QDBusArgument is in marshalling mode and cannot be read back).
+_phosphorservicenotifications_test(test_phosphorservicenotifications_wire test_wire.cpp)

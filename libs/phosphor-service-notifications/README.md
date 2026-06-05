@@ -62,6 +62,8 @@ acquisition + static methods; milestone 2's facade/name-acquisition shipped
 inside the milestone-1 commit), 3 (Notify ingestion + the `Notification` object +
 hint / image decode), 4 (expiry timers + close lifecycle + action invoke), 5
 (`NotificationModel`), 6 (QML facade, verified by a real QQmlEngine load test),
-and 7 (the `examples/phosphor-service-notifications-cli` server/client demo, plus
-`acquireName(replace)` for `--replace` takeover) landed; milestones 8-9 (full
-wire tests, README finalisation) follow per the plan.
+7 (the `examples/phosphor-service-notifications-cli` server/client demo, plus
+`acquireName(replace)` for `--replace` takeover), and 8 (the peer-to-peer wire
+test that drives `Notify` / `CloseNotification` / `GetServerInformation` through
+real D-Bus marshalling, covering the `image-data` `(iiibiiay)` struct decode)
+landed; milestone 9 (README finalisation) follows per the plan.
