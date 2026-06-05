@@ -41,7 +41,6 @@ public:
     /// Maximum number of entries kept; the oldest are evicted past this. Default
     /// 100. Lowering it evicts immediately.
     void setMaxEntries(int max);
-    [[nodiscard]] int maxEntries() const;
 
     [[nodiscard]] int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     [[nodiscard]] QVariant data(const QModelIndex& index, int role) const override;

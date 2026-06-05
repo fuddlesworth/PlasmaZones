@@ -34,6 +34,16 @@ void ClipboardHistoryModel::setSource(IClipboardSource* source)
     if (m_source)
         m_source->disconnect(this);
     m_source = source;
+
+    // A read outstanding against the old source can never complete against the
+    // new one; reset the read state machine so the new source starts clean and
+    // cannot be wedged by the abandoned read.
+    m_reading = false;
+    m_selectionChangedWhileReading = false;
+    m_latestTypes.clear();
+    m_readTypes.clear();
+    m_readMime.clear();
+
     if (m_source) {
         connect(m_source, &IClipboardSource::selectionChanged, this, &ClipboardHistoryModel::onSelectionChanged);
         connect(m_source, &IClipboardSource::dataReceived, this, &ClipboardHistoryModel::onDataReceived);
@@ -49,11 +59,6 @@ void ClipboardHistoryModel::setMaxEntries(int max)
         Q_EMIT countChanged();
         Q_EMIT historyChanged();
     }
-}
-
-int ClipboardHistoryModel::maxEntries() const
-{
-    return m_maxEntries;
 }
 
 int ClipboardHistoryModel::rowCount(const QModelIndex& parent) const
@@ -110,7 +115,8 @@ void ClipboardHistoryModel::setEntries(const QList<ClipboardEntry>& entries)
     const int before = m_entries.size();
     beginResetModel();
     m_entries = entries;
-    if (m_maxEntries >= 0 && m_entries.size() > m_maxEntries)
+    // m_maxEntries is clamped to >= 0 in setMaxEntries, so the cap always applies.
+    if (m_entries.size() > m_maxEntries)
         m_entries.erase(m_entries.begin() + m_maxEntries, m_entries.end());
     endResetModel();
     if (m_entries.size() != before)

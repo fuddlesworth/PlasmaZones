@@ -63,11 +63,6 @@ ClipboardStore::ClipboardStore(QString directory)
 {
 }
 
-QString ClipboardStore::directory() const
-{
-    return m_directory;
-}
-
 QString ClipboardStore::defaultDirectory()
 {
     return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation))

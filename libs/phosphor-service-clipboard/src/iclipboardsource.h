@@ -36,13 +36,21 @@ public:
 
     /// Asynchronously read the current selection as @p mimeType; the result
     /// arrives via `dataReceived`.
+    ///
+    /// Contract: every receive() MUST eventually emit exactly one `dataReceived`
+    /// carrying the SAME @p mimeType (with empty data on any failure). The model
+    /// serializes reads and waits for that matching reply, so a source that drops
+    /// a reply or echoes a different type would stall further captures. The
+    /// production `WaylandClipboardSource` honours this on every path
+    /// (no-offer / pipe-failure / EOF / read-error all emit the requested type).
     virtual void receive(const QString& mimeType) = 0;
 
 Q_SIGNALS:
     /// The clipboard selection changed; @p mimeTypes lists the offered types
     /// (empty when cleared).
     void selectionChanged(const QStringList& mimeTypes);
-    /// Asynchronous result of `receive()`. @p data is empty on failure.
+    /// Asynchronous result of `receive()`. @p data is empty on failure;
+    /// @p mimeType is always the type that was requested.
     void dataReceived(const QString& mimeType, const QByteArray& data);
 };
 
