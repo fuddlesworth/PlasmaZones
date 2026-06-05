@@ -19,12 +19,14 @@
  * Shells consume:
  *   - `NotificationServer`: owns the bus name, ingest, id allocation, expiry,
  *     and the close/action lifecycle.
- * (The typed `Notification` object and `NotificationModel` land in milestone 3+
- * and join this umbrella header then.)
+ *   - `Notification`: one decoded live notification (summary / body / actions /
+ *     urgency / image / hints), mutated in place on `replaces_id`.
+ * (`NotificationModel` lands in milestone 5 and joins this umbrella header then.)
  *
  * Phase 2.5 of the service-library plan documented in
  * `docs/phosphor-shell-design/04-implementation-plan.md`.
  */
 
+#include <PhosphorServiceNotifications/Notification.h>
 #include <PhosphorServiceNotifications/NotificationServer.h>
 #include <PhosphorServiceNotifications/QmlRegistration.h>

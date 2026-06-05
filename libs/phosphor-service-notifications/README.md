@@ -33,9 +33,9 @@ library.
 | Type                 | Role                                                                              |
 |----------------------|-----------------------------------------------------------------------------------|
 | `NotificationServer` | Owns the bus name and the notification lifecycle; forwarding target of the generated `org.freedesktop.Notifications` adaptor. |
+| `Notification`       | One decoded live notification (summary / body / actions / urgency / image / hints), mutated in place on `replaces_id`. |
 
-*(The typed `Notification` object and `NotificationModel` join this table in
-milestone 3+.)*
+*(`NotificationModel` joins this table in milestone 5.)*
 
 ## Design notes
 
@@ -53,11 +53,13 @@ milestone 3+.)*
 
 ## Dependencies
 
-- Qt6 ≥ 6.6: Core, Qml, DBus. *(Gui lands in milestone 3 for `image-data`
-  decode; `PhosphorDBus` and `PhosphorServiceIconTheme` land then too, for hint
-  demarshalling and app-icon resolution.)*
+- Qt6 ≥ 6.6: Core, Qml, DBus, Gui (`QImage` decode, scoped to image only).
+- `PhosphorServiceIconTheme` (private): `image-path`-as-icon-name resolution.
 
 ## Status
 
-Phase 2.5: in progress. Milestone 1 (skeleton + CMake + adaptor + name
-acquisition + static methods) landed; milestones 2-9 follow per the plan.
+Phase 2.5: in progress. Milestones 1 (skeleton + CMake + adaptor + name
+acquisition + static methods) and 3 (Notify ingestion + the `Notification`
+object + hint / image decode) landed; milestones 4-9 (expiry + close lifecycle,
+the model, QML facade, CLI daemon demo, full wire tests, README finalisation)
+follow per the plan.

@@ -6,6 +6,7 @@
 #include <PhosphorServiceNotifications/phosphorservicenotifications_export.h>
 
 #include <QDBusConnection>
+#include <QList>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -14,6 +15,8 @@
 #include <memory>
 
 namespace PhosphorServiceNotifications {
+
+class Notification;
 
 /**
  * @brief The session-bus server for `org.freedesktop.Notifications` (Desktop
@@ -34,10 +37,10 @@ namespace PhosphorServiceNotifications {
  * here. The spec signals (`NotificationClosed`, `ActionInvoked`) are declared
  * on this object and auto-relayed to the bus by the adaptor.
  *
- * Milestone 1 lands the plumbing: name acquisition, the static
- * `GetServerInformation` / `GetCapabilities`, and id allocation. Hint decode
- * (including the `image-data` → `QImage` path), the typed `Notification`
- * object + model, and expiry timers land in milestones 3-5.
+ * Milestone 3 lands ingest: `Notify` decodes the hint set (including the
+ * `image-data` → `QImage` path) into a typed `Notification`, allocates ids,
+ * and updates in place on `replaces_id`. Expiry timers + action invocation
+ * (milestone 4) and the `NotificationModel` (milestone 5) follow.
  */
 class PHOSPHORSERVICENOTIFICATIONS_EXPORT NotificationServer : public QObject
 {
@@ -60,6 +63,12 @@ public:
     [[nodiscard]] static QString serviceName();
     [[nodiscard]] static QString objectPath();
 
+    /// The live notifications, in ascending id order. Each is owned by this
+    /// server; the list is a snapshot (pointers stay valid until the matching
+    /// `NotificationClosed` fires). The `NotificationModel` (milestone 5) seeds
+    /// itself from this and tracks `notificationAdded` / `NotificationClosed`.
+    [[nodiscard]] QList<Notification*> notifications() const;
+
 public Q_SLOTS:
     // org.freedesktop.Notifications, forwarded here by the generated adaptor.
     // Signatures mirror the spec exactly; the PascalCase names are spec-dictated
@@ -72,9 +81,15 @@ public Q_SLOTS:
     QString GetServerInformation(QString& vendor, QString& version, QString& specVersion);
 
 Q_SIGNALS:
+    /// A fresh notification (new id) was ingested and decoded. A `replaces_id`
+    /// update does NOT re-emit this; it mutates the existing object in place and
+    /// fires that object's `Notification::changed()` instead.
+    void notificationAdded(Notification* notification);
+
     /// A notification was closed; @p reason is the spec close-reason code
     /// (1 expired, 2 dismissed, 3 closed by CloseNotification, 4 undefined).
-    /// Auto-relayed to the bus by the adaptor.
+    /// Auto-relayed to the bus by the adaptor. The matching object is deleted
+    /// right after this fires, so consumers must drop their pointer here.
     void NotificationClosed(uint id, uint reason);
     /// The user invoked action @p actionKey on notification @p id. Auto-relayed
     /// to the bus by the adaptor.

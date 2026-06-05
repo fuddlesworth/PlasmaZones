@@ -32,12 +32,26 @@ include(GenerateExportHeader)
 #
 # Core / Qml: the QObject + QML surface. DBus: NotificationServer's injectable
 # (connection, service) ctor exposes QDBusConnection in the public header, and
-# the generated adaptor is QtDBus, so DBus is PUBLIC. Qt::Gui is NOT linked yet:
-# it lands in milestone 3 with the image-data hint decode (QImage). PhosphorDBus
-# and PhosphorServiceIconTheme likewise land in milestone 3 (hint demarshalling
-# + app-icon resolution); milestone 1 has no code that uses them, so they are
-# deliberately absent here rather than linked speculatively.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus)
+# the generated adaptor is QtDBus, so DBus is PUBLIC. Gui: the image-data hint
+# decodes to a QImage that surfaces in Notification.h, so Gui is PUBLIC (a first
+# for a service lib, scoped strictly to QImage, no widgets). PhosphorServiceIconTheme
+# is PRIVATE: only the .cpp uses it (image-path-as-icon-name resolution). The
+# (iiibiiay) image struct is demarshalled inline via QDBusArgument, so PhosphorDBus
+# is not needed here.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml DBus Gui)
+
+# PhosphorServiceIconTheme provides the XDG icon resolver used for the
+# image-path-as-icon-name fallback. The root CMakeLists.txt configures it before
+# this lib; guard so a standalone configure fails with a clear message.
+if(NOT TARGET PhosphorServiceIconTheme::PhosphorServiceIconTheme)
+    find_package(PhosphorServiceIconTheme QUIET)
+endif()
+if(NOT TARGET PhosphorServiceIconTheme::PhosphorServiceIconTheme)
+    message(FATAL_ERROR
+        "PhosphorServiceNotifications requires PhosphorServiceIconTheme. "
+        "Configure libs/phosphor-service-icontheme first (the root "
+        "CMakeLists.txt does this automatically) or supply it via find_package.")
+endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -68,11 +82,13 @@ set(phosphorservicenotifications_public_HDRS
     include/PhosphorServiceNotifications/PhosphorServiceNotifications.h
     include/PhosphorServiceNotifications/QmlRegistration.h
     include/PhosphorServiceNotifications/NotificationServer.h
+    include/PhosphorServiceNotifications/Notification.h
 )
 
 set(phosphorservicenotifications_SRCS
     src/qmlregistration.cpp
     src/notificationserver.cpp
+    src/notification.cpp
 )
 
 add_library(PhosphorServiceNotifications SHARED
@@ -109,6 +125,9 @@ target_link_libraries(PhosphorServiceNotifications
         Qt6::Core
         Qt6::Qml
         Qt6::DBus
+        Qt6::Gui
+    PRIVATE
+        PhosphorServiceIconTheme::PhosphorServiceIconTheme
 )
 
 set_target_properties(PhosphorServiceNotifications PROPERTIES

@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Milestone-1 smoke test for phosphor-service-notifications. Pins the plumbing
-// contract: QML-registration idempotency, the static spec identifiers,
-// GetServerInformation / GetCapabilities, monotonic non-zero id allocation with
-// replaces_id reuse, and the CloseNotification close-reason signal.
+// Smoke test for phosphor-service-notifications. Pins the plumbing contract
+// (QML-registration idempotency, the static spec identifiers, server info,
+// capabilities, id allocation with replaces_id reuse, the close-reason signal)
+// and the milestone-3 ingest contract (hint decode, image-path decode,
+// replace-in-place, the live-notification accessor).
 //
 // Every server instance is built on a PRIVATE peer D-Bus connection rather than
 // the session bus, so the test never registers (or hijacks) the real
@@ -12,7 +13,13 @@
 // real connection; well-known-name acquisition is a bus-daemon concept that
 // does not apply peer-to-peer, so nameAcquired() is not asserted here (it is
 // exercised manually via the CLI demo in milestone 7).
+//
+// The image-data (iiibiiay) struct decode needs a real wire round-trip (an
+// in-process QDBusArgument is in marshalling mode and cannot be read back), so
+// it is covered by the milestone-8 wire test; the image-path -> file branch is
+// fully in-process and is pinned here.
 
+#include <PhosphorServiceNotifications/Notification.h>
 #include <PhosphorServiceNotifications/NotificationServer.h>
 #include <PhosphorServiceNotifications/QmlRegistration.h>
 
@@ -20,9 +27,13 @@
 #include <QDBusConnection>
 #include <QDBusServer>
 #include <QDeadlineTimer>
+#include <QDir>
+#include <QImage>
 #include <QSignalSpy>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QTest>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -41,6 +52,12 @@ private Q_SLOTS:
     void notifyAllocatesMonotonicNonZeroIds();
     void notifyHonoursReplacesId();
     void closeNotificationEmitsForLiveIdOnly();
+    void notifyDecodesScalarHints();
+    void notifyDefaultsWhenHintsAbsent();
+    void notifyDecodesImagePathFromFile();
+    void notifyImagePathMissingIsGraceful();
+    void replacesIdUpdatesInPlaceAndEmitsChanged();
+    void notificationsAccessorTracksLifecycle();
 
 private:
     std::unique_ptr<NotificationServer> makeServer();
@@ -108,8 +125,8 @@ void NotificationsSmokeTest::capabilitiesAdvertiseBody()
     auto server = makeServer();
     const QStringList caps = server->GetCapabilities();
     QVERIFY(!caps.isEmpty());
-    // "body" is the only capability milestone 1 can honestly back; the set grows
-    // as actions / markup / persistence land in later milestones.
+    // "body" is honestly backed today; the set grows as actions / markup /
+    // persistence land in later milestones.
     QVERIFY(caps.contains(QStringLiteral("body")));
 }
 
@@ -165,6 +182,156 @@ void NotificationsSmokeTest::closeNotificationEmitsForLiveIdOnly()
     // Closing an id that was never issued is a no-op.
     server->CloseNotification(424242);
     QCOMPARE(spy.count(), 1);
+}
+
+void NotificationsSmokeTest::notifyDecodesScalarHints()
+{
+    auto server = makeServer();
+    Notification* added = nullptr;
+    connect(server.get(), &NotificationServer::notificationAdded, this, [&added](Notification* n) {
+        added = n;
+    });
+
+    QVariantMap hints;
+    hints.insert(QStringLiteral("urgency"), QVariant::fromValue<uint>(2));
+    hints.insert(QStringLiteral("category"), QStringLiteral("im.received"));
+    hints.insert(QStringLiteral("desktop-entry"), QStringLiteral("org.phosphor.Chat"));
+    hints.insert(QStringLiteral("transient"), true);
+    hints.insert(QStringLiteral("resident"), true);
+    hints.insert(QStringLiteral("suppress-sound"), true);
+    hints.insert(QStringLiteral("value"), 42);
+
+    server->Notify(QStringLiteral("Chat"), 0, QString(), QStringLiteral("Ping"), QStringLiteral("hello"),
+                   {QStringLiteral("default"), QStringLiteral("Open")}, hints, 5000);
+
+    QVERIFY(added != nullptr);
+    QCOMPARE(added->appName(), QStringLiteral("Chat"));
+    QCOMPARE(added->summary(), QStringLiteral("Ping"));
+    QCOMPARE(added->body(), QStringLiteral("hello"));
+    QCOMPARE(added->actions(), (QStringList{QStringLiteral("default"), QStringLiteral("Open")}));
+    QCOMPARE(added->urgency(), Notification::Critical);
+    QCOMPARE(added->category(), QStringLiteral("im.received"));
+    QCOMPARE(added->desktopEntry(), QStringLiteral("org.phosphor.Chat"));
+    QVERIFY(added->transient());
+    QVERIFY(added->resident());
+    QVERIFY(added->suppressSound());
+    QCOMPARE(added->value(), 42);
+    QCOMPARE(added->expireTimeout(), 5000);
+    QVERIFY(added->timestamp().isValid());
+    // The raw hint map is retained for advanced bindings.
+    QCOMPARE(added->hints().value(QStringLiteral("category")).toString(), QStringLiteral("im.received"));
+}
+
+void NotificationsSmokeTest::notifyDefaultsWhenHintsAbsent()
+{
+    auto server = makeServer();
+    Notification* added = nullptr;
+    connect(server.get(), &NotificationServer::notificationAdded, this, [&added](Notification* n) {
+        added = n;
+    });
+
+    server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("bare"), QString(), {}, {}, -1);
+
+    QVERIFY(added != nullptr);
+    QCOMPARE(added->urgency(), Notification::Normal); // default when no urgency hint
+    QCOMPARE(added->value(), -1); // -1 sentinel when no value hint
+    QVERIFY(!added->transient());
+    QVERIFY(!added->resident());
+    QVERIFY(!added->suppressSound());
+    QVERIFY(added->category().isEmpty());
+    QVERIFY(added->image().isNull());
+    QVERIFY(!added->hasImage());
+}
+
+void NotificationsSmokeTest::notifyDecodesImagePathFromFile()
+{
+    // The image-path -> file branch is fully in-process and deterministic (the
+    // image-data struct branch is covered by the milestone-8 wire test).
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("art.png"));
+    QImage source(4, 3, QImage::Format_RGB888);
+    source.fill(Qt::red);
+    QVERIFY(source.save(path, "PNG"));
+
+    auto server = makeServer();
+    Notification* added = nullptr;
+    connect(server.get(), &NotificationServer::notificationAdded, this, [&added](Notification* n) {
+        added = n;
+    });
+
+    QVariantMap hints;
+    hints.insert(QStringLiteral("image-path"), path);
+    server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("art"), QString(), {}, hints, -1);
+
+    QVERIFY(added != nullptr);
+    QVERIFY(added->hasImage());
+    QCOMPARE(added->image().size(), QSize(4, 3));
+}
+
+void NotificationsSmokeTest::notifyImagePathMissingIsGraceful()
+{
+    auto server = makeServer();
+    Notification* added = nullptr;
+    connect(server.get(), &NotificationServer::notificationAdded, this, [&added](Notification* n) {
+        added = n;
+    });
+
+    QVariantMap hints;
+    hints.insert(QStringLiteral("image-path"), QStringLiteral("/nonexistent/phosphor/does-not-exist.png"));
+    server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("noimg"), QString(), {}, hints, -1);
+
+    QVERIFY(added != nullptr);
+    QVERIFY(added->image().isNull()); // missing file decodes to a null image, no crash
+}
+
+void NotificationsSmokeTest::replacesIdUpdatesInPlaceAndEmitsChanged()
+{
+    auto server = makeServer();
+    Notification* added = nullptr;
+    int addedCount = 0;
+    connect(server.get(), &NotificationServer::notificationAdded, this, [&](Notification* n) {
+        added = n;
+        ++addedCount;
+    });
+
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("first"),
+                                   QStringLiteral("body1"), {}, {}, -1);
+    QVERIFY(added != nullptr);
+    QCOMPARE(addedCount, 1);
+    QSignalSpy changedSpy(added, &Notification::changed);
+    QVERIFY(changedSpy.isValid());
+    Notification* original = added;
+
+    const uint replaced = server->Notify(QStringLiteral("app"), id, QString(), QStringLiteral("second"),
+                                         QStringLiteral("body2"), {}, {}, -1);
+
+    QCOMPARE(replaced, id);
+    QCOMPARE(addedCount, 1); // a replace is NOT a new add
+    QCOMPARE(changedSpy.count(), 1); // it mutates in place and fires changed() once
+    QCOMPARE(original->summary(), QStringLiteral("second"));
+    QCOMPARE(original->body(), QStringLiteral("body2"));
+    // The same object identity is preserved across the replace.
+    QCOMPARE(server->notifications().size(), 1);
+    QCOMPARE(server->notifications().constFirst(), original);
+}
+
+void NotificationsSmokeTest::notificationsAccessorTracksLifecycle()
+{
+    auto server = makeServer();
+    const uint a = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("a"), QString(), {}, {}, -1);
+    const uint b = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("b"), QString(), {}, {}, -1);
+
+    auto live = server->notifications();
+    QCOMPARE(live.size(), 2);
+    // Ascending id order (QMap-backed).
+    QCOMPARE(live.at(0)->id(), a);
+    QCOMPARE(live.at(1)->id(), b);
+
+    server->CloseNotification(a);
+    live = server->notifications();
+    QCOMPARE(live.size(), 1);
+    QCOMPARE(live.at(0)->id(), b);
 }
 
 QTEST_GUILESS_MAIN(NotificationsSmokeTest)
