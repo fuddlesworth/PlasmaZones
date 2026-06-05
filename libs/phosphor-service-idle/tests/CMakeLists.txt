@@ -27,6 +27,11 @@ _phosphorserviceidle_test(test_phosphorserviceidle_smoke test_smoke.cpp)
 # sort, inhibition toggling, inert defaults) under the offscreen platform.
 _phosphorserviceidle_test(test_phosphorserviceidle_facade test_facade.cpp)
 
+# QML facade test: a real QQmlEngine imports the module and proves the imperative
+# registration yields a usable facade (IdleService instantiates, its stages
+# property writes from QML, and inhibit/release are invokable).
+_phosphorserviceidle_test(test_phosphorserviceidle_qmlfacade test_qmlfacade.cpp)
+
 # State-machine unit test: exercises the pure stage-ladder logic on a fake idle
 # source. It compiles idlestatemachine.cpp directly (and includes the internal
 # src/ headers) rather than linking the lib, so it needs no compositor and no
