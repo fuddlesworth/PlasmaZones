@@ -12,6 +12,9 @@
 
 namespace PhosphorServicePolkit {
 
+class AuthRequest;
+class ListenerImpl;
+
 /**
  * @brief A PolicyKit authentication agent for Phosphor-based desktop shells.
  *
@@ -37,6 +40,7 @@ class PHOSPHORSERVICEPOLKIT_EXPORT PolkitAgent : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool registered READ registered NOTIFY registeredChanged)
+    Q_PROPERTY(PhosphorServicePolkit::AuthRequest* activeRequest READ activeRequest NOTIFY activeRequestChanged)
 
 public:
     /// Agent for the current session, at the default object path.
@@ -61,11 +65,27 @@ public:
     /// opt in from QML.
     Q_INVOKABLE bool registerAgent();
 
+    /// The authentication request polkit is currently waiting on, or null. A
+    /// dialog binds this; at most one is active (polkit serialises).
+    [[nodiscard]] AuthRequest* activeRequest() const;
+
+    /// Decline the active request: it completes without authorization and clears.
+    /// The authenticate path (answering the PAM prompt) lands in milestone 4.
+    /// Q_INVOKABLE for a UI / CLI; never exported on any bus.
+    Q_INVOKABLE void cancel();
+
 Q_SIGNALS:
     void registeredChanged();
+    void activeRequestChanged();
+    /// A new authentication request arrived (also reflected in `activeRequest`).
+    void authenticationRequested(PhosphorServicePolkit::AuthRequest* request);
+    /// The active request ended with none remaining (declined here, or withdrawn
+    /// by polkit).
+    void authenticationCancelled();
 
 private:
     Q_DISABLE_COPY_MOVE(PolkitAgent)
+    friend class ListenerImpl;
     class Private;
     std::unique_ptr<Private> d;
 };

@@ -9,9 +9,11 @@
 // object inert. The request decode + PAM session paths need a live polkitd and
 // are exercised manually via the CLI demo in milestone 6.
 
+#include <PhosphorServicePolkit/AuthRequest.h>
 #include <PhosphorServicePolkit/PolkitAgent.h>
 #include <PhosphorServicePolkit/QmlRegistration.h>
 
+#include <QSignalSpy>
 #include <QString>
 #include <QTest>
 
@@ -28,6 +30,8 @@ private Q_SLOTS:
     void defaultObjectPath();
     void constructsInert();
     void registerWithBogusSessionStaysInert();
+    void activeRequestStartsNull();
+    void cancelWithNoRequestIsNoop();
 
 private:
     // A session id that cannot resolve to a real logind session, so
@@ -67,6 +71,26 @@ void PolkitSmokeTest::registerWithBogusSessionStaysInert()
     const bool ok = agent.registerAgent();
     QVERIFY(!ok);
     QVERIFY(!agent.registered());
+}
+
+void PolkitSmokeTest::activeRequestStartsNull()
+{
+    // No authentication is in flight until polkit calls initiateAuthentication.
+    PolkitAgent agent(bogusSession(), PolkitAgent::defaultObjectPath());
+    QVERIFY(agent.activeRequest() == nullptr);
+}
+
+void PolkitSmokeTest::cancelWithNoRequestIsNoop()
+{
+    // Declining when nothing is active is a safe no-op: no crash, no signal, the
+    // active request stays null. (The decode of a real request into an
+    // AuthRequest needs a live polkitd calling back, and is exercised through
+    // the CLI demo against pkexec in milestone 6.)
+    PolkitAgent agent(bogusSession(), PolkitAgent::defaultObjectPath());
+    QSignalSpy cancelledSpy(&agent, &PolkitAgent::authenticationCancelled);
+    agent.cancel();
+    QCOMPARE(cancelledSpy.count(), 0);
+    QVERIFY(agent.activeRequest() == nullptr);
 }
 
 QTEST_GUILESS_MAIN(PolkitSmokeTest)

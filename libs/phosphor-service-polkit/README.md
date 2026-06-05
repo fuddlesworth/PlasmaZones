@@ -27,8 +27,7 @@ The authentication dialog itself is a Phase 3 / 4 consumer of this library.
 | Type          | Role                                                                                     |
 |---------------|------------------------------------------------------------------------------------------|
 | `PolkitAgent` | Registers as the session's authentication agent and surfaces the active request + a respond / cancel path. Wraps `polkit-qt6`'s `Agent::Listener` privately, so its public surface carries no polkit-qt types. |
-
-*(The typed `AuthRequest` object joins this table in milestone 3.)*
+| `AuthRequest` | One decoded authentication request polkit is waiting on (action / message / icon / details / identities + the selected identity). |
 
 ## Design notes
 
@@ -55,8 +54,9 @@ The authentication dialog itself is a Phase 3 / 4 consumer of this library.
 
 ## Status
 
-Phase 2.6: in progress. Milestone 1 (skeleton + CMake + the `PolkitAgent`
-registration plumbing) landed; milestones 2-8 (listener registration lifecycle,
-the `initiateAuthentication` → `AuthRequest` decode, the `Agent::Session` PAM
+Phase 2.6: in progress. Milestones 1+2 (skeleton + CMake + the `PolkitAgent`
+registration plumbing; the listener-registration work folded into the
+milestone-1 commit) and 3 (the `initiateAuthentication` → `AuthRequest` decode,
+surfaced as the active request) landed; milestones 4-8 (the `Agent::Session` PAM
 conversation, the QML facade, the CLI agent demo, tests, and README
 finalisation) follow per the plan.

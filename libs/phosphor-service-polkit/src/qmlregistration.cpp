@@ -3,6 +3,7 @@
 
 #include <PhosphorServicePolkit/QmlRegistration.h>
 
+#include <PhosphorServicePolkit/AuthRequest.h>
 #include <PhosphorServicePolkit/PolkitAgent.h>
 
 #include <QQmlEngine>
@@ -28,9 +29,15 @@ void registerQmlTypes()
     std::call_once(once, [] {
         // Instantiable entry point. The shell constructs the agent in QML and
         // calls registerAgent() to opt into becoming the session's agent; a
-        // plain type, NOT a singleton. AuthRequest joins this registration in
-        // milestone 3.
+        // plain type, NOT a singleton.
         qmlRegisterType<PolkitAgent>(kModule, kModuleVersionMajor, kModuleVersionMinor, "PolkitAgent");
+
+        // Pointer-receivable type. Exposed as a Q_PROPERTY / signal arg from the
+        // agent, never constructed in QML; uncreatable makes its metatype known
+        // so QML can read its properties and set selectedIdentity.
+        qmlRegisterUncreatableType<AuthRequest>(
+            kModule, kModuleVersionMajor, kModuleVersionMinor, "AuthRequest",
+            QStringLiteral("AuthRequest is owned by PolkitAgent; bind via the agent's activeRequest"));
     });
 }
 

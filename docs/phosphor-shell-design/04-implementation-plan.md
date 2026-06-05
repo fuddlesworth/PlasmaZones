@@ -506,7 +506,12 @@ Three structural firsts versus the prior service libs:
 
 ---
 
-### 2.6: `phosphor-service-polkit` *(planned)*
+### 2.6: `phosphor-service-polkit` *(in progress: milestones 1+2, 3 landed)*
+
+> Note: milestone 2 (the `Listener` subclass + registration lifecycle) shipped
+> inside the milestone-1 commit; the registration plumbing is inseparable from
+> the skeleton. The commit series runs 1 → 3.
+
 
 A PolicyKit **authentication agent** via the `polkit-qt6` binding. Namespace `PhosphorServicePolkit`, export macro `PHOSPHORSERVICEPOLKIT_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Polkit 1.0`. Table effort **M**. Unlike the data-source service libs (2.1-2.4), and like 2.5, this one is a callback target: `polkitd` calls into us when an app requests a privileged action, and we drive the PAM conversation that authenticates the user.
 

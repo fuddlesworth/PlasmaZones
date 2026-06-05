@@ -46,11 +46,13 @@ set(phosphorservicepolkit_public_HDRS
     include/PhosphorServicePolkit/PhosphorServicePolkit.h
     include/PhosphorServicePolkit/QmlRegistration.h
     include/PhosphorServicePolkit/PolkitAgent.h
+    include/PhosphorServicePolkit/AuthRequest.h
 )
 
 set(phosphorservicepolkit_SRCS
     src/qmlregistration.cpp
     src/polkitagent.cpp
+    src/authrequest.cpp
 )
 
 add_library(PhosphorServicePolkit SHARED
