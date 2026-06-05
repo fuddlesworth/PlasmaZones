@@ -18,6 +18,8 @@
 #include <QStringList>
 #include <QVariantMap>
 
+#include <utility>
+
 namespace {
 constexpr auto kDefaultObjectPath = "/org/phosphor/PolicyKit1/AuthenticationAgent";
 
@@ -62,8 +64,8 @@ public:
 
     // Active request state. polkit serialises authentication, so at most one is
     // live. The AsyncResult is owned by polkit (we complete it, never delete it);
-    // the Identity::List is kept so milestone 4 can build the PAM session for the
-    // selected identity.
+    // the Identity::List is kept so authenticate() can build the PAM session for
+    // the selected identity.
     AuthRequest* request = nullptr;
     PolkitQt1::Identity::List identities;
     PolkitQt1::Agent::AsyncResult* result = nullptr;
@@ -175,49 +177,49 @@ void PolkitAgent::cancel()
 {
     if (!d->request)
         return;
-    if (d->session) {
-        // A running PAM conversation: cancelling it emits completed(false), which
-        // completes the result and tears down via onSessionCompleted.
-        d->session->cancel();
-        return;
-    }
-    // No conversation started yet: decline the request directly (completing the
-    // result without authorization).
-    if (d->result) {
-        d->result->setCompleted();
-        d->result = nullptr;
-    }
-    teardownActive();
+    // Decline: complete polkit's result without authorization and tear down.
+    // Synchronous and deterministic even mid-conversation; it does not wait on
+    // the session's asynchronous completed() signal.
+    settleActive(/*completeResult=*/true);
     Q_EMIT authenticationCancelled();
 }
 
 void PolkitAgent::onSessionCompleted(bool gainedAuthorization)
 {
-    if (d->result) {
-        d->result->setCompleted();
-        d->result = nullptr;
-    }
-    teardownActive();
+    // The session finished; complete polkit's result exactly once and tear down.
+    settleActive(/*completeResult=*/true);
     Q_EMIT authenticationCompleted(gainedAuthorization);
 }
 
-void PolkitAgent::teardownActive()
+void PolkitAgent::settleActive(bool completeResult)
 {
-    if (d->session) {
-        // Stop further signals before deleting, so a teardown triggered from
-        // within a session signal (completed) does not re-enter.
-        d->session->disconnect(this);
-        d->session->deleteLater();
-        d->session = nullptr;
-    }
-    d->result = nullptr;
+    if (!d->request)
+        return;
+
+    // Capture and clear the active state FIRST, so any re-entrant call (a slot on
+    // activeRequestChanged, or a synchronous session signal) sees no active
+    // request and returns. This makes the result completion exactly-once and the
+    // teardown idempotent regardless of polkit-qt's signal-emission timing
+    // (Session::completed is asynchronous, fired when the PAM helper exits).
+    AuthRequest* request = std::exchange(d->request, nullptr);
+    PolkitQt1::Agent::Session* session = std::exchange(d->session, nullptr);
+    PolkitQt1::Agent::AsyncResult* result = std::exchange(d->result, nullptr);
     d->identities.clear();
-    if (d->request) {
-        AuthRequest* request = d->request;
-        d->request = nullptr;
-        request->deleteLater();
+
+    if (session) {
+        // Disconnect before deleting so the session's pending/asynchronous
+        // completed() can never re-enter this path; ~Session aborts the PAM
+        // helper.
+        session->disconnect(this);
+        session->deleteLater();
     }
+    // Complete polkit's result unless the daemon withdrew the request, in which
+    // case polkit owns the result's teardown and completing it would double-free.
+    if (completeResult && result)
+        result->setCompleted();
+
     Q_EMIT activeRequestChanged();
+    request->deleteLater();
 }
 
 void ListenerImpl::initiateAuthentication(const QString& actionId, const QString& message, const QString& iconName,
@@ -227,10 +229,15 @@ void ListenerImpl::initiateAuthentication(const QString& actionId, const QString
 {
     PolkitAgent::Private* d = m_facade->d.get();
 
-    // polkit serialises, but defend against a lingering prior request: decline it
-    // before taking the new one so its AsyncResult is not orphaned.
-    if (d->request)
-        m_facade->cancel();
+    // polkit serialises authentication, but defend against a lingering prior
+    // request: decline it synchronously (completing its result) before adopting
+    // the new one, so its AsyncResult is never orphaned. settleActive does NOT
+    // rely on the old session's asynchronous completed(), so the state is fully
+    // cleared before the assignments below.
+    if (d->request) {
+        m_facade->settleActive(/*completeResult=*/true);
+        Q_EMIT m_facade->authenticationCancelled();
+    }
 
     auto* request = new AuthRequest(actionId, message, iconName, detail::detailsToMap(details), cookie,
                                     detail::identityNames(identities), m_facade);
@@ -238,9 +245,8 @@ void ListenerImpl::initiateAuthentication(const QString& actionId, const QString
     d->identities = identities;
     d->result = result;
 
-    // Milestone 3 surfaces the decoded request. Answering it (the Agent::Session
-    // PAM conversation driven by respond(password)) lands in milestone 4; until
-    // then a consumer can read the request and decline it via cancel().
+    // Surface the decoded request. A consumer calls authenticate() to begin the
+    // PAM conversation, or cancel() to decline.
     Q_EMIT m_facade->activeRequestChanged();
     Q_EMIT m_facade->authenticationRequested(request);
 }
@@ -250,11 +256,10 @@ void ListenerImpl::cancelAuthentication()
     PolkitAgent::Private* d = m_facade->d.get();
     if (!d->request)
         return;
-    // polkit is withdrawing the request and owns the result's teardown, so we
-    // drop our state (result first) and notify without completing it ourselves.
-    // teardownActive disconnects + deletes any running session, aborting PAM.
-    d->result = nullptr;
-    m_facade->teardownActive();
+    // polkit is withdrawing the request and owns the result's teardown, so settle
+    // WITHOUT completing the result ourselves (completing it would double-free).
+    // settleActive disconnects + deletes any running session, aborting PAM.
+    m_facade->settleActive(/*completeResult=*/false);
     Q_EMIT m_facade->authenticationCancelled();
 }
 

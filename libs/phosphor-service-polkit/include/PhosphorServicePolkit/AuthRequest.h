@@ -25,8 +25,9 @@ class PolkitAgent;
  * a dialog can offer a chooser when the user may authenticate as more than one
  * identity (usually just themselves, sometimes root).
  *
- * The PAM prompt and the response path land on this object / the agent in
- * milestone 4; milestone 3 surfaces the request's description and identities.
+ * The request's description and identities are decoded here; the live PAM
+ * `prompt` / `echo` are updated on this object by the agent as the conversation
+ * progresses, and the response goes back through `PolkitAgent::respond()`.
  */
 class PHOSPHORSERVICEPOLKIT_EXPORT AuthRequest : public QObject
 {

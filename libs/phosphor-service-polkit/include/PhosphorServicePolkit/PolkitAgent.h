@@ -32,9 +32,10 @@ class ListenerImpl;
  * `registerAgent()` fails and the object stays inert (`registered() == false`),
  * mirroring the name-conflict-is-inert shape of `phosphor-service-notifications`.
  *
- * Milestone 1 lands the registration plumbing. The request decode into a typed
- * `AuthRequest` (milestone 3) and the `Agent::Session` PAM conversation that
- * actually authenticates (milestone 4) follow.
+ * `initiateAuthentication` from polkit is decoded into a typed `AuthRequest`
+ * surfaced as `activeRequest`; `authenticate()` then drives the `Agent::Session`
+ * PAM conversation (prompt -> `respond()` -> `completed`), with `cancel()` and
+ * polkit's withdrawal both resolving polkit's result exactly once.
  */
 class PHOSPHORSERVICEPOLKIT_EXPORT PolkitAgent : public QObject
 {
@@ -104,11 +105,15 @@ private:
     Q_DISABLE_COPY_MOVE(PolkitAgent)
     friend class ListenerImpl;
 
-    /// Complete the PAM conversation: complete polkit's result and clear.
+    /// The PAM session finished: settle the active request (completing polkit's
+    /// result) and emit authenticationCompleted.
     void onSessionCompleted(bool gainedAuthorization);
-    /// Drop the active request + session (deleting both) and notify; does NOT
-    /// complete polkit's result (the caller decides whether to).
-    void teardownActive();
+    /// Resolve the active request exactly once: capture-and-clear the state first
+    /// (so re-entrant calls become no-ops), disconnect + delete the session
+    /// (aborting PAM), optionally complete polkit's result, and emit
+    /// activeRequestChanged. @p completeResult is false only when polkit itself
+    /// withdrew the request and owns the result's teardown.
+    void settleActive(bool completeResult);
 
     class Private;
     std::unique_ptr<Private> d;
