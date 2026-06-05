@@ -60,6 +60,9 @@ LayerShellIntegration::~LayerShellIntegration()
     if (m_singlePixelBufferManager) {
         wp_single_pixel_buffer_manager_v1_destroy(m_singlePixelBufferManager);
     }
+    if (m_dataControlManager) {
+        zwlr_data_control_manager_v1_destroy(m_dataControlManager);
+    }
     if (m_layerShell) {
         if (m_boundVersion >= 3) {
             // Protocol-level destroy request (added in v3)

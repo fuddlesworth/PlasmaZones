@@ -72,6 +72,8 @@ Q_SIGNALS:
 private:
     void onSelectionChanged(const QStringList& mimeTypes);
     void onDataReceived(const QString& mimeType, const QByteArray& data);
+    void startNextRead();
+    void recordEntry(const QByteArray& content, const QString& mimeType, const QStringList& offeredTypes);
     [[nodiscard]] int indexOfContent(const QByteArray& content, const QString& mimeType) const;
     void enforceCap();
 
@@ -83,10 +85,16 @@ private:
     QList<ClipboardEntry> m_entries;
     int m_maxEntries = 100;
 
-    // The selection we asked the source to read, remembered until its bytes
-    // arrive via dataReceived.
-    QStringList m_pendingTypes;
-    QString m_pendingMime;
+    // Reads are serialized so an async delivery is never mis-attributed: at most
+    // one receive() is outstanding at a time. `m_latestTypes` is the most recent
+    // selection to capture; `m_readTypes` / `m_readMime` are the snapshot the
+    // outstanding read belongs to (so its bytes are recorded with ITS own offered
+    // types, even if the selection changed mid-read).
+    QStringList m_latestTypes;
+    QStringList m_readTypes;
+    QString m_readMime;
+    bool m_reading = false;
+    bool m_selectionChangedWhileReading = false;
 };
 
 } // namespace PhosphorServiceClipboard

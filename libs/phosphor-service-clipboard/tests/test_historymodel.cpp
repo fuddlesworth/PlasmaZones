@@ -30,8 +30,10 @@ public:
     }
     void receive(const QString& mimeType) override
     {
-        // The real client reads asynchronously; the fake delivers synchronously
-        // (the model reacts to the signal either way).
+        // The real client reads asynchronously; this fake delivers synchronously,
+        // which exercises every same-thread code path but cannot interleave two
+        // reads. The async interleaving (a stale same-MIME delivery) is covered by
+        // DeferringFakeClipboardSource below.
         Q_EMIT dataReceived(mimeType, m_data.value(mimeType));
     }
 
@@ -58,6 +60,48 @@ private:
     QMap<QString, QByteArray> m_data;
 };
 
+// A fake whose reads are deferred: receive() captures the bytes to deliver (as
+// the real async client would, snapshotting the offer at request time) and
+// queues them; flushNext() delivers one, simulating an async completion. This
+// lets a test interleave two selections so a read is still in flight when the
+// next selection arrives.
+class DeferringFakeClipboardSource : public IClipboardSource
+{
+public:
+    [[nodiscard]] QStringList mimeTypes() const override
+    {
+        return m_mimeTypes;
+    }
+    void receive(const QString& mimeType) override
+    {
+        m_queue.append({mimeType, m_data.value(mimeType)});
+    }
+
+    void pushSelection(const QStringList& mimeTypes, const QMap<QString, QByteArray>& data)
+    {
+        m_mimeTypes = mimeTypes;
+        m_data = data;
+        Q_EMIT selectionChanged(mimeTypes);
+    }
+    bool flushNext()
+    {
+        if (m_queue.isEmpty())
+            return false;
+        const auto [mime, data] = m_queue.takeFirst();
+        Q_EMIT dataReceived(mime, data);
+        return true;
+    }
+    [[nodiscard]] int pending() const
+    {
+        return m_queue.size();
+    }
+
+private:
+    QStringList m_mimeTypes;
+    QMap<QString, QByteArray> m_data;
+    QList<QPair<QString, QByteArray>> m_queue;
+};
+
 QByteArray utf8(const char* s)
 {
     return QByteArray(s);
@@ -80,6 +124,7 @@ private Q_SLOTS:
     void prefersUtf8Text();
     void binaryPreviewIsPlaceholder();
     void removeAndClear();
+    void asyncSameMimeReadsAreNotMisattributed();
 };
 
 void ClipboardHistoryModelTest::startsEmpty()
@@ -231,6 +276,34 @@ void ClipboardHistoryModelTest::removeAndClear()
 
     model.clear();
     QCOMPARE(model.rowCount(), 0);
+}
+
+void ClipboardHistoryModelTest::asyncSameMimeReadsAreNotMisattributed()
+{
+    DeferringFakeClipboardSource source;
+    ClipboardHistoryModel model;
+    model.setSource(&source);
+
+    const QString text = QStringLiteral("text/plain;charset=utf-8");
+
+    // Selection A is read (request issued + queued); before its bytes arrive,
+    // selection B replaces it with the SAME MIME type. A naive single-slot
+    // pending state would record A's bytes under B's selection and drop B.
+    source.pushSelection({text}, {{text, utf8("AAA")}});
+    source.pushSelection({text}, {{text, utf8("BBB")}});
+    QCOMPARE(model.rowCount(), 0); // both reads deferred; nothing recorded yet
+    QCOMPARE(source.pending(), 1); // reads are serialized: only A is outstanding
+
+    QVERIFY(source.flushNext()); // deliver A's bytes
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(model.data(model.index(0), ClipboardHistoryModel::PreviewRole).toString(), QStringLiteral("AAA"));
+    QCOMPARE(source.pending(), 1); // model then issued B's read
+
+    QVERIFY(source.flushNext()); // deliver B's bytes
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(model.data(model.index(0), ClipboardHistoryModel::PreviewRole).toString(), QStringLiteral("BBB"));
+    QCOMPARE(model.data(model.index(1), ClipboardHistoryModel::PreviewRole).toString(), QStringLiteral("AAA"));
+    QVERIFY(!source.flushNext()); // no stale third read
 }
 
 QTEST_GUILESS_MAIN(ClipboardHistoryModelTest)

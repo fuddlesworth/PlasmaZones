@@ -141,38 +141,67 @@ void ClipboardHistoryModel::clear()
 
 void ClipboardHistoryModel::onSelectionChanged(const QStringList& mimeTypes)
 {
-    m_pendingMime.clear();
-    m_pendingTypes.clear();
-    if (mimeTypes.isEmpty())
-        return; // selection cleared: keep the history, just nothing new to read.
-    if (isSensitive(mimeTypes))
-        return; // a secret (password manager): never read, never record.
-    const QString mime = preferredMimeType(mimeTypes);
-    if (mime.isEmpty())
+    // A cleared selection keeps the history but has nothing to read; a sensitive
+    // selection (password manager) is never read or kept. Either way the "latest
+    // to capture" becomes empty.
+    m_latestTypes = (mimeTypes.isEmpty() || isSensitive(mimeTypes)) ? QStringList() : mimeTypes;
+
+    // Reads are serialized. If one is already outstanding, just remember that the
+    // selection moved on; the in-flight read records its own bytes (with its own
+    // types) and then picks up the latest. Otherwise start reading now.
+    if (m_reading)
+        m_selectionChangedWhileReading = true;
+    else
+        startNextRead();
+}
+
+void ClipboardHistoryModel::startNextRead()
+{
+    m_readTypes = m_latestTypes;
+    m_selectionChangedWhileReading = false;
+    if (m_readTypes.isEmpty()) {
+        m_reading = false;
+        return; // nothing to capture (cleared or sensitive selection).
+    }
+    m_readMime = preferredMimeType(m_readTypes);
+    if (m_readMime.isEmpty()) {
+        m_reading = false;
         return;
-    m_pendingTypes = mimeTypes;
-    m_pendingMime = mime;
+    }
+    m_reading = true;
     if (m_source)
-        m_source->receive(mime);
+        m_source->receive(m_readMime);
 }
 
 void ClipboardHistoryModel::onDataReceived(const QString& mimeType, const QByteArray& data)
 {
-    // Only accept the bytes for the read we are currently waiting on; a stray or
-    // stale delivery (or an empty/failed read) is ignored.
-    if (m_pendingMime.isEmpty() || mimeType != m_pendingMime || data.isEmpty())
+    // Accept only the bytes for the read currently outstanding; a stray delivery
+    // is ignored.
+    if (!m_reading || mimeType != m_readMime)
         return;
+    m_reading = false;
 
+    // Record with the types captured when THIS read was issued, so a selection
+    // change mid-read cannot mis-attribute these bytes to a newer selection. An
+    // empty/failed read records nothing.
+    if (!data.isEmpty())
+        recordEntry(data, mimeType, m_readTypes);
+
+    // If the selection moved on while we were reading, capture the latest now.
+    if (m_selectionChangedWhileReading)
+        startNextRead();
+}
+
+void ClipboardHistoryModel::recordEntry(const QByteArray& content, const QString& mimeType,
+                                        const QStringList& offeredTypes)
+{
     ClipboardEntry entry;
-    entry.content = data;
+    entry.content = content;
     entry.mimeType = mimeType;
-    entry.offeredTypes = m_pendingTypes;
-    entry.preview = makePreview(data, mimeType);
+    entry.offeredTypes = offeredTypes;
+    entry.preview = makePreview(content, mimeType);
     entry.timestamp = QDateTime::currentDateTime();
     entry.sensitive = false; // sensitive selections never reach here.
-
-    m_pendingMime.clear();
-    m_pendingTypes.clear();
 
     const int beforeCount = m_entries.size();
 

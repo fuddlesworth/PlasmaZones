@@ -24,6 +24,23 @@ QString blobHash(const QByteArray& content)
     return QString::fromLatin1(QCryptographicHash::hash(content, QCryptographicHash::Sha256).toHex());
 }
 
+// A blob filename is always a SHA-256 hex digest on the write path. Validate the
+// index's `blob` field against that contract on read so a tampered index can
+// never turn it into a path component (e.g. "../../etc/passwd" or an absolute
+// path) that QDir::filePath would happily resolve.
+bool isValidBlobHash(const QString& hash)
+{
+    if (hash.size() != 64)
+        return false;
+    for (const QChar c : hash) {
+        const bool hex =
+            (c >= QLatin1Char('0') && c <= QLatin1Char('9')) || (c >= QLatin1Char('a') && c <= QLatin1Char('f'));
+        if (!hex)
+            return false;
+    }
+    return true;
+}
+
 bool atomicWrite(const QString& path, const QByteArray& bytes)
 {
     QSaveFile file(path);
@@ -33,7 +50,11 @@ bool atomicWrite(const QString& path, const QByteArray& bytes)
         file.cancelWriting();
         return false;
     }
-    return file.commit();
+    if (!file.commit())
+        return false;
+    // Clipboard content is sensitive; keep each file readable only by the owner.
+    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    return true;
 }
 } // namespace
 
@@ -81,8 +102,8 @@ QList<ClipboardEntry> ClipboardStore::load() const
     for (const QJsonValue& value : array) {
         const QJsonObject obj = value.toObject();
         const QString hash = obj.value(QLatin1String("blob")).toString();
-        if (hash.isEmpty())
-            continue;
+        if (!isValidBlobHash(hash))
+            continue; // missing or tampered blob reference: skip.
         QFile blob(blobs.filePath(hash));
         if (!blob.open(QIODevice::ReadOnly))
             continue; // a missing blob means a corrupt entry; skip it.
@@ -107,6 +128,13 @@ bool ClipboardStore::save(const QList<ClipboardEntry>& entries) const
     QDir dir(m_directory);
     if (!dir.mkpath(QStringLiteral(".")) || !dir.mkpath(QStringLiteral("blobs")))
         return false;
+
+    // The history records everything copied; restrict the directories to the
+    // owner so other users on the machine cannot read it.
+    const QFileDevice::Permissions ownerOnlyDir =
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+    QFile::setPermissions(m_directory, ownerOnlyDir);
+    QFile::setPermissions(blobsDir(), ownerOnlyDir);
 
     const QDir blobs(blobsDir());
 

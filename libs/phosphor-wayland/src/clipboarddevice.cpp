@@ -43,6 +43,21 @@ struct WriteContext
     int fd = -1;
     QSocketNotifier* notifier = nullptr;
 };
+
+// Release a context's notifier + fd. Closing the fd before deleteLater ensures
+// the (disabled) notifier can never fire on a closed/reused descriptor.
+void finalizeIo(int& fd, QSocketNotifier*& notifier)
+{
+    if (notifier) {
+        notifier->setEnabled(false);
+        notifier->deleteLater();
+        notifier = nullptr;
+    }
+    if (fd >= 0) {
+        ::close(fd);
+        fd = -1;
+    }
+}
 } // namespace
 
 class ClipboardDevice::Private
@@ -138,8 +153,12 @@ void ClipboardDevice::Private::ensureDevice()
 
 void ClipboardDevice::Private::destroyOffer(struct zwlr_data_control_offer_v1* offer)
 {
-    if (offer)
+    if (offer) {
+        // Sever the listener's back-pointer before destroying, so any event still
+        // queued for this offer dispatches with data == nullptr and is dropped.
+        wl_proxy_set_user_data(reinterpret_cast<struct wl_proxy*>(offer), nullptr);
         zwlr_data_control_offer_v1_destroy(offer);
+    }
 }
 
 void ClipboardDevice::Private::clearPendingOffers(struct zwlr_data_control_offer_v1* except)
@@ -158,6 +177,7 @@ void ClipboardDevice::Private::clearPendingOffers(struct zwlr_data_control_offer
 void ClipboardDevice::Private::destroySource()
 {
     if (source) {
+        wl_proxy_set_user_data(reinterpret_cast<struct wl_proxy*>(source), nullptr);
         zwlr_data_control_source_v1_destroy(source);
         source = nullptr;
     }
@@ -166,11 +186,14 @@ void ClipboardDevice::Private::destroySource()
 
 void ClipboardDevice::Private::teardownDevice()
 {
+    // Finalize every in-flight read/write, then clear the vectors in one shot.
+    // We must NOT call finishRead/finishWrite here: those erase the context from
+    // the vector being iterated, which would invalidate the loop's iterator.
     for (auto& ctx : reads)
-        finishRead(ctx.get());
+        finalizeIo(ctx->fd, ctx->notifier);
     reads.clear();
     for (auto& ctx : writes)
-        finishWrite(ctx.get());
+        finalizeIo(ctx->fd, ctx->notifier);
     writes.clear();
 
     destroySource();
@@ -180,6 +203,7 @@ void ClipboardDevice::Private::teardownDevice()
     currentMimes.clear();
 
     if (device) {
+        wl_proxy_set_user_data(reinterpret_cast<struct wl_proxy*>(device), nullptr);
         zwlr_data_control_device_v1_destroy(device);
         device = nullptr;
     }
@@ -225,15 +249,7 @@ void ClipboardDevice::Private::finishRead(ReadContext* ctx)
 {
     if (!ctx)
         return;
-    if (ctx->notifier) {
-        ctx->notifier->setEnabled(false);
-        ctx->notifier->deleteLater();
-        ctx->notifier = nullptr;
-    }
-    if (ctx->fd >= 0) {
-        ::close(ctx->fd);
-        ctx->fd = -1;
-    }
+    finalizeIo(ctx->fd, ctx->notifier);
     for (auto it = reads.begin(); it != reads.end(); ++it) {
         if (it->get() == ctx) {
             reads.erase(it);
@@ -274,15 +290,7 @@ void ClipboardDevice::Private::finishWrite(WriteContext* ctx)
 {
     if (!ctx)
         return;
-    if (ctx->notifier) {
-        ctx->notifier->setEnabled(false);
-        ctx->notifier->deleteLater();
-        ctx->notifier = nullptr;
-    }
-    if (ctx->fd >= 0) {
-        ::close(ctx->fd);
-        ctx->fd = -1;
-    }
+    finalizeIo(ctx->fd, ctx->notifier);
     for (auto it = writes.begin(); it != writes.end(); ++it) {
         if (it->get() == ctx) {
             writes.erase(it);
@@ -297,7 +305,7 @@ void ClipboardDevice::Private::handleDataOffer(void* data, struct zwlr_data_cont
                                                struct zwlr_data_control_offer_v1* offer)
 {
     auto* self = static_cast<Private*>(data);
-    if (!offer)
+    if (!self || !offer)
         return;
     // The offer's MIME types arrive next, as `offer` events, before `selection`.
     self->pendingOffers.insert(offer, QStringList());
@@ -311,6 +319,8 @@ void ClipboardDevice::Private::handleSelection(void* data, struct zwlr_data_cont
                                                struct zwlr_data_control_offer_v1* offer)
 {
     auto* self = static_cast<Private*>(data);
+    if (!self)
+        return;
 
     // Replace the previous selection's offer (if any).
     if (self->currentOffer && self->currentOffer != offer) {
@@ -318,21 +328,25 @@ void ClipboardDevice::Private::handleSelection(void* data, struct zwlr_data_cont
         self->currentOffer = nullptr;
     }
 
+    // A selection for an offer we never saw via `data_offer` violates the
+    // protocol; do not adopt (and so never destroy) an offer we do not own.
+    if (offer && !self->pendingOffers.contains(offer)) {
+        qCWarning(lcClipboardDevice) << "selection for an unknown offer; ignoring";
+        offer = nullptr;
+    }
+
     if (!offer) {
-        // Selection cleared.
+        // Selection cleared (or the anomalous case above).
         self->clearPendingOffers(nullptr);
         self->currentOffer = nullptr;
-        if (!self->currentMimes.isEmpty()) {
-            self->currentMimes.clear();
-        }
+        self->currentMimes.clear();
         Q_EMIT self->owner->selectionChanged(QStringList());
         return;
     }
 
+    self->currentMimes = self->pendingOffers.take(offer); // claim its mimes + remove its pending slot
+    self->clearPendingOffers(offer); // destroy any other still-pending offers
     self->currentOffer = offer;
-    self->currentMimes = self->pendingOffers.value(offer);
-    self->clearPendingOffers(offer); // drop any stale pending offers; keep this one's slot gone too
-    self->pendingOffers.remove(offer);
     Q_EMIT self->owner->selectionChanged(self->currentMimes);
 }
 
@@ -341,6 +355,8 @@ void ClipboardDevice::Private::handleFinished(void* data, struct zwlr_data_contr
     // The compositor invalidated this device (e.g. the seat went away). Tear it
     // down; a fresh selection event stream would require a new device.
     auto* self = static_cast<Private*>(data);
+    if (!self)
+        return;
     self->teardownDevice();
     Q_EMIT self->owner->selectionChanged(QStringList());
 }
@@ -355,7 +371,7 @@ void ClipboardDevice::Private::handleOfferMime(void* data, struct zwlr_data_cont
                                                const char* mimeType)
 {
     auto* self = static_cast<Private*>(data);
-    if (!mimeType)
+    if (!self || !mimeType)
         return;
     auto it = self->pendingOffers.find(offer);
     if (it != self->pendingOffers.end())
@@ -368,11 +384,21 @@ void ClipboardDevice::Private::handleSend(void* data, struct zwlr_data_control_s
                                           int32_t fd)
 {
     auto* self = static_cast<Private*>(data);
+    if (!self) {
+        ::close(fd);
+        return;
+    }
     const QString mime = QString::fromUtf8(mimeType);
     const QByteArray bytes = self->sourceData.value(mime);
-    int flags = ::fcntl(fd, F_GETFL, 0);
-    if (flags != -1)
-        ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    // The async write path depends on a non-blocking fd; a blocking write on a
+    // full pipe would stall the GUI thread. If we cannot make it non-blocking,
+    // fail the paste cleanly rather than risk blocking the event loop.
+    const int flags = ::fcntl(fd, F_GETFL, 0);
+    if (flags == -1 || ::fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+        qCWarning(lcClipboardDevice) << "could not set the paste fd non-blocking; dropping the transfer";
+        ::close(fd);
+        return;
+    }
     self->startWrite(bytes, fd);
 }
 
@@ -380,6 +406,8 @@ void ClipboardDevice::Private::handleCancelled(void* data, struct zwlr_data_cont
 {
     // Another client took the selection; our source is dead.
     auto* self = static_cast<Private*>(data);
+    if (!self)
+        return;
     self->destroySource();
 }
 
