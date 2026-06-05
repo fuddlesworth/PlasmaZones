@@ -437,7 +437,15 @@ The sysfs + logind backend only covers internal panels and keyboard backlights; 
 
 ---
 
-### 2.5: `phosphor-service-notifications` *(in progress: milestones 1, 3, 4 landed)*
+### 2.5: `phosphor-service-notifications` *(in progress: milestones 1+2, 3, 4 landed)*
+
+> Note: milestone 2 (NotificationServer facade + name acquisition + the static
+> `GetServerInformation` / `GetCapabilities`) shipped inside the milestone-1
+> commit. Name acquisition lives in the same constructor as the adaptor wiring,
+> so a milestone-1 server with nothing registered could not be meaningfully
+> smoke-tested; the two were built and committed together. The commit series
+> therefore runs 1 → 3 → 4.
+
 
 The server side of `org.freedesktop.Notifications` (Desktop Notifications Spec 1.2) on the **session bus**, via `phosphor-dbus`. Namespace `PhosphorServiceNotifications`, export macro `PHOSPHORSERVICENOTIFICATIONS_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Notifications 1.0`. Table effort **L**: this is one of the larger Phase 2 libs because it owns notification lifecycle (id allocation, expiry, replace, close-reason bookkeeping) and decodes the full hint set, not just a read/write passthrough.
 
