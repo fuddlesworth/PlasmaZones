@@ -18,8 +18,6 @@
 #include <QString>
 #include <QTest>
 
-#include <memory>
-
 using namespace PhosphorServicePolkit;
 
 class PolkitSmokeTest : public QObject
