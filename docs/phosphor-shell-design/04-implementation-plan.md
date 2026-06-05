@@ -529,7 +529,7 @@ The `polkit-qt6` API we build on:
 - **DI for testability.** The agent takes an injectable `Subject` (default: the current session) and an injectable object path, so registration can be exercised without owning the real session, and the request/response state machine can be driven without a live `polkitd`.
 - **Inert on registration failure.** Exactly one agent serves a session; if the desktop's agent (KDE / GNOME / `polkit-gnome`) already holds it, `registerListener` fails and the agent surfaces `registered() == false` and stays inert, mirroring 2.5's name-conflict-is-inert shape. Taking over (stopping the desktop agent) is the operator's choice, surfaced in the CLI demo, not forced.
 - **Surface the request, never the secret.** `AuthRequest` carries actionId / message / iconName / details / the chosen identity / the current PAM prompt + echo flag. `respond(password)` and `cancel()` are `Q_INVOKABLE` for a UI; the password is passed straight through and never retained.
-- **Link Core + Agent, not Gui.** `PolkitQt6-1::Core` + `::Agent` only; the `::Gui` action-button widgets are a different (Phase 3/4 UI) concern. (`Qt6::Gui` still arrives transitively via the agent lib.)
+- **Link Core + Agent, not Gui.** `PolkitQt6-1::Core` + `::Agent` only; the `::Gui` action-button widgets are a different (Phase 3/4 UI) concern. No Qt Gui type is used, and `PolkitQt6-1::Agent` does not pull `Qt6::Gui` transitively, so Gui is not a dependency.
 
 **Milestones**
 
@@ -547,7 +547,7 @@ The `polkit-qt6` API we build on:
 **Dependencies**
 
 - `polkit-qt6` ≥ the distro's PolkitQt6-1 (Core + Agent), discovered via `find_package(PolkitQt6-1)`. A running `polkitd` on the system bus for the live path (the lib loads inert without it).
-- Qt6 ≥ 6.6 Core / Qml (Gui arrives transitively via `PolkitQt6-1::Agent`). No `phosphor-dbus` (polkit-qt owns its D-Bus).
+- Qt6 ≥ 6.6 Core / Qml. No `phosphor-dbus` (polkit-qt owns its D-Bus).
 
 **Risks**
 
