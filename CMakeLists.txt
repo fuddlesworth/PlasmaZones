@@ -713,6 +713,14 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-notifications-cli)
 endif()
 
+# phosphor-service-polkit-cli. Acceptance harness for the phosphor-service-polkit
+# library (Phase 2.6). Runs as the session's PolicyKit authentication agent and
+# answers PAM prompts (trigger with `pkexec true`). Gated like the lib: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-polkit-cli)
+endif()
+
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third
 # (CPU-meter) widget builds as a separate .so + manifest.json and
