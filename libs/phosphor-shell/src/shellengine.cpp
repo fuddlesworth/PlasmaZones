@@ -17,7 +17,6 @@
 #include <PhosphorShell/Variants.h>
 
 #include <PhosphorWayland/IdleInhibitor.h>
-#include <PhosphorWayland/IdleNotifier.h>
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/IScreenProvider.h>
@@ -124,8 +123,13 @@ bool ShellEngine::load(const QUrl& shellUrl)
             "Phosphor.Shell", 1, 0, "ForeignToplevel",
             QStringLiteral("ForeignToplevel is owned by Toplevels and cannot be constructed from QML"));
         qmlRegisterType<SystemClock>("Phosphor.Shell", 1, 0, "SystemClock");
+        // Surface-bound idle inhibition (zwp-idle-inhibit-v1): a QML window keeps
+        // its own output awake while visible. This stays a foundation primitive.
+        // Session-wide idle monitoring (ext-idle-notify-v1) is NOT registered here:
+        // it is owned by Phosphor.Service.Idle's IdleService (a multi-stage timeout
+        // policy + surface-less inhibition), registered in src/shell/main.cpp, so a
+        // single monitor arms each timeout.
         qmlRegisterType<PhosphorWayland::IdleInhibitor>("Phosphor.Shell", 1, 0, "IdleInhibitor");
-        qmlRegisterType<PhosphorWayland::IdleNotifier>("Phosphor.Shell", 1, 0, "IdleNotifier");
         qmlRegisterSingletonType<Toplevels>("Phosphor.Shell", 1, 0, "Toplevels", &Toplevels::create);
     });
 
