@@ -634,6 +634,76 @@ So the service lib is the **policy layer** on top of those single-purpose primit
 
 **Out of scope for 2.7.** The visual idle actions (dim animation, lock screen, DPMS / display power), any power-management or suspend coupling (that is 2.10 session / logind), and the D-Bus inhibit server (U3). The service times inactivity and reports stage transitions; the shell decides what each stage does.
 
+### 2.8: `phosphor-service-clipboard`
+
+A clipboard-history service: it watches the session's clipboard, keeps a de-duplicated, capped, on-disk history, and can re-apply any entry. Namespace `PhosphorServiceClipboard`, export macro `PHOSPHORSERVICECLIPBOARD_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Clipboard 1.0`. Table effort **M**.
+
+Second **Wayland-client** service lib (after 2.7), with two structural firsts:
+
+- **First to read arbitrary data off the compositor.** Unlike 2.7 (signal-only) or the read-only D-Bus libs (2.2 / 2.3 / 2.5), clipboard needs MIME negotiation and asynchronous fd reads/writes via `wlr-data-control`: watch the selection, `receive(mime, fd)` to read an offer, and a data source to re-offer an entry. The data path is new; the closest code precedent is the foundation `phosphor-wayland` clients.
+- **First to persist.** Every prior service lib is a live readout. This one keeps an on-disk history (cliphist-style) under `~/.local/share/` (XDG `GenericDataLocation`, the convention the phosphor libs already use) that survives restarts.
+
+> Backend note: the plan table (row 2.8) names `wlr-data-control-unstable-v1` (wlroots, widely supported today). The freedesktop successor is `ext-data-control-v1` (staging). We own the compositor, so either is implementable; see U1.
+
+**What already exists (foundation tier).**
+
+- `phosphor-wayland` binds Wayland globals in `LayerShellIntegration::registryHandler` (`ext_idle_notifier_v1`, `zwlr_layer_shell_v1`, `zwlr_foreign_toplevel_manager_v1`, etc.) and exposes `display()`. A data-control manager global binds the same way, and a `phosphor-wayland` client class wraps the device, mirroring `IdleNotifier` / `ForeignToplevel`.
+- `wlr-data-control-unstable-v1.xml` is **not yet vendored** (the six current protocols are idle-notify, idle-inhibit, layer-shell, foreign-toplevel, single-pixel-buffer, xdg-toplevel-drag). 2.8 vendors it under `libs/phosphor-wayland/protocols/` and code-generates it there, the established pattern.
+- `src/editor/controller/clipboard.cpp` is the editor's `QClipboard` **zone-layout** copy, unrelated to this system clipboard-history manager. No clipboard-history infrastructure exists yet.
+
+**What the service adds.**
+
+- **A foundation data-control client** (lands in `phosphor-wayland`): bind `zwlr_data_control_manager_v1`, get a device for the seat, surface selection-changed events with their offered MIME types, read an offer's data on demand (an async pipe fd driven on the event loop), and set the selection from a `zwlr_data_control_source_v1` to re-paste.
+- **A history store**: de-duplicated, capped at N entries, persisted on disk. Text stored inline; large / binary content (images) as on-disk blobs behind an index (the cliphist shape). Survives restarts.
+- **A QML / CLI facade** (`ClipboardService` + a `ClipboardHistoryModel`): the live history list, copy-nth-entry, remove, and clear.
+
+**Decisions taken up front** (see Unknowns for the rest):
+
+- **Foundation client in phosphor-wayland, policy in the service.** The raw `wlr-data-control` device is a `phosphor-wayland` primitive (like `IdleNotifier`); the service is the history / dedup / persistence layer over it, linked PRIVATE so no Wayland types leak from the public surface.
+- **Never persist secrets.** Password managers tag clipboard content sensitive (e.g. an `x-kde-passwordManagerHint` MIME type valued `secret`, or a concealed-content hint). A tagged entry is delivered live but never written to disk or kept in history, mirroring 2.6's never-store-the-secret stance. This is security-critical (see U3 and Risks).
+- **Model, not single-host.** Clipboard is inherently a LIST, so the facade exposes a `QAbstractListModel` of entries (the 2.5 host-backed-model shape), each with content / preview / mimeTypes / timestamp / sensitive roles. This differs from 2.6 / 2.7 (single active item).
+- **DI for testability.** The data-control device and the history store sit behind interfaces, so the dedup / cap / persistence logic and the model are unit-tested with a fake clipboard source and a temp-dir store, with no live compositor.
+
+**Milestones**
+
+1. **Foundation data-control client in `phosphor-wayland` (M, ~2-3 days).** Vendor `wlr-data-control-unstable-v1.xml`; bind `zwlr_data_control_manager_v1` in `LayerShellIntegration` (add the `strcmp` branch + an accessor, like `idleNotifier()`). Add a `ClipboardDevice` (`zwlr_data_control_device_v1`) class: a `selectionChanged(QStringList mimeTypes)` signal, an async `read(mime)` returning the bytes via a pipe fd on the event loop, and `setSelection(mimeData)` via a `zwlr_data_control_source_v1`. `static bool isSupported()`. Inert when the compositor lacks the global.
+2. **Service skeleton + CMake plumbing (S, ~1 day).** `libs/phosphor-service-clipboard/` mirroring the 2.7 shape (`CMakeLists.txt`, `PhosphorServiceClipboardConfig.cmake.in`, `include/PhosphorServiceClipboard/`, `src/`, `tests/`, `examples/phosphor-service-clipboard-cli/`). Link `PhosphorWayland` (PRIVATE) + Qt6 Core / Qml. Imperative `qmlregistration.cpp`, `std::call_once`-guarded, called from `src/shell/main.cpp` alongside the existing services. `BUILD_PHOSPHOR_SHELL`-gated.
+3. **History model + dedup + cap (S-M, ~1-2 days).** `ClipboardEntry` (content / preview / mimeTypes / timestamp / sensitive) and `ClipboardHistoryModel` (`QAbstractListModel`). On `selectionChanged`: read the preferred MIME, dedup against existing (move-to-front on a repeat), cap at N. Pure logic behind an `IClipboardSource` seam, unit-tested with a fake source.
+4. **On-disk persistence (M, ~2-3 days).** A history store under `~/.local/share/phosphor-clipboard/`: a JSON index + per-entry blob files for large / binary content; load on startup, append / evict on change, atomic writes. Sensitive entries are never written. Behind an injectable store interface, unit-tested against a temp dir.
+5. **QML facade + `ClipboardService` host (S, ~1 day).** `Phosphor.Service.Clipboard 1.0`: `ClipboardService` exposes the model, `Q_INVOKABLE copy(index)` (re-apply entry N to the selection via `setSelection`), `remove(index)`, `clear()`. Instantiable, not a singleton.
+6. **CLI demo `examples/phosphor-service-clipboard-cli/` (M, ~2 days).** Subcommands matching the table: `watch` (log each new clipboard entry), `list` (print the history), `copy <n>` (re-apply entry n). Runs under the phosphorwayland QPA (`registerLayerShellPlugin` before `QGuiApplication`) so the protocol is live.
+7. **Tests: model + store (S-M, ~1-2 days).** Unit-test dedup / cap / move-to-front on a fake source; persistence round-trip (write, reload, evict) on a temp dir; sensitive-entry exclusion; inert construction with no compositor. `QSKIP` the live read / write protocol path (validated through the CLI).
+8. **README + Status (S, ~half day).** Sibling convention; "Phase 2.8: shipped" on gate pass; cross-reference `phosphor-wayland` for the device primitive, §2.5 for the host-backed model, and §2.6 for the never-store-secrets stance.
+
+**Total effort:** M (≈ 2-3 weeks). Milestones 1 (the async data-control read / write) and 4 (persistence) hold the wall-clock; 2, 5, 7, 8 are mechanical given the 2.7 templates.
+
+**Dependencies**
+
+- `phosphor-wayland` (PRIVATE link; provides the new data-control device + the vendored protocol code). No separate `wayland-protocols` dependency.
+- Qt6 ≥ 6.6 Core / Qml. The CLI additionally links Gui for `QGuiApplication`. No `phosphor-dbus`.
+- A compositor implementing `wlr-data-control-unstable-v1` for the live path (the lib loads inert without it).
+
+**Risks**
+
+- **Secret leakage.** Clipboard history is a prime way to capture passwords. The sensitive-hint exclusion is security-critical and must be correct: honor every known hint, and when uncertain, do NOT persist. Audit this surface specifically, like 2.6's password handling.
+- **Unbounded growth / large blobs.** Images and huge pastes bloat disk. Cap entry count AND per-entry size; store large content as evictable blobs, never inline.
+- **fd / pipe lifecycle.** Async `receive(mime, fd)` reads must not block the event loop, must close every fd, and must survive the source vanishing mid-read. A leaked fd or a blocking read is a real bug.
+- **Re-paste fights the owner.** `setSelection` makes us the clipboard owner; copy-nth-entry must behave like a normal paste source and not loop back into our own watch as a new entry.
+- **No live compositor on CI.** Keep the model and store behind injectable seams; `QSKIP` the protocol path, validate via the CLI.
+- **Protocol churn.** wlr-data-control is wlroots-specific / frozen; `ext-data-control-v1` is the freedesktop successor (U1).
+
+**Unknowns to resolve before / during implementation**
+
+| # | Question | Lean |
+|---|----------|------|
+| U1 | `wlr-data-control-unstable-v1` (table, wlroots) or `ext-data-control-v1` (freedesktop staging successor)? | Lean wlr-data-control for the gate (broadest support today, and our compositor can advertise it); structure the foundation client so swapping to `ext-data-control-v1` is a protocol-binding change, not a rewrite. |
+| U2 | Which MIME types to capture per entry: store every offered type, or text plus one preview image? | Lean: always capture `text/plain;charset=utf-8`; capture one image type (`image/png`) when offered; record the full offered-MIME list but materialize only those, avoiding N redundant encodings on disk. |
+| U3 | Which sensitivity hints to honor for never-persist? | Lean: honor `x-kde-passwordManagerHint` valued `secret` plus a configurable MIME deny-list (password-manager / concealed-content hints). Default to NOT persisting anything tagged, and document the exact set. Mirrors 2.6's secret handling. |
+| U4 | Track the primary selection (middle-click) in addition to the clipboard selection? | Lean: clipboard selection only for the gate; primary-selection history is noisy and a separate opt-in later. |
+| U5 | History cap and persistence format? | Lean: a default cap (e.g. 100 entries) plus a per-entry size limit; a JSON index + per-entry blob files under `~/.local/share/phosphor-clipboard/` with atomic writes. Cap / format become Settings-tunable later. |
+
+**Out of scope for 2.8.** The clipboard-manager UI (a Phase 3 / 4 popup / picker consumer), image thumbnail rendering, primary-selection history (U4), cross-device sync, and any D-Bus clipboard interface. The service watches, stores, and re-applies; the shell renders the picker.
+
 ---
 
 ## Phase 3: UI primitives + first visible examples
