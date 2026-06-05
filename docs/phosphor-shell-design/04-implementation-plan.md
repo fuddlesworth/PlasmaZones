@@ -568,7 +568,7 @@ The `polkit-qt6` API we build on:
 
 **Out of scope for 2.6.** The authentication **dialog UI** (Phase 3/4: the agent only surfaces the request + prompt a dialog binds), client-side `checkAuthorization` gating (U4), temporary-authorization management, and any credential storage. The agent drives the PAM conversation; it draws nothing and remembers nothing.
 
-### 2.7: `phosphor-service-idle`
+### 2.7: `phosphor-service-idle` *(shipped)*
 
 A Wayland idle-management service: it watches the session for inactivity through a configurable multi-stage timeout policy, and it inhibits idle on request. Namespace `PhosphorServiceIdle`, export macro `PHOSPHORSERVICEIDLE_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Idle 1.0`. Table effort **S**.
 
