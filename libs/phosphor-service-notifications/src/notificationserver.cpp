@@ -11,8 +11,10 @@
 
 #include <QDBusArgument>
 #include <QDateTime>
+#include <QHash>
 #include <QLoggingCategory>
 #include <QMap>
+#include <QTimer>
 #include <QUrl>
 
 namespace {
@@ -27,7 +29,13 @@ constexpr auto kServerVersion = "0.1.0";
 constexpr auto kSpecVersion = "1.2";
 
 // Spec close-reason codes (org.freedesktop.Notifications NotificationClosed).
+constexpr uint kReasonExpired = 1;
+constexpr uint kReasonDismissed = 2;
 constexpr uint kReasonClosedByCall = 3;
+
+// Timeout (ms) for a Notify whose expire_timeout is -1 (server decides), unless
+// the notification is Critical (which never auto-expires). Settable per server.
+constexpr int kDefaultExpireMs = 5000;
 
 // Default icon-resolution size for image-path-as-icon-name. The full-fidelity
 // route is the image-data hint; a name resolves to a reasonable static size and
@@ -91,6 +99,12 @@ public:
     // Live notifications keyed by id, each parented to the server. A QMap keeps
     // notifications() in ascending-id order without a separate sort.
     QMap<uint, Notification*> live;
+    // Per-notification single-shot expiry timers, parented to the server and
+    // torn down with their notification. Absent when a notification never
+    // expires (expire_timeout 0, or -1 on a Critical).
+    QHash<uint, QTimer*> timers;
+
+    int defaultExpireMs = kDefaultExpireMs;
 
     explicit Private(QDBusConnection conn, QString svc)
         : connection(std::move(conn))
@@ -241,27 +255,110 @@ uint NotificationServer::Notify(const QString& appName, uint replacesId, const Q
         d->live.insert(id, notification);
         Q_EMIT notificationAdded(notification);
     }
+
+    // (Re)arm the expiry timer from the freshly-applied expire_timeout + urgency.
+    // On a replace this restarts the countdown, matching the spec intent that a
+    // replacing Notify fully re-specifies the notification.
+    armExpiry(notification);
     return id;
 }
 
 void NotificationServer::CloseNotification(uint id)
 {
-    // A close for an unknown id is a no-op (the notification already expired or
-    // was dismissed). For a live one, drop it, announce the reason, then delete
-    // the object after consumers have reacted to the signal.
+    // The spec's explicit-close path. Unknown ids are a no-op (already expired
+    // or dismissed).
+    closeInternal(id, kReasonClosedByCall);
+}
+
+void NotificationServer::dismissNotification(uint id)
+{
+    closeInternal(id, kReasonDismissed);
+}
+
+void NotificationServer::invokeAction(uint id, const QString& actionKey, const QString& activationToken)
+{
+    Notification* notification = d->live.value(id);
+    if (!notification)
+        return;
+
+    // XDG activation token (if any) goes out first so the target app can raise
+    // its window as the action fires.
+    if (!activationToken.isEmpty())
+        Q_EMIT ActivationToken(id, activationToken);
+    Q_EMIT ActionInvoked(id, actionKey);
+
+    // Per spec, invoking an action dismisses a non-resident notification; a
+    // resident one stays up so further actions can be taken.
+    if (!notification->resident())
+        closeInternal(id, kReasonDismissed);
+}
+
+void NotificationServer::closeInternal(uint id, uint reason)
+{
     Notification* notification = d->live.take(id);
     if (!notification)
         return;
-    Q_EMIT NotificationClosed(id, kReasonClosedByCall);
+    if (QTimer* timer = d->timers.take(id)) {
+        timer->stop();
+        timer->deleteLater();
+    }
+    // Announce the close before deleting, so consumers (model, toast) can react
+    // while the object is still readable; deleteLater defers the destruction.
+    Q_EMIT NotificationClosed(id, reason);
     notification->deleteLater();
+}
+
+void NotificationServer::armExpiry(Notification* notification)
+{
+    const uint id = notification->id();
+
+    int effective = notification->expireTimeout();
+    if (effective < 0)
+        effective = notification->urgency() == Notification::Critical ? 0 : d->defaultExpireMs;
+
+    QTimer* timer = d->timers.value(id);
+
+    // expire_timeout 0 (or a -1 Critical resolving to 0) means "never": tear down
+    // any timer carried over from a previous Notify on this id.
+    if (effective <= 0) {
+        if (timer) {
+            d->timers.remove(id);
+            timer->stop();
+            timer->deleteLater();
+        }
+        return;
+    }
+
+    if (!timer) {
+        timer = new QTimer(this);
+        timer->setSingleShot(true);
+        connect(timer, &QTimer::timeout, this, [this, id] {
+            closeInternal(id, kReasonExpired);
+        });
+        d->timers.insert(id, timer);
+    }
+    timer->start(effective);
+}
+
+int NotificationServer::defaultExpireTimeout() const
+{
+    return d->defaultExpireMs;
+}
+
+void NotificationServer::setDefaultExpireTimeout(int ms)
+{
+    if (d->defaultExpireMs == ms)
+        return;
+    d->defaultExpireMs = ms;
+    Q_EMIT defaultExpireTimeoutChanged();
 }
 
 QStringList NotificationServer::GetCapabilities()
 {
-    // Advertise only what the server can honestly back today. "actions" lands
-    // with action invocation (milestone 4); "persistence" with the model
+    // Advertise only what the server can honestly back today. "actions" is now
+    // backed (invokeAction + ActionInvoked); "persistence" lands with the model
     // (milestone 5); "body-markup" only once a renderer exists (Phase 4.3).
-    return {QStringLiteral("body"), QStringLiteral("icon-static")};
+    return {QStringLiteral("body"), QStringLiteral("actions"), QStringLiteral("icon-static")};
 }
 
 QString NotificationServer::GetServerInformation(QString& vendor, QString& version, QString& specVersion)

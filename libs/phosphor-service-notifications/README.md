@@ -59,7 +59,7 @@ library.
 ## Status
 
 Phase 2.5: in progress. Milestones 1 (skeleton + CMake + adaptor + name
-acquisition + static methods) and 3 (Notify ingestion + the `Notification`
-object + hint / image decode) landed; milestones 4-9 (expiry + close lifecycle,
-the model, QML facade, CLI daemon demo, full wire tests, README finalisation)
-follow per the plan.
+acquisition + static methods), 3 (Notify ingestion + the `Notification` object +
+hint / image decode), and 4 (expiry timers + close lifecycle + action invoke)
+landed; milestones 5-9 (the model, QML facade, CLI daemon demo, full wire tests,
+README finalisation) follow per the plan.

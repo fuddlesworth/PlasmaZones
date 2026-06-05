@@ -58,6 +58,16 @@ private Q_SLOTS:
     void notifyImagePathMissingIsGraceful();
     void replacesIdUpdatesInPlaceAndEmitsChanged();
     void notificationsAccessorTracksLifecycle();
+    void explicitTimeoutExpiresWithReasonExpired();
+    void timeoutZeroNeverExpires();
+    void defaultTimeoutExpiresForNormal();
+    void criticalDefaultNeverExpires();
+    void dismissEmitsReasonDismissed();
+    void invokeActionEmitsAndDismissesNonResident();
+    void invokeActionKeepsResidentOpen();
+    void invokeActionEmitsActivationTokenBeforeAction();
+    void replaceUpdatesExpiry();
+    void invokeActionUnknownIdIsNoop();
 
 private:
     std::unique_ptr<NotificationServer> makeServer();
@@ -332,6 +342,149 @@ void NotificationsSmokeTest::notificationsAccessorTracksLifecycle()
     live = server->notifications();
     QCOMPARE(live.size(), 1);
     QCOMPARE(live.at(0)->id(), b);
+}
+
+void NotificationsSmokeTest::explicitTimeoutExpiresWithReasonExpired()
+{
+    auto server = makeServer();
+    QSignalSpy spy(server.get(), &NotificationServer::NotificationClosed);
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("ttl"), QString(), {}, {}, 30);
+
+    QVERIFY(spy.wait(2000)); // the 30ms timer fires once the event loop runs
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toUInt(), id);
+    QCOMPARE(spy.at(0).at(1).toUInt(), 1u); // reason 1 == expired
+    QVERIFY(server->notifications().isEmpty());
+}
+
+void NotificationsSmokeTest::timeoutZeroNeverExpires()
+{
+    auto server = makeServer();
+    QSignalSpy spy(server.get(), &NotificationServer::NotificationClosed);
+    server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("sticky"), QString(), {}, {}, 0);
+
+    QVERIFY(!spy.wait(200)); // expire_timeout 0 means never; no close arrives
+    QCOMPARE(server->notifications().size(), 1);
+}
+
+void NotificationsSmokeTest::defaultTimeoutExpiresForNormal()
+{
+    auto server = makeServer();
+    server->setDefaultExpireTimeout(30); // shrink the -1 default for the test
+    QSignalSpy spy(server.get(), &NotificationServer::NotificationClosed);
+    // expire_timeout -1 + Normal urgency (no hint) resolves to the default.
+    server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("def"), QString(), {}, {}, -1);
+
+    QVERIFY(spy.wait(2000));
+    QCOMPARE(spy.at(0).at(1).toUInt(), 1u);
+    QVERIFY(server->notifications().isEmpty());
+}
+
+void NotificationsSmokeTest::criticalDefaultNeverExpires()
+{
+    auto server = makeServer();
+    server->setDefaultExpireTimeout(30);
+    QSignalSpy spy(server.get(), &NotificationServer::NotificationClosed);
+
+    QVariantMap hints;
+    hints.insert(QStringLiteral("urgency"), QVariant::fromValue<uint>(2)); // Critical
+    // -1 + Critical resolves to "never", ignoring the (short) default.
+    server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("crit"), QString(), {}, hints, -1);
+
+    QVERIFY(!spy.wait(200));
+    QCOMPARE(server->notifications().size(), 1);
+}
+
+void NotificationsSmokeTest::dismissEmitsReasonDismissed()
+{
+    auto server = makeServer();
+    QSignalSpy spy(server.get(), &NotificationServer::NotificationClosed);
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("d"), QString(), {}, {}, 0);
+
+    server->dismissNotification(id);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toUInt(), id);
+    QCOMPARE(spy.at(0).at(1).toUInt(), 2u); // reason 2 == dismissed
+    QVERIFY(server->notifications().isEmpty());
+}
+
+void NotificationsSmokeTest::invokeActionEmitsAndDismissesNonResident()
+{
+    auto server = makeServer();
+    QSignalSpy actionSpy(server.get(), &NotificationServer::ActionInvoked);
+    QSignalSpy closeSpy(server.get(), &NotificationServer::NotificationClosed);
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("a"), QString(),
+                                   {QStringLiteral("default"), QStringLiteral("Open")}, {}, 0);
+
+    server->invokeAction(id, QStringLiteral("default"));
+
+    QCOMPARE(actionSpy.count(), 1);
+    QCOMPARE(actionSpy.at(0).at(0).toUInt(), id);
+    QCOMPARE(actionSpy.at(0).at(1).toString(), QStringLiteral("default"));
+    // A non-resident notification is dismissed after the action.
+    QCOMPARE(closeSpy.count(), 1);
+    QCOMPARE(closeSpy.at(0).at(1).toUInt(), 2u);
+    QVERIFY(server->notifications().isEmpty());
+}
+
+void NotificationsSmokeTest::invokeActionKeepsResidentOpen()
+{
+    auto server = makeServer();
+    QSignalSpy actionSpy(server.get(), &NotificationServer::ActionInvoked);
+    QSignalSpy closeSpy(server.get(), &NotificationServer::NotificationClosed);
+
+    QVariantMap hints;
+    hints.insert(QStringLiteral("resident"), true);
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("r"), QString(),
+                                   {QStringLiteral("more")}, hints, 0);
+
+    server->invokeAction(id, QStringLiteral("more"));
+
+    QCOMPARE(actionSpy.count(), 1);
+    QCOMPARE(closeSpy.count(), 0); // resident stays open
+    QCOMPARE(server->notifications().size(), 1);
+}
+
+void NotificationsSmokeTest::invokeActionEmitsActivationTokenBeforeAction()
+{
+    auto server = makeServer();
+    QStringList sequence;
+    connect(server.get(), &NotificationServer::ActivationToken, this, [&sequence](uint, const QString&) {
+        sequence << QStringLiteral("token");
+    });
+    connect(server.get(), &NotificationServer::ActionInvoked, this, [&sequence](uint, const QString&) {
+        sequence << QStringLiteral("action");
+    });
+    QSignalSpy tokenSpy(server.get(), &NotificationServer::ActivationToken);
+
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("a"), QString(),
+                                   {QStringLiteral("default")}, {}, 0);
+    server->invokeAction(id, QStringLiteral("default"), QStringLiteral("tok-123"));
+
+    QCOMPARE(tokenSpy.count(), 1);
+    QCOMPARE(tokenSpy.at(0).at(1).toString(), QStringLiteral("tok-123"));
+    // The activation token must precede the action so the app can raise first.
+    QCOMPARE(sequence, (QStringList{QStringLiteral("token"), QStringLiteral("action")}));
+}
+
+void NotificationsSmokeTest::replaceUpdatesExpiry()
+{
+    auto server = makeServer();
+    QSignalSpy spy(server.get(), &NotificationServer::NotificationClosed);
+    // Arm a short timer, then replace it with a never-expire (0) before it fires.
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("first"), QString(), {}, {}, 40);
+    server->Notify(QStringLiteral("app"), id, QString(), QStringLiteral("second"), QString(), {}, {}, 0);
+
+    QVERIFY(!spy.wait(300)); // the replace cancelled the original countdown
+    QCOMPARE(server->notifications().size(), 1);
+}
+
+void NotificationsSmokeTest::invokeActionUnknownIdIsNoop()
+{
+    auto server = makeServer();
+    QSignalSpy actionSpy(server.get(), &NotificationServer::ActionInvoked);
+    server->invokeAction(999999, QStringLiteral("default")); // no such notification
+    QCOMPARE(actionSpy.count(), 0);
 }
 
 QTEST_GUILESS_MAIN(NotificationsSmokeTest)

@@ -46,6 +46,8 @@ class PHOSPHORSERVICENOTIFICATIONS_EXPORT NotificationServer : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool nameAcquired READ nameAcquired NOTIFY nameAcquiredChanged)
+    Q_PROPERTY(int defaultExpireTimeout READ defaultExpireTimeout WRITE setDefaultExpireTimeout NOTIFY
+                   defaultExpireTimeoutChanged)
 
 public:
     /// Construct on the session bus under the spec's well-known name.
@@ -68,6 +70,26 @@ public:
     /// `NotificationClosed` fires). The `NotificationModel` (milestone 5) seeds
     /// itself from this and tracks `notificationAdded` / `NotificationClosed`.
     [[nodiscard]] QList<Notification*> notifications() const;
+
+    /// Timeout (ms) applied to a `Notify` whose `expire_timeout` is -1 (the
+    /// spec's "server decides"). Critical notifications ignore this and never
+    /// auto-expire. Default 5000. Changing it affects only future notifications,
+    /// not timers already armed.
+    [[nodiscard]] int defaultExpireTimeout() const;
+    void setDefaultExpireTimeout(int ms);
+
+    /// The user dismissed @p id (close reason 2): for a shell/toast to call when
+    /// the user swipes or clicks the notification away. Q_INVOKABLE (not a slot)
+    /// so it is callable from QML/CLI but never exported on the bus.
+    Q_INVOKABLE void dismissNotification(uint id);
+
+    /// Invoke @p actionKey on @p id. When @p activationToken is non-empty it is
+    /// announced via `ActivationToken(id, token)` first (XDG activation, so the
+    /// target app can raise its window), then `ActionInvoked(id, key)`. A
+    /// non-resident notification is closed afterwards (reason 2); a resident one
+    /// stays open. Q_INVOKABLE, not a slot: callable from QML/CLI, never exported
+    /// (the bluetooth Agent1 keeps its respond* methods off the bus the same way).
+    Q_INVOKABLE void invokeAction(uint id, const QString& actionKey, const QString& activationToken = QString());
 
 public Q_SLOTS:
     // org.freedesktop.Notifications, forwarded here by the generated adaptor.
@@ -94,11 +116,23 @@ Q_SIGNALS:
     /// The user invoked action @p actionKey on notification @p id. Auto-relayed
     /// to the bus by the adaptor.
     void ActionInvoked(uint id, const QString& actionKey);
+    /// Carries the XDG activation token for @p id ahead of an `ActionInvoked`,
+    /// so the activated app can raise its window. Auto-relayed by the adaptor.
+    void ActivationToken(uint id, const QString& activationToken);
 
     void nameAcquiredChanged();
+    void defaultExpireTimeoutChanged();
 
 private:
     Q_DISABLE_COPY_MOVE(NotificationServer)
+
+    /// Single close path. Removes @p id from the live set, cancels its expiry
+    /// timer, emits `NotificationClosed(id, reason)`, and deletes the object.
+    void closeInternal(uint id, uint reason);
+    /// (Re)arm or cancel @p notification's expiry timer from its current
+    /// `expireTimeout` + urgency, honouring `defaultExpireTimeout`.
+    void armExpiry(Notification* notification);
+
     class Private;
     std::unique_ptr<Private> d;
 };
