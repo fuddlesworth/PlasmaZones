@@ -792,18 +792,9 @@ void WindowTrackingService::onLayoutChanged()
             if (!appId.isEmpty() && appId != windowIdOrStableId) {
                 addedIds.insert(appId);
             }
-            // Collect all zone positions for multi-zone resnap
-            QList<int> allPositions;
-            for (const QString& zid : zoneIdList) {
-                int p = globalZoneIdToPosition.value(zid, 0);
-                if (p > 0)
-                    allPositions.append(p);
-            }
-
             ResnapEntry entry;
             entry.windowId = windowIdOrStableId;
             entry.zonePosition = pos;
-            entry.allZonePositions = allPositions;
             entry.screenId = screenId;
             entry.virtualDesktop = vd;
             newBuffer.append(entry);

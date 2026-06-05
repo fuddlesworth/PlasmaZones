@@ -78,69 +78,40 @@ QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapFromPreviousLayout()
         const int newZoneCount = newZones.size();
 
         for (const ResnapEntry* entry : screenIt.value()) {
-            // Multi-zone windows: map zone positions to the new layout.
-            // Only include positions that exist in the new layout — don't cycle
-            // excess positions (e.g. zone 3 shouldn't map to zone 1 when going
-            // from a 3-zone to a 2-zone layout).
-            if (entry->allZonePositions.size() > 1) {
-                QStringList targetZoneIds;
-                for (int pos : entry->allZonePositions) {
-                    if (pos > newZoneCount)
-                        continue; // skip positions beyond new layout
-                    PhosphorZones::Zone* z = newZones.value(pos - 1, nullptr);
-                    if (z)
-                        targetZoneIds.append(z->id().toString());
-                }
-                if (!targetZoneIds.isEmpty()) {
-                    QRect geo = m_windowTracker->resolveZoneGeometry(targetZoneIds, screenId);
-                    if (geo.isValid()) {
-                        ZoneAssignmentEntry assignEntry;
-                        assignEntry.windowId = entry->windowId;
-                        assignEntry.sourceZoneId = QString();
-                        assignEntry.targetZoneId = targetZoneIds.first();
-                        if (targetZoneIds.size() > 1)
-                            assignEntry.targetZoneIds = targetZoneIds;
-                        assignEntry.targetGeometry = geo;
-                        result.append(assignEntry);
-                    }
-                } else {
-                    // ALL zone positions exceed the new layout — restore to pre-tile geometry.
-                    tryAppendRestore(entry);
-                }
-            } else {
-                // Single-zone: map 1:1 by position (1->1, 2->2).
-                // Windows whose position exceeds the new zone count are restored to
-                // their pre-tile geometry — a window snapped to zone 3 should go back
-                // to its original size when switching to a 2-zone layout.
-                if (entry->zonePosition > newZoneCount) {
-                    tryAppendRestore(entry);
-                    continue;
-                }
-                PhosphorZones::Zone* targetZone = newZones.value(entry->zonePosition - 1, nullptr);
-                if (!targetZone) {
-                    continue;
-                }
-
-                // Use the loop's `screenId` (the entries-by-screen group
-                // key) rather than `entry->screenId`. The two are equal at
-                // entry time because we bucketed by entry->screenId above,
-                // but the loop already uses `screenId` for
-                // layout resolution and for the multi-zone resolveZoneGeometry
-                // call — keep the single-zone path symmetric so a future
-                // change to the grouping key (e.g. canonical screen-id form)
-                // doesn't silently leave this call against a stale field.
-                QRect geo = m_windowTracker->zoneGeometry(targetZone->id().toString(), screenId);
-                if (!geo.isValid()) {
-                    continue;
-                }
-
-                ZoneAssignmentEntry assignEntry;
-                assignEntry.windowId = entry->windowId;
-                assignEntry.sourceZoneId = QString();
-                assignEntry.targetZoneId = targetZone->id().toString();
-                assignEntry.targetGeometry = geo;
-                result.append(assignEntry);
+            // Map the window's primary zone position 1:1 into the new layout
+            // (1->1, 2->2). A multi-zone span is specific to the layout it was
+            // made in, so on a layout switch a spanning window collapses to its
+            // primary zone rather than trying to reconstruct the span across a
+            // different zone arrangement. Windows whose primary position exceeds
+            // the new zone count are restored to their pre-tile geometry — a
+            // window snapped to zone 3 should go back to its original size when
+            // switching to a 2-zone layout.
+            if (entry->zonePosition > newZoneCount) {
+                tryAppendRestore(entry);
+                continue;
             }
+            PhosphorZones::Zone* targetZone = newZones.value(entry->zonePosition - 1, nullptr);
+            if (!targetZone) {
+                continue;
+            }
+
+            // Use the loop's `screenId` (the entries-by-screen group key) rather
+            // than `entry->screenId`. The two are equal at entry time because we
+            // bucketed by entry->screenId above, but the loop already uses
+            // `screenId` for layout resolution — keep this call symmetric so a
+            // future change to the grouping key (e.g. canonical screen-id form)
+            // doesn't silently leave it against a stale field.
+            QRect geo = m_windowTracker->zoneGeometry(targetZone->id().toString(), screenId);
+            if (!geo.isValid()) {
+                continue;
+            }
+
+            ZoneAssignmentEntry assignEntry;
+            assignEntry.windowId = entry->windowId;
+            assignEntry.sourceZoneId = QString();
+            assignEntry.targetZoneId = targetZone->id().toString();
+            assignEntry.targetGeometry = geo;
+            result.append(assignEntry);
         }
     }
 
