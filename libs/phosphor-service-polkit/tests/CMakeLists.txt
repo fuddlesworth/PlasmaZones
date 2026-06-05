@@ -18,9 +18,10 @@ function(_phosphorservicepolkit_test target source)
     )
 endfunction()
 
-# Smoke test: exercises the milestone-1 contract (QML-registration idempotency,
-# the default object path, and inert construction / registration against a
-# bogus session so no real polkitd registration can occur).
+# Smoke test: exercises the deterministic facade contract (QML-registration
+# idempotency, the default object path, inert construction / registration against
+# a bogus session so no real polkitd registration can occur, and the
+# cancel / authenticate / respond no-op guards).
 _phosphorservicepolkit_test(test_phosphorservicepolkit_smoke test_smoke.cpp)
 
 # QML facade test: a real QQmlEngine imports the module and proves the
