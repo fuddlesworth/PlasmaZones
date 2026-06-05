@@ -58,6 +58,7 @@ set(phosphorserviceidle_SRCS
     src/iidlesource.cpp
     src/idlestatemachine.cpp
     src/idlenotifiersource.cpp
+    src/idleinhibitionmanager.cpp
 )
 
 add_library(PhosphorServiceIdle SHARED

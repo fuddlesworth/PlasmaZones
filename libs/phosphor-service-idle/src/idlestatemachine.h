@@ -52,6 +52,13 @@ public:
     /// Name of the current stage, or an empty string when active.
     [[nodiscard]] QString currentStageName() const;
 
+    /// Arm or disarm idle monitoring. While disabled the sources are torn down
+    /// (so the compositor delivers no idle notifications) and the machine reports
+    /// active; re-enabling re-arms them. The facade disables monitoring while idle
+    /// is inhibited.
+    void setMonitoringEnabled(bool enabled);
+    [[nodiscard]] bool isMonitoringEnabled() const;
+
 Q_SIGNALS:
     void currentStageChanged();
     /// Entered idle stage @p stage (1-based).
@@ -68,6 +75,7 @@ private:
     QList<IdleStage> m_stages;
     std::vector<IIdleSource::Ptr> m_sources;
     int m_currentStage = 0;
+    bool m_monitoringEnabled = true;
 };
 
 } // namespace PhosphorServiceIdle

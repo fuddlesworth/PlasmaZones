@@ -85,6 +85,7 @@ private Q_SLOTS:
     void resumeFromDeepStageResets();
     void stagesSortedByAscendingTimeout();
     void reconfigureWhileIdleResets();
+    void monitoringPauseDisarmsAndResumeRearms();
 };
 
 void IdleStateMachineTest::emptyStagesStaysActive()
@@ -216,6 +217,42 @@ void IdleStateMachineTest::reconfigureWhileIdleResets()
     fresh->fireIdle();
     QCOMPARE(machine.currentStage(), 1);
     QCOMPARE(machine.currentStageName(), QStringLiteral("sleep"));
+}
+
+void IdleStateMachineTest::monitoringPauseDisarmsAndResumeRearms()
+{
+    RecordingFactory rec;
+    IdleStateMachine machine(rec.factory());
+    QVERIFY(machine.isMonitoringEnabled());
+
+    machine.setStages({{QStringLiteral("dim"), 5min}, {QStringLiteral("lock"), 10min}});
+    QCOMPARE(rec.created.size(), size_t{2});
+    rec.created.at(0)->fireIdle();
+    rec.created.at(1)->fireIdle();
+    QCOMPARE(machine.currentStage(), 2);
+
+    QSignalSpy resumedSpy(&machine, &IdleStateMachine::resumed);
+    // Disabling monitoring (idle inhibited) tears the sources down and resets to
+    // active, so the compositor delivers no further idle notifications.
+    machine.setMonitoringEnabled(false);
+    QVERIFY(!machine.isMonitoringEnabled());
+    QCOMPARE(machine.currentStage(), 0);
+    QCOMPARE(resumedSpy.count(), 1);
+
+    // Re-enabling re-arms the same ladder; the prior fakes were destroyed, so the
+    // factory hands out fresh ones.
+    const size_t before = rec.created.size();
+    machine.setMonitoringEnabled(true);
+    QVERIFY(machine.isMonitoringEnabled());
+    QCOMPARE(rec.created.size(), before + 2);
+    rec.created.at(before)->fireIdle();
+    QCOMPARE(machine.currentStage(), 1);
+    QCOMPARE(machine.currentStageName(), QStringLiteral("dim"));
+
+    // Setting the same state again is a no-op: no rebuild, no fresh sources.
+    const size_t afterReenable = rec.created.size();
+    machine.setMonitoringEnabled(true);
+    QCOMPARE(rec.created.size(), afterReenable);
 }
 
 QTEST_GUILESS_MAIN(IdleStateMachineTest)

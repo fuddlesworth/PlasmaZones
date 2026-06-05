@@ -42,3 +42,20 @@ set_tests_properties(test_phosphorserviceidle_statemachine
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
         LABELS "phosphorserviceidle"
 )
+
+# Inhibition unit test: ref-count semantics on the aggregator, compiled directly
+# (no lib link, no compositor).
+add_executable(test_phosphorserviceidle_inhibition
+    test_inhibition.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/idleinhibitionmanager.cpp
+)
+target_include_directories(test_phosphorserviceidle_inhibition
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_link_libraries(test_phosphorserviceidle_inhibition PRIVATE Qt6::Test)
+add_test(NAME test_phosphorserviceidle_inhibition COMMAND test_phosphorserviceidle_inhibition)
+set_tests_properties(test_phosphorserviceidle_inhibition
+    PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        LABELS "phosphorserviceidle"
+)

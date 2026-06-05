@@ -49,24 +49,43 @@ QString IdleStateMachine::currentStageName() const
     return m_stages.at(m_currentStage - 1).name;
 }
 
+void IdleStateMachine::setMonitoringEnabled(bool enabled)
+{
+    if (enabled == m_monitoringEnabled)
+        return;
+    m_monitoringEnabled = enabled;
+    // rebuild() arms the sources when enabled, tears them down and resets to
+    // active when disabled.
+    rebuild();
+}
+
+bool IdleStateMachine::isMonitoringEnabled() const
+{
+    return m_monitoringEnabled;
+}
+
 void IdleStateMachine::rebuild()
 {
     // Destroying the old sources disconnects their signals (they are unparented
     // unique_ptrs, so this also tears down their compositor objects).
     m_sources.clear();
 
-    for (int i = 0; i < m_stages.size(); ++i) {
-        IIdleSource::Ptr source = m_factory();
-        if (!source)
-            continue;
-        source->setTimeout(m_stages.at(i).timeout);
-        connect(source.get(), &IIdleSource::idled, this, [this, i] {
-            onSourceIdled(i);
-        });
-        connect(source.get(), &IIdleSource::resumed, this, [this] {
-            onSourceResumed();
-        });
-        m_sources.push_back(std::move(source));
+    // While monitoring is disabled (idle is inhibited) no sources are armed, so
+    // the compositor delivers no idle notifications.
+    if (m_monitoringEnabled) {
+        for (int i = 0; i < m_stages.size(); ++i) {
+            IIdleSource::Ptr source = m_factory();
+            if (!source)
+                continue;
+            source->setTimeout(m_stages.at(i).timeout);
+            connect(source.get(), &IIdleSource::idled, this, [this, i] {
+                onSourceIdled(i);
+            });
+            connect(source.get(), &IIdleSource::resumed, this, [this] {
+                onSourceResumed();
+            });
+            m_sources.push_back(std::move(source));
+        }
     }
 
     // Rebuilding clears any prior idle state: the new sources all start active.
