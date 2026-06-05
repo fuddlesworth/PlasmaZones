@@ -20,8 +20,9 @@ endfunction()
 
 # Smoke test: exercises the deterministic facade contract (QML-registration
 # idempotency and inert construction with no live compositor). The history
-# model, persistence, and live clipboard read / write are exercised by the unit
-# tests and the CLI demo as they land.
+# model and persistence are covered by the dedicated history-model and store
+# tests below; the live clipboard read / write path is exercised by the CLI demo
+# against a real session.
 _phosphorserviceclipboard_test(test_phosphorserviceclipboard_smoke test_smoke.cpp)
 
 # QML facade test: a real QQmlEngine imports the module and proves the imperative

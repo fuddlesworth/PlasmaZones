@@ -15,8 +15,8 @@
 
 namespace PhosphorServiceClipboard {
 
-/// The read surface of a clipboard the history model consumes: it reports which
-/// MIME types the current selection offers and reads a chosen type on demand
+/// The read surface of a clipboard the history model consumes: it announces the
+/// offered MIME types via `selectionChanged` and reads a chosen type on demand
 /// (asynchronously, so a large producer never blocks the loop).
 class IClipboardSource : public QObject
 {
@@ -30,9 +30,6 @@ public:
     // Out-of-line (defined in iclipboardsource.cpp) so it anchors the vtable and
     // gives AUTOMOC a translation unit for the Q_OBJECT metaobject.
     ~IClipboardSource() override;
-
-    /// MIME types offered by the current selection (empty when cleared).
-    [[nodiscard]] virtual QStringList mimeTypes() const = 0;
 
     /// Asynchronously read the current selection as @p mimeType; the result
     /// arrives via `dataReceived`.

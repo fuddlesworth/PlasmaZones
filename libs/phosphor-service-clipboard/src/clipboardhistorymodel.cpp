@@ -170,13 +170,14 @@ void ClipboardHistoryModel::startNextRead()
         return; // nothing to capture (cleared or sensitive selection).
     }
     m_readMime = preferredMimeType(m_readTypes);
-    if (m_readMime.isEmpty()) {
+    if (m_readMime.isEmpty() || !m_source) {
+        // Nothing readable, or no source to read from: stay idle rather than
+        // marking a read outstanding that no dataReceived will ever complete.
         m_reading = false;
         return;
     }
     m_reading = true;
-    if (m_source)
-        m_source->receive(m_readMime);
+    m_source->receive(m_readMime);
 }
 
 void ClipboardHistoryModel::onDataReceived(const QString& mimeType, const QByteArray& data)

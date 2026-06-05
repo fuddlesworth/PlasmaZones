@@ -24,10 +24,6 @@ namespace {
 class FakeClipboardSource : public IClipboardSource
 {
 public:
-    [[nodiscard]] QStringList mimeTypes() const override
-    {
-        return m_mimeTypes;
-    }
     void receive(const QString& mimeType) override
     {
         // The real client reads asynchronously; this fake delivers synchronously,
@@ -39,7 +35,6 @@ public:
 
     void pushSelection(const QStringList& mimeTypes, const QMap<QString, QByteArray>& data)
     {
-        m_mimeTypes = mimeTypes;
         m_data = data;
         Q_EMIT selectionChanged(mimeTypes);
     }
@@ -50,13 +45,11 @@ public:
     }
     void clearSelection()
     {
-        m_mimeTypes.clear();
         m_data.clear();
         Q_EMIT selectionChanged(QStringList());
     }
 
 private:
-    QStringList m_mimeTypes;
     QMap<QString, QByteArray> m_data;
 };
 
@@ -68,10 +61,6 @@ private:
 class DeferringFakeClipboardSource : public IClipboardSource
 {
 public:
-    [[nodiscard]] QStringList mimeTypes() const override
-    {
-        return m_mimeTypes;
-    }
     void receive(const QString& mimeType) override
     {
         m_queue.append({mimeType, m_data.value(mimeType)});
@@ -79,7 +68,6 @@ public:
 
     void pushSelection(const QStringList& mimeTypes, const QMap<QString, QByteArray>& data)
     {
-        m_mimeTypes = mimeTypes;
         m_data = data;
         Q_EMIT selectionChanged(mimeTypes);
     }
@@ -97,7 +85,6 @@ public:
     }
 
 private:
-    QStringList m_mimeTypes;
     QMap<QString, QByteArray> m_data;
     QList<QPair<QString, QByteArray>> m_queue;
 };

@@ -23,7 +23,6 @@ class WaylandClipboardSource : public IClipboardSource
 public:
     explicit WaylandClipboardSource(QObject* parent = nullptr);
 
-    [[nodiscard]] QStringList mimeTypes() const override;
     void receive(const QString& mimeType) override;
 
     /// Take ownership of the clipboard selection, offering @p data keyed by MIME

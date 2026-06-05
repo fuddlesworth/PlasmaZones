@@ -17,11 +17,6 @@ WaylandClipboardSource::WaylandClipboardSource(QObject* parent)
             });
 }
 
-QStringList WaylandClipboardSource::mimeTypes() const
-{
-    return m_device.mimeTypes();
-}
-
 void WaylandClipboardSource::receive(const QString& mimeType)
 {
     m_device.receive(mimeType);
