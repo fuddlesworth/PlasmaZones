@@ -23,3 +23,23 @@ endfunction()
 # model, persistence, and live clipboard read / write are exercised by the unit
 # tests and the CLI demo as they land.
 _phosphorserviceclipboard_test(test_phosphorserviceclipboard_smoke test_smoke.cpp)
+
+# History-model unit test: exercises the dedup / cap / preview / sensitive-drop
+# logic on a fake source. It compiles the model + seam directly (and includes the
+# internal src/ headers) rather than linking the lib, so it needs no compositor
+# and no phosphor-wayland; the internal classes stay unexported.
+add_executable(test_phosphorserviceclipboard_historymodel
+    test_historymodel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/clipboardhistorymodel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/iclipboardsource.cpp
+)
+target_include_directories(test_phosphorserviceclipboard_historymodel
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_link_libraries(test_phosphorserviceclipboard_historymodel PRIVATE Qt6::Test)
+add_test(NAME test_phosphorserviceclipboard_historymodel COMMAND test_phosphorserviceclipboard_historymodel)
+set_tests_properties(test_phosphorserviceclipboard_historymodel
+    PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        LABELS "phosphorserviceclipboard"
+)

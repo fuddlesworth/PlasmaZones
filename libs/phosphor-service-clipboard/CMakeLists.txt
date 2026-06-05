@@ -55,6 +55,8 @@ set(phosphorserviceclipboard_public_HDRS
 set(phosphorserviceclipboard_SRCS
     src/qmlregistration.cpp
     src/clipboardservice.cpp
+    src/iclipboardsource.cpp
+    src/clipboardhistorymodel.cpp
 )
 
 add_library(PhosphorServiceClipboard SHARED

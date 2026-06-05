@@ -1,0 +1,244 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include "clipboardhistorymodel.h"
+
+#include <QDateTime>
+
+namespace PhosphorServiceClipboard {
+
+namespace {
+// The KDE de-facto password-manager hint: when a selection offers this MIME
+// type the content is a secret and must not enter the history.
+constexpr auto kPasswordHint = "x-kde-passwordManagerHint";
+constexpr int kPreviewMaxChars = 120;
+
+bool isTextType(const QString& mimeType)
+{
+    return mimeType.startsWith(QLatin1String("text/")) || mimeType == QLatin1String("UTF8_STRING")
+        || mimeType == QLatin1String("STRING") || mimeType == QLatin1String("TEXT");
+}
+} // namespace
+
+ClipboardHistoryModel::ClipboardHistoryModel(QObject* parent)
+    : QAbstractListModel(parent)
+{
+}
+
+ClipboardHistoryModel::~ClipboardHistoryModel() = default;
+
+void ClipboardHistoryModel::setSource(IClipboardSource* source)
+{
+    if (m_source == source)
+        return;
+    if (m_source)
+        m_source->disconnect(this);
+    m_source = source;
+    if (m_source) {
+        connect(m_source, &IClipboardSource::selectionChanged, this, &ClipboardHistoryModel::onSelectionChanged);
+        connect(m_source, &IClipboardSource::dataReceived, this, &ClipboardHistoryModel::onDataReceived);
+    }
+}
+
+void ClipboardHistoryModel::setMaxEntries(int max)
+{
+    m_maxEntries = max < 0 ? 0 : max;
+    const int before = m_entries.size();
+    enforceCap();
+    if (m_entries.size() != before)
+        Q_EMIT countChanged();
+}
+
+int ClipboardHistoryModel::maxEntries() const
+{
+    return m_maxEntries;
+}
+
+int ClipboardHistoryModel::rowCount(const QModelIndex& parent) const
+{
+    if (parent.isValid())
+        return 0;
+    return m_entries.size();
+}
+
+QVariant ClipboardHistoryModel::data(const QModelIndex& index, int role) const
+{
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_entries.size())
+        return {};
+    const ClipboardEntry& entry = m_entries.at(index.row());
+    switch (role) {
+    case Qt::DisplayRole:
+    case PreviewRole:
+        return entry.preview;
+    case MimeTypeRole:
+        return entry.mimeType;
+    case OfferedTypesRole:
+        return entry.offeredTypes;
+    case TimestampRole:
+        return entry.timestamp;
+    default:
+        return {};
+    }
+}
+
+QHash<int, QByteArray> ClipboardHistoryModel::roleNames() const
+{
+    return {
+        {PreviewRole, QByteArrayLiteral("preview")},
+        {MimeTypeRole, QByteArrayLiteral("mimeType")},
+        {OfferedTypesRole, QByteArrayLiteral("offeredTypes")},
+        {TimestampRole, QByteArrayLiteral("timestamp")},
+    };
+}
+
+ClipboardEntry ClipboardHistoryModel::entryAt(int row) const
+{
+    if (row < 0 || row >= m_entries.size())
+        return {};
+    return m_entries.at(row);
+}
+
+void ClipboardHistoryModel::removeAt(int row)
+{
+    if (row < 0 || row >= m_entries.size())
+        return;
+    beginRemoveRows(QModelIndex(), row, row);
+    m_entries.removeAt(row);
+    endRemoveRows();
+    Q_EMIT countChanged();
+}
+
+void ClipboardHistoryModel::clear()
+{
+    if (m_entries.isEmpty())
+        return;
+    beginResetModel();
+    m_entries.clear();
+    endResetModel();
+    Q_EMIT countChanged();
+}
+
+void ClipboardHistoryModel::onSelectionChanged(const QStringList& mimeTypes)
+{
+    m_pendingMime.clear();
+    m_pendingTypes.clear();
+    if (mimeTypes.isEmpty())
+        return; // selection cleared: keep the history, just nothing new to read.
+    if (isSensitive(mimeTypes))
+        return; // a secret (password manager): never read, never record.
+    const QString mime = preferredMimeType(mimeTypes);
+    if (mime.isEmpty())
+        return;
+    m_pendingTypes = mimeTypes;
+    m_pendingMime = mime;
+    if (m_source)
+        m_source->receive(mime);
+}
+
+void ClipboardHistoryModel::onDataReceived(const QString& mimeType, const QByteArray& data)
+{
+    // Only accept the bytes for the read we are currently waiting on; a stray or
+    // stale delivery (or an empty/failed read) is ignored.
+    if (m_pendingMime.isEmpty() || mimeType != m_pendingMime || data.isEmpty())
+        return;
+
+    ClipboardEntry entry;
+    entry.content = data;
+    entry.mimeType = mimeType;
+    entry.offeredTypes = m_pendingTypes;
+    entry.preview = makePreview(data, mimeType);
+    entry.timestamp = QDateTime::currentDateTime();
+    entry.sensitive = false; // sensitive selections never reach here.
+
+    m_pendingMime.clear();
+    m_pendingTypes.clear();
+
+    const int beforeCount = m_entries.size();
+
+    // De-duplicate: an identical capture moves to the front (most-recent) rather
+    // than adding a second copy.
+    const int existing = indexOfContent(entry.content, entry.mimeType);
+    if (existing >= 0) {
+        beginRemoveRows(QModelIndex(), existing, existing);
+        m_entries.removeAt(existing);
+        endRemoveRows();
+    }
+
+    beginInsertRows(QModelIndex(), 0, 0);
+    m_entries.prepend(entry);
+    endInsertRows();
+
+    enforceCap();
+
+    if (m_entries.size() != beforeCount)
+        Q_EMIT countChanged();
+}
+
+int ClipboardHistoryModel::indexOfContent(const QByteArray& content, const QString& mimeType) const
+{
+    for (int i = 0; i < m_entries.size(); ++i) {
+        if (m_entries.at(i).mimeType == mimeType && m_entries.at(i).content == content)
+            return i;
+    }
+    return -1;
+}
+
+void ClipboardHistoryModel::enforceCap()
+{
+    while (m_entries.size() > m_maxEntries) {
+        const int last = m_entries.size() - 1;
+        beginRemoveRows(QModelIndex(), last, last);
+        m_entries.removeLast();
+        endRemoveRows();
+    }
+}
+
+QString ClipboardHistoryModel::preferredMimeType(const QStringList& mimeTypes)
+{
+    // Prefer UTF-8 text, then any plain/other text, then a common image type,
+    // then any image, then whatever is offered first.
+    static const QStringList textPreference = {
+        QStringLiteral("text/plain;charset=utf-8"),
+        QStringLiteral("text/plain"),
+        QStringLiteral("UTF8_STRING"),
+        QStringLiteral("STRING"),
+    };
+    for (const QString& candidate : textPreference) {
+        if (mimeTypes.contains(candidate))
+            return candidate;
+    }
+    for (const QString& mime : mimeTypes) {
+        if (isTextType(mime))
+            return mime;
+    }
+    if (mimeTypes.contains(QLatin1String("image/png")))
+        return QStringLiteral("image/png");
+    for (const QString& mime : mimeTypes) {
+        if (mime.startsWith(QLatin1String("image/")))
+            return mime;
+    }
+    return mimeTypes.isEmpty() ? QString() : mimeTypes.first();
+}
+
+bool ClipboardHistoryModel::isSensitive(const QStringList& mimeTypes)
+{
+    return mimeTypes.contains(QLatin1String(kPasswordHint));
+}
+
+QString ClipboardHistoryModel::makePreview(const QByteArray& content, const QString& mimeType)
+{
+    if (!isTextType(mimeType)) {
+        return QStringLiteral("[%1, %2 bytes]").arg(mimeType).arg(content.size());
+    }
+    QString text = QString::fromUtf8(content);
+    // Collapse to a single trimmed line for the preview.
+    text.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    text.replace(QLatin1Char('\r'), QLatin1Char(' '));
+    text.replace(QLatin1Char('\t'), QLatin1Char(' '));
+    text = text.simplified();
+    if (text.size() > kPreviewMaxChars)
+        text = text.left(kPreviewMaxChars) + QStringLiteral("...");
+    return text;
+}
+
+} // namespace PhosphorServiceClipboard
