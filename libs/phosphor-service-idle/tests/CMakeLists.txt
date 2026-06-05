@@ -23,6 +23,10 @@ endfunction()
 # state machine needs a live compositor and is driven through the CLI demo.
 _phosphorserviceidle_test(test_phosphorserviceidle_smoke test_smoke.cpp)
 
+# Facade test: the deterministic IdleService surface (stage config round trip +
+# sort, inhibition toggling, inert defaults) under the offscreen platform.
+_phosphorserviceidle_test(test_phosphorserviceidle_facade test_facade.cpp)
+
 # State-machine unit test: exercises the pure stage-ladder logic on a fake idle
 # source. It compiles idlestatemachine.cpp directly (and includes the internal
 # src/ headers) rather than linking the lib, so it needs no compositor and no
