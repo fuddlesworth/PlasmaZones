@@ -1,18 +1,16 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 
-# PhosphorServiceNotifications
+# phosphor-service-notifications
 
-The session-bus server for `org.freedesktop.Notifications` (Desktop
-Notifications Specification 1.2). This library IS the notification daemon: it
-owns the well-known name and answers it, rather than being a client of one. It
-has no UI; it stores and lifecycles notifications and surfaces them as Qt/QML
-types for a shell to render.
-
-Phase 2.5 of the service-library plan in
-[`docs/phosphor-shell-design/04-implementation-plan.md`](../../docs/phosphor-shell-design/04-implementation-plan.md).
+The `org.freedesktop.Notifications` (Desktop Notifications Specification 1.2)
+server for Phosphor-based desktop shells.
 
 ## Responsibility
+
+This library IS the notification daemon: it owns the well-known name and answers
+it, rather than being a client of one. No UI; it stores and lifecycles
+notifications and surfaces them as Qt + QML types for a shell to render.
 
 - Acquire `org.freedesktop.Notifications` on the session bus and answer its four
   methods (`Notify`, `CloseNotification`, `GetCapabilities`,
@@ -24,9 +22,8 @@ Phase 2.5 of the service-library plan in
   resident, transient, suppress-sound, value) into a typed `Notification`, and
   expose the live set through a `NotificationModel`.
 
-It deliberately does **not** render anything: toasts, the notification center,
-per-app rules, and markup rendering are Phase 3.4 / 4.3 consumers of this
-library.
+Toasts, the notification center, per-app rules, and markup rendering are
+Phase 3.4 / 4.3 consumers of this library, not part of it.
 
 ## Key types
 
@@ -38,15 +35,20 @@ library.
 
 ## Typical use
 
-Composition root (the shell binary) registers the QML types once, before any
-engine loads QML:
+C++ shell composition root:
 
 ```cpp
 #include <PhosphorServiceNotifications/QmlRegistration.h>
-PhosphorServiceNotifications::registerQmlTypes();
+
+int main(int argc, char** argv)
+{
+    QGuiApplication app(argc, argv);
+    PhosphorServiceNotifications::registerQmlTypes();
+    // ... load shell.qml
+}
 ```
 
-QML binds a model to a server and renders the rows however it likes:
+QML consumer (a toast per live notification):
 
 ```qml
 import Phosphor.Service.Notifications 1.0
@@ -64,19 +66,6 @@ ListView {
         onDismissed: notifications.dismissNotification(model.id)
     }
 }
-```
-
-The CLI doubles as the worked example and the acceptance harness. It is both the
-daemon and a client:
-
-```sh
-# terminal 1: become the notification daemon and log events
-phosphor-service-notifications-cli watch --replace
-
-# terminal 2
-phosphor-service-notifications-cli send "Build done" "tests passed" --urgency critical --action default:Open
-phosphor-service-notifications-cli info
-notify-send "hi" "there"   # any notifying app works too
 ```
 
 ## Design notes
@@ -108,15 +97,27 @@ notify-send "hi" "there"   # any notifying app works too
 
 ## Dependencies
 
-- Qt6 ≥ 6.6: Core, Qml, DBus, Gui (`QImage` decode, scoped to image only).
-- `PhosphorServiceIconTheme` (private): `image-path`-as-icon-name resolution.
+- A free `org.freedesktop.Notifications` name on the session bus (another running
+  notification daemon makes this server inert unless taken over via `--replace`).
+- `PhosphorServiceIconTheme` (private link): `image-path`-as-icon-name resolution.
+- Qt6 ≥ 6.6 (Core, Qml, DBus, Gui). Gui is scoped to `QImage` decode only.
 
 ## Status
 
-Phase 2.5: shipped. `NotificationServer` + `Notification` + `NotificationModel`
-cover the full headless server (name acquisition, ingest, hint / image decode,
-expiry, dismissal, action invocation, the live model). The
-`examples/phosphor-service-notifications-cli` server/client demo drives the
-contract end to end, and three test binaries (direct-call smoke, QML-engine
-facade, peer-to-peer wire) pass. UI consumers (toast, notification center) are
-Phase 3.4 / 4.3.
+Phase 2.5: shipped. The name-owning server with the generated
+`org.freedesktop.Notifications` adaptor and opt-in `--replace` takeover
+(`NotificationServer`), `Notify` ingestion with the full hint decode including
+the `image-data` `(iiibiiay)` → `QImage` path (`Notification`), per-urgency
+expiry timers, the unified close lifecycle (expired / dismissed / closed-by-call
+reason codes), `invokeAction` + `ActivationToken` and `dismissNotification`, the
+`QAbstractListModel` over the live set (`NotificationModel`), and the
+`phosphorctl`-style CLI demo (`examples/phosphor-service-notifications-cli`:
+watch, send, close, info) covering the Phase-2 gate (run as the daemon, log
+received notifications) all landed. Three test binaries pin the contract
+deterministically over a private peer bus with no session daemon: the direct-call
+smoke harness (id allocation + `replaces_id`, hint decode, expiry / dismiss /
+action lifecycle, model roles + add / replace / close under
+`QAbstractItemModelTester`), the QML-engine facade load test, and the
+peer-to-peer wire test (real marshalling, including the `image-data` struct
+decode and its oversized-input rejection). UI consumers (toast, notification
+center) are Phase 3.4 / 4.3.
