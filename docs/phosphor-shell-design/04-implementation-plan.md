@@ -634,7 +634,7 @@ So the service lib is the **policy layer** on top of those single-purpose primit
 
 **Out of scope for 2.7.** The visual idle actions (dim animation, lock screen, DPMS / display power), any power-management or suspend coupling (that is 2.10 session / logind), and the D-Bus inhibit server (U3). The service times inactivity and reports stage transitions; the shell decides what each stage does.
 
-### 2.8: `phosphor-service-clipboard`
+### 2.8: `phosphor-service-clipboard` *(shipped)*
 
 A clipboard-history service: it watches the session's clipboard, keeps a de-duplicated, capped, on-disk history, and can re-apply any entry. Namespace `PhosphorServiceClipboard`, export macro `PHOSPHORSERVICECLIPBOARD_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Clipboard 1.0`. Table effort **M**.
 
