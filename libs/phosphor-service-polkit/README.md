@@ -56,7 +56,8 @@ The authentication dialog itself is a Phase 3 / 4 consumer of this library.
 
 Phase 2.6: in progress. Milestones 1+2 (skeleton + CMake + the `PolkitAgent`
 registration plumbing; the listener-registration work folded into the
-milestone-1 commit) and 3 (the `initiateAuthentication` → `AuthRequest` decode,
-surfaced as the active request) landed; milestones 4-8 (the `Agent::Session` PAM
-conversation, the QML facade, the CLI agent demo, tests, and README
-finalisation) follow per the plan.
+milestone-1 commit), 3 (the `initiateAuthentication` → `AuthRequest` decode,
+surfaced as the active request), and 4 (the `Agent::Session` PAM conversation:
+`authenticate()` / `respond()` / `cancel()` driving the prompt → answer →
+completed flow) landed; milestones 5-8 (the QML facade, the CLI agent demo,
+tests, and README finalisation) follow per the plan.

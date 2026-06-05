@@ -69,9 +69,19 @@ public:
     /// dialog binds this; at most one is active (polkit serialises).
     [[nodiscard]] AuthRequest* activeRequest() const;
 
-    /// Decline the active request: it completes without authorization and clears.
-    /// The authenticate path (answering the PAM prompt) lands in milestone 4.
-    /// Q_INVOKABLE for a UI / CLI; never exported on any bus.
+    /// Begin authenticating the active request as its `selectedIdentity`: starts
+    /// the PAM conversation, after which `activeRequest`'s `prompt` updates and
+    /// the user's answer goes back via `respond()`. A no-op with no active
+    /// request or once a conversation is already running. Q_INVOKABLE for a UI.
+    Q_INVOKABLE void authenticate();
+
+    /// Answer the active PAM prompt. The response is passed straight to PAM and
+    /// is never stored, logged, or echoed by this library. Q_INVOKABLE for a UI.
+    Q_INVOKABLE void respond(const QString& response);
+
+    /// Decline the active request: it completes without authorization and clears
+    /// (aborting any running PAM conversation). Q_INVOKABLE for a UI / CLI; never
+    /// exported on any bus.
     Q_INVOKABLE void cancel();
 
 Q_SIGNALS:
@@ -79,6 +89,13 @@ Q_SIGNALS:
     void activeRequestChanged();
     /// A new authentication request arrived (also reflected in `activeRequest`).
     void authenticationRequested(PhosphorServicePolkit::AuthRequest* request);
+    /// The PAM conversation finished; @p gainedAuthorization is true when the
+    /// user authenticated successfully.
+    void authenticationCompleted(bool gainedAuthorization);
+    /// PAM reported an error (e.g. "Authentication failure") to show the user.
+    void authenticationError(const QString& text);
+    /// PAM reported an informational message to show the user.
+    void authenticationInfo(const QString& text);
     /// The active request ended with none remaining (declined here, or withdrawn
     /// by polkit).
     void authenticationCancelled();
@@ -86,6 +103,13 @@ Q_SIGNALS:
 private:
     Q_DISABLE_COPY_MOVE(PolkitAgent)
     friend class ListenerImpl;
+
+    /// Complete the PAM conversation: complete polkit's result and clear.
+    void onSessionCompleted(bool gainedAuthorization);
+    /// Drop the active request + session (deleting both) and notify; does NOT
+    /// complete polkit's result (the caller decides whether to).
+    void teardownActive();
+
     class Private;
     std::unique_ptr<Private> d;
 };

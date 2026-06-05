@@ -506,7 +506,7 @@ Three structural firsts versus the prior service libs:
 
 ---
 
-### 2.6: `phosphor-service-polkit` *(in progress: milestones 1+2, 3 landed)*
+### 2.6: `phosphor-service-polkit` *(in progress: milestones 1+2, 3, 4 landed)*
 
 > Note: milestone 2 (the `Listener` subclass + registration lifecycle) shipped
 > inside the milestone-1 commit; the registration plumbing is inseparable from

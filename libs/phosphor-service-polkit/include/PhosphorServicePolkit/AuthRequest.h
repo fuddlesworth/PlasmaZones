@@ -13,6 +13,7 @@
 namespace PhosphorServicePolkit {
 
 class ListenerImpl;
+class PolkitAgent;
 
 /**
  * @brief One active PolicyKit authentication request, decoded from polkit's
@@ -37,6 +38,8 @@ class PHOSPHORSERVICEPOLKIT_EXPORT AuthRequest : public QObject
     Q_PROPERTY(QString cookie READ cookie CONSTANT)
     Q_PROPERTY(QStringList identities READ identities CONSTANT)
     Q_PROPERTY(int selectedIdentity READ selectedIdentity WRITE setSelectedIdentity NOTIFY selectedIdentityChanged)
+    Q_PROPERTY(QString prompt READ prompt NOTIFY promptChanged)
+    Q_PROPERTY(bool echo READ echo NOTIFY promptChanged)
 
 public:
     [[nodiscard]] QString actionId() const
@@ -74,12 +77,27 @@ public:
     /// Clamped to a valid index; out-of-range values are ignored.
     void setSelectedIdentity(int index);
 
+    /// The current PAM prompt to show the user (e.g. "Password: "), updated by
+    /// the agent as the conversation progresses. Empty until authentication
+    /// starts.
+    [[nodiscard]] QString prompt() const
+    {
+        return m_prompt;
+    }
+    /// Whether the response to `prompt` should be echoed (false for passwords).
+    [[nodiscard]] bool echo() const
+    {
+        return m_echo;
+    }
+
 Q_SIGNALS:
     void selectedIdentityChanged();
+    void promptChanged();
 
 private:
     Q_DISABLE_COPY_MOVE(AuthRequest)
     friend class ListenerImpl;
+    friend class PolkitAgent;
 
     AuthRequest(QString actionId, QString message, QString iconName, QVariantMap details, QString cookie,
                 QStringList identities, QObject* parent);
@@ -91,6 +109,8 @@ private:
     QString m_cookie;
     QStringList m_identities;
     int m_selectedIdentity = 0;
+    QString m_prompt;
+    bool m_echo = false;
 };
 
 } // namespace PhosphorServicePolkit

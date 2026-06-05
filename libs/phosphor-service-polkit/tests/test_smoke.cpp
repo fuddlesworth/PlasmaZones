@@ -32,6 +32,8 @@ private Q_SLOTS:
     void registerWithBogusSessionStaysInert();
     void activeRequestStartsNull();
     void cancelWithNoRequestIsNoop();
+    void authenticateWithNoRequestIsNoop();
+    void respondWithNoSessionIsNoop();
 
 private:
     // A session id that cannot resolve to a real logind session, so
@@ -91,6 +93,27 @@ void PolkitSmokeTest::cancelWithNoRequestIsNoop()
     agent.cancel();
     QCOMPARE(cancelledSpy.count(), 0);
     QVERIFY(agent.activeRequest() == nullptr);
+}
+
+void PolkitSmokeTest::authenticateWithNoRequestIsNoop()
+{
+    // Starting a PAM conversation with nothing to authenticate is a safe no-op.
+    // The real authenticate -> prompt -> respond -> completed flow needs a live
+    // polkitd + PAM and is exercised via the CLI demo against pkexec (milestone 6).
+    PolkitAgent agent(bogusSession(), PolkitAgent::defaultObjectPath());
+    QSignalSpy completedSpy(&agent, &PolkitAgent::authenticationCompleted);
+    agent.authenticate();
+    QCOMPARE(completedSpy.count(), 0);
+    QVERIFY(agent.activeRequest() == nullptr);
+}
+
+void PolkitSmokeTest::respondWithNoSessionIsNoop()
+{
+    // Answering when no conversation is running must not crash or emit anything.
+    PolkitAgent agent(bogusSession(), PolkitAgent::defaultObjectPath());
+    QSignalSpy errorSpy(&agent, &PolkitAgent::authenticationError);
+    agent.respond(QStringLiteral("not-a-real-password"));
+    QCOMPARE(errorSpy.count(), 0);
 }
 
 QTEST_GUILESS_MAIN(PolkitSmokeTest)

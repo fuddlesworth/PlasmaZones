@@ -83,6 +83,7 @@ public:
     AuthRequest* request = nullptr;
     PolkitQt1::Identity::List identities;
     PolkitQt1::Agent::AsyncResult* result = nullptr;
+    PolkitQt1::Agent::Session* session = nullptr;
 
     Private(PolkitAgent* facade, QString sid, QString path)
         : sessionId(std::move(sid))
@@ -145,21 +146,94 @@ AuthRequest* PolkitAgent::activeRequest() const
     return d->request;
 }
 
+void PolkitAgent::authenticate()
+{
+    if (!d->request || d->session)
+        return;
+    const int index = d->request->selectedIdentity();
+    if (index < 0 || index >= d->identities.size())
+        return;
+
+    // The Session is constructed with polkit's AsyncResult and drives the PAM
+    // conversation for the chosen identity. We complete the result on completed()
+    // (the documented contract), never the Session.
+    auto* session = new PolkitQt1::Agent::Session(d->identities.at(index), d->request->cookie(), d->result, this);
+    d->session = session;
+
+    connect(session, &PolkitQt1::Agent::Session::request, this, [this](const QString& prompt, bool echo) {
+        if (!d->request)
+            return;
+        d->request->m_prompt = prompt;
+        d->request->m_echo = echo;
+        Q_EMIT d->request->promptChanged();
+    });
+    connect(session, &PolkitQt1::Agent::Session::completed, this, [this](bool gained) {
+        onSessionCompleted(gained);
+    });
+    connect(session, &PolkitQt1::Agent::Session::showError, this, [this](const QString& text) {
+        Q_EMIT authenticationError(text);
+    });
+    connect(session, &PolkitQt1::Agent::Session::showInfo, this, [this](const QString& text) {
+        Q_EMIT authenticationInfo(text);
+    });
+
+    session->initiate();
+}
+
+void PolkitAgent::respond(const QString& response)
+{
+    // Straight through to PAM; never retained, logged, or echoed.
+    if (d->session)
+        d->session->setResponse(response);
+}
+
 void PolkitAgent::cancel()
 {
     if (!d->request)
         return;
-    // Completing the result without the user authenticating is a clean decline.
+    if (d->session) {
+        // A running PAM conversation: cancelling it emits completed(false), which
+        // completes the result and tears down via onSessionCompleted.
+        d->session->cancel();
+        return;
+    }
+    // No conversation started yet: decline the request directly (completing the
+    // result without authorization).
     if (d->result) {
         d->result->setCompleted();
         d->result = nullptr;
     }
-    AuthRequest* request = d->request;
-    d->request = nullptr;
-    d->identities.clear();
-    Q_EMIT activeRequestChanged();
+    teardownActive();
     Q_EMIT authenticationCancelled();
-    request->deleteLater();
+}
+
+void PolkitAgent::onSessionCompleted(bool gainedAuthorization)
+{
+    if (d->result) {
+        d->result->setCompleted();
+        d->result = nullptr;
+    }
+    teardownActive();
+    Q_EMIT authenticationCompleted(gainedAuthorization);
+}
+
+void PolkitAgent::teardownActive()
+{
+    if (d->session) {
+        // Stop further signals before deleting, so a teardown triggered from
+        // within a session signal (completed) does not re-enter.
+        d->session->disconnect(this);
+        d->session->deleteLater();
+        d->session = nullptr;
+    }
+    d->result = nullptr;
+    d->identities.clear();
+    if (d->request) {
+        AuthRequest* request = d->request;
+        d->request = nullptr;
+        request->deleteLater();
+    }
+    Q_EMIT activeRequestChanged();
 }
 
 void ListenerImpl::initiateAuthentication(const QString& actionId, const QString& message, const QString& iconName,
@@ -193,14 +267,11 @@ void ListenerImpl::cancelAuthentication()
     if (!d->request)
         return;
     // polkit is withdrawing the request and owns the result's teardown, so we
-    // drop our state and notify without completing the result ourselves.
-    AuthRequest* request = d->request;
-    d->request = nullptr;
+    // drop our state (result first) and notify without completing it ourselves.
+    // teardownActive disconnects + deletes any running session, aborting PAM.
     d->result = nullptr;
-    d->identities.clear();
-    Q_EMIT m_facade->activeRequestChanged();
+    m_facade->teardownActive();
     Q_EMIT m_facade->authenticationCancelled();
-    request->deleteLater();
 }
 
 } // namespace PhosphorServicePolkit
