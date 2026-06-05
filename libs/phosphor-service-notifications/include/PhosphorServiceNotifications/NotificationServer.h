@@ -20,7 +20,7 @@ class Notification;
 
 /**
  * @brief The session-bus server for `org.freedesktop.Notifications` (Desktop
- * Notifications Spec 1.2).
+ * Notifications Spec 1.3).
  *
  * This library OWNS the well-known name `org.freedesktop.Notifications` and
  * answers it: it is the notification daemon, not a client of one. Because

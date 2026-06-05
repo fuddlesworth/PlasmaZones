@@ -155,7 +155,7 @@ void NotificationsWireTest::getServerInformationOverWire()
     const QVariantList args = reply.arguments();
     QCOMPARE(args.size(), 4);
     QCOMPARE(args.at(0).toString(), QStringLiteral("Phosphor"));
-    QCOMPARE(args.at(3).toString(), QStringLiteral("1.2"));
+    QCOMPARE(args.at(3).toString(), QStringLiteral("1.3"));
 }
 
 void NotificationsWireTest::notifyDecodesImageDataStructOverWire()

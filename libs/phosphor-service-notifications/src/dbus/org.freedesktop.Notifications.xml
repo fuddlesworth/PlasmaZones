@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
 <!-- SPDX-License-Identifier: LGPL-2.1-or-later -->
 <!--
-  org.freedesktop.Notifications, the Desktop Notifications Specification 1.2
+  org.freedesktop.Notifications, the Desktop Notifications Specification 1.3
   server interface. We OWN this name on the session bus and answer it; this XML
   drives qt6_add_dbus_adaptor to generate the adaptor that forwards to
   PhosphorServiceNotifications::NotificationServer. All four methods reply

@@ -27,7 +27,10 @@ constexpr auto kObjectPath = "/org/freedesktop/Notifications";
 constexpr auto kServerName = "Phosphor";
 constexpr auto kServerVendor = "phosphor-works";
 constexpr auto kServerVersion = "0.1.0";
-constexpr auto kSpecVersion = "1.2";
+// The org.freedesktop.Notifications spec level this server is compliant with.
+// 1.3 (Aug 2024) is the current spec; the ActivationToken signal we implement
+// is its defining addition over 1.2.
+constexpr auto kSpecVersion = "1.3";
 
 // Spec close-reason codes (org.freedesktop.Notifications NotificationClosed).
 constexpr uint kReasonExpired = 1;

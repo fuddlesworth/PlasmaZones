@@ -3,7 +3,7 @@
 
 # phosphor-service-notifications
 
-The `org.freedesktop.Notifications` (Desktop Notifications Specification 1.2)
+The `org.freedesktop.Notifications` (Desktop Notifications Specification 1.3)
 server for Phosphor-based desktop shells.
 
 ## Responsibility

@@ -134,7 +134,7 @@ void NotificationsSmokeTest::serverInformation()
     const QString name = server->GetServerInformation(vendor, version, specVersion);
     QCOMPARE(name, QStringLiteral("Phosphor"));
     QCOMPARE(vendor, QStringLiteral("phosphor-works"));
-    QCOMPARE(specVersion, QStringLiteral("1.2"));
+    QCOMPARE(specVersion, QStringLiteral("1.3"));
     QVERIFY(!version.isEmpty());
 }
 

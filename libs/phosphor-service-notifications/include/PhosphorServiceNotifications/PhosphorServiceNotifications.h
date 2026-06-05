@@ -8,7 +8,7 @@
  * @brief Umbrella header for the PhosphorServiceNotifications library.
  *
  * PhosphorServiceNotifications is the session-bus server for
- * `org.freedesktop.Notifications` (Desktop Notifications Spec 1.2). It owns the
+ * `org.freedesktop.Notifications` (Desktop Notifications Spec 1.3). It owns the
  * well-known name and answers it: the library IS the notification daemon, not a
  * client of one. The interface is exported through a generated adaptor
  * (`qt6_add_dbus_adaptor`) that forwards to `NotificationServer`. The library
