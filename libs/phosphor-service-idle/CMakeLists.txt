@@ -55,6 +55,9 @@ set(phosphorserviceidle_public_HDRS
 set(phosphorserviceidle_SRCS
     src/qmlregistration.cpp
     src/idleservice.cpp
+    src/iidlesource.cpp
+    src/idlestatemachine.cpp
+    src/idlenotifiersource.cpp
 )
 
 add_library(PhosphorServiceIdle SHARED

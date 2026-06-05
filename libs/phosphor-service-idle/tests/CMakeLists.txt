@@ -20,6 +20,25 @@ endfunction()
 
 # Smoke test: exercises the deterministic facade contract (QML-registration
 # idempotency and inert construction with no live compositor). The full idle
-# state machine needs a live compositor and is driven through the CLI demo; the
-# pure stage-ladder logic is unit-tested separately once it lands.
+# state machine needs a live compositor and is driven through the CLI demo.
 _phosphorserviceidle_test(test_phosphorserviceidle_smoke test_smoke.cpp)
+
+# State-machine unit test: exercises the pure stage-ladder logic on a fake idle
+# source. It compiles idlestatemachine.cpp directly (and includes the internal
+# src/ headers) rather than linking the lib, so it needs no compositor and no
+# phosphor-wayland; the internal classes stay unexported.
+add_executable(test_phosphorserviceidle_statemachine
+    test_statemachine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/idlestatemachine.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/iidlesource.cpp
+)
+target_include_directories(test_phosphorserviceidle_statemachine
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_link_libraries(test_phosphorserviceidle_statemachine PRIVATE Qt6::Test)
+add_test(NAME test_phosphorserviceidle_statemachine COMMAND test_phosphorserviceidle_statemachine)
+set_tests_properties(test_phosphorserviceidle_statemachine
+    PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        LABELS "phosphorserviceidle"
+)

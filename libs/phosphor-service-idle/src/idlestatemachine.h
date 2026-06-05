@@ -1,0 +1,73 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+// Internal (not installed) multi-stage idle state machine. It composes a ladder
+// of single-timeout idle sources (one per stage) into a single monotonic state:
+// as inactivity grows, each stage's source fires `idled()` in timeout order and
+// advances the current stage; the first `resumed()` from any source resets the
+// whole ladder to active. Pure logic over IIdleSource, so it is unit-tested with
+// a fake source and no live compositor.
+
+#include "iidlesource.h"
+
+#include <QList>
+#include <QObject>
+#include <QString>
+
+#include <chrono>
+#include <vector>
+
+namespace PhosphorServiceIdle {
+
+/// One step in the idle ladder: a display name and the inactivity timeout at
+/// which it fires.
+struct IdleStage
+{
+    QString name;
+    std::chrono::milliseconds timeout;
+};
+
+class IdleStateMachine : public QObject
+{
+    Q_OBJECT
+
+public:
+    /// @p factory creates a bare idle source per stage; the machine arms each
+    /// with its stage timeout. Injected so tests pass a factory of fakes.
+    explicit IdleStateMachine(IdleSourceFactory factory, QObject* parent = nullptr);
+    ~IdleStateMachine() override;
+
+    /// Replace the stage ladder. Stages are sorted by ascending timeout so the
+    /// current-stage index is always monotonic in inactivity. Rebuilding the
+    /// sources resets the machine to active.
+    void setStages(const QList<IdleStage>& stages);
+    [[nodiscard]] QList<IdleStage> stages() const;
+
+    /// 0 when active; otherwise the 1-based index of the deepest stage currently
+    /// fired.
+    [[nodiscard]] int currentStage() const;
+    [[nodiscard]] bool isIdle() const;
+    /// Name of the current stage, or an empty string when active.
+    [[nodiscard]] QString currentStageName() const;
+
+Q_SIGNALS:
+    void currentStageChanged();
+    /// Entered idle stage @p stage (1-based).
+    void idled(int stage);
+    /// Returned to active from any idle stage.
+    void resumed();
+
+private:
+    void rebuild();
+    void onSourceIdled(int stageIndex);
+    void onSourceResumed();
+
+    IdleSourceFactory m_factory;
+    QList<IdleStage> m_stages;
+    std::vector<IIdleSource::Ptr> m_sources;
+    int m_currentStage = 0;
+};
+
+} // namespace PhosphorServiceIdle
