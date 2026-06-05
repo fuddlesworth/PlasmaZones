@@ -269,8 +269,10 @@ inline constexpr QLatin1StringView SetHideTitleBar{"setHideTitleBar"};
 inline constexpr QLatin1StringView SetBorderVisible{"setBorderVisible"};
 inline constexpr QLatin1StringView SetBorderWidth{"setBorderWidth"};
 inline constexpr QLatin1StringView SetBorderRadius{"setBorderRadius"};
+// Focus-dependent colours are expressed by matching on `Field::IsFocused`
+// (e.g. a rule `WHEN NOT focused ⇒ SetBorderColor(gray)`) rather than a
+// separate inactive-colour action — see the effect's updateWindowBorder.
 inline constexpr QLatin1StringView SetBorderColor{"setBorderColor"};
-inline constexpr QLatin1StringView SetInactiveBorderColor{"setInactiveBorderColor"};
 
 // ── Per-context gap overrides (domain Context) ──
 // Resolved daemon-side at zone-geometry time as the highest-precedence gap
@@ -294,14 +296,14 @@ inline bool isAnimationOverrideAction(const QString& type)
     return type == OverrideAnimationShader || type == OverrideAnimationTiming || type == OverrideAnimationCurve;
 }
 
-/// True when @p type is one of the six per-window border / title-bar
+/// True when @p type is one of the five per-window border / title-bar
 /// appearance override actions. Grouped here so `isEffectRuleAction` (which
 /// admits these to the effect's rule set) has one definition to delegate to —
-/// adding a seventh appearance override only updates this helper.
+/// adding a sixth appearance override only updates this helper.
 inline bool isBorderAppearanceAction(const QString& type)
 {
     return type == SetHideTitleBar || type == SetBorderVisible || type == SetBorderWidth || type == SetBorderRadius
-        || type == SetBorderColor || type == SetInactiveBorderColor;
+        || type == SetBorderColor;
 }
 
 /// True when @p type is one of the actions the KWin effect's **shader
@@ -363,7 +365,6 @@ inline constexpr QLatin1StringView BorderVisible{"border-visible"};
 inline constexpr QLatin1StringView BorderWidth{"border-width"};
 inline constexpr QLatin1StringView BorderRadius{"border-radius"};
 inline constexpr QLatin1StringView BorderColor{"border-color"};
-inline constexpr QLatin1StringView InactiveBorderColor{"inactive-border-color"};
 // Per-context gap slots (mirror the PerScreenSnappingKey set).
 inline constexpr QLatin1StringView ZonePadding{"zone-padding"};
 inline constexpr QLatin1StringView OuterGap{"outer-gap"};

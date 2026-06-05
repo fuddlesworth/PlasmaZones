@@ -123,20 +123,22 @@ void PlasmaZonesEffect::updateWindowBorder(const QString& windowId, KWin::Effect
         return;
     }
 
-    // Choose color: active for focused window, inactive for others.
-    const QColor activeColor = (ovr && ovr->borderColor) ? *ovr->borderColor : (state ? state->color : QColor());
-    // Inactive falls back to the active rule colour when a rule supplies only
-    // an active colour AND the window has no owning mode (floating): without
-    // this a rule-bordered floating window would lose its border entirely when
-    // it loses focus (invalid inactiveColor → early-return below). A snapped
-    // window still inherits its mode's inactive colour.
-    const QColor inactiveColor = (ovr && ovr->inactiveBorderColor) ? *ovr->inactiveBorderColor
-        : state                                                    ? state->inactiveColor
-        : (ovr && ovr->borderColor)                                ? *ovr->borderColor
-                                                                   : QColor();
-    KWin::EffectWindow* active = KWin::effects->activeWindow();
-    const bool isFocused = (w == active);
-    const QColor bc = isFocused ? activeColor : inactiveColor;
+    // Choose color. The owning mode (autotile / snap) carries separate active
+    // and inactive border colours — global appearance settings, not rules — so
+    // pick the one matching the window's current focus state. A per-window
+    // SetBorderColor rule, when matched, overrides it. Focus-dependence of the
+    // RULE colour is expressed in the rule itself via the IsFocused match
+    // condition: `windowRuleQueryFor` set the query's isFocused flag, so a
+    // focus-scoped rule (`WHEN focused`/`WHEN NOT focused`) only fills the
+    // border-colour slot in its matching state, while a focus-agnostic rule
+    // applies in both. Either way `ovr->borderColor` already holds the colour
+    // appropriate to this window's current focus — no post-resolution switch.
+    // A floating window (no owning mode) whose only rule is focus-scoped thus
+    // correctly shows no border in the unmatched state; author a focus-agnostic
+    // rule to keep a border in both states.
+    const bool isFocused = (w == KWin::effects->activeWindow());
+    const QColor modeColor = state ? (isFocused ? state->color : state->inactiveColor) : QColor();
+    const QColor bc = (ovr && ovr->borderColor) ? *ovr->borderColor : modeColor;
     if (!bc.isValid() || bc.alpha() == 0) {
         return;
     }

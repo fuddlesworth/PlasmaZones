@@ -57,6 +57,21 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(o).has_value());
     }
 
+    void testJson_rejectsRemovedInactiveBorderColor()
+    {
+        // `setInactiveBorderColor` was a valid action type until focus-dependent
+        // colour was folded into the IsFocused match condition (a `WHEN NOT
+        // focused ⇒ setBorderColor` rule replaces it). It is now unregistered,
+        // so a saved rule carrying it must drop the action on load — even with
+        // an otherwise-valid hex payload. Pins the removal's drop-on-load
+        // contract to the specific retired token, not just the generic
+        // unknown-type path (testJson_rejectsUnregisteredType).
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QStringLiteral("setInactiveBorderColor"));
+        o.insert(QStringLiteral("value"), QStringLiteral("#FF0000"));
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+    }
+
     void testJson_rejectsInvalidParams()
     {
         // setEngineMode requires a non-empty `mode` string.
@@ -141,7 +156,6 @@ private Q_SLOTS:
             ActionType::SetBorderWidth,
             ActionType::SetBorderRadius,
             ActionType::SetBorderColor,
-            ActionType::SetInactiveBorderColor,
         };
         for (const QLatin1StringView type : windowTypes) {
             const auto descriptor = ActionRegistry::instance().descriptor(QString::fromLatin1(type));
@@ -258,7 +272,7 @@ private Q_SLOTS:
 
     void testBorderColorActions_requireHex()
     {
-        for (const QLatin1StringView type : {ActionType::SetBorderColor, ActionType::SetInactiveBorderColor}) {
+        for (const QLatin1StringView type : {ActionType::SetBorderColor}) {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString::fromLatin1(type));
             o.insert(QStringLiteral("value"), QStringLiteral("red")); // named colour — hex-only boundary rejects

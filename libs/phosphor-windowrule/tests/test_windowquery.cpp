@@ -50,6 +50,7 @@ private Q_SLOTS:
         QVERIFY(!q.valueForField(Field::Pid).has_value());
         QVERIFY(!q.valueForField(Field::WindowType).has_value());
         QVERIFY(!q.valueForField(Field::IsSticky).has_value());
+        QVERIFY(!q.valueForField(Field::IsFocused).has_value());
     }
 
     void testValueForField_presentWindowAttribute()
@@ -59,12 +60,14 @@ private Q_SLOTS:
         q.pid = 4242;
         q.windowType = WindowType::Dialog;
         q.isFullscreen = true;
+        q.isFocused = true;
 
         QCOMPARE(q.valueForField(Field::AppId)->toString(), QStringLiteral("firefox"));
         QCOMPARE(q.valueForField(Field::Pid)->toInt(), 4242);
         // WindowType resolves to its underlying int.
         QCOMPARE(q.valueForField(Field::WindowType)->toInt(), static_cast<int>(WindowType::Dialog));
         QCOMPARE(q.valueForField(Field::IsFullscreen)->toBool(), true);
+        QCOMPARE(q.valueForField(Field::IsFocused)->toBool(), true);
     }
 
     void testValueForField_falseBoolIsStillPresent()

@@ -315,9 +315,6 @@ QString actionLabel(const RuleAction& action, const WindowRuleModel::LabelLookup
         if (action.type == ActionType::SetBorderColor) {
             return PzI18n::tr("Border: %1").arg(raw.toString().toUpper());
         }
-        if (action.type == ActionType::SetInactiveBorderColor) {
-            return PzI18n::tr("Inactive border: %1").arg(raw.toString().toUpper());
-        }
         // ── per-context gap overrides ──
         if (action.type == ActionType::SetZonePadding) {
             return PzI18n::tr("Zone padding: %1 px").arg(raw.toInt());
@@ -638,6 +635,8 @@ QString WindowRuleModel::fieldLabel(Field field)
         return PzI18n::tr("Maximized");
     case Field::IsMinimized:
         return PzI18n::tr("Minimized");
+    case Field::IsFocused:
+        return PzI18n::tr("Focused");
     case Field::ScreenId:
         return PzI18n::tr("Monitor");
     case Field::VirtualDesktop:

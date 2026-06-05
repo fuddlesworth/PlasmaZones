@@ -430,6 +430,44 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated
     notifyWindowActivated(w);
 
+    // Focus is a window-rule match input (Field::IsFocused), and both the
+    // border-appearance and opacity resolvers go through the evaluator's
+    // per-window match cache (resolveCached), which is keyed on
+    // (windowId, ruleSet revision) — neither of which moves on a focus
+    // change. Without dropping the cache, a window keeps the actions it
+    // resolved at its FIRST focus state forever (a `WHEN focused` border
+    // colour would never revert when the window loses focus). Mirror the
+    // windowClass / desktopFile invalidation: drop the whole cache so the
+    // re-resolve below (and the next per-frame opacity resolve) sees the new
+    // focus state. Gated on a non-empty rule set so the no-rules case pays
+    // nothing. The per-frame opacity cache clears every frame at
+    // postPaintScreen, so a focus-scoped opacity re-resolves on the next paint.
+    if (!m_shaderManager.animationRuleSet().isEmpty()) {
+        m_shaderManager.animationRuleEvaluator().clearCache();
+
+        // A focus-scoped SetOpacity rule changes a window's resolved opacity
+        // when it gains or loses focus. updateAllBorders() below repaints any
+        // window that carries a border item, but an opacity-only (borderless)
+        // window has nothing to recreate — so without an explicit repaint its
+        // re-resolved opacity would not reach the screen until some unrelated
+        // damage happened to repaint it. Force a repaint of both the window
+        // gaining focus (w) and the one losing it (m_lastActivatedWindow).
+        // Gated on hasOpacityRules() because pure border-colour changes are
+        // already covered by updateAllBorders()'s item recreate.
+        if (m_shaderManager.hasOpacityRules()) {
+            if (w) {
+                w->addRepaintFull();
+            }
+            if (m_lastActivatedWindow && m_lastActivatedWindow != w) {
+                m_lastActivatedWindow->addRepaintFull();
+            }
+        }
+    }
+    // Track the now-active window as the next focus change's "previously
+    // active" window. Updated unconditionally (even with no rules yet) so the
+    // pointer is correct if opacity rules are added before the next activation.
+    m_lastActivatedWindow = w;
+
     // Recreate all borders so the active window gets the active color
     // and inactive windows get the inactive color.  A full recreate is
     // used instead of in-place setOutline() because the latter may not

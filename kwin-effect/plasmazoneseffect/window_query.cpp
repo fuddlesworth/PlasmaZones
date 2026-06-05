@@ -136,6 +136,13 @@ PhosphorWindowRule::WindowQuery windowRuleQueryFor(KWin::EffectWindow* w, const 
     if (kw) {
         query.isMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
     }
+    // isFocused mirrors the live active-window state so a rule like
+    // "isFocused=false ⇒ SetBorderColor(gray)" resolves correctly. The
+    // evaluator's per-window match cache is keyed on (windowId, ruleSet
+    // revision) — neither moves on focus change — so callers MUST invalidate
+    // it on KWin's windowActivated signal (see slotWindowActivated), exactly
+    // as they already do for windowClass / desktopFile changes.
+    query.isFocused = (w == KWin::effects->activeWindow());
     // virtualDesktop: first desktop's 1-based x11 number (0 = all/unknown).
     // activity: first activity UUID (empty = all/unknown). Both mirror the
     // daemon-side setWindowMetadata derivation in window_identity.cpp so a

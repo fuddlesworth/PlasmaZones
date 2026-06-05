@@ -131,14 +131,14 @@ ColumnLayout {
     // Toggle editor for `kind == "bool"` params (SetHideTitleBar / SetBorderVisible
     // / SetUsePerSideOuterGap). Stores a JSON bool.
     property Component _boolParamEditor
-    // Colour swatch + picker for `kind == "color"` params (SetBorderColor /
-    // SetInactiveBorderColor). Stores a `#RRGGBB` wire string — the validator
+    // Colour swatch + picker for `kind == "color"` params (SetBorderColor).
+    // Stores a `#RRGGBB` wire string — the validator
     // rejects anything else, so the dialog's selectedColor is encoded to 6-hex
     // via `_toHex6` (QML color.toString() includes the alpha byte).
     property Component _colorParamEditor
 
     /// Encode a QML color to a `#RRGGBB` wire string (no alpha) — the form the
-    /// SetBorderColor / SetInactiveBorderColor validators accept.
+    /// SetBorderColor validator accepts.
     function _toHex6(c) {
         function h(v) {
             var s = Math.round(v * 255).toString(16);
