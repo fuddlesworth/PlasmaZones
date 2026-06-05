@@ -29,6 +29,54 @@ The authentication dialog itself is a Phase 3 / 4 consumer of this library.
 | `PolkitAgent` | Registers as the session's authentication agent and surfaces the active request + a respond / cancel path. Wraps `polkit-qt6`'s `Agent::Listener` privately, so its public surface carries no polkit-qt types. |
 | `AuthRequest` | One decoded authentication request polkit is waiting on (action / message / icon / details / identities + the selected identity). |
 
+## Typical use
+
+C++ shell composition root:
+
+```cpp
+#include <PhosphorServicePolkit/QmlRegistration.h>
+
+int main(int argc, char** argv)
+{
+    QGuiApplication app(argc, argv);
+    PhosphorServicePolkit::registerQmlTypes();
+    // ... load shell.qml
+}
+```
+
+QML authentication dialog (drives one request to completion):
+
+```qml
+import Phosphor.Service.Polkit 1.0
+
+PolkitAgent {
+    id: agent
+    Component.onCompleted: registerAgent()
+
+    onAuthenticationRequested: (request) => authDialog.show(request)
+    onAuthenticationCompleted: (gained) => authDialog.finish(gained)
+}
+
+AuthDialog {
+    id: authDialog
+    // request.message + request.identities choose who; request.prompt is the
+    // PAM prompt (e.g. "Password: "), request.echo whether to show the input.
+    onAuthenticate: agent.authenticate()
+    onAnswered: (text) => agent.respond(text)   // straight to PAM, never stored
+    onDismissed: agent.cancel()
+}
+```
+
+The CLI doubles as the worked example and the acceptance harness; it runs as the
+agent itself:
+
+```sh
+# register as the session agent and answer prompts (stop the desktop agent first)
+phosphor-service-polkit-cli
+# in another terminal, trigger an action:
+pkexec true
+```
+
 ## Design notes
 
 - **Wraps polkit-qt privately.** `PolkitAgent` is a plain `QObject`; the
@@ -54,12 +102,17 @@ The authentication dialog itself is a Phase 3 / 4 consumer of this library.
 
 ## Status
 
-Phase 2.6: in progress. Milestones 1+2 (skeleton + CMake + the `PolkitAgent`
-registration plumbing; the listener-registration work folded into the
-milestone-1 commit), 3 (the `initiateAuthentication` → `AuthRequest` decode,
-surfaced as the active request), and 4 (the `Agent::Session` PAM conversation:
-`authenticate()` / `respond()` / `cancel()` driving the prompt → answer →
-completed flow), 5 (the QML facade, verified by a real QQmlEngine load test),
-6 (the `examples/phosphor-service-polkit-cli` standalone-agent demo), and 7 (the
-decode unit test over real polkit-qt `Details` / `Identity` values) landed;
-milestone 8 (README finalisation) follows per the plan.
+Phase 2.6: shipped. The `PolkitAgent` registers as the session's authentication
+agent (explicit, inert when another agent owns the session), decodes polkit's
+`initiateAuthentication` into a typed `AuthRequest` (action / message / icon /
+details / identities), and drives the `polkit-qt6` `Agent::Session` PAM
+conversation: `authenticate()` starts it, the PAM prompt surfaces on
+`AuthRequest`, `respond()` answers it straight to PAM without retaining the
+secret, and `completed` / `cancel` resolve polkit's result exactly once. The
+`examples/phosphor-service-polkit-cli` standalone-agent demo covers the Phase-2
+gate (run as the agent, log requests, answer prompts) and exercises the live
+path against `pkexec`. Three test binaries pin the deterministic surface with no
+`polkitd`: the C++ smoke harness (inert construction, registration-fail, the
+active-request / authenticate / respond / cancel guards), the QML-engine facade
+load test, and the decode unit test over real polkit-qt `Details` / `Identity`
+values. The authentication dialog UI is a Phase 3 / 4 consumer.
