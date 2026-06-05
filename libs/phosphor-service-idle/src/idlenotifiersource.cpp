@@ -26,9 +26,4 @@ std::chrono::milliseconds IdleNotifierSource::timeout() const
     return m_notifier.timeout();
 }
 
-bool IdleNotifierSource::isIdle() const
-{
-    return m_notifier.isIdle();
-}
-
 } // namespace PhosphorServiceIdle

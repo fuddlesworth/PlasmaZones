@@ -21,7 +21,6 @@ public:
 
     void setTimeout(std::chrono::milliseconds timeout) override;
     [[nodiscard]] std::chrono::milliseconds timeout() const override;
-    [[nodiscard]] bool isIdle() const override;
 
 private:
     PhosphorWayland::IdleNotifier m_notifier;

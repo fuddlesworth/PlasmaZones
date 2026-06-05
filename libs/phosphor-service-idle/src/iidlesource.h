@@ -39,9 +39,6 @@ public:
     virtual void setTimeout(std::chrono::milliseconds timeout) = 0;
     [[nodiscard]] virtual std::chrono::milliseconds timeout() const = 0;
 
-    /// Whether the source is currently in its idle state.
-    [[nodiscard]] virtual bool isIdle() const = 0;
-
 Q_SIGNALS:
     /// The timeout elapsed without activity.
     void idled();

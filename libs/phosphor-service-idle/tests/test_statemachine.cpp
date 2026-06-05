@@ -34,25 +34,18 @@ public:
     {
         return m_timeout;
     }
-    [[nodiscard]] bool isIdle() const override
-    {
-        return m_idle;
-    }
 
     void fireIdle()
     {
-        m_idle = true;
         Q_EMIT idled();
     }
     void fireResume()
     {
-        m_idle = false;
         Q_EMIT resumed();
     }
 
 private:
     std::chrono::milliseconds m_timeout{0};
-    bool m_idle = false;
 };
 
 // Records the fakes it hands out so the test can fire their edges. The fakes are
