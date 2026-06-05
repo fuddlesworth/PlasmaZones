@@ -45,8 +45,10 @@ void ClipboardHistoryModel::setMaxEntries(int max)
     m_maxEntries = max < 0 ? 0 : max;
     const int before = m_entries.size();
     enforceCap();
-    if (m_entries.size() != before)
+    if (m_entries.size() != before) {
         Q_EMIT countChanged();
+        Q_EMIT historyChanged();
+    }
 }
 
 int ClipboardHistoryModel::maxEntries() const
@@ -98,6 +100,23 @@ ClipboardEntry ClipboardHistoryModel::entryAt(int row) const
     return m_entries.at(row);
 }
 
+QList<ClipboardEntry> ClipboardHistoryModel::entries() const
+{
+    return m_entries;
+}
+
+void ClipboardHistoryModel::setEntries(const QList<ClipboardEntry>& entries)
+{
+    const int before = m_entries.size();
+    beginResetModel();
+    m_entries = entries;
+    if (m_maxEntries >= 0 && m_entries.size() > m_maxEntries)
+        m_entries.erase(m_entries.begin() + m_maxEntries, m_entries.end());
+    endResetModel();
+    if (m_entries.size() != before)
+        Q_EMIT countChanged();
+}
+
 void ClipboardHistoryModel::removeAt(int row)
 {
     if (row < 0 || row >= m_entries.size())
@@ -106,6 +125,7 @@ void ClipboardHistoryModel::removeAt(int row)
     m_entries.removeAt(row);
     endRemoveRows();
     Q_EMIT countChanged();
+    Q_EMIT historyChanged();
 }
 
 void ClipboardHistoryModel::clear()
@@ -116,6 +136,7 @@ void ClipboardHistoryModel::clear()
     m_entries.clear();
     endResetModel();
     Q_EMIT countChanged();
+    Q_EMIT historyChanged();
 }
 
 void ClipboardHistoryModel::onSelectionChanged(const QStringList& mimeTypes)
@@ -172,6 +193,8 @@ void ClipboardHistoryModel::onDataReceived(const QString& mimeType, const QByteA
 
     if (m_entries.size() != beforeCount)
         Q_EMIT countChanged();
+    // A capture (new or a dedup re-order) always changes the persisted history.
+    Q_EMIT historyChanged();
 }
 
 int ClipboardHistoryModel::indexOfContent(const QByteArray& content, const QString& mimeType) const

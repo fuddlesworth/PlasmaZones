@@ -50,6 +50,13 @@ public:
     /// The full entry at @p row, or a default-constructed entry when out of range
     /// (used by the copy path to re-apply content).
     [[nodiscard]] ClipboardEntry entryAt(int row) const;
+    /// The full entry list (most-recent first), for persistence.
+    [[nodiscard]] QList<ClipboardEntry> entries() const;
+    /// Replace the entries (most-recent first), e.g. seeding from disk on
+    /// startup. Trims to the cap. A reset, not a user mutation: it updates the
+    /// count but does NOT emit `historyChanged` (so a load does not trigger a
+    /// re-save).
+    void setEntries(const QList<ClipboardEntry>& entries);
 
     /// Remove the entry at @p row. Out-of-range rows are ignored.
     void removeAt(int row);
@@ -58,6 +65,9 @@ public:
 
 Q_SIGNALS:
     void countChanged();
+    /// The persisted history changed (a new capture, dedup re-order, removal,
+    /// clear, or cap eviction). The host saves on this; not emitted by a load.
+    void historyChanged();
 
 private:
     void onSelectionChanged(const QStringList& mimeTypes);

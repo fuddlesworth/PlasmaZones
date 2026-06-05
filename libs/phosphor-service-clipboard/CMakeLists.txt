@@ -58,6 +58,7 @@ set(phosphorserviceclipboard_SRCS
     src/iclipboardsource.cpp
     src/clipboardhistorymodel.cpp
     src/clipboardstore.cpp
+    src/waylandclipboardsource.cpp
 )
 
 add_library(PhosphorServiceClipboard SHARED
