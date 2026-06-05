@@ -79,6 +79,7 @@ private Q_SLOTS:
     void initTestCase();
     void getServerInformationOverWire();
     void notifyDecodesImageDataStructOverWire();
+    void notifyRejectsOversizedImageData();
     void closeNotificationOverWire();
 
 private:
@@ -108,8 +109,10 @@ void NotificationsWireTest::initTestCase()
         QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
     QVERIFY2(m_clientSide.isConnected() && m_serverSide.isConnected(), "peer-to-peer connection did not establish");
 
-    // One server for the whole suite, registered on the peer's server end so the
-    // client's method calls route to it through real marshalling.
+    // One server shared by the whole suite, registered on the peer's server end
+    // so the client's method calls route to it through real marshalling. Tests
+    // must stay count-agnostic (locate notifications by the returned id, not by
+    // notifications().size()) since state accumulates across cases.
     m_server = std::make_unique<NotificationServer>(m_serverSide, NotificationServer::serviceName());
 }
 
@@ -185,6 +188,39 @@ void NotificationsWireTest::notifyDecodesImageDataStructOverWire()
     QVERIFY(n != nullptr);
     QVERIFY(n->hasImage());
     QCOMPARE(n->image().size(), QSize(2, 2));
+}
+
+void NotificationsWireTest::notifyRejectsOversizedImageData()
+{
+    // A width beyond the decoder's dimension cap, declared with deliberately
+    // short data, must be rejected (no over-read, no giant allocation) rather
+    // than decoded. The notification still lands; it simply has no image. This
+    // pins the boundary check against attacker-controlled (width/rowstride/data)
+    // image structs.
+    ImageData image;
+    image.width = 100000; // beyond the decoder's kMaxImageDimension
+    image.height = 1;
+    image.channels = 4;
+    image.bitsPerSample = 8;
+    image.rowstride = image.width * image.channels;
+    image.hasAlpha = true;
+    image.data = QByteArray(16, '\x7f'); // far too small for the declared size
+
+    QVariantMap hints;
+    hints.insert(QStringLiteral("image-data"), QVariant::fromValue(image));
+
+    QDBusMessage call = notifyMessage();
+    call << QStringLiteral("app") << 0u << QString() << QStringLiteral("bad") << QString() << QStringList() << hints
+         << 0;
+
+    const QDBusMessage reply = callSync(call);
+    QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+    const uint id = reply.arguments().value(0).toUInt();
+    QVERIFY(id != 0);
+
+    Notification* n = findById(id);
+    QVERIFY(n != nullptr);
+    QVERIFY(!n->hasImage()); // rejected by the bounds check, not over-read
 }
 
 void NotificationsWireTest::closeNotificationOverWire()

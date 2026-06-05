@@ -94,7 +94,10 @@ notify-send "hi" "there"   # any notifying app works too
   inline (`QDBusArgument`) into a deep-copied `QImage`, with `image-path`
   falling back to a file load or an icon-theme name. This is the lib's only
   `Qt::Gui` use, scoped to `QImage`; the raw hint map stays on `Notification`
-  for advanced bindings.
+  for advanced bindings. The `image` property / model role is a `QImage`, so a
+  QML delegate that wants to paint it needs a `QQuickImageProvider` keyed off the
+  notification id (the Phase 3.4 toast supplies one); it is not directly an
+  `Image.source`.
 - **Markup stays raw.** `body` markup is stored, never rendered; `GetCapabilities`
   advertises `body` / `actions` / `icon-static` / `persistence` but not
   `body-markup` until a renderer exists (Phase 4.3).

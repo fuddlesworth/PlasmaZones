@@ -22,8 +22,8 @@ namespace {
 constexpr auto kServiceName = "org.freedesktop.Notifications";
 constexpr auto kObjectPath = "/org/freedesktop/Notifications";
 
-// GetServerInformation fields. The version tracks the library SOVERSION line;
-// the spec version is the level this server implements.
+// GetServerInformation fields. The version tracks the library VERSION; the spec
+// version is the level this server implements.
 constexpr auto kServerName = "Phosphor";
 constexpr auto kServerVendor = "phosphor-works";
 constexpr auto kServerVersion = "0.1.0";
@@ -64,13 +64,24 @@ QImage decodeImageData(const QDBusArgument& arg)
     arg >> width >> height >> rowstride >> hasAlpha >> bitsPerSample >> channels >> data;
     arg.endStructure();
 
-    // Only the common 8-bit, 3- (RGB) or 4-channel (RGBA) layouts are supported;
-    // anything else is rejected rather than risking a misread.
-    if (width <= 0 || height <= 0 || bitsPerSample != 8 || (channels != 3 && channels != 4))
+    // width / height / rowstride / channels are attacker-controlled: any session
+    // peer can call Notify. Bound the dimensions before any arithmetic. This both
+    // prevents signed-int overflow in the size math below (an INT_MAX width times
+    // channels wraps negative and would defeat the buffer check) and rejects
+    // absurd allocations (an un-capped width*height makes QImage::copy a trivial
+    // OOM DoS). Only the common 8-bit, 3- (RGB) or 4-channel (RGBA) layouts are
+    // supported; anything else is rejected rather than risking a misread.
+    constexpr int kMaxImageDimension = 8192;
+    if (width <= 0 || height <= 0 || width > kMaxImageDimension || height > kMaxImageDimension || bitsPerSample != 8
+        || (channels != 3 && channels != 4))
         return {};
-    if (rowstride < width * channels)
+
+    // All size math in qsizetype: width is bounded above but rowstride is not, so
+    // the products must not wrap. A negative rowstride also fails this check.
+    const qsizetype minRowBytes = static_cast<qsizetype>(width) * channels;
+    if (rowstride < minRowBytes)
         return {};
-    if (data.size() < static_cast<qsizetype>(rowstride) * (height - 1) + width * channels)
+    if (data.size() < static_cast<qsizetype>(rowstride) * (height - 1) + minRowBytes)
         return {};
 
     const QImage::Format format = channels == 4 ? QImage::Format_RGBA8888 : QImage::Format_RGB888;
@@ -115,7 +126,13 @@ public:
 
     uint allocateId()
     {
-        return ++nextId;
+        // Skip 0 (reserved: replaces_id == 0 means "new") and any id still live,
+        // so a wrap past 2^32 ids cannot collide with an existing notification and
+        // silently overwrite (leaking) it.
+        do {
+            ++nextId;
+        } while (nextId == 0 || live.contains(nextId));
+        return nextId;
     }
 
     // Resolve the rich notification image: image-data hint first (full fidelity),

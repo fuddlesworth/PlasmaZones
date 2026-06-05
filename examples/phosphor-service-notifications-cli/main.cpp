@@ -152,10 +152,18 @@ int cmdSend(const QStringList& args)
     QStringList actions;
 
     QStringList positional;
+    bool missingValue = false;
     for (int i = 0; i < args.size(); ++i) {
         const QString& a = args.at(i);
         auto next = [&]() -> QString {
-            return i + 1 < args.size() ? args.at(++i) : QString();
+            // A flag with no following token is a usage error: flag it rather
+            // than silently substituting an empty value (which --app / --action
+            // would otherwise accept as a blank app name / empty action).
+            if (i + 1 >= args.size()) {
+                missingValue = true;
+                return QString();
+            }
+            return args.at(++i);
         };
         if (a == QLatin1String("--app")) {
             app = next();
@@ -191,6 +199,8 @@ int cmdSend(const QStringList& args)
         }
     }
 
+    if (missingValue)
+        return usage();
     if (positional.isEmpty())
         return usage();
     summary = positional.at(0);
@@ -294,8 +304,10 @@ int main(int argc, char** argv)
         return rest.isEmpty() ? usage() : cmdClose(rest.at(0));
     if (command == QLatin1String("info"))
         return cmdInfo();
-    if (command == QLatin1String("help") || command == QLatin1String("--help") || command == QLatin1String("-h"))
-        return usage() == kUsage ? kOk : kOk; // help is a success exit
+    if (command == QLatin1String("help") || command == QLatin1String("--help") || command == QLatin1String("-h")) {
+        usage(); // print the usage text
+        return kOk; // an explicit help request is a success, not a usage error
+    }
 
     return usage();
 }

@@ -37,10 +37,11 @@ class Notification;
  * here. The spec signals (`NotificationClosed`, `ActionInvoked`) are declared
  * on this object and auto-relayed to the bus by the adaptor.
  *
- * Milestone 3 lands ingest: `Notify` decodes the hint set (including the
- * `image-data` → `QImage` path) into a typed `Notification`, allocates ids,
- * and updates in place on `replaces_id`. Expiry timers + action invocation
- * (milestone 4) and the `NotificationModel` (milestone 5) follow.
+ * `Notify` decodes the hint set (including the `image-data` → `QImage` path)
+ * into a typed `Notification`, allocates ids, and updates in place on
+ * `replaces_id`. Notifications expire per their `expire_timeout` (Critical never
+ * auto-expires), can be dismissed or have an action invoked, and are exposed as
+ * a list through `NotificationModel`.
  */
 class PHOSPHORSERVICENOTIFICATIONS_EXPORT NotificationServer : public QObject
 {

@@ -119,7 +119,8 @@ public:
     {
         return m_suppressSound;
     }
-    /// Progress value 0-100 from the `value` hint, or -1 when absent.
+    /// The `value` hint (a progress percentage by convention), or -1 when absent.
+    /// Stored as sent; the server does not clamp it.
     [[nodiscard]] int value() const
     {
         return m_value;
@@ -140,7 +141,9 @@ public:
     }
 
 Q_SIGNALS:
-    /// Emitted once after a `replaces_id` update mutates any field.
+    /// Emitted once per `replaces_id` update: the server re-applies the full
+    /// field set in place (a replacing Notify re-specifies the notification, so
+    /// this fires even if the new values happen to match the old).
     void changed();
 
 private:

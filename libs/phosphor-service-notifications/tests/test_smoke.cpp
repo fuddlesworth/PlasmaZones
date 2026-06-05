@@ -479,7 +479,10 @@ void NotificationsSmokeTest::replaceUpdatesExpiry()
 {
     auto server = makeServer();
     QSignalSpy spy(server.get(), &NotificationServer::NotificationClosed);
-    // Arm a short timer, then replace it with a never-expire (0) before it fires.
+    // Arm a short timer, then replace it with a never-expire (0). This is not a
+    // timing race: both Notify calls are synchronous with no event-loop pump
+    // between them, so the 40ms timer's slot cannot run before the replace
+    // cancels the timer (armExpiry removes it). The 40ms is illustrative only.
     const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("first"), QString(), {}, {}, 40);
     server->Notify(QStringLiteral("app"), id, QString(), QStringLiteral("second"), QString(), {}, {}, 0);
 
