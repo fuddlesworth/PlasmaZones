@@ -60,6 +60,9 @@ LayerShellIntegration::~LayerShellIntegration()
     if (m_singlePixelBufferManager) {
         wp_single_pixel_buffer_manager_v1_destroy(m_singlePixelBufferManager);
     }
+    if (m_dataControlManager) {
+        zwlr_data_control_manager_v1_destroy(m_dataControlManager);
+    }
     if (m_layerShell) {
         if (m_boundVersion >= 3) {
             // Protocol-level destroy request (added in v3)
@@ -259,6 +262,19 @@ void LayerShellIntegration::registryHandler(void* data, struct wl_registry* regi
         self->m_foreignToplevelManagerVersion = bindVersion;
         self->m_foreignToplevelManagerAvailable = true;
         qCDebug(lcLayerShellIntegration).nospace() << "Bound zwlr_foreign_toplevel_manager_v1 v" << bindVersion;
+    } else if (strcmp(interface, zwlr_data_control_manager_v1_interface.name) == 0) {
+        if (self->m_dataControlManager && self->m_dataControlManagerAvailable)
+            return;
+        self->m_dataControlManager = nullptr;
+        // Bind v1: clipboard selection only. Primary-selection is the v2 feature
+        // we deliberately do not consume.
+        static constexpr uint32_t kMaxVersion = 1;
+        uint32_t bindVersion = qMin(version, kMaxVersion);
+        self->m_dataControlManager = static_cast<struct zwlr_data_control_manager_v1*>(
+            wl_registry_bind(registry, id, &zwlr_data_control_manager_v1_interface, bindVersion));
+        self->m_dataControlManagerId = id;
+        self->m_dataControlManagerAvailable = true;
+        qCDebug(lcLayerShellIntegration).nospace() << "Bound zwlr_data_control_manager_v1 v" << bindVersion;
     }
 }
 
@@ -286,6 +302,10 @@ void LayerShellIntegration::registryRemoveHandler(void* data, struct wl_registry
         self->m_foreignToplevelManagerAvailable = false;
         self->m_foreignToplevelManagerId = 0;
         qCDebug(lcLayerShellIntegration) << "zwlr_foreign_toplevel_manager_v1 global removed";
+    } else if (id == self->m_dataControlManagerId) {
+        self->m_dataControlManagerAvailable = false;
+        self->m_dataControlManagerId = 0;
+        qCDebug(lcLayerShellIntegration) << "zwlr_data_control_manager_v1 global removed";
     } else if (id == self->m_layerShellId) {
         qCWarning(lcLayerShellIntegration) << "zwlr_layer_shell_v1 global removed (id" << id << ") —"
                                            << "new layer surface creation will fail."

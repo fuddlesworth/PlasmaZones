@@ -3,6 +3,7 @@
 
 #include <PhosphorServiceBluetooth/QmlRegistration.h>
 #include <PhosphorServiceBrightness/QmlRegistration.h>
+#include <PhosphorServiceClipboard/QmlRegistration.h>
 #include <PhosphorServiceIconTheme/QmlRegistration.h>
 #include <PhosphorServiceIdle/QmlRegistration.h>
 #include <PhosphorServiceMpris/QmlRegistration.h>
@@ -117,6 +118,7 @@ int main(int argc, char* argv[])
     PhosphorServiceNotifications::registerQmlTypes();
     PhosphorServicePolkit::registerQmlTypes();
     PhosphorServiceIdle::registerQmlTypes();
+    PhosphorServiceClipboard::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();

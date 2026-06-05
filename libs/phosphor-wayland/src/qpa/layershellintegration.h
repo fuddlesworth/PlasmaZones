@@ -17,6 +17,7 @@
 #include "idle_inhibit_protocol.h"
 #include "xdg_toplevel_drag_protocol.h"
 #include "foreign_toplevel_protocol.h"
+#include "data_control_protocol.h"
 
 namespace PhosphorWayland {
 
@@ -140,6 +141,14 @@ public:
         return m_foreignToplevelManagerVersion;
     }
 
+    /// Client-side clipboard manager (`zwlr_data_control_manager_v1`). Bound at
+    /// version 1 (clipboard selection only; primary-selection is a v2 feature we
+    /// do not use). Returns nullptr when the compositor does not advertise it.
+    struct zwlr_data_control_manager_v1* dataControlManager() const
+    {
+        return m_dataControlManagerAvailable ? m_dataControlManager : nullptr;
+    }
+
     /// Access the Wayland display for explicit flushing after surface creation.
     QtWaylandClient::QWaylandDisplay* display() const
     {
@@ -178,6 +187,10 @@ private:
     uint32_t m_foreignToplevelManagerId = 0;
     uint32_t m_foreignToplevelManagerVersion = 0;
     bool m_foreignToplevelManagerAvailable = false;
+
+    struct zwlr_data_control_manager_v1* m_dataControlManager = nullptr;
+    uint32_t m_dataControlManagerId = 0;
+    bool m_dataControlManagerAvailable = false;
 
     std::vector<std::pair<CallbackId, GlobalRemovedCallback>> m_globalRemovedCallbacks;
     CallbackId m_nextCallbackId = 1;

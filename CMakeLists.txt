@@ -461,6 +461,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-notifications) # org.freedesktop.Notifications server (Phase 2.5)
     add_subdirectory(libs/phosphor-service-polkit)        # PolicyKit authentication agent (Phase 2.6)
     add_subdirectory(libs/phosphor-service-idle)          # Wayland idle monitoring + inhibition (Phase 2.7)
+    add_subdirectory(libs/phosphor-service-clipboard)     # Wayland clipboard history (data-control) (Phase 2.8)
 endif()
 
 # Source directories
@@ -736,6 +737,14 @@ endif()
 # target does not exist, so the CLI can't link.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-idle-cli)
+endif()
+
+# phosphor-service-clipboard-cli. Acceptance harness for the
+# phosphor-service-clipboard library (Phase 2.8). Watches the clipboard, lists
+# the history, and copies an entry back. Gated like the lib: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-clipboard-cli)
 endif()
 
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
