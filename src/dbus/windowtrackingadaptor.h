@@ -26,6 +26,10 @@
 
 #include <PhosphorConfig/IBackend.h>
 
+namespace PhosphorContext {
+class IContextResolver;
+} // namespace PhosphorContext
+
 namespace PhosphorZones {
 class IZoneDetector;
 class Layout;
@@ -44,6 +48,7 @@ class SnapNavigationTargetResolver;
 
 namespace PhosphorWorkspaces {
 class VirtualDesktopManager;
+class ActivityManager;
 }
 
 namespace PlasmaZones {
@@ -70,8 +75,9 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor,
 public:
     explicit WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
                                    PhosphorZones::IZoneDetector* zoneDetector,
-                                   Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                   PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
                                    PhosphorWorkspaces::VirtualDesktopManager* virtualDesktopManager,
+                                   PhosphorWorkspaces::ActivityManager* activityManager = nullptr,
                                    QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override;
 
@@ -151,6 +157,19 @@ public:
     void setEngines(PhosphorEngine::PlacementEngineBase* snapEngine,
                     PhosphorEngine::PlacementEngineBase* autotileEngine);
 
+    /**
+     * @brief Set the frozen-snapshot resolver used by saveload's disable
+     *        gate to short-circuit restore on a disabled context.
+     *
+     * Late-bound for the same reason as setEngines / setShortcutRegistrar —
+     * the resolver is constructed after this adaptor. Daemon calls this
+     * once after `m_contextResolver` lands. Pass nullptr during shutdown.
+     */
+    void setContextResolver(PhosphorContext::IContextResolver* resolver)
+    {
+        m_contextResolver = resolver;
+    }
+
     PhosphorSnapEngine::SnapEngine* snapEngine() const;
 
     /**
@@ -195,10 +214,16 @@ public Q_SLOTS:
      * internalId(); Hyprland's address on a future bridge). It is opaque to
      * the daemon — never parsed.
      *
-     * @param instanceId  Opaque compositor handle (stable for window lifetime)
-     * @param appId       Current app class (mutable)
-     * @param desktopFile Current desktop file name (mutable, may be empty)
-     * @param title       Current caption (mutable, may be empty)
+     * @param instanceId     Opaque compositor handle (stable for window lifetime)
+     * @param appId          Current app class (mutable)
+     * @param desktopFile    Current desktop file name (mutable, may be empty)
+     * @param title          Current caption (mutable, may be empty)
+     * @param windowRole     X11 WM_WINDOW_ROLE (empty for Wayland-native windows)
+     * @param pid            Process id (0 = unknown)
+     * @param virtualDesktop 1-based x11 desktop number (0 = all desktops / unknown)
+     * @param activity       Activity UUID (empty = all activities / unknown)
+     * @param windowType     PhosphorProtocol::WindowType underlying value; out-of-range
+     *                       values are clamped to WindowType::Unknown
      *
      * Emits no D-Bus signal. Populates the daemon's WindowRegistry; consumers
      * subscribe to the registry's Qt signals directly.
@@ -207,7 +232,8 @@ public Q_SLOTS:
      * is unchanged.
      */
     void setWindowMetadata(const QString& instanceId, const QString& appId, const QString& desktopFile,
-                           const QString& title);
+                           const QString& title, const QString& windowRole, int pid, int virtualDesktop,
+                           const QString& activity, int windowType);
 
     // windowSnapped, windowSnappedMultiZone, windowUnsnapped, windowsSnappedBatch,
     // recordSnapIntent moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
@@ -253,15 +279,6 @@ public Q_SLOTS:
 
     // calculateUnfloatRestore moved to SnapAdaptor (org.plasmazones.Snap D-Bus interface).
 
-    /**
-     * Store window geometry before snapping (for unsnap restoration)
-     * @param windowId Window ID
-     * @param x Window X position
-     * @param y Window Y position
-     * @param width Window width
-     * @param height Window height
-     * @note Only stores on FIRST snap - subsequent snaps (A→B) keep original
-     */
     /**
      * Store geometry before tiling (unified snap + autotile)
      * @param windowId Window ID
@@ -385,6 +402,15 @@ public Q_SLOTS:
     /// Called by the KWin effect after daemon ready to clean up stale KConfig entries
     /// from windows that no longer exist (closed between save and daemon restart).
     void pruneStaleWindows(const QStringList& aliveWindowIds);
+
+    /// Re-drive compositor-side per-window appearance (snap border / hidden
+    /// title bar, autotile border) for every window each engine manages. Called
+    /// by the KWin effect once the daemon is ready: on a daemon or effect
+    /// restart the compositor drops its window-chrome state, so it must be
+    /// re-applied from the daemon's authoritative placement state. Delegates to
+    /// the common IPlacementEngine::reapplyManagedWindowAppearance() on both
+    /// engines — does not move windows.
+    void reapplyWindowAppearance();
 
     /**
      * Get typed list of empty zones for Snap Assist continuation
@@ -519,31 +545,18 @@ public Q_SLOTS:
      */
     void scheduleSaveState();
 
-    /**
-     * @brief Set tiling state serialization delegates
-     *
-     * These delegates are called during saveState()/loadState() to include
-     * autotile per-screen tiling state alongside window tracking state.
-     *
-     * @param serializeFn Returns JSON array of per-screen tiling states
-     * @param deserializeFn Restores tiling states from JSON array
-     */
-    // MOC misparses std::function<void(const QJsonArray&)> as function<const void(QJsonArray&)>,
-    // generating code that fails to compile. This method is not a signal/slot, but MOC still
-    // processes all public member declarations in Q_OBJECT classes. Guard is required.
-#ifndef Q_MOC_RUN
-    void setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
-                                 std::function<void(const QJsonArray&)> deserializeFn);
+    /// Unified placement capture orchestrator: ask each engine for @p windowId's
+    /// current placement, stamp it with the live frame geometry, and record it in
+    /// the WindowPlacementStore (or clear the record if no engine manages it).
+    /// Shadow-written in P1; the single funnel every state-change + close hook
+    /// calls so the persisted record always reflects the window's live state.
+    void captureWindowPlacement(const QString& windowId);
 
-    /**
-     * @brief Set delegates for autotile pending restore queue persistence
-     *
-     * Separate from tiling state delegates — pending restores have their own
-     * config key to keep the window-orders array homogeneous.
-     */
-    void setTilingPendingRestoreDelegates(std::function<QJsonObject()> serializeFn,
-                                          std::function<void(const QJsonObject&)> deserializeFn);
-#endif
+    /// Re-capture every open floating window's live geometry into the unified
+    /// store at save time (no per-move hook fires for drags). Called before the
+    /// dirty snapshot in saveState so a dragged floated window persists its
+    /// current position across a daemon restart.
+    void refreshOpenWindowPlacements();
 
     /**
      * @brief Load window tracking state from disk
@@ -557,40 +570,65 @@ public Q_SLOTS:
      */
     void loadState();
 
+    // handleBatchedResnap moved to SnapAdaptor.
+
+public:
+    // Internal-only members below — declared as plain public methods (NOT
+    // under Q_SLOTS) so QDBusAbstractAdaptor's runtime introspection does
+    // NOT expose them on the bus regardless of XML content. Same pattern as
+    // `WindowDragAdaptor::clearForCompositorReconnect` /
+    // `handleWindowClosed`. Every caller is in-process and reaches them
+    // via direct C++ invocation through the daemon, NOT through D-Bus.
     /**
-     * @brief Drop snap and autotile pending-restore queues for excluded appIds.
+     * @brief Drop unified WindowPlacement records for excluded appIds.
      *
-     * Reads the current snap-side exclusion lists from m_settings, combines
-     * them, and asks both engines to walk their pending-restore queues and
-     * remove any appId matching a pattern. Marks DirtyPendingRestores or
-     * DirtyAutotilePending as appropriate so the next debounced save persists
-     * the pruned state.
+     * Single `placementStore().removeIf(...)` over the unified store, dropping any
+     * record whose appId matches one of @p patterns (via
+     * PhosphorIdentity::WindowId::appIdMatches), across BOTH engines' records — there
+     * is no longer a per-engine pending-restore queue to walk. Marks
+     * DirtyWindowPlacements when anything was removed so the next debounced save
+     * persists the pruned store.
      *
-     * Called from three sites.
-     *   1. WTA's own constructor, right after loadState. The snap queues are
-     *      populated by then but the autotile queue is not.
-     *   2. The excludedApplicationsChanged and excludedWindowClassesChanged signal
-     *      handlers wired in the constructor.
-     *   3. The daemon's finalizeStartup, after AutotileEngine::loadState runs. By
-     *      then the autotile queue has also been deserialized into the engine,
-     *      so it gets pruned too.
+     * Plain `public:` (not Q_SLOTS): the bus surface deliberately excludes this —
+     * every caller is in-process and reaches it via direct C++ invocation through the
+     * daemon. Same pattern as `WindowDragAdaptor::clearForCompositorReconnect`.
      *
-     * Calling this before either engine is wired is safe. Engines that are
-     * missing contribute zero removals.
+     * Called from three daemon-side sites:
+     *   1. Daemon::init's init-prologue priming call — runs once, synchronously,
+     *      before the `rulesChanged` subscription connects, pruning what loadState
+     *      just deserialized into the store.
+     *   2. Daemon::init's `refilterExcludeRules` lambda, fired on every
+     *      `WindowRuleStore::rulesChanged` whose post-filter Exclude slice differs
+     *      from the cached one (equality-guarded). Drives live rule edits into the prune.
+     *   3. Daemon::finalizeStartup, after AutotileEngine::loadState has restored its
+     *      placement records, so any autotile records loaded then are pruned too.
+     * The daemon derives @p patterns from the unified WindowRule store via
+     * `PhosphorWindowRule::ExclusionRules::applicationExcludePatternsFrom`.
+     *
+     * Safe to call at any time. An empty @p patterns short-circuits.
      */
-    void pruneExcludedPendingRestoresFromSettings();
+    void pruneExcludedPendingRestores(const QStringList& patterns);
 
     /**
-     * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles)
-     *
+     * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles).
      * Not a D-Bus method; used internally so the daemon timer can trigger the signal.
      */
     void requestReapplyWindowGeometries();
 
-    // handleBatchedResnap moved to SnapAdaptor.
-
 Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
+
+    /**
+     * @brief Internal Qt signal emitted after the windowClosed() D-Bus method
+     * processes a close. Used to drive sibling-adaptor cleanup (e.g.
+     * WindowDragAdaptor's drag-state teardown when a window closes mid-drag)
+     * without re-introducing a D-Bus-visible WindowDrag.handleWindowClosed
+     * surface that no one outside the daemon was wiring up.
+     *
+     * Distinct name from the D-Bus method so MOC/QtDBus don't conflate the
+     * two; the method runs first, then we emit this for in-process listeners.
+     */
+    void windowClosedNotification(const QString& windowId);
 
     /**
      * @brief Emitted when a window's floating state changes
@@ -621,7 +659,7 @@ Q_SIGNALS:
      * 1. The active layout becomes available after startup
      * 2. There are pending zone assignments waiting to be applied
      *
-     * The KWin effect should respond by calling restoreToPersistedZone()
+     * The KWin effect should respond by calling resolveWindowRestore()
      * for all visible windows that haven't yet been tracked.
      *
      * @note This solves startup timing issues where windows appear before
@@ -714,15 +752,23 @@ public Q_SLOTS:
      */
     void setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating);
 
+public:
+    // Internal-only members below — plain `public:` placement (not Q_SLOTS)
+    // to keep QDBusAbstractAdaptor's runtime introspection from exposing
+    // them on the bus when the XML doesn't list them. Same pattern as the
+    // `pruneExcludedPendingRestores` / `requestReapplyWindowGeometries`
+    // pair above.
     /**
-     * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats)
+     * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats).
      * Gets validated geometry, emits applyGeometryRequested if found, clears stored geometry.
      * @return true if geometry was applied, false if none stored
      */
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
 
     /**
-     * @brief Emit moveSpecificWindowToZoneRequested - called when user selects from Snap Assist
+     * @brief Emit moveSpecificWindowToZoneRequested — called when user selects from Snap Assist.
+     * Takes a `QRect` payload; not D-Bus marshallable without a typeName annotation, so
+     * keeping it off the wire entirely is the only safe shape.
      */
     void requestMoveSpecificWindowToZone(const QString& windowId, const QString& zoneId, const QRect& geometry);
 
@@ -744,7 +790,7 @@ private Q_SLOTS:
     /**
      * @brief Handle panel geometry becoming ready
      *
-     * Called when Phosphor::Screens::ScreenManager reports panel geometry is known.
+     * Called when PhosphorScreens::ScreenManager reports panel geometry is known.
      * If there are pending restores waiting for geometry, emits pendingRestoresAvailable.
      */
     void onPanelGeometryReady();
@@ -800,33 +846,24 @@ private:
     // applySnapResult moved to SnapAdaptor.
 
     /**
-     * @brief Build a unified window state JSON object for windowStateChanged emission
-     * @param windowId Window identifier
-     * @param zoneId Primary zone ID (may be empty for unsnap)
-     * @param zoneIds All zone IDs (QJsonArray)
-     * @param screenId Screen identifier
-     * @param isFloating Current float state
-     * @param changeType One of: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
-     * @return QJsonObject ready for serialization
-     */
-    QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
-                                 const QString& screenId, bool isFloating, const QString& changeType) const;
-
-    /**
      * @brief Test whether the given (screen, virtualDesktop, activity) tuple is currently disabled.
      *
      * Used by the save/load filters to drop entries persisted before the user
-     * disabled a monitor / virtual desktop / activity. Selects the mode via the
-     * ScreenModeRouter when wired; falls back to Snapping mode otherwise
-     * (consistent with the snap-side write gate, and the helper's only
-     * load-time caller chain is snap-side anyway). Empty screenId is treated
-     * as "context unknown" and the entry is kept.
+     * disabled a monitor / virtual desktop / activity. Routes through
+     * `PhosphorContext::IContextResolver::handleForPersisted`, which queries
+     * the screen's current mode internally via its bound `IModeProvider`.
+     * Returns `false` when the resolver has not yet been wired (e.g. during
+     * the adaptor's own construction, before `Daemon` calls
+     * `setContextResolver`) — keeping the entry is safe at that point because
+     * no save/load can race the ctor on the same thread. Empty screenId
+     * carries through to the resolver, which treats it as a sentinel
+     * (matches no per-screen disable entry).
      *
      * The activity parameter is optional and defaults to empty — snap-mode
      * storage carries no per-window activity tag (SnapState does not track it)
      * so snap callers leave it unset and the activity-mode disable list never
-     * applies to them. Autotile pending-restore filtering passes the entry's
-     * activity tag explicitly via the engine's ShouldPersistRestorePredicate.
+     * applies to them. The WindowPlacementStore serialize keep-predicate passes
+     * each record's activity tag explicitly so autotile records gate correctly.
      */
     bool isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
                                     const QString& activity = QString()) const;
@@ -838,7 +875,7 @@ private:
      */
     int currentDesktop() const;
 
-    // clearFloatingStateForSnap was removed — PhosphorPlacement::WindowTrackingService::commitSnap
+    // clearFloatingStateForSnap was removed — PhosphorSnapEngine::SnapEngine::commitSnap
     // now handles floating-state clearing internally (and emits
     // windowFloatingClearedForSnap which the adaptor relays to its own
     // windowFloatingChanged D-Bus signal).
@@ -862,7 +899,13 @@ private:
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr;
     PhosphorZones::LayoutRegistry* m_layoutManager;
     ISettings* m_settings;
+    /// Non-owning resolver pointer, late-bound via setContextResolver after
+    /// Daemon constructs `m_contextResolver`. Replaces the previous
+    /// `(m_screenModeRouter->modeFor → currentVirtualDesktop → currentActivity
+    /// → isContextDisabled)` cascade rebuild in `saveload.cpp`.
+    PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorWorkspaces::VirtualDesktopManager* m_virtualDesktopManager;
+    PhosphorWorkspaces::ActivityManager* m_activityManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
 
     // Engine references for per-screen routing (set via setEngines())
@@ -887,8 +930,21 @@ private:
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service
+    //
+    // INVARIANT: post-construction, `m_service` is non-null for the
+    // lifetime of this adaptor. The constructor `qFatal`s on any null
+    // dependency, so reaching any member function with a null `m_service`
+    // is impossible under the current contract. The few `if (!m_service)
+    // return;` guards in public slots are belt-and-braces against a
+    // future regression that introduces a clear-to-null path (none
+    // currently exists); the qFatal is the authoritative gate.
     // ═══════════════════════════════════════════════════════════════════════════════
-    PhosphorPlacement::IGeometryResolver* m_geometryResolver = nullptr;
+    // Owned: DaemonGeometryResolver is a plain non-QObject and the
+    // adaptor's destructor would otherwise leak it. WindowTrackingService
+    // borrows the resolver by raw pointer (no ownership transfer), so this
+    // unique_ptr must outlive m_service — declare it BEFORE m_service so
+    // reverse-order member destruction tears m_service down first.
+    std::unique_ptr<PhosphorPlacement::IGeometryResolver> m_geometryResolver;
     PhosphorPlacement::WindowTrackingService* m_service = nullptr;
 
     // Shared registry: compositor-supplied instance id → current metadata.
@@ -919,12 +975,6 @@ private:
     // harness or an unexpected misconfiguration.
     bool m_syncFallbackWarned = false;
 
-    // Tiling state serialization delegates (autotile engine → WTA persistence)
-    std::function<QJsonArray()> m_serializeTilingStatesFn;
-    std::function<void(const QJsonArray&)> m_deserializeTilingStatesFn;
-    std::function<QJsonObject()> m_serializePendingRestoresFn;
-    std::function<void(const QJsonObject&)> m_deserializePendingRestoresFn;
-
     // ═══════════════════════════════════════════════════════════════════════════════
     // Startup timing coordination
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -934,7 +984,7 @@ private:
      *
      * Conditions required:
      * 1. PhosphorZones::Layout is available with pending restores
-     * 2. Panel geometry has been received by Phosphor::Screens::ScreenManager
+     * 2. Panel geometry has been received by PhosphorScreens::ScreenManager
      *
      * This prevents windows from restoring with incorrect geometry
      * before panel positions are known.

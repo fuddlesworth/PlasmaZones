@@ -20,6 +20,7 @@
 #include <QScreen>
 #include <QQmlEngine>
 #include <QQmlComponent>
+#include <QImage>
 #include <QMutexLocker>
 #include <QPointer>
 
@@ -30,6 +31,35 @@
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
+
+namespace {
+
+// Collapse a dismissed overlay slot's full-screen labels texture to a 1x1
+// placeholder so the labels QImage - up to tens of MB per shader-enabled
+// screen at 4K - is released while the overlay is hidden rather than pinned
+// on the persistent slot property for the whole session. The wallpaperTexture
+// is reset for symmetry and to drop the slot's stale reference across a
+// wallpaper change, but the bulk wallpaper image is owned by ShaderRegistry's
+// static cache (s_cachedWallpaperImage / crops) and is COW-shared, so that
+// reset reclaims little RSS on its own - the labels release is the real win.
+// The next show() rebuilds both via createOverlayWindow ->
+// updateLabelsTextureForWindow / applyShaderInfoToWindow. Callers MUST also
+// reset PerScreenOverlayState::labelsTextureHash to 0 so the hash compare in
+// updateLabelsTextureForWindow does not short-circuit the rebuild and leave
+// the 1x1 placeholder showing with no labels.
+void releaseOverlaySlotTextures(QQuickItem* slot)
+{
+    if (!slot) {
+        return;
+    }
+    QImage placeholder(1, 1, QImage::Format_ARGB32);
+    placeholder.fill(Qt::transparent);
+    const QVariant placeholderVar = QVariant::fromValue(placeholder);
+    writeQmlProperty(slot, QStringLiteral("labelsTexture"), placeholderVar);
+    writeQmlProperty(slot, QStringLiteral("wallpaperTexture"), placeholderVar);
+}
+
+} // namespace
 
 void OverlayService::destroyIfTypeMismatch(const QString& screenId)
 {
@@ -68,7 +98,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         QPoint pos = (cursorPos.x() >= 0) ? cursorPos : QCursor::pos();
         cursorEffectiveId = Utils::effectiveScreenIdAt(m_screenManager, pos, cursorScreen);
     } else if (cursorScreen) {
-        cursorEffectiveId = Phosphor::Screens::ScreenIdentity::identifierFor(cursorScreen);
+        cursorEffectiveId = PhosphorScreens::ScreenIdentity::identifierFor(cursorScreen);
     }
 
     // Store the effective screen ID for cross-virtual-screen detection in showAtPosition()
@@ -97,7 +127,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     QHash<QString, QRect> targetGeometries;
     if (haveEffective) {
         for (const QString& screenId : effectiveIds) {
-            const Phosphor::Screens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
+            const PhosphorScreens::PhysicalScreen phys = mgr->physicalScreenFor(screenId);
             QScreen* physScreen = phys.qscreen;
             if (!physScreen) {
                 continue;
@@ -115,7 +145,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         }
     } else {
         for (auto* screen : Utils::allScreens()) {
-            const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+            const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, screenId,
                                   m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
@@ -318,10 +348,16 @@ void OverlayService::updateLayout(PhosphorZones::Layout* layout)
 
 void OverlayService::updateGeometries()
 {
-    for (const QString& screenId : m_screenStates.keys()) {
-        QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
+    // Iterate via constBegin/constEnd rather than `.keys()` — the prior
+    // shape allocated a QStringList copy on every geometry update; this
+    // is a hot path during multi-monitor compositor signal storms (Plasma
+    // emits screenAdded/screenRemoved/geometryChanged in tight bursts on
+    // hotplug and DPMS-wake). updateOverlayWindow does not mutate
+    // m_screenStates, so iterating in-place is safe.
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        QScreen* physScreen = it.value().overlayPhysScreen;
         if (physScreen) {
-            updateOverlayWindow(screenId, physScreen);
+            updateOverlayWindow(it.key(), physScreen);
         }
     }
     // Geometry data is now current - do NOT bump version here.
@@ -400,7 +436,7 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
 
 void OverlayService::createOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     auto* mgr = m_screenManager;
     QRect geom = (mgr && mgr->screenGeometry(screenId).isValid()) ? mgr->screenGeometry(screenId) : screen->geometry();
     createOverlayWindow(screenId, screen, geom);
@@ -517,7 +553,7 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
 
 void OverlayService::dismissOverlayWindow(QScreen* screen)
 {
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
 
     // Collect matching overlay keys - may be virtual screen IDs for this physical screen
     QStringList matchingKeys;
@@ -570,13 +606,19 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
             sit->overlayGeomConnection = {};
             sit->overlayPhysScreen = nullptr;
             sit->overlayGeometry = QRect();
-            // labelsTextureHash is intentionally NOT cleared - the
-            // QML labelsTexture property still holds the previously-
-            // built image, and updateLabelsTextureForWindow's hash
-            // compare on the next show() will detect any genuine
-            // input change and rebuild only then. Zeroing the hash
-            // would force a redundant 23 MB QImage rebuild on every
-            // hide/show cycle even for unchanged zone inputs.
+            // Release the full-screen labels QImage the persistent slot
+            // property would otherwise keep resident for the whole session
+            // while hidden (the wallpaper reset is symmetric only - its image
+            // is pinned by ShaderRegistry's static cache; see
+            // releaseOverlaySlotTextures). Zeroing labelsTextureHash forces
+            // updateLabelsTextureForWindow to rebuild on the next show()
+            // instead of short-circuiting on the now-1x1 placeholder (which
+            // would render no labels). The trade is one ZoneLabelTextureBuilder
+            // rebuild per drag-start vs. tens of MB held idle per screen; the
+            // warm drag-pause path (setIdleForDragPause) is untouched and keeps
+            // the texture warm mid-drag.
+            releaseOverlaySlotTextures(sit->mainOverlaySlot());
+            sit->labelsTextureHash = 0;
             writeQmlProperty(sit->mainOverlaySlot(), QStringLiteral("loaded"), false);
             sit->mainOverlaySlot()->setVisible(false);
             syncPassiveShellSurfaceState(screenIdCopy);
@@ -589,6 +631,10 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
         it->overlayGeomConnection = {};
         it->overlayPhysScreen = nullptr;
         it->overlayGeometry = QRect();
+        // Mirror the shell-surface path: release the full-screen texture
+        // buffers and reset the hash so the next show() rebuilds correctly.
+        releaseOverlaySlotTextures(slot);
+        it->labelsTextureHash = 0;
         writeQmlProperty(slot, QStringLiteral("loaded"), false);
         slot->setVisible(false);
         syncPassiveShellSurfaceState(screenId);
@@ -597,7 +643,7 @@ void OverlayService::dismissOverlayWindow(const QString& screenId)
 
 void OverlayService::destroyOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     qCDebug(lcOverlay) << "destroyOverlayWindow:" << screenId;
     destroyOverlayWindow(screenId);
 }
@@ -618,12 +664,20 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
     it->overlayPhysScreen = nullptr;
     it->overlayGeometry = QRect();
     it->overlayGeomConnection = {};
+    // Release the slot's full-screen labels buffer too. A shader->non-shader
+    // type flip routes through here (destroyIfTypeMismatch) and the
+    // non-shader createOverlayWindow reload does NOT overwrite labelsTexture,
+    // so without this the slot would pin the last shader-mode QImage for the
+    // screen's whole non-shader session. The screen-teardown callers
+    // immediately destroyPassiveShell, where this is a harmless no-op on an
+    // about-to-be-freed slot. Mirrors dismissOverlayWindow's release.
+    releaseOverlaySlotTextures(it->mainOverlaySlot());
     it->labelsTextureHash = 0;
 }
 
 void OverlayService::updateOverlayWindow(QScreen* screen)
 {
-    const QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     updateOverlayWindow(screenId, screen);
 }
 

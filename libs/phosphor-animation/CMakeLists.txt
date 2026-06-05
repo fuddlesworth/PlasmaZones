@@ -122,8 +122,6 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/AnimationUniformExtension.h
     include/PhosphorAnimation/ShaderProfile.h
     include/PhosphorAnimation/ShaderProfileTree.h
-    include/PhosphorAnimation/AnimationAppRule.h
-    include/PhosphorAnimation/AnimationAppRuleResolver.h
 
     # Layer animator (ex phosphor-animation-layer)
     include/PhosphorAnimation/PhosphorAnimationLayer.h
@@ -173,8 +171,6 @@ set(phosphoranimation_SRCS
     src/animationshaderregistry.cpp
     src/shaderprofile.cpp
     src/shaderprofiletree.cpp
-    src/animationapprule.cpp
-    src/animationappruleresolver.cpp
     src/contract_pins.cpp
 
     # Layer animator (ex phosphor-animation-layer)
@@ -270,6 +266,8 @@ endif()
 set_target_properties(PhosphorAnimation PROPERTIES
     VERSION ${PHOSPHORANIMATION_VERSION}
     SOVERSION 0
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
 )
 
 # ===============================================================================
@@ -292,6 +290,15 @@ target_include_directories(PhosphorAnimationQml
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        # The generated <module>_qmltyperegistrations.cpp guards each registered
+        # type with `#if __has_include(<PhosphorCurve.h>)` using the BARE header
+        # name, so the header's own directory must be on the include path for the
+        # registration to resolve it. A non-unity build compiles that generated
+        # TU alone (no batch-mate to declare the type), so without this it fails
+        # with "PhosphorAnimation … not declared". PRIVATE — consumers still use
+        # the <PhosphorAnimation/…> spelling via the PUBLIC include dir above.
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorAnimation>
 )
 
 target_compile_features(PhosphorAnimationQml PUBLIC cxx_std_20)
@@ -333,6 +340,10 @@ if(PHOSPHOR_ANIMATION_QML_INSTALL)
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
             $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
+        PRIVATE
+            # Same bare-`__has_include(<PhosphorCurve.h>)` resolution as the
+            # PhosphorAnimationQml target above — see the comment there.
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/PhosphorAnimation>
     )
 
     # The SHARED variant compiles the same sources under a different target

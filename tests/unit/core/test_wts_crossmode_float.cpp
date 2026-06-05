@@ -38,6 +38,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
@@ -61,8 +62,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsCrossModeFloat(nullptr);
         m_zoneDetector = new StubZoneDetectorCrossModeFloat(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
@@ -229,6 +229,74 @@ private Q_SLOTS:
         QCOMPARE(result2.found, false);
     }
 
+    // =====================================================================
+    // Test 4: Per-engine float independence (root fix for the shared-bit defect)
+    //
+    // A window floated in AUTOTILE mode must NOT be floating in SNAPPING mode,
+    // and vice versa. The harness wires only the SnapEngine, so we model the
+    // two engines' authoritative float stores with in-test maps and drive WTS
+    // through the injected resolver/writer exactly as the daemon does. This
+    // asserts the WTS contract: isWindowFloating / setWindowFloating route to
+    // the engine owning the window's CURRENT mode, with no shared bit.
+    // =====================================================================
+    void testPerEngineFloatIndependence()
+    {
+        const QString winA = QStringLiteral("firefox|dddddddd-0000-0000-0000-000000000004");
+
+        // Per-engine float stores, keyed by windowId, modelling SnapState and
+        // TilingState. The mode flag selects which one WTS sees as "current".
+        QSet<QString> snapFloats;
+        QSet<QString> autotileFloats;
+        bool autotileMode = false; // start in snapping mode
+
+        m_service->setEngineFloatResolver([&](const QString& w) -> bool {
+            return autotileMode ? autotileFloats.contains(w) : snapFloats.contains(w);
+        });
+        m_service->setEngineFloatWriter([&](const QString& w, bool floating) {
+            QSet<QString>& store = autotileMode ? autotileFloats : snapFloats;
+            if (floating) {
+                store.insert(w);
+            } else {
+                store.remove(w);
+            }
+        });
+
+        // Float in SNAPPING mode.
+        autotileMode = false;
+        m_service->setWindowFloating(winA, true);
+        QVERIFY(m_service->isWindowFloating(winA)); // floating in snap
+        QVERIFY(snapFloats.contains(winA));
+        QVERIFY(!autotileFloats.contains(winA)); // snap float did NOT leak into autotile
+
+        // Switch the window's screen to AUTOTILE mode: it must NOT be floating
+        // there — the snap float bit is independent.
+        autotileMode = true;
+        QVERIFY(!m_service->isWindowFloating(winA)); // not floating in autotile
+
+        // Float it in AUTOTILE mode now.
+        m_service->setWindowFloating(winA, true);
+        QVERIFY(m_service->isWindowFloating(winA)); // floating in autotile
+        QVERIFY(autotileFloats.contains(winA));
+
+        // Back to SNAPPING mode: still floating there from before — autotile
+        // float did NOT clear the snap float.
+        autotileMode = false;
+        QVERIFY(m_service->isWindowFloating(winA));
+        QVERIFY(snapFloats.contains(winA));
+
+        // Unfloat in SNAPPING mode: autotile float must SURVIVE.
+        m_service->setWindowFloating(winA, false);
+        QVERIFY(!m_service->isWindowFloating(winA)); // not floating in snap
+        QVERIFY(!snapFloats.contains(winA));
+        autotileMode = true;
+        QVERIFY(m_service->isWindowFloating(winA)); // still floating in autotile
+        QVERIFY(autotileFloats.contains(winA));
+
+        // Clear injected hooks so cleanup() and other tests use the fallback.
+        m_service->setEngineFloatResolver({});
+        m_service->setEngineFloatWriter({});
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
@@ -240,5 +308,5 @@ private:
     QStringList m_zoneIds;
 };
 
-QTEST_GUILESS_MAIN(TestWtsCrossModeFloat)
+QTEST_MAIN(TestWtsCrossModeFloat)
 #include "test_wts_crossmode_float.moc"

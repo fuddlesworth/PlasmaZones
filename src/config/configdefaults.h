@@ -156,7 +156,7 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Appearance Settings
+    // Zone Overlay (Snapping.Zones.*) Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
     static bool useSystemColors()
@@ -592,6 +592,17 @@ public:
     {
         return 400;
     }
+    // Zone-selector preview-size presets (Small / Large). Medium reuses the
+    // default previewWidth() (180). Used by the Small/Medium/Large quick-size
+    // buttons so the widths aren't hard-coded in QML.
+    static constexpr int previewWidthSmall()
+    {
+        return 120;
+    }
+    static constexpr int previewWidthLarge()
+    {
+        return 260;
+    }
     static int previewHeight()
     {
         return 101;
@@ -635,10 +646,17 @@ public:
     // and high-frequency session state saves.
     PLASMAZONES_EXPORT static QString sessionFilePath();
 
-    // Returns the absolute path to assignments.json (layout assignments and
-    // quick layout shortcuts).  Separate from config.json so that Settings
-    // and PhosphorZones::LayoutRegistry have independent ownership of their files.
-    PLASMAZONES_EXPORT static QString assignmentsFilePath();
+    // Returns the absolute path to windowrules.json (the unified WindowRule
+    // store — schema v4). Separate from config.json so frequent daemon-driven
+    // rule writes do not churn the cold user-settings blob. The daemon is the
+    // sole writer; see docs/window-rule-refactor-design.md §5.
+    PLASMAZONES_EXPORT static QString windowRulesFilePath();
+
+    // Returns the absolute path to quicklayouts.json (the numbered quick-layout
+    // shortcut slots 1..9). Quick-layout slots are NOT window rules, so they
+    // sit in a sibling sidecar next to windowrules.json rather than in the
+    // rule store. LayoutRegistry reads/writes this file directly.
+    PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
 
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).
     // Used only by the one-time migration module.
@@ -677,10 +695,16 @@ public:
     // When adding entries, also add the display name to the translation catalog.
     static const QList<RenderingBackendEntry>& renderingBackendEntries()
     {
+        // QT_TRANSLATE_NOOP marks the display names for lupdate
+        // extraction under the project's "plasmazones" context while
+        // keeping the literal as the runtime value — GeneralPageController
+        // resolves the translated form via PzI18n::tr() at display time.
+        // Without the macro, lupdate wouldn't see the source strings
+        // and the .ts catalog would never carry the translations.
         static const QList<RenderingBackendEntry> entries = {
-            {QStringLiteral("auto"), QStringLiteral("Automatic")},
-            {QStringLiteral("vulkan"), QStringLiteral("Vulkan")},
-            {QStringLiteral("opengl"), QStringLiteral("OpenGL")},
+            {QStringLiteral("auto"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Automatic"))},
+            {QStringLiteral("vulkan"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "Vulkan"))},
+            {QStringLiteral("opengl"), QStringLiteral(QT_TRANSLATE_NOOP("plasmazones", "OpenGL"))},
         };
         return entries;
     }
@@ -978,16 +1002,6 @@ public:
         return {};
     }
 
-    /// Animation App Rules default — empty array. Persisted as a JSON
-    /// array (top-level QVariantList) so the schema entry can route
-    /// through the same `QVariantList`-typed read/write path the
-    /// existing settings backends already implement for ordered
-    /// arrays. fromJson tolerates an empty list as the no-rules case.
-    static QVariantList animationAppRules()
-    {
-        return {};
-    }
-
     static bool autotileFocusFollowsMouse()
     {
         return false;
@@ -998,11 +1012,11 @@ public:
     }
     static bool autotileHideTitleBars()
     {
-        return true;
+        return false;
     }
     static bool autotileShowBorder()
     {
-        return true;
+        return false;
     }
     static int autotileBorderWidth()
     {
@@ -1018,7 +1032,7 @@ public:
     }
     static int autotileBorderRadius()
     {
-        return 0;
+        return ::PhosphorZones::ZoneDefaults::BorderRadius;
     }
     static constexpr int autotileBorderRadiusMin()
     {
@@ -1039,6 +1053,55 @@ public:
     static bool autotileUseSystemBorderColors()
     {
         return true;
+    }
+
+    // Snapping window appearance — the snapped window's border / title-bar
+    // decoration (stored under Snapping.Appearance.*). Every default delegates to
+    // its autotile* counterpart so the two modes start from identical window
+    // appearance: a single edit to the autotile default moves both in lockstep.
+    static bool snapWindowHideTitleBars()
+    {
+        return autotileHideTitleBars();
+    }
+    static bool snapWindowShowBorder()
+    {
+        return autotileShowBorder();
+    }
+    static int snapWindowBorderWidth()
+    {
+        return autotileBorderWidth();
+    }
+    static constexpr int snapWindowBorderWidthMin()
+    {
+        return autotileBorderWidthMin();
+    }
+    static constexpr int snapWindowBorderWidthMax()
+    {
+        return autotileBorderWidthMax();
+    }
+    static int snapWindowBorderRadius()
+    {
+        return autotileBorderRadius();
+    }
+    static constexpr int snapWindowBorderRadiusMin()
+    {
+        return autotileBorderRadiusMin();
+    }
+    static constexpr int snapWindowBorderRadiusMax()
+    {
+        return autotileBorderRadiusMax();
+    }
+    static QColor snapWindowBorderColor()
+    {
+        return autotileBorderColor();
+    }
+    static QColor snapWindowInactiveBorderColor()
+    {
+        return autotileInactiveBorderColor();
+    }
+    static bool snapWindowUseSystemBorderColors()
+    {
+        return autotileUseSystemBorderColors();
     }
     static int autotileStickyWindowHandling()
     {
@@ -1131,11 +1194,16 @@ public:
     /// Per-axis defaults — currently share the same value as editorSnapInterval
     /// but split so future aspect-aware defaults don't require auditing every
     /// call site. Use these from resetDefaults / first-run paths.
-    static double editorSnapIntervalX()
+    ///
+    /// Return type is `qreal` to match `ISettings::editorSnapIntervalX/Y`
+    /// (qreal is `double` on every Qt6-supported target, but the type
+    /// alignment removes a category of "I forgot which one" mistakes in
+    /// callers that take the value `auto`).
+    static qreal editorSnapIntervalX()
     {
         return editorSnapInterval();
     }
-    static double editorSnapIntervalY()
+    static qreal editorSnapIntervalY()
     {
         return editorSnapInterval();
     }

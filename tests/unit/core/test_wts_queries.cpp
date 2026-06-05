@@ -37,6 +37,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using PhosphorEngine::ZoneAssignmentEntry;
@@ -48,80 +49,17 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 // =========================================================================
 
 #include "../helpers/StubSettings.h"
+#include "../helpers/StubZoneDetector.h"
 
 using StubSettingsQueries = StubSettings;
 
 // =========================================================================
-// Stub PhosphorZones::Zone Detector
+// Stub PhosphorZones::Zone Detector + createTestLayout come from the shared
+// helper (StubZoneDetector.h). No local Q_OBJECT subclass is needed — see the
+// rationale in that header.
 // =========================================================================
 
-class StubZoneDetectorQueries : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorQueries(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(PhosphorZones::Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    PhosphorZones::Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helper
-// =========================================================================
-
-static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new PhosphorZones::Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
+using StubZoneDetectorQueries = StubZoneDetector;
 
 // =========================================================================
 // Test Class
@@ -135,8 +73,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsQueries(nullptr);
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
         m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
@@ -273,15 +210,23 @@ private Q_SLOTS:
 
     void testCalculateSnapAllWindows_fillsEmptyZones()
     {
-        QStringList unsnappedWindows = {
+        const QStringList unsnappedWindows = {
             QStringLiteral("new1:win:111"),
             QStringLiteral("new2:win:222"),
         };
 
         QVector<ZoneAssignmentEntry> entries = m_engine->calculateSnapAllWindowEntries(unsnappedWindows, QString());
 
-        // In headless mode, result is empty (no screen -> no geometry)
-        Q_UNUSED(entries);
+        // The two unsnapped windows fill two of the three empty zones: one entry per
+        // input window, distinct target zones, no spurious windows.
+        QCOMPARE(entries.size(), 2);
+        QVERIFY(entries[0].targetZoneId != entries[1].targetZoneId);
+        QSet<QString> placed;
+        for (const ZoneAssignmentEntry& e : entries) {
+            QVERIFY(unsnappedWindows.contains(e.windowId));
+            placed.insert(e.windowId);
+        }
+        QCOMPARE(placed.size(), 2);
     }
 
     // =====================================================================
@@ -290,10 +235,16 @@ private Q_SLOTS:
 
     void testMultiZoneGeometry_unionOfZones()
     {
-        QStringList multiZones = {m_zoneIds[0], m_zoneIds[1]};
-        QRect geo = m_service->multiZoneGeometry(multiZones, QString());
-        // In headless mode geo is invalid. The method should not crash.
-        Q_UNUSED(geo);
+        const QStringList multiZones = {m_zoneIds[0], m_zoneIds[1]};
+        const QRect geo = m_service->multiZoneGeometry(multiZones, QString());
+        const QRect zone0 = m_service->zoneGeometry(m_zoneIds[0], QString());
+        const QRect zone1 = m_service->zoneGeometry(m_zoneIds[1], QString());
+        QVERIFY(zone0.isValid());
+        QVERIFY(zone1.isValid());
+        // The multi-zone geometry is the bounding union — valid and covering both zones.
+        QVERIFY(geo.isValid());
+        QVERIFY(geo.contains(zone0));
+        QVERIFY(geo.contains(zone1));
     }
 
     // =====================================================================
@@ -313,15 +264,10 @@ private Q_SLOTS:
         QVERIFY(m_service->isWindowFloating(windowIdNew));
     }
 
-    void testPreSnapGeometry_stableIdFallback()
-    {
-        QString appId = QStringLiteral("dolphin");
-        QString windowId = QStringLiteral("dolphin|a1b2c3d4-0000-0000-0000-000088888888");
-
-        m_engine->storeUnmanagedGeometry(appId, QRect(50, 100, 640, 480), QString());
-        QVERIFY(m_engine->hasUnmanagedGeometry(appId));
-        QCOMPARE(m_engine->unmanagedGeometry(appId).width(), 640);
-    }
+    // testPreSnapGeometry_stableIdFallback removed: the per-engine unmanaged-geometry
+    // store was collapsed into the unified WindowPlacementStore. The appId-fallback
+    // lookup for float-back geometry is now exercised by the WindowPlacementStore
+    // peek/take appId-FIFO tests.
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;

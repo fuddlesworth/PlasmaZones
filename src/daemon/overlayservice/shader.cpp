@@ -100,7 +100,7 @@ bool OverlayService::useShaderForScreen(QScreen* screen) const
     }
     // Resolve to virtual screen ID when the physical screen has subdivisions,
     // so shader-type checks use the correct per-virtual-screen layout.
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         // Check all virtual screens - if any uses a shader, return true.
@@ -515,7 +515,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     // the SurfaceAnimator deliberately doesn't register a config for this
     // role (editor-controlled imperative show/hide), keeping construction
     // uniform across every per-instance role keeps a future migration cheap.
-    const QString scopeId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
+    const QString scopeId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
     const auto role =
         PzRoles::makePerInstanceRole(PzRoles::ShaderPreview, scopeId, m_surfaceManager->nextScopeGeneration());
 

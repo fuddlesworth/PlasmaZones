@@ -71,7 +71,7 @@ target_link_libraries(PhosphorTileEngine
         PhosphorEngine::PhosphorEngine
         PhosphorTiles::PhosphorTiles
     PRIVATE
-        PhosphorScreens::Core
+        PhosphorScreens::Runtime  # AutotileEngine queries screen geometry via ScreenManager
         PhosphorIdentity::PhosphorIdentity
         PhosphorZones::PhosphorZones
 )

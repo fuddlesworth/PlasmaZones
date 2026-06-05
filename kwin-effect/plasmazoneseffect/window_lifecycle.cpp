@@ -379,6 +379,17 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
     m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
 
+    // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
+    // the window is being destroyed, so no setNoBorder/removeWindowBorder is
+    // needed here (the border item is removed just below and the title bar
+    // dies with the window).
+    PhosphorCompositor::AutotileStateHelpers::removeFromAllScreens(m_snapBorder, closedWindowId);
+    m_snapBorder.zoneGeometries.remove(closedWindowId);
+    // Drop any rule-hidden-title-bar tracking for the dying window. No
+    // setNoBorder restore is needed (the title bar dies with the window); this
+    // just prevents a stale windowId lingering in the set.
+    m_ruleHiddenTitleBars.remove(closedWindowId);
+
     // Remove the window's border item (parent WindowItem is being destroyed anyway,
     // but clean up our tracking hash to avoid stale entries).
     removeWindowBorder(closedWindowId);
@@ -393,12 +404,69 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_windowIdReverse.remove(closedWindowId);
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
+    // Drop any pending-but-not-yet-flushed frame geometry for the
+    // closing window. The windowDeleted lambda in lifecycle.cpp does
+    // the same removal as belt-and-suspenders against a
+    // windowFrameGeometryChanged emission re-inserting between this
+    // slot and windowDeleted (possible for windows held alive via
+    // WindowClosedGrabRole). Daemon would discard a stale
+    // setFrameGeometry call for a no-longer-tracked windowId anyway,
+    // so the leak was wasted D-Bus rather than incorrect — but the
+    // cleanup keeps the pending-batch in lockstep with the live
+    // window set.
+    m_pendingFrameGeometry.remove(closedWindowId);
+    // Symmetric with the `windowDeleted` lambda in `lifecycle.cpp`
+    // (which removes the same key from `m_frameOpacityCache` after the
+    // close-grab unref). Close shaders held via `holdCloseGrab=true`
+    // keep the EffectWindow alive past slotWindowClosed and the
+    // close-path paints can still touch the opacity cache; clearing
+    // here ensures the next windowDeleted has nothing to clean up if
+    // the close shader runs zero frames.
+    m_shaderManager.m_frameOpacityCache.remove(w);
 }
 
 void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 {
     // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated
     notifyWindowActivated(w);
+
+    // Focus is a window-rule match input (Field::IsFocused), and both the
+    // border-appearance and opacity resolvers go through the evaluator's
+    // per-window match cache (resolveCached), which is keyed on
+    // (windowId, ruleSet revision) — neither of which moves on a focus
+    // change. Without dropping the cache, a window keeps the actions it
+    // resolved at its FIRST focus state forever (a `WHEN focused` border
+    // colour would never revert when the window loses focus). Mirror the
+    // windowClass / desktopFile invalidation: drop the whole cache so the
+    // re-resolve below (and the next per-frame opacity resolve) sees the new
+    // focus state. Gated on a non-empty rule set so the no-rules case pays
+    // nothing. The per-frame opacity cache clears every frame at
+    // postPaintScreen, so a focus-scoped opacity re-resolves on the next paint.
+    if (!m_shaderManager.animationRuleSet().isEmpty()) {
+        m_shaderManager.animationRuleEvaluator().clearCache();
+
+        // A focus-scoped SetOpacity rule changes a window's resolved opacity
+        // when it gains or loses focus. updateAllBorders() below repaints any
+        // window that carries a border item, but an opacity-only (borderless)
+        // window has nothing to recreate — so without an explicit repaint its
+        // re-resolved opacity would not reach the screen until some unrelated
+        // damage happened to repaint it. Force a repaint of both the window
+        // gaining focus (w) and the one losing it (m_lastActivatedWindow).
+        // Gated on hasOpacityRules() because pure border-colour changes are
+        // already covered by updateAllBorders()'s item recreate.
+        if (m_shaderManager.hasOpacityRules()) {
+            if (w) {
+                w->addRepaintFull();
+            }
+            if (m_lastActivatedWindow && m_lastActivatedWindow != w) {
+                m_lastActivatedWindow->addRepaintFull();
+            }
+        }
+    }
+    // Track the now-active window as the next focus change's "previously
+    // active" window. Updated unconditionally (even with no rules yet) so the
+    // pointer is correct if opacity rules are added before the next activation.
+    m_lastActivatedWindow = w;
 
     // Recreate all borders so the active window gets the active color
     // and inactive windows get the inactive color.  A full recreate is
@@ -543,8 +611,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             m_trackedScreenPerWindow[safeW] = newScreenId;
 
             // Skip during drag — the drag system owns state transitions.
-            // Autotile drag handles VS transfers in dragStopped (line 262-285).
-            // Snapping drag handles cross-screen unsnap in dragStopped via daemon.
+            // Autotile drag handles VS transfers via the drag-policy-changed path.
+            // Snapping drag handles cross-screen unsnap on drag-stop via the daemon.
             if (m_dragTracker->isDragging()) {
                 return;
             }
@@ -591,9 +659,30 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 pushWindowMetadata(safeW);
             }
         };
+        // Class / desktop-file mutations invalidate the animation rule
+        // evaluator's per-window match cache. The cache is keyed on the
+        // window's frozen composite id but the cascade resolves against
+        // the LIVE windowClass — so without invalidation, a SetOpacity /
+        // OverrideAnimation* rule for the post-rename class silently
+        // never applies (Electron/CEF/Steam family). pushLatest already
+        // refreshes the daemon's WindowRegistry record; mirror that
+        // refresh on the effect's local resolver cache. Caption /
+        // desktops / activities / role changes don't feed the
+        // WindowClass matcher so they don't need the cache drop.
+        auto invalidateRuleCache = [this]() {
+            m_shaderManager.animationRuleEvaluator().clearCache();
+        };
         connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
+        connect(kw, &KWin::Window::windowClassChanged, this, invalidateRuleCache);
         connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
+        connect(kw, &KWin::Window::desktopFileNameChanged, this, invalidateRuleCache);
         connect(kw, &KWin::Window::captionChanged, this, pushLatest);
+        // Per-window virtual-desktop / activity / role changes also refresh the
+        // registry so context-aware rule resolution sees current values. Same
+        // record-only contract: no retroactive re-evaluation of committed state.
+        connect(kw, &KWin::Window::desktopsChanged, this, pushLatest);
+        connect(kw, &KWin::Window::activitiesChanged, this, pushLatest);
+        connect(kw, &KWin::Window::windowRoleChanged, this, pushLatest);
 
         // Diagnostic dump on identity change — but ONLY for class / desktop-file,
         // never caption. CEF/Electron apps (Steam included) map with a
@@ -774,11 +863,7 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // correctly skip excluded windows instead of operating on a stale
     // m_lastActiveWindowId.
     const QString windowClass = w->windowClass();
-    if (windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
-        || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive)) {
-        return;
-    }
-    if (windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive)) {
+    if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass)) {
         return;
     }
     // Plasma shell surfaces — independent filter chain from shouldHandleWindow()
@@ -873,12 +958,16 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
 
 QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString& windowId) const
 {
-    // Instance ids are unique — "all windows for a given id" is at most one
-    // window. findAllWindowsById exists as an API seam for the (historical)
-    // case where callers wanted every instance of an app class matching a
-    // given composite; that semantic now lives on the daemon's
-    // WindowRegistry::instancesWithAppId() + per-instance lookups. The
-    // single-instance behavior here is the only case that remains.
+    // Two cases:
+    //   1. Exact-instance match (`wId == windowId`): returns a single-
+    //      element vector with just that window — discards any appId
+    //      matches accumulated earlier in the stacking-order walk
+    //      because the instance id is the strictly stronger identifier.
+    //   2. Fuzzy appId match (no exact instance found): accumulates
+    //      every window that shares the composite's appId. Used by
+    //      autotile to disambiguate when multiple windows share an
+    //      appId (e.g. two Firefox instances) — see the header doc on
+    //      `plasmazoneseffect.h::findAllWindowsById`.
     QVector<KWin::EffectWindow*> out;
     if (windowId.isEmpty()) {
         return out;

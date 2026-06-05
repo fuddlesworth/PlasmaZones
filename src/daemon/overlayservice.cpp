@@ -4,6 +4,7 @@
 #include "overlayservice/internal.h"
 #include "overlayservice.h"
 #include "snapassistthumbnailprovider.h"
+#include "dmabuftextureprovider.h"
 
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 #include <PhosphorOverlay/ShellHost.h>
@@ -27,6 +28,7 @@
 #include <QDBusConnection>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QByteArrayList>
 #include <QQmlEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -108,7 +110,7 @@ QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
 // overlayservice/priming.cpp to keep this translation unit under the
 // project's <800-line guideline.
 
-OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
+OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
                                PhosphorAnimation::PhosphorProfileRegistry* profileRegistry, QObject* parent)
     : IOverlayService(parent)
     , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
@@ -166,6 +168,13 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
     m_thumbnailProviderOwned = std::make_unique<SnapAssistThumbnailProvider>();
     m_thumbnailProvider.store(m_thumbnailProviderOwned.get(), std::memory_order_release);
 
+    // Same eager-construct + engine-handover pattern for the zero-copy GPU
+    // thumbnail provider (PLASMAZONES_DMABUF_THUMBNAILS). Always constructed so
+    // the borrowed pointer is non-null; it only ever receives descriptors when
+    // the env gate is on and the kwin-effect takes the dma-buf path.
+    m_dmabufTextureProviderOwned = std::make_unique<DmabufTextureProvider>();
+    m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
+
     m_surfaceManager = std::make_unique<PhosphorSurfaces::SurfaceManager>(PhosphorSurfaces::SurfaceManagerConfig{
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
@@ -203,13 +212,35 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
                 }
                 engine.addImageProvider(QString::fromLatin1(SnapAssistThumbnailProvider::ProviderId),
                                         m_thumbnailProviderOwned.release());
+
+                // Mirror for the dma-buf (Texture-type) provider.
+                if (!m_dmabufTextureProviderOwned) {
+                    m_dmabufTextureProviderOwned = std::make_unique<DmabufTextureProvider>();
+                    m_dmabufTextureProvider.store(m_dmabufTextureProviderOwned.get(), std::memory_order_release);
+                }
+                engine.addImageProvider(QString::fromLatin1(DmabufTextureProvider::ProviderId),
+                                        m_dmabufTextureProviderOwned.release());
+
                 QObject::connect(&engine, &QObject::destroyed, this, [this]() {
                     m_thumbnailProvider.store(nullptr, std::memory_order_release);
+                    m_dmabufTextureProvider.store(nullptr, std::memory_order_release);
                 });
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,
         .vulkanApiVersion = PlasmaZones::PzVulkanApiVersion,
+        // Zero-copy dma-buf thumbnail import (PLASMAZONES_DMABUF_THUMBNAILS)
+        // needs these device extensions enabled on the overlay windows' QRhi
+        // Vulkan device; without them vkGetMemoryFdPropertiesKHR is unavailable
+        // and the import fails. Only requested when the experimental gate is
+        // on, so default builds keep Qt's stock device. Qt enables only the
+        // physically-supported subset.
+        .vulkanDeviceExtensions = qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS")
+            ? QByteArrayList{QByteArrayLiteral("VK_KHR_external_memory_fd"),
+                             QByteArrayLiteral("VK_EXT_external_memory_dma_buf"),
+                             QByteArrayLiteral("VK_EXT_image_drm_format_modifier"),
+                             QByteArrayLiteral("VK_KHR_image_format_list")}
+            : QByteArrayList{},
     });
 
     // ShellHost was constructed earlier (before setupSurfaceAnimator)
@@ -246,13 +277,13 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
 
     // Connect to virtual screen configuration changes
     if (auto* mgr = m_screenManager) {
-        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
+        connect(mgr, &PhosphorScreens::ScreenManager::virtualScreensChanged, this,
                 &OverlayService::onVirtualScreensChanged);
         // Regions-only changes (swap/rotate/boundary-resize) also need the
         // overlay windows destroyed and recreated with the new VS geometry.
         // The handler is heavy but only runs when overlays are visible
         // (active drag), so the cost is bounded.
-        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
+        connect(mgr, &PhosphorScreens::ScreenManager::virtualScreenRegionsChanged, this,
                 &OverlayService::onVirtualScreensChanged);
     }
 
@@ -528,7 +559,7 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) cons
     if (!screen) {
         return m_layout;
     }
-    return resolveScreenLayout(Phosphor::Screens::ScreenIdentity::identifierFor(screen));
+    return resolveScreenLayout(PhosphorScreens::ScreenIdentity::identifierFor(screen));
 }
 
 PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
@@ -618,8 +649,8 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (!m_layoutManager) {
         return flags;
     }
-    const QString resolvedId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
-        ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+    const QString resolvedId = PhosphorScreens::ScreenIdentity::isConnectorName(screenId)
+        ? PhosphorScreens::ScreenIdentity::idForName(screenId)
         : screenId;
     if (resolvedId.isEmpty()) {
         return flags;

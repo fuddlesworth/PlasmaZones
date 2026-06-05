@@ -10,6 +10,7 @@
 #include "../../core/enums.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
+#include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Layout.h>
@@ -26,11 +27,8 @@
 
 namespace PlasmaZones {
 
-void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y, double width, double height,
-                                    int mouseButtons)
+void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y, double width, double height)
 {
-    Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
-
     if (windowId.isEmpty()) {
         qCWarning(lcDbusWindow) << "dragStarted: empty windowId";
         return;
@@ -70,7 +68,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_isMultiZoneMode = false;
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
-    m_modifierConflictWarned = false;
+    // m_modifierConflictWarned reset moved to beginDrag — keeping it
+    // here only covered snap-path drags, leaving the latch stale across
+    // bypass drags.
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     m_lastLoggedActivationActive = false;
@@ -119,7 +119,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         if (screen) {
             QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
             if (screenId.isEmpty())
-                screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+                screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
             auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 PhosphorZones::LayoutComputeService::recalculateSync(
@@ -127,7 +127,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 
                 for (auto* zone : layout->zones()) {
                     QRect zoneRect = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId,
-                                                                             layout, m_settings);
+                                                                             layout, m_settings, m_layoutManager);
 
                     // Use class constants for tolerances
                     int xDiff = std::abs(m_originalGeometry.x() - zoneRect.x());
@@ -156,8 +156,13 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
         return nullptr;
     }
     outScreenId = resolved.screenId;
-    if (isContextDisabled(m_settings, PhosphorZones::AssignmentEntry::Snapping, outScreenId,
-                          m_layoutManager->currentVirtualDesktop(), m_layoutManager->currentActivity())) {
+    // Live-mode disable check — `handleFor` not `handleForMode(Snapping)`.
+    // The cursor can cross from a snap-mode screen onto an autotile-mode
+    // screen mid-drag; gating on the hard-coded Snapping disable list
+    // would consult the wrong list for the destination. Mirrors the
+    // matching fix in drop.cpp::useOverlayZone and
+    // drag_protocol.cpp::computeDragPolicy.
+    if (m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(outScreenId))) {
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;
@@ -433,8 +438,8 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_zoneDetector->highlightZone(result.primaryZone);
             m_overlayService->highlightZone(zoneId);
 
-            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(m_screenManager, result.primaryZone, screen,
-                                                                            screenId, layout, m_settings);
+            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(
+                m_screenManager, result.primaryZone, screen, screenId, layout, m_settings, m_layoutManager);
             m_currentMultiZoneGeometry = QRect();
         }
     } else {

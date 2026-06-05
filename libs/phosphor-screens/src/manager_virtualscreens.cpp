@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 namespace {
 /// Minimum usable dimension (pixels) for a virtual screen available area.
@@ -201,6 +201,7 @@ QStringList ScreenManager::effectiveScreenIds() const
 
 QStringList ScreenManager::virtualScreenIdsFor(const QString& physicalScreenId) const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     auto it = m_virtualConfigs.constFind(physicalScreenId);
     if (it != m_virtualConfigs.constEnd() && it->hasSubdivisions()) {
         QStringList ids;
@@ -273,12 +274,14 @@ PhysicalScreen ScreenManager::physicalScreenFor(const QString& screenId) const
 
 bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     auto it = m_virtualConfigs.constFind(physicalScreenId);
     return it != m_virtualConfigs.constEnd() && it->hasSubdivisions();
 }
 
 VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& screenId) const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return {true, true, true, true};
     }
@@ -297,6 +300,7 @@ VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& s
 
 QString ScreenManager::virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     const PhysicalScreen screen = trackedScreenFor(physicalScreenId);
     return virtualScreenAtWithScreen(globalPos, physicalScreenId, screen);
 }
@@ -330,6 +334,7 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
 
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     for (const auto& screen : m_trackedScreens) {
         // Exclusive-right containment (shared helper) to match VS lookup
         // semantics — a point on the boundary between two adjacent physical
@@ -394,4 +399,4 @@ void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId)
     }
 }
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

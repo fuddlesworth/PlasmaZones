@@ -7,7 +7,8 @@
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 
-#include <PhosphorConfig/IBackend.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
 #include <QHash>
 #include <QPair>
@@ -17,6 +18,34 @@
 #include <memory>
 
 namespace PhosphorZones {
+
+/**
+ * @brief Triple-axis key for the Combined-context batch API.
+ *
+ * Combined rules pin all three dimensions (screen + desktop + activity)
+ * — the QPair-based keys used by the Activity / Desktop batch APIs can't
+ * represent them. This struct + qHash overload below let
+ * `combinedAssignments()` / `setAllCombinedAssignments()` round-trip
+ * Combined rules without dropping any dimension. Pure-Activity, pure-
+ * Desktop, and Monitor-only rules continue to use their dedicated
+ * batches and stay invisible to this API.
+ */
+struct CombinedAssignmentKey
+{
+    QString screenId;
+    int virtualDesktop = 0;
+    QString activity;
+
+    bool operator==(const CombinedAssignmentKey& other) const
+    {
+        return screenId == other.screenId && virtualDesktop == other.virtualDesktop && activity == other.activity;
+    }
+};
+
+inline size_t qHash(const CombinedAssignmentKey& key, size_t seed = 0) noexcept
+{
+    return qHashMulti(seed, key.screenId, key.virtualDesktop, key.activity);
+}
 
 /**
  * @brief Manual zone-layout registry + per-context assignment store.
@@ -31,18 +60,17 @@ namespace PhosphorZones {
  *   - In-memory catalog of @ref Layout instances (enumeration, add,
  *     remove, duplicate, active-layout selection - inherited from
  *     @ref IZoneLayoutRegistry).
- *   - Per-context @ref AssignmentEntry table keyed by
+ *   - Per-context @ref AssignmentEntry resolution keyed by
  *     (screenId, virtualDesktop, activity), with cascading fallback
- *     (narrower keys beat wider keys; base screen is the widest).
- *   - Numbered quick-layout shortcut slots (1..9).
+ *     (narrower keys beat wider keys; base screen is the widest). The
+ *     assignment authority is the injected
+ *     @ref PhosphorWindowRule::WindowRuleStore — each per-context
+ *     assignment is a context-only @c WindowRule and the cascade is the
+ *     evaluator's descending-priority walk.
+ *   - Numbered quick-layout shortcut slots (1..9), persisted to a
+ *     @c quicklayouts.json sidecar beside the rule store's file.
  *   - Built-in layout templates (columns, rows, grid, priority, focus).
- *   - JSON-file persistence for layouts; @ref PhosphorConfig::IBackend
- *     persistence for assignments + quick-slots.
- *
- * Schema strings (@c "Assignment:", @c "QuickLayouts", @c "ModeTracking")
- * are hardcoded lib-level constants inside @c layoutregistry_persistence.cpp.
- * They ARE the wire format - third-party compositors that reuse this
- * lib share them for free.
+ *   - JSON-file persistence for layouts.
  */
 class PHOSPHORZONES_EXPORT LayoutRegistry : public IZoneLayoutRegistry
 {
@@ -55,9 +83,17 @@ class PHOSPHORZONES_EXPORT LayoutRegistry : public IZoneLayoutRegistry
 
 public:
     /**
-     * @param backend Owned config-store backend (typically
-     *                @c createAssignmentsBackend()). Required - asserted
-     *                non-null; every persistence method dereferences it.
+     * @param ruleStore Borrowed unified WindowRule store. Required - asserted
+     *                non-null. The store's @ref PhosphorWindowRule::WindowRuleSet
+     *                is the single source of truth for every per-context
+     *                assignment; the registry resolves @ref layoutForScreen /
+     *                @ref assignmentEntryForScreen and the per-mode/snapping/
+     *                tiling derivatives by building a windowless
+     *                @ref PhosphorWindowRule::WindowQuery and evaluating it
+     *                through @ref PhosphorWindowRule::RuleEvaluator. Mutators
+     *                (@ref assignLayout etc.) translate to context-rule upserts
+     *                via @c ContextRuleBridge and persist through the store.
+     *                The caller owns the store and must outlive the registry.
      * @param layoutSubdirectory XDG-relative path used for layout JSON
      *                discovery (e.g. @c "plasmazones/layouts"). The registry
      *                writes to
@@ -66,10 +102,26 @@ public:
      *                entry containing that subdirectory, so system copies
      *                (in @c /usr/share/<subdir>) provide built-ins while
      *                the user-writable copy overrides them. Required -
-     *                asserted non-empty.
+     *                asserted non-empty. Quick-layout slots persist to a
+     *                @c quicklayouts.json sibling file in this directory.
      * @param parent Qt parent.
+     *
+     * @note Required post-construction call order. The constructor does NOT
+     *       read the quick-layout sidecar — @ref loadAssignments must be
+     *       called once after construction (and after @ref loadLayouts) for
+     *       the numbered quick-layout slots to be populated; without it,
+     *       @ref layoutForShortcut / @ref applyQuickLayout silently see empty
+     *       slots. The per-context assignment cascade itself needs no such
+     *       call: the injected @c ruleStore loads its rule set in its own
+     *       constructor, so assignment resolution is live immediately.
+     *       @ref loadAssignments additionally re-reads the shared rule store
+     *       from disk, so composition roots also call it to pick up
+     *       cross-process rule edits. The daemon composition root calls
+     *       @ref loadLayouts then @ref loadAssignments; the editor / settings
+     *       roots, which drive quick slots over D-Bus rather than locally,
+     *       deliberately skip it.
      */
-    LayoutRegistry(std::unique_ptr<PhosphorConfig::IBackend> backend, QString layoutSubdirectory,
+    LayoutRegistry(PhosphorWindowRule::WindowRuleStore* ruleStore, QString layoutSubdirectory,
                    QObject* parent = nullptr);
     ~LayoutRegistry() override;
 
@@ -210,6 +262,14 @@ public:
      */
     void setSnappingPreferredProvider(std::function<bool()> provider);
 
+    /// True when the snapping-preferred provider is wired AND reports true — i.e.
+    /// snapping is globally enabled (the daemon wires the provider to
+    /// `ISettings::snappingEnabled`). Mirrors the internal default-assignment
+    /// branch's `m_snappingPreferredProvider && m_snappingPreferredProvider()`
+    /// test, exposed so other engines can gate cross-engine coordination on the
+    /// global snap toggle. When unset, returns false (no provider ⇒ not preferred).
+    bool snappingPreferred() const;
+
     // ─── Assignments (per-context routing) ────────────────────────────────
 
     /// Get the previous active layout (before the most recent
@@ -230,62 +290,6 @@ public:
     void setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const AssignmentEntry& entry);
 
-    /// Update only the @c snappingLayout field for the (@p screenId,
-    /// @p virtualDesktop, @p activity) entry, preserving mode and
-    /// tilingAlgorithm. When no entry exists at that key, seeds a new
-    /// entry from the cascade-resolved ambient state at that context so
-    /// the recorded preference lands in the right mode. A pre-existing
-    /// local entry — including one whose @c activeLayoutId() happens to
-    /// be empty (e.g. a stored tile-only preference) — is used as-is
-    /// as the seed so its opposite-field value is preserved.
-    /// Empty @p layoutId clears the snap field; if both fields end up
-    /// empty the entry is removed entirely.
-    void setSnappingLayoutPreservingMode(const QString& screenId, int virtualDesktop, const QString& activity,
-                                         const QString& layoutId);
-
-    /// Update only the @c tilingAlgorithm field, mirroring
-    /// @ref setSnappingLayoutPreservingMode for the tiling slot.
-    void setTilingAlgorithmPreservingMode(const QString& screenId, int virtualDesktop, const QString& activity,
-                                          const QString& algorithmId);
-
-    /// "Promote" variant of @ref setSnappingLayoutPreservingMode used
-    /// when the user's current rendered context is already in Snapping
-    /// mode — i.e. the edit matches what's actively rendering. Wipes
-    /// every other assignment entry on the same physical screen (and
-    /// its VS variants) that would shadow this slot in the cascade,
-    /// forces the slot to mode=Snapping with the new layoutId, and
-    /// emits @c layoutAssigned. After this the slot is the cascade
-    /// winner for every context on the screen, so setActiveLayout +
-    /// onLayoutChanged see a real layout change and the resnap path
-    /// actually moves windows. Snap and tile are independent fields
-    /// (the slot's tile is left intact / inherited from the existing
-    /// entry).
-    ///
-    /// Shadow scope by slot shape (see @ref clearShadowsForSlot):
-    ///   - Monitor row (vd=0, activity=""):  ALL other entries on the
-    ///     screen are wiped — this is the universal fallback so
-    ///     anything more specific shadows it for some context.
-    ///   - Per-desktop (vd>0, activity=""):  same-desktop entries
-    ///     (vd, anyActivity) AND every per-activity entry
-    ///     (0, activity!="") on the screen — the latter shadow the
-    ///     per-desktop slot at cascade L2 for any context with that
-    ///     activity, regardless of desktop, so leaving them intact
-    ///     would defeat the "cascade winner" guarantee.
-    ///   - Per-activity (vd=0, activity!=""):  entries with the same
-    ///     activity on any desktop.
-    ///   - Specific (vd>0, activity!=""):  no shadow possible — nothing
-    ///     wiped.
-    /// Promote is destructive: callers should reserve it for explicit
-    /// user "make this the active layout" intent, not for ambient
-    /// preference recording.
-    void setSnappingLayoutPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
-                                    const QString& layoutId);
-
-    /// Symmetric @c promoting variant for the tile field; forces
-    /// mode=Autotile after wiping shadows.
-    void setTilingAlgorithmPromoting(const QString& screenId, int virtualDesktop, const QString& activity,
-                                     const QString& algorithmId);
-
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
 
@@ -298,8 +302,28 @@ public:
         return layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
     }
 
+    /// Resolve the per-context gap override for (screen, desktop, activity) by
+    /// evaluating a windowless WindowQuery through the RuleEvaluator and
+    /// reading the gap action slots (ZonePadding / OuterGap /
+    /// UsePerSideOuterGap / per-side). Unlike @ref resolveAssignmentEntry this
+    /// is a PER-SLOT read across all matching context rules (not a single
+    /// winning rule), so independent gap rules compose and there is no
+    /// engine-mode gate. Returns an all-unset @ref ContextGapOverride when no
+    /// matching rule fills a gap slot. Same owner-thread affinity as the rest
+    /// of the registry.
+    ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop,
+                                          const QString& activity) const override;
+
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString());
+    /// True iff a context-assignment rule whose match is exactly this
+    /// (screen, desktop, activity) tuple's shape exists in the rule set —
+    /// regardless of the rule's @c enabled state. A DISABLED explicit
+    /// assignment is still an explicit assignment: this reports stored
+    /// intent, not the effective cascade result. It therefore intentionally
+    /// diverges from @ref assignmentEntryForScreen / the resolvers, which
+    /// skip disabled rules and would synthesize the provider default for a
+    /// context whose only rule is disabled.
     Q_INVOKABLE bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                            const QString& activity = QString()) const;
 
@@ -363,9 +387,21 @@ public:
     void setAllScreenAssignments(const QHash<QString, QString>& assignments);
     void setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments);
     void setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments);
+    /// Combined-context (screen + desktop + activity) batch setter — the
+    /// triple-axis sibling of the Activity / Desktop batches. Combined
+    /// rules cannot round-trip through `setAllActivityAssignments` (the
+    /// (screen, activity) key drops the desktop dimension); this API
+    /// keeps them as first-class. Pure-Activity, pure-Desktop, and
+    /// Monitor-only rules are NOT touched — they remain in their own
+    /// batches.
+    void setAllCombinedAssignments(const QHash<CombinedAssignmentKey, QString>& assignments);
 
     QHash<QPair<QString, int>, QString> desktopAssignments() const;
     QHash<QPair<QString, QString>, QString> activityAssignments() const;
+    /// Strict Combined-context reader. See @ref setAllCombinedAssignments
+    /// for the round-trip contract. Returns ONLY rules with all three
+    /// dimensions pinned (screen + desktop + activity).
+    QHash<CombinedAssignmentKey, QString> combinedAssignments() const;
 
     // ─── Quick-layout slots (1..9) ────────────────────────────────────────
 
@@ -412,6 +448,18 @@ public:
     void saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides);
     QJsonObject loadAutotileOverrides(const QString& algorithmId) const;
 
+    /// Current entry count in the @ref resolveAssignmentEntry hot-path cache.
+    /// Used by tests to verify the cache populates and invalidates against
+    /// rule-set revision bumps. Not for production callers — the value
+    /// drifts as cursor-move resolves come in. Return type is `int` because
+    /// the cache is bounded at 256 entries (`kMaxEntries` in
+    /// layoutregistry_assignments.cpp), well within `int` range — keeps
+    /// test assertions free of the `qsizetype` `int` widening dance.
+    [[nodiscard]] int contextResolveCacheSize() const
+    {
+        return static_cast<int>(m_contextResolveCache.size());
+    }
+
 Q_SIGNALS:
     // layoutAdded / layoutRemoved / activeLayoutChanged / layoutAssigned are
     // inherited from IZoneLayoutRegistry - declared on the interface so
@@ -424,19 +472,17 @@ Q_SIGNALS:
     void layoutsSaved();
 
 private:
-    /// Remove every assignment entry on @p screenId's physical screen
-    /// (and its VS variants) that would shadow @p (virtualDesktop, activity)
-    /// in the cascade walk. Internal helper used by the @c promoting
-    /// variants above; the target slot itself is left intact for the
-    /// caller to write.
-    void clearShadowsForSlot(const QString& screenId, int virtualDesktop, const QString& activity);
+    /// Post-construction setup: path validation, evaluator binding, signal
+    /// wiring.
+    void initCommon();
 
     void ensureLayoutDirectory();
     void loadLayoutsFromDirectory(const QString& directory);
     Layout* restoreSystemLayout(const QUuid& id, const QString& systemPath);
     QString layoutFilePath(const QUuid& id) const;
-    void readAssignmentGroups(PhosphorConfig::IBackend* backend);
-    void readQuickLayouts(PhosphorConfig::IBackend* backend);
+    QString quickLayoutsFilePath() const;
+    void readQuickLayouts();
+    void writeQuickLayouts();
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
     void emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId);
@@ -459,6 +505,97 @@ private:
     void saveAllAutotileOverrides(const QJsonObject& all);
     Layout* resolveConfiguredDefault() const;
 
+    // ─── Rule-backed assignment resolution ────────────────────────────────
+    // The unified WindowRuleStore is the single source of truth for every
+    // per-context assignment. These helpers translate the legacy
+    // AssignmentEntry API onto the rule store + evaluator.
+
+    /// Resolve the AssignmentEntry for a context by evaluating a windowless
+    /// WindowQuery through the RuleEvaluator and reading the engine-mode /
+    /// layout / tiling action slots of the resolved action set. Returns
+    /// nullopt when no pinned context rule fills the engine-mode slot
+    /// (the catch-all/provider-default rule is excluded so cascade-miss is
+    /// distinguishable). @p screenId is taken verbatim — connector / VS
+    /// fallback is the caller's (layoutForScreen) retry loop.
+    ///
+    /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
+    /// by (screenId, virtualDesktop, activity). The cache is invalidated
+    /// lazily by comparing the bound rule set's monotonic
+    /// @c WindowRuleSet::revision() against the snapshot taken on the last
+    /// insert — a mismatch clears the whole map before falling through to the
+    /// linear walk. No explicit signal-time clear is required: a real edit
+    /// bumps the revision (see @c WindowRuleSet::setRules), so the next
+    /// resolve sees the bump and re-populates. A soft cap (256 entries — see
+    /// the @c kMaxEntries constant in @c layoutregistry_assignments.cpp)
+    /// guards against pathological growth from clients probing unique
+    /// non-existent tuples; on overflow the cache is cleared entirely (the
+    /// next walk re-seeds it cleanly). 256 sits comfortably above any
+    /// realistic live (screens × desktops × activities) footprint and far
+    /// below any heap-pressure concern.
+    ///
+    /// Thread-affinity: like the rest of @c LayoutRegistry, this method
+    /// (and the cache it mutates through @c mutable members) must only be
+    /// called on the registry's owner thread (typically the main Qt thread).
+    /// The cache itself takes no lock; concurrent calls are not supported.
+    std::optional<AssignmentEntry> resolveAssignmentEntry(const QString& screenId, int virtualDesktop,
+                                                          const QString& activity) const;
+
+    /// True if a rule whose match is exactly the context shape
+    /// (context-only All{ScreenId==,VirtualDesktop==,Activity==} for the
+    /// pinned dims) exists in the rule set and carries an engine-mode action.
+    /// A disabled rule still counts — see @ref findExactContextRule.
+    bool hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const;
+
+    /// Find the exact-shape context rule for a (screen, desktop, activity)
+    /// tuple, or nullptr if none exists. The returned pointer aliases into the
+    /// borrowed rule set and is valid only until the next rule-set mutation.
+    /// This is the single exact-shape scan — @ref exactContextRuleId and
+    /// @ref hasExactContextRule are thin wrappers, and the assignment mutators
+    /// read the winning rule's actions through it directly (so a wider cascade
+    /// entry never bleeds its tilingAlgorithm into a new narrower rule).
+    /// The scan ignores the rule's @c enabled state (so an upsert updates a
+    /// disabled rule in place rather than appending a duplicate) but rejects
+    /// any match carrying a window-property leaf — only a pure context-only
+    /// match is an exact context rule.
+    const PhosphorWindowRule::WindowRule* findExactContextRule(const QString& screenId, int virtualDesktop,
+                                                               const QString& activity) const;
+
+    /// Find the id of the exact-shape context rule for a (screen, desktop,
+    /// activity) tuple, or a null QUuid if none exists.
+    QUuid exactContextRuleId(const QString& screenId, int virtualDesktop, const QString& activity) const;
+
+    /// Upsert a context assignment rule: replace the exact-shape rule if one
+    /// exists, else add a new one. Persists through the store.
+    void upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
+                              const AssignmentEntry& entry);
+
+    /// Remove the exact-shape context assignment rule for a tuple, if any.
+    /// Returns true if a rule was removed.
+    bool removeAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity);
+
+    /// Shared driver behind the three @c setAll*Assignments batch setters:
+    /// snapshot existing exact-context entries, drop the addressed rule
+    /// family, rebuild it from @p assignments, commit once, and emit one
+    /// @c layoutAssigned per stored screen. @p decode maps a hash key to its
+    /// cascade context, @p valid rejects an ill-formed context for the
+    /// family, @p familyMatches selects which existing rules to drop,
+    /// @p emitDesktop / @p emitActivity are the context the closing
+    /// @c layoutAssigned signal is computed under, and @p label names the
+    /// family in log output. Only ever instantiated from
+    /// layoutregistry_batch.cpp, where it is defined alongside its callers.
+    template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
+    void applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
+                               FamilyFn familyMatches, int emitDesktop, const QString& emitActivity, const char* label);
+
+    /// Drop @p layoutId from every assignment rule's @c SetSnappingLayout
+    /// action when a snap layout is deleted. A rule that still carries
+    /// meaningful intent (an Autotile engine-mode, or a preserved
+    /// tilingAlgorithm) is rebuilt with only the snapping layout cleared —
+    /// the mode + tiling intent survives, preserving mode-toggle
+    /// losslessness. A rule left with nothing but a default (Snapping)
+    /// engine-mode is dropped entirely. Returns true if the rule set changed.
+    bool purgeSnappingLayoutFromAssignments(const QString& layoutId);
+
     /// Resolve the level-1 global default into an AssignmentEntry on
     /// cascade-miss. Three-tier precedence:
     ///   1. snapping-preferred provider (true → return Snapping with
@@ -470,6 +607,55 @@ private:
     /// Returns a default-constructed (invalid) entry when no provider
     /// has a value.
     AssignmentEntry resolveDefaultAssignmentEntry() const;
+
+    /// Lookup key for @c m_contextResolveCache. Mirrors the parameters of
+    /// @ref resolveAssignmentEntry — three independent context dimensions
+    /// the windowless cascade walks (screen id, virtual desktop, activity).
+    /// Field-equal + per-field hash composition is enough: every dimension is
+    /// part of the cascade identity.
+    struct ContextResolveKey
+    {
+        QString screenId;
+        int virtualDesktop = 0;
+        QString activity;
+        bool operator==(const ContextResolveKey& other) const noexcept
+        {
+            return virtualDesktop == other.virtualDesktop && screenId == other.screenId && activity == other.activity;
+        }
+    };
+    friend size_t qHash(const LayoutRegistry::ContextResolveKey& key, size_t seed) noexcept
+    {
+        // ::qHash routes to the global Qt qHash overloads — without the leading
+        // qualifier ADL would pick up @c qHash(LayoutAssignmentKey&) (declared
+        // in @c AssignmentEntry.h alongside this header) and fail to convert
+        // each field. Mirrors the same pattern @c LayoutAssignmentKey itself uses.
+        size_t h = seed;
+        h = ::qHash(key.screenId, h);
+        h = ::qHash(key.virtualDesktop, h);
+        h = ::qHash(key.activity, h);
+        return h;
+    }
+
+    /// Cache of @ref resolveAssignmentEntry results keyed by context tuple.
+    /// A @c nullopt value caches a genuine cascade miss (no pinned context
+    /// rule wins) — so a missed lookup pays the linear walk exactly once per
+    /// rule-set revision, not three times per cursor-move (the
+    /// connector / virtual-screen fallback chain in
+    /// @ref assignmentEntryForScreen drives the same miss into three lookups).
+    mutable QHash<ContextResolveKey, std::optional<AssignmentEntry>> m_contextResolveCache;
+    /// The rule-set revision the cache contents are valid for. The cache is
+    /// dropped wholesale whenever this no longer matches
+    /// @c m_ruleStore->ruleSet().revision() — see @ref resolveAssignmentEntry.
+    mutable quint64 m_contextResolveCacheRevision = 0;
+
+    /// Hot-path cache for @ref resolveContextGaps, keyed and revision-invalidated
+    /// exactly like @c m_contextResolveCache. Separate cache because gaps read a
+    /// per-slot ResolvedActions walk (not the single-winner assignment walk),
+    /// and the geometry path resolves the same (screen, desktop, activity) tuple
+    /// twice per op (padding + outer gaps) — and N× inside a multi-zone snap —
+    /// so memoizing collapses those repeats to one walk per rule-set revision.
+    mutable QHash<ContextResolveKey, ContextGapOverride> m_contextGapCache;
+    mutable quint64 m_contextGapCacheRevision = 0;
 
     std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = provider disabled; falls back to first layout
     /// Empty = provider disabled. Returns the user's default autotile
@@ -483,14 +669,17 @@ private:
     /// whether a global default snap layout id is configured. See
     /// @ref setSnappingPreferredProvider for the rationale.
     std::function<bool()> m_snappingPreferredProvider;
-    std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
-    PhosphorConfig::IBackend* m_configBackend = nullptr; ///< Borrowed alias of m_ownedBackend.get(); always non-null
+    /// Borrowed unified rule store — the single assignment authority. The
+    /// caller owns the store and must outlive the registry; always non-null
+    /// (the ctor asserts it).
+    PhosphorWindowRule::WindowRuleStore* m_ruleStore = nullptr;
+    /// Evaluator bound to m_ruleStore->ruleSet(); the one resolution model.
+    std::unique_ptr<PhosphorWindowRule::RuleEvaluator> m_evaluator;
     QString m_layoutSubdirectory; ///< XDG-relative (e.g. "plasmazones/layouts") - drives locateAll discovery
     QString m_layoutDirectory; ///< Absolute user-writable path derived from m_layoutSubdirectory
     QVector<Layout*> m_layouts;
     Layout* m_activeLayout = nullptr;
     Layout* m_previousLayout = nullptr; ///< Active layout before last setActiveLayout (for resnap)
-    QHash<LayoutAssignmentKey, AssignmentEntry> m_assignments;
     QHash<int, QString> m_quickLayoutShortcuts; ///< slot number (1..9) → layout ID
     int m_currentVirtualDesktop = 1;
     QString m_currentActivity;

@@ -70,7 +70,7 @@ SettingsFlickable {
     function _syncCachedValues() {
         var c = page.appSettings.animationEasingCurve;
         if (typeof c !== "string")
-            return ;
+            return;
 
         if (page._isSpringCurve(c)) {
             var s = page._parseSpring(c);
@@ -82,21 +82,28 @@ SettingsFlickable {
     }
 
     function _writeSpring(omega, zeta) {
-        var encoded = page._springPrefix + omega.toFixed(2) + "," + zeta.toFixed(2);
+        var omegaRounded = parseFloat(omega.toFixed(2));
+        var zetaRounded = parseFloat(zeta.toFixed(2));
+        var encoded = page._springPrefix + omegaRounded + "," + zetaRounded;
         // No-op-guard before mutating cache so a re-selection of the
         // already-active mode/values doesn't churn bindings even though
         // the underlying setter would no-op.
         if (page.appSettings.animationEasingCurve === encoded)
-            return ;
+            return;
 
-        page._lastSpringOmega = omega;
-        page._lastSpringZeta = zeta;
+        // Cache the ROUNDED values — the encoded string is the canonical
+        // on-disk form (2-decimal precision), so caching the raw inputs
+        // would briefly leave `_lastSpringOmega` / `_lastSpringZeta` a
+        // sub-precision tick off the value the next reload sees, until
+        // `_syncCachedValues()` re-parses the encoded string.
+        page._lastSpringOmega = omegaRounded;
+        page._lastSpringZeta = zetaRounded;
         page.appSettings.animationEasingCurve = encoded;
     }
 
     function _writeEasing(curveStr) {
         if (page.appSettings.animationEasingCurve === curveStr)
-            return ;
+            return;
 
         page._lastEasingCurve = curveStr;
         page.appSettings.animationEasingCurve = curveStr;
@@ -123,7 +130,6 @@ SettingsFlickable {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            visible: true
             text: i18n("These defaults apply to every animation event unless a sub-page (Window, Zone, OSD, etc.) defines its own override.")
         }
 
@@ -141,7 +147,7 @@ SettingsFlickable {
             showToggle: true
             toggleChecked: page.appSettings.animationsEnabled
             collapsible: true
-            onToggleClicked: function(checked) {
+            onToggleClicked: function (checked) {
                 page.appSettings.animationsEnabled = checked;
             }
 
@@ -164,7 +170,7 @@ SettingsFlickable {
                     animationDuration: page.appSettings.animationDuration
                     previewEnabled: animationsCard.toggleChecked && page._currentTimingMode === CurvePresets.timingModeEasing
                     opacity: animationsCard.toggleChecked ? 1 : 0.4
-                    onCurveEdited: function(newCurve) {
+                    onCurveEdited: function (newCurve) {
                         page._writeEasing(newCurve);
                     }
                 }
@@ -181,8 +187,7 @@ SettingsFlickable {
                     opacity: animationsCard.toggleChecked ? 1 : 0.4
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 // ── Timing mode ───────────────────────────────────────────
                 // Mirrors AnimationEventCard's combo so both global and
@@ -198,18 +203,16 @@ SettingsFlickable {
                         enabled: animationsCard.toggleChecked
                         model: [i18n("Easing"), i18n("Spring")]
                         currentIndex: page._currentTimingMode
-                        onActivated: function(index) {
+                        onActivated: function (index) {
                             if (index === CurvePresets.timingModeSpring)
                                 page._writeSpring(page._lastSpringOmega, page._lastSpringZeta);
                             else
                                 page._writeEasing(page._lastEasingCurve);
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 // ── Easing controls (visible only in easing mode) ─────────
                 EasingSettings {
@@ -231,13 +234,12 @@ SettingsFlickable {
                     animationsEnabled: animationsCard.toggleChecked
                     omega: page._lastSpringOmega
                     zeta: page._lastSpringZeta
-                    onSpringChanged: function(omega, zeta) {
+                    onSpringChanged: function (omega, zeta) {
                         page._writeSpring(omega, zeta);
                     }
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Multiple windows")
@@ -248,11 +250,10 @@ SettingsFlickable {
                         enabled: animationsCard.toggleChecked
                         model: [i18n("All at once"), i18n("One by one")]
                         currentIndex: page.appSettings.animationSequenceMode
-                        onActivated: (index) => {
-                            return page.appSettings.animationSequenceMode = index;
+                        onActivated: index => {
+                            page.appSettings.animationSequenceMode = index;
                         }
                     }
-
                 }
 
                 SettingsRow {
@@ -269,15 +270,13 @@ SettingsFlickable {
                         value: page.appSettings.animationStaggerInterval
                         valueSuffix: " ms"
                         labelWidth: Kirigami.Units.gridUnit * 4
-                        onMoved: (value) => {
-                            return page.appSettings.animationStaggerInterval = Math.round(value);
+                        onMoved: value => {
+                            page.appSettings.animationStaggerInterval = Math.round(value);
                         }
                     }
-
                 }
 
-                SettingsSeparator {
-                }
+                SettingsSeparator {}
 
                 SettingsRow {
                     title: i18n("Minimum distance")
@@ -290,17 +289,127 @@ SettingsFlickable {
                         to: settingsController.generalPage.animationMinDistanceMax
                         stepSize: 5
                         value: page.appSettings.animationMinDistance
-                        onValueModified: (value) => {
-                            return page.appSettings.animationMinDistance = value;
+                        // Match the "zero = disabled, otherwise px" treatment used
+                        // by the Minimum window width / height spinboxes below so
+                        // the user sees a consistent "Off" / "%1 px" rendering
+                        // across every threshold-with-disable spinbox on the page.
+                        unitText: ""
+                        onValueModified: value => {
+                            page.appSettings.animationMinDistance = value;
+                        }
+                        textFromValue: function (value) {
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
                         }
                     }
-
                 }
-
             }
-
         }
 
-    }
+        // ── Window Filtering ─────────────────────────────────────────
+        // Animation-global gating: which windows are eligible for any
+        // animation at all. Relocated here from the old Animations App
+        // Rules page — these are global config toggles, not per-window
+        // rules, so they belong on the General page. Per-window
+        // overrides now live on the unified Window Rules page.
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Information
+            text: i18n("Filtered windows are not animated. Use a Window Rule to keep a specific application animated even when a filter would exclude it.")
+        }
 
+        SettingsCard {
+            id: filteringCard
+
+            Layout.fillWidth: true
+            headerText: i18n("Window Filtering")
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Exclude transient windows")
+                    description: i18n("Skip animations for dialogs, popups, tooltips, and dropdown menus")
+
+                    SettingsSwitch {
+                        checked: page.appSettings.animationExcludeTransientWindows
+                        accessibleName: i18n("Exclude transient windows from animations")
+                        onToggled: function (newValue) {
+                            page.appSettings.animationExcludeTransientWindows = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Exclude notifications and OSDs")
+                    description: i18n("Skip animations for notification popups and on-screen displays such as volume and brightness")
+
+                    SettingsSwitch {
+                        checked: page.appSettings.animationExcludeNotificationsAndOsd
+                        accessibleName: i18n("Exclude notifications and on-screen displays from animations")
+                        onToggled: function (newValue) {
+                            page.appSettings.animationExcludeNotificationsAndOsd = newValue;
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Minimum window width")
+                    description: page.appSettings.animationMinimumWindowWidth === 0 ? i18n("Disabled. No width threshold.") : i18n("Windows narrower than this will not animate")
+
+                    SettingsSpinBox {
+                        // Schema-driven bounds — see GeneralPageController's
+                        // animationMinimumWindowWidthMin/Max Q_PROPERTYs.
+                        // Literal bounds would silently truncate any saved
+                        // value outside the literal range when the SpinBox
+                        // clamped the bound `value` on render.
+                        from: settingsController.generalPage.animationMinimumWindowWidthMin
+                        to: settingsController.generalPage.animationMinimumWindowWidthMax
+                        stepSize: 10
+                        value: page.appSettings.animationMinimumWindowWidth
+                        // textFromValue already emits the localised "%1 px" suffix; suppress
+                        // SettingsSpinBox's default "px" Label so the displayed value reads
+                        // "100 px" rather than "100 px px" (and "Off" rather than "Off px").
+                        unitText: ""
+                        Accessible.name: i18n("Minimum window width for animations")
+                        onValueModified: value => {
+                            page.appSettings.animationMinimumWindowWidth = value;
+                        }
+                        textFromValue: function (value) {
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
+                        }
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Minimum window height")
+                    description: page.appSettings.animationMinimumWindowHeight === 0 ? i18n("Disabled. No height threshold.") : i18n("Windows shorter than this will not animate")
+
+                    SettingsSpinBox {
+                        from: settingsController.generalPage.animationMinimumWindowHeightMin
+                        to: settingsController.generalPage.animationMinimumWindowHeightMax
+                        stepSize: 10
+                        value: page.appSettings.animationMinimumWindowHeight
+                        // textFromValue already emits the localised "%1 px" suffix; see the
+                        // width SettingsSpinBox above for rationale on suppressing
+                        // SettingsSpinBox's default "px" Label.
+                        unitText: ""
+                        Accessible.name: i18n("Minimum window height for animations")
+                        onValueModified: value => {
+                            page.appSettings.animationMinimumWindowHeight = value;
+                        }
+                        textFromValue: function (value) {
+                            return value === 0 ? i18n("Off") : i18nc("pixel-unit suffix in spin box", "%1 px", value);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

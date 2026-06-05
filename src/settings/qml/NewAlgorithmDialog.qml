@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "WizardUtils.js" as WizardUtils
@@ -35,37 +36,41 @@ Kirigami.Dialog {
     // Re-evaluated on open so it picks up the correct screen.
     // Clamped to [1.0, 3.6] to keep the preview usable on extreme aspect ratios (e.g. 32:9).
     property real screenAspectRatio: 16 / 9
-    readonly property var baseTemplates: [{
-        "name": i18n("Blank"),
-        "id": "blank",
-        "desc": i18n("Minimal skeleton to implement yourself"),
-        "hasMaster": false,
-        "hasSplit": false
-    }, {
-        "name": i18n("Master + Stack"),
-        "id": "master-stack",
-        "desc": i18n("Large master area with stacked windows"),
-        "hasMaster": true,
-        "hasSplit": true
-    }, {
-        "name": i18n("Grid"),
-        "id": "grid",
-        "desc": i18n("Equal-sized NxM grid layout"),
-        "hasMaster": false,
-        "hasSplit": false
-    }, {
-        "name": i18n("Binary Split"),
-        "id": "bsp",
-        "desc": i18n("Balanced recursive BSP splitting"),
-        "hasMaster": false,
-        "hasSplit": true
-    }]
+    readonly property var baseTemplates: [
+        {
+            "name": i18n("Blank"),
+            "id": "blank",
+            "desc": i18n("Minimal skeleton to implement yourself"),
+            "hasMaster": false,
+            "hasSplit": false
+        },
+        {
+            "name": i18n("Master + Stack"),
+            "id": "master-stack",
+            "desc": i18n("Large master area with stacked windows"),
+            "hasMaster": true,
+            "hasSplit": true
+        },
+        {
+            "name": i18n("Grid"),
+            "id": "grid",
+            "desc": i18n("Equal-sized NxM grid layout"),
+            "hasMaster": false,
+            "hasSplit": false
+        },
+        {
+            "name": i18n("Binary Split"),
+            "id": "bsp",
+            "desc": i18n("Balanced recursive BSP splitting"),
+            "hasMaster": false,
+            "hasSplit": true
+        }
+    ]
     // Resolve selected template data for step 2
     readonly property var selectedTemplate: {
         for (let i = 0; i < baseTemplates.length; i++) {
             if (baseTemplates[i].id === root.baseTemplate)
                 return baseTemplates[i];
-
         }
         return baseTemplates[0];
     }
@@ -177,15 +182,10 @@ Kirigami.Dialog {
                                         profile: "widget.tint"
                                         durationOverride: 200
                                     }
-
                                 }
-
                             }
-
                         }
-
                     }
-
                 }
 
                 Label {
@@ -194,7 +194,6 @@ Kirigami.Dialog {
                     font: Kirigami.Theme.smallFont
                     opacity: 0.4
                 }
-
             }
 
             // ── Step 2: Configure ──────────────────────────────────────
@@ -209,7 +208,7 @@ Kirigami.Dialog {
                     Layout.alignment: Qt.AlignHCenter
                     radius: Kirigami.Units.smallSpacing * 2
                     color: root._subtleBg
-                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                    border.width: Math.round(Screen.devicePixelRatio)
                     border.color: root._accentBorder
 
                     AlgorithmPreview {
@@ -242,13 +241,11 @@ Kirigami.Dialog {
                             font: Kirigami.Theme.smallFont
                             opacity: 0.5
                         }
-
                     }
 
                     WizardPreviewBadge {
                         text: root.selectedTemplate.name
                     }
-
                 }
 
                 // Config card
@@ -273,7 +270,6 @@ Kirigami.Dialog {
                             Keys.onReturnPressed: {
                                 if (wizardFooter.createEnabled)
                                     wizardFooter.createClicked();
-
                             }
                         }
 
@@ -281,12 +277,10 @@ Kirigami.Dialog {
                             function onCurrentStepChanged() {
                                 if (root.currentStep === 1)
                                     nameField.forceActiveFocus();
-
                             }
 
                             target: root
                         }
-
                     }
 
                     Kirigami.Separator {
@@ -308,11 +302,10 @@ Kirigami.Dialog {
                             }
 
                             Label {
-                                text: i18n("(editable later in the .js file)")
+                                text: i18n("(editable later in the .luau file)")
                                 font: Kirigami.Theme.smallFont
                                 opacity: 0.4
                             }
-
                         }
 
                         GridLayout {
@@ -359,9 +352,7 @@ Kirigami.Dialog {
                                 ToolTip.delay: Kirigami.Units.toolTipDelay
                                 ToolTip.text: i18n("Remembers positions across changes")
                             }
-
                         }
-
                     }
 
                     Kirigami.Separator {
@@ -375,13 +366,9 @@ Kirigami.Dialog {
                         onToggled: root.openInEditor = checked
                         Accessible.name: text
                     }
-
                 }
-
             }
-
         }
-
     }
 
     Connections {
@@ -390,7 +377,6 @@ Kirigami.Dialog {
             // LayoutsPage's toast handler will surface the error (avoids double reporting)
             if (root.opened)
                 wizardFooter.errorText = reason;
-
         }
 
         target: root.controller
@@ -416,5 +402,4 @@ Kirigami.Dialog {
         }
         onCancelClicked: root.close()
     }
-
 }

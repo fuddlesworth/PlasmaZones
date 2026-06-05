@@ -5,6 +5,7 @@
 
 #include <cstdint>
 
+#include <PhosphorCompositor/AutotileState.h>
 #include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -15,6 +16,9 @@
 #include <PhosphorAnimation/AnimationLimits.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
+
+#include <PhosphorWindowRule/RuleEvaluator.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -60,9 +64,9 @@ namespace PlasmaZones {
 
 using namespace PhosphorCompositor;
 
-// Mirror of core/enums.h AutotileDragBehavior. The effect can't include daemon
-// headers (KWin plugin ABI constraints), so the values are duplicated here.
-// MUST stay in sync with core/enums.h — bump both in the same commit. The
+// Mirror of PhosphorTiles::AutotileDragBehavior (re-exported via core/enums.h).
+// The effect can't include daemon headers (KWin plugin ABI constraints), so the
+// values are duplicated here. MUST stay in sync with the canonical enum — the
 // static_asserts below pin the integer encoding so a drift on either side
 // becomes a compile-time failure rather than a silent runtime mismatch.
 enum class EffectAutotileDragBehavior : int {
@@ -70,10 +74,10 @@ enum class EffectAutotileDragBehavior : int {
     Reorder = 1, ///< Drag-to-reorder (Krohnkite-style)
 };
 static_assert(static_cast<int>(EffectAutotileDragBehavior::Float) == 0,
-              "EffectAutotileDragBehavior::Float must encode as 0 to match core/enums.h AutotileDragBehavior::Float");
+              "EffectAutotileDragBehavior::Float must encode as 0 to match PhosphorTiles::AutotileDragBehavior::Float");
 static_assert(
     static_cast<int>(EffectAutotileDragBehavior::Reorder) == 1,
-    "EffectAutotileDragBehavior::Reorder must encode as 1 to match core/enums.h AutotileDragBehavior::Reorder");
+    "EffectAutotileDragBehavior::Reorder must encode as 1 to match PhosphorTiles::AutotileDragBehavior::Reorder");
 
 // Forward declarations for helper classes
 class AutotileHandler;
@@ -133,6 +137,16 @@ protected:
     // Every other redirected window is left untouched (drawn 1:1 over
     // its own geometry).
     void apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data, KWin::WindowQuadList& quads) override;
+
+    // Capture the redirected window's current (pre-moveResize) content into a
+    // GLTexture for the geometry-morph cross-fade. Replicates KWin's
+    // OffscreenData::maybeRender: render the window into our own FBO via
+    // effects->drawWindow (our morph shader temporarily bypassed so the copy
+    // is the raw old content), then store the texture in
+    // `transition.oldSnapshot` (bound as uOldWindow). Called once on the first
+    // morph paint, while the content is still old (the moveResize configure
+    // hasn't round-tripped).
+    void captureOldWindowSnapshot(ShaderTransition& transition, KWin::EffectWindow* window);
 
 private Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow* w);
@@ -300,32 +314,18 @@ private:
      * `Animations.WindowFiltering` cache so the two filter sets can
      * diverge.
      *
-     * A class-pattern AnimationAppRule of ANY kind whose pattern
-     * substring-matches the window's class OVERRIDES the filter —
-     * the existence of even one targeted rule signals deliberate
-     * user intent to animate this app, regardless of which event the
-     * cascade is firing for or whether the rule is Shader / Timing.
-     * Same case-insensitive substring match the
-     * `AnimationAppRuleList::firstMatchOfKind` resolver uses, so the
-     * override scope mirrors the per-rule match contract exactly.
-     * Empty windowClass falls through to the filter (no rule can
-     * match an unidentified window).
+     * A WindowRule carrying any OverrideAnimation* or SetOpacity
+     * action whose match expression resolves for the window OVERRIDES
+     * the filter — the existence of even one targeted rule signals
+     * deliberate user intent to animate this app, regardless of
+     * which event the cascade is firing for. The match expression
+     * walks the full per-window query (AppId / WindowClass / Title /
+     * WindowRole / DesktopFile / WindowType / Pid / state flags) so
+     * a rule pinned to any of those axes triggers the override; a
+     * window with no rule-matchable attributes at all falls through
+     * to the filter.
      */
     bool shouldAnimateWindow(KWin::EffectWindow* w) const;
-
-    /**
-     * @brief Substring exclusion-list match helper.
-     *
-     * Returns true when @p appName or @p windowClass matches any
-     * non-empty entry in @p apps or @p classes (case-insensitive
-     * substring). Shared between `shouldHandleWindow` (snapping/
-     * tiling Exclusions) and `shouldAnimateWindow` (animation
-     * filtering) — both filter sets use identical match semantics
-     * but persist their lists independently, so the loops are the
-     * same shape with different inputs.
-     */
-    static bool matchesExclusionLists(const QString& appName, const QString& windowClass, const QStringList& apps,
-                                      const QStringList& classes);
 
     /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.
@@ -354,6 +354,18 @@ private:
      * surface. Sharing one substring match keeps both call sites in lockstep.
      */
     static bool isOwnOverlayClass(const QString& windowClass);
+
+    /**
+     * @brief Reject XDG desktop portal surfaces by window class.
+     *
+     * File dialogs / color pickers / screenshot pickers brokered by
+     * `xdg-desktop-portal-*` services arrive with classes like
+     * "xdg-desktop-portal-kde" / "xdg-desktop-portal-gtk". Snapping or
+     * tracking them as user-focus targets pollutes the daemon's
+     * last-active-window state. Shared by `shouldHandleWindow` and
+     * `notifyWindowActivated` so the two filter chains stay in lockstep.
+     */
+    static bool isXdgDesktopPortalSurface(const QString& windowClass);
 
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
@@ -410,10 +422,14 @@ private:
      * receive daemon data keyed by appId should do a linear scan fallback
      * when the exact full ID is not found.
      *
-     * @param filterHandleable If true, only include windows passing shouldHandleWindow()
+     * Always filters to handleable windows (passes shouldHandleWindow()) —
+     * the prior `filterHandleable=false` overload had zero callers and was
+     * removed as dead surface. Add it back as an explicit parameter if a
+     * future caller actually needs the unfiltered map.
+     *
      * @return Hash map of fullWindowId -> EffectWindow*
      */
-    QHash<QString, KWin::EffectWindow*> buildWindowMap(bool filterHandleable = true) const;
+    QHash<QString, KWin::EffectWindow*> buildWindowMap() const;
 
     /**
      * @brief Get the active window if valid, emit navigation feedback on failure
@@ -428,6 +444,29 @@ private:
      * @return true if window is floating
      */
     bool isWindowFloating(const QString& windowId) const;
+
+    /**
+     * @brief True if the window is currently snap-managed (tiled into a snap zone).
+     * Its frame geometry is the zone rect, NOT a free-floating position — callers
+     * that capture "pre-tile / float-back" geometry must skip such windows even on
+     * fast paths, or the snap zone poisons the autotile float-back (per-mode float
+     * independence). Backed by the shared snap BorderState tiled set.
+     */
+    bool isWindowMarkedSnapped(const QString& windowId) const
+    {
+        return PhosphorCompositor::AutotileStateHelpers::isTiledWindow(m_snapBorder, windowId);
+    }
+
+    /**
+     * @brief True if SNAP is currently hiding this window's title bar (it is in the
+     * snap BorderState borderless set). The autotile→snap cleanup consults this so it
+     * drops its own tracking without calling setNoBorder(false) — which would un-hide
+     * a title bar the per-mode snapping appearance wants hidden.
+     */
+    bool isWindowSnapBorderless(const QString& windowId) const
+    {
+        return PhosphorCompositor::AutotileStateHelpers::isBorderlessWindow(m_snapBorder, windowId);
+    }
 
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
@@ -445,7 +484,7 @@ private:
     /**
      * @brief Build a stable EDID-based screen identifier from a KWin::Output.
      *
-     * Mirrors the daemon's Phosphor::Screens::ScreenIdentity::identifierFor() exactly: tries
+     * Mirrors the daemon's PhosphorScreens::ScreenIdentity::identifierFor() exactly: tries
      * QScreen::serialNumber(), normalizes hex, falls back to sysfs EDID
      * header serial. This ensures both sides produce identical screen IDs
      * regardless of which EDID field KWin's Output::serialNumber() returns.
@@ -568,6 +607,26 @@ private:
 
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
+    // The window most recently passed to slotWindowActivated — i.e. the
+    // "previously active" window on the next focus change. Used to repaint the
+    // window that just lost focus so a focus-scoped (IsFocused) SetOpacity rule
+    // re-resolves on it; the window gaining focus is repainted via the slot's
+    // own argument. QPointer auto-nulls on window destruction.
+    QPointer<KWin::EffectWindow> m_lastActivatedWindow;
+
+    // Windows whose server-side title bar a per-window-rule SetHideTitleBar
+    // override hid (distinct from the snap/autotile borderless sets). Tracked
+    // so reconcileRuleHiddenTitleBar can restore the decoration when the rule
+    // stops matching, without fighting snap/autotile borderless ownership.
+    QSet<QString> m_ruleHiddenTitleBars;
+
+    // Snapping's own managed-window border state, parallel to
+    // AutotileHandler::m_border. Built on the shared PhosphorCompositor
+    // BorderState + AutotileStateHelpers so snap and autotile share one
+    // standardized border mechanism (and a future mode reuses the same
+    // machinery). Populated at snap commit, cleared on float / unsnap / close.
+    PhosphorCompositor::BorderState m_snapBorder;
+
     // Policy returned from the daemon's beginDrag for the currently-active
     // drag. Async-populated a few ms after the
     // drag starts; until then, conservative defaults apply (snap-path
@@ -584,10 +643,47 @@ private:
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 
+    /// Debounce timer for `WindowRules.rulesChanged`. Single-shot, 50ms;
+    /// timeout fires `loadWindowRuleAnimationsFromDbus`. Re-armed on every
+    /// `slotWindowRulesChanged` invocation so a burst of per-rule mutations
+    /// (a 50-rule batch edit emits 50 signals) collapses into a single
+    /// `getAllRules` fetch at the trailing edge.
+    QTimer m_animationRulesRefreshDebounce;
+
     void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
     void clearAllBorders();
+
+    // ── Snapping border-state tracking (mirrors AutotileHandler's set) ──
+    /// Record @p windowId as snap-committed on @p screenId (idempotent), apply
+    /// title-bar hiding if enabled, and (re)draw its border.
+    void markWindowSnapped(const QString& windowId, const QString& screenId);
+    /// Drop @p windowId from the snap set on every screen, restore its title
+    /// bar if we hid it, and remove its border.
+    void clearWindowSnapped(const QString& windowId);
+    /// Apply/restore title-bar hiding across all currently snap-committed
+    /// windows when the snapWindowHideTitleBars setting toggles.
+    void updateSnapHideTitleBars(bool hide);
+    /// Restore every snap-hidden title bar and drop the snap border set.
+    /// Called on daemon loss / effect teardown (symmetric with
+    /// AutotileHandler::restoreAllBorderless).
+    void restoreAllSnapBorderless();
+    /// Resolve which mode's BorderState manages @p windowId — autotile first,
+    /// then snap — or nullptr if neither draws a border for it.
+    const PhosphorCompositor::BorderState* resolveBorderStateFor(const QString& windowId) const;
+
+    /// Apply or restore a per-window-rule SetHideTitleBar override for
+    /// @p windowId, coordinating with the snap/autotile borderless sets so a
+    /// rule never fights mode-driven decoration management. Idempotent — only
+    /// toggles setNoBorder on an actual desired-state change.
+    void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
+
+    /// Restore every title bar a SetHideTitleBar rule hid and drop the
+    /// m_ruleHiddenTitleBars set. Called on daemon loss / effect teardown
+    /// (symmetric with restoreAllSnapBorderless) so a rule-hidden title bar is
+    /// never left hidden after the authoritative rule state is gone.
+    void restoreAllRuleHiddenTitleBars();
 
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
@@ -644,9 +740,10 @@ private:
     ///
     /// Both cases are correctly handled by `tryBeginShaderForEvent`'s
     /// "skip the timer" branch. A future caller writing a manual install
-    /// path that needs to distinguish the two should compare the
-    /// pre-call `m_shaderTransitions.find(window)` result against the
-    /// post-call result to detect case (a).
+    /// path that needs to distinguish the two should snapshot
+    /// `m_shaderManager.findTransition(window)` (and its generation)
+    /// pre-call and compare against the post-call snapshot to detect
+    /// case (a).
     bool beginShaderTransition(KWin::EffectWindow* window, const PhosphorAnimationShaders::ShaderProfile& profile,
                                int durationMs = 0, bool reverse = false, bool holdCloseGrab = false,
                                bool holdAddedGrab = false);
@@ -660,7 +757,6 @@ private:
     void endRestoreSuppression(KWin::EffectWindow* window);
 
     void loadShaderProfileFromDbus();
-    void loadAnimationAppRulesFromDbus();
     void loadMotionProfileTreeFromDbus();
     void loadShaderRegistryFromDbus();
     void tryBeginShaderForEvent(KWin::EffectWindow* window, const QString& profilePath, int durationMs,
@@ -677,6 +773,10 @@ private:
     Qt::KeyboardModifiers m_currentModifiers = Qt::NoModifier;
     Qt::MouseButtons m_currentMouseButtons = Qt::NoButton;
     bool m_keyboardGrabbed = false;
+    // Re-entrancy guard: true while captureOldWindowSnapshot's drawWindow walks
+    // the chain, so paint/apply hooks behave plainly during the raw capture
+    // pass (no morph quad deform / re-capture).
+    bool m_capturingSnapshot = false;
 
     // D-Bus communication uses QDBusMessage::createMethodCall exclusively
     // (no QDBusInterface) to avoid synchronous D-Bus introspection that blocks
@@ -726,11 +826,16 @@ private:
     // beginDrag is called unconditionally at drag-start; the deferred-send
     // optimization is obsolete now that the daemon always knows about the drag.
 
-    // User-configured exclusion lists — cached from daemon for shouldHandleWindow() gating.
-    // The daemon also enforces these for keyboard navigation, but the effect needs them
-    // for drag operations and window lifecycle reporting (slotWindowAdded, dragTracker).
-    QStringList m_excludedApplications;
-    QStringList m_excludedWindowClasses;
+    // Drag-gate exclusion rule set — the Exclude-shaped slice of the
+    // unified WindowRule store the effect mirrors over D-Bus. Filled by
+    // loadWindowRuleAnimationsFromDbus's parse step (which already
+    // deserialises the full rule set for the animation override path),
+    // via `PhosphorWindowRule::ExclusionRules::excludeRulesFrom`. The
+    // bound RuleEvaluator drives shouldHandleWindow()'s exclusion gate.
+    // Declaration ORDER MATTERS — the rule set must precede (and outlive)
+    // the evaluator that binds a reference to it.
+    PhosphorWindowRule::WindowRuleSet m_snappingExclusionRuleSet;
+    PhosphorWindowRule::RuleEvaluator m_snappingExclusionEvaluator{m_snappingExclusionRuleSet};
 
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForAutotileNotify() to prevent small utility
@@ -748,21 +853,33 @@ private:
     // Animation window filtering — separate cache from the snapping/tiling
     // exclusions because the user can opt for divergent filter sets. The
     // filter gates the animation cascade BEFORE rule resolution, but a
-    // class-pattern rule whose pattern matches the window's class
-    // overrides the filter (so a user can disable animations broadly via
-    // an app exclusion AND still keep one class animated through a
-    // targeted rule). Defaults are permissive (no filter) until D-Bus
-    // populates them; matches the per-key defaults in ConfigDefaults.
+    // rule whose match expression resolves for the window overrides the
+    // filter (so a user can disable animations broadly via an app exclusion
+    // AND still keep one app animated through a targeted rule). The match
+    // expression sees the full per-window query (AppId / WindowClass /
+    // Title / WindowRole / DesktopFile / WindowType / Pid / state flags).
+    // Defaults are permissive (no filter) until D-Bus populates them;
+    // matches the per-key defaults in ConfigDefaults.
     bool m_animationExcludeTransientWindows = false;
     // Notification / OSD surfaces — excluded by default (see
-    // ConfigDefaults::animationExcludeNotificationsAndOsd). Initialised
+    // ConfigDefaults::animationExcludeNotificationsAndOsd()). Initialised
     // to the exclude default rather than the permissive value above so
     // a pre-D-Bus window event doesn't flash a shader on a notification.
     bool m_animationExcludeNotificationsAndOsd = true;
     int m_animationMinWindowWidth = 0;
     int m_animationMinWindowHeight = 0;
-    QStringList m_animationExcludedApplications;
-    QStringList m_animationExcludedWindowClasses;
+
+    // Animation exclusion rule set — the `ExcludeAnimations`-action slice
+    // of the unified WindowRule store the effect mirrors over D-Bus.
+    // Filled by loadWindowRuleAnimationsFromDbus's parse step (which
+    // already deserialises the full rule set for the animation override
+    // path), via
+    // `PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom`.
+    // The bound RuleEvaluator drives shouldAnimateWindow()'s exclusion
+    // gate. Declaration ORDER MATTERS — the rule set must precede (and
+    // outlive) the evaluator that binds a reference to it.
+    PhosphorWindowRule::WindowRuleSet m_animationExclusionRuleSet;
+    PhosphorWindowRule::RuleEvaluator m_animationExclusionEvaluator{m_animationExclusionRuleSet};
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
@@ -815,6 +932,14 @@ private:
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
     QString m_snapDragStartScreenId; // Virtual screen at snap-mode drag start (for VS crossing on drop)
+
+    /// Monotonic per-drag generation. Bumped on every drag start. The async
+    /// beginDrag reply lambda captures the generation at dispatch time and
+    /// checks against the live value at reply time — if the drag has ended
+    /// (or a new one started) before the reply arrives, the captured policy
+    /// would otherwise be written into m_currentDragPolicy and bleed into
+    /// the next drag's state. Generation-mismatched replies are discarded.
+    quint64 m_dragGeneration = 0;
 
     // Windows floated by drag on autotile screens. The daemon emits
     // applyGeometryRequested to restore pre-autotile geometry on float,
@@ -872,6 +997,12 @@ private:
     /// resolveEffectiveScreenId tagging windows with dead "physId/vs:N" ids.
     QHash<QString, uint64_t> m_vsFetchSeqPerPhysId;
     bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState
+    /// One-shot guard for the WindowRules rulesChanged D-Bus subscription.
+    /// QDBusConnection::connect silently accepts duplicate subscriptions, so without
+    /// this flag the subscription set would grow unbounded across every
+    /// slotSettingsChanged broadcast (which re-runs loadCachedSettings()). Set true
+    /// after the first successful connect from continueDaemonReadySetup().
+    bool m_windowRulesSubscribed = false;
 
     // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
     // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
@@ -943,6 +1074,23 @@ private Q_SLOTS:
     /// logout/login. Dedicated signal (not settingsChanged) so the
     /// Settings app's change detection is unaffected.
     void slotMotionProfileTreeChanged();
+
+    /// Fetch the unified WindowRule store via `org.plasmazones.WindowRules.
+    /// getAllRules`, filter to rules carrying an OverrideAnimation* action,
+    /// and forward them to the shader manager — the sole source of per-window
+    /// animation overrides. Called once at bringup; the bringup also
+    /// subscribes to the interface's `rulesChanged` signal (via a debounce
+    /// timer — see m_animationRulesRefreshDebounce) so a settings-UI edit
+    /// takes effect without restarting the effect.
+    void loadWindowRuleAnimationsFromDbus();
+
+    /// D-Bus signal handler for `WindowRules.rulesChanged`. Re-arms the
+    /// debounce timer rather than refetching the full ruleset on every
+    /// signal — the daemon emits one signal per per-rule mutation, so a
+    /// 50-rule batch edit would otherwise drive 50 full-ruleset fetches
+    /// and parses. A 50ms single-shot debounce coalesces the burst into a
+    /// single fetch at the trailing edge.
+    void slotWindowRulesChanged();
 };
 
 } // namespace PlasmaZones

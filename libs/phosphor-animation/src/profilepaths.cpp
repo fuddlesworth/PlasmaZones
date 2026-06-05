@@ -184,5 +184,27 @@ QString parentPath(const QString& path)
     return path.left(dotIdx);
 }
 
+QString defaultShaderEffectIdForPath(const QString& path)
+{
+    // Window move/resize events default to the geometry-morph shader so a
+    // window animates via shader cross-fade when it snaps/tiles/reflows.
+    if (path == WindowMove || path == WindowResize || path == WindowSnapIn || path == WindowSnapOut
+        || path == WindowSnapResize || path == WindowLayoutSwitch) {
+        return QStringLiteral("window-morph");
+    }
+    // Overlay surface show/hide (OSD + popups) default to the fade-and-scale
+    // shader so the daemon animates them via shader instead of the C++
+    // opacity/scale legs in SurfaceAnimator (which stay as the fallback when a
+    // shader is unavailable or the user picks "None"). Per-surface scale feel is
+    // preserved by seeding fade's `scaleAmount` daemon-side (animation_config).
+    if (path == OsdShow || path == OsdHide || path == PopupZoneSelectorShow || path == PopupZoneSelectorHide
+        || path == PopupLayoutPickerShow || path == PopupLayoutPickerHide || path == PopupSnapAssistShow
+        || path == PopupSnapAssistHide) {
+        return QStringLiteral("fade");
+    }
+    // Every other event defaults to no shader.
+    return QString();
+}
+
 } // namespace ProfilePaths
 } // namespace PhosphorAnimation

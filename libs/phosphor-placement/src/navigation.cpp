@@ -47,7 +47,7 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
         // from making zones appear occupied on the target screen.
         if (!screenFilter.isEmpty()) {
             QString windowScreen = screens.value(it.key());
-            if (!Phosphor::Screens::ScreenIdentity::screensMatch(windowScreen, screenFilter)) {
+            if (!PhosphorScreens::ScreenIdentity::screensMatch(windowScreen, screenFilter)) {
                 continue;
             }
         }
@@ -108,8 +108,8 @@ PhosphorProtocol::EmptyZoneList WindowTrackingService::getEmptyZones(const QStri
     }
 
     // Resolve physical screen for fallback (virtual screen IDs resolve to their backing physical output)
-    const Phosphor::Screens::PhysicalScreen screen =
-        m_screenManager ? m_screenManager->physicalScreenFor(screenId) : Phosphor::Screens::PhysicalScreen{};
+    const PhosphorScreens::PhysicalScreen screen =
+        m_screenManager ? m_screenManager->physicalScreenFor(screenId) : PhosphorScreens::PhysicalScreen{};
     QRect physicalGeom = screen.geometry;
     if (!m_screenManager) {
         if (QScreen* primary = QGuiApplication::primaryScreen()) {

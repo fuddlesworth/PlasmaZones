@@ -3,10 +3,13 @@
 
 #include "../plasmazoneseffect.h"
 
+#include "window_query.h"
+
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
+#include <virtualdesktops.h>
 #include <window.h>
 
 #include <utility>
@@ -81,6 +84,15 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)
     if (!w) {
         return;
     }
+    // Gate on daemon readiness. KWin's class/desktop/caption/activity change
+    // signals fire during session restore well before the daemon attaches its
+    // bus name, and `fireAndForget` would WARN once per signal × N windows
+    // when the WindowTracking service is missing. The bringup path re-pushes
+    // metadata for every live window in continueDaemonReadySetup() once the
+    // bridge is registered, so deferring here loses nothing.
+    if (!m_daemonServiceRegistered) {
+        return;
+    }
     const QString instanceId = getWindowInstanceId(w);
     if (instanceId.isEmpty()) {
         return;
@@ -91,10 +103,38 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)
     const QString desktopFile = window ? window->desktopFileName() : QString();
     const QString title = w->caption();
 
+    // windowRole is the X11 WM_WINDOW_ROLE — empty for Wayland-native windows.
+    const QString windowRole = window ? window->windowRole() : QString();
+    // KWin's EffectWindow::pid() returns -1 for windows whose PID is unknown
+    // (notably during session restore before the client reattaches). Clamp
+    // to 0 at the source so the metadata struct's `int` field is always a
+    // valid PID or the well-known "unknown" sentinel — the daemon's
+    // adaptor doesn't have to second-guess negative values either.
+    const int rawPid = static_cast<int>(w->pid());
+    const int pid = rawPid > 0 ? rawPid : 0;
+
+    // virtualDesktop: 0 = on all desktops / unknown; otherwise the 1-based x11
+    // desktop number of the window's first desktop. A window spanning several
+    // (but not all) desktops reports its first — the registry stores one int.
+    int virtualDesktop = 0;
+    if (window) {
+        const QList<KWin::VirtualDesktop*> desktops = window->desktops();
+        if (!desktops.isEmpty() && desktops.first()) {
+            virtualDesktop = static_cast<int>(desktops.first()->x11DesktopNumber());
+        }
+    }
+
+    // activity: empty = on all activities / unknown; otherwise the first UUID.
+    const QStringList activities = w->activities();
+    const QString activity = activities.isEmpty() ? QString() : activities.first();
+
+    const int windowType = static_cast<int>(windowTypeFor(w));
+
     // Fire-and-forget — the daemon side is idempotent.
     PhosphorProtocol::ClientHelpers::fireAndForget(
         this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setWindowMetadata"),
-        {instanceId, appId, desktopFile, title}, QStringLiteral("setWindowMetadata"));
+        {instanceId, appId, desktopFile, title, windowRole, pid, virtualDesktop, activity, windowType},
+        QStringLiteral("setWindowMetadata"));
 }
 
 void PlasmaZonesEffect::flushPendingFrameGeometry()
@@ -134,6 +174,14 @@ bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)
     // should treat normally.
     return windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
         || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive);
+}
+
+bool PlasmaZonesEffect::isXdgDesktopPortalSurface(const QString& windowClass)
+{
+    // Substring match on "xdg-desktop-portal" covers every brokered portal
+    // variant (kde / gtk / lxqt). Case-insensitive because the same class
+    // appears differently between Wayland appId and X11 resource name.
+    return windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive);
 }
 
 PhosphorEngine::WindowKind PlasmaZonesEffect::classifyWindowKind(KWin::EffectWindow* w) const

@@ -103,8 +103,19 @@ void AutotileHandler::restoreWindowBorders(KWin::EffectWindow* w, const QString&
             screensHoldingBorderless.append(it.key());
         }
     }
+    // If snap has taken over this window (autotile→snap mode swap) and is keeping
+    // its title bar hidden, drop the autotile tracking WITHOUT calling
+    // setNoBorder(false) — doing so would un-hide a title bar the per-mode snapping
+    // appearance wants hidden. This guard defers to snap whenever snap currently owns
+    // the window's borderless state, regardless of which caller we arrive through:
+    // for the mode-swap path, snap's per-window markWindowSnapped runs in the resnap
+    // batch before this deferred drain populates the set; the synchronous
+    // desktop-switch caller (slotScreensChanged) simply reads whatever snap owns at
+    // that moment. Either way, an empty snap borderless set means snap does not own
+    // the window and autotile restores its border normally.
+    const bool snapKeepsBorderless = m_effect->isWindowSnapBorderless(windowId);
     for (const QString& sid : std::as_const(screensHoldingBorderless)) {
-        if (w) {
+        if (w && !snapKeepsBorderless) {
             setWindowBorderless(w, windowId, false, sid);
         } else {
             AutotileStateHelpers::removeBorderlessOnScreen(m_border, sid, windowId);

@@ -20,6 +20,7 @@
  */
 
 #include <QTest>
+#include <QColor>
 #include <QSignalSpy>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -115,6 +116,44 @@ private Q_SLOTS:
     }
 
     /**
+     * reset() must restore every snapped-window appearance setting
+     * (Snapping.Appearance.{Borders,Decorations,Colors}) to its ConfigDefaults
+     * value. reset() reverts them via its group-delete + reload path (like every
+     * other store-backed setting), so this pins dedicated reset coverage for them.
+     */
+    void testReset_restoresSnapWindowAppearanceDefaults()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        // Drive every snapWindow* setting away from its default.
+        settings.setSnapWindowHideTitleBars(!ConfigDefaults::snapWindowHideTitleBars());
+        settings.setSnapWindowShowBorder(!ConfigDefaults::snapWindowShowBorder());
+        settings.setSnapWindowUseSystemBorderColors(!ConfigDefaults::snapWindowUseSystemBorderColors());
+        settings.setSnapWindowBorderWidth(ConfigDefaults::snapWindowBorderWidth() + 1);
+        settings.setSnapWindowBorderRadius(ConfigDefaults::snapWindowBorderRadius() + 1);
+        settings.setSnapWindowBorderColor(QColor(10, 20, 30));
+        settings.setSnapWindowInactiveBorderColor(QColor(40, 50, 60));
+
+        settings.reset();
+
+        QCOMPARE(settings.snapWindowHideTitleBars(), ConfigDefaults::snapWindowHideTitleBars());
+        QCOMPARE(settings.snapWindowShowBorder(), ConfigDefaults::snapWindowShowBorder());
+        QCOMPARE(settings.snapWindowUseSystemBorderColors(), ConfigDefaults::snapWindowUseSystemBorderColors());
+        QCOMPARE(settings.snapWindowBorderWidth(), ConfigDefaults::snapWindowBorderWidth());
+        QCOMPARE(settings.snapWindowBorderRadius(), ConfigDefaults::snapWindowBorderRadius());
+        // The default snapWindowUseSystemBorderColors is true, so reset()'s
+        // reload drives the snap border colors to the (also-reset) zone
+        // highlight/inactive colors via applySnapWindowBorderSystemColor().
+        // Assert against the live zone colors — the actual contract when
+        // system colors are enabled — rather than the static ConfigDefaults
+        // border colors, which only apply when system colors are off.
+        QCOMPARE(settings.snapWindowBorderColor(), settings.highlightColor());
+        QCOMPARE(settings.snapWindowInactiveBorderColor(), settings.inactiveColor());
+    }
+
+    /**
      * After save() then load(), every property must equal what was set.
      * This validates the full round-trip for a representative subset of settings
      * across all config groups.
@@ -147,6 +186,16 @@ private Q_SLOTS:
         settings.setAnimationDuration(300);
         settings.setAnimationSequenceMode(0);
         settings.setLabelFontWeight(400);
+        // Snapped-window appearance (Snapping.Appearance.{Borders,Decorations,Colors}).
+        // useSystemBorderColors=false so the explicit colors persist instead of
+        // being overwritten by the accent-derived system colors on load.
+        settings.setSnapWindowShowBorder(false);
+        settings.setSnapWindowHideTitleBars(false);
+        settings.setSnapWindowBorderWidth(4);
+        settings.setSnapWindowBorderRadius(8);
+        settings.setSnapWindowUseSystemBorderColors(false);
+        settings.setSnapWindowBorderColor(QColor(10, 20, 30));
+        settings.setSnapWindowInactiveBorderColor(QColor(40, 50, 60));
 
         settings.save();
 
@@ -161,17 +210,17 @@ private Q_SLOTS:
         }
 
         {
-            auto border = backend->group(ConfigDefaults::snappingAppearanceBorderGroup());
+            auto border = backend->group(ConfigDefaults::snappingZonesBorderGroup());
             QCOMPARE(border->readInt(ConfigDefaults::widthKey(), 0), 5);
             QCOMPARE(border->readInt(ConfigDefaults::radiusKey(), 0), 25);
         }
         {
-            auto opacity = backend->group(ConfigDefaults::snappingAppearanceOpacityGroup());
+            auto opacity = backend->group(ConfigDefaults::snappingZonesOpacityGroup());
             QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::activeKey(), 0.0), 0.8));
             QVERIFY(qFuzzyCompare(opacity->readDouble(ConfigDefaults::inactiveKey(), 0.0), 0.2));
         }
         {
-            auto labels = backend->group(ConfigDefaults::snappingAppearanceLabelsGroup());
+            auto labels = backend->group(ConfigDefaults::snappingZonesLabelsGroup());
             QCOMPARE(labels->readInt(ConfigDefaults::fontWeightKey(), 0), 400);
         }
 
@@ -217,6 +266,44 @@ private Q_SLOTS:
             const QJsonObject obj = doc.object();
             QCOMPARE(obj.value(QLatin1String("duration")).toInt(), 300);
             QCOMPARE(obj.value(QLatin1String("sequenceMode")).toInt(), 0);
+        }
+
+        {
+            // Snapped-window border decoration (Snapping.Appearance.Borders).
+            auto borders = backend->group(ConfigDefaults::snappingAppearanceBordersGroup());
+            QCOMPARE(borders->readBool(ConfigDefaults::showBorderKey(), true), false);
+            QCOMPARE(borders->readInt(ConfigDefaults::widthKey(), 0), 4);
+            QCOMPARE(borders->readInt(ConfigDefaults::radiusKey(), 0), 8);
+        }
+        {
+            // Snapped-window title-bar decoration (Snapping.Appearance.Decorations).
+            auto decorations = backend->group(ConfigDefaults::snappingAppearanceDecorationsGroup());
+            QCOMPARE(decorations->readBool(ConfigDefaults::hideTitleBarsKey(), true), false);
+        }
+        {
+            // Snapped-window border colors (Snapping.Appearance.Colors). Read the
+            // stored strings back through QColor so the on-disk serialization
+            // format is irrelevant to the comparison.
+            auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+            QCOMPARE(colors->readBool(ConfigDefaults::useSystemKey(), true), false);
+            QCOMPARE(QColor(colors->readString(ConfigDefaults::activeKey(), QString())), QColor(10, 20, 30));
+            QCOMPARE(QColor(colors->readString(ConfigDefaults::inactiveKey(), QString())), QColor(40, 50, 60));
+        }
+
+        {
+            // Load-side getter round-trip: a freshly-constructed Settings must
+            // read every snapWindow* value back through its OWN getter. The
+            // on-disk assertions above only prove save() wrote the right keys;
+            // a getter wired to the wrong group/key would still pass them.
+            // Reading through the getters pins the read path too.
+            Settings reloaded;
+            QCOMPARE(reloaded.snapWindowShowBorder(), false);
+            QCOMPARE(reloaded.snapWindowHideTitleBars(), false);
+            QCOMPARE(reloaded.snapWindowBorderWidth(), 4);
+            QCOMPARE(reloaded.snapWindowBorderRadius(), 8);
+            QCOMPARE(reloaded.snapWindowUseSystemBorderColors(), false);
+            QCOMPARE(reloaded.snapWindowBorderColor(), QColor(10, 20, 30));
+            QCOMPARE(reloaded.snapWindowInactiveBorderColor(), QColor(40, 50, 60));
         }
     }
 
@@ -281,6 +368,41 @@ private Q_SLOTS:
 
         QCOMPARE(specificSpy.count(), 0);
         QCOMPARE(generalSpy.count(), 0);
+    }
+
+    /**
+     * The hand-written setSnapWindowUseSystemBorderColors setter (not
+     * macro-generated) must emit both its specific
+     * snapWindowUseSystemBorderColorsChanged signal and settingsChanged() on a
+     * real change, and stay silent on a no-op (set to the same value twice).
+     */
+    void testSetSnapWindowUseSystemBorderColors_emitsAndGuards()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+
+        const bool current = settings.snapWindowUseSystemBorderColors();
+        const bool toggled = !current;
+        settings.setSnapWindowUseSystemBorderColors(current); // force known value
+
+        QSignalSpy generalSpy(&settings, &Settings::settingsChanged);
+        QSignalSpy specificSpy(&settings, &Settings::snapWindowUseSystemBorderColorsChanged);
+        QVERIFY(generalSpy.isValid());
+        QVERIFY(specificSpy.isValid());
+
+        // Real change emits both signals.
+        settings.setSnapWindowUseSystemBorderColors(toggled);
+        QCOMPARE(specificSpy.count(), 1);
+        QVERIFY(generalSpy.count() >= 1);
+
+        const int specificBefore = specificSpy.count();
+        const int generalBefore = generalSpy.count();
+
+        // No-op (same value again) emits nothing.
+        settings.setSnapWindowUseSystemBorderColors(toggled);
+        QCOMPARE(specificSpy.count(), specificBefore);
+        QCOMPARE(generalSpy.count(), generalBefore);
     }
 
     /**
@@ -447,7 +569,7 @@ private Q_SLOTS:
                 g->writeBool(QStringLiteral("OldDisplayToggle"), true);
             }
             {
-                auto g = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+                auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
                 g->writeInt(QStringLiteral("DeprecatedThemeIndex"), 42);
             }
             {
@@ -481,9 +603,9 @@ private Q_SLOTS:
             QVERIFY2(g->hasKey(ConfigDefaults::showNumbersKey()), "Valid key ShowNumbers must survive save()");
         }
         {
-            auto g = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+            auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("DeprecatedThemeIndex")),
-                     "Stale key in Snapping.Appearance.Colors group must be purged by save()");
+                     "Stale key in Snapping.Zones.Colors group must be purged by save()");
         }
         {
             auto g = backend->group(ConfigDefaults::tilingGroup());

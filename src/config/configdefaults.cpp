@@ -34,9 +34,14 @@ QString ConfigDefaults::sessionFilePath()
     return configDir() + QStringLiteral("/plasmazones/session.json");
 }
 
-QString ConfigDefaults::assignmentsFilePath()
+QString ConfigDefaults::windowRulesFilePath()
 {
-    return configDir() + QStringLiteral("/plasmazones/assignments.json");
+    return configDir() + QStringLiteral("/plasmazones/windowrules.json");
+}
+
+QString ConfigDefaults::quickLayoutsFilePath()
+{
+    return configDir() + QStringLiteral("/plasmazones/quicklayouts.json");
 }
 
 QString ConfigDefaults::legacyConfigFilePath()
@@ -69,8 +74,11 @@ QString ConfigDefaults::readRenderingBackendFromDisk()
     const QString iniPath = legacyConfigFilePath();
     if (QFile::exists(iniPath)) {
         QSettings cfg(iniPath, QSettings::IniFormat);
-        // Hardcoded v1 key name — the INI file predates the v2 rename to "Backend"
-        const QString raw = cfg.value(QStringLiteral("RenderingBackend"), renderingBackend()).toString();
+        // v1 INI key name — the INI file predates the v2 rename to "Backend".
+        // Routed through the frozen `Legacy::v1RenderingBackendKey()` accessor
+        // shared with `migrateIniToJson` / `migrateV1ToV2` so a future rename
+        // of the literal can't drift one consumer behind the others.
+        const QString raw = cfg.value(ConfigKeys::Legacy::v1RenderingBackendKey(), renderingBackend()).toString();
         return normalizeRenderingBackend(raw);
     }
 

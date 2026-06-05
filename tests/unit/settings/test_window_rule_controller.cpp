@@ -1,0 +1,799 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_window_rule_controller.cpp
+ * @brief Coverage for WindowRuleController — the staging controller behind
+ *        the unified Window Rules page.
+ *
+ * The controller talks to the daemon over D-Bus; in a headless unit run the
+ * daemon is absent, so `daemonReachable` is false and the model starts empty.
+ * The staging contract (in-memory CRUD by UUID, dirty-tracking, revert) is
+ * fully exercisable without a live daemon.
+ *
+ * Pins:
+ *   - `newEmptyRule` produces a valid, subject-shaped rule with a fresh UUID,
+ *   - add / update / remove by UUID flip the dirty bit,
+ *   - `monitorOverview` summarises rules per connected monitor,
+ *   - `moveRule` reorders and renormalizes priorities,
+ *   - the field / operator / action authoring metadata is well-formed.
+ */
+
+#include <QJSEngine>
+#include <QJsonObject>
+#include <QSignalSpy>
+#include <QTest>
+#include <QUuid>
+
+#include "settings/windowrulecontroller.h"
+#include "settings/windowrulemodel.h"
+
+#include <PhosphorWindowRule/MatchExpression.h>
+#include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/WindowRule.h>
+
+using namespace PlasmaZones;
+using namespace PhosphorWindowRule;
+
+class TestWindowRuleController : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void newEmptyRuleShapesBySubject();
+    void addUpdateRemoveByUuid();
+    void dirtyTrackingAndRevert();
+    void monitorOverviewSummarises();
+    void monitorOverviewClassifiesScrollingWithoutLayoutName();
+    void monitorOverviewDisableEngineMatchesEffectiveMode();
+    void engineModePickerExposesAllVocabularyTokens();
+    void userAuthorableFilterHidesInternalActions();
+    void moveRuleReorders();
+    void authoringMetadata();
+    void templatesProduceSeededRules();
+    void actionTypesCarryDomain();
+    void matchIsContextOnlyClassifies();
+    void validationIssuesForJsonFlags();
+    void defaultPayloadForSeedsParams();
+    void forceCommitIsInvokable();
+    void curveLabelResolverBridgesQmlNaming();
+};
+
+void TestWindowRuleController::newEmptyRuleShapesBySubject()
+{
+    WindowRuleController controller;
+
+    const QVariantMap monitor = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVERIFY(!monitor.value(QStringLiteral("id")).toString().isEmpty());
+    QVERIFY(monitor.contains(QStringLiteral("match")));
+    // The monitor subject starts with a ScreenId leaf.
+    const QVariantMap monitorMatch = monitor.value(QStringLiteral("match")).toMap();
+    QCOMPARE(monitorMatch.value(QStringLiteral("field")).toString(), QStringLiteral("screenId"));
+
+    const QVariantMap app = controller.newEmptyRule(QStringLiteral("application"));
+    const QVariantMap appMatch = app.value(QStringLiteral("match")).toMap();
+    QCOMPARE(appMatch.value(QStringLiteral("field")).toString(), QStringLiteral("appId"));
+
+    const QVariantMap activity = controller.newEmptyRule(QStringLiteral("activity"));
+    const QVariantMap activityMatch = activity.value(QStringLiteral("match")).toMap();
+    QCOMPARE(activityMatch.value(QStringLiteral("field")).toString(), QStringLiteral("activity"));
+
+    // Custom starts from the catch-all All{} composite.
+    const QVariantMap custom = controller.newEmptyRule(QStringLiteral("custom"));
+    QVERIFY(custom.value(QStringLiteral("match")).toMap().contains(QStringLiteral("all")));
+
+    // Each fresh rule carries a distinct UUID.
+    QVERIFY(monitor.value(QStringLiteral("id")).toString() != app.value(QStringLiteral("id")).toString());
+}
+
+void TestWindowRuleController::addUpdateRemoveByUuid()
+{
+    WindowRuleController controller;
+
+    // Build a monitor rule, give it a usable action, and add it.
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("application"));
+    rule[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+    const QString id = controller.addRuleFromJson(rule);
+    QVERIFY(!id.isEmpty());
+    QCOMPARE(controller.model()->rowCount(), 1);
+
+    // Update by UUID — rename it.
+    QVariantMap fetched = controller.ruleJson(id);
+    QCOMPARE(fetched.value(QStringLiteral("id")).toString(), id);
+    fetched[QStringLiteral("name")] = QStringLiteral("Renamed");
+    QVERIFY(controller.updateRuleFromJson(fetched));
+    QCOMPARE(controller.ruleJson(id).value(QStringLiteral("name")).toString(), QStringLiteral("Renamed"));
+
+    // setRuleEnabled toggles the flag.
+    QVERIFY(controller.setRuleEnabled(id, false));
+    QCOMPARE(controller.ruleJson(id).value(QStringLiteral("enabled")).toBool(), false);
+
+    // Remove by UUID.
+    QVERIFY(controller.removeRule(id));
+    QCOMPARE(controller.model()->rowCount(), 0);
+    QVERIFY(!controller.removeRule(id));
+}
+
+void TestWindowRuleController::dirtyTrackingAndRevert()
+{
+    WindowRuleController controller;
+    QVERIFY(!controller.isDirty());
+
+    QSignalSpy dirtySpy(&controller, &WindowRuleController::dirtyChanged);
+
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("application"));
+    rule[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+    const QString id = controller.addRuleFromJson(rule);
+    QVERIFY(!id.isEmpty());
+
+    // Adding a rule flips the dirty bit.
+    QVERIFY(controller.isDirty());
+    QVERIFY(controller.hasPendingChanges());
+    QVERIFY(dirtySpy.count() >= 1);
+
+    // revert() re-fetches the daemon's authoritative set asynchronously and
+    // only clears the dirty bit if the re-fetch succeeded. The contract this
+    // test guards is the linkage between the async outcome and the dirty-state
+    // transition: a successful revert (rulesLoaded fires) MUST clear dirty, a
+    // failed revert MUST preserve it. The earlier bug was a failed revert
+    // silently dropping staged edits while reporting success. The check is
+    // symmetric so it passes both in a fully headless run (daemon absent →
+    // revert fails → dirty stays) and on a dev machine with a live daemon
+    // (revert succeeds → dirty clears).
+    QSignalSpy loadedSpy(&controller, &WindowRuleController::rulesLoaded);
+    controller.revert();
+    // Pump the event loop briefly so the QDBusPendingCall reply (success or
+    // error) lands. A timeout fall-through is acceptable — that's the
+    // daemon-absent path and dirty must stay set.
+    loadedSpy.wait(500);
+    const bool reverted = loadedSpy.count() > 0;
+    QCOMPARE(controller.isDirty(), !reverted);
+}
+
+void TestWindowRuleController::monitorOverviewSummarises()
+{
+    WindowRuleController controller;
+
+    // One rule pinned to DP-2 with an engine action.
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+    match[QStringLiteral("value")] = QStringLiteral("DP-2");
+    rule[QStringLiteral("match")] = match;
+    rule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+    QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+
+    // Two monitors connected — DP-2 has the rule, eDP-1 has none.
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("eDP-1")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+
+    bool sawDp2 = false;
+    bool sawEdp1 = false;
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        if (tile.value(QStringLiteral("screenId")).toString() == QLatin1String("DP-2")) {
+            sawDp2 = true;
+            QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+            QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
+        }
+        if (tile.value(QStringLiteral("screenId")).toString() == QLatin1String("eDP-1")) {
+            sawEdp1 = true;
+            QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 0);
+            QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), false);
+        }
+    }
+    QVERIFY(sawDp2);
+    QVERIFY(sawEdp1);
+}
+
+void TestWindowRuleController::monitorOverviewClassifiesScrollingWithoutLayoutName()
+{
+    // Pin that a Scrolling-mode rule, even when carrying a stale snapping
+    // layout in its action payload, produces an EMPTY `layoutName` on the
+    // overview tile. The pre-Pass-3 inline `== "autotile"` / `== "snapping"`
+    // classifier silently coerced Scrolling rules into the "no engine pin
+    // → prefer snapping layout" fallback, mis-labelling the tile with the
+    // leftover layout. A regression to that shape is caught here.
+    WindowRuleController controller;
+
+    QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
+    QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+    match[QStringLiteral("value")] = QStringLiteral("DP-3");
+    rule[QStringLiteral("match")] = match;
+    // Build a SetEngineMode=scrolling action ALONGSIDE a stale snapping
+    // layout payload — the bug class drops the SetEngineMode mode token
+    // (silently mapping scrolling → snapping) and surfaces the snapping
+    // layout as the tile's layoutName. With the fix, the classifier sees
+    // mode=Scrolling and leaves layoutName empty.
+    rule[QStringLiteral("actions")] =
+        QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                 {QStringLiteral("mode"), QStringLiteral("scrolling")}},
+                     QVariantMap{{QStringLiteral("type"), QStringLiteral("setSnappingLayout")},
+                                 {QStringLiteral("layoutId"), QStringLiteral("{stale-layout-id-not-real}")}}};
+    QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-3")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 1);
+    const QVariantMap tile = overview.first().toMap();
+    QCOMPARE(tile.value(QStringLiteral("screenId")).toString(), QStringLiteral("DP-3"));
+    QCOMPARE(tile.value(QStringLiteral("ruleCount")).toInt(), 1);
+    QCOMPARE(tile.value(QStringLiteral("assigned")).toBool(), true);
+    // The Scrolling branch yields no layout/algorithm to label — the tile
+    // must read empty here, NOT the stale snapping layout id/name that
+    // the pre-fix classifier would have surfaced.
+    QVERIFY2(tile.value(QStringLiteral("layoutName")).toString().isEmpty(),
+             qPrintable(tile.value(QStringLiteral("layoutName")).toString()));
+}
+
+void TestWindowRuleController::monitorOverviewDisableEngineMatchesEffectiveMode()
+{
+    // Pin that `tilingEnabled` on the overview tile resolves the
+    // DisableEngine action against the screen's EFFECTIVE engine mode,
+    // not "any DisableEngine action present". A DisableEngine{snapping}
+    // rule on an Autotile-effective screen must NOT flip tilingEnabled
+    // off — the cascade resolution in the daemon would never treat that
+    // rule as disabling autotile. The matching positive case
+    // (DisableEngine{mode} == effective mode) must flip it off.
+    WindowRuleController controller;
+    // DP-A: SetEngineMode=autotile + DisableEngine=autotile → engine off.
+    {
+        QVariantMap modeRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = modeRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-A");
+        modeRule[QStringLiteral("match")] = match;
+        modeRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(modeRule).isEmpty());
+
+        QVariantMap disableRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap dmatch = disableRule.value(QStringLiteral("match")).toMap();
+        dmatch[QStringLiteral("value")] = QStringLiteral("DP-A");
+        disableRule[QStringLiteral("match")] = dmatch;
+        disableRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(disableRule).isEmpty());
+    }
+    // DP-B: SetEngineMode=autotile + DisableEngine=snapping → engine ON
+    // (cross-mode disable must not flip the tile).
+    {
+        QVariantMap modeRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap match = modeRule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = QStringLiteral("DP-B");
+        modeRule[QStringLiteral("match")] = match;
+        modeRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("setEngineMode")},
+                                     {QStringLiteral("mode"), QStringLiteral("autotile")}}};
+        QVERIFY(!controller.addRuleFromJson(modeRule).isEmpty());
+
+        QVariantMap disableRule = controller.newEmptyRule(QStringLiteral("monitor"));
+        QVariantMap dmatch = disableRule.value(QStringLiteral("match")).toMap();
+        dmatch[QStringLiteral("value")] = QStringLiteral("DP-B");
+        disableRule[QStringLiteral("match")] = dmatch;
+        disableRule[QStringLiteral("actions")] =
+            QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("disableEngine")},
+                                     {QStringLiteral("mode"), QStringLiteral("snapping")}}};
+        QVERIFY(!controller.addRuleFromJson(disableRule).isEmpty());
+    }
+
+    const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-A")}},
+                               QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-B")}}};
+    const QVariantList overview = controller.monitorOverview(screens);
+    QCOMPARE(overview.size(), 2);
+    bool sawA = false;
+    bool sawB = false;
+    for (const QVariant& v : overview) {
+        const QVariantMap tile = v.toMap();
+        const QString id = tile.value(QStringLiteral("screenId")).toString();
+        if (id == QLatin1String("DP-A")) {
+            sawA = true;
+            QCOMPARE(tile.value(QStringLiteral("tilingEnabled")).toBool(), false);
+        } else if (id == QLatin1String("DP-B")) {
+            sawB = true;
+            QCOMPARE(tile.value(QStringLiteral("tilingEnabled")).toBool(), true);
+        }
+    }
+    QVERIFY(sawA);
+    QVERIFY(sawB);
+}
+
+void TestWindowRuleController::engineModePickerExposesAllVocabularyTokens()
+{
+    // Pin that the SetEngineMode + DisableEngine pickers expose exactly
+    // three options — snapping / autotile / scrolling — with non-empty
+    // localised labels. A regression that dropped the Scrolling enum
+    // option from `engineModeOptions()` or the GPL settings-layer label
+    // map would surface here.
+    WindowRuleController controller;
+    const QVariantList types = controller.actionTypes();
+    // Each entry in `actionTypes()` carries its own `params` list (see the
+    // descriptor docstring in windowrulecontroller.h:281-291). For each
+    // param of kind="enum", the `options` list contains `{value, label}`
+    // pairs. We walk to the `mode` param of each action and extract its
+    // options to verify the closed engine-mode vocabulary.
+    const auto findModeOptions = [&](const QString& typeWire) -> QVariantList {
+        for (const QVariant& t : types) {
+            const QVariantMap tm = t.toMap();
+            if (tm.value(QStringLiteral("value")).toString() != typeWire) {
+                continue;
+            }
+            for (const QVariant& p : tm.value(QStringLiteral("params")).toList()) {
+                const QVariantMap pm = p.toMap();
+                if (pm.value(QStringLiteral("key")).toString() == QLatin1String("mode")) {
+                    return pm.value(QStringLiteral("options")).toList();
+                }
+            }
+        }
+        return {};
+    };
+    for (const QString& actionWire : {QStringLiteral("setEngineMode"), QStringLiteral("disableEngine")}) {
+        const QVariantList options = findModeOptions(actionWire);
+        QCOMPARE(options.size(), 3);
+        QStringList wireValues;
+        for (const QVariant& opt : options) {
+            const QVariantMap om = opt.toMap();
+            wireValues.append(om.value(QStringLiteral("value")).toString());
+            QVERIFY2(!om.value(QStringLiteral("label")).toString().isEmpty(),
+                     qPrintable(QStringLiteral("empty label for %1 / %2")
+                                    .arg(actionWire, om.value(QStringLiteral("value")).toString())));
+        }
+        QVERIFY2(wireValues.contains(QStringLiteral("snapping")), qPrintable(wireValues.join(QLatin1Char(','))));
+        QVERIFY2(wireValues.contains(QStringLiteral("autotile")), qPrintable(wireValues.join(QLatin1Char(','))));
+        QVERIFY2(wireValues.contains(QStringLiteral("scrolling")), qPrintable(wireValues.join(QLatin1Char(','))));
+    }
+}
+
+void TestWindowRuleController::userAuthorableFilterHidesInternalActions()
+{
+    // Pin that the controller's actionTypes() picker honours the
+    // `userAuthorable=false` flag on ActionDescriptor. Without this test the
+    // filter is dead code — every shipped descriptor currently defaults to
+    // userAuthorable=true, so a regression that bypasses the filter (e.g.
+    // re-introducing a hand-maintained allow-list) would slip through CI.
+    //
+    // Register a sentinel descriptor flagged as non-authorable, walk the
+    // picker, then restore the descriptor to its prior state so the rest
+    // of the test suite isn't disturbed.
+    using PhosphorWindowRule::ActionDescriptor;
+    using PhosphorWindowRule::ActionDomain;
+    using PhosphorWindowRule::ActionRegistry;
+
+    static const QString kSentinelType = QStringLiteral("test-sentinel-internal-action");
+    auto& registry = ActionRegistry::instance();
+    const bool prevExists = registry.isRegistered(kSentinelType);
+    const std::optional<ActionDescriptor> prev = registry.descriptor(kSentinelType);
+
+    // RAII cleanup: restore the prior descriptor (or unregister the sentinel
+    // entirely) even if an assertion throws / fails mid-test. Without this,
+    // a QVERIFY2 failure between the two registerAction calls would skip
+    // the trailing cleanup and leak the sentinel into the registry for the
+    // remainder of the test binary's lifetime.
+    struct RegistryGuard
+    {
+        ActionRegistry& registry;
+        QString type;
+        bool prevExists;
+        std::optional<ActionDescriptor> prev;
+        ~RegistryGuard()
+        {
+            if (prevExists && prev.has_value()) {
+                registry.registerAction(*prev);
+            } else {
+                registry.unregisterAction(type);
+            }
+        }
+    };
+    RegistryGuard guard{registry, kSentinelType, prevExists, prev};
+
+    ActionDescriptor sentinel;
+    sentinel.type = kSentinelType;
+    sentinel.slotFor = [](const QJsonObject&) {
+        return QStringLiteral("test-sentinel-slot");
+    };
+    sentinel.validate = [](const QJsonObject&) {
+        return true;
+    };
+    sentinel.terminal = false;
+    sentinel.domain = ActionDomain::Window;
+    sentinel.userAuthorable = false;
+    registry.registerAction(sentinel);
+
+    WindowRuleController controller;
+    const QVariantList types = controller.actionTypes();
+    bool found = false;
+    for (const QVariant& t : types) {
+        const QVariantMap tm = t.toMap();
+        if (tm.value(QStringLiteral("value")).toString() == kSentinelType) {
+            found = true;
+            break;
+        }
+    }
+    QVERIFY2(!found, "actionTypes() must exclude descriptors with userAuthorable=false");
+
+    // Now flip the descriptor to userAuthorable=true and confirm the same
+    // sentinel surfaces — the filter is the only thing keeping it hidden.
+    sentinel.userAuthorable = true;
+    registry.registerAction(sentinel);
+    const QVariantList typesAuthorable = controller.actionTypes();
+    bool foundAuthorable = false;
+    for (const QVariant& t : typesAuthorable) {
+        const QVariantMap tm = t.toMap();
+        if (tm.value(QStringLiteral("value")).toString() == kSentinelType) {
+            foundAuthorable = true;
+            break;
+        }
+    }
+    QVERIFY2(foundAuthorable, "actionTypes() must include descriptors with userAuthorable=true");
+    // RegistryGuard's dtor handles cleanup.
+}
+
+void TestWindowRuleController::moveRuleReorders()
+{
+    WindowRuleController controller;
+
+    auto makeApp = [&](const QString& appId) {
+        QVariantMap rule = controller.newEmptyRule(QStringLiteral("application"));
+        QVariantMap match = rule.value(QStringLiteral("match")).toMap();
+        match[QStringLiteral("value")] = appId;
+        rule[QStringLiteral("match")] = match;
+        rule[QStringLiteral("actions")] = QVariantList{QVariantMap{{QStringLiteral("type"), QStringLiteral("float")}}};
+        return controller.addRuleFromJson(rule);
+    };
+
+    const QString a = makeApp(QStringLiteral("a"));
+    const QString b = makeApp(QStringLiteral("b"));
+    const QString c = makeApp(QStringLiteral("c"));
+    QVERIFY(!a.isEmpty() && !b.isEmpty() && !c.isEmpty());
+
+    // Move C before A — order becomes C, A, B.
+    QVERIFY(controller.moveRule(c, a));
+    WindowRuleModel* model = controller.model();
+    QCOMPARE(model->index(0, 0).data(WindowRuleModel::IdRole).toString(), c);
+    QCOMPARE(model->index(1, 0).data(WindowRuleModel::IdRole).toString(), a);
+    QCOMPARE(model->index(2, 0).data(WindowRuleModel::IdRole).toString(), b);
+
+    // moveRule renormalizes priorities — earlier list index ⇒ higher priority.
+    const int prioFirst = model->index(0, 0).data(WindowRuleModel::PriorityRole).toInt();
+    const int prioLast = model->index(2, 0).data(WindowRuleModel::PriorityRole).toInt();
+    QVERIFY(prioFirst > prioLast);
+}
+
+void TestWindowRuleController::authoringMetadata()
+{
+    WindowRuleController controller;
+
+    const QVariantList fields = controller.matchFields();
+    QVERIFY(!fields.isEmpty());
+    // Every field entry carries value / label / valueKind. The `screen` and
+    // `activity` kinds drive the dedicated picker editors in QML — assert
+    // at least one of each is present so a regression that reverts those
+    // fields back to `string` (silently breaking the picker UX) is caught.
+    bool sawScreenKind = false;
+    bool sawActivityKind = false;
+    bool sawWindowTypeKind = false;
+    for (const QVariant& v : fields) {
+        const QVariantMap f = v.toMap();
+        QVERIFY(f.contains(QStringLiteral("value")));
+        QVERIFY(!f.value(QStringLiteral("label")).toString().isEmpty());
+        const QString kind = f.value(QStringLiteral("valueKind")).toString();
+        QVERIFY(kind == QLatin1String("string") || kind == QLatin1String("number") || kind == QLatin1String("bool")
+                || kind == QLatin1String("screen") || kind == QLatin1String("activity")
+                || kind == QLatin1String("windowType"));
+        if (kind == QLatin1String("screen")) {
+            sawScreenKind = true;
+        }
+        if (kind == QLatin1String("activity")) {
+            sawActivityKind = true;
+        }
+        if (kind == QLatin1String("windowType")) {
+            sawWindowTypeKind = true;
+            // windowType must carry an `options` array of {value, wire, label}
+            // triples so the editor can render the enum dropdown.
+            const QVariantList options = f.value(QStringLiteral("options")).toList();
+            QVERIFY2(!options.isEmpty(), "windowType valueKind must expose enum options for the dropdown");
+            for (const QVariant& opt : options) {
+                const QVariantMap m = opt.toMap();
+                QVERIFY(m.contains(QStringLiteral("value")));
+                QVERIFY(m.contains(QStringLiteral("wire")));
+                QVERIFY(!m.value(QStringLiteral("label")).toString().isEmpty());
+            }
+        }
+    }
+    QVERIFY(sawScreenKind);
+    QVERIFY(sawActivityKind);
+    QVERIFY(sawWindowTypeKind);
+
+    // AppId (Field enum 0) supports the AppIdMatches operator.
+    const QVariantList appOps = controller.operatorsForField(0);
+    QVERIFY(!appOps.isEmpty());
+
+    const QVariantList actions = controller.actionTypes();
+    QVERIFY(!actions.isEmpty());
+    bool sawFloat = false;
+    for (const QVariant& v : actions) {
+        if (v.toMap().value(QStringLiteral("value")).toString() == QLatin1String("float"))
+            sawFloat = true;
+    }
+    QVERIFY(sawFloat);
+}
+
+void TestWindowRuleController::templatesProduceSeededRules()
+{
+    WindowRuleController controller;
+
+    // The catalogue surfaced to the AddRuleSheet — every template entry
+    // must carry the four UI fields the QML grid binds against. A missing
+    // field would render a tile with a blank label or no icon.
+    const QVariantList templates = controller.ruleTemplates();
+    QVERIFY(!templates.isEmpty());
+    for (const QVariant& v : templates) {
+        const QVariantMap t = v.toMap();
+        QVERIFY(!t.value(QStringLiteral("id")).toString().isEmpty());
+        QVERIFY(!t.value(QStringLiteral("label")).toString().isEmpty());
+        QVERIFY(!t.value(QStringLiteral("description")).toString().isEmpty());
+        QVERIFY(!t.value(QStringLiteral("icon")).toString().isEmpty());
+    }
+
+    // `layoutOnMonitor` mirrors the old MonitorStatePage assignment flow:
+    // ScreenId leaf + SetEngineMode("snapping") + SetSnappingLayout (empty
+    // layoutId — the user fills it in the editor). The seeded action shape
+    // is the rule editor's contract; regression there silently breaks the
+    // quick-start flow.
+    const QVariantMap layoutRule = controller.newRuleFromTemplate(QStringLiteral("layoutOnMonitor"));
+    QVERIFY(!layoutRule.value(QStringLiteral("id")).toString().isEmpty());
+    QCOMPARE(layoutRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("screenId"));
+    const QVariantList layoutActions = layoutRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(layoutActions.size(), 2);
+    QCOMPARE(layoutActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setEngineMode"));
+    QCOMPARE(layoutActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
+    QCOMPARE(layoutActions.at(1).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setSnappingLayout"));
+
+    // `algorithmOnMonitor` is the autotile mirror — same screen leaf,
+    // SetEngineMode("autotile") + SetTilingAlgorithm.
+    const QVariantMap algoRule = controller.newRuleFromTemplate(QStringLiteral("algorithmOnMonitor"));
+    const QVariantList algoActions = algoRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(algoActions.size(), 2);
+    QCOMPARE(algoActions.at(0).toMap().value(QStringLiteral("mode")).toString(), QStringLiteral("autotile"));
+    QCOMPARE(algoActions.at(1).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("setTilingAlgorithm"));
+
+    // `excludeApp` is the per-app exclusion template (Application subject +
+    // Exclude action). Single action, no params required.
+    const QVariantMap excludeRule = controller.newRuleFromTemplate(QStringLiteral("excludeApp"));
+    QCOMPARE(excludeRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("appId"));
+    const QVariantList excludeActions = excludeRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(excludeActions.size(), 1);
+    QCOMPARE(excludeActions.at(0).toMap().value(QStringLiteral("type")).toString(), QStringLiteral("exclude"));
+
+    // An unknown id must return an empty map — the AddRuleSheet would
+    // otherwise commit a UUID-less rule on a typo in the template id.
+    const QVariantMap bogus = controller.newRuleFromTemplate(QStringLiteral("nonexistentTemplate"));
+    QVERIFY(bogus.isEmpty());
+}
+
+void TestWindowRuleController::actionTypesCarryDomain()
+{
+    // The picker keys off this field to disable context-domain actions when
+    // the match references window-property leaves — a regression that drops
+    // the domain would silently re-enable the silently-never-fires
+    // combination.
+    WindowRuleController controller;
+    const QVariantList actions = controller.actionTypes();
+    QVERIFY(!actions.isEmpty());
+    QHash<QString, QString> domainOf;
+    for (const QVariant& v : actions) {
+        const QVariantMap m = v.toMap();
+        const QString id = m.value(QStringLiteral("value")).toString();
+        const QString domain = m.value(QStringLiteral("domain")).toString();
+        QVERIFY2(domain == QLatin1String("context") || domain == QLatin1String("window"),
+                 qPrintable(QStringLiteral("action %1 has unexpected domain %2").arg(id, domain)));
+        domainOf.insert(id, domain);
+    }
+    // Spot-check the canonical pairs — the context actions and a sample of
+    // window actions. A typo in the descriptor would flip these.
+    QCOMPARE(domainOf.value(QStringLiteral("setEngineMode")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("setSnappingLayout")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("setTilingAlgorithm")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("disableEngine")), QStringLiteral("context"));
+    QCOMPARE(domainOf.value(QStringLiteral("float")), QStringLiteral("window"));
+    QCOMPARE(domainOf.value(QStringLiteral("exclude")), QStringLiteral("window"));
+}
+
+void TestWindowRuleController::matchIsContextOnlyClassifies()
+{
+    WindowRuleController controller;
+
+    // Empty / catch-all match — context-only by definition (no leaves).
+    QVERIFY(controller.matchIsContextOnly(QVariantMap{}));
+
+    QVariantMap allEmpty;
+    allEmpty[QStringLiteral("all")] = QVariantList{};
+    QVERIFY(controller.matchIsContextOnly(allEmpty));
+
+    // Single context leaf — context-only.
+    QVariantMap screenLeaf;
+    screenLeaf[QStringLiteral("field")] = QStringLiteral("screenId");
+    screenLeaf[QStringLiteral("op")] = QStringLiteral("equals");
+    screenLeaf[QStringLiteral("value")] = QStringLiteral("DP-1");
+    QVERIFY(controller.matchIsContextOnly(screenLeaf));
+
+    // Single window leaf — NOT context-only.
+    QVariantMap appLeaf;
+    appLeaf[QStringLiteral("field")] = QStringLiteral("appId");
+    appLeaf[QStringLiteral("op")] = QStringLiteral("equals");
+    appLeaf[QStringLiteral("value")] = QStringLiteral("firefox");
+    QVERIFY(!controller.matchIsContextOnly(appLeaf));
+
+    // An All{} carrying a window leaf — NOT context-only.
+    QVariantMap mixedAll;
+    QVariantList children;
+    children.append(screenLeaf);
+    children.append(appLeaf);
+    mixedAll[QStringLiteral("all")] = children;
+    QVERIFY(!controller.matchIsContextOnly(mixedAll));
+}
+
+void TestWindowRuleController::validationIssuesForJsonFlags()
+{
+    WindowRuleController controller;
+
+    // Clean rule: window match + Float action → no issues.
+    QVariantMap clean = controller.newEmptyRule(QStringLiteral("application"));
+    QVariantMap appLeaf;
+    appLeaf[QStringLiteral("field")] = QStringLiteral("appId");
+    appLeaf[QStringLiteral("op")] = QStringLiteral("equals");
+    appLeaf[QStringLiteral("value")] = QStringLiteral("firefox");
+    clean[QStringLiteral("match")] = appLeaf;
+    QVariantList cleanActions;
+    QVariantMap floatAction;
+    floatAction[QStringLiteral("type")] = QStringLiteral("float");
+    cleanActions.append(floatAction);
+    clean[QStringLiteral("actions")] = cleanActions;
+    QCOMPARE(controller.validationIssuesForJson(clean).size(), 0);
+
+    // Bad rule: same window match + SetEngineMode action → one issue at
+    // index 0, pointing at the offending action.
+    QVariantMap bad = clean;
+    QVariantList badActions;
+    QVariantMap engine;
+    engine[QStringLiteral("type")] = QStringLiteral("setEngineMode");
+    engine[QStringLiteral("mode")] = QStringLiteral("autotile");
+    badActions.append(engine);
+    bad[QStringLiteral("actions")] = badActions;
+    const QVariantList issues = controller.validationIssuesForJson(bad);
+    QCOMPARE(issues.size(), 1);
+    const QVariantMap issue = issues.first().toMap();
+    QCOMPARE(issue.value(QStringLiteral("actionIndex")).toInt(), 0);
+    QCOMPARE(issue.value(QStringLiteral("actionType")).toString(), QStringLiteral("setEngineMode"));
+    QVERIFY(!issue.value(QStringLiteral("message")).toString().isEmpty());
+
+    // Partial rule (no actions yet) → zero issues; the editor only flags
+    // once the user has picked an action.
+    QVariantMap partial = clean;
+    partial[QStringLiteral("actions")] = QVariantList{};
+    QCOMPARE(controller.validationIssuesForJson(partial).size(), 0);
+}
+
+void TestWindowRuleController::defaultPayloadForSeedsParams()
+{
+    // The QML action row uses `defaultPayloadFor` when the user switches the
+    // type combo to a new action — a stale regression that returned a bare
+    // `{type: X}` map would leave SpinBoxes anchored at 0 and `canSave`
+    // would gate the rule on params the user never had a chance to fill.
+    WindowRuleController controller;
+
+    // Float carries no params — payload is exactly `{type: float}`.
+    const QVariantMap floatPayload = controller.defaultPayloadFor(QStringLiteral("float"));
+    QCOMPARE(floatPayload.value(QStringLiteral("type")).toString(), QStringLiteral("float"));
+    QCOMPARE(floatPayload.size(), 1);
+
+    // SetOpacity stores `display * scale`; the descriptor declares
+    // defaultDisplay=100 with scale=0.01, so the seeded wire value is
+    // 1.0 (100% — no visible change). A future change to the descriptor's
+    // defaultDisplay would automatically flow through here. The earlier
+    // seed-at-`min`=0 behaviour was a bug: a SetOpacity rule was savable
+    // immediately at 0% (invisible window) before the user adjusted.
+    const QVariantMap opacityPayload = controller.defaultPayloadFor(QStringLiteral("setOpacity"));
+    QCOMPARE(opacityPayload.value(QStringLiteral("type")).toString(), QStringLiteral("setOpacity"));
+    QVERIFY(opacityPayload.contains(QStringLiteral("value")));
+    QCOMPARE(opacityPayload.value(QStringLiteral("value")).toDouble(), 1.0);
+
+    // SetEngineMode's `mode` is an enum — seeded to the first option's wire
+    // value. The engineModeOptions list begins with snapping, so the default
+    // pre-selects that. Changing the order in the descriptor would
+    // automatically change this default.
+    const QVariantMap modePayload = controller.defaultPayloadFor(QStringLiteral("setEngineMode"));
+    QCOMPARE(modePayload.value(QStringLiteral("type")).toString(), QStringLiteral("setEngineMode"));
+    QCOMPARE(modePayload.value(QStringLiteral("mode")).toString(), QStringLiteral("snapping"));
+
+    // SetSnappingLayout uses the `snappingLayout` picker kind — no implicit
+    // default (the user must pick a layout), so the seeded value is an
+    // empty string. `canSave` will then explicitly surface "layout missing".
+    const QVariantMap layoutPayload = controller.defaultPayloadFor(QStringLiteral("setSnappingLayout"));
+    QVERIFY(layoutPayload.contains(QStringLiteral("layoutId")));
+    QCOMPARE(layoutPayload.value(QStringLiteral("layoutId")).toString(), QString());
+
+    // OverrideAnimationCurve has two picker-kind params — both empty.
+    const QVariantMap curvePayload = controller.defaultPayloadFor(QStringLiteral("overrideAnimationCurve"));
+    QVERIFY(curvePayload.contains(QStringLiteral("event")));
+    QVERIFY(curvePayload.contains(QStringLiteral("curve")));
+    QCOMPARE(curvePayload.value(QStringLiteral("event")).toString(), QString());
+    QCOMPARE(curvePayload.value(QStringLiteral("curve")).toString(), QString());
+
+    // Unknown type → bare `{type: X}` map. The QML side will never call this
+    // with an unknown wire (the picker only offers registered types), but
+    // returning a sane shape keeps the contract total.
+    const QVariantMap unknownPayload = controller.defaultPayloadFor(QStringLiteral("bogusActionType"));
+    QCOMPARE(unknownPayload.value(QStringLiteral("type")).toString(), QStringLiteral("bogusActionType"));
+    QCOMPARE(unknownPayload.size(), 1);
+}
+
+void TestWindowRuleController::forceCommitIsInvokable()
+{
+    // Pin the post-pass-27 contract — asyncCommit(bool) is the
+    // QML-facing escape hatch the daemonChangedWhileDirty banner
+    // uses. Originally forceCommit() carried the Q_INVOKABLE, but
+    // pass 27 migrated QML to the async path so the test now pins
+    // the live contract. The old test name is preserved so the
+    // history is grep-able; the assertion targets the actual hot
+    // path.
+    WindowRuleController controller;
+    const QMetaObject* mo = controller.metaObject();
+    QVERIFY2(mo->indexOfMethod("asyncCommit(bool)") >= 0,
+             "WindowRuleController::asyncCommit must remain Q_INVOKABLE — QML's daemon-changed banner depends on it");
+}
+
+void TestWindowRuleController::curveLabelResolverBridgesQmlNaming()
+{
+    // The rule-list summary resolves OverrideAnimationCurve wire strings to
+    // friendly names through a QML-supplied JS resolver (CurvePresets.curveLabel
+    // in production). Exercise the actual QJSValue bridge end-to-end: install a
+    // real engine-backed resolver and confirm the summary renders its output,
+    // and that a non-callable value clears the resolver back to the raw value.
+    WindowRuleController controller;
+
+    WindowRule curveRule;
+    curveRule.id = QUuid::createUuid();
+    curveRule.priority = 100;
+    curveRule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+    RuleAction curve;
+    curve.type = QString(ActionType::OverrideAnimationCurve);
+    curve.params.insert(ActionParam::Curve, QStringLiteral("0.33,1.00,0.68,1.00"));
+    curveRule.actions = {curve};
+    controller.model()->setRules({curveRule});
+
+    const auto summary = [&]() {
+        return controller.model()->data(controller.model()->index(0, 0), WindowRuleModel::ActionSummaryRole).toString();
+    };
+
+    // No resolver wired yet → the raw wire string round-trips behind the label.
+    QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
+
+    QJSEngine engine;
+    QJSValue resolver = engine.evaluate(
+        QStringLiteral("(function(c){ return c === '0.33,1.00,0.68,1.00' ? 'Standard (Cubic)' : c; })"));
+    QVERIFY(resolver.isCallable());
+    controller.setCurveLabelResolver(resolver);
+    QCOMPARE(summary(), QStringLiteral("Curve: Standard (Cubic)"));
+
+    // A callable resolver returning an empty string falls back to the raw wire
+    // value (the bridge's isEmpty() guard), not an empty "Curve: ".
+    QJSValue emptyResolver = engine.evaluate(QStringLiteral("(function(c){ return ''; })"));
+    QVERIFY(emptyResolver.isCallable());
+    controller.setCurveLabelResolver(emptyResolver);
+    QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
+
+    // A non-callable value clears the resolver — the summary falls back to raw.
+    controller.setCurveLabelResolver(QJSValue());
+    QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
+}
+
+QTEST_MAIN(TestWindowRuleController)
+
+#include "test_window_rule_controller.moc"

@@ -10,10 +10,10 @@
 
 namespace PlasmaZones::VirtualScreenUtils {
 
-Phosphor::Screens::VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map,
-                                                                 const QString& physicalScreenId, int index)
+PhosphorScreens::VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QString& physicalScreenId,
+                                                               int index)
 {
-    Phosphor::Screens::VirtualScreenDef def;
+    PhosphorScreens::VirtualScreenDef def;
     def.physicalScreenId = physicalScreenId;
     def.index = index;
     def.displayName = map.value(QStringLiteral("displayName")).toString();

@@ -5,7 +5,6 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
-#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
@@ -16,6 +15,7 @@
 #include "configbackends.h"
 
 #include <PhosphorConfig/Store.h>
+#include <PhosphorWindowRule/WindowRuleStore.h>
 
 #include <memory>
 #include <QFont>
@@ -70,9 +70,26 @@ public:
      *                      through the caller's registry, preserving
      *                      `shared_ptr<const Curve>` identity across the
      *                      Settings ↔ daemon boundary.
+     * @param windowRuleStore Non-owned WindowRuleStore pointer. When non-null,
+     *                        Settings shares this store rather than owning a
+     *                        second instance pointed at the same file — a
+     *                        dual-store setup races on disk (one store's
+     *                        `setAllRules` clobbers the other's unflushed
+     *                        edits because both rebuild `kept` from stale
+     *                        in-memory snapshots). The daemon, which already
+     *                        owns the canonical store for `LayoutRegistry`
+     *                        and `WindowRuleAdaptor`, passes it in here so
+     *                        every in-process consumer mutates the same
+     *                        ruleset. Standalone processes (settings app,
+     *                        editor) pass nullptr and Settings falls back to
+     *                        owning its own store. Must outlive this Settings
+     *                        when non-null. The caller is responsible for
+     *                        having already invoked `load()` on a non-null
+     *                        store; this ctor does not reload it.
      * @param parent Parent QObject
      */
-    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry, QObject* parent);
+    Settings(PhosphorConfig::IBackend* backend, PhosphorAnimation::CurveRegistry* curveRegistry,
+             PhosphorWindowRule::WindowRuleStore* windowRuleStore, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -174,11 +191,12 @@ public:
     Q_PROPERTY(QStringList tilingAlgorithmOrder READ tilingAlgorithmOrder WRITE setTilingAlgorithmOrder NOTIFY
                    tilingAlgorithmOrderChanged)
 
-    // Exclusions
-    Q_PROPERTY(QStringList excludedApplications READ excludedApplications WRITE setExcludedApplications NOTIFY
-                   excludedApplicationsChanged)
-    Q_PROPERTY(QStringList excludedWindowClasses READ excludedWindowClasses WRITE setExcludedWindowClasses NOTIFY
-                   excludedWindowClassesChanged)
+    // Window filtering — the global knobs. The per-application /
+    // per-class exclusion list Q_PROPERTYs (excludedApplications,
+    // excludedWindowClasses) retired in v4 along with the standalone
+    // Exclusions settings page; the lists folded into Window Rules and
+    // the daemon serves the runtime evaluator from
+    // PhosphorWindowRule::ExclusionRules over the unified rule store.
     Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
                    excludeTransientWindowsChanged)
     Q_PROPERTY(
@@ -196,10 +214,12 @@ public:
                    NOTIFY animationMinimumWindowWidthChanged)
     Q_PROPERTY(int animationMinimumWindowHeight READ animationMinimumWindowHeight WRITE setAnimationMinimumWindowHeight
                    NOTIFY animationMinimumWindowHeightChanged)
-    Q_PROPERTY(QStringList animationExcludedApplications READ animationExcludedApplications WRITE
-                   setAnimationExcludedApplications NOTIFY animationExcludedApplicationsChanged)
-    Q_PROPERTY(QStringList animationExcludedWindowClasses READ animationExcludedWindowClasses WRITE
-                   setAnimationExcludedWindowClasses NOTIFY animationExcludedWindowClassesChanged)
+    // The animationExcludedApplications / animationExcludedWindowClasses
+    // Q_PROPERTYs retired in v4 — the lists folded into `ExcludeAnimations`
+    // WindowRules and the effect's `shouldAnimateWindow` gate now resolves
+    // against the slice
+    // `PhosphorWindowRule::ExclusionRules::excludeAnimationsRulesFrom`
+    // produces from the unified rule store.
 
     // PhosphorZones::Zone Selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
@@ -276,11 +296,6 @@ public:
     // dirty-tracking / notifyReload plumbing).
     Q_PROPERTY(QString shaderProfileTreeJson READ shaderProfileTreeJson WRITE setShaderProfileTreeJson NOTIFY
                    shaderProfileTreeChanged)
-    /// Animation App Rules (per-window-class overrides) — mirrors the
-    /// ShaderProfileTree storage pattern: typed C++ list for engine
-    /// consumers, JSON string facade for the meta-object loop.
-    Q_PROPERTY(QString animationAppRulesJson READ animationAppRulesJson WRITE setAnimationAppRulesJson NOTIFY
-                   animationAppRulesChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -301,6 +316,20 @@ public:
                    NOTIFY autotileInactiveBorderColorChanged)
     Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
                    setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
+    Q_PROPERTY(bool snapWindowHideTitleBars READ snapWindowHideTitleBars WRITE setSnapWindowHideTitleBars NOTIFY
+                   snapWindowHideTitleBarsChanged)
+    Q_PROPERTY(bool snapWindowShowBorder READ snapWindowShowBorder WRITE setSnapWindowShowBorder NOTIFY
+                   snapWindowShowBorderChanged)
+    Q_PROPERTY(int snapWindowBorderWidth READ snapWindowBorderWidth WRITE setSnapWindowBorderWidth NOTIFY
+                   snapWindowBorderWidthChanged)
+    Q_PROPERTY(int snapWindowBorderRadius READ snapWindowBorderRadius WRITE setSnapWindowBorderRadius NOTIFY
+                   snapWindowBorderRadiusChanged)
+    Q_PROPERTY(QColor snapWindowBorderColor READ snapWindowBorderColor WRITE setSnapWindowBorderColor NOTIFY
+                   snapWindowBorderColorChanged)
+    Q_PROPERTY(QColor snapWindowInactiveBorderColor READ snapWindowInactiveBorderColor WRITE
+                   setSnapWindowInactiveBorderColor NOTIFY snapWindowInactiveBorderColorChanged)
+    Q_PROPERTY(bool snapWindowUseSystemBorderColors READ snapWindowUseSystemBorderColors WRITE
+                   setSnapWindowUseSystemBorderColors NOTIFY snapWindowUseSystemBorderColorsChanged)
     Q_PROPERTY(int autotileStickyWindowHandling READ autotileStickyWindowHandlingInt WRITE
                    setAutotileStickyWindowHandlingInt NOTIFY autotileStickyWindowHandlingChanged)
     Q_PROPERTY(int autotileDragBehavior READ autotileDragBehaviorInt WRITE setAutotileDragBehaviorInt NOTIFY
@@ -466,6 +495,27 @@ public:
 
 public:
     explicit Settings(QObject* parent = nullptr);
+
+    /**
+     * @brief Standalone ctor that owns its config backend but BORROWS a
+     *        WindowRuleStore.
+     *
+     * Same standalone semantics as Settings(QObject*) — owns a freshly migrated
+     * config backend and leaves the CurveRegistry null (animation profiles parse
+     * through the process-static fallback) — but takes its WindowRuleStore from
+     * the caller instead of owning one. The settings app uses this so a single
+     * store is shared between this Settings instance (per-mode monitor disable
+     * lists, which persist in windowrules.json) and the SettingsController's
+     * in-process LayoutRegistry, eliminating the divergence two independent
+     * stores over the same file would otherwise allow.
+     *
+     * @param windowRuleStore Borrowed store; must outlive this Settings. A null
+     *        argument degrades to owning a store (same fallback the
+     *        backend-injecting ctor uses) so a misuse still yields a working
+     *        object.
+     * @param parent Parent QObject.
+     */
+    Settings(PhosphorWindowRule::WindowRuleStore* windowRuleStore, QObject* parent);
     ~Settings() override = default;
 
     // No singleton - use dependency injection instead
@@ -616,15 +666,9 @@ public:
     QStringList tilingAlgorithmOrder() const override;
     void setTilingAlgorithmOrder(const QStringList& order) override;
 
-    // Exclusions — PhosphorConfig::Store-backed.
-    QStringList excludedApplications() const override;
-    void setExcludedApplications(const QStringList& apps) override;
-    Q_INVOKABLE void addExcludedApplication(const QString& app);
-    Q_INVOKABLE void removeExcludedApplicationAt(int index);
-    QStringList excludedWindowClasses() const override;
-    void setExcludedWindowClasses(const QStringList& classes) override;
-    Q_INVOKABLE void addExcludedWindowClass(const QString& cls);
-    Q_INVOKABLE void removeExcludedWindowClassAt(int index);
+    // Window filtering — PhosphorConfig::Store-backed. The per-app /
+    // per-class exclusion list accessors retired in v4 — see the
+    // Q_PROPERTY block above for the migration notes.
     bool excludeTransientWindows() const override;
     void setExcludeTransientWindows(bool exclude) override;
     int minimumWindowWidth() const override;
@@ -642,14 +686,9 @@ public:
     void setAnimationMinimumWindowWidth(int width) override;
     int animationMinimumWindowHeight() const override;
     void setAnimationMinimumWindowHeight(int height) override;
-    QStringList animationExcludedApplications() const override;
-    void setAnimationExcludedApplications(const QStringList& apps) override;
-    Q_INVOKABLE void addAnimationExcludedApplication(const QString& app);
-    Q_INVOKABLE void removeAnimationExcludedApplicationAt(int index);
-    QStringList animationExcludedWindowClasses() const override;
-    void setAnimationExcludedWindowClasses(const QStringList& classes) override;
-    Q_INVOKABLE void addAnimationExcludedWindowClass(const QString& cls);
-    Q_INVOKABLE void removeAnimationExcludedWindowClassAt(int index);
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // (+ their add*/remove* convenience methods) retired in v4 — see the
+    // Q_PROPERTY block above for the migration notes.
 
     // PhosphorZones::Zone Selector — PhosphorConfig::Store-backed.
     bool zoneSelectorEnabled() const override;
@@ -805,16 +844,6 @@ public:
     QString shaderProfileTreeJson() const;
     void setShaderProfileTreeJson(const QString& json);
 
-    /// Animation App Rules — ordered list of per-window-class
-    /// shader/timing overrides. Consumed by the kwin-effect's window-
-    /// event dispatcher (Phase 2) before falling through to the
-    /// shaderProfileTree per-event default.
-    PhosphorAnimationShaders::AnimationAppRuleList animationAppRules() const override;
-    void setAnimationAppRules(const PhosphorAnimationShaders::AnimationAppRuleList& rules) override;
-    /// String facade — same rationale as `shaderProfileTreeJson` above.
-    QString animationAppRulesJson() const;
-    void setAnimationAppRulesJson(const QString& json);
-
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;
     void setAutotileFocusFollowsMouse(bool focus) override;
@@ -834,6 +863,20 @@ public:
     void setAutotileInactiveBorderColor(const QColor& color) override;
     bool autotileUseSystemBorderColors() const override;
     void setAutotileUseSystemBorderColors(bool use) override;
+    bool snapWindowHideTitleBars() const override;
+    void setSnapWindowHideTitleBars(bool hide) override;
+    bool snapWindowShowBorder() const override;
+    void setSnapWindowShowBorder(bool show) override;
+    int snapWindowBorderWidth() const override;
+    void setSnapWindowBorderWidth(int width) override;
+    int snapWindowBorderRadius() const override;
+    void setSnapWindowBorderRadius(int radius) override;
+    QColor snapWindowBorderColor() const override;
+    void setSnapWindowBorderColor(const QColor& color) override;
+    QColor snapWindowInactiveBorderColor() const override;
+    void setSnapWindowInactiveBorderColor(const QColor& color) override;
+    bool snapWindowUseSystemBorderColors() const override;
+    void setSnapWindowUseSystemBorderColors(bool use) override;
     StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
     int autotileStickyWindowHandlingInt() const;
@@ -855,13 +898,13 @@ public:
                           bool locked) override;
 
     // Virtual screen configuration
-    QHash<QString, Phosphor::Screens::VirtualScreenConfig> virtualScreenConfigs() const;
-    void setVirtualScreenConfigs(const QHash<QString, Phosphor::Screens::VirtualScreenConfig>& configs);
+    QHash<QString, PhosphorScreens::VirtualScreenConfig> virtualScreenConfigs() const;
+    void setVirtualScreenConfigs(const QHash<QString, PhosphorScreens::VirtualScreenConfig>& configs);
     /// Returns true on success, false if the config was rejected by
-    /// Phosphor::Screens::VirtualScreenConfig::isValid (or empty physicalScreenId). An
+    /// PhosphorScreens::VirtualScreenConfig::isValid (or empty physicalScreenId). An
     /// already-current value is treated as a successful no-op.
-    bool setVirtualScreenConfig(const QString& physicalScreenId, const Phosphor::Screens::VirtualScreenConfig& config);
-    Phosphor::Screens::VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
+    bool setVirtualScreenConfig(const QString& physicalScreenId, const PhosphorScreens::VirtualScreenConfig& config);
+    PhosphorScreens::VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
 
     /// Atomically re-key a persisted VS config from @p oldPhysicalScreenId to
     /// @p newPhysicalScreenId. Used when a screen's disambiguation-aware
@@ -882,8 +925,8 @@ public:
     // Shader Effects — backed by PhosphorConfig::Store (see settingsschema.cpp).
     // Getters read through the store (validator clamps FrameRate and BarCount
     // ranges uniformly); setters route the write through the store so the
-    // value is coerced + persisted in memory on the same call, with
-    // syncConfig()/save() flushing to disk.
+    // value is coerced + persisted in memory on the same call, with save()
+    // flushing to disk.
     bool enableShaderEffects() const override;
     void setEnableShaderEffects(bool enable) override;
     int shaderFrameRate() const override;
@@ -1012,28 +1055,28 @@ public:
     // Editor Settings (shared [Editor] group in config.json)
     // PhosphorConfig::Store-backed.
     // ═══════════════════════════════════════════════════════════════════════════
-    QString editorDuplicateShortcut() const;
-    void setEditorDuplicateShortcut(const QString& shortcut);
-    QString editorSplitHorizontalShortcut() const;
-    void setEditorSplitHorizontalShortcut(const QString& shortcut);
-    QString editorSplitVerticalShortcut() const;
-    void setEditorSplitVerticalShortcut(const QString& shortcut);
-    QString editorFillShortcut() const;
-    void setEditorFillShortcut(const QString& shortcut);
-    bool editorGridSnappingEnabled() const;
-    void setEditorGridSnappingEnabled(bool enabled);
-    bool editorEdgeSnappingEnabled() const;
-    void setEditorEdgeSnappingEnabled(bool enabled);
-    qreal editorSnapIntervalX() const;
-    void setEditorSnapIntervalX(qreal interval);
-    qreal editorSnapIntervalY() const;
-    void setEditorSnapIntervalY(qreal interval);
-    int editorSnapOverrideModifier() const;
-    void setEditorSnapOverrideModifier(int mod);
-    bool fillOnDropEnabled() const;
-    void setFillOnDropEnabled(bool enabled);
-    int fillOnDropModifier() const;
-    void setFillOnDropModifier(int mod);
+    QString editorDuplicateShortcut() const override;
+    void setEditorDuplicateShortcut(const QString& shortcut) override;
+    QString editorSplitHorizontalShortcut() const override;
+    void setEditorSplitHorizontalShortcut(const QString& shortcut) override;
+    QString editorSplitVerticalShortcut() const override;
+    void setEditorSplitVerticalShortcut(const QString& shortcut) override;
+    QString editorFillShortcut() const override;
+    void setEditorFillShortcut(const QString& shortcut) override;
+    bool editorGridSnappingEnabled() const override;
+    void setEditorGridSnappingEnabled(bool enabled) override;
+    bool editorEdgeSnappingEnabled() const override;
+    void setEditorEdgeSnappingEnabled(bool enabled) override;
+    qreal editorSnapIntervalX() const override;
+    void setEditorSnapIntervalX(qreal interval) override;
+    qreal editorSnapIntervalY() const override;
+    void setEditorSnapIntervalY(qreal interval) override;
+    int editorSnapOverrideModifier() const override;
+    void setEditorSnapOverrideModifier(int mod) override;
+    bool fillOnDropEnabled() const override;
+    void setFillOnDropEnabled(bool enabled) override;
+    int fillOnDropModifier() const override;
+    void setFillOnDropModifier(int mod) override;
 
     // Old inline accessors replaced above — kept anchors below so the second
     // half of the replaced region can be collapsed in one edit pass.
@@ -1041,7 +1084,6 @@ public:
     // TilingQuickLayoutSlots — read/write via the shared config backend
     QString readTilingQuickLayoutSlot(int slotNumber) const;
     void writeTilingQuickLayoutSlot(int slotNumber, const QString& layoutId);
-    void syncConfig();
 
     // Persistence
     void load() override;
@@ -1049,9 +1091,10 @@ public:
     void reset() override;
 
     // Additional methods
-    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath);
+    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
     Q_INVOKABLE void applySystemColorScheme();
     void applyAutotileBorderSystemColor();
+    void applySnapWindowBorderSystemColor();
 
 Q_SIGNALS:
     /// Emitted when the whole animation Profile blob is replaced via
@@ -1063,20 +1106,13 @@ Q_SIGNALS:
     /// signals per the existing NOTIFY wiring.
     void animationProfileChanged();
 
-    // Editor settings signals (not part of ISettings interface)
-    void editorDuplicateShortcutChanged();
-    void editorSplitHorizontalShortcutChanged();
-    void editorSplitVerticalShortcutChanged();
-    void editorFillShortcutChanged();
-    void editorGridSnappingEnabledChanged();
-    void editorEdgeSnappingEnabledChanged();
-    void editorSnapIntervalXChanged();
-    void editorSnapIntervalYChanged();
-    void editorSnapOverrideModifierChanged();
-    void fillOnDropEnabledChanged();
-    void fillOnDropModifierChanged();
-    void filterLayoutsByAspectRatioChanged();
-    void virtualScreenConfigsChanged();
+    // NOTE: do not redeclare signals already on ISettings here.
+    // Re-declaring a base-class Q_SIGNAL produces a second moc index
+    // and `connect(s, &ISettings::xChanged, ...)` then misses the
+    // unqualified `Q_EMIT xChanged()` (which resolves to the derived
+    // signal). All editor / fillOnDrop / filterLayoutsByAspectRatio /
+    // virtualScreenConfigs signals live on ISettings and are inherited
+    // here — see src/core/isettings.h.
 
 private:
     /// Member-function-pointer alias used by the indexed shortcut setters
@@ -1097,43 +1133,27 @@ private:
     void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                           TriggerListSignalFn specificSignal);
 
-    /// Member-function-pointer alias for a no-arg NOTIFY signal passed into
-    /// @ref writeCommaList — the canonical setter for comma-joined string-
-    /// list config values.
-    using CommaListSignalFn = void (Settings::*)();
-
-    /// Shared setter for QStringList settings that round-trip through the
-    /// store as a comma-joined QString. Performs the same canonicalisation
-    /// + post-write read-back compare the open-coded list setters use, so
-    /// `addX` / `removeXAt` helpers can reuse the dedupe + signal-on-real-
-    /// change semantics without duplicating the body. New list settings
-    /// should call this; pre-existing list setters (`setExcludedApplications`
-    /// / `setExcludedWindowClasses`, the snap-assist trigger ones) keep
-    /// their open-coded form to avoid touching established code paths.
-    void writeCommaList(const QString& group, const QString& key, const QStringList& list,
-                        CommaListSignalFn specificSignal);
-
     /// Member-function-pointer alias for the three per-mode disable NOTIFY
-    /// signals passed into @ref writeDisableList. The signals carry the mode
+    /// signals passed into @ref writeDisableEntries. The signals carry the mode
     /// that flipped so listeners only react to their own axis.
     using DisableModeSignalFn = void (Settings::*)(PhosphorZones::AssignmentEntry::Mode);
 
-    /// Shared comma-list setter used by @ref setDisabledMonitors,
-    /// @ref setDisabledDesktops, and @ref setDisabledActivities. Reads under
-    /// @c displayGroup, writes the joined list, post-write compares against
-    /// the canonicalised form (the @c canonicalCommaList validator
-    /// trims/de-dupes/normalises whitespace), and only fires
-    /// @p signalFn + @c settingsChanged on a real change.
-    void writeDisableList(const QString& key, const QStringList& entries, PhosphorZones::AssignmentEntry::Mode mode,
-                          DisableModeSignalFn signalFn);
+    /// Shared writer for the three per-mode disable lists. Replaces the whole
+    /// `DisableEngine` context-rule family for (@p mode, @p axisInt) in the
+    /// WindowRule store — @p axisInt is a `DisableAxis` value (file-local enum
+    /// in settings.cpp; passed as an int so the header stays decoupled). Drops
+    /// malformed composite entries, fires @p signalFn + @c settingsChanged
+    /// only on a real (canonical-set) change.
+    void writeDisableEntries(PhosphorZones::AssignmentEntry::Mode mode, int axisInt, const QStringList& entries,
+                             DisableModeSignalFn signalFn);
 
-    /// Shared getter for the three per-mode disable lists. Reads under
-    /// @c displayGroup and parses the comma-joined value into a list. The
-    /// monitor variant additionally resolves connector names to canonical
-    /// screen ids — that step lives in @ref disabledMonitors itself, not
-    /// here, because composite-keyed lists (desktop/activity) embed the
-    /// screen id and would need parsing the composite to canonicalise.
-    QStringList readDisableList(const QString& key) const;
+    /// Shared reader for the three per-mode disable lists. Enumerates the
+    /// `DisableEngine` context rules in the WindowRule store scoped to
+    /// @p mode and @p axisInt (a `DisableAxis` value), projecting each rule's
+    /// pinned context dimensions back to its list-entry string form. The
+    /// monitor variant's connector-name → canonical-id resolution lives in
+    /// @ref disabledMonitors itself, not here.
+    QStringList disableEntriesFor(PhosphorZones::AssignmentEntry::Mode mode, int axisInt) const;
 
     // ─── load() / save() helpers ────────────────────────────────────────
     // Only non-Store groups need dedicated helpers now. Store-backed groups
@@ -1199,6 +1219,27 @@ private:
     std::unique_ptr<PhosphorConfig::Store> m_store;
     static QString normalizeUuidString(const QString& uuidStr);
 
+    // Per-mode disable lists are stored as `DisableEngine` context rules in
+    // the unified WindowRule store (windowrules.json), NOT in config.json.
+    //
+    // The store can be either owned (standalone settings app / editor / tests
+    // that have no daemon counterpart) or borrowed (daemon process — the
+    // daemon owns the canonical store for `LayoutRegistry` and
+    // `WindowRuleAdaptor`, and passes that same instance in so every
+    // in-process writer mutates the same in-memory ruleset). Mirroring the
+    // existing `LayoutRegistry`-via-borrowed-pointer pattern eliminates the
+    // dual-store race where two stores pointed at the same file each rebuild
+    // a `kept` list from a stale snapshot and clobber each other's writes.
+    //
+    // The owning ctor calls `load()` on the owned store; the borrowing ctor
+    // does not — the owner is responsible for having loaded already.
+    // load() reloads the active store from disk so cross-process deltas
+    // surface; the disabled*/setDisabled*/is*Disabled accessors read/write
+    // through `m_windowRuleStore` (a raw pointer that always tracks the
+    // active store — owned or borrowed).
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_ownedWindowRuleStore;
+    PhosphorWindowRule::WindowRuleStore* m_windowRuleStore = nullptr;
+
     // Activation
     // Activation is stored in m_store.
 
@@ -1235,7 +1276,7 @@ private:
     // (remaining zone selector members stored in m_store)
 
     // Virtual screen configurations (physicalScreenId -> config)
-    QHash<QString, Phosphor::Screens::VirtualScreenConfig> m_virtualScreenConfigs;
+    QHash<QString, PhosphorScreens::VirtualScreenConfig> m_virtualScreenConfigs;
 
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;

@@ -27,11 +27,11 @@ using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
 
 namespace {
-/// Fire Phosphor::Screens::ScreenManager::panelGeometryReady directly on the instance. The signal
-/// is only emitted from within Phosphor::Screens::ScreenManager's D-Bus panel callback in
+/// Fire PhosphorScreens::ScreenManager::panelGeometryReady directly on the instance. The signal
+/// is only emitted from within PhosphorScreens::ScreenManager's D-Bus panel callback in
 /// production; for unit tests we need a way to simulate that moment without
 /// running a real Plasma shell.
-void emitPanelGeometryReady(Phosphor::Screens::ScreenManager& mgr)
+void emitPanelGeometryReady(PhosphorScreens::ScreenManager& mgr)
 {
     QMetaObject::invokeMethod(&mgr, "panelGeometryReady");
 }
@@ -64,7 +64,7 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testDefersWhenPanelNotReady_flushesOnSignal()
     {
-        Phosphor::Screens::ScreenManager mgr;
+        PhosphorScreens::ScreenManager mgr;
         QVERIFY(!mgr.isPanelGeometryReady());
 
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
@@ -100,7 +100,7 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testRejectsInvalidSingleOpens()
     {
-        Phosphor::Screens::ScreenManager mgr;
+        PhosphorScreens::ScreenManager mgr;
 
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
@@ -127,7 +127,7 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testBatchOrderPreservedAcrossFlush()
     {
-        Phosphor::Screens::ScreenManager mgr;
+        PhosphorScreens::ScreenManager mgr;
 
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
@@ -161,7 +161,7 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testFlushWithClearedEngine_noCrash()
     {
-        Phosphor::Screens::ScreenManager mgr;
+        PhosphorScreens::ScreenManager mgr;
 
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;

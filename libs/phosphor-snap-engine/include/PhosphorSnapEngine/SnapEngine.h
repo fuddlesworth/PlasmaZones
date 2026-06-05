@@ -12,18 +12,27 @@
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorProtocol/NavigationTypes.h>
 #include <PhosphorProtocol/WindowTypes.h>
+#include <PhosphorWindowRule/RuleEvaluator.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
 #include <QString>
 #include <QStringList>
 #include <functional>
+#include <optional>
 #include <memory>
 
 namespace PhosphorZones {
 class IZoneDetector;
 class LayoutRegistry;
 }
+
+// PhosphorWindowRule::RuleEvaluator is included as a member type of
+// std::optional below (needs a complete type at declaration); WindowRuleSet
+// is referenced only by pointer / reference, so a forward declaration would
+// suffice — but including RuleEvaluator.h pulls in WindowRuleSet.h
+// transitively anyway, so leave the explicit forward decls out and let
+// RuleEvaluator.h provide both.
 
 namespace PhosphorSnapEngine {
 
@@ -57,11 +66,16 @@ public:
                         QObject* parent = nullptr);
     ~SnapEngine() override;
 
-    /// Current virtual desktop (1-based; 0 when no virtual-desktop manager is
-    /// wired) and activity, forwarded from the injected managers. Exposed so
-    /// daemon adaptors that gate on disabled context (see isContextDisabled)
-    /// can read the same values the engine's own restore logic uses, without
-    /// each adaptor wiring its own managers.
+    /// Current virtual desktop (1-based; 0 when no virtual-desktop manager
+    /// is wired) and activity, forwarded from the injected managers.
+    /// Public for symmetry with AutotileEngine's analogous accessors and
+    /// to keep the engine's "current context" surface coherent — the
+    /// daemon uses `Daemon::currentDesktop()` / `Daemon::currentActivity()`
+    /// directly rather than going through the engine. The only current
+    /// in-tree caller of these two is `lifecycle.cpp` (snap-engine-
+    /// internal restore logic); kept public so a future adaptor that
+    /// wants the engine's own view (e.g. for a per-engine OSD) doesn't
+    /// have to wire its own VDM.
     int currentVirtualDesktop() const;
     QString currentActivity() const;
 
@@ -170,10 +184,16 @@ public:
      *
      * @param autotileWindowOrder Ordered list of window IDs from autotile engine
      * @param screenId Screen to resnap on
+     * @param preClaimedZoneIds Zone IDs already reserved by OTHER restore producers
+     *        (e.g. the daemon's windowsReleased snap-zone restores for windows that
+     *        were floated in autotile and are absent from the tile order). Seeds the
+     *        claim ledger so the positional fallback never re-uses a zone another
+     *        producer is reclaiming — the two-windows-one-zone collision.
      * @return Vector of PhosphorEngine::ZoneAssignmentEntry (may be empty)
      */
     QVector<PhosphorEngine::ZoneAssignmentEntry>
-    calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId);
+    calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId,
+                                            const QStringList& preClaimedZoneIds = {});
 
     /**
      * @brief Calculate snap-all-windows assignments without applying them
@@ -219,11 +239,9 @@ public:
      * @param windowId Window identifier
      * @param screenId Screen where the window appeared
      * @param sticky Whether the window is on all desktops
-     * @param kind Structural kind of the opening window. Compared against the
-     *             kind recorded on the matching PendingRestore entry; when
-     *             both sides are concrete and disagree, the restore is
-     *             refused and the entry is left intact for the next-opening
-     *             window of the right kind. Default `Unknown` is permissive.
+     * @param kind Structural kind of the opening window. Accepted for D-Bus
+     *             wire-compatibility but no longer gates restore — the matched
+     *             WindowPlacement record carries its own kind.
      * @return PhosphorEngine::SnapResult with geometry and zone info, or PhosphorEngine::SnapResult::noSnap()
      */
     PhosphorEngine::SnapResult
@@ -321,6 +339,16 @@ public:
     /// resnapToNewLayout().
     void reapplyLayout(const PhosphorEngine::NavigationContext& ctx) override;
 
+    /// Re-emit the snap geometry for every currently-snapped (non-floating)
+    /// window so the compositor re-applies its snap border / hidden title bar
+    /// after a bridge reconnect. Does not recompute zone assignments. See
+    /// IPlacementEngine::reapplyManagedWindowAppearance().
+    void reapplyManagedWindowAppearance() override;
+
+    /// Unified placement model — report this window's current snap state
+    /// (snapped / floated / free) for persistence, or nullopt if untracked.
+    std::optional<PhosphorEngine::WindowPlacement> capturePlacement(const QString& windowId) const override;
+
     /// Snap every unmanaged window on the screen. The IPlacementEngine
     /// override takes PhosphorEngine::NavigationContext; coexists with the existing
     /// snapAllWindows(const QString&) method which it delegates to.
@@ -373,9 +401,6 @@ public:
                                                        bool isSticky) const;
     PhosphorEngine::SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenId,
                                                         bool isSticky) const;
-    PhosphorEngine::SnapResult
-    calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky,
-                                PhosphorEngine::WindowKind kind = PhosphorEngine::WindowKind::Unknown) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resnap / rotation calculations (moved from WTS)
@@ -385,39 +410,12 @@ public:
     QVector<PhosphorEngine::ZoneAssignmentEntry>
     calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
     QVector<PhosphorEngine::ZoneAssignmentEntry>
-    calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId) const;
+    calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId,
+                                     const QStringList& preClaimedZoneIds = {}) const;
     QVector<PhosphorEngine::ZoneAssignmentEntry> calculateSnapAllWindowEntries(const QStringList& windowIds,
                                                                                const QString& screenId) const;
     QVector<PhosphorEngine::ZoneAssignmentEntry> calculateRotation(bool clockwise,
                                                                    const QString& screenFilter = QString()) const;
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Saved snap-floating windows (mode-transition bookkeeping)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void saveSnapFloating(const QString& windowId);
-    bool restoreSnapFloating(const QString& windowId);
-    void clearSavedSnapFloating();
-
-    // IPlacementEngine — generic mode-float overrides
-    bool restoreSavedModeFloat(const QString& windowId) override
-    {
-        return restoreSnapFloating(windowId);
-    }
-    void clearSavedFloatingForWindows(const QStringList& windowIds) override
-    {
-        for (const QString& windowId : windowIds) {
-            m_savedSnapFloatingWindows.remove(windowId);
-        }
-    }
-    void saveModeFloat(const QString& windowId) override
-    {
-        saveSnapFloating(windowId);
-    }
-    void clearSavedModeFloating() override
-    {
-        clearSavedSnapFloating();
-    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Effect-reported windows (runtime flag — not persisted)
@@ -484,6 +482,50 @@ public:
         return m_lastActiveScreenId;
     }
 
+    /// Wire the daemon's filtered Exclude rule set into the snap engine.
+    /// See the comment block on the private members and the impl in
+    /// navigation_actions.cpp for the lifetime contract — the pointer is
+    /// borrowed and the cached evaluator drops on a pointer change.
+    ///
+    /// The borrowed rule set MUST outlive every subsequent
+    /// `isAppIdExcluded` call. The Daemon currently guarantees this
+    /// through member-declaration order (`m_excludeRuleSet` is declared
+    /// before `m_snapEngine` so reverse-order destruction tears the
+    /// engine down first), AND additionally clears the borrow
+    /// symmetrically by calling `setExcludeRuleSet(nullptr)` in
+    /// `Daemon::stop()` before `m_snapEngine.reset()` — that explicit
+    /// teardown survives a future reordering or ownership move that
+    /// would otherwise silently introduce a dangling pointer.
+    ///
+    /// Declared OUTSIDE the Q_SIGNALS section below: MOC treats every
+    /// declaration in `Q_SIGNALS:` as a signal and generates a stub body
+    /// for it, so placing this setter inside that section makes the
+    /// translation unit redefine the function and the link fails.
+    void setExcludeRuleSet(const PhosphorWindowRule::WindowRuleSet* ruleSet);
+
+    /// True if @p appId matches an enabled `Exclude`-action WindowRule
+    /// whose match leaf targets the `AppId` field. Public so the unit-
+    /// test layer can directly verify the wiring (nullptr borrow,
+    /// empty-set short-circuit, evaluator rebind on pointer change,
+    /// revision-bump invalidation on in-place setRules edits) without
+    /// staging the heavy navigation fixture every public navigation
+    /// method needs. Pure const observer — no side effects beyond the
+    /// `mutable` evaluator cache.
+    ///
+    /// **Limitation:** the engine builds a `WindowQuery` with only
+    /// `query.appId` populated and feeds it to the bound `RuleEvaluator`.
+    /// A user-authored Exclude rule whose match leaf targets a non-
+    /// `AppId` field (`WindowClass Contains "steam"`, `Title Regex …`,
+    /// a composite match) silently evaluates to false here because
+    /// those leaves never resolve against a query that only knows the
+    /// appId. Migration-produced rules are all `AppId AppIdMatches
+    /// <pattern>` so legacy v3 behaviour is preserved exactly; the gap
+    /// only opens for hand-authored rules with broader match leaves.
+    /// A more thorough check would require the caller to pass the full
+    /// `WindowQuery` it can build from the WTS registry's per-window
+    /// attributes, instead of just the appId.
+    bool isAppIdExcluded(const QString& appId) const;
+
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
     // Signals (relayed via SnapAdaptor -> WTA -> D-Bus -> effect)
@@ -510,12 +552,6 @@ Q_SIGNALS:
     /// label disambiguates the cause downstream ("rotate", "resnap",
     /// "snap_all", "vs_reconfigure"). Relayed to D-Bus via WTA.
     void applyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
-
-protected:
-    void onWindowClaimed(const QString& windowId) override;
-    void onWindowReleased(const QString& windowId) override;
-    void onWindowFloated(const QString& windowId) override;
-    void onWindowUnfloated(const QString& windowId) override;
 
 private:
     PhosphorEngine::ISnapSettings* snapSettings() const;
@@ -549,7 +585,6 @@ private:
     // by the fact that SnapEngine has to exist before a resolver that
     // takes WTS + PhosphorZones::LayoutRegistry can be built).
     std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
-    QSet<QString> m_savedSnapFloatingWindows;
     QSet<QString> m_effectReportedWindows;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -574,10 +609,38 @@ private:
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
     /// Check whether the window is excluded from the given navigation
-    /// action by the user's excluded-apps / excluded-classes rules.
-    /// Emits navigationFeedback(false, action, "excluded", ...) and returns
-    /// true when excluded so callers can early-return. False otherwise.
+    /// action by a terminal `Exclude` action in the unified WindowRule
+    /// store. Emits navigationFeedback(false, action, "excluded", ...)
+    /// and returns true when excluded so callers can early-return. False
+    /// otherwise.
     bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
+
+    // `isAppIdExcluded` is declared in the public section above (so the
+    // unit tests can drive the wiring directly); full docstring + the
+    // AppId-only matching limitation live with that declaration.
+
+    /// Borrowed pointer to the daemon's filtered Exclude rule set. nullptr
+    /// in early-init paths (before the daemon wires the store) — the
+    /// `isAppIdExcluded` fast path short-circuits to false in that case.
+    ///
+    /// @note Daemon-main-thread-only. Every access path runs on the
+    /// daemon's main thread (rulesChanged signal delivery, navigation
+    /// slot dispatch, in-thread isAppIdExcluded calls). `setExcludeRuleSet`
+    /// writes the raw pointer non-atomically and the paired
+    /// `m_excludeEvaluator` mutates a lazy priority-order index that
+    /// must be externally serialised (see RuleEvaluator.h's thread-
+    /// safety note). Do not access from another thread without adding
+    /// locking.
+    const PhosphorWindowRule::WindowRuleSet* m_excludeRuleSet = nullptr;
+    /// Lazily constructed evaluator bound to @ref m_excludeRuleSet. Reset
+    /// in `setExcludeRuleSet` when the pointer changes; the evaluator's
+    /// internal prio-sort index and resolve cache key off the bound rule
+    /// set's revision counter, so an in-place rule edit through the store
+    /// invalidates the evaluator's per-revision state automatically — only
+    /// a different rule-set pointer needs the explicit reset.
+    ///
+    /// @note Same daemon-main-thread-only contract as @ref m_excludeRuleSet.
+    mutable std::optional<PhosphorWindowRule::RuleEvaluator> m_excludeEvaluator;
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;
@@ -587,9 +650,12 @@ private:
     QString m_lastActiveScreenId;
 
     // Auto-snap entry gate. Empty until the daemon wires it; while empty
-    // the engine treats every (screen, desktop) as active — preserving the
-    // historical default that unit tests rely on. See ShouldRestorePredicate
-    // doc above and discussion #461 item 7.
+    // the engine treats every screen as active — preserving the
+    // historical default that unit tests rely on. (The predicate's
+    // signature is `bool(const QString& screenId)` — the desktop and
+    // activity dimensions are resolved by the daemon-side closure at
+    // call time, not passed in here; see ShouldRestorePredicate doc
+    // above and discussion #461 item 7.)
     ShouldRestorePredicate m_shouldRestorePredicate{};
 };
 

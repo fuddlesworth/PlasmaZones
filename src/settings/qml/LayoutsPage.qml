@@ -12,6 +12,11 @@ import org.plasmazones.common as QFZCommon
 
 ColumnLayout {
     // Flickable
+    // Extract URL-to-path helper to avoid duplicating regex in FileDialogs.
+    // Linux/POSIX only — file:///path → /path. A Windows-style
+    // file:///C:/path would become /C:/path here, which is wrong, but
+    // PlasmaZones is Wayland-only (per CLAUDE.md) so the regex is
+    // intentionally limited to the POSIX URI shape.
 
     id: root
 
@@ -22,9 +27,16 @@ ColumnLayout {
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
     property int viewMode: 0
 
-    // m-15: Extract URL-to-path helper to avoid duplicating regex in FileDialogs
+    // Qt's FileDialog returns selectedFile as a percent-encoded QUrl —
+    // a folder named "My Layouts" comes back as
+    // file:///home/user/My%20Layouts. Delegate to the controller's
+    // urlToLocalFile() (which calls QUrl::toLocalFile()) so percent-
+    // decoding, embedded query/fragment, and non-trivial schemes are
+    // all handled by Qt's canonical path. Previously a regex-based
+    // strip was used here; that path silently mishandled URLs with
+    // query strings or unusual encoding.
     function filePathFromUrl(url) {
-        return url.toString().replace(/^file:\/\/+/, "/");
+        return settingsController.urlToLocalFile(url);
     }
 
     spacing: 0
@@ -57,7 +69,7 @@ ColumnLayout {
         onRequestOpenLayoutsFolder: settingsController.openLayoutsFolder()
         onRequestImportAlgorithm: algorithmImportDialog.open()
         onRequestOpenAlgorithmsFolder: settingsController.openAlgorithmsFolder()
-        onViewModeRequested: (mode) => {
+        onViewModeRequested: mode => {
             root.viewMode = mode;
             layoutGrid.selectedLayoutId = "";
             // rebuildModel() already triggered by filterBar.onViewModeChanged → loadState → filterSettingsChanged
@@ -117,42 +129,48 @@ ColumnLayout {
                 // recreating on every rebuildModel() call.
                 // NOTE: items matching multiple capabilities appear in multiple groups;
                 // the same card will be highlighted in both sections simultaneously.
-                readonly property var tilingCapabilityGroups: [{
-                    "key": "masterCount",
-                    "label": i18n("Master Count"),
-                    "order": 0,
-                    "test": (a) => {
-                        return a.supportsMasterCount === true;
+                readonly property var tilingCapabilityGroups: [
+                    {
+                        "key": "masterCount",
+                        "label": i18n("Master Count"),
+                        "order": 0,
+                        "test": a => {
+                            return a.supportsMasterCount === true;
+                        }
+                    },
+                    {
+                        "key": "splitRatio",
+                        "label": i18n("Split Ratio"),
+                        "order": 1,
+                        "test": a => {
+                            return a.supportsSplitRatio === true;
+                        }
+                    },
+                    {
+                        "key": "overlapping",
+                        "label": i18n("Overlapping Zones"),
+                        "order": 2,
+                        "test": a => {
+                            return a.producesOverlappingZones === true;
+                        }
+                    },
+                    {
+                        "key": "persistent",
+                        "label": i18n("Persistent (Memory)"),
+                        "order": 3,
+                        "test": a => {
+                            return a.supportsMemory === true;
+                        }
+                    },
+                    {
+                        "key": "customParams",
+                        "label": i18n("Custom Parameters"),
+                        "order": 4,
+                        "test": a => {
+                            return a.supportsCustomParams === true;
+                        }
                     }
-                }, {
-                    "key": "splitRatio",
-                    "label": i18n("Split Ratio"),
-                    "order": 1,
-                    "test": (a) => {
-                        return a.supportsSplitRatio === true;
-                    }
-                }, {
-                    "key": "overlapping",
-                    "label": i18n("Overlapping Zones"),
-                    "order": 2,
-                    "test": (a) => {
-                        return a.producesOverlappingZones === true;
-                    }
-                }, {
-                    "key": "persistent",
-                    "label": i18n("Persistent (Memory)"),
-                    "order": 3,
-                    "test": (a) => {
-                        return a.supportsMemory === true;
-                    }
-                }, {
-                    "key": "customParams",
-                    "label": i18n("Custom Parameters"),
-                    "order": 4,
-                    "test": (a) => {
-                        return a.supportsCustomParams === true;
-                    }
-                }]
+                ]
 
                 function rebuildModel() {
                     let allLayouts = settingsController.layouts;
@@ -176,17 +194,54 @@ ColumnLayout {
                 }
 
                 function selectDefaultLayout(mode) {
-                    let defaultId = (mode === 1) ? ("autotile:" + root.settingsBridge.defaultAutotileAlgorithm) : root.settingsBridge.defaultLayoutId;
-                    if (defaultId)
+                    let defaultId;
+                    if (mode === 1) {
+                        const algo = root.settingsBridge.defaultAutotileAlgorithm;
+                        // Empty algo would produce a truthy "autotile:" sentinel that
+                        // sails through the `if (defaultId)` guard below and selects a
+                        // nonsense layout id. Treat empty algo as "no default".
+                        defaultId = algo.length > 0 ? ("autotile:" + algo) : "";
+                    } else {
+                        defaultId = root.settingsBridge.defaultLayoutId;
+                    }
+                    if (defaultId) {
                         selectedLayoutId = defaultId;
-
+                        return;
+                    }
+                    // Fall back to the first available layout id in the
+                    // current view — without this, a fresh install with
+                    // no default set leaves the grid with no card
+                    // highlighted, and the keyboard-driven edit shortcut
+                    // (Return) silently does nothing. Walk the rebuilt
+                    // model's section delegates rather than the source
+                    // list so the fallback honours the current filter
+                    // state (i.e. picks something the user can actually
+                    // see). Mirrors the snap/autotile split above so
+                    // the autotile mode doesn't accidentally select a
+                    // bare snap layout via the same fallback.
+                    const sections = layoutGrid.model || [];
+                    for (let i = 0; i < sections.length; ++i) {
+                        const items = sections[i].layouts || [];
+                        for (let j = 0; j < items.length; ++j) {
+                            const item = items[j];
+                            const itemIsAutotile = item.isAutotile === true;
+                            if ((mode === 1) === itemIsAutotile && item.id) {
+                                selectedLayoutId = String(item.id);
+                                return;
+                            }
+                        }
+                    }
                 }
 
+                // Void: callers don't read the return value (the no-op
+                // boolean was a misleading "did I set anything?" signal
+                // that no consumer ever inspected). Empty-string layoutId
+                // is treated as "no-op, keep current selection" so the
+                // post-add Qt.callLater path can pass through unrejected
+                // when the newly-added rule has no id yet.
                 function selectLayoutById(layoutId) {
                     if (layoutId)
                         selectedLayoutId = layoutId;
-
-                    return layoutId !== "";
                 }
 
                 // Grouping — kept in QML because group labels require i18n/i18np
@@ -195,30 +250,30 @@ ColumnLayout {
                         if (groupIdx === filterBar.groupCapability)
                             return Logic.groupByCapability(filtered, tilingCapabilityGroups, i18n("Other"));
                         else if (groupIdx === filterBar.groupTilingSource)
-                            return Logic.groupByBoolKey(filtered, (item) => {
-                            return Logic.isBuiltIn(item);
-                        }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
+                            return Logic.groupByBoolKey(filtered, item => {
+                                return Logic.isBuiltIn(item);
+                            }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
                         else if (groupIdx === filterBar.groupPersistent)
-                            return Logic.groupByBoolKey(filtered, (item) => {
-                            return item.supportsMemory === true;
-                        }, "persistent", i18n("Persistent"), "stateless", i18n("Stateless"));
+                            return Logic.groupByBoolKey(filtered, item => {
+                                return item.supportsMemory === true;
+                            }, "persistent", i18n("Persistent"), "stateless", i18n("Stateless"));
                         return Logic.ungrouped(filtered);
                     }
                     // Snapping grouping
                     if (groupIdx === filterBar.groupAspectRatio)
                         return Logic.groupByAspectRatio(filtered);
                     else if (groupIdx === filterBar.groupZoneCount)
-                        return Logic.groupByZoneCount(filtered, (count) => {
-                        return i18np("%n zone", "%n zones", count);
-                    }, i18n("Unknown"));
+                        return Logic.groupByZoneCount(filtered, count => {
+                            return i18np("%n zone", "%n zones", count);
+                        }, i18n("Unknown"));
                     else if (groupIdx === filterBar.groupAutoManual)
-                        return Logic.groupByBoolKey(filtered, (item) => {
-                        return item.autoAssign === true;
-                    }, "auto", i18n("Auto"), "manual", i18n("Manual"));
+                        return Logic.groupByBoolKey(filtered, item => {
+                            return item.autoAssign === true;
+                        }, "auto", i18n("Auto"), "manual", i18n("Manual"));
                     else if (groupIdx === filterBar.groupSource)
-                        return Logic.groupByBoolKey(filtered, (item) => {
-                        return Logic.isBuiltIn(item);
-                    }, "builtin", i18n("Built-in"), "user", i18n("User Layouts"));
+                        return Logic.groupByBoolKey(filtered, item => {
+                            return Logic.isBuiltIn(item);
+                        }, "builtin", i18n("Built-in"), "user", i18n("User Layouts"));
                     return Logic.ungrouped(filtered);
                 }
 
@@ -285,7 +340,6 @@ ColumnLayout {
                         icon.name: "edit-reset"
                         onTriggered: filterBar.resetFilters()
                     }
-
                 }
 
                 // ─── Section Delegate (header + Flow of layout cards) ────────
@@ -329,31 +383,43 @@ ColumnLayout {
                                 cellHeight: layoutGrid.cellHeight
                                 viewMode: root.viewMode
                                 isSelected: String(modelData.id) === layoutGrid.selectedLayoutId
-                                onSelected: (idx) => {
+                                // When LayoutsPage is hosted outside Main.qml
+                                // (KCM / future preview) `window.layoutContextMenu`
+                                // is undefined; the previous shape silently
+                                // swallowed right-clicks. Suppressing the
+                                // right-button mask on the delegate is cleaner
+                                // — the user sees no context-menu affordance
+                                // (no ghost cursor change, no eaten event) so
+                                // the missing menu doesn't pretend to exist.
+                                contextMenuEnabled: window && window.layoutContextMenu
+                                onSelected: idx => {
                                     layoutGrid.selectedLayoutId = String(modelData.id);
                                 }
-                                onActivated: (layoutId) => {
+                                onActivated: layoutId => {
                                     settingsController.editLayout(layoutId);
                                 }
-                                onDeleteRequested: (layout) => {
+                                onDeleteRequested: layout => {
                                     deleteConfirmDialog.layoutToDelete = layout;
                                     deleteConfirmDialog.open();
                                 }
-                                onContextMenuRequested: (layout) => {
-                                    window.showLayoutContextMenu(layout);
+                                onContextMenuRequested: layout => {
+                                    // Same defensive guard the toast call
+                                    // sites below use — the page can be
+                                    // hosted inside other consumers (KCM,
+                                    // future external preview) that don't
+                                    // attach `layoutContextMenu`. With
+                                    // contextMenuEnabled bound above, this
+                                    // signal won't fire in those hosts, but
+                                    // keep the guard as a belt-and-braces.
+                                    if (window && window.layoutContextMenu)
+                                        window.layoutContextMenu.showForLayout(layout);
                                 }
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // Import file dialog
@@ -361,7 +427,7 @@ ColumnLayout {
         id: importDialog
 
         title: i18n("Import Layout")
-        nameFilters: [i18n("JSON files") + " (*.json)", i18n("All files") + " (*)"]
+        nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             settingsController.importLayout(root.filePathFromUrl(selectedFile));
@@ -375,7 +441,7 @@ ColumnLayout {
         property string layoutId: ""
 
         title: i18n("Export Layout")
-        nameFilters: [i18n("JSON files") + " (*.json)"]
+        nameFilters: [i18n("JSON files (*.json)")]
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportLayout(exportDialog.layoutId, root.filePathFromUrl(selectedFile));
@@ -387,13 +453,12 @@ ColumnLayout {
         id: algorithmImportDialog
 
         title: i18n("Import Tiling Algorithm")
-        nameFilters: [i18n("JavaScript files") + " (*.js)", i18n("All files") + " (*)"]
+        nameFilters: [i18n("Luau files (*.luau)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             if (settingsController.importAlgorithm(root.filePathFromUrl(selectedFile))) {
                 if (window && window.showToast)
                     window.showToast(i18n("Algorithm imported"));
-
             }
         }
     }
@@ -403,19 +468,25 @@ ColumnLayout {
         id: kzonesFileDialog
 
         title: i18n("Import KZones Layout File")
-        nameFilters: [i18n("JSON files") + " (*.json)", i18n("All files") + " (*)"]
+        nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
         fileMode: FileDialog.OpenFile
         onAccepted: {
             settingsController.importFromKZonesFile(root.filePathFromUrl(selectedFile));
         }
     }
 
-    // KZones import result notification — uses Main.qml's toast
+    // KZones import result notification — uses Main.qml's toast.
+    // The signal carries (count, message); the toast text already
+    // includes the count from the C++ side, so we only show `message`.
+    // `count` is unprefixed (no underscore) so the signature reads as
+    // intended — the C++ signal is `void kzonesImportFinished(int count,
+    // const QString& message)` and the QML handler should mirror the
+    // C++ parameter names for grep-friendliness even though `count`
+    // is unused in this consumer.
     Connections {
         function onKzonesImportFinished(count, message) {
             if (window && window.showToast)
                 window.showToast(message);
-
         }
 
         target: settingsController
@@ -438,7 +509,12 @@ ColumnLayout {
             }
         }
 
-        target: window.layoutContextMenu
+        // When LayoutsPage is hosted outside Main.qml (KCM / preview
+        // host), `window.layoutContextMenu` is undefined; an unguarded
+        // target would emit a runtime warning on every signal fire.
+        // Disable the Connections entirely in that case.
+        enabled: window && window.layoutContextMenu
+        target: window && window.layoutContextMenu ? window.layoutContextMenu : null
     }
 
     // New Layout wizard dialog
@@ -465,7 +541,6 @@ ColumnLayout {
             layoutGrid.rebuildModel();
             if (root.viewMode === 1)
                 layoutGrid.selectedLayoutId = "autotile:" + algorithmId;
-
         }
 
         function onAlgorithmOperationFailed(reason) {
@@ -473,7 +548,6 @@ ColumnLayout {
             // is open, it shows the error inline via its own Connections block
             if (!newAlgorithmDialog.opened && window && window.showToast)
                 window.showToast(reason);
-
         }
 
         function onLayoutOperationFailed(reason) {
@@ -481,7 +555,6 @@ ColumnLayout {
             // is open, it shows the error inline via its own Connections block
             if (!newLayoutDialog.opened && window && window.showToast)
                 window.showToast(reason);
-
         }
 
         target: settingsController
@@ -494,7 +567,8 @@ ColumnLayout {
         property string algorithmId: ""
 
         title: i18n("Export Algorithm")
-        nameFilters: [i18n("JavaScript files") + " (*.js)"]
+        nameFilters: [i18n("Luau files (*.luau)")]
+        defaultSuffix: "luau"
         fileMode: FileDialog.SaveFile
         onAccepted: {
             settingsController.exportAlgorithm(algorithmExportDialog.algorithmId, root.filePathFromUrl(selectedFile));
@@ -537,5 +611,4 @@ ColumnLayout {
             }
         ]
     }
-
 }

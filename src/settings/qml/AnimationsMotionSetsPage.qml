@@ -39,6 +39,15 @@ SettingsFlickable {
             root._saving = false;
         }
 
+        // Surface controller-emitted toast requests (e.g. an apply/save
+        // refused mid-discard) through the shell `window.showToast`.
+        // Without this the controller's diagnostic vanishes and the
+        // user sees an unexplained no-op.
+        function onToastRequested(text) {
+            if (window && window.showToast)
+                window.showToast(text);
+        }
+
         target: settingsController.animationsPage
     }
 
@@ -126,11 +135,8 @@ SettingsFlickable {
                             root._saving = false;
                         }
                     }
-
                 }
-
             }
-
         }
 
         SettingsCard {
@@ -180,7 +186,6 @@ SettingsFlickable {
                                 color: Kirigami.Theme.disabledTextColor
                                 font: Kirigami.Theme.smallFont
                             }
-
                         }
 
                         Button {
@@ -227,15 +232,9 @@ SettingsFlickable {
                                 deleteConfirm.close();
                             }
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

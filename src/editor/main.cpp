@@ -104,7 +104,9 @@ int main(int argc, char* argv[])
     if (useVulkan) {
         if (!PlasmaZones::createAndRegisterVulkanInstance(vulkanInstance, app)) {
             qCCritical(PlasmaZones::lcEditor)
-                << "Failed to create Vulkan instance — falling back to OpenGL for shader preview.";
+                << "Vulkan unavailable (instance creation failed or no enumerable GPU) —"
+                << "falling back to OpenGL for shader preview. If a GPU driver was upgraded,"
+                << "a reboot may be needed to match the kernel module to the userspace driver.";
             useVulkan = false;
         }
     }
@@ -164,7 +166,7 @@ int main(int argc, char* argv[])
     // ScreenResolver wraps the daemon call + QGuiApplication::screenAt fallback
     // so we don't have to duplicate the virtual-screen-aware lookup here.
     QString targetScreen = parser.isSet(screenOption) ? parser.value(screenOption)
-                                                      : Phosphor::Screens::ScreenResolver::effectiveScreenAtCursor();
+                                                      : PhosphorScreens::ScreenResolver::effectiveScreenAtCursor();
 
     // Warn about mutually exclusive flags
     if (parser.isSet(previewOption) && parser.isSet(newLayoutOption)) {

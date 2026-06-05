@@ -10,7 +10,7 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 
-namespace Phosphor::Shortcuts {
+namespace PhosphorShortcuts {
 
 namespace {
 
@@ -89,4 +89,4 @@ std::unique_ptr<IBackend> createBackend(BackendHint hint, QObject* parent)
     Q_UNREACHABLE();
 }
 
-} // namespace Phosphor::Shortcuts
+} // namespace PhosphorShortcuts

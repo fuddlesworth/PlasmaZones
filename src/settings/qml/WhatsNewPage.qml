@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -12,7 +13,7 @@ Kirigami.Dialog {
 
     readonly property color subtleBg: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.03)
     readonly property color subtleBorder: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-    readonly property int thinBorder: Math.round(Kirigami.Units.devicePixelRatio)
+    readonly property int thinBorder: Math.round(Screen.devicePixelRatio)
 
     title: i18n("What's New in PlasmaZones %1", Qt.application.version)
     preferredWidth: Kirigami.Units.gridUnit * 28
@@ -91,9 +92,7 @@ Kirigami.Dialog {
                         Item {
                             Layout.fillWidth: true
                         }
-
                     }
-
                 }
 
                 Rectangle {
@@ -112,6 +111,8 @@ Kirigami.Dialog {
                         model: releaseCard.modelData.highlights
 
                         RowLayout {
+                            id: highlightRow
+
                             required property string modelData
 
                             Layout.fillWidth: true
@@ -125,16 +126,18 @@ Kirigami.Dialog {
 
                             Label {
                                 Layout.fillWidth: true
-                                text: parent.modelData
+                                // Read through the row's explicit id rather
+                                // than `parent.modelData` \u2014 if the RowLayout
+                                // ever grew an intermediate wrapper (Pane,
+                                // Item) the `parent` chain would shift and
+                                // this binding would silently resolve to
+                                // undefined. Direct id avoids that fragility.
+                                text: highlightRow.modelData
                                 wrapMode: Text.WordWrap
                             }
-
                         }
-
                     }
-
                 }
-
             }
 
             Behavior on border.color {
@@ -142,7 +145,6 @@ Kirigami.Dialog {
                     profile: "widget.tint"
                     durationOverride: Kirigami.Units.shortDuration
                 }
-
             }
 
             transform: Translate {
@@ -153,13 +155,8 @@ Kirigami.Dialog {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

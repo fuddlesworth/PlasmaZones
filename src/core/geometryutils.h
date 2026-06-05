@@ -21,9 +21,11 @@
 namespace PhosphorZones {
 class Layout;
 class Zone;
+class IZoneLayoutRegistry;
+struct ContextGapOverride;
 }
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 
@@ -48,9 +50,9 @@ using ::PhosphorZones::GeometryUtils::getZoneGeometryWithGaps;
 /**
  * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry
  *
- * Unified helper that resolves virtual screen geometry via Phosphor::Screens::ScreenManager when
+ * Unified helper that resolves virtual screen geometry via PhosphorScreens::ScreenManager when
  * available, falling back to the physical QScreen* geometry. Eliminates the
- * repeated pattern of querying Phosphor::Screens::ScreenManager + branching on vsGeom.isValid()
+ * repeated pattern of querying PhosphorScreens::ScreenManager + branching on vsGeom.isValid()
  * that appears in navigation, resnap, snap-all, rotation, and overlay code.
  *
  * @param zone PhosphorZones::Zone to get geometry for
@@ -58,11 +60,17 @@ using ::PhosphorZones::GeometryUtils::getZoneGeometryWithGaps;
  * @param screenId Screen identifier (physical or virtual)
  * @param layout PhosphorZones::Layout for gap overrides
  * @param settings Global settings for gap fallbacks
+ * @param layoutRegistry Optional registry; when non-null, the context-rule gap
+ *        override for @p screenId in the registry's CURRENT desktop/activity is
+ *        resolved and applied as the highest-precedence gap layer — so preview /
+ *        query geometry matches the commit-time geometry the resolver produces.
+ *        Pass null (default) to skip rule gaps entirely (legacy behaviour).
  * @return Snapped integer geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Zone* zone,
                                                   QScreen* screen, const QString& screenId,
-                                                  PhosphorZones::Layout* layout, ISettings* settings);
+                                                  PhosphorZones::Layout* layout, ISettings* settings,
+                                                  PhosphorZones::IZoneLayoutRegistry* layoutRegistry = nullptr);
 
 /**
  * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry (floating-point)
@@ -76,11 +84,15 @@ PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManag
  * @param screenId Screen identifier (physical or virtual)
  * @param layout PhosphorZones::Layout for gap overrides
  * @param settings Global settings for gap fallbacks
+ * @param layoutRegistry Optional registry; see getZoneGeometryForScreen — when
+ *        non-null, the current-context rule gap override for @p screenId is
+ *        applied as the highest-precedence gap layer.
  * @return Floating-point geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Zone* zone,
                                                     QScreen* screen, const QString& screenId,
-                                                    PhosphorZones::Layout* layout, ISettings* settings);
+                                                    PhosphorZones::Layout* layout, ISettings* settings,
+                                                    PhosphorZones::IZoneLayoutRegistry* layoutRegistry = nullptr);
 
 /**
  * @brief Get effective zone padding for a layout
@@ -89,10 +101,15 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenMan
  * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective zone padding in pixels
  *
- * Resolution cascade: per-screen override → layout override → global settings → default (8px)
+ * @param ruleGapOverride Optional PerScreenSnappingKey-shaped map of context-rule
+ *        gap overrides (built by DaemonGeometryResolver from the resolved
+ *        context rules); takes precedence over every other layer.
+ *
+ * Resolution cascade: context-rule override → per-screen override → layout
+ * override → global settings → default (8px)
  */
 PLASMAZONES_EXPORT int getEffectiveZonePadding(PhosphorZones::Layout* layout, ISettings* settings,
-                                               const QString& screenId = {});
+                                               const QString& screenId = {}, const QVariantMap& ruleGapOverride = {});
 
 using ::PhosphorZones::GeometryUtils::snapToRect;
 
@@ -103,11 +120,26 @@ using ::PhosphorZones::GeometryUtils::snapToRect;
  * @param screenId Optional screen identifier for per-screen override lookup
  * @return Effective per-side edge gaps
  *
- * Resolution cascade: per-screen per-side → per-screen uniform → layout per-side →
- * layout uniform → global per-side → global uniform → default
+ * @param ruleGapOverride Optional PerScreenSnappingKey-shaped map of context-rule
+ *        gap overrides; takes precedence over every other layer.
+ *
+ * Resolution cascade: context-rule override → per-screen per-side → per-screen
+ * uniform → layout per-side → layout uniform → global per-side → global uniform → default
  */
 PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZones::Layout* layout, ISettings* settings,
-                                                                    const QString& screenId = {});
+                                                                    const QString& screenId = {},
+                                                                    const QVariantMap& ruleGapOverride = {});
+
+/**
+ * @brief Convert a resolved ContextGapOverride into the PerScreenSnappingKey-shaped
+ *        QVariantMap consumed by getEffectiveZonePadding / getEffectiveOuterGaps as
+ *        the `ruleGapOverride` argument. Only the override's set (engaged) fields
+ *        are written; an empty override yields an empty map.
+ *
+ * Shared by DaemonGeometryResolver (commit path) and the preview/query geometry
+ * helpers above so the rule→map translation lives in exactly one place.
+ */
+PLASMAZONES_EXPORT QVariantMap contextGapOverrideMap(const PhosphorZones::ContextGapOverride& gaps);
 
 using ::PhosphorZones::GeometryUtils::effectiveScreenGeometry;
 
@@ -126,19 +158,21 @@ using ::PhosphorZones::GeometryUtils::setZoneGeometry;
  * to avoid duplicating the empty-zones building logic.
  */
 PLASMAZONES_EXPORT PhosphorProtocol::EmptyZoneList
-buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout, QScreen* screen,
-                   ISettings* settings, const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
+buildEmptyZoneList(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout, QScreen* screen,
+                   ISettings* settings, const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty,
+                   PhosphorZones::IZoneLayoutRegistry* layoutRegistry = nullptr);
 
 /**
  * @brief Build typed list of empty zones using explicit screen ID (virtual-screen-aware)
  *
- * Uses Phosphor::Screens::ScreenManager to resolve virtual screen geometry when available, falling back
+ * Uses PhosphorScreens::ScreenManager to resolve virtual screen geometry when available, falling back
  * to the physical QScreen* geometry.
  */
 PLASMAZONES_EXPORT PhosphorProtocol::EmptyZoneList
-buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout, const QString& screenId,
+buildEmptyZoneList(PhosphorScreens::ScreenManager* mgr, PhosphorZones::Layout* layout, const QString& screenId,
                    QScreen* physScreen, ISettings* settings,
-                   const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
+                   const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty,
+                   PhosphorZones::IZoneLayoutRegistry* layoutRegistry = nullptr);
 
 using ::PhosphorGeometry::enforceMinSizes;
 using ::PhosphorGeometry::removeRectOverlaps;

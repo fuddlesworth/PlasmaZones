@@ -59,14 +59,21 @@ public:
     bool isSnapMode(const QString& screenId) const;
     bool isAutotileMode(const QString& screenId) const;
 
-    /// Split a list of screen ids into snap-mode and autotile-mode
-    /// buckets. Useful for multi-screen cleanup and resnap paths that
-    /// need to iterate one engine at a time. Preserves input order
-    /// within each bucket.
+    /// Split a list of screen ids into per-mode buckets. Useful for
+    /// multi-screen cleanup and resnap paths that need to iterate one
+    /// engine at a time. Preserves input order within each bucket.
+    ///
+    /// Screens assigned to a mode whose engine is not currently wired
+    /// in the router (Scrolling — engine slot reserved, see
+    /// `AssignmentEntry::Mode`) land in @ref passthrough. Existing
+    /// callers that only enumerate `.snap` / `.autotile` correctly
+    /// skip passthrough screens (they are unmanaged by this daemon, so
+    /// cleanup loops should leave them alone).
     struct Partitioned
     {
         QStringList snap;
         QStringList autotile;
+        QStringList passthrough; ///< Scrolling-mode screens — no engine wired
     };
     Partitioned partitionByMode(const QStringList& screenIds) const;
 

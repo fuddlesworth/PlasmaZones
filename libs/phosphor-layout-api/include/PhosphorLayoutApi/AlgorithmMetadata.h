@@ -12,8 +12,8 @@ namespace PhosphorLayout {
 /// How zone numbers are displayed in algorithm previews.
 ///
 /// Internal typed enumeration used throughout the C++ codebase. String
-/// encodings are still used at the wire/parse boundaries (JS script
-/// front-matter, D-Bus @c AlgorithmInfoEntry, JSON serialisation, QML
+/// encodings are still used at the wire/parse boundaries (Luau script
+/// metadata, D-Bus @c AlgorithmInfoEntry, JSON serialisation, QML
 /// property strings) — convert via @c zoneNumberDisplayToString and
 /// @c zoneNumberDisplayFromString at those boundaries.
 enum class ZoneNumberDisplay {
@@ -99,8 +99,8 @@ struct AlgorithmMetadata
     /// surface a "remembers your splits" indicator.
     bool supportsMemory = false;
 
-    /// True when the algorithm is loaded from a JS script file rather than
-    /// a built-in C++ implementation. Affects how the picker renders the
+    /// True when the algorithm is loaded from a Luau script file rather than
+    /// a built-in implementation. Affects how the picker renders the
     /// system-vs-user badge (see @c isUserScript).
     bool isScripted = false;
 

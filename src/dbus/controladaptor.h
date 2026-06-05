@@ -24,12 +24,12 @@ class SnapAdaptor;
 class LayoutAdaptor;
 class CompositorBridgeAdaptor;
 
-// Phosphor::Screens::ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
+// PhosphorScreens::ScreenManager moved to libs/phosphor-screens (PhosphorScreens::ScreenManager).
 } // namespace PlasmaZones
 namespace PhosphorEngine {
 class IPlacementEngine;
 }
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 class ScreenManager;
 }
 namespace PlasmaZones {
@@ -52,7 +52,7 @@ public:
     explicit ControlAdaptor(WindowTrackingAdaptor* wta, SnapAdaptor* snapAdaptor, LayoutAdaptor* layoutAdaptor,
                             PhosphorZones::LayoutRegistry* layoutManager,
                             PhosphorEngine::IPlacementEngine* autotileEngine,
-                            Phosphor::Screens::ScreenManager* screenManager, CompositorBridgeAdaptor* compositorBridge,
+                            PhosphorScreens::ScreenManager* screenManager, CompositorBridgeAdaptor* compositorBridge,
                             QObject* parent = nullptr);
     ~ControlAdaptor() override = default;
 
@@ -108,7 +108,7 @@ private:
     LayoutAdaptor* m_layoutAdaptor;
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorEngine::IPlacementEngine* m_autotileEngine;
-    Phosphor::Screens::ScreenManager* m_screenManager;
+    PhosphorScreens::ScreenManager* m_screenManager;
     CompositorBridgeAdaptor* m_compositorBridge;
     QPointer<QFutureWatcher<QString>> m_reportWatcher;
 };

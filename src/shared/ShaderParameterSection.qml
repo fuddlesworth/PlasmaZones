@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls as QQC
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -46,11 +47,10 @@ ColumnLayout {
     readonly property int paramCount: groupParams ? groupParams.length : 0
     property bool expanded: true
     property alias contentComponent: contentLoader.sourceComponent
-    property var lockedParams: ({
-    })
+    property var lockedParams: ({})
     property bool enableLocking: true
 
-    signal toggled()
+    signal toggled
     /// Emitted when the group-lock button is clicked. `lock` is the new
     /// state (true = lock all, false = unlock all). Host applies it as a
     /// single batched mutation across all `groupParams`.
@@ -90,9 +90,7 @@ ColumnLayout {
                         profile: root.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
                         durationOverride: Kirigami.Units.longDuration
                     }
-
                 }
-
             }
 
             QQC.Label {
@@ -113,7 +111,6 @@ ColumnLayout {
                         var p = root.groupParams[i];
                         if (p && p.id !== undefined && root.lockedParams[p.id] !== true)
                             return false;
-
                     }
                     return true;
                 }
@@ -147,9 +144,7 @@ ColumnLayout {
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.textColor
                 }
-
             }
-
         }
 
         background: Rectangle {
@@ -163,14 +158,12 @@ ColumnLayout {
                 // Hairline divider — pixel-snap via devicePixelRatio so it
                 // renders crisp on HiDPI without violating the no-hardcoded-
                 // pixels rule.
-                height: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
+                height: Math.max(1, Math.round(Screen.devicePixelRatio))
                 color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: root.expanded
                 opacity: 0.5
             }
-
         }
-
     }
 
     Item {
@@ -198,9 +191,7 @@ ColumnLayout {
                     profile: root.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
                     durationOverride: Kirigami.Units.longDuration
                 }
-
             }
-
         }
 
         Behavior on implicitHeight {
@@ -208,9 +199,6 @@ ColumnLayout {
                 profile: root.expanded ? "widget.accordionExpand" : "widget.accordionCollapse"
                 durationOverride: Kirigami.Units.longDuration
             }
-
         }
-
     }
-
 }

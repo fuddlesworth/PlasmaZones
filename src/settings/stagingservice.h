@@ -60,11 +60,16 @@ public:
 
     // ── Assignment staging ────────────────────────────────────────────
 
-    /// Stage a snapping-layout assignment. Clears any staged tiling
-    /// assignment for the same context to prevent mode conflict.
+    /// Stage a snapping-layout assignment. The snapping and tiling slots are
+    /// mutually exclusive in the unified Window Rule model — one assignment
+    /// context carries either a snapping layout or a tiling algorithm, not
+    /// both — so staging here clears any staged tiling assignment for the
+    /// same context. Callers that want to write both atomically must use
+    /// `stageAssignmentEntry`.
     void stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
 
-    /// Stage a tiling-algorithm assignment. Clears any staged snapping
+    /// Stage a tiling-algorithm assignment. See `stageSnapping` — the two
+    /// slots are mutually exclusive, so this clears any staged snapping
     /// assignment for the same context.
     void stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
 

@@ -110,8 +110,6 @@ pas_add_test(pas_test_animationshadereffect test_animationshadereffect.cpp)
 pas_add_test(pas_test_shaderprofile test_shaderprofile.cpp)
 pas_add_test(pas_test_shaderprofiletree test_shaderprofiletree.cpp)
 pas_add_test(pas_test_animationshaderregistry test_animationshaderregistry.cpp)
-pas_add_test(pas_test_animationapprule test_animationapprule.cpp)
-pas_add_test(pas_test_animationappruleresolver test_animationappruleresolver.cpp)
 
 # Integration test against the actual data/animations/ packs.
 pas_add_test(pas_test_builtin_effects test_builtin_effects.cpp)

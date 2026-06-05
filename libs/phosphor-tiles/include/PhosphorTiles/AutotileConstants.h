@@ -63,10 +63,6 @@ constexpr int MaxMaxWindows = 12;
 constexpr int UnlimitedMaxWindowsSentinel = std::numeric_limits<int>::max() / 2;
 constexpr int MaxZones = 256;
 constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
-/// Cap on total node count when converting a SplitTree to a QJSValue object. Each
-/// tiled window occupies one leaf plus at most one internal node, so MaxZones*2
-/// is a safe ceiling that lets the widest valid tree through without truncation.
-constexpr int MaxTreeNodesForJs = MaxZones * 2;
 constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed
 constexpr int MinMetadataWindows = 1;
 constexpr int MaxMetadataWindows = 100;
@@ -78,11 +74,10 @@ constexpr int MaxInsertPosition = 2;
 // libs/phosphor-animation/include/PhosphorAnimation/AnimationLimits.h
 // (PhosphorAnimation::Limits namespace). Consumers that need them
 // should include that header directly; ConfigDefaults already does.
-/// Watchdog deadline for a single JS evaluation guarded by
-/// ScriptedAlgorithm::guardedCall(). Generous enough for ARM / slow
-/// systems where JS startup and first-call JIT warmup can take tens of
-/// milliseconds. Exposed here so operators tuning for their target
-/// hardware don't need to recompile the scriptedalgorithm TU.
+/// Watchdog deadline for a single Luau call (tile / lifecycle hook) issued via
+/// LuauEngine::callModule. Generous enough for ARM / slow systems where
+/// first-call warmup can take tens of milliseconds. Exposed here so operators
+/// tuning for their target hardware don't need to recompile the binding TU.
 constexpr int ScriptWatchdogTimeoutMs = 100;
 
 /// Returns true if typeId is a numeric QMetaType (Double, Float, Int, UInt, LongLong, ULongLong).

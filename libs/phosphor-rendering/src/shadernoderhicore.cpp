@@ -533,6 +533,23 @@ void ShaderNodeRhi::prepare()
 
     if (multipassActive) {
         const QColor clearColor(0, 0, 0, 0);
+        // Pin qt_Matrix to identity for the buffer passes. The image pass
+        // carries an NDC Y-flip in qt_Matrix on Y-up-in-NDC backends (see
+        // shadernoderhiuniforms.cpp), but the buffer/multipass FBOs are our
+        // own offscreen targets whose texels the image pass later samples via
+        // channelUv()/iFlipBufferY — that round-trip is already
+        // backend-consistent. Flipping the buffer-write geometry would invert
+        // the stored orientation and double-flip the sampled result. Restore
+        // the flip-carrying value right after the loop, before render() draws.
+        if (m_ubo) {
+            static constexpr float kIdentity4x4[16] = {1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                                                       0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f};
+            QRhiResourceUpdateBatch* identityBatch = rhi->nextResourceUpdateBatch();
+            if (identityBatch) {
+                identityBatch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(kIdentity4x4), kIdentity4x4);
+                cb->resourceUpdate(identityBatch);
+            }
+        }
         if (multiBufferMode) {
             const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
             for (int i = 0; i < n; ++i) {
@@ -597,11 +614,15 @@ void ShaderNodeRhi::prepare()
             cb->endPass();
         }
 
-        // Resource flush after buffer passes (Vulkan barrier hint).
+        // Resource flush after buffer passes (Vulkan barrier hint). Doubles as
+        // the restore of the image-pass qt_Matrix (carrying the NDC Y-flip)
+        // that the buffer passes above pinned to identity — render() draws the
+        // image pass against this value. Uploads the full 64-byte qt_Matrix
+        // (offset 0) rather than the prior 4-byte touch.
         if (m_ubo) {
             QRhiResourceUpdateBatch* barrier = rhi->nextResourceUpdateBatch();
             if (barrier) {
-                barrier->updateDynamicBuffer(m_ubo.get(), 0, 4, &m_baseUniforms);
+                barrier->updateDynamicBuffer(m_ubo.get(), 0, 16 * sizeof(float), m_baseUniforms.qt_Matrix);
                 cb->resourceUpdate(barrier);
             }
         }

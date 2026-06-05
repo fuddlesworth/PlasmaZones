@@ -6,10 +6,6 @@ import QtQuick
 OrderingPage {
     id: root
 
-    readonly property var
-    settingsBridge: SnappingBridge {
-    }
-
     function updateCustomOrderState() {
         root.hasCustomOrder = settingsController.hasCustomSnappingOrder();
     }
@@ -22,13 +18,13 @@ OrderingPage {
     hasCustomOrder: settingsController.hasCustomSnappingOrder()
     previewZonesKey: "zones"
     zoneCountKey: "zoneCount"
-    resolveOrder: function() {
+    resolveOrder: function () {
         return settingsController.resolvedSnappingOrder();
     }
-    moveItem: function(from, to) {
+    moveItem: function (from, to) {
         settingsController.moveSnappingLayout(from, to);
     }
-    resetOrder: function() {
+    resetOrder: function () {
         settingsController.resetSnappingOrder();
     }
 
@@ -51,5 +47,4 @@ OrderingPage {
 
         target: settingsController
     }
-
 }

@@ -181,14 +181,24 @@ void SurfaceManager::configureWindow(PhosphorLayer::Surface* surface)
         return;
     }
 
-    if (!m_impl->config.pipelineCachePath.isEmpty()) {
-        if (!m_impl->pipelineCacheDirCreated) {
-            const QFileInfo fi(m_impl->config.pipelineCachePath);
-            QDir().mkpath(fi.path());
-            m_impl->pipelineCacheDirCreated = true;
-        }
+    const bool wantPipelineCache = !m_impl->config.pipelineCachePath.isEmpty();
+    const bool wantDeviceExtensions = !m_impl->config.vulkanDeviceExtensions.isEmpty();
+    if (wantPipelineCache || wantDeviceExtensions) {
         QQuickGraphicsConfiguration gfxCfg = w->graphicsConfiguration();
-        gfxCfg.setPipelineCacheSaveFile(m_impl->config.pipelineCachePath);
+        if (wantPipelineCache) {
+            if (!m_impl->pipelineCacheDirCreated) {
+                const QFileInfo fi(m_impl->config.pipelineCachePath);
+                QDir().mkpath(fi.path());
+                m_impl->pipelineCacheDirCreated = true;
+            }
+            gfxCfg.setPipelineCacheSaveFile(m_impl->config.pipelineCachePath);
+        }
+        if (wantDeviceExtensions) {
+            // Request extra Vulkan device extensions (e.g. external-memory /
+            // dma-buf import) on this window's QRhi device. Must be set before
+            // the scene graph initialises. Qt filters to the supported set.
+            gfxCfg.setDeviceExtensions(m_impl->config.vulkanDeviceExtensions);
+        }
         w->setGraphicsConfiguration(gfxCfg);
     }
 

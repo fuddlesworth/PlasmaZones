@@ -35,11 +35,12 @@ class TilingAlgorithm;
  * plugin-based compositor/WM/shell deployment requires per-instance
  * ownership so plugins cannot corrupt each other's registry state.
  *
- * Built-in algorithms (BSP, Master-Stack, Columns) register
- * automatically in the constructor via the static
- * @c pendingAlgorithmRegistrations list populated by
- * @c AlgorithmRegistrar. Additional scripted algorithms are loaded by
- * @c ScriptedAlgorithmLoader against an injected registry.
+ * The bundled algorithms (BSP, Master-Stack, Columns, …) ship as Luau scripts
+ * in @c data/algorithms and are loaded by @c ScriptedAlgorithmLoader against an
+ * injected registry, alongside user scripts. The @c AlgorithmRegistrar /
+ * @c pendingAlgorithmRegistrations machinery remains as the extension point for
+ * a future compiled-in C++ algorithm, but no in-tree algorithm currently uses
+ * it.
  *
  * @note Thread Safety: read operations (@c algorithm, @c availableAlgorithms,
  *       @c hasAlgorithm) are thread-safe once construction has completed.
@@ -59,7 +60,7 @@ public:
      * @brief Early cleanup of all registered algorithms.
      *
      * Wired to @c QCoreApplication::aboutToQuit so algorithm objects
-     * (especially @c ScriptedAlgorithm instances with @c QJSEngine
+     * (especially @c LuauTileAlgorithm instances with @c lua_State
      * internals) are destroyed while Qt is still fully alive, avoiding
      * teardown crashes if an instance outlives @c QCoreApplication.
      *

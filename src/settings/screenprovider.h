@@ -3,88 +3,70 @@
 
 #pragma once
 
-#include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorScreens/ScreenInfo.h>
 #include <PhosphorZones/AssignmentEntry.h>
-#include <QDBusConnection>
 #include <QList>
 #include <QString>
 #include <QVariantList>
 #include <functional>
-#include "../../src/core/constants.h"
+
+class QObject;
 
 namespace PlasmaZones {
 
-class Settings;
-
-/**
- * @brief Lightweight screen descriptor returned by fetchScreens()
- */
-struct ScreenInfo
-{
-    QString name;
-    bool isPrimary = false;
-    QString manufacturer;
-    QString model;
-    int width = 0;
-    int height = 0;
-    QString screenId;
-    bool isVirtualScreen = false;
-    QString connectorName; ///< Physical connector (e.g. "DP-2")
-    int virtualIndex = -1; ///< 0-based index within the physical screen (-1 = not virtual)
-    QString virtualDisplayName; ///< User-facing name (e.g. "Left", "Right")
-};
+class ISettings;
 
 /**
  * @brief Fetch the list of connected screens via D-Bus (daemon) with Qt fallback
  *
- * Each ScreenInfo contains connector name, primary flag, manufacturer, model,
- * resolution, and the stable EDID-based screenId from the daemon.
- */
-QList<ScreenInfo> fetchScreens();
-
-/**
- * @brief Convert a ScreenInfo list to QVariantList suitable for QML consumption
+ * Each PhosphorScreens::ScreenInfo contains connector name, primary flag,
+ * manufacturer, model, resolution, and the stable EDID-based screenId from the
+ * daemon. This call stays in PlasmaZones because it speaks the PlasmaZones
+ * daemon's specific D-Bus protocol; the generic ScreenInfo POD itself lives in
+ * phosphor-screens.
  *
- * Each entry is a QVariantMap with keys: name, isPrimary, manufacturer, model,
- * resolution, screenId.
+ * @param daemonUnavailable  Optional out-pointer. When non-null, set to true
+ *                           if the daemon path failed (empty getScreens reply
+ *                           or every per-screen getScreenInfo() probe errored)
+ *                           and the Qt-fallback branch ran. Settings UIs can
+ *                           use this to render a degraded-fallback banner
+ *                           without re-doing the D-Bus probing.
  */
-QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens);
+QList<PhosphorScreens::ScreenInfo> fetchScreens(bool* daemonUnavailable = nullptr);
 
 /**
  * @brief Check whether a given monitor is disabled in settings for the given mode
- * @param settings The Settings instance to query
+ * @param settings The ISettings instance to query
  * @param mode The mode whose disable list to check
  * @param screenName The connector name of the screen
  */
-bool isMonitorDisabledFor(const Settings* settings, PhosphorZones::AssignmentEntry::Mode mode,
+bool isMonitorDisabledFor(const ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode,
                           const QString& screenName);
 
 /**
  * @brief Enable or disable a monitor in settings for the given mode
- * @param settings The Settings instance to modify
+ * @param settings The ISettings instance to modify
  * @param mode The mode whose disable list to modify
  * @param screenName The connector name of the screen
  * @param disabled Whether to disable (true) or enable (false)
  * @param onChanged Callback invoked when the disabled list actually changes
+ * @return true on success, false if the screen name could not be resolved
+ *         (settings is null, screenName is empty, or the connector name
+ *         couldn't be canonicalised to a screen id). QML toggle handlers
+ *         can use this to revert visual state when the underlying write
+ *         couldn't be performed.
  */
-void setMonitorDisabledFor(Settings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
+bool setMonitorDisabledFor(ISettings* settings, PhosphorZones::AssignmentEntry::Mode mode, const QString& screenName,
                            bool disabled, const std::function<void()>& onChanged);
 
 /**
  * @brief Connect D-Bus screen change signals to a receiver's refreshScreens() slot.
  *
- * Call this in KCM constructors that need screen change tracking.
+ * Call this in KCM constructors that need screen change tracking. Returns
+ * true if BOTH subscriptions succeeded; on partial failure the receiver
+ * may miss screenAdded/screenRemoved broadcasts. The receiver MUST have a
+ * `refreshScreens()` slot declared in its meta-object (Q_SLOTS).
  */
-inline void connectScreenChangeSignals(QObject* receiver)
-{
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::Screen),
-                                          QStringLiteral("screenAdded"), receiver, SLOT(refreshScreens()));
-    QDBusConnection::sessionBus().connect(QString(PhosphorProtocol::Service::Name),
-                                          QString(PhosphorProtocol::Service::ObjectPath),
-                                          QString(PhosphorProtocol::Service::Interface::Screen),
-                                          QStringLiteral("screenRemoved"), receiver, SLOT(refreshScreens()));
-}
+bool connectScreenChangeSignals(QObject* receiver);
 
 } // namespace PlasmaZones

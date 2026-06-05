@@ -5,7 +5,6 @@
 
 #include <PhosphorEngine/EngineTypes.h>
 #include <QObject>
-#include <QStringList>
 
 namespace PhosphorEngine {
 
@@ -22,8 +21,12 @@ public:
     // stay in lockstep.
     virtual bool snappingEnabled() const = 0;
 
-    virtual QStringList excludedApplications() const = 0;
-    virtual QStringList excludedWindowClasses() const = 0;
+    // excludedApplications() / excludedWindowClasses() are gone — the v4
+    // migration folded those flat lists into the unified WindowRule store.
+    // The daemon now wires a filtered Exclude rule set directly into the
+    // SnapEngine via `setExcludeRuleSet`; consumers that previously called
+    // these accessors evaluate against the rule set instead.
+
     virtual StickyWindowHandling stickyWindowHandling() const = 0;
     virtual bool moveNewWindowsToLastZone() const = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
@@ -41,4 +44,11 @@ public:
 
 } // namespace PhosphorEngine
 
+// Q_DECLARE_INTERFACE is REQUIRED at moc time for any QObject that uses
+// `Q_INTERFACES(PhosphorEngine::ISnapSettings)` to declare that it
+// implements this interface — Settings does so in src/config/settings.h.
+// Interface dispatch happens through `dynamic_cast<ISnapSettings*>` (see
+// `SnapEngine::snapSettings()` in SnapEngine.cpp), not `qobject_cast`, so the
+// IID string below is never exercised at runtime — but the macro pairing with
+// `Q_INTERFACES` is still structurally required for an implementer to compile.
 Q_DECLARE_INTERFACE(PhosphorEngine::ISnapSettings, "org.plasmazones.ISnapSettings")

@@ -9,8 +9,16 @@
 
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorSnapEngine/SnapState.h>
+#include <PhosphorWindowRule/MatchExpression.h>
+#include <PhosphorWindowRule/MatchTypes.h>
+#include <PhosphorWindowRule/RuleAction.h>
+#include <PhosphorWindowRule/WindowRule.h>
+#include <PhosphorWindowRule/WindowRuleSet.h>
 #include "config/configbackends.h"
 #include "core/interfaces.h"
 
@@ -25,6 +33,7 @@ using namespace PhosphorSnapEngine;
 #include <PhosphorZones/Zone.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
 
@@ -105,8 +114,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsSnap(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
@@ -331,19 +339,8 @@ private Q_SLOTS:
         QVERIFY(m_snapState->preFloatZone(windowId).isEmpty());
     }
 
-    void testEngineBaseUnmanagedGeometry()
-    {
-        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
-        m_wts->setSnapState(engine.snapState());
-        const QString windowId = QStringLiteral("app|uuid-pretile-sync");
-
-        engine.storeUnmanagedGeometry(windowId, QRect(10, 20, 300, 200), QStringLiteral("DP-1"));
-        QVERIFY(engine.hasUnmanagedGeometry(windowId));
-
-        engine.forgetWindow(windowId);
-        QVERIFY(!engine.hasUnmanagedGeometry(windowId));
-        m_wts->setSnapState(nullptr);
-    }
+    // testEngineBaseUnmanagedGeometry removed: the per-engine unmanaged-geometry store
+    // was collapsed into the unified WindowPlacementStore (shared freeGeometryByScreen).
 
     void testDualStoreSync_windowClosed()
     {
@@ -964,6 +961,285 @@ private Q_SLOTS:
         QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("disabled-context gate rejected restore")),
                  "with no predicate the disabled-context gate must never fire");
         m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // resolveWindowRestore — cross-screen ownership gate (multi-monitor login)
+    //
+    // A window snapped on a SNAP monitor can be reopened by KWin's session
+    // restore on a DIFFERENT monitor that happens to be in autotile mode. The
+    // opening-screen ownership gate must NOT blindly defer such a window to
+    // autotile: its snapped record's RECORDED screen is in snapping mode, so the
+    // restore migrates cross-screen back to that monitor (mirrors main, which
+    // gated the defer on the saved screen). Conversely, a snapped record whose
+    // OWN recorded screen is now autotile-owned must still defer (and must not be
+    // consumed), leaving the record for the autotile engine.
+    // =========================================================================
+
+    void testResolveWindowRestore_crossScreenSnap_doesNotDeferOnAutotileOpeningScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // DP-2 is an autotile-mode screen; DP-1 stays snapping (the default).
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
+        QCOMPARE(m_layoutManager->modeForScreen(QStringLiteral("DP-2"), 0, QString()),
+                 PhosphorZones::AssignmentEntry::Autotile);
+
+        // A window snapped on the SNAP monitor DP-1 (its recorded screen).
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-1");
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        m_wts->placementStore().record(rec);
+
+        // The session reopens the window (new uuid) on the AUTOTILE monitor DP-2.
+        // The opening-screen ownership gate must NOT defer — the snapped record's
+        // recorded screen (DP-1) is in snapping mode, so the restore migrates
+        // cross-screen. (Geometry can't resolve in this guiless fixture, so we
+        // assert via the absence of the defer log rather than result.shouldSnap.)
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-2"), &result);
+
+        QVERIFY2(!lines.join(QLatin1Char('\n')).contains(QStringLiteral("defers to the owning engine")),
+                 "a pending cross-screen snap restore must NOT be deferred by the opening-screen ownership gate");
+        m_wts->setSnapState(nullptr);
+    }
+
+    void testResolveWindowRestore_sameScreenAutotileRecord_defersAndPreservesRecord()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        // DP-2 is autotile mode AND the recorded screen of the snapped record
+        // (the user switched DP-2 to autotile after snapping there last session).
+        PhosphorZones::AssignmentEntry autotile;
+        autotile.mode = PhosphorZones::AssignmentEntry::Autotile;
+        autotile.tilingAlgorithm = QStringLiteral("dwindle");
+        m_layoutManager->setAssignmentEntryDirect(QStringLiteral("DP-2"), 0, QString(), autotile);
+
+        PhosphorEngine::WindowPlacement rec;
+        rec.windowId = QStringLiteral("app|orig");
+        rec.appId = QStringLiteral("app");
+        rec.screenId = QStringLiteral("DP-2"); // recorded on the now-autotile screen
+        PhosphorEngine::EngineSlot slot;
+        slot.state = PhosphorEngine::WindowPlacement::stateSnapped();
+        slot.zoneIds = QStringList{QStringLiteral("z1")};
+        rec.engines.insert(QStringLiteral("snap"), slot);
+        m_wts->placementStore().record(rec);
+
+        // Reopen on DP-2. No cross-screen restore is pending (the recorded screen
+        // is autotile), so the gate must defer AND must not consume the record —
+        // autotile still needs it.
+        PhosphorEngine::SnapResult result;
+        const QStringList lines =
+            captureResolveLogs(engine, QStringLiteral("app|new"), QStringLiteral("DP-2"), &result);
+
+        QVERIFY2(!result.shouldSnap, "a window on an autotile screen with no cross-screen snap restore must not snap");
+        QVERIFY2(lines.join(QLatin1Char('\n')).contains(QStringLiteral("defers to the owning engine")),
+                 "the opening-screen ownership gate must defer to autotile");
+        QVERIFY2(m_wts->placementStore().contains(QStringLiteral("app|orig"), QStringLiteral("app")),
+                 "deferring must not consume the snapped record — autotile still needs it");
+        m_wts->setSnapState(nullptr);
+    }
+
+    // =========================================================================
+    // setExcludeRuleSet + isAppIdExcluded wiring tests
+    //
+    // Daemon owns the filtered Exclude rule set and pushes its address into
+    // SnapEngine via `setExcludeRuleSet`. SnapEngine lazily binds a
+    // `RuleEvaluator` to that set on first `isAppIdExcluded` call and
+    // re-binds it whenever the pointer changes. An in-place edit through
+    // `WindowRuleSet::setRules` bumps the revision counter; the evaluator's
+    // per-revision sort index + match cache invalidate automatically.
+    //
+    // These tests pin the contract the daemon's `refilterExcludeRules`
+    // lambda + `Daemon::stop()` `setExcludeRuleSet(nullptr)` teardown
+    // rely on:
+    //   - nullptr borrow ⇒ isAppIdExcluded == false (early-init fast path)
+    //   - empty set      ⇒ isAppIdExcluded == false (no-exclusions fast path)
+    //   - matching rule  ⇒ isAppIdExcluded == true
+    //   - pointer change ⇒ cached evaluator drops + rebinds against new set
+    //   - in-place edit  ⇒ revision bump invalidates the eval cache
+    // =========================================================================
+
+    void testExcludeWiring_nullptrBorrowReturnsFalse()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        // No setExcludeRuleSet call — m_excludeRuleSet starts nullptr.
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+    }
+
+    void testExcludeWiring_emptySetReturnsFalse()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+        PhosphorWindowRule::WindowRuleSet emptySet;
+        engine.setExcludeRuleSet(&emptySet);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+    }
+
+    void testExcludeWiring_matchingRuleReturnsTrue()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRule::WindowRuleSet set;
+        PhosphorWindowRule::WindowRule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("exclude-firefox");
+        rule.enabled = true;
+        rule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("firefox"));
+        PhosphorWindowRule::RuleAction action;
+        action.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        rule.actions.append(action);
+        QVERIFY(set.addRule(rule));
+
+        engine.setExcludeRuleSet(&set);
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("firefox")));
+        // Non-matching appId resolves to not-excluded against the same
+        // bound set — the evaluator differentiates correctly.
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+    }
+
+    void testExcludeWiring_pointerChangeRebindsEvaluator()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRule::WindowRuleSet firefoxSet;
+        PhosphorWindowRule::WindowRule firefoxRule;
+        firefoxRule.id = QUuid::createUuid();
+        firefoxRule.enabled = true;
+        firefoxRule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("firefox"));
+        PhosphorWindowRule::RuleAction firefoxAction;
+        firefoxAction.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        firefoxRule.actions.append(firefoxAction);
+        QVERIFY(firefoxSet.addRule(firefoxRule));
+
+        PhosphorWindowRule::WindowRuleSet konsoleSet;
+        PhosphorWindowRule::WindowRule konsoleRule;
+        konsoleRule.id = QUuid::createUuid();
+        konsoleRule.enabled = true;
+        konsoleRule.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+            PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, QStringLiteral("konsole"));
+        PhosphorWindowRule::RuleAction konsoleAction;
+        konsoleAction.type = QString(PhosphorWindowRule::ActionType::Exclude);
+        konsoleRule.actions.append(konsoleAction);
+        QVERIFY(konsoleSet.addRule(konsoleRule));
+
+        // Wire the firefox set, prime the cached evaluator.
+        engine.setExcludeRuleSet(&firefoxSet);
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+
+        // Re-wire to the konsole set — the cached evaluator was bound to
+        // firefoxSet by reference; without the pointer-change rebind in
+        // setExcludeRuleSet, this would still resolve "firefox" as
+        // excluded and "konsole" as not.
+        engine.setExcludeRuleSet(&konsoleSet);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("konsole")));
+
+        // Clear: nullptr borrow short-circuits to false again.
+        engine.setExcludeRuleSet(nullptr);
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("firefox")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("konsole")));
+    }
+
+    // Honest scope of this test (renamed from the earlier
+    // `…InvalidatesEvalCache` name): exercises that across in-place
+    // `WindowRuleSet::setRules` edits at the SAME bound pointer, the
+    // evaluator surfaces the post-edit rule set (not stale results
+    // from the pre-edit rule set). `WindowRuleSet::setRules`
+    // unconditionally bumps the revision counter, so the evaluator's
+    // revision-equality guard
+    // (`m_priorityOrderRevision == revision`) catches every transition
+    // here independently of the also-present size guard
+    // (`m_priorityOrderRulesSize == rules.size()`) — the size guard
+    // only fires under a quint64 revision wraparound the production
+    // path effectively never hits (~5.85 billion years of one-per-
+    // second edits, see RuleEvaluator's own commentary). This test
+    // doesn't pin the size guard in isolation; a fixture that did
+    // would need test-only hooks to force a revision collision. The
+    // grow-the-list (1 → 2) step is kept because it makes
+    // false-negative regressions in the priority-order rebuild
+    // visible (cached `[0]` walk would skip rules[1]), even though
+    // the revision guard catches it first in the current code.
+    void testExcludeWiring_inPlaceSetRulesRespectsRevisionBump()
+    {
+        SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
+
+        PhosphorWindowRule::WindowRuleSet set;
+        // Wire BEFORE adding rules so the bound pointer doesn't change
+        // when we mutate the set; this is the daemon's actual pattern
+        // (setExcludeRuleSet wired once at init, edits happen via
+        // setRules from the rulesChanged subscription).
+        engine.setExcludeRuleSet(&set);
+
+        const auto excludeRule = [](const QString& pattern) {
+            PhosphorWindowRule::WindowRule r;
+            r.id = QUuid::createUuid();
+            r.enabled = true;
+            r.match = PhosphorWindowRule::MatchExpression::makeLeaf(
+                PhosphorWindowRule::Field::AppId, PhosphorWindowRule::Operator::AppIdMatches, pattern);
+            PhosphorWindowRule::RuleAction a;
+            a.type = QString(PhosphorWindowRule::ActionType::Exclude);
+            r.actions.append(a);
+            return r;
+        };
+
+        // Step 1: rule A exists (size 1). Querying primes the cached
+        // evaluator against the bound set at its current revision; the
+        // resolved priority-order index is `[0]`.
+        set.setRules({excludeRule(QStringLiteral("appA"))});
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appA")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appB")));
+
+        // Step 2: swap rule A for rule B at the SAME size (1 → 1).
+        // Verifies that the new rule's match is picked up — the
+        // priorityOrder cache happens to remain `[0]` which still
+        // indexes the only post-swap rule, so this step alone does
+        // NOT discriminate revision-bump invalidation from a stale
+        // cache (the broken walk visits rules[0] which IS the new
+        // rule). It does verify that the engine doesn't latch onto
+        // the OLD rule's pattern, which is the load-bearing user-
+        // facing property.
+        set.setRules({excludeRule(QStringLiteral("appB"))});
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appB")));
+
+        // Step 3: GROW the list (1 → 2). This is the step that
+        // discriminates a working `priorityOrder()` rebuild from a
+        // broken one. The cached permutation from Step 2 has size 1;
+        // the new set has size 2. Without per-revision invalidation,
+        // the cached `[0]` walk would only visit rules[0] (the
+        // already-known "appB" rule) — rules[1] ("appC") would never
+        // be evaluated and `isAppIdExcluded("appC")` would return
+        // false (false-negative). The pass verdict requires BOTH
+        // pre-existing AND newly-appended rules to resolve correctly.
+        set.setRules({excludeRule(QStringLiteral("appB")), excludeRule(QStringLiteral("appC"))});
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appB")));
+        QVERIFY(engine.isAppIdExcluded(QStringLiteral("appC")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
+
+        // Step 4: clear via empty setRules. This goes through the
+        // `isEmpty()` fast path in `SnapEngine::isAppIdExcluded` (not
+        // the evaluator), but verifies the bound pointer survives the
+        // mutation cleanly.
+        set.setRules({});
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appA")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appB")));
+        QVERIFY(!engine.isAppIdExcluded(QStringLiteral("appC")));
     }
 };
 

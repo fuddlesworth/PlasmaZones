@@ -144,10 +144,11 @@ WindowAnimator::startAnimationWithResult(KWin::EffectWindow* handle, const QRect
     }
 
     PhosphorAnimation::SnapPolicy::SnapParams params;
-    // Per-call profile override — used by the AnimationAppRule cascade to
-    // apply a curve / duration override for one animation without mutating
-    // m_profile. The override is already curve-resolved through CurveRegistry
-    // by the caller and clamped here through the same path as m_profile.
+    // Per-call profile override — used by the per-window animation rule
+    // cascade to apply a curve / duration override for one animation without
+    // mutating m_profile. The override is already curve-resolved through
+    // CurveRegistry by the caller and clamped here through the same path as
+    // m_profile.
     if (profileOverride) {
         params.profile = *profileOverride;
         clampProfile(params.profile);

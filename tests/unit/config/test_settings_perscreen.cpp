@@ -9,7 +9,6 @@
  * 1. Per-screen zone selector set/clear
  * 2. Per-screen autotile validation
  * 3. Fresh config defaults
- * 4. Empty string list preservation across save/load
  */
 
 #include <QTest>
@@ -151,28 +150,11 @@ private Q_SLOTS:
         QCOMPARE(settings.shaderFrameRate(), ConfigDefaults::shaderFrameRate());
     }
 
-    // =========================================================================
-    // P2: edge cases -- empty string list preservation
-    // =========================================================================
-
-    /**
-     * Empty QStringList exclusions must survive a save/load round-trip
-     * without becoming null or gaining spurious entries.
-     */
-    void testSave_load_preservesEmptyStringLists()
-    {
-        IsolatedConfigGuard guard;
-
-        Settings settings;
-        settings.setExcludedApplications(QStringList());
-        settings.setExcludedWindowClasses(QStringList());
-        settings.save();
-
-        Settings loaded;
-        QVERIFY2(loaded.excludedApplications().isEmpty(), "Empty excluded applications list must survive round-trip");
-        QVERIFY2(loaded.excludedWindowClasses().isEmpty(),
-                 "Empty excluded window classes list must survive round-trip");
-    }
+    // The earlier "empty excluded lists survive round-trip" test was
+    // retired alongside excludedApplications / excludedWindowClasses
+    // themselves: the v4 fold removed those QStringList settings from
+    // Settings entirely. The Window Rules round-trip is covered by
+    // test_windowrule_store; the empty-rule-set case is exercised there.
 };
 
 QTEST_MAIN(TestSettingsPerScreen)

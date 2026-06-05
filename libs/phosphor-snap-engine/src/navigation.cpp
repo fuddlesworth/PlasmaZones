@@ -88,9 +88,11 @@ void SnapEngine::resnapFromAutotileOrder(const QStringList& autotileWindowOrder,
 }
 
 QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                                                 const QString& screenId)
+                                                                                 const QString& screenId,
+                                                                                 const QStringList& preClaimedZoneIds)
 {
-    QVector<ZoneAssignmentEntry> entries = calculateResnapFromAutotileOrder(autotileWindowOrder, screenId);
+    QVector<ZoneAssignmentEntry> entries =
+        calculateResnapFromAutotileOrder(autotileWindowOrder, screenId, preClaimedZoneIds);
 
     if (entries.isEmpty()) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine)

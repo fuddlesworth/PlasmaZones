@@ -38,53 +38,31 @@ void WindowTrackingAdaptor::storePreTileGeometry(const QString& windowId, int x,
         return;
     }
 
-    if (m_snapEngine) {
-        m_snapEngine->storeUnmanagedGeometry(windowId, QRect(x, y, width, height), screenId, overwrite);
+    // SINGLE float-back store: the placement record's SHARED per-screen free
+    // geometry (NOT a per-engine store). The effect's guarded pre-tile/pre-snap
+    // capture is the source; snap and autotile read the SAME value, so a window's
+    // free position never differs between modes and a managed rect can't leak from
+    // one engine's store into the other's float restore.
+    if (m_service) {
+        m_service->recordFreeGeometry(windowId, screenId, QRect(x, y, width, height), overwrite);
     }
-    qCDebug(lcDbusWindow) << "Stored pre-tile geometry for" << windowId << "screen=" << screenId
+    qCDebug(lcDbusWindow) << "Stored pre-tile geometry to record for" << windowId << "screen=" << screenId
                           << "overwrite=" << overwrite;
 }
 
 bool WindowTrackingAdaptor::getPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height)
 {
-    x = y = width = height = 0;
-
-    if (!validateWindowId(windowId, QStringLiteral("get pre-tile geometry"))) {
-        return false;
-    }
-
-    if (!m_snapEngine || !m_snapEngine->hasUnmanagedGeometry(windowId)) {
-        // appId fallback
-        const QString appId = m_service->currentAppIdFor(windowId);
-        if (appId == windowId || !m_snapEngine || !m_snapEngine->hasUnmanagedGeometry(appId)) {
-            return false;
-        }
-        QRect geo = m_snapEngine->unmanagedGeometry(appId);
-        x = geo.x();
-        y = geo.y();
-        width = geo.width();
-        height = geo.height();
-        return true;
-    }
-
-    QRect geo = m_snapEngine->unmanagedGeometry(windowId);
-    x = geo.x();
-    y = geo.y();
-    width = geo.width();
-    height = geo.height();
-    return true;
+    // Single float-back store: the unified record (via validatedUnmanagedGeometry).
+    return getValidatedPreTileGeometry(windowId, x, y, width, height);
 }
 
 bool WindowTrackingAdaptor::hasPreTileGeometry(const QString& windowId)
 {
-    if (windowId.isEmpty() || !m_snapEngine) {
+    if (windowId.isEmpty() || !m_service) {
         return false;
     }
-    if (m_snapEngine->hasUnmanagedGeometry(windowId)) {
-        return true;
-    }
-    const QString appId = m_service->currentAppIdFor(windowId);
-    return (appId != windowId && m_snapEngine->hasUnmanagedGeometry(appId));
+    const QString screenId = m_service->screenAssignments().value(windowId);
+    return m_service->validatedUnmanagedGeometry(windowId, screenId).has_value();
 }
 
 void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
@@ -92,42 +70,46 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("clear pre-tile geometry"))) {
         return;
     }
-    if (!m_snapEngine) {
-        return;
-    }
-    bool hadGeometry = m_snapEngine->hasUnmanagedGeometry(windowId);
-    m_snapEngine->forgetWindow(windowId);
-    // Also remove appId entry
-    const QString appId = m_service->currentAppIdFor(windowId);
-    if (appId != windowId) {
-        hadGeometry |= m_snapEngine->hasUnmanagedGeometry(appId);
-        m_snapEngine->forgetWindow(appId);
-    }
-    if (hadGeometry) {
-        qCDebug(lcDbusWindow) << "Cleared pre-tile geometry for" << windowId;
+    // Single float-back store: clear the record's shared free geometry.
+    if (m_service) {
+        m_service->clearFreeGeometry(windowId);
     }
 }
 
 PhosphorProtocol::PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
 {
     PhosphorProtocol::PreTileGeometryList result;
-    if (!m_snapEngine) {
+    if (!m_service) {
         return result;
     }
-    const auto& map = m_snapEngine->unmanagedGeometries();
-    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-        PhosphorProtocol::PreTileGeometryEntry entry;
-        entry.appId = m_service->currentAppIdFor(it.key());
-        entry.x = it.value().geometry.x();
-        entry.y = it.value().geometry.y();
-        entry.width = it.value().geometry.width();
-        entry.height = it.value().geometry.height();
-        if (!it.value().screenId.isEmpty()) {
-            entry.screenId = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().screenId)
-                ? it.value().screenId
-                : Phosphor::Screens::ScreenIdentity::idForName(it.value().screenId);
+    // Source from the SINGLE float-back store — the unified record's shared
+    // per-screen free geometry — so the effect's float-cache seed sees every
+    // window's float-back regardless of which mode captured it.
+    // Intentionally NOT gated by isPersistedContextDisabled (unlike
+    // getPendingRestoreGeometries): float-back restores a window to a FREE
+    // position, it does not snap it into a zone, so the snap-disable gate must
+    // not apply here — mirroring the snap engine's floating-branch policy in
+    // SnapEngine::resolveWindowRestore.
+    for (const PhosphorEngine::WindowPlacement& p : m_service->placementStore().records()) {
+        for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
+            const QRect& geo = it.value();
+            if (!geo.isValid()) {
+                continue;
+            }
+            PhosphorProtocol::PreTileGeometryEntry entry;
+            entry.appId = p.appId;
+            entry.x = geo.x();
+            entry.y = geo.y();
+            entry.width = geo.width();
+            entry.height = geo.height();
+            const QString& screen = it.key();
+            if (!screen.isEmpty()) {
+                entry.screenId = PhosphorIdentity::VirtualScreenId::isVirtual(screen)
+                    ? screen
+                    : PhosphorScreens::ScreenIdentity::idForName(screen);
+            }
+            result.append(entry);
         }
-        result.append(entry);
     }
     return result;
 }
@@ -179,7 +161,7 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
             }
         }
     } else {
-        // Fallback: no Phosphor::Screens::ScreenManager, use physical screens
+        // Fallback: no PhosphorScreens::ScreenManager, use physical screens
         for (QScreen* screen : Utils::allScreens()) {
             QRect intersection = screen->geometry().intersected(geometry);
             if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
@@ -252,11 +234,13 @@ void WindowTrackingAdaptor::onLayoutChanged()
     // Delegate to service
     m_service->onLayoutChanged();
 
-    // After layout becomes available, check if we have pending restores
-    if (!m_service->pendingRestoreQueues().isEmpty()) {
+    // After layout becomes available, check if we have placement records to
+    // restore. The unified WindowPlacementStore is the source of truth (the legacy
+    // m_pendingRestoreQueues is in-session-only and empty at startup).
+    if (m_service->placementStore().size() > 0) {
         m_hasPendingRestores = true;
-        qCDebug(lcDbusWindow) << "Layout available with" << m_service->pendingRestoreQueues().size()
-                              << "pending restores, checking if panel geometry is ready";
+        qCDebug(lcDbusWindow) << "Layout available with" << m_service->placementStore().size()
+                              << "placement records, checking if panel geometry is ready";
         tryEmitPendingRestoresAvailable();
     }
 }
@@ -280,19 +264,19 @@ void WindowTrackingAdaptor::tryEmitPendingRestoresAvailable()
         return;
     }
 
-    // Check if panel geometry is ready, or if Phosphor::Screens::ScreenManager doesn't exist (fallback)
-    // If Phosphor::Screens::ScreenManager instance is null, we proceed anyway with a warning - this is
+    // Check if panel geometry is ready, or if PhosphorScreens::ScreenManager doesn't exist (fallback)
+    // If PhosphorScreens::ScreenManager instance is null, we proceed anyway with a warning - this is
     // better than blocking window restoration indefinitely
     if (m_service->screenManager() && !m_service->screenManager()->isPanelGeometryReady()) {
         qCDebug(lcDbusWindow) << "pendingRestoresAvailable: cannot emit, panel geometry not ready yet";
         return;
     }
 
-    // Both conditions met (or Phosphor::Screens::ScreenManager unavailable) - emit the signal
+    // Both conditions met (or PhosphorScreens::ScreenManager unavailable) - emit the signal
     m_pendingRestoresEmitted = true;
     if (!m_service->screenManager()) {
         qCWarning(lcDbusWindow)
-            << "pendingRestoresAvailable: no Phosphor::Screens::ScreenManager, geometry may be incorrect";
+            << "pendingRestoresAvailable: no PhosphorScreens::ScreenManager, geometry may be incorrect";
     } else {
         qCInfo(lcDbusWindow) << "Pending restores: panel geometry ready, notifying effect";
     }
@@ -364,7 +348,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
             QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
                               refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));
             if (screen->geometry().contains(zoneCenter)) {
-                return Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+                return PhosphorScreens::ScreenIdentity::identifierFor(screen);
             }
         }
     }

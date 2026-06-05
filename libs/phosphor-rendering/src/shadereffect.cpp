@@ -98,10 +98,14 @@ static constexpr int kDefaultSvgRasteriseSize = 1024;
 // in-tree example of that pattern.
 //
 // The QuadVertices buffer (see internal.h) emits positions in clip space
-// (-1..1) so a pass-through is sufficient. We deliberately avoid binding
-// the UBO here: SRB binding 0 is registered for both stages in the
-// pipeline, but glslang strips the unused declaration during SPIR-V bake,
-// keeping the default stage independent of any consumer-side UBO layout.
+// (-1..1) so a pass-through is sufficient. We bind the UBO at binding 0 as a
+// single-field view (`mat4 qt_Matrix` at offset 0), layout-compatible with the
+// full BaseUniforms block the fragment stage declares (qt_Matrix is its first
+// member). qt_Matrix carries the per-backend NDC Y-orientation correction
+// (identity on Y-down-NDC backends like Vulkan, a Y-flip on Y-up-NDC backends
+// like OpenGL) — without applying it the fixed-NDC fullscreen quad presents
+// upside down on OpenGL when rendered direct-to-window (the daemon animation
+// path). ShaderNodeRhi sets this value (see shadernoderhiuniforms.cpp).
 //
 // Stored as `static const QString` (not QLatin1String) so the conversion
 // to QString happens once at static-init. Previously a per-paint
@@ -113,9 +117,13 @@ layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 texCoord;
 layout(location = 0) out vec2 vTexCoord;
 
+layout(std140, binding = 0) uniform DefaultVertexUniforms {
+    mat4 qt_Matrix;
+};
+
 void main() {
     vTexCoord = texCoord;
-    gl_Position = vec4(position, 0.0, 1.0);
+    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
 }
 )");
 

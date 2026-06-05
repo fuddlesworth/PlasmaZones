@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorEngine/IWindowRegistry.h>
+#include <PhosphorProtocol/WindowTypeEnum.h>
 #include <phosphorengine_export.h>
 #include <QHash>
 #include <QMultiHash>
@@ -19,10 +20,17 @@ struct WindowMetadata
     QString appId;
     QString desktopFile;
     QString title;
+    QString windowRole{}; ///< X11 WM_WINDOW_ROLE; empty for Wayland-native windows
+    int pid = 0; ///< process id; 0 = unknown
+    int virtualDesktop = 0; ///< 1-based x11 desktop number; 0 = all desktops / unknown
+    QString activity{}; ///< activity UUID; empty = all activities / unknown
+    PhosphorProtocol::WindowType windowType = PhosphorProtocol::WindowType::Unknown;
 
     bool operator==(const WindowMetadata& other) const
     {
-        return appId == other.appId && desktopFile == other.desktopFile && title == other.title;
+        return appId == other.appId && desktopFile == other.desktopFile && title == other.title
+            && windowRole == other.windowRole && pid == other.pid && virtualDesktop == other.virtualDesktop
+            && activity == other.activity && windowType == other.windowType;
     }
     bool operator!=(const WindowMetadata& other) const
     {

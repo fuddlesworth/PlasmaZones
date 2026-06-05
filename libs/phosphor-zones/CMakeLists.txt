@@ -44,17 +44,12 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
-# PhosphorConfig::IBackend is taken by reference in LayoutRegistry's public
-# constructor so callers can wire any persistent-store backend they own.
-# PUBLIC because the type leaks through the header.
-if(NOT TARGET PhosphorConfig::PhosphorConfig)
-    find_package(PhosphorConfig CONFIG REQUIRED)
-endif()
-
-# PhosphorScreens supplies ScreenIdentity (canonical id ↔ connector name)
-# and VirtualScreen helpers used by LayoutRegistry's assignment cascade.
-# PRIVATE because no public header leaks the type.
-if(NOT TARGET PhosphorScreens::Core)
+# PhosphorScreens supplies ScreenIdentity / VirtualScreen (LayoutRegistry's
+# assignment cascade) and ScreenManager geometry queries (GeometryUtils, whose
+# public GeometryUtils.h surfaces a ScreenManager*) — so this links the Runtime
+# target. PRIVATE: callers of the ScreenManager-taking GeometryUtils functions
+# own and link their own PhosphorScreens, so the dep need not propagate.
+if(NOT TARGET PhosphorScreens::Runtime)
     find_package(PhosphorScreens CONFIG REQUIRED)
 endif()
 
@@ -107,6 +102,9 @@ set(phosphorzones_SRCS
     src/interfaces.cpp
     src/layoutregistry.cpp
     src/layoutregistry_assignments.cpp
+    src/layoutregistry_batch.cpp
+    src/layoutregistry_rulehelpers.cpp
+    src/layoutregistry_overrides.cpp
     src/layoutregistry_persistence.cpp
     src/geometryutils.cpp
     src/layoutfactory.cpp
@@ -161,18 +159,22 @@ target_link_libraries(PhosphorZones
         Qt6::Gui
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorGeometry::PhosphorGeometry
-        # LayoutRegistry's public ctor takes a unique_ptr<PhosphorConfig::IBackend>
-        # — type must be visible to callers that include LayoutRegistry.h.
-        PhosphorConfig::PhosphorConfig
+        # LayoutRegistry resolves the assignment cascade through a
+        # WindowRuleStore + RuleEvaluator; the store type is referenced in
+        # the public LayoutRegistry.h ctor signature so the dep is PUBLIC.
+        PhosphorWindowRule::PhosphorWindowRule
     PRIVATE
         # Layout::matchAppRule uses PhosphorIdentity::WindowId for
         # composite window-id parsing; PRIVATE because the dep doesn't
         # leak through any public PhosphorZones header.
         PhosphorIdentity::PhosphorIdentity
-        # LayoutRegistry impl uses ScreenIdentity / VirtualScreen for
-        # the assignment-cascade screen-id normalisation. PRIVATE — no
-        # public header surfaces these types.
-        PhosphorScreens::Core
+        # GeometryUtils calls ScreenManager geometry queries, and LayoutRegistry
+        # uses ScreenIdentity / VirtualScreen for assignment-cascade screen-id
+        # normalisation — so this links the Runtime target (ScreenManager), which
+        # re-exports Core's POD types. PRIVATE: callers of the GeometryUtils
+        # functions that take a ScreenManager* pass one they already own and link
+        # PhosphorScreens themselves, so the dep need not propagate.
+        PhosphorScreens::Runtime
 )
 
 set_target_properties(PhosphorZones PROPERTIES

@@ -30,6 +30,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorSnapEngine;
@@ -109,13 +110,13 @@ private Q_SLOTS:
         m_bridgeAdaptor = new CompositorBridgeAdaptor(m_parent);
 
         // For ControlAdaptor tests we need a WTA + PhosphorZones::LayoutRegistry
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsBridge(nullptr);
         m_zoneDetector = new StubZoneDetectorBridge(nullptr);
 
         m_wtaParent = new QObject(nullptr);
-        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_wtaParent);
+        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr,
+                                          m_wtaParent);
 
         m_snapEngine = new SnapEngine(m_layoutManager, m_wta->service(), m_zoneDetector, nullptr, nullptr);
         m_snapEngine->setEngineSettings(m_settings);
@@ -167,14 +168,14 @@ private Q_SLOTS:
     void testRegisterBridge_returnsApiVersion()
     {
         PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
-            QStringLiteral("kwin"), QStringLiteral("3"), {QStringLiteral("borderless"), QStringLiteral("animation")});
+            QStringLiteral("kwin"), QStringLiteral("4"), {QStringLiteral("borderless"), QStringLiteral("animation")});
 
-        QCOMPARE(result.apiVersion, QStringLiteral("3"));
+        QCOMPARE(result.apiVersion, QStringLiteral("4"));
     }
 
     void testRegisterBridge_storesBridgeName()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("3"), {});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), {});
 
         QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
     }
@@ -182,7 +183,7 @@ private Q_SLOTS:
     void testRegisterBridge_storesCapabilities()
     {
         QStringList caps = {QStringLiteral("borderless"), QStringLiteral("maximize"), QStringLiteral("animation")};
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("3"), caps);
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), caps);
 
         QCOMPARE(m_bridgeAdaptor->bridgeCapabilities(), caps);
     }
@@ -191,11 +192,11 @@ private Q_SLOTS:
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
-        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("3"), {QStringLiteral("modifiers")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("4"), {QStringLiteral("modifiers")});
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("hyprland"));
-        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("3"));
+        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("4"));
     }
 
     // Version gate regression test: a peer speaking an older protocol
@@ -203,18 +204,18 @@ private Q_SLOTS:
     // sentinel in sessionId, must NOT update the stored bridge name, and
     // must NOT emit bridgeRegistered. If this regresses, stale effects
     // would silently connect and crash on marshalling mismatches. Peer
-    // string is "2" so this test directly pins the v2→v3 bump (the
-    // setSnapAssistThumbnail signature change); a peer that was valid
+    // string is "3" so this test directly pins the v3→v4 bump (the
+    // setWindowMetadata 4→9-arg signature widening); a peer that was valid
     // pre-bump is now rejected.
     void testRegisterBridge_rejectsOldVersion()
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
         PhosphorProtocol::BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
-            QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless")});
+            QStringLiteral("kwin"), QStringLiteral("3"), {QStringLiteral("borderless")});
 
         QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
-        QCOMPARE(result.apiVersion, QStringLiteral("3"));
+        QCOMPARE(result.apiVersion, QStringLiteral("4"));
         QCOMPARE(spy.count(), 0);
         QVERIFY(m_bridgeAdaptor->bridgeName().isEmpty());
     }
@@ -236,14 +237,14 @@ private Q_SLOTS:
 
     void testHasCapability_registered_returnsTrue()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("3"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), {QStringLiteral("borderless")});
 
         QVERIFY(m_bridgeAdaptor->hasCapability(QStringLiteral("borderless")));
     }
 
     void testHasCapability_notRegistered_returnsFalse()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("3"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("4"), {QStringLiteral("borderless")});
 
         QVERIFY(!m_bridgeAdaptor->hasCapability(QStringLiteral("unknown_capability")));
     }
@@ -276,15 +277,18 @@ private Q_SLOTS:
 
         QJsonObject obj = doc.object();
 
-        // Should have layouts array
+        // Should have layouts array, and the layout seeded in init() must surface.
         QVERIFY(obj.contains(QLatin1String("layouts")));
         QVERIFY(obj[QLatin1String("layouts")].isArray());
+        QVERIFY(obj[QLatin1String("layouts")].toArray().size() >= 1);
 
         // Should have windows array
         QVERIFY(obj.contains(QLatin1String("windows")));
+        QVERIFY(obj[QLatin1String("windows")].isArray());
 
-        // Should have activeLayoutId
+        // Should have activeLayoutId, non-empty because init() set an active layout.
         QVERIFY(obj.contains(QLatin1String("activeLayoutId")));
+        QVERIFY(!obj[QLatin1String("activeLayoutId")].toString().isEmpty());
     }
 
 private:

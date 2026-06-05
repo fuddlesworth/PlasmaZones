@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
@@ -27,13 +28,12 @@ ColumnLayout {
     // (virtual screens like "id/vs:0" are collapsed to their physical parent "id").
     // Uses imperative JS because QML declarative bindings can't express set-deduplication.
     readonly property var _filteredScreens: {
-        var all = appSettings.screens;
+        var all = appSettings.screens || [];
         if (!physicalOnly)
             return all;
 
         // Collect unique physical screen IDs
-        var seen = {
-        };
+        var seen = {};
         var result = [];
         for (var i = 0; i < all.length; i++) {
             var name = all[i].name || "";
@@ -42,9 +42,9 @@ ColumnLayout {
             if (!seen[physId]) {
                 seen[physId] = true;
                 // Use the physical screen's data (first occurrence or non-virtual entry)
-                var entry = {
-                };
-                for (var key in all[i]) entry[key] = all[i][key]
+                var entry = {};
+                for (var key in all[i])
+                    entry[key] = all[i][key];
                 entry["name"] = physId; // Override name to physical ID
                 // Virtual screen entries have sub-geometry and VS-specific labels;
                 // replace with the physical monitor's info.
@@ -83,7 +83,7 @@ ColumnLayout {
         return result;
     }
 
-    signal resetClicked()
+    signal resetClicked
 
     visible: showAllMonitors ? _filteredScreens.length > 1 : _filteredScreens.length > 0
     spacing: Kirigami.Units.smallSpacing
@@ -92,13 +92,12 @@ ColumnLayout {
     Connections {
         function onScreensChanged() {
             if (root.selectedScreenName === "")
-                return ;
+                return;
 
             let screens = root._filteredScreens;
             for (let i = 0; i < screens.length; i++) {
                 if (screens[i].name === root.selectedScreenName)
-                    return ;
-
+                    return;
             }
             root.selectedScreenName = "";
         }
@@ -120,11 +119,18 @@ ColumnLayout {
             // "All Monitors" option
             Rectangle {
                 visible: root.showAllMonitors
-                width: allMonitorContent.implicitWidth + Kirigami.Units.largeSpacing * 2
-                height: allMonitorContent.implicitHeight + Kirigami.Units.largeSpacing
+                // Size via Layout.* (not width/height) so the RowLayout actually
+                // lays the tiles out side by side — plain width/height on a layout
+                // child is overridden to the implicit (0) size, which collapsed the
+                // tiles on top of each other once a second monitor appeared.
+                // fillHeight equalises every tile to the tallest (the per-monitor
+                // tiles carry an extra "Primary" badge row).
+                Layout.preferredWidth: allMonitorContent.implicitWidth + Kirigami.Units.largeSpacing * 2
+                Layout.preferredHeight: allMonitorContent.implicitHeight + Kirigami.Units.largeSpacing
+                Layout.fillHeight: true
                 radius: Kirigami.Units.smallSpacing
                 color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : allMonitorMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
-                border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                border.width: Math.round(Screen.devicePixelRatio)
                 border.color: !root.isPerScreen ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : allMonitorMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                 Accessible.role: Accessible.RadioButton
                 Accessible.name: i18n("All Monitors")
@@ -150,7 +156,6 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignHCenter
                         opacity: !root.isPerScreen ? 1 : 0.5
                     }
-
                 }
 
                 MouseArea {
@@ -170,7 +175,6 @@ ColumnLayout {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
 
                 Behavior on border.color {
@@ -178,9 +182,7 @@ ColumnLayout {
                         profile: "widget.hover"
                         durationOverride: Kirigami.Units.shortDuration
                     }
-
                 }
-
             }
 
             // Individual monitors
@@ -193,11 +195,12 @@ ColumnLayout {
                     readonly property string screenName: modelData.name || ""
                     readonly property bool isSelected: root.selectedScreenName === screenName
 
-                    width: monitorContent.implicitWidth + Kirigami.Units.largeSpacing * 2
-                    height: monitorContent.implicitHeight + Kirigami.Units.largeSpacing
+                    Layout.preferredWidth: monitorContent.implicitWidth + Kirigami.Units.largeSpacing * 2
+                    Layout.preferredHeight: monitorContent.implicitHeight + Kirigami.Units.largeSpacing
+                    Layout.fillHeight: true
                     radius: Kirigami.Units.smallSpacing
                     color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.1) : monitorMouse.containsMouse ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.06) : "transparent"
-                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                    border.width: Math.round(Screen.devicePixelRatio)
                     border.color: isSelected ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.5) : monitorMouse.activeFocus ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7) : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
                     Accessible.role: Accessible.RadioButton
                     Accessible.name: monitorLabel.text
@@ -241,8 +244,8 @@ ColumnLayout {
 
                         Rectangle {
                             Layout.alignment: Qt.AlignHCenter
-                            width: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
-                            height: primaryLabel.implicitHeight + 2
+                            Layout.preferredWidth: primaryLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+                            Layout.preferredHeight: primaryLabel.implicitHeight + Kirigami.Units.smallSpacing
                             radius: height / 2
                             color: (modelData.isPrimary || false) ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15) : "transparent"
 
@@ -255,9 +258,7 @@ ColumnLayout {
                                 color: Kirigami.Theme.positiveTextColor
                                 opacity: (modelData.isPrimary || false) ? 1 : 0
                             }
-
                         }
-
                     }
 
                     MouseArea {
@@ -277,7 +278,6 @@ ColumnLayout {
                             profile: "widget.hover"
                             durationOverride: Kirigami.Units.shortDuration
                         }
-
                     }
 
                     Behavior on border.color {
@@ -285,15 +285,10 @@ ColumnLayout {
                             profile: "widget.hover"
                             durationOverride: Kirigami.Units.shortDuration
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
 
     // Per-screen info/reset row
@@ -316,7 +311,5 @@ ColumnLayout {
             visible: root.hasOverrides
             onClicked: root.resetClicked()
         }
-
     }
-
 }

@@ -36,6 +36,13 @@ namespace PhosphorZones {
 class Layout;
 }
 
+namespace PhosphorWindowRule {
+// Forward-declared for the std::unique_ptr<WindowRuleStoreWatcher> member.
+// (The complete WindowRuleStore type is pulled in transitively via
+// PhosphorZones/LayoutRegistry.h; the .cpp includes WindowRuleStore.h directly.)
+class WindowRuleStoreWatcher;
+}
+
 namespace PlasmaZones {
 
 class ILayoutService;
@@ -929,6 +936,17 @@ private:
     //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
+    /// Owned WindowRule store backing the in-process LayoutRegistry's
+    /// assignment cascade. Declared before m_localLayoutManager so it
+    /// outlives the registry that borrows it (members destruct in reverse
+    /// declaration order). Points at the shared windowrules.json so the
+    /// editor's local registry sees the same rule set the daemon writes.
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStore> m_localRuleStore;
+    /// Opt-in cross-process auto-reload of m_localRuleStore. The editor has no
+    /// daemon D-Bus rules-reload path, so this watcher is its only way to pick
+    /// up another process's windowrules.json writes while it is open. Declared
+    /// after the store it borrows so it tears down first.
+    std::unique_ptr<PhosphorWindowRule::WindowRuleStoreWatcher> m_localRuleStoreWatcher;
     std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
     PhosphorLayout::LayoutSourceBundle m_localSources;
     /// Owned here (not parented to `this`) so destruction runs via the

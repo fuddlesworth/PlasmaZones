@@ -12,4 +12,38 @@ find_dependency(PhosphorProtocol 0.1)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorScreensTargets.cmake")
 
+# Re-create the in-tree short alias that `add_library(PhosphorScreens::Core
+# ALIAS PhosphorScreensCore)` in the source tree provided. The install/export
+# step only exports the real target name (`PhosphorScreens::PhosphorScreensCore`),
+# so downstream `find_package(PhosphorScreens)` consumers would otherwise have
+# to spell out the long form. Mirror the in-tree convention so single-binary
+# and find_package usage stay symmetric.
+#
+# CMake 3.18+ supports `ALIAS` against IMPORTED targets directly; on the
+# project's 3.16 minimum we wrap the imported target in an INTERFACE library
+# that forwards link/include via target_link_libraries. The wrapper is a
+# zero-cost forwarder — it adds no compile or link steps.
+if(TARGET PhosphorScreens::PhosphorScreensCore AND NOT TARGET PhosphorScreens::Core)
+    # Guard against a name collision if a downstream consumer nests
+    # find_package(PhosphorScreens) twice through a transitive
+    # dependency — without the TARGET check around add_library, the
+    # second find_package would fatal on "target already exists".
+    if(NOT TARGET PhosphorScreens_CoreAliasWrapper)
+        add_library(PhosphorScreens_CoreAliasWrapper INTERFACE)
+        target_link_libraries(PhosphorScreens_CoreAliasWrapper INTERFACE PhosphorScreens::PhosphorScreensCore)
+    endif()
+    add_library(PhosphorScreens::Core ALIAS PhosphorScreens_CoreAliasWrapper)
+endif()
+
+# Same in-tree-alias re-creation for the Runtime target (ScreenManager +
+# Wayland), so downstream `find_package(PhosphorScreens)` consumers can spell
+# `PhosphorScreens::Runtime` exactly as in-tree add_subdirectory consumers do.
+if(TARGET PhosphorScreens::PhosphorScreensRuntime AND NOT TARGET PhosphorScreens::Runtime)
+    if(NOT TARGET PhosphorScreens_RuntimeAliasWrapper)
+        add_library(PhosphorScreens_RuntimeAliasWrapper INTERFACE)
+        target_link_libraries(PhosphorScreens_RuntimeAliasWrapper INTERFACE PhosphorScreens::PhosphorScreensRuntime)
+    endif()
+    add_library(PhosphorScreens::Runtime ALIAS PhosphorScreens_RuntimeAliasWrapper)
+endif()
+
 check_required_components(PhosphorScreens)

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import "ThemeHelpers.js" as Theme
@@ -30,7 +31,7 @@ ToolBar {
     required property bool fullscreenMode
     required property bool previewMode
 
-    signal fullscreenToggled()
+    signal fullscreenToggled
 
     height: Kirigami.Units.gridUnit * 5
     z: 100
@@ -70,7 +71,6 @@ ToolBar {
                     onClicked: {
                         if (editorController && modelData)
                             editorController.targetScreen = modelData.name;
-
                     }
 
                     contentItem: Label {
@@ -88,15 +88,13 @@ ToolBar {
                                 profile: "popup"
                                 durationOverride: Theme.animDuration
                             }
-
                         }
-
                     }
 
                     background: Rectangle {
                         radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                         color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.06) : "transparent")
-                        border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                        border.width: Math.round(Screen.devicePixelRatio)
                         border.color: screenButton.isActive ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : (screenButton.hovered ? Theme.withAlpha(Kirigami.Theme.textColor, 0.15) : "transparent")
 
                         Behavior on color {
@@ -104,7 +102,6 @@ ToolBar {
                                 profile: "popup"
                                 durationOverride: Theme.animDuration
                             }
-
                         }
 
                         Behavior on border.color {
@@ -112,15 +109,10 @@ ToolBar {
                                 profile: "popup"
                                 durationOverride: Theme.animDuration
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
 
         // Visual separator
@@ -139,10 +131,9 @@ ToolBar {
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - between label and field)
             // Initialize on component creation with delay to ensure editorController is ready
             Component.onCompleted: {
-                Qt.callLater(function() {
+                Qt.callLater(function () {
                     if (editorController && editorController.layoutName)
                         layoutNameField.text = editorController.layoutName;
-
                 });
             }
 
@@ -168,7 +159,6 @@ ToolBar {
                     color: Kirigami.Theme.neutralTextColor
                     font.weight: Font.Medium
                 }
-
             }
 
             // Layout name field with integrated character counter
@@ -189,13 +179,12 @@ ToolBar {
                 onEditingFinished: {
                     if (editorController && text !== editorController.layoutName)
                         editorController.layoutName = text;
-
                 }
 
                 background: Rectangle {
                     color: Theme.withAlpha(Kirigami.Theme.textColor, layoutNameField.activeFocus ? 0.08 : 0.04)
                     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
-                    border.width: Math.round(Kirigami.Units.devicePixelRatio)
+                    border.width: Math.round(Screen.devicePixelRatio)
                     border.color: layoutNameField.activeFocus ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.4) : Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
 
                     // Character counter overlay (right-aligned inside field)
@@ -217,7 +206,6 @@ ToolBar {
                             profile: "popup"
                             durationOverride: Theme.animDuration
                         }
-
                     }
 
                     Behavior on border.color {
@@ -225,11 +213,8 @@ ToolBar {
                             profile: "popup"
                             durationOverride: Theme.animDuration
                         }
-
                     }
-
                 }
-
             }
 
             // Explicitly connect to layoutNameChanged signal for reliable updates
@@ -237,13 +222,11 @@ ToolBar {
                 function onLayoutNameChanged() {
                     if (!layoutNameField.activeFocus && editorController)
                         layoutNameField.text = editorController.layoutName || "";
-
                 }
 
                 target: editorController
                 enabled: editorController !== null && editorController !== undefined
             }
-
         }
 
         Item {
@@ -303,7 +286,6 @@ ToolBar {
                 onClicked: {
                     if (undoRedoSection.undoController)
                         undoRedoSection.undoController.undo();
-
                 }
                 ToolTip.text: undoRedoSection.canUndo ? i18nc("@action:tooltip", "Undo: %1", undoRedoSection.undoText) : i18nc("@action:tooltip", "Undo")
                 ToolTip.visible: hovered
@@ -321,7 +303,6 @@ ToolBar {
                 onClicked: {
                     if (undoRedoSection.undoController)
                         undoRedoSection.undoController.redo();
-
                 }
                 ToolTip.text: undoRedoSection.canRedo ? i18nc("@action:tooltip", "Redo: %1", undoRedoSection.redoText) : i18nc("@action:tooltip", "Redo")
                 ToolTip.visible: hovered
@@ -335,7 +316,6 @@ ToolBar {
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
             }
-
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -472,9 +452,7 @@ ToolBar {
                 Accessible.name: i18nc("@action", "Close")
                 Accessible.description: i18nc("@info", "Close the layout editor")
             }
-
         }
-
     }
 
     background: Rectangle {
@@ -484,10 +462,8 @@ ToolBar {
         Rectangle {
             anchors.bottom: parent.bottom
             width: parent.width
-            height: Math.round(Kirigami.Units.devicePixelRatio)
+            height: Math.round(Screen.devicePixelRatio)
             color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
         }
-
     }
-
 }

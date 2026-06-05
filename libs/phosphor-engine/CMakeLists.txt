@@ -6,7 +6,8 @@
 # Shared library providing IPlacementEngine, IPlacementState,
 # NavigationContext, and PlacementEngineBase. Both phosphor-zones (snap)
 # and phosphor-tiles (autotile) inherit PlacementEngineBase so daemons
-# and compositor plugins get universal window-state mechanics for free.
+# and compositor plugins get the shared placement-engine plumbing
+# (settings injection, stale-window pruning, common signals) for free.
 #
 # Depends on Qt6::Core (QString, QStringList, QRect, QJsonObject, QObject).
 
@@ -30,7 +31,10 @@ set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
+    include/PhosphorEngine/WindowPlacement.h
+    include/PhosphorEngine/WindowPlacementStore.h
     src/PlacementEngineBase.cpp
+    src/WindowPlacementStore.cpp
     src/GeometryUtils.cpp
     src/WindowRegistry.cpp
     include/PhosphorEngine/WindowRegistry.h
@@ -54,8 +58,8 @@ target_compile_features(PhosphorEngine PUBLIC cxx_std_20)
 target_link_libraries(PhosphorEngine
     PUBLIC
         Qt6::Core
-        Qt6::Gui
         PhosphorGeometry::PhosphorGeometry
+        PhosphorProtocol::Types
     PRIVATE
         PhosphorIdentity::PhosphorIdentity
 )

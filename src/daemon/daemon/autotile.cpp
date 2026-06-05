@@ -15,6 +15,7 @@
 #include "../../core/constants.h"
 #include "../../core/utils.h"
 #include <PhosphorPlacement/WindowTrackingService.h>
+#include <PhosphorContext/ContextResolver.h>
 #include "../config/settings.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
@@ -43,6 +44,14 @@ void Daemon::updateAutotileScreens()
     if (!m_autotileEngine || !m_layoutManager || !m_screenManager) {
         return;
     }
+    // Every entry path into this function is wired in init() or later
+    // (settingsChanged, layoutAssigned, virtual-screen reconfigure), so
+    // the resolver is always live by the time we run. The earlier guard
+    // here had a settings-cascade fallback — that path was unreachable
+    // and let isContextDisabled stay alive in the daemon as dead code.
+    if (!m_contextResolver) {
+        return;
+    }
 
     const int desktop = currentDesktop();
     const QString activity = currentActivity();
@@ -51,9 +60,11 @@ void Daemon::updateAutotileScreens()
     QHash<QString, QString> screenAlgorithms;
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
-        // Skip screens/desktops/activities where PlasmaZones is disabled
-        if (isContextDisabled(m_settings.get(), PhosphorZones::AssignmentEntry::Autotile, screenId, desktop,
-                              activity)) {
+        // Skip screens/desktops/activities where PlasmaZones is disabled.
+        // Single cascade path through the resolver — see
+        // libs/phosphor-context-resolver/README.md.
+        if (m_contextResolver->isDisabled(
+                m_contextResolver->handleForMode(screenId, PhosphorZones::AssignmentEntry::Autotile))) {
             continue;
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
@@ -98,7 +109,7 @@ void Daemon::updateAutotileScreens()
             // Inject algorithm from layout assignment (authoritative source)
             if (screenAlgorithms.contains(screenId)) {
                 const QString screenAlgo = screenAlgorithms.value(screenId);
-                overrides[QStringLiteral("Algorithm")] = screenAlgo;
+                overrides[PerScreenKeys::Algorithm] = screenAlgo;
 
                 // When the per-screen algorithm differs from the engine's
                 // current global algorithm and there's no explicit MaxWindows
@@ -121,8 +132,8 @@ void Daemon::updateAutotileScreens()
                 // without a per-screen override. The override here is an optimization.
                 const QString globalAlgo = m_autotileEngine->algorithmId();
                 if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows)) {
-                    auto* screenAlgoPtr = m_algorithmRegistry.get()->algorithm(screenAlgo);
-                    auto* globalAlgoPtr = m_algorithmRegistry.get()->algorithm(globalAlgo);
+                    auto* screenAlgoPtr = m_algorithmRegistry->algorithm(screenAlgo);
+                    auto* globalAlgoPtr = m_algorithmRegistry->algorithm(globalAlgo);
                     if (screenAlgoPtr) {
                         if (!globalAlgoPtr) {
                             qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm" << globalAlgo
@@ -134,7 +145,7 @@ void Daemon::updateAutotileScreens()
                         // setAlgorithm syncs settings via QSignalBlocker.
                         const int runtimeMaxWindows = m_autotileEngine->runtimeMaxWindows();
                         if (!globalAlgoPtr || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
-                            overrides[QStringLiteral("MaxWindows")] = screenAlgoPtr->defaultMaxWindows();
+                            overrides[PerScreenKeys::MaxWindows] = screenAlgoPtr->defaultMaxWindows();
                         }
                     } else {
                         qCWarning(lcDaemon) << "updateAutotileScreens: unknown per-screen algorithm" << screenAlgo
@@ -228,8 +239,9 @@ void Daemon::handleAutotileDisabled()
             QSignalBlocker blocker(m_layoutManager.get());
             for (const QString& screenId : effectiveIds) {
                 const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                const auto existingSnapUuid = Utils::parseUuid(existingSnapId);
                 PhosphorZones::Layout* existing =
-                    existingSnapId.isEmpty() ? nullptr : m_layoutManager->layoutById(QUuid::fromString(existingSnapId));
+                    existingSnapUuid ? m_layoutManager->layoutById(*existingSnapUuid) : nullptr;
                 if (existing) {
                     continue; // Per-screen snap layout already valid — don't overwrite.
                 }
@@ -248,16 +260,8 @@ void Daemon::handleAutotileDisabled()
             m_layoutManager->setActiveLayout(fallbackLayout);
         }
     }
-    // Clear ALL saved floating state when autotile is disabled globally.
-    // Stale entries would incorrectly float windows on next activation.
-    if (m_autotileEngine) {
-        m_autotileEngine->clearAllSavedFloating();
-    }
-    // Clear saved snap-floats — we're fully back in snap mode, so the
-    // save/restore mechanism is no longer needed until next autotile entry.
-    if (m_snapEngine) {
-        m_snapEngine->clearSavedModeFloating();
-    }
+    // No parallel saved-floating sets to clear — each window's cross-mode state
+    // lives only in its unified WindowPlacement record (single source of truth).
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
     // windowsReleased clears floating state before windows are resnapped.
 }
@@ -348,34 +352,6 @@ QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
     return orders;
 }
 
-void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, int desktop, const QString& activity)
-{
-    // Legacy path — emits individual D-Bus signals. Prefer buildAutotileRestoreEntries()
-    // + emitBatchedResnap() to batch float-restores into the resnap signal.
-    if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
-        return;
-    }
-    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-    if (!wts) {
-        return;
-    }
-    for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
-        if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
-            continue;
-        }
-        const QString& screenId = it.key().screenId;
-        for (const QString& windowId : it.value()) {
-            if (excludeWindows.contains(windowId))
-                continue;
-            if (wts->isWindowSnapped(windowId))
-                continue;
-            if (wts->isWindowFloating(windowId))
-                continue;
-            m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
-        }
-    }
-}
-
 QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
                                                                  const QString& activity)
 {
@@ -406,7 +382,6 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
             // window to stale coordinates left behind by a ghost instance.
             // Leaving the window at its current tiled position is the least
             // surprising outcome.
-            // Strict per-instance lookup: no appId fallback.
             auto geo = wts->validatedUnmanagedGeometry(windowId, screenId, /*exactOnly=*/true);
             if (geo) {
                 ZoneAssignmentEntry entry;
@@ -427,7 +402,17 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
 
 void Daemon::presaveSnapFloats(const QString& screenId)
 {
-    if (!m_windowTrackingAdaptor) {
+    // Snapshot snap-mode float state into the unified record BEFORE a screen leaves
+    // snapping for autotile, so the screen's return restores the float from the
+    // SINGLE source of truth (the record's snap slot) — no parallel saved-float set.
+    // Runs while the screen is still in snapping mode, so captureWindowPlacement
+    // routes to the snap engine and records the snap slot (= floating) plus the
+    // shared free geometry from the live frame.
+    //
+    // Reachable from `Settings::settingsChanged` (daemon.cpp ~830) before the
+    // engines exist — any synchronous re-entry into settingsChanged during the
+    // D-Bus retry loop in init() would hit this path with null engine pointers.
+    if (!m_windowTrackingAdaptor || !m_autotileEngine || !m_snapEngine) {
         return;
     }
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
@@ -436,17 +421,16 @@ void Daemon::presaveSnapFloats(const QString& screenId)
         if (m_autotileEngine->isModeSpecificFloated(fid)) {
             continue;
         }
-        // When scoped to a screen, only save windows on that screen.
-        // Windows floating on other screens are not entering autotile
-        // and must not have their snap-float state recorded.
+        // When scoped to a screen, only snapshot windows on that screen.
+        // Windows floating on other screens are not entering autotile.
         if (!screenId.isEmpty()) {
             const QString windowScreen = wts->screenAssignments().value(fid);
             if (!windowScreen.isEmpty() && windowScreen != screenId) {
                 continue;
             }
         }
-        m_snapEngine->saveModeFloat(fid);
-        qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "screen=" << screenId;
+        m_windowTrackingAdaptor->captureWindowPlacement(fid);
+        qCDebug(lcDaemon) << "Captured snap-float to record for" << fid << "screen=" << screenId;
     }
 }
 
@@ -469,12 +453,9 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     }
 
     if (!order.isEmpty()) {
-        // Clear saved-floating for windows that were re-snapped to zones.
-        // If the user floated a window in autotile then re-snapped it in manual
-        // mode, the re-snap shows intent to tile — don't restore as floating.
-        // Un-snapped windows (not in zoneOrder) keep their saved floating state
-        // so they stay floating when autotile is re-enabled.
-        m_autotileEngine->clearSavedFloatingForWindows(order);
+        // A window's re-snap intent is already captured in its record (snap slot =
+        // snapped) by the snap-commit path, so no saved-floating set needs clearing
+        // here — the record is the single source of truth.
         m_autotileEngine->setInitialWindowOrder(screenId, order);
     }
 }
@@ -491,10 +472,8 @@ void Daemon::processPendingGeometryUpdates()
     // tracks pending (screenId, layoutId) pairs explicitly so unrelated
     // geometriesComputed emissions (e.g. from an async layoutAssigned firing
     // mid-barrier) cannot drain it prematurely.
-    const int desktop = m_virtualDesktopManager->currentDesktop();
-    const QString activity = m_activityManager && PhosphorWorkspaces::ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
 
     // Key = (screenId, layoutId). Matches what geometriesComputed carries.

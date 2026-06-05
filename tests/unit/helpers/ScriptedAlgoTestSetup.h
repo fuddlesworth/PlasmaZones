@@ -22,7 +22,7 @@ namespace PlasmaZones {
 namespace TestHelpers {
 
 /**
- * @brief RAII helper that loads JS-based builtin algorithms from data/algorithms/
+ * @brief RAII helper that loads the Luau-scripted algorithms from data/algorithms/
  *
  * Creates a temporary XDG data directory with a symlink to the project's
  * data/algorithms/ directory, sets XDG env vars, and runs the PhosphorTiles::ScriptedAlgorithmLoader.
@@ -93,10 +93,10 @@ public:
                                                                             registry());
         m_loader->scanAndRegister();
 
-        // Verify a minimum number of algorithms loaded to catch silent JS/builtin failures
-        if (registry()->availableAlgorithms().size() < 24) {
+        // Verify a minimum number of algorithms loaded to catch silent load failures
+        if (registry()->availableAlgorithms().size() < 25) {
             qWarning() << "ScriptedAlgoTestSetup: Only" << registry()->availableAlgorithms().size()
-                       << "algorithms loaded, expected at least 24 (15 C++ builtins + 9 JS-native)";
+                       << "algorithms loaded, expected at least 25 bundled Luau algorithms";
             return false;
         }
         return true;

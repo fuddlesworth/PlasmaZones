@@ -154,7 +154,7 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // When virtual screens are configured, this delegates to the first VS in config
     // order (virtualScreenIdsFor returns IDs in config order, not hash order).
     // Callers with an explicit virtual screen ID should use the QString overload directly.
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
@@ -207,7 +207,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen*
     // Defensive check: if virtual screens are configured for this physical screen,
     // screen center disambiguation always resolves to the same VS. Callers must
     // use the QString overload instead.
-    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
@@ -237,8 +237,8 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Uses the layout's geometry preference: available area (excluding panels/taskbars)
     // or full screen geometry depending on useFullScreenGeometry setting.
     // Calculate zone geometry with gaps, auto-resolving virtual screen geometry
-    QRectF geom =
-        GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, physScreen, screenId, layout, m_settings);
+    QRectF geom = GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, physScreen, screenId, layout,
+                                                           m_settings, m_layoutManager);
 
     // Convert to overlay-local coordinates: virtual screens use the overlay rect origin,
     // physical screens use the QScreen origin

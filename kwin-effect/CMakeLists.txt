@@ -19,6 +19,14 @@ set(QT_DEFAULT_MAJOR_VERSION 6)
 # Find KWin for effect development
 find_package(KWin 6.6 REQUIRED)
 
+# libepoxy: snap-assist thumbnail dma-buf export (Phase-0 spike) uses
+# EGL_MESA_image_dma_buf_export to hand the rendered OffscreenQuickScene
+# texture to the daemon zero-copy. epoxy provides the EGL/GL entry points
+# (eglExportDMABUFImageMESA et al.) the effect calls; KWin itself links it,
+# so it is always present where the effect runs.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(Epoxy REQUIRED IMPORTED_TARGET epoxy)
+
 # KWin effect plugins link against libkwin. Log the build-time version so
 # packagers can verify compatibility (patch releases are ABI-compatible).
 if(KWin_FOUND AND KWin_DIR)
@@ -41,6 +49,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_identity.cpp
     plasmazoneseffect/mouse_drag.cpp
     plasmazoneseffect/window_filtering.cpp
+    plasmazoneseffect/window_query.cpp
+    plasmazoneseffect/window_query.h
     plasmazoneseffect/screens.cpp
     plasmazoneseffect/window_lifecycle.cpp
     plasmazoneseffect/daemon_bringup.cpp
@@ -48,6 +58,8 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/drag_snap.cpp
     plasmazoneseffect/paint_pipeline.cpp
     plasmazoneseffect/shader_transitions.cpp
+    plasmazoneseffect/shader_resolve.cpp
+    plasmazoneseffect/shader_resolve.h
     plasmazoneseffect/shader_internal.h
     plasmazoneseffect/types.h
     shadertransitionmanager.h
@@ -86,6 +98,13 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
     INSTALL_NAMESPACE "kwin/effects/plugins"
 )
 
+# Keep the epoxy TU out of the Unity (jumbo) build (root sets CMAKE_UNITY_BUILD
+# ON). snapassistthumbnailcapture.cpp must include epoxy/gl.h before any other
+# GL header; jumbo-grouping it with the other effect sources (which pull in
+# KWin's GL headers) would break that ordering. Mirrors the daemon's identical
+# guard on dmabufglimport.cpp (src/CMakeLists.txt).
+set_source_files_properties(snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE
     KWin::kwin
@@ -112,11 +131,25 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # the re-export and this target would break mysteriously. Named
     # here so the link graph matches the include graph.
     PhosphorAnimation::PhosphorAnimation
+    # PhosphorWindowRule: the unified LGPL rule engine. The effect resolves
+    # its per-window animation overrides AND its exclusion gates through
+    # RuleEvaluator over slices of windowrules.json — the snap-drag gate
+    # binds to `ExclusionRules::excludeRulesFrom`, the animation gate to
+    # `ExclusionRules::excludeAnimationsRulesFrom`, both filtering the
+    # same unified rule-store push that drives the OverrideAnimation*
+    # pipeline. Both the effect and the daemon link this one library so
+    # there is exactly one match-code implementation (GPL->LGPL link is
+    # fine).
+    PhosphorWindowRule::PhosphorWindowRule
     # ShaderIncludeResolver: kwin-effect resolves `#include` directives
     # in animation shader source so the canonical header inlines before
     # the `#define PLASMAZONES_KWIN` injection selects its default-block
     # branch (KWin::GLShader's classic-GL pipeline doesn't bind UBOs).
     PhosphorShaders::PhosphorShaders
+    # libepoxy: EGL dma-buf export entry points for snap-assist thumbnail
+    # zero-copy delivery (snapassistthumbnailcapture.cpp). Qt6::DBus's
+    # QDBusUnixFileDescriptor carries the exported fd to the daemon.
+    PkgConfig::Epoxy
 )
 
 # Include directories

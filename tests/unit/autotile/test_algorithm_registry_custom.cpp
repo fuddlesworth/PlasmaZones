@@ -226,7 +226,7 @@ private Q_SLOTS:
         auto* registry = m_scriptSetup.registry();
         auto available = registry->availableAlgorithms();
 
-        // At least 15 built-in algorithms should be present (loaded from JS scripts)
+        // At least 15 built-in algorithms should be present (loaded from Luau scripts)
         QVERIFY(available.size() >= 15);
 
         // Verify all core algorithms are registered (order depends on filesystem scan)

@@ -6,7 +6,7 @@
 #include "IConfigStore.h"
 #include "phosphorscreenscore_export.h"
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief Trivial @ref IConfigStore that holds its state in process memory.
@@ -31,16 +31,12 @@ public:
     /// Tests that deliberately want no cap pass 0 explicitly.
     static constexpr int DefaultMaxScreensPerPhysical = 8;
 
-    explicit InMemoryConfigStore(QObject* parent = nullptr)
-        : IConfigStore(parent)
-        , m_maxScreensPerPhysical(DefaultMaxScreensPerPhysical)
-    {
-    }
-
-    /// Construct with an explicit maximum-virtual-screens-per-physical cap.
-    /// Pass 0 for "no cap" (test-only; production parity requires matching
-    /// the daemon's cap).
-    explicit InMemoryConfigStore(int maxScreensPerPhysical, QObject* parent = nullptr)
+    /// Construct with an optional maximum-virtual-screens-per-physical cap.
+    /// Default matches the production daemon's cap; pass 0 explicitly for
+    /// "no cap" (test-only — production parity requires matching the
+    /// daemon's cap so over-limit configs the real consumer would reject
+    /// don't silently land in tests).
+    explicit InMemoryConfigStore(int maxScreensPerPhysical = DefaultMaxScreensPerPhysical, QObject* parent = nullptr)
         : IConfigStore(parent)
         , m_maxScreensPerPhysical(maxScreensPerPhysical)
     {
@@ -99,4 +95,4 @@ private:
     int m_maxScreensPerPhysical; ///< 0 means "no cap". Default is DefaultMaxScreensPerPhysical.
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

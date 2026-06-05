@@ -7,6 +7,56 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Window Rules**: a new unified settings page replaces the old Snapping Assignments, Tiling Assignments, Animations App Rules, and per-mode "disabled apps" lists. Rules are browsed, added, edited, drag-reordered, duplicated, and disabled from one place. Matching composes class, title, role, app-id, virtual desktop, activity, and screen predicates with AND/OR/NOT. A rule's actions cover snapping/tiling assignment, animation-curve and shader overrides, and exclusion from snapping, autotile, and effects — the four surfaces that previously each had their own editor.
+- **`org.plasmazones.WindowRules` D-Bus interface** (`dbus/org.plasmazones.WindowRules.xml`): `getAllRules`, `setAllRules`, `addRule`, `removeRule`, and related lifecycle methods for programmatic rule management.
+- **`phosphor-windowrule`** LGPL-2.1+ library housing the rule model, parser, and `RuleEvaluator`, so third parties can link the matcher without inheriting GPL.
+
+### Changed
+
+- **Single rule format**: window assignments, per-mode disable lists, animation App Rules, and effect exclusion lists are unified into one rule list stored in `~/.config/plasmazones/windowrules.json`. The KWin effect now consults the same `RuleEvaluator` as the daemon for animation App-Rule resolution and exclusion checks, so the two cannot drift.
+- **`LayoutRegistry::walkCascade` removed**, replaced by `RuleEvaluator`. The old per-axis cascade (context-keyed assignments vs window-property matching) no longer exists; all matching goes through the evaluator.
+- **`org.plasmazones.WindowTracking.setWindowMetadata`** widened from 4 to 9 arguments to carry the additional fields the evaluator needs (role, app-id, desktop, activity, screen). The KWin effect and daemon must be installed and running as a matched pair — `MinPeerApiVersion` bumped 3 → 4, and either side refuses to register a mismatched peer rather than silently degrading. Packagers must rebuild and ship both binaries together.
+- **`org.plasmazones.Layout.assignmentChangesApplied`** signal dropped its second argument (the per-key field tag). Subscribers that depended on that field must update or they will receive the wrong arity.
+- **Scripted autotiling moved from QJSEngine (JavaScript) to an embedded, sandboxed Luau VM** (`phosphor-scripting`). The 25 bundled algorithms were ported `*.js` → `*.luau`, written against a new frozen `pz` standard library, with a per-engine CPU-time watchdog and a 64 MiB heap cap. The `TilingAlgorithm` contract, daemon, editor, and settings are unchanged. **Breaking for custom algorithms**: the loader now discovers only `*.luau` files, so user scripts in `~/.local/share/plasmazones/algorithms/` written in the old JavaScript form are no longer loaded and must be rewritten in Luau (see `docs/architecture/luau-algorithm-authoring.md`).
+- **Nix flake restructured around a single package definition.** The 312-line `flake.nix` is now thin wiring; the build recipe and the KWin-IID rationale live in `packaging/nix/{package,overlays,module,hm-module,devShell,formatter}.nix`. The package is defined once in `overlays.nix` (`final.callPackage`) and every output (`packages`, `devShells`, `checks`, `formatter`) derives from `legacyPackages.<system>.extend overlay`, replacing five independent build call sites that each had to remember to build against the right pkgs. The version is parsed once from the top-level `project(PlasmaZones VERSION …)` in `CMakeLists.txt` inside `flake.nix` (where the flake `self` is a store path, so the read is pure) and threaded to the package as an argument — reading it inside `package.nix` forced an import-from-derivation when nixpkgs builds from a `fetchFromGitHub` src. LTO is now opt-in (`enableLTO`, default off) instead of forced, since every module/overlay consumer rebuilds against host pkgs with no cache reuse; the build source is `lib.fileset`-scoped so editing docs/CI/flake files no longer invalidates it; `nix fmt` now formats Nix, C++, and QML (reusing the in-tree `.clang-format`); and the NixOS module declares the `plasmazones` systemd user service with autostart opt-in (default off, preserving the per-user "enable it yourself" policy).
+
+### Removed
+
+- Legacy `Display.SnappingDisabled*` and `Display.AutotileDisabled*` config keys (auto-migrated into rules).
+- **QJSEngine-based scripted-tiling path** (the `ScriptedAlgorithm` runtime, its JS builtins, and the bundled `*.js` algorithms), along with the `Qt6::Qml` dependency in `phosphor-tiles`. Replaced by the Luau path above.
+- `setSnappingLayoutEntry`, `setTilingAlgorithmEntry`, and related per-field `Settings`-side `Q_INVOKABLE`s that the legacy KCM Assignments pages used. There is no QML replacement — use the Window Rules page.
+- Legacy Snapping Assignments, Tiling Assignments, and Animations App Rules settings pages (replaced by Window Rules).
+- **Per-release `plasmazones.nix` asset and its `generate-release-nix.sh` generator.** The asset was a source-pinned build *recipe* (not a binary), so it saved no build time and only served non-flake Nix users — who can instead build any tag against their host's pkgs with `pkgs.callPackage "${builtins.fetchTarball "https://github.com/fuddlesworth/PlasmaZones/archive/v<VERSION>.tar.gz"}/packaging/nix/package.nix" { version = "<VERSION>"; }`. The release notes' standalone-install section now shows that form, and the `build-nix` release job is reduced to a `nix build` smoke gate. Flake users are unaffected.
+- **Stray `develop.nix`** — an unrelated dev flake (for "canaanepperson.com", `nodejs_24`) that had no connection to PlasmaZones. The dev environment lives in the flake's `devShells.default`.
+
+### Migration
+
+- **Config schema bumped v3 → v4.** On first launch after upgrade, `~/.config/plasmazones/assignments.json` is automatically converted into `~/.config/plasmazones/windowrules.json`, and the legacy `Display.SnappingDisabled*` / `Display.AutotileDisabled*` keys in `config.json` are folded into the same rule set. The migration is lossless and runs without user interaction.
+- **Backout**: the source file is renamed `assignments.json.migrated` (not deleted), so a downgrade can restore the previous schema by manually renaming it back and starting an older daemon.
+- **Recovery**: if migration aborts because the source is malformed, the original file is renamed to `~/.config/plasmazones/assignments.json.corrupt.bak`, the schema version stays at v3, and `windowrules.json` is not created — the daemon does not silently flush the old assignments to an empty rule set. The user can inspect / repair the quarantined file and rename it back to `assignments.json`; the next launch then retries the v3→v4 conversion.
+
+### Fixed
+
+- **KWin effect plugin silently never installed under Nix.** `packaging/nix/package.nix` set `KDE_INSTALL_QTPLUGINDIR` to an absolute path *inside the read-only `qtbase` store output* (`${qt6.qtbase}/lib/qt6/plugins`). A derivation may only write under its own `$out`, so the effect dropped out of the package closure entirely — the daemon ran but zone overlays never appeared on Nix installs. The plugin now installs into the package's own `$out/${qt6.qtbase.qtPluginPrefix}` (the canonical NixOS `lib/qt-6/plugins` layout), where the running KWin discovers it via the system profile's aggregated `QT_PLUGIN_PATH`.
+
+## [3.0.15] - 2026-05-28
+
+### Fixed
+
+- **Zone-selector popup at the screen edge switched the active layout on hover, resnapping every tiled window** ([#542](https://github.com/fuddlesworth/PlasmaZones/pull/542)): the zone-selector slot was supposed to be input-transparent during drag — cursor coordinates come in via the D-Bus `updateSelectorPosition` path and the snap commits at drag-end via `drop.cpp`, never via a Qt hover event. But the slot's QML `MouseArea`s still fired `zoneSelected` on every pointer-enter, and once snap-assist became visible the shared shell surface flipped to input-grabbing (`anyInputGrabbing = isVisible(snapAssistSlot) || isVisible(layoutPickerSlot)` in `syncPassiveShellSurfaceState`) — those leaked hover events committed `manualLayoutSelected`, which immediately resnapped every other tiled window into the new layout's zones. Visible as "my layout changes to one with more or fewer windows whenever I drag windows up". The QML hover commit path is gone (`ZoneSelectorContent` is now `interactive: false` and the daemon's `manualLayoutSelected` handler / signal are removed); cross-layout switching on drop still works because `WindowDragAdaptor::dragStopped` reads `m_selectedLayoutId` from the C++ hit-test and applies the layout when the user actually releases the drag on a zone in a different layout.
+
+### Removed
+
+- **Switching the autotile algorithm by hovering an autotile preview in the zone-selector popup** ([#542](https://github.com/fuddlesworth/PlasmaZones/pull/542)): the autotile-hover commit path went away with the input-contract fix above (`drop.cpp` resolves the selected id as a UUID and skips non-UUID autotile ids, so the hover path was the only commit point for autotile-via-zone-selector). Algorithm swaps still work through the existing on-by-default routes: `NextLayout` / `PreviousLayout`, `QuickLayout1`–`QuickLayout9`, and the Layout Picker (`Meta+Alt+Space` by default). The `IOverlayService::autotileLayoutSelected` signal and its daemon handler were removed as dead code.
+
+## [3.0.14] - 2026-05-27
+
+### Fixed
+
+- **DPMS-wake autotile orphan reassignment still triggered intermittently** ([#527](https://github.com/fuddlesworth/PlasmaZones/discussions/527), [#536](https://github.com/fuddlesworth/PlasmaZones/pull/536)): 3.0.13 closed the dropped-monitor case but missed the dual-monitor wake-up where the second output coming back simply shifts the first output's x-offset. With no output actually removed, `oldScreenStillConnected` stayed true, and `isScreenChangeInProgress()` hadn't flipped on yet because KWin emits the per-window `outputChanged` *before* the `virtualScreenGeometryChanged` that the screen-change debounce listens for — the orphan reached the autotile-delegation guard with both legs of the check false. `screenAdded` and `screenRemoved` are now also wired into the screen-change handler, latching the pending-change flag at the earliest point KWin tells us the output set is changing. The settle path that runs once `virtualScreenGeometryChanged` catches up is unchanged.
+
 ## [3.0.13] - 2026-05-26
 
 ### Fixed
@@ -112,7 +162,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Keyboard snap-to-zone shortcuts fired with snapping globally off** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): `IPlacementEngine::isEnabled()` defaulted to `false` and `SnapEngine` never overrode it, so the shared keyboard-shortcut dispatcher had no usable gate for snap-mode shortcuts (autotile shortcuts were already gated on `AutotileEngine::isEnabled()`). `SnapEngine::isEnabled()` now mirrors `AutotileEngine` and reports `snappingEnabled()`, and the navigator dispatcher skips any shortcut whose resolved engine is disabled. Together with the auto-snap fix, `Snapping.Enabled=false` is now a total kill-switch at parity with autotiling.
 - **Transient child surfaces snapped to zones** ([#461](https://github.com/fuddlesworth/PlasmaZones/discussions/461), [#492](https://github.com/fuddlesworth/PlasmaZones/pull/492)): the effect's `shouldHandleWindow()` filtered dialogs, utilities, splashes, notifications, OSDs, modals, and popups, but never consulted `w->transientFor()` — despite the comment claiming it skipped transient windows. Sibling filters in the same file (`shouldAnimateWindow`, `isTileableWindow`) already had the transient-parent check. Electron/CEF apps (Steam image previews, Discord popups, VS Code dialogs) spawn child surfaces that frequently fail to report an accurate KWin window type but always set `transientFor`, so they passed the filter and got snapped to a zone. Transient children are now excluded.
 - **Generic "effect not running" message hid the real cause on bridge timeout** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481), [#485](https://github.com/fuddlesworth/PlasmaZones/pull/485)): the KWin effect plugin's IID embeds KWin's exact upstream version, and KWin's effect loader silently rejects any plugin whose IID does not match the running compositor — even across patch releases. On bridge watchdog timeout the daemon now reads the installed effect plugin's embedded IID via `QPluginLoader::metaData()`, asynchronously queries the running KWin's `supportInformation()`, and names the exact build-vs-running versions and the remediation in the log and desktop notification. The version probe is non-blocking, so the degraded startup path no longer freezes the daemon event loop for the duration of the round-trip.
-- **Nix flake hardened to keep PlasmaZones in sync with the host's KWin** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481), [#489](https://github.com/fuddlesworth/PlasmaZones/pull/489)): expanded module documentation, a new `overlays.default` output, and explicit guidance steer users toward the NixOS module, Home Manager module, and overlay (which build against the consumer's pkgs) and away from `nix profile install` / `packages.default` (which pins to the flake's own nixpkgs and breaks silently when the host's KWin moves past `flake.lock`). The `develop.nix` shell adds debugging tools.
+- **Nix flake hardened to keep PlasmaZones in sync with the host's KWin** ([#481](https://github.com/fuddlesworth/PlasmaZones/discussions/481), [#489](https://github.com/fuddlesworth/PlasmaZones/pull/489)): expanded module documentation, a new `overlays.default` output, and explicit guidance steer users toward the NixOS module, Home Manager module, and overlay (which build against the consumer's pkgs) and away from `nix profile install` / `packages.default` (which pins to the flake's own nixpkgs and breaks silently when the host's KWin moves past `flake.lock`).
 
 ## [3.0.4] - 2026-05-18
 
@@ -1425,7 +1475,9 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.15...HEAD
+[3.0.15]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.14...v3.0.15
+[3.0.14]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.13...v3.0.14
 [3.0.13]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.12...v3.0.13
 [3.0.12]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.11...v3.0.12
 [3.0.11]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.0.10...v3.0.11

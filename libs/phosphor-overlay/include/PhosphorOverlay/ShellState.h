@@ -42,10 +42,11 @@ public:
     ShellState() = default;
     // Non-copyable, non-movable: ShellHost owns these objects as
     // heap-allocated raw pointers and consumers cache borrowed
-    // references via `ShellHost::stateFor`. A copy (e.g. `auto copy =
-    // host.stateFor(id)` instead of `auto&`) would silently duplicate
-    // the mechanism pointers and slot map, leaving the caller's
-    // mutations invisible to the host. Block at compile time.
+    // references via `ShellHost::getOrCreateStateFor`. A copy (e.g.
+    // `auto copy = host.getOrCreateStateFor(id)` instead of `auto&`)
+    // would silently duplicate the mechanism pointers and slot map,
+    // leaving the caller's mutations invisible to the host. Block at
+    // compile time.
     ShellState(const ShellState&) = delete;
     ShellState(ShellState&&) = delete;
     ShellState& operator=(const ShellState&) = delete;

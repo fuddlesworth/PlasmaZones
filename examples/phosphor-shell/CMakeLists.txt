@@ -32,6 +32,16 @@ endif()
 # the registration TU unconditionally.
 set(CMAKE_AUTOMOC ON)
 
+# Suppress -Wmissing-include-dirs for the targets generated below by
+# qt_add_qml_module (main module + qmlplugin + qmltyperegistration). Qt
+# adds `<target>_autogen/include` to each sub-target's -I list, but this
+# example carries no Q_OBJECT declarations, so AUTOMOC produces nothing
+# and the include dir is either empty or — after `--clean-first` —
+# missing entirely. cc1plus then fires the warning before AUTOMOC has a
+# chance to recreate the path. See src/shared/CMakeLists.txt for the
+# same workaround applied to the shared QML module.
+set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dirs")
+
 qt_add_qml_module(phosphor_shell_example
     URI Phosphor.Shell.Example
     VERSION 1.0

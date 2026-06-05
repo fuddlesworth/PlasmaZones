@@ -5,7 +5,6 @@
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
-#include <PhosphorAnimation/AnimationAppRule.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
@@ -26,7 +25,6 @@ namespace PlasmaZones {
 
 namespace {
 constexpr qsizetype kMaxShaderProfileTreeBytes = 64 * 1024;
-constexpr qsizetype kMaxAnimationAppRulesBytes = 64 * 1024;
 }
 
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry,
@@ -476,9 +474,9 @@ void SettingsAdaptor::initializeRegistry()
     // Default layout
     REGISTER_STRING_SETTING("defaultLayoutId", defaultLayoutId, setDefaultLayoutId)
 
-    // Exclusions
-    REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)
-    REGISTER_STRINGLIST_SETTING("excludedWindowClasses", excludedWindowClasses, setExcludedWindowClasses)
+    // Window filtering — the per-app / per-class exclusion lists
+    // (excludedApplications, excludedWindowClasses) retired in v4 along
+    // with their settings page; only the three global knobs below remain.
     REGISTER_BOOL_SETTING("excludeTransientWindows", excludeTransientWindows, setExcludeTransientWindows)
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
@@ -492,10 +490,10 @@ void SettingsAdaptor::initializeRegistry()
                           setAnimationExcludeNotificationsAndOsd)
     REGISTER_INT_SETTING("animationMinimumWindowWidth", animationMinimumWindowWidth, setAnimationMinimumWindowWidth)
     REGISTER_INT_SETTING("animationMinimumWindowHeight", animationMinimumWindowHeight, setAnimationMinimumWindowHeight)
-    REGISTER_STRINGLIST_SETTING("animationExcludedApplications", animationExcludedApplications,
-                                setAnimationExcludedApplications)
-    REGISTER_STRINGLIST_SETTING("animationExcludedWindowClasses", animationExcludedWindowClasses,
-                                setAnimationExcludedWindowClasses)
+    // animationExcludedApplications / animationExcludedWindowClasses
+    // retired in v4 — folded into ExcludeAnimations WindowRules; the
+    // effect derives its animation exclusion rule set from the unified
+    // store via the WindowRules.rulesChanged subscription instead.
 
     // PhosphorZones::Zone selector settings
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
@@ -576,28 +574,6 @@ void SettingsAdaptor::initializeRegistry()
             return true;
         };
         m_schemas[QString(PhosphorProtocol::Service::SettingProperty::ShaderProfileTree)] = QStringLiteral("string");
-
-        // Animation app rules: ordered JSON array round-trip — the wire
-        // shape mirrors `Settings::animationAppRulesJson`. Same byte cap
-        // as the profile tree since both blobs share the same per-user
-        // upper bound (dozens of overrides at most).
-        m_getters[QString(PhosphorProtocol::Service::SettingProperty::AnimationAppRules)] = [concrete]() {
-            return QString::fromUtf8(
-                QJsonDocument(concrete->animationAppRules().toJson()).toJson(QJsonDocument::Compact));
-        };
-        m_setters[QString(PhosphorProtocol::Service::SettingProperty::AnimationAppRules)] =
-            [concrete](const QVariant& v) -> bool {
-            // Same UTF-8-byte gate rationale as shaderProfileTree above.
-            const QByteArray raw = v.toString().toUtf8();
-            if (raw.size() > kMaxAnimationAppRulesBytes)
-                return false;
-            const QJsonDocument doc = QJsonDocument::fromJson(raw);
-            if (!doc.isArray())
-                return false;
-            concrete->setAnimationAppRules(PhosphorAnimationShaders::AnimationAppRuleList::fromJson(doc.array()));
-            return true;
-        };
-        m_schemas[QString(PhosphorProtocol::Service::SettingProperty::AnimationAppRules)] = QStringLiteral("string");
     }
 
     // Per-event motion-profile tree (read-only, JSON blob round-trip).
@@ -704,6 +680,18 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_COLOR_SETTING("autotileInactiveBorderColor", autotileInactiveBorderColor, setAutotileInactiveBorderColor)
     REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
                           setAutotileUseSystemBorderColors)
+
+    // Snapping window decoration settings (on ISettings interface)
+    REGISTER_BOOL_SETTING("snapWindowHideTitleBars", snapWindowHideTitleBars, setSnapWindowHideTitleBars)
+    REGISTER_BOOL_SETTING("snapWindowShowBorder", snapWindowShowBorder, setSnapWindowShowBorder)
+    REGISTER_INT_SETTING("snapWindowBorderWidth", snapWindowBorderWidth, setSnapWindowBorderWidth)
+    REGISTER_INT_SETTING("snapWindowBorderRadius", snapWindowBorderRadius, setSnapWindowBorderRadius)
+    REGISTER_COLOR_SETTING("snapWindowBorderColor", snapWindowBorderColor, setSnapWindowBorderColor)
+    REGISTER_COLOR_SETTING("snapWindowInactiveBorderColor", snapWindowInactiveBorderColor,
+                           setSnapWindowInactiveBorderColor)
+    REGISTER_BOOL_SETTING("snapWindowUseSystemBorderColors", snapWindowUseSystemBorderColors,
+                          setSnapWindowUseSystemBorderColors)
+
     REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
     m_getters[QStringLiteral("autotileStickyWindowHandling")] = [this]() {
         return static_cast<int>(m_settings->autotileStickyWindowHandling());

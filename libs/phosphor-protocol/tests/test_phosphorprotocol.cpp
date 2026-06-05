@@ -7,8 +7,10 @@
 #include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
+#include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 
+#include <QSet>
 #include <QTest>
 
 using namespace PhosphorProtocol;
@@ -120,8 +122,13 @@ private Q_SLOTS:
         QVERIFY(r.validationError().isEmpty());
     }
 
-    void testBridgeRegistrationRejected()
+    void testBridgeRegistrationRejectedSentinelIsNotAValidationError()
     {
+        // "REJECTED" is the documented version-mismatch sentinel for
+        // `sessionId`, not an invariant violation: `validationError()` must
+        // stay empty so the sentinel survives the validity gate. Callers
+        // detect the rejection by checking the sessionId value separately —
+        // see BridgeRegistrationResult::validationError() docs.
         BridgeRegistrationResult r;
         r.sessionId = QStringLiteral("REJECTED");
         QVERIFY(r.validationError().isEmpty());
@@ -131,14 +138,57 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 3 alongside setSnapAssistThumbnail's signature change
-        // (s,s data:URL → s,i,i,ay raw ARGB32 → b) so a stale effect can't
-        // silently send the old wire format and crash on marshalling.
-        QCOMPARE(Service::ApiVersion, 3);
-        QCOMPARE(Service::MinPeerApiVersion, 3);
+        // Bumped to 4 alongside setWindowMetadata's signature widening
+        // (4 args → 9 args) so a stale effect can't silently send the old
+        // wire format and crash on marshalling.
+        QCOMPARE(Service::ApiVersion, 4);
+        QCOMPARE(Service::MinPeerApiVersion, 4);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.
+
+    // ── WindowType enum ──────────────────────────────────────────────────
+
+    void testWindowTypeStringRoundTrip()
+    {
+        QSet<QString> tokens;
+        for (int v = windowTypeMinValue; v <= windowTypeMaxValue; ++v) {
+            const auto type = static_cast<WindowType>(v);
+            const QString token = windowTypeToString(type);
+            const auto parsed = windowTypeFromString(token);
+            QVERIFY(parsed.has_value());
+            QVERIFY(*parsed == type);
+            tokens.insert(token);
+        }
+        // Every enum value must map to a DISTINCT wire token — a copy-paste
+        // bug returning the same token for two values would round-trip one of
+        // them to the wrong enum. The set size equals the enum value count.
+        QCOMPARE(tokens.size(), windowTypeMaxValue - windowTypeMinValue + 1);
+    }
+
+    void testWindowTypeFromStringCaseInsensitive()
+    {
+        const auto upper = windowTypeFromString(QStringLiteral("DIALOG"));
+        QVERIFY(upper.has_value() && *upper == WindowType::Dialog);
+        const auto mixed = windowTypeFromString(QStringLiteral("DiAlOg"));
+        QVERIFY(mixed.has_value() && *mixed == WindowType::Dialog);
+    }
+
+    void testWindowTypeFromStringUnknownTokenIsNullopt()
+    {
+        QVERIFY(!windowTypeFromString(QStringLiteral("not-a-type")).has_value());
+        QVERIFY(!windowTypeFromString(QString()).has_value());
+    }
+
+    void testWindowTypeFromIntClampsOutOfRange()
+    {
+        QVERIFY(windowTypeFromInt(static_cast<int>(WindowType::Dialog)) == WindowType::Dialog);
+        QVERIFY(windowTypeFromInt(-1) == WindowType::Unknown);
+        QVERIFY(windowTypeFromInt(9999) == WindowType::Unknown);
+        QVERIFY(!isValidWindowType(-1));
+        QVERIFY(!isValidWindowType(9999));
+        QVERIFY(isValidWindowType(static_cast<int>(WindowType::Popup)));
+    }
 };
 
 QTEST_GUILESS_MAIN(TestPhosphorProtocol)

@@ -79,20 +79,17 @@ Window {
     /// Forwarded from the loaded OSD content. C++ side connects this to
     /// the slot-hide animation start (not Surface::hide() — the shell
     /// stays mapped permanently, only the slot's opacity animates).
-    signal osdDismissRequested()
+    signal osdDismissRequested
     /// Forwarded from snap-assist's `windowSelected` signal — host wires
     /// to onSnapAssistWindowSelected.
     signal snapAssistWindowSelected(string windowId, string zoneId, string geometryJson)
     /// Forwarded from snap-assist's backdrop click / dismiss request.
-    signal snapAssistDismissRequested()
+    signal snapAssistDismissRequested
     /// Forwarded from picker's `layoutSelected`.
     signal layoutPickerSelected(string layoutId)
     /// Forwarded from picker's `dismissRequested` (backdrop click /
     /// supplemental dismiss path; primary Escape goes via global accel).
-    signal layoutPickerDismissRequested()
-    /// Forwarded from zone-selector's `zoneSelected` — host wires to
-    /// onZoneSelected.
-    signal zoneSelectorZoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
+    signal layoutPickerDismissRequested
 
     // Qt::WindowTransparentForInput is driven imperatively by C++ from
     // syncPassiveShellSurfaceState (via Surface::show()/hide() with
@@ -196,7 +193,6 @@ Window {
         onModeChanged: {
             if (mode !== "" && mode !== "layout-osd" && mode !== "navigation-osd")
                 console.warn("PassiveOverlayShell osdSlot: unknown mode =", mode);
-
         }
 
         Loader {
@@ -219,7 +215,6 @@ Window {
             onLoaded: {
                 if (osdLoader.item)
                     osdLoader.item.dismissRequested.connect(root.osdDismissRequested);
-
             }
         }
 
@@ -252,7 +247,6 @@ Window {
                 disabled: osdSlot.disabled
                 disabledReason: osdSlot.disabledReason
             }
-
         }
 
         Component {
@@ -271,9 +265,7 @@ Window {
                 windowCount: osdSlot.windowCount
                 errorColor: osdSlot.errorColor
             }
-
         }
-
     }
 
     Item {
@@ -341,9 +333,7 @@ Window {
                 borderWidth: snapAssistSlot.borderWidth
                 borderRadius: snapAssistSlot.borderRadius
             }
-
         }
-
     }
 
     Item {
@@ -381,13 +371,11 @@ Window {
         function moveSelection(dx, dy) {
             if (layoutPickerLoader.item)
                 layoutPickerLoader.item.moveSelection(dx, dy);
-
         }
 
         function confirmSelection() {
             if (layoutPickerLoader.item)
                 layoutPickerLoader.item.confirmSelection();
-
         }
 
         anchors.fill: parent
@@ -442,9 +430,7 @@ Window {
                 fontStrikeout: layoutPickerSlot.fontStrikeout
                 locked: layoutPickerSlot.locked
             }
-
         }
-
     }
 
     Item {
@@ -523,7 +509,6 @@ Window {
         function applyScrollDelta(angleDeltaY) {
             if (zoneSelectorLoader.item)
                 zoneSelectorLoader.item.applyScrollDelta(angleDeltaY);
-
         }
 
         function resetCursorState() {
@@ -549,11 +534,10 @@ Window {
             active: zoneSelectorSlot.loaded
             asynchronous: true
             sourceComponent: zoneSelectorContentComp
-            onLoaded: {
-                if (zoneSelectorLoader.item)
-                    zoneSelectorLoader.item.zoneSelected.connect(root.zoneSelectorZoneSelected);
-
-            }
+            // No signal wiring: the zone-selector slot is input-transparent by
+            // design (see ZoneSelectorContent's `interactive: false`). Cursor
+            // tracking and commit both go through C++ (updateSelectorPosition
+            // + drop.cpp), so QML never needs to forward a selection event.
         }
 
         Component {
@@ -626,9 +610,7 @@ Window {
                 activeOpacity: zoneSelectorSlot.activeOpacity
                 inactiveOpacity: zoneSelectorSlot.inactiveOpacity
             }
-
         }
-
     }
 
     Item {
@@ -669,8 +651,7 @@ Window {
         property string bufferWrap: "clamp"
         property int zoneCount: 0
         property int highlightedCount: 0
-        property var shaderParams: ({
-        })
+        property var shaderParams: ({})
         property int zoneDataVersion: 0
         property real iTime: 0
         property real iTimeDelta: 0
@@ -688,31 +669,26 @@ Window {
         function flash() {
             if (mainOverlayLoader.item && mainOverlayLoader.item.flash)
                 mainOverlayLoader.item.flash();
-
         }
 
         function highlightZone(zoneId) {
             if (mainOverlayLoader.item && mainOverlayLoader.item.highlightZone)
                 mainOverlayLoader.item.highlightZone(zoneId);
-
         }
 
         function highlightZones(zoneIds) {
             if (mainOverlayLoader.item && mainOverlayLoader.item.highlightZones)
                 mainOverlayLoader.item.highlightZones(zoneIds);
-
         }
 
         function clearHighlight() {
             if (mainOverlayLoader.item && mainOverlayLoader.item.clearHighlight)
                 mainOverlayLoader.item.clearHighlight();
-
         }
 
         function reloadShader() {
             if (mainOverlayLoader.item && mainOverlayLoader.item.reloadShader)
                 mainOverlayLoader.item.reloadShader();
-
         }
 
         anchors.fill: parent
@@ -757,7 +733,6 @@ Window {
                 borderRadius: mainOverlaySlot.borderRadius
                 _idled: mainOverlaySlot._idled
             }
-
         }
 
         Component {
@@ -806,9 +781,6 @@ Window {
                 borderRadius: mainOverlaySlot.borderRadius
                 _idled: mainOverlaySlot._idled
             }
-
         }
-
     }
-
 }

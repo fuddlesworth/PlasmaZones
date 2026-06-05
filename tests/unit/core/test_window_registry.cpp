@@ -21,6 +21,8 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include <functional>
+
 using PhosphorEngine::WindowMetadata;
 using PhosphorEngine::WindowRegistry;
 
@@ -202,6 +204,74 @@ private Q_SLOTS:
         QCOMPARE(disappeared.size(), 2);
         QCOMPARE(reg.size(), 0);
         QVERIFY(reg.instancesWithAppId(QStringLiteral("firefox")).isEmpty());
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // Wide metadata — windowRole / pid / virtualDesktop / activity / windowType
+    // ────────────────────────────────────────────────────────────────────
+
+    void upsert_identicalWideMetadata_isNoop()
+    {
+        WindowMetadata wide;
+        wide.appId = QStringLiteral("firefox");
+        wide.desktopFile = QStringLiteral("firefox.desktop");
+        wide.title = QStringLiteral("Mozilla Firefox");
+        wide.windowRole = QStringLiteral("browser");
+        wide.pid = 4242;
+        wide.virtualDesktop = 2;
+        wide.activity = QStringLiteral("activity-uuid");
+        wide.windowType = PhosphorProtocol::WindowType::Normal;
+
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), wide);
+
+        QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
+        reg.upsert(QStringLiteral("u1"), wide);
+        QCOMPARE(changed.size(), 0);
+    }
+
+    void wideMetadataChange_perField_emitsMetadataChanged()
+    {
+        WindowMetadata base;
+        base.appId = QStringLiteral("firefox");
+        base.windowRole = QStringLiteral("browser");
+        base.pid = 1000;
+        base.virtualDesktop = 1;
+        base.activity = QStringLiteral("act-a");
+        base.windowType = PhosphorProtocol::WindowType::Normal;
+
+        // Each mutator changes exactly one non-appId field. The widened
+        // operator== must detect it so metadataChanged fires — the
+        // window-rule match engine relies on this for cache invalidation.
+        const QList<std::function<void(WindowMetadata&)>> mutators = {
+            [](WindowMetadata& m) {
+                m.windowRole = QStringLiteral("popup");
+            },
+            [](WindowMetadata& m) {
+                m.pid = 2000;
+            },
+            [](WindowMetadata& m) {
+                m.virtualDesktop = 3;
+            },
+            [](WindowMetadata& m) {
+                m.activity = QStringLiteral("act-b");
+            },
+            [](WindowMetadata& m) {
+                m.windowType = PhosphorProtocol::WindowType::Dialog;
+            },
+        };
+
+        for (const auto& mutate : mutators) {
+            WindowRegistry reg;
+            reg.upsert(QStringLiteral("u1"), base);
+            QSignalSpy changed(&reg, &WindowRegistry::metadataChanged);
+
+            WindowMetadata next = base;
+            mutate(next);
+            reg.upsert(QStringLiteral("u1"), next);
+
+            QCOMPARE(changed.size(), 1);
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────

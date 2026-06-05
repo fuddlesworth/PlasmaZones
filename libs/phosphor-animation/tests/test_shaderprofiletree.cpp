@@ -223,6 +223,141 @@ private Q_SLOTS:
         const ShaderProfile resolved = tree.resolve(PP::WindowOpen);
         QCOMPARE(*resolved.effectId, QStringLiteral("glitch"));
     }
+
+    // ─── resolveShaderWithDefault: built-in per-event default ───
+
+    void testDefaultShaderForPathMoveEvents()
+    {
+        // Move/resize events default to window-morph; others to none.
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapIn), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapOut), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowSnapResize), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowMove), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowResize), QStringLiteral("window-morph"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::WindowLayoutSwitch), QStringLiteral("window-morph"));
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowOpen).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::WindowClose).isEmpty());
+    }
+
+    void testDefaultShaderForPathOverlayEvents()
+    {
+        // OSD + popup show/hide events default to the fade shader; others none.
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::OsdShow), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::OsdHide), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupZoneSelectorShow), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupZoneSelectorHide), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupLayoutPickerShow), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupLayoutPickerHide), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupSnapAssistShow), QStringLiteral("fade"));
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::PopupSnapAssistHide), QStringLiteral("fade"));
+        // The category roots and the OSD "pop" event carry no built-in default.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::Osd).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::Popup).isEmpty());
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::OsdPop).isEmpty());
+    }
+
+    void testResolveWithDefaultUnsetOverlayEventGetsFade()
+    {
+        // Truly-unset overlay show/hide resolves to the built-in fade default;
+        // an explicit per-event "None" is still respected.
+        ShaderProfileTree tree;
+        QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::OsdShow).effectiveEffectId(),
+                 QStringLiteral("fade"));
+        QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::PopupSnapAssistHide).effectiveEffectId(),
+                 QStringLiteral("fade"));
+        ShaderProfile none;
+        none.effectId = QString();
+        tree.setOverride(PP::OsdShow, none);
+        QVERIFY(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::OsdShow).effectiveEffectId().isEmpty());
+    }
+
+    void testResolveWithDefaultUnsetMoveEventGetsMorph()
+    {
+        // Truly-unset move event resolves to the built-in default.
+        ShaderProfileTree tree;
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        QCOMPARE(r.effectiveEffectId(), QStringLiteral("window-morph"));
+    }
+
+    void testResolveWithDefaultUnsetNonMoveEventStaysEmpty()
+    {
+        ShaderProfileTree tree;
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowOpen);
+        QVERIFY(r.effectiveEffectId().isEmpty());
+    }
+
+    void testResolveWithDefaultUserOverrideWins()
+    {
+        // A real user override beats the built-in default.
+        ShaderProfileTree tree;
+        ShaderProfile leaf;
+        leaf.effectId = QStringLiteral("slide");
+        tree.setOverride(PP::WindowSnapIn, leaf);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        QCOMPARE(r.effectiveEffectId(), QStringLiteral("slide"));
+    }
+
+    void testResolveWithDefaultExplicitNoneRespected()
+    {
+        // An explicit "None" (engaged-empty override) suppresses the default.
+        ShaderProfileTree tree;
+        ShaderProfile none;
+        none.effectId = QString(); // engaged-empty
+        tree.setOverride(PP::WindowSnapIn, none);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        QVERIFY(r.effectiveEffectId().isEmpty());
+    }
+
+    void testResolveWithDefaultInheritedRealShaderRespected()
+    {
+        // An ancestor (window) that chose a REAL shader is inherited, not
+        // replaced by the default.
+        ShaderProfileTree tree;
+        ShaderProfile cat;
+        cat.effectId = QStringLiteral("dissolve");
+        tree.setOverride(PP::Window, cat);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn);
+        QCOMPARE(r.effectiveEffectId(), QStringLiteral("dissolve"));
+    }
+
+    void testResolveWithDefaultAncestorNoneDoesNotSuppressDefault()
+    {
+        // Regression: a category-level "None" ("window" → "") must NOT suppress
+        // the per-event built-in default — a snap event still defaults to
+        // window-morph. (Only a per-event override suppresses it.)
+        ShaderProfileTree tree;
+        ShaderProfile catNone;
+        catNone.effectId = QString(); // engaged-empty "None" at the category
+        tree.setOverride(PP::Window, catNone);
+        // A move event without its own override still gets the default.
+        QCOMPARE(PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn).effectiveEffectId(),
+                 QStringLiteral("window-morph"));
+        // A non-move window event correctly stays None under the category None.
+        QVERIFY(
+            PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMinimize).effectiveEffectId().isEmpty());
+        // A per-event None under the category still wins (no default).
+        ShaderProfile leafNone;
+        leafNone.effectId = QString();
+        tree.setOverride(PP::WindowSnapIn, leafNone);
+        QVERIFY(
+            PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowSnapIn).effectiveEffectId().isEmpty());
+    }
+
+    void testResolveWithDefaultParamsOnlyLeafStillGetsDefault()
+    {
+        // A params-only leaf override (parameters set, effectId UNSET) is "no
+        // shader chosen" — the per-event default still applies, and the user's
+        // params overlay onto it. (Gated on the leaf's effectId engagement, not
+        // merely hasOverride.)
+        ShaderProfileTree tree;
+        ShaderProfile paramsOnly;
+        paramsOnly.parameters = QVariantMap({{QStringLiteral("speed"), 0.5}});
+        tree.setOverride(PP::WindowMove, paramsOnly);
+        const ShaderProfile r = PhosphorAnimationShaders::resolveShaderWithDefault(tree, PP::WindowMove);
+        QCOMPARE(r.effectiveEffectId(), QStringLiteral("window-morph"));
+        QVERIFY(r.parameters.has_value());
+        QCOMPARE(r.parameters->value(QStringLiteral("speed")).toDouble(), 0.5);
+    }
 };
 
 QTEST_MAIN(TestShaderProfileTree)

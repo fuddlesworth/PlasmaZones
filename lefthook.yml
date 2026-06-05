@@ -13,16 +13,18 @@ pre-commit:
       stage_fixed: true
     qmlformat:
       glob: "*.qml"
-      # Prefer the Qt 6 qmlformat. Some distros (Arch, Fedora) ship the
-      # Qt 5 binary at /usr/bin/qmlformat which is older than the runtime
-      # the project targets and refuses Qt 6-only syntax like list<real>.
-      # Fall back to PATH only when the Qt 6 binary is absent.
-      run: |
-        QMLFMT=/usr/lib/qt6/bin/qmlformat
-        [ -x "$QMLFMT" ] || QMLFMT=/usr/lib64/qt6/bin/qmlformat
-        [ -x "$QMLFMT" ] || QMLFMT=$(command -v qmlformat6 2>/dev/null)
-        [ -n "$QMLFMT" ] && [ -x "$QMLFMT" ] || QMLFMT=qmlformat
-        "$QMLFMT" -i {staged_files}
+      # Resolve qmlformat robustly. The Qt6 binary is named `qmlformat` but is
+      # often not on PATH (Arch ships it under /usr/lib/qt6/bin), and some
+      # distros suffix it `qmlformat6` / `qmlformat-qt6`. Try PATH names first,
+      # then the Qt6 install-bins dir reported by qtpaths6 / qmake6, then a
+      # known Arch path; fail with a clear message if none resolve. Without
+      # this, a stale/absent PATH entry makes every QML commit abort with an
+      # opaque "command not found".
+      run: >
+        sh -c 'for c in qmlformat6 qmlformat-qt6 qmlformat; do command -v "$c" >/dev/null 2>&1 && exec "$c" -i "$@"; done;
+        bins=$(qtpaths6 --query QT_INSTALL_BINS 2>/dev/null || qmake6 -query QT_INSTALL_BINS 2>/dev/null);
+        for p in "$bins/qmlformat" /usr/lib/qt6/bin/qmlformat; do [ -x "$p" ] && exec "$p" -i "$@"; done;
+        echo "qmlformat not found on PATH or under the Qt6 install bins; install the Qt6 declarative tools" >&2; exit 1' sh {staged_files}
       stage_fixed: true
 
 commit-msg:

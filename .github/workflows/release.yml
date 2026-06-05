@@ -247,17 +247,61 @@ jobs:
 
     steps:
       - name: Install prerequisites
+        # Tumbleweed mirrors occasionally lag one snapshot behind the
+        # container's baked-in package index — metadata advertises a new
+        # version of a transitive dep (e.g. file-magic in v3.0.15) but
+        # the matching .rpm is not yet on any mirror, every mirror
+        # returns 404, zypper exits 4 and the whole release blocks.
+        # Two changes vs the pre-3.0.15 form:
+        #
+        #   1. Drop `zypper dist-upgrade`. That was an Arch-style
+        #      "full system upgrade to prevent partial-upgrade state"
+        #      reflex, but on a one-shot CI builder it instead pulls
+        #      every transitive dep of every installed package to its
+        #      newest snapshot version — which is what exposed us to
+        #      the file-magic 404. The base image is already recent
+        #      enough to build rpm-build + git + rpmdevtools without
+        #      upgrades.
+        #
+        #   2. Wrap the install in a refresh-and-retry. If the first
+        #      attempt fails to a missing .rpm, sleep 60s, re-pull
+        #      metadata (mirrors typically catch up within minutes),
+        #      and try once more. Single retry is enough — if the
+        #      second pass still fails, the failure is real and we
+        #      want the release to block rather than loop forever.
         run: |
-          zypper -n --gpg-auto-import-keys refresh --force
-          zypper -n dist-upgrade --no-confirm
-          zypper -n install git rpm-build rpmdevtools
+          set -euo pipefail
+          install_with_retry() {
+              zypper -n --gpg-auto-import-keys refresh --force
+              if ! zypper -n install "$@"; then
+                  echo "::warning::zypper install failed; sleeping 60s and retrying after metadata refresh"
+                  sleep 60
+                  zypper -n --gpg-auto-import-keys refresh --force
+                  zypper -n install "$@"
+              fi
+          }
+          install_with_retry git rpm-build rpmdevtools
 
       - name: Checkout
         uses: actions/checkout@v6
 
       - name: Install build dependencies
+        # Reuse the install-with-retry shape from the prerequisites step.
+        # Inlined because each step gets its own shell — no sourcing
+        # across steps. The build-dep list is larger so it's also more
+        # exposed to transient mirror flakes; the retry is load-bearing.
         run: |
-          zypper -n install \
+          set -euo pipefail
+          install_with_retry() {
+              zypper -n --gpg-auto-import-keys refresh --force
+              if ! zypper -n install "$@"; then
+                  echo "::warning::zypper install failed; sleeping 60s and retrying after metadata refresh"
+                  sleep 60
+                  zypper -n --gpg-auto-import-keys refresh --force
+                  zypper -n install "$@"
+              fi
+          }
+          install_with_retry \
             cmake ninja extra-cmake-modules gcc-c++ \
             qt6-core-private-devel qt6-gui-private-devel qt6-quick-private-devel \
             'cmake(Qt6Core)' 'cmake(Qt6DBus)' 'cmake(Qt6Gui)' \
@@ -549,21 +593,6 @@ jobs:
           echo "Expected version: $VERSION"
           ./result/bin/plasmazonesd --version || true
 
-      - name: Generate release package.nix
-        run: |
-          # Delegate to the versioned script — keeps the awk pattern in
-          # one place and adds a `nix-instantiate --parse` smoke check.
-          bash packaging/nix/generate-release-nix.sh "${{ needs.version.outputs.version }}"
-          echo "=== Generated plasmazones.nix ==="
-          cat plasmazones.nix
-
-      - name: Upload Nix package artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: nix-package
-          path: plasmazones.nix
-          retention-days: 30
-
   # ═══════════════════════════════════════════════════════════════════════════
   # Create GitHub Release
   # ═══════════════════════════════════════════════════════════════════════════
@@ -661,12 +690,14 @@ jobs:
             echo "programs.plasmazones.enable = true;"
             echo '```'
             echo ""
-            echo "**NixOS (standalone):**"
-            echo "Download \`plasmazones.nix\` from the release assets, then:"
+            echo "**NixOS (without flakes):**"
+            echo "Build this tag's source against your host's pkgs (no release asset needed):"
             echo '```nix'
             echo "# configuration.nix"
             echo "environment.systemPackages = ["
-            echo "  (pkgs.callPackage ./plasmazones.nix {})"
+            echo "  (pkgs.callPackage"
+            echo "    \"\${builtins.fetchTarball \"https://github.com/fuddlesworth/PlasmaZones/archive/v${VERSION}.tar.gz\"}/packaging/nix/package.nix\""
+            echo "    { version = \"${VERSION}\"; })"
             echo "];"
             echo '```'
             echo ""
@@ -702,7 +733,7 @@ jobs:
           ASSETS=()
           while IFS= read -r f; do
             ASSETS+=("$f")
-          done < <(find artifacts -type f \( -name '*.deb' -o -name '*.ddeb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*linux-x86_64.tar.gz' -o -name 'plasmazones.nix' \))
+          done < <(find artifacts -type f \( -name '*.deb' -o -name '*.ddeb' -o -name '*.rpm' -o -name '*.pkg.tar.zst' -o -name '*linux-x86_64.tar.gz' \))
 
           echo "Uploading ${#ASSETS[@]} assets:"
           printf '  %s\n' "${ASSETS[@]}"

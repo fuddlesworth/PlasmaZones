@@ -389,6 +389,18 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:activity' to layoutId."/>
             </arg>
         </method>
+        <method name="setAllCombinedAssignments">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-(screen,desktop,activity) Combined assignments (saves once). Key format: 'screenName|virtualDesktop|activityId'. Pure-Activity, pure-Desktop and Monitor-only rules are not touched."/>
+            <arg name="assignments" type="a{ss}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' to layoutId."/>
+            </arg>
+        </method>
+        <method name="getAllCombinedAssignments">
+            <annotation name="org.gtk.GDBus.DocString" value="Get all per-(screen,desktop,activity) Combined assignments. Returns ONLY rules with all three dimensions pinned."/>
+            <arg name="assignments" type="a{ss}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' to layoutId."/>
+            </arg>
+        </method>
         <!-- Full assignment (screen + desktop + activity) -->
         <method name="getLayoutForScreenDesktopActivity">
             <annotation name="org.gtk.GDBus.DocString" value="Get layout for screen, virtual desktop, and activity."/>

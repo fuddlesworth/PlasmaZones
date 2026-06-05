@@ -45,11 +45,6 @@ std::unique_ptr<PhosphorConfig::IBackend> createSessionBackend()
     return makeBackend(ConfigDefaults::sessionFilePath());
 }
 
-std::unique_ptr<PhosphorConfig::IBackend> createAssignmentsBackend()
-{
-    return makeBackend(ConfigDefaults::assignmentsFilePath());
-}
-
 std::unique_ptr<PhosphorConfig::QSettingsBackend> createLegacyQSettingsBackend()
 {
     return std::make_unique<PhosphorConfig::QSettingsBackend>(ConfigDefaults::legacyConfigFilePath());

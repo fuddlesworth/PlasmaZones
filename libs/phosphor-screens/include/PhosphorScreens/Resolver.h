@@ -11,7 +11,7 @@
 
 class QPoint;
 
-namespace Phosphor::Screens {
+namespace PhosphorScreens {
 
 /**
  * @brief D-Bus endpoint that ScreenResolver queries.
@@ -87,4 +87,4 @@ public:
                                            int timeoutMs = PhosphorProtocol::Service::SyncCallTimeoutMs);
 };
 
-} // namespace Phosphor::Screens
+} // namespace PhosphorScreens

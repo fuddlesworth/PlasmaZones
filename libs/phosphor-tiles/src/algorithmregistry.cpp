@@ -126,8 +126,8 @@ void AlgorithmRegistry::cleanup()
 
     // Explicitly delete all algorithm children while Qt is still alive.
     // This prevents crashes when the registry is destroyed after
-    // QCoreApplication during static destruction (ScriptedAlgorithm
-    // instances hold QJSEngine internals that require a live Qt runtime).
+    // QCoreApplication during static destruction (LuauTileAlgorithm
+    // instances hold lua_State internals that require a live Qt runtime).
     // Use direct delete instead of deleteLater() — this runs during shutdown
     // where the event loop may not drain the deferred-delete queue before
     // ~QObject() tries to destroy remaining children (double-free risk).

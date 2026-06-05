@@ -179,6 +179,26 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     if (m_uniformsDirty) {
         syncBaseUniforms();
         m_baseUniforms.iFlipBufferY = 1;
+        // NDC Y-orientation correction for the fixed-NDC fullscreen quad on the
+        // DIRECT-TO-WINDOW path (daemon animation shaders, whose shaderItem is
+        // not layer-enabled). Qt-RHI does NOT normalise the NDC Y direction of
+        // geometry the shader emits: OpenGL is Y-up-in-NDC, Vulkan is Y-down.
+        // The quad + Y-down vTexCoord contract are authored against Vulkan, so
+        // on a Y-up-in-NDC backend the quad presents upside down. Bake the
+        // correction into qt_Matrix — animation vertex stages apply it as
+        // `gl_Position = qt_Matrix * vec4(position, 0, 1)`. Column-major
+        // float[16]: index 5 is the Y-scale (m11); negate it only when NDC is
+        // Y-up. Overlay/zone shaders (zone.vert) render via layer.enabled and
+        // intentionally ignore qt_Matrix — Qt's layer composite already
+        // corrects them, so this matrix is harmlessly unread on that path.
+        // (The buffer/multipass passes pin qt_Matrix back to identity — see the
+        // multipass block in shadernoderhicore.cpp — because their FBO
+        // round-trip is already backend-consistent and must not be flipped.)
+        std::memset(m_baseUniforms.qt_Matrix, 0, sizeof(m_baseUniforms.qt_Matrix));
+        m_baseUniforms.qt_Matrix[0] = 1.0f;
+        m_baseUniforms.qt_Matrix[5] = rhi->isYUpInNDC() ? -1.0f : 1.0f;
+        m_baseUniforms.qt_Matrix[10] = 1.0f;
+        m_baseUniforms.qt_Matrix[15] = 1.0f;
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
             if (!m_didFullUploadOnce) {

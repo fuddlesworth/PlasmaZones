@@ -65,8 +65,9 @@ target_link_libraries(PhosphorSnapEngine
         PhosphorZones::PhosphorZones
         PhosphorProtocol::Types
     PRIVATE
-        PhosphorScreens::Core
+        PhosphorScreens::Runtime  # SnapEngine queries screen geometry via ScreenManager
         PhosphorIdentity::PhosphorIdentity
+        PhosphorWindowRule::PhosphorWindowRule
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

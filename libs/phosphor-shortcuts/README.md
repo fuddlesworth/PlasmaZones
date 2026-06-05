@@ -33,10 +33,10 @@ The consumer shouldn't care which backend is active. `phosphor-shortcuts`:
 
 | Type | Purpose |
 |------|---------|
-| `Phosphor::Shortcuts::Registry`        | Front-end: `bind()` a shortcut id and callback |
-| `Phosphor::Shortcuts::IBackend`        | Abstract backend. Shipped implementations: KGlobalAccel, XDG-Portal, D-Bus |
-| `Phosphor::Shortcuts::Integration::IAdhocRegistrar` | Short-lived registrations that skip persistent storage |
-| `Phosphor::Shortcuts::createBackend`   | Selects the right backend based on running environment |
+| `PhosphorShortcuts::Registry`        | Front-end: `bind()` a shortcut id and callback |
+| `PhosphorShortcuts::IBackend`        | Abstract backend. Shipped implementations: KGlobalAccel, XDG-Portal, D-Bus |
+| `PhosphorShortcutsIntegration::IAdhocRegistrar` | Short-lived registrations that skip persistent storage |
+| `PhosphorShortcuts::createBackend`   | Selects the right backend based on running environment |
 
 ## Typical use
 
@@ -44,7 +44,7 @@ The consumer shouldn't care which backend is active. `phosphor-shortcuts`:
 #include <PhosphorShortcuts/Registry.h>
 #include <PhosphorShortcuts/Factory.h>
 
-using namespace Phosphor::Shortcuts;
+using namespace PhosphorShortcuts;
 
 auto backend = createBackend();  // picks KGlobalAccel on Plasma
 Registry registry(backend.get());

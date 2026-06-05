@@ -13,7 +13,7 @@ include(CMakeFindDependencyMacro)
 find_dependency(Qt6 6.6 COMPONENTS Core Gui)
 find_dependency(PhosphorLayoutApi)
 find_dependency(PhosphorGeometry)
-find_dependency(PhosphorConfig)
+find_dependency(PhosphorWindowRule)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorZonesTargets.cmake")
 

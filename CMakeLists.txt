@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 3.0.13 LANGUAGES C CXX)
+project(PlasmaZones VERSION 3.0.15 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -101,15 +101,17 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     ShaderTools
     Svg
 )
-
-# Qt 6.5+ resource-prefix policy. NEW = use `:/qt/qml/` as the QML
-# module resource prefix. Set at the top level so every qt_add_qml_module
-# call across libs/ examples/ src/ inherits it; without this, each
-# qt_add_qml_module emits a QTP0001 dev warning on every configure.
-# Unguarded: QT_MIN_VERSION 6.6 (line 73 above) guarantees qt_policy
-# exists. The src/CMakeLists.txt sibling QTP0004 call follows the same
-# unguarded pattern.
-qt_policy(SET QTP0001 NEW)
+# Silence Qt 6.6+ deprecation warnings on qt_add_qml_module: opt into
+# the new default for resource-prefix derivation (QTP0001) and the new
+# default for QML module dependency resolution (QTP0004). These are
+# the NEW behaviours we already rely on across phosphor-* and src/
+# qt_add_qml_module calls.
+if(POLICY QTP0001)
+    qt_policy(SET QTP0001 NEW)
+endif()
+if(POLICY QTP0004)
+    qt_policy(SET QTP0004 NEW)
+endif()
 # GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay.
 # Some distros (Fedora) create these targets inside Qt6GuiConfig.cmake rather than providing
 # standalone config files, so only call find_package if the target doesn't already exist.
@@ -290,14 +292,17 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-dbus)        # generic, service-agnostic D-Bus client utilities (Client, HasDBusStreaming)
 add_subdirectory(libs/phosphor-protocol)    # D-Bus wire types and service constants, needed by phosphor-screens (Resolver endpoint defaults)
+add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader) - Core-only, needed by phosphor-windowrule's store watcher
+add_subdirectory(libs/phosphor-windowrule)  # unified window/context rule engine (MatchExpression, RuleEvaluator) - depends on phosphor-identity + phosphor-protocol + phosphor-fsloader
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
-add_subdirectory(libs/phosphor-fsloader)    # filesystem-backed loader scaffolding (WatchedDirectorySet + DirectoryLoader)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner - needed by phosphor-zones
 add_subdirectory(libs/phosphor-shaders)     # shader-domain primitives (BaseUniforms, IUniformExtension, ShaderRegistry)
 add_subdirectory(libs/phosphor-wayland)       # Wayland layer-shell QPA plugin + LayerSurface - needed by phosphor-screens
 add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision - needed by phosphor-zones
 add_subdirectory(libs/phosphor-geometry)    # pure geometry math (coordinate transforms, overlap, min-size)
 add_subdirectory(libs/phosphor-zones)       # zone primitives + LayoutManager (depends on phosphor-config IBackend, phosphor-screens ScreenIdentity)
+add_subdirectory(libs/phosphor-context-resolver) # frozen-snapshot per-screen mode + disable/lock cascade façade (depends on phosphor-zones for AssignmentEntry::Mode)
+add_subdirectory(libs/phosphor-scripting)   # generic embedded Luau host (engine, sandbox, watchdog, marshalling) — vendored extern/luau
 add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
@@ -438,6 +443,7 @@ endif()
 
 add_subdirectory(libs/phosphor-placement)   # window placement state tracking
 add_subdirectory(libs/phosphor-compositor)  # compositor-plugin SDK
+add_subdirectory(libs/phosphor-settings-ui) # reusable Qt6/QML/Kirigami settings-app framework (page controllers, registry, chrome)
 if(BUILD_PHOSPHOR_SHELL)
     # Order: icontheme is consumed by sni (SNI publisher uses the
     # image provider + theme resolver), so configure it first. The
@@ -498,6 +504,7 @@ install(FILES
     dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.Shader.xml
     dbus/org.plasmazones.WindowDrag.xml
+    dbus/org.plasmazones.WindowRules.xml
     dbus/org.plasmazones.WindowTracking.xml
     dbus/org.plasmazones.ZoneDetection.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}
@@ -595,7 +602,7 @@ install(DIRECTORY data/animations/
 install(DIRECTORY data/algorithms/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/algorithms
     FILES_MATCHING
-    PATTERN "*.js"
+    PATTERN "*.luau"
 )
 
 # Install support report script
@@ -765,16 +772,18 @@ add_custom_target(uninstall
 # Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
 # and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
+# Qt's WrapVulkanHeaders backs the QVulkanInstance Vulkan-backend support, which
+# is guarded throughout with #if QT_CONFIG(vulkan); it stays OPTIONAL here so that
+# backend degrades gracefully when absent.
+# NOTE: this does NOT make the whole build Vulkan-optional. The dma-buf thumbnail
+# daemon path hard-requires the Vulkan SDK via find_package(Vulkan REQUIRED) in
+# src/CMakeLists.txt (dmabuftextureprovider.cpp includes <vulkan/vulkan.h>
+# unconditionally), so a daemon build without the Vulkan SDK fails at configure time.
+# Packaging specs (PKGBUILD, debian/control, rpm .spec, nix) already list Vulkan as a
+# hard BuildRequires, so distribution packages are unaffected.
+set_package_properties(WrapVulkanHeaders PROPERTIES TYPE OPTIONAL)
+
 # Feature summary (REQUIRED + OPTIONAL only; RUNTIME hidden to reduce noise)
-# (Vulkan is still used at runtime via QVulkanInstance — see
-# src/daemon/vulkan_support.cpp and the QVulkanInstance owners in
-# src/daemon/main.cpp + src/editor/main.cpp. There is no
-# find_package(Vulkan) at configure time because Qt Wayland loads the
-# Vulkan loader via QLibrary at runtime, so a build-time package check
-# would only false-positive on systems missing the runtime loader. The
-# previous `set_package_properties(WrapVulkanHeaders ...)` block here
-# was orphaned (no corresponding find_package(Vulkan) ever ran), so it
-# never appeared in feature_summary; removed in PR #546.)
 feature_summary(WHAT REQUIRED_PACKAGES_FOUND REQUIRED_PACKAGES_NOT_FOUND
                      OPTIONAL_PACKAGES_FOUND OPTIONAL_PACKAGES_NOT_FOUND
                 FATAL_ON_MISSING_REQUIRED_PACKAGES)

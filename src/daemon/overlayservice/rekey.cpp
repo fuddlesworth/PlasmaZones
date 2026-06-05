@@ -214,7 +214,7 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
         if (auto* w = st.shell->shellWindow()) {
             if (isVS) {
                 // Virtual screen: recompute sub-region geometry from
-                // Phosphor::Screens::ScreenManager (virtual proportions
+                // PhosphorScreens::ScreenManager (virtual proportions
                 // are relative to the physical screen) and push new
                 // margins via the PhosphorLayer transport handle.
                 // Anchors (Top|Left) are fixed at attach and can't change.

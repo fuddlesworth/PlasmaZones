@@ -4,6 +4,8 @@
 #include "overlayadaptor.h"
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
+#include "../core/dmabufthumbnail.h"
+#include "../core/ioverlayservice.h"
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -31,7 +33,7 @@ namespace PlasmaZones {
 
 OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
                                PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
-                               Phosphor::Screens::ScreenManager* screenManager, ISettings* settings, QObject* parent)
+                               PhosphorScreens::ScreenManager* screenManager, ISettings* settings, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
     , m_zoneDetector(detector)
@@ -307,6 +309,53 @@ bool OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, int
     return m_overlayService->setSnapAssistThumbnail(compositorHandle, width, height, pixels);
 }
 
+bool OverlayAdaptor::setWindowThumbnailDmabuf(const QString& compositorHandle, int width, int height, uint drmFormat,
+                                              qulonglong modifier, uint stride, uint offset,
+                                              const QDBusUnixFileDescriptor& fd, const QDBusUnixFileDescriptor& fenceFd)
+{
+    if (!m_overlayService) {
+        return false;
+    }
+    // Authenticate the sender BEFORE inspecting the payload, so an
+    // unauthenticated peer can't drive the validation logic. (The raw-pixel
+    // sibling deliberately bounds its payload size pre-auth to cap marshalling
+    // cost of a multi-MB blob; a dma-buf carries no inline payload, so there is
+    // no reason to validate before authenticating here.)
+    if (!authenticateKwinSender()) {
+        return false;
+    }
+    // No marshalling-size guard is needed here (unlike the raw-pixel path):
+    // a dma-buf is a kernel handle, not an inline byte array, so there is no
+    // large payload to deserialise. Bound the dimensions before import to
+    // reject a hostile/buggy authenticated sender, mirroring the raw-pixel
+    // path's 1024² ceiling.
+    static constexpr int MaxDimension = 1024;
+    if (width <= 0 || height <= 0 || width > MaxDimension || height > MaxDimension) {
+        qCWarning(lcDbus) << "setWindowThumbnailDmabuf: rejecting out-of-range dimensions" << width << "x" << height
+                          << "(handle len=" << compositorHandle.size() << ")";
+        return false;
+    }
+    if (!fd.isValid() || !fenceFd.isValid()) {
+        qCWarning(lcDbus) << "setWindowThumbnailDmabuf: invalid dma-buf or fence fd (handle len="
+                          << compositorHandle.size() << ")";
+        return false;
+    }
+    // fd / fenceFd are BORROWED: the QDBusUnixFileDescriptors own them and close
+    // them when this call returns. The service's importer dup()s whatever it
+    // needs past the call (the GPU import dups the dma-buf; the fence is waited
+    // on during import); we hand the borrowed fds through unchanged.
+    DmabufThumbnailDesc desc;
+    desc.fd = fd.fileDescriptor();
+    desc.fenceFd = fenceFd.fileDescriptor();
+    desc.width = width;
+    desc.height = height;
+    desc.fourcc = drmFormat;
+    desc.modifier = modifier;
+    desc.stride = stride;
+    desc.offset = offset;
+    return m_overlayService->setWindowThumbnailDmabuf(compositorHandle, desc);
+}
+
 bool OverlayAdaptor::authenticateKwinSender()
 {
     // Resolve the sender's bus name via QDBusContext. Direct (non-D-Bus) calls
@@ -352,7 +401,7 @@ bool OverlayAdaptor::authenticateKwinSender()
         // registration re-fires the pre-warm. Demoted from qCWarning to keep
         // routine session churn out of the warning channel; actual auth
         // rejections still log at warning level inside @ref validateExeAndTrust.
-        qCDebug(lcDbus) << "setSnapAssistThumbnail: GetConnectionUnixProcessID failed for" << sender << "—"
+        qCDebug(lcDbus) << "authenticateKwinSender: GetConnectionUnixProcessID failed for" << sender << "—"
                         << pidReplyMsg.errorMessage();
         return false;
     }

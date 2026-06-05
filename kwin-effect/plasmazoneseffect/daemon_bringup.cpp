@@ -58,8 +58,8 @@ void PlasmaZonesEffect::slotDaemonReady()
     }
     if (m_bridgeRegistrationInFlight) {
         // A registerBridge async call is already pending. The Introspect-
-        // probe path at line ~782 and the daemonReady D-Bus signal can
-        // both fire slotDaemonReady before the FIRST registerBridge reply
+        // probe path (effect ctor, lifecycle.cpp) and the daemonReady D-Bus
+        // signal can both fire slotDaemonReady before the FIRST registerBridge reply
         // sets m_daemonServiceRegistered. Without this gate, a daemon
         // racing its own readiness signal against an Introspect probe
         // would receive TWO registerBridge calls in flight, then both
@@ -130,6 +130,19 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
 {
     // All D-Bus calls use QDBusMessage::createMethodCall + asyncCall (no QDBusInterface)
     // to avoid synchronous D-Bus introspection that blocks the compositor thread.
+
+    // Re-push metadata for every live window. KWin's class/desktop/caption
+    // change signals fired during session restore are swallowed by
+    // pushWindowMetadata's m_daemonServiceRegistered gate, so the daemon's
+    // WindowRegistry is empty when the bridge first comes up. Walk the
+    // stacking order once and re-emit setWindowMetadata so any consumer
+    // querying the registry from a subsequent windowOpened / settings-load
+    // handler sees a populated record. Safe to send before virtual screens
+    // / pending restores arrive — setWindowMetadata is registry-only and has
+    // no dependency on screen identity.
+    for (KWin::EffectWindow* w : KWin::effects->stackingOrder()) {
+        pushWindowMetadata(w);
+    }
 
     // Drop the snap-assist capture's "we recently posted this handle" set —
     // the daemon's bounded LRU is empty after a fresh registration (whether
@@ -227,6 +240,25 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
                 qCDebug(lcEffect) << "Synced" << floatingIds.size() << "floating windows from daemon";
             }
         });
+    }
+
+    // One-shot WindowRules subscription. The daemon emits rulesChanged per
+    // per-rule mutation; slotWindowRulesChanged debounces via a 50ms timer to
+    // collapse batch edits into a single full-ruleset refetch. Subscribed here
+    // (not in loadCachedSettings) because loadCachedSettings re-runs on every
+    // settingsChanged broadcast, and QDBusConnection::connect accepts duplicate
+    // subscriptions silently — re-subscribing on each broadcast would grow the
+    // connection set unbounded across the effect's lifetime.
+    if (!m_windowRulesSubscribed) {
+        const bool ok = QDBusConnection::sessionBus().connect(
+            QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
+            QString(PhosphorProtocol::Service::Interface::WindowRules), QStringLiteral("rulesChanged"), this,
+            SLOT(slotWindowRulesChanged()));
+        if (ok) {
+            m_windowRulesSubscribed = true;
+        } else {
+            qCWarning(lcEffect) << "Failed to subscribe to WindowRules.rulesChanged — will retry on next bringup";
+        }
     }
 
     // These already use QDBusMessage::createMethodCall (no QDBusInterface)
@@ -335,9 +367,24 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             // still function as a fallback.
             m_daemonReadyRestoresDone = true;
 
+            // Re-drive per-window chrome (snap border / hidden title bar,
+            // autotile border) for windows the daemon already considers managed.
             QDBusPendingReply<QStringList> reply = *w;
             QSet<QString> trackedAppIds;
             if (reply.isValid()) {
+                // On daemon loss the effect cleared its window-appearance state
+                // (restoreAllSnapBorderless / AutotileHandler::restoreAllBorderless)
+                // and restored every title bar; already-tracked windows are NOT in
+                // the untracked-restore set below, so their chrome would never come
+                // back without this. Daemon-driven and engine-common: the daemon
+                // re-emits each engine's placement geometry, which routes through the
+                // normal snap-commit / tile-request paths. Fired only on a VALID
+                // reply — that proves the daemon's placement state is populated. The
+                // windows are already in their zones, so nothing moves.
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("reapplyWindowAppearance"), {}, QStringLiteral("reapplyWindowAppearance"));
+
                 const QStringList trackedWindows = reply.value();
                 for (const QString& windowId : trackedWindows) {
                     QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
@@ -473,12 +520,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     // cached here for drag-operation gating (shouldHandleWindow).
     m_triggersLoaded = false; // Permissive until new triggers arrive (#175)
 
-    loadSettingAsync(QStringLiteral("excludedApplications"), [this](const QVariant& v) {
-        m_excludedApplications = v.toStringList();
-    });
-    loadSettingAsync(QStringLiteral("excludedWindowClasses"), [this](const QVariant& v) {
-        m_excludedWindowClasses = v.toStringList();
-    });
+    // excludedApplications / excludedWindowClasses are GONE — the v4
+    // migration folded those lists into the unified WindowRule store, and
+    // the effect's drag-gate exclusion rule set is now derived from the
+    // store-side Exclude rules pulled via WindowRules.rulesChanged →
+    // loadWindowRuleAnimationsFromDbus. No D-Bus settings fetch needed.
     loadSettingAsync(QStringLiteral("minimumWindowWidth"), [this](const QVariant& v) {
         m_cachedMinWindowWidth = v.toInt();
     });
@@ -521,9 +567,9 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     // Animation window filtering — independent of the snapping/tiling
     // exclusions cached above. Used by `shouldAnimateWindow()` to gate
-    // the animation cascade; class-pattern rules override the filter
-    // at the resolver layer so a targeted rule can re-enable animation
-    // for an otherwise-excluded app.
+    // the animation cascade; rules whose match expression resolves for
+    // the window override the filter at the resolver layer so a targeted
+    // rule can re-enable animation for an otherwise-excluded app.
     loadSettingAsync(QStringLiteral("animationExcludeTransientWindows"), [this](const QVariant& v) {
         m_animationExcludeTransientWindows = v.toBool();
     });
@@ -548,17 +594,26 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("animationMinimumWindowHeight"), [this](const QVariant& v) {
         m_animationMinWindowHeight = qBound(0, v.toInt(), 2000);
     });
-    loadSettingAsync(QStringLiteral("animationExcludedApplications"), [this](const QVariant& v) {
-        m_animationExcludedApplications = v.toStringList();
-    });
-    loadSettingAsync(QStringLiteral("animationExcludedWindowClasses"), [this](const QVariant& v) {
-        m_animationExcludedWindowClasses = v.toStringList();
-    });
+    // animationExcludedApplications / animationExcludedWindowClasses are
+    // GONE — the v4 migration folded those lists into the unified
+    // WindowRule store as `ExcludeAnimations`-action rules, and
+    // loadWindowRuleAnimationsFromDbus's parse step rebuilds the effect's
+    // m_animationExclusionRuleSet from the same rule-set push that drives
+    // the OverrideAnimation* pipeline. No D-Bus settings fetch needed.
 
     loadShaderProfileFromDbus();
-    loadAnimationAppRulesFromDbus();
     loadMotionProfileTreeFromDbus();
     loadShaderRegistryFromDbus();
+    // Unified WindowRule store — pull in any rules carrying an
+    // OverrideAnimation* action. The subscription below refreshes whenever
+    // the daemon broadcasts `rulesChanged`, so an edit in the settings UI
+    // lands without restarting the effect.
+    loadWindowRuleAnimationsFromDbus();
+    // Subscription to the daemon's rulesChanged broadcast is installed once from
+    // continueDaemonReadySetup() — installing it here would re-subscribe on every
+    // slotSettingsChanged callback (QDBusConnection::connect silently accepts
+    // duplicates, so the connection set would grow unbounded over the effect's
+    // lifetime).
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();
     });
@@ -589,13 +644,15 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     // autotileHideTitleBars needs extra logic when toggled off — delegate to handler
     loadSettingAsync(QStringLiteral("autotileHideTitleBars"), [this](const QVariant& v) {
-        m_autotileHandler->updateHideTitleBarsSetting(v.toBool());
-        updateAllBorders();
+        if (m_autotileHandler->updateHideTitleBarsSetting(v.toBool())) {
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileShowBorder"), [this](const QVariant& v) {
-        m_autotileHandler->updateShowBorderSetting(v.toBool());
-        updateAllBorders();
+        if (m_autotileHandler->updateShowBorderSetting(v.toBool())) {
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
@@ -620,17 +677,73 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("autotileBorderColor"), [this](const QVariant& v) {
-        m_autotileHandler->setBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        const QColor c(v.toString());
+        if (m_autotileHandler->borderColor() != c) {
+            m_autotileHandler->setBorderColor(c);
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileInactiveBorderColor"), [this](const QVariant& v) {
-        m_autotileHandler->setInactiveBorderColor(QColor(v.toString()));
-        updateAllBorders();
+        const QColor c(v.toString());
+        if (m_autotileHandler->inactiveBorderColor() != c) {
+            m_autotileHandler->setInactiveBorderColor(c);
+            updateAllBorders();
+        }
     });
 
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
         m_autotileHandler->setFocusFollowsMouse(v.toBool());
+    });
+
+    // Snapped-window border settings — feed the effect's parallel snap
+    // BorderState (m_snapBorder), mirroring the autotile* block above. When
+    // snapWindowUseSystemBorderColors is on the daemon writes the resolved
+    // accent into the colour keys, so (like autotile) the effect only reads the
+    // resolved colours and never the use-system flag.
+    // Each setter guards on a changed value before re-walking the stacking
+    // order in updateAllBorders / re-toggling title bars — matching the
+    // "only act on change" convention the autotile width/radius setters use.
+    loadSettingAsync(QStringLiteral("snapWindowHideTitleBars"), [this](const QVariant& v) {
+        const bool hide = v.toBool();
+        if (m_snapBorder.hideTitleBars != hide) {
+            updateSnapHideTitleBars(hide);
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowShowBorder"), [this](const QVariant& v) {
+        const bool show = v.toBool();
+        if (m_snapBorder.showBorder != show) {
+            m_snapBorder.showBorder = show;
+            updateAllBorders();
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowBorderWidth"), [this](const QVariant& v) {
+        const int bw = qBound(0, v.toInt(), 10);
+        if (m_snapBorder.width != bw) {
+            m_snapBorder.width = bw;
+            updateAllBorders();
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowBorderRadius"), [this](const QVariant& v) {
+        const int br = qBound(0, v.toInt(), 20);
+        if (m_snapBorder.radius != br) {
+            m_snapBorder.radius = br;
+            updateAllBorders();
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowBorderColor"), [this](const QVariant& v) {
+        const QColor c(v.toString());
+        if (m_snapBorder.color != c) {
+            m_snapBorder.color = c;
+            updateAllBorders();
+        }
+    });
+    loadSettingAsync(QStringLiteral("snapWindowInactiveBorderColor"), [this](const QVariant& v) {
+        const QColor c(v.toString());
+        if (m_snapBorder.inactiveColor != c) {
+            m_snapBorder.inactiveColor = c;
+            updateAllBorders();
+        }
     });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization

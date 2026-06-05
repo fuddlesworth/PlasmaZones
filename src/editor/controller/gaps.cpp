@@ -401,7 +401,7 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 {
     if (!targetScreen.isEmpty()) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == targetScreen
+            if (PhosphorScreens::ScreenIdentity::identifierFor(screen) == targetScreen
                 || screen->name() == targetScreen) {
                 return screen;
             }
@@ -475,11 +475,11 @@ void EditorController::refreshUsableAreaInsets()
             return;
         }
         fullGeom = screen->geometry();
-        screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
     }
 
     // Query the daemon for both full and available geometry via D-Bus.
-    // The daemon's Phosphor::Screens::ScreenManager handles VS IDs natively.
+    // The daemon's PhosphorScreens::ScreenManager handles VS IDs natively.
     QDBusMessage geoMsg = QDBusMessage::createMethodCall(
         QString(PhosphorProtocol::Service::Name), QString(PhosphorProtocol::Service::ObjectPath),
         QString(PhosphorProtocol::Service::Interface::Screen), QStringLiteral("getScreenGeometry"));

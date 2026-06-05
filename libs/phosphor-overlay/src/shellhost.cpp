@@ -134,6 +134,12 @@ ShellState* ShellHost::ensureShell(const QString& screenId, QScreen* physScreen)
 
 void ShellHost::destroyShell(const QString& screenId)
 {
+    // Contract: this function tears down the SHELL members of a ShellState
+    // (shellSurface, shellWindow, physScreen, slot map) but does NOT delete
+    // the ShellState* itself — that's the destructor's job (see ~ShellHost,
+    // which calls destroyShell then qDeleteAll). A future refactor that adds
+    // `delete state;` here will double-free when ~ShellHost runs its drain
+    // loop and then the qDeleteAll over the same map.
     auto it = m_states.find(screenId);
     if (it == m_states.end()) {
         return;
@@ -307,7 +313,7 @@ void ShellHost::hideSlot(const QString& screenId, const QString& slotKey, std::f
     m_surfaceAnimator->beginHide(state.m_shellSurface, item, slotIt.value().role, std::move(completion));
 }
 
-ShellState& ShellHost::stateFor(const QString& screenId)
+ShellState& ShellHost::getOrCreateStateFor(const QString& screenId)
 {
     return *ensureEntry(m_states, screenId);
 }

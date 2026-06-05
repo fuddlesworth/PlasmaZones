@@ -8,9 +8,9 @@
 #include <QSignalSpy>
 #include <QTest>
 
-using Phosphor::Screens::InMemoryConfigStore;
-using Phosphor::Screens::VirtualScreenConfig;
-using Phosphor::Screens::VirtualScreenDef;
+using PhosphorScreens::InMemoryConfigStore;
+using PhosphorScreens::VirtualScreenConfig;
+using PhosphorScreens::VirtualScreenDef;
 
 namespace {
 

@@ -32,17 +32,23 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
+    // Drop the common float-restore geometry relay from BOTH outgoing engines
+    // before reassigning, so a re-wire (mode toggle / daemon teardown) can't
+    // accumulate duplicate connections.
+    if (m_snapEngine) {
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
+    }
+    if (m_autotileEngine) {
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
+    }
 
-    // Detach the restore predicates from the outgoing engines before dropping
-    // the references. Both predicates capture `this`; clearing them honours the
-    // engine headers' detach contract ("clear via setShould*Predicate({})
-    // before destroying the captured object") instead of relying on daemon
-    // destruction order. Symmetric with the autotile nav-feedback disconnect.
+    // Detach the snap restore predicate from the outgoing engine before dropping
+    // the reference. The predicate captures `this`; clearing it honours the engine
+    // header's detach contract ("clear via setShouldRestorePredicate({}) before
+    // destroying the captured object") instead of relying on daemon destruction
+    // order.
     if (m_cachedSnapEngine) {
         m_cachedSnapEngine->setShouldRestorePredicate({});
-    }
-    if (auto* oldAutotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(m_autotileEngine)) {
-        oldAutotile->setShouldPersistRestorePredicate({});
     }
 
     m_snapEngine = snapEngine;
@@ -95,11 +101,24 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 [this](const QString& windowId, const QString& screenId) {
                     Q_EMIT windowFloatingChanged(windowId, false, screenId);
                 });
+        // Unified model: keep the live placement record current on every snap
+        // state change (commit / uncommit) so the persisted state always matches
+        // the window's actual state — including for daemon-restart-window-open.
+        connect(snap, &PhosphorSnapEngine::SnapEngine::windowSnapStateChanged, this,
+                [this](const QString& windowId, const PhosphorProtocol::WindowStateEntry&) {
+                    captureWindowPlacement(windowId);
+                });
     } else if (snapEngine) {
         // Snap-mode window state signals are critical for WTS correctness.
-        // A non-SnapEngine in the snap slot means state notifications are lost.
-        Q_ASSERT_X(false, "WindowTrackingAdaptor::setEngines",
-                   "snapEngine must be a SnapEngine — snap-specific signals not connected");
+        // A non-SnapEngine in the snap slot means state notifications are
+        // lost — silently in release builds if we only Q_ASSERT here. The
+        // construction-time pattern in snapadaptor.cpp uses qFatal for the
+        // same class of misconfiguration; mirror it so debug AND release
+        // both halt loudly instead of corrupting state propagation.
+        qFatal(
+            "WindowTrackingAdaptor::setEngines: snapEngine (%p) is not a SnapEngine — "
+            "snap-specific signal wiring would silently drop window-state notifications",
+            static_cast<void*>(snapEngine));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -122,19 +141,36 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_autotileEngine) {
         connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,
                 &WindowTrackingAdaptor::navigationFeedback);
+        // Autotile's disabled-context gate is applied centrally at save time by the
+        // WindowPlacementStore serialize keep-predicate (isPersistedContextDisabled),
+        // so no engine-side predicate injection is needed.
+    }
 
-        // Disabled-context gate for autotile pending restores (discussion
-        // #461 item 2). Mirror of the snap-side ShouldTrackPredicate wired
-        // in the constructor — both routes share isPersistedContextDisabled
-        // so the live, save-time, and load-time gates can never drift.
-        // Activity is threaded through because autotile entries carry it
-        // (snap entries do not). See AutotileEngine::ShouldPersistRestorePredicate.
-        if (auto* autotile = qobject_cast<PhosphorTileEngine::AutotileEngine*>(autotileEngine)) {
-            autotile->setShouldPersistRestorePredicate(
-                [this](const QString& screenId, int desktop, const QString& activity) -> bool {
-                    return !isPersistedContextDisabled(screenId, desktop, activity);
-                });
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Common float-restore geometry channel
+    //
+    // Both engines emit the base-class geometryRestoreRequested when they
+    // restore a floated window (consuming a floated WindowPlacement from the
+    // unified store on reopen). Relay it to applyGeometryRequested
+    // with an EMPTY zoneId: the effect places the window and treats it as
+    // unmanaged (empty zoneId → clearWindowSnapped, no snap border). The engine
+    // separately emits windowFloatingChanged(true) so the effect marks it
+    // floating. This single relay gives every engine — current and future —
+    // float-restore geometry application for free.
+    // ═══════════════════════════════════════════════════════════════════════════
+    const auto floatRestoreRelay = [this](const QString& windowId, const QRect& geometry, const QString& screenId) {
+        if (!geometry.isValid()) {
+            return;
         }
+        Q_EMIT applyGeometryRequested(windowId, geometry.x(), geometry.y(), geometry.width(), geometry.height(),
+                                      QString(), screenId, false);
+    };
+    if (snapEngine) {
+        connect(snapEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
+    }
+    if (autotileEngine) {
+        connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,
+                floatRestoreRelay);
     }
 }
 

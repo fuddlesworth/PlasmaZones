@@ -154,11 +154,13 @@ void AutotileHandler::drainPendingBorderlessRestore()
     (*step)();
 }
 
-void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
+bool AutotileHandler::updateHideTitleBarsSetting(bool enabled)
 {
-    const bool wasEnabled = m_border.hideTitleBars;
+    if (m_border.hideTitleBars == enabled) {
+        return false;
+    }
     m_border.hideTitleBars = enabled;
-    if (wasEnabled && !enabled) {
+    if (!enabled) {
         // Turning OFF — restore title bars for all borderless windows
         m_border.zoneGeometries.clear();
         const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
@@ -168,7 +170,7 @@ void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
                 setWindowBorderless(win, p.first, false, p.second);
             }
         }
-    } else if (!wasEnabled && enabled) {
+    } else {
         // Turning ON — hide title bars for all currently tiled windows
         const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
         for (const auto& p : pairs) {
@@ -178,11 +180,16 @@ void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
             }
         }
     }
+    return true;
 }
 
-void AutotileHandler::updateShowBorderSetting(bool enabled)
+bool AutotileHandler::updateShowBorderSetting(bool enabled)
 {
+    if (m_border.showBorder == enabled) {
+        return false;
+    }
     m_border.showBorder = enabled;
+    return true;
 }
 
 void AutotileHandler::setFocusFollowsMouse(bool enabled)
@@ -199,15 +206,21 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
         return false;
     }
-    auto& screenGeometries = m_preAutotileGeometries[screenId];
     // Use EXACT windowId match only — NOT stableId fallback.
     // Multiple instances of the same app (e.g., 3 Dolphin windows) share a stableId.
     // hasSavedGeometryForWindow's stableId fallback would return true after the first
     // instance is saved, preventing all other instances from saving their own geometry.
     // On restore, all instances would get the first instance's geometry — scrambling
     // window positions on every autotile ↔ snapping toggle.
-    if (screenGeometries.contains(windowId)) {
-        return false;
+    //
+    // Use a CONST lookup for the contains-check so a guard-bail below never inserts an
+    // empty per-screen bucket (operator[] would); the bucket is created only at the
+    // genuine insertion point (below).
+    {
+        const auto screenIt = m_preAutotileGeometries.constFind(screenId);
+        if (screenIt != m_preAutotileGeometries.constEnd() && screenIt->contains(windowId)) {
+            return false;
+        }
     }
     // Only save geometry for floating windows — snapped/tiled windows have zone
     // dimensions in frameGeometry(), not the original free-floating size. Storing
@@ -219,16 +232,30 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     // window pass knownFreeFloating=true to bypass the guard. Without that bypass,
     // the save is silently dropped and every later float-restore for this window
     // falls through to stale cross-session data (or, with exact-only lookups, nothing).
+    // A snap-managed window's frame IS its zone rect, never a free-floating
+    // position — this holds EVEN on the knownFreeFloating fast path, which fires
+    // when a window is re-added to autotile on a snap→autotile toggle. Storing the
+    // zone rect as the pre-autotile float-back is the per-mode leak: a later
+    // float-in-autotile then teleports the window to the snap zone instead of its
+    // genuine pre-snap free position. isWindowFloating() below misses this because
+    // knownFreeFloating bypasses it, so check the snap-managed state explicitly and
+    // unconditionally.
+    if (m_effect->isWindowMarkedSnapped(windowId)) {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry for snap-managed window (frame is zone rect)" << windowId
+                          << "on" << screenId;
+        return true;
+    }
     if (!knownFreeFloating && !m_effect->isWindowFloating(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
         return true;
     }
-    screenGeometries[windowId] = frame;
+    m_preAutotileGeometries[screenId][windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
     if (m_effect->m_daemonServiceRegistered) {
-        // overwrite=true: the isWindowFloating() guard above already skipped
-        // this path for snapped windows, so when we reach here the frame is
-        // the window's authoritative free-floating geometry for THIS session.
+        // overwrite=true: the isWindowMarkedSnapped() and isWindowFloating() guards
+        // above already skipped this path for snapped/tiled windows (the former even
+        // on the knownFreeFloating fast path), so when we reach here the frame is the
+        // window's authoritative free-floating geometry for THIS session.
         // The daemon persists pre-tile entries across window close/reopen
         // (keyed by appId for session restore), so a stale entry from a
         // prior session would otherwise block the fresh capture and leave

@@ -26,6 +26,7 @@
 #include "config/configbackends.h"
 #include "core/screenmoderouter.h"
 #include "../helpers/AutotileTestHelpers.h"
+#include "../helpers/LayoutRegistryTestHelpers.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 
 using namespace PlasmaZones;
@@ -48,8 +49,7 @@ private Q_SLOTS:
     {
         // PhosphorZones::LayoutRegistry with no backend — every screen hits the default
         // modeForScreen fallback (Snapping unless explicitly assigned).
-        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
-                                                            QStringLiteral("plasmazones/layouts"));
+        m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
 
         // SnapEngine with all-nullptr dependencies is a valid construction:
         // the router only invokes it via the PhosphorEngine::IPlacementEngine interface

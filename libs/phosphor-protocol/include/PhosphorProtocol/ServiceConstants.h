@@ -27,6 +27,7 @@ inline constexpr QLatin1String Screen("org.plasmazones.Screen");
 inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
 inline constexpr QLatin1String Snap("org.plasmazones.Snap");
+inline constexpr QLatin1String WindowRules("org.plasmazones.WindowRules");
 }
 
 /// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised
@@ -45,7 +46,6 @@ inline constexpr QLatin1String Shutdown("org.plasmazones.Error.Shutdown");
 /// than duplicating string literals on both ends of the bus.
 namespace SettingProperty {
 inline constexpr QLatin1String ShaderProfileTree("shaderProfileTree");
-inline constexpr QLatin1String AnimationAppRules("animationAppRules");
 inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
 inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
 }
@@ -86,9 +86,14 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       X-KDE-DBUS-Restricted-Interfaces gate are dropped. Mismatched
 //       peers fail the bridge handshake instead of producing
 //       method-not-found at first thumbnail post.
+//   v4: setWindowMetadata widened from 4 args (instanceId, appId,
+//       desktopFile, title) to 9 (adds windowRole, pid, virtualDesktop,
+//       activity, windowType). A stale effect sending the old 4-arg form
+//       would fail marshalling, so the bridge handshake rejects mismatched
+//       peers up front.
 //
-inline constexpr int ApiVersion = 3;
-inline constexpr int MinPeerApiVersion = 3;
+inline constexpr int ApiVersion = 4;
+inline constexpr int MinPeerApiVersion = 4;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze
