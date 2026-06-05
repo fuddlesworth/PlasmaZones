@@ -10,7 +10,7 @@ namespace PhosphorServiceClipboard {
 namespace {
 // The KDE de-facto password-manager hint: when a selection offers this MIME
 // type the content is a secret and must not enter the history.
-constexpr auto kPasswordHint = "x-kde-passwordManagerHint";
+constexpr QLatin1String kPasswordHint{"x-kde-passwordManagerHint"};
 constexpr int kPreviewMaxChars = 120;
 
 bool isTextType(const QString& mimeType)
@@ -53,7 +53,7 @@ void ClipboardHistoryModel::setSource(IClipboardSource* source)
 void ClipboardHistoryModel::setMaxEntries(int max)
 {
     m_maxEntries = max < 0 ? 0 : max;
-    const int before = m_entries.size();
+    const qsizetype before = m_entries.size();
     enforceCap();
     if (m_entries.size() != before) {
         Q_EMIT countChanged();
@@ -112,7 +112,7 @@ QList<ClipboardEntry> ClipboardHistoryModel::entries() const
 
 void ClipboardHistoryModel::setEntries(const QList<ClipboardEntry>& entries)
 {
-    const int before = m_entries.size();
+    const qsizetype before = m_entries.size();
     beginResetModel();
     m_entries = entries;
     // m_maxEntries is clamped to >= 0 in setMaxEntries, so the cap always applies.
@@ -210,7 +210,7 @@ void ClipboardHistoryModel::recordEntry(const QByteArray& content, const QString
     entry.timestamp = QDateTime::currentDateTime();
     entry.sensitive = false; // sensitive selections never reach here.
 
-    const int beforeCount = m_entries.size();
+    const qsizetype beforeCount = m_entries.size();
 
     // De-duplicate: an identical capture moves to the front (most-recent) rather
     // than adding a second copy.
@@ -244,6 +244,9 @@ int ClipboardHistoryModel::indexOfContent(const QByteArray& content, const QStri
 
 void ClipboardHistoryModel::enforceCap()
 {
+    // Evicts the oldest rows past the cap with the proper row signals, but does
+    // NOT emit countChanged/historyChanged itself: callers detect the size delta
+    // and emit (so a net-zero dedup+evict still reports the right count).
     while (m_entries.size() > m_maxEntries) {
         const int last = m_entries.size() - 1;
         beginRemoveRows(QModelIndex(), last, last);
@@ -281,7 +284,7 @@ QString ClipboardHistoryModel::preferredMimeType(const QStringList& mimeTypes)
 
 bool ClipboardHistoryModel::isSensitive(const QStringList& mimeTypes)
 {
-    return mimeTypes.contains(QLatin1String(kPasswordHint));
+    return mimeTypes.contains(kPasswordHint);
 }
 
 QString ClipboardHistoryModel::makePreview(const QByteArray& content, const QString& mimeType)

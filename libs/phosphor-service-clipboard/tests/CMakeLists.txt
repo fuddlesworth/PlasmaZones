@@ -31,20 +31,9 @@ _phosphorserviceclipboard_test(test_phosphorserviceclipboard_smoke test_smoke.cp
 # QML facade test: a real QQmlEngine imports the module and proves the imperative
 # registration yields a usable facade (ClipboardService instantiates, its
 # history / count / supported surface reads through QML, and the invokables run).
-# XDG_DATA_HOME is isolated to a build-tree dir so the service never touches real
-# user clipboard history.
-add_executable(test_phosphorserviceclipboard_qmlfacade test_qmlfacade.cpp)
-target_link_libraries(test_phosphorserviceclipboard_qmlfacade
-    PRIVATE
-        Qt6::Test
-        PhosphorServiceClipboard::PhosphorServiceClipboard
-)
-add_test(NAME test_phosphorserviceclipboard_qmlfacade COMMAND test_phosphorserviceclipboard_qmlfacade)
-set_tests_properties(test_phosphorserviceclipboard_qmlfacade
-    PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/test-xdg-data"
-        LABELS "phosphorserviceclipboard"
-)
+# The shared helper isolates XDG_DATA_HOME to a build-tree dir so the service
+# never touches real user clipboard history.
+_phosphorserviceclipboard_test(test_phosphorserviceclipboard_qmlfacade test_qmlfacade.cpp)
 
 # History-model unit test: exercises the dedup / cap / preview / sensitive-drop
 # logic on a fake source. It compiles the model + seam directly (and includes the
