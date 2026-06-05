@@ -452,6 +452,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-network)   # NetworkManager devices / connectivity (Phase 2.2)
     add_subdirectory(libs/phosphor-service-bluetooth) # BlueZ adapters / devices / pairing (Phase 2.3)
     add_subdirectory(libs/phosphor-service-brightness) # display / keyboard backlight brightness (Phase 2.4)
+    add_subdirectory(libs/phosphor-service-notifications) # org.freedesktop.Notifications server (Phase 2.5)
 endif()
 
 # Source directories
@@ -700,6 +701,15 @@ endif()
 # target does not exist, so the CLI can't link.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-brightness-cli)
+endif()
+
+# phosphor-service-notifications-cli. Acceptance harness for the
+# phosphor-service-notifications library (Phase 2.5). Both a server (watch: own
+# org.freedesktop.Notifications and log incoming Notify + close events) and a
+# client (send / close / info via D-Bus). Gated like the lib: when
+# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-notifications-cli)
 endif()
 
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
