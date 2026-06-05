@@ -68,6 +68,7 @@ IdleService::IdleService(QObject* parent)
     : QObject(parent)
     , d(std::make_unique<Private>())
 {
+    connect(&d->machine, &IdleStateMachine::stagesChanged, this, &IdleService::stagesChanged);
     connect(&d->machine, &IdleStateMachine::currentStageChanged, this, &IdleService::currentStageChanged);
     connect(&d->machine, &IdleStateMachine::idled, this, &IdleService::idled);
     connect(&d->machine, &IdleStateMachine::resumed, this, &IdleService::resumed);
@@ -97,8 +98,9 @@ QVariantList IdleService::stages() const
 
 void IdleService::setStages(const QVariantList& stages)
 {
+    // The machine emits stagesChanged (forwarded above) only when the ladder
+    // actually changes, so this does not emit directly.
     d->machine.setStages(toStages(stages));
-    Q_EMIT stagesChanged();
 }
 
 int IdleService::currentStage() const

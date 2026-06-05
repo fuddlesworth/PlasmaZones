@@ -27,6 +27,8 @@ struct IdleStage
 {
     QString name;
     std::chrono::milliseconds timeout;
+
+    bool operator==(const IdleStage& other) const = default;
 };
 
 class IdleStateMachine : public QObject
@@ -39,9 +41,11 @@ public:
     explicit IdleStateMachine(IdleSourceFactory factory, QObject* parent = nullptr);
     ~IdleStateMachine() override;
 
-    /// Replace the stage ladder. Stages are sorted by ascending timeout so the
-    /// current-stage index is always monotonic in inactivity. Rebuilding the
-    /// sources resets the machine to active.
+    /// Replace the stage ladder. Stages with a non-positive timeout are dropped
+    /// (they could never arm), then sorted by ascending timeout so the
+    /// current-stage index is always monotonic in inactivity. A no-op when the
+    /// resulting ladder is unchanged; otherwise rebuilds the sources (resetting
+    /// the machine to active) and emits `stagesChanged`.
     void setStages(const QList<IdleStage>& stages);
     [[nodiscard]] QList<IdleStage> stages() const;
 
@@ -60,6 +64,8 @@ public:
     [[nodiscard]] bool isMonitoringEnabled() const;
 
 Q_SIGNALS:
+    /// The configured stage ladder changed (dropped/sorted form).
+    void stagesChanged();
     void currentStageChanged();
     /// Entered idle stage @p stage (1-based).
     void idled(int stage);

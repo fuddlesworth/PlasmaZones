@@ -68,8 +68,10 @@ public:
     [[nodiscard]] bool isInhibited() const;
 
     /// Acquire an idle inhibition. Returns a cookie to release it with; idle is
-    /// inhibited (the ladder disarmed) while any cookie is held.
-    Q_INVOKABLE int inhibit();
+    /// inhibited (the ladder disarmed) while any cookie is held. Retain the cookie:
+    /// discarding it leaks the inhibition for the process lifetime (cookies are
+    /// never reused).
+    [[nodiscard]] Q_INVOKABLE int inhibit();
     /// Release a previously acquired inhibition. Returns true if @p cookie was
     /// held; a no-op returning false for an unknown or already-released cookie.
     Q_INVOKABLE bool release(int cookie);

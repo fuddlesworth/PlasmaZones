@@ -162,8 +162,9 @@ void IdleStateMachineTest::resumeFromDeepStageResets()
     QCOMPARE(machine.currentStage(), 3);
 
     QSignalSpy resumedSpy(&machine, &IdleStateMachine::resumed);
-    // Activity resumes: the shallowest source resumes first; that alone resets the
-    // whole ladder. The other fired sources resuming afterwards are no-ops.
+    // Any source resuming resets the whole ladder; the first resume wins and later
+    // resumes from other fired sources are no-ops. (Source 0 here is an arbitrary
+    // choice, not a requirement.)
     rec.created.at(0)->fireResume();
     QCOMPARE(machine.currentStage(), 0);
     QCOMPARE(resumedSpy.count(), 1);

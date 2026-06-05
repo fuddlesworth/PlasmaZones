@@ -730,9 +730,10 @@ if(BUILD_PHOSPHOR_SHELL)
 endif()
 
 # phosphor-service-idle-cli. Acceptance harness for the phosphor-service-idle
-# library (Phase 2.7). Reports idle support and (in later milestones) logs idle
-# stage fires + toggles an inhibitor. Gated like the lib: when
-# BUILD_PHOSPHOR_SHELL is OFF the lib target does not exist, so the CLI can't link.
+# library (Phase 2.7). Reports idle support, logs each idle stage as it fires
+# with a wall-clock timestamp, and can hold an inhibition for a fixed duration
+# (--inhibit-for). Gated like the lib: when BUILD_PHOSPHOR_SHELL is OFF the lib
+# target does not exist, so the CLI can't link.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-idle-cli)
 endif()

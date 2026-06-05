@@ -18,13 +18,28 @@ IdleStateMachine::~IdleStateMachine() = default;
 
 void IdleStateMachine::setStages(const QList<IdleStage>& stages)
 {
-    m_stages = stages;
+    // Drop stages that could never arm (the facade already filters these, but the
+    // machine is the reusable unit and a direct C++ caller might not).
+    QList<IdleStage> next;
+    next.reserve(stages.size());
+    for (const IdleStage& stage : stages) {
+        if (stage.timeout.count() > 0)
+            next.push_back(stage);
+    }
     // Sort by ascending timeout so the current-stage index is monotonic in
     // inactivity: source i (and thus stage i+1) always fires before source i+1.
-    std::stable_sort(m_stages.begin(), m_stages.end(), [](const IdleStage& a, const IdleStage& b) {
+    std::stable_sort(next.begin(), next.end(), [](const IdleStage& a, const IdleStage& b) {
         return a.timeout < b.timeout;
     });
+
+    // A redundant reconfigure must not tear down the live compositor sources or
+    // emit a spurious change.
+    if (next == m_stages)
+        return;
+
+    m_stages = std::move(next);
     rebuild();
+    Q_EMIT stagesChanged();
 }
 
 QList<IdleStage> IdleStateMachine::stages() const
