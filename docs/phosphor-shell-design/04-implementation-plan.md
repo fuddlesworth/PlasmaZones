@@ -600,7 +600,7 @@ So the service lib is the **policy layer** on top of those single-purpose primit
 
 **Milestones**
 
-1. **Skeleton + CMake plumbing (S, ~1 day).** `libs/phosphor-service-idle/` mirroring the 2.6 shape (`CMakeLists.txt`, `PhosphorServiceIdleConfig.cmake.in`, `include/PhosphorServiceIdle/`, `src/`, `tests/`, `examples/phosphor-service-idle-cli/`). Link `PhosphorWayland` (PRIVATE) + Qt6 Core / Qml / Gui (Gui for `QWindow` on the inhibitor path). Imperative `qmlregistration.cpp`, `std::call_once`-guarded, called from `src/shell/main.cpp` alongside the ten existing services. `BUILD_PHOSPHOR_SHELL`-gated.
+1. **Skeleton + CMake plumbing (S, ~1 day).** `libs/phosphor-service-idle/` mirroring the 2.6 shape (`CMakeLists.txt`, `PhosphorServiceIdleConfig.cmake.in`, `include/PhosphorServiceIdle/`, `src/`, `tests/`, `examples/phosphor-service-idle-cli/`). Link `PhosphorWayland` (PRIVATE) + Qt6 Core / Qml. (The lib is non-visual: U2 resolved inhibition to disarming the monitors rather than holding a surface-bound inhibitor, so no `QWindow` / Gui is needed; only the CLI links Gui, for `QGuiApplication`.) Imperative `qmlregistration.cpp`, `std::call_once`-guarded, called from `src/shell/main.cpp` alongside the ten existing services. `BUILD_PHOSPHOR_SHELL`-gated.
 2. **Idle-source seam + stage state machine (S-M, ~1-2 days).** Define `IIdleSource` (timeout setter + `idled` / `resumed` signals) implemented by an adapter over `PhosphorWayland::IdleNotifier`. `IdleStateMachine` owns an ordered list of stages, arms one source per stage, advances the current stage on `idled()`, and resets to active on `resumed()`. Pure logic, fully testable on a fake source.
 3. **Inhibition aggregation (S, ~1 day).** Ref-counted `inhibit()` / `release(cookie)` surface; while any cookie is held, idle monitoring is paused (or an inhibitor is armed, per U2). `inhibited` property + change signal.
 4. **QML facade + `IdleService` host (S, ~1 day).** `Phosphor.Service.Idle 1.0`: `IdleService` instantiable (plain type, not a singleton); `state` (active / idle-stage-N), `stages` config, `inhibited`, `inhibit()` / `release()` `Q_INVOKABLE`, `idled(stage)` / `resumed()` signals. Resolve coexistence with the shell's existing direct `Phosphor.Shell.IdleNotifier` / `IdleInhibitor` regs (U4).
@@ -613,7 +613,7 @@ So the service lib is the **policy layer** on top of those single-purpose primit
 **Dependencies**
 
 - `phosphor-wayland` (PRIVATE link; provides `IdleNotifier` / `IdleInhibitor` + the generated protocol code). No new `wayland-protocols` dependency; the XMLs are already vendored in `phosphor-wayland`.
-- Qt6 ≥ 6.6 Core / Qml / Gui (Gui for `QWindow` on the surface-bound inhibitor). No `phosphor-dbus` unless the optional `org.freedesktop.ScreenSaver` surface lands (U3).
+- Qt6 ≥ 6.6 Core / Qml. Gui is not a lib dependency (U2 resolved to disarm-the-monitors inhibition, so no `QWindow` / surface-bound inhibitor); the CLI links Gui for `QGuiApplication`. No `phosphor-dbus` unless the optional `org.freedesktop.ScreenSaver` surface lands (U3).
 
 **Risks**
 
