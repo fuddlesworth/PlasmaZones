@@ -86,6 +86,7 @@ private Q_SLOTS:
     void stagesSortedByAscendingTimeout();
     void reconfigureWhileIdleResets();
     void monitoringPauseDisarmsAndResumeRearms();
+    void redundantSetStagesIsNoOpAndDropsInvalid();
 };
 
 void IdleStateMachineTest::emptyStagesStaysActive()
@@ -254,6 +255,36 @@ void IdleStateMachineTest::monitoringPauseDisarmsAndResumeRearms()
     const size_t afterReenable = rec.created.size();
     machine.setMonitoringEnabled(true);
     QCOMPARE(rec.created.size(), afterReenable);
+}
+
+void IdleStateMachineTest::redundantSetStagesIsNoOpAndDropsInvalid()
+{
+    RecordingFactory rec;
+    IdleStateMachine machine(rec.factory());
+    QSignalSpy stagesSpy(&machine, &IdleStateMachine::stagesChanged);
+
+    machine.setStages({{QStringLiteral("dim"), 5min}, {QStringLiteral("lock"), 10min}});
+    QCOMPARE(rec.created.size(), size_t{2});
+    QCOMPARE(stagesSpy.count(), 1);
+
+    // The same ladder supplied in a different order sorts equal, so it is a no-op:
+    // the live sources are NOT torn down (no fresh fakes) and stagesChanged does
+    // not re-fire.
+    machine.setStages({{QStringLiteral("lock"), 10min}, {QStringLiteral("dim"), 5min}});
+    QCOMPARE(rec.created.size(), size_t{2});
+    QCOMPARE(stagesSpy.count(), 1);
+
+    // The machine itself drops non-positive timeouts (a direct C++ caller bypasses
+    // the facade filter): an all-invalid ladder clears the stages, which is a real
+    // change from the prior non-empty ladder.
+    machine.setStages({{QStringLiteral("bad"), 0ms}, {QStringLiteral("worse"), std::chrono::milliseconds(-5)}});
+    QVERIFY(machine.stages().isEmpty());
+    QCOMPARE(machine.currentStage(), 0);
+    QCOMPARE(stagesSpy.count(), 2);
+
+    // Re-applying the now-empty ladder is again a no-op.
+    machine.setStages({});
+    QCOMPARE(stagesSpy.count(), 2);
 }
 
 QTEST_GUILESS_MAIN(IdleStateMachineTest)

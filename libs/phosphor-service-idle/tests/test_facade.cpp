@@ -69,6 +69,12 @@ void IdleFacadeTest::stagesRoundTripSortedByTimeout()
     QCOMPARE(out.at(0).toMap().value(QLatin1String("timeoutMs")).toInt(), 300000);
     QCOMPARE(out.at(1).toMap().value(QLatin1String("name")).toString(), QStringLiteral("lock"));
     QCOMPARE(out.at(2).toMap().value(QLatin1String("name")).toString(), QStringLiteral("off"));
+
+    // Re-applying the same ladder is a no-op: the forwarded stagesChanged is
+    // edge-only, so it must not fire again.
+    service.setStages({stage(QStringLiteral("off"), 900000), stage(QStringLiteral("dim"), 300000),
+                       stage(QStringLiteral("lock"), 600000)});
+    QCOMPARE(spy.count(), 1);
 }
 
 void IdleFacadeTest::nonPositiveTimeoutsDropped()
