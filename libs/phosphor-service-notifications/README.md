@@ -34,8 +34,7 @@ library.
 |----------------------|-----------------------------------------------------------------------------------|
 | `NotificationServer` | Owns the bus name and the notification lifecycle; forwarding target of the generated `org.freedesktop.Notifications` adaptor. |
 | `Notification`       | One decoded live notification (summary / body / actions / urgency / image / hints), mutated in place on `replaces_id`. |
-
-*(`NotificationModel` joins this table in milestone 5.)*
+| `NotificationModel`  | `QAbstractListModel` over a server's live notifications (bind its `server` property); rows track add / replace / close. |
 
 ## Design notes
 
@@ -61,6 +60,6 @@ library.
 Phase 2.5: in progress. Milestones 1+2 (skeleton + CMake + adaptor + name
 acquisition + static methods; milestone 2's facade/name-acquisition shipped
 inside the milestone-1 commit), 3 (Notify ingestion + the `Notification` object +
-hint / image decode), and 4 (expiry timers + close lifecycle + action invoke)
-landed; milestones 5-9 (the model, QML facade, CLI daemon demo, full wire tests,
-README finalisation) follow per the plan.
+hint / image decode), 4 (expiry timers + close lifecycle + action invoke), and 5
+(`NotificationModel`) landed; milestones 6-9 (QML facade, CLI daemon demo, full
+wire tests, README finalisation) follow per the plan.

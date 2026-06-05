@@ -355,10 +355,12 @@ void NotificationServer::setDefaultExpireTimeout(int ms)
 
 QStringList NotificationServer::GetCapabilities()
 {
-    // Advertise only what the server can honestly back today. "actions" is now
-    // backed (invokeAction + ActionInvoked); "persistence" lands with the model
-    // (milestone 5); "body-markup" only once a renderer exists (Phase 4.3).
-    return {QStringLiteral("body"), QStringLiteral("actions"), QStringLiteral("icon-static")};
+    // Advertise only what the server can honestly back today. "persistence" is
+    // now backed: the server retains live notifications (NotificationModel
+    // exposes them) until they are closed, rather than discarding on display.
+    // "body-markup" stays out until a renderer exists (Phase 4.3).
+    return {QStringLiteral("body"), QStringLiteral("actions"), QStringLiteral("icon-static"),
+            QStringLiteral("persistence")};
 }
 
 QString NotificationServer::GetServerInformation(QString& vendor, QString& version, QString& specVersion)

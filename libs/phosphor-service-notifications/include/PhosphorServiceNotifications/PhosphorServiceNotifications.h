@@ -21,12 +21,14 @@
  *     and the close/action lifecycle.
  *   - `Notification`: one decoded live notification (summary / body / actions /
  *     urgency / image / hints), mutated in place on `replaces_id`.
- * (`NotificationModel` lands in milestone 5 and joins this umbrella header then.)
+ *   - `NotificationModel`: a `QAbstractListModel` over a server's live
+ *     notifications, for a `ListView` / `Repeater` to bind.
  *
  * Phase 2.5 of the service-library plan documented in
  * `docs/phosphor-shell-design/04-implementation-plan.md`.
  */
 
 #include <PhosphorServiceNotifications/Notification.h>
+#include <PhosphorServiceNotifications/NotificationModel.h>
 #include <PhosphorServiceNotifications/NotificationServer.h>
 #include <PhosphorServiceNotifications/QmlRegistration.h>

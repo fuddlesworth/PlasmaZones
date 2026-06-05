@@ -20,9 +20,11 @@
 // fully in-process and is pinned here.
 
 #include <PhosphorServiceNotifications/Notification.h>
+#include <PhosphorServiceNotifications/NotificationModel.h>
 #include <PhosphorServiceNotifications/NotificationServer.h>
 #include <PhosphorServiceNotifications/QmlRegistration.h>
 
+#include <QAbstractItemModelTester>
 #include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusServer>
@@ -68,6 +70,12 @@ private Q_SLOTS:
     void invokeActionEmitsActivationTokenBeforeAction();
     void replaceUpdatesExpiry();
     void invokeActionUnknownIdIsNoop();
+    void modelSeedsFromServer();
+    void modelInsertsOnAdd();
+    void modelRemovesOnClose();
+    void modelDataChangedOnReplace();
+    void modelRoleNamesPinned();
+    void modelClearsWhenServerDestroyed();
 
 private:
     std::unique_ptr<NotificationServer> makeServer();
@@ -485,6 +493,110 @@ void NotificationsSmokeTest::invokeActionUnknownIdIsNoop()
     QSignalSpy actionSpy(server.get(), &NotificationServer::ActionInvoked);
     server->invokeAction(999999, QStringLiteral("default")); // no such notification
     QCOMPARE(actionSpy.count(), 0);
+}
+
+void NotificationsSmokeTest::modelSeedsFromServer()
+{
+    auto server = makeServer();
+    const uint a =
+        server->Notify(QStringLiteral("AppA"), 0, QString(), QStringLiteral("first"), QStringLiteral("b1"), {}, {}, 0);
+    server->Notify(QStringLiteral("AppB"), 0, QString(), QStringLiteral("second"), QString(), {}, {}, 0);
+
+    NotificationModel model;
+    QAbstractItemModelTester tester(&model); // pins the QAbstractItemModel contract
+    model.setServer(server.get());
+
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(model.property("count").toInt(), 2);
+    QCOMPARE(model.data(model.index(0), NotificationModel::IdRole).toUInt(), a);
+    QCOMPARE(model.data(model.index(0), NotificationModel::AppNameRole).toString(), QStringLiteral("AppA"));
+    QCOMPARE(model.data(model.index(0), NotificationModel::SummaryRole).toString(), QStringLiteral("first"));
+    QCOMPARE(model.data(model.index(1), NotificationModel::AppNameRole).toString(), QStringLiteral("AppB"));
+}
+
+void NotificationsSmokeTest::modelInsertsOnAdd()
+{
+    auto server = makeServer();
+    NotificationModel model;
+    QAbstractItemModelTester tester(&model);
+    model.setServer(server.get());
+    QCOMPARE(model.rowCount(), 0);
+
+    QSignalSpy insertSpy(&model, &QAbstractListModel::rowsInserted);
+    QSignalSpy countSpy(&model, &NotificationModel::countChanged);
+
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("new"), QString(), {}, {}, 0);
+
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(insertSpy.count(), 1);
+    QCOMPARE(countSpy.count(), 1);
+    QCOMPARE(model.data(model.index(0), NotificationModel::IdRole).toUInt(), id);
+}
+
+void NotificationsSmokeTest::modelRemovesOnClose()
+{
+    auto server = makeServer();
+    NotificationModel model;
+    QAbstractItemModelTester tester(&model);
+    model.setServer(server.get());
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("x"), QString(), {}, {}, 0);
+    QCOMPARE(model.rowCount(), 1);
+
+    QSignalSpy removeSpy(&model, &QAbstractListModel::rowsRemoved);
+    server->CloseNotification(id);
+
+    QCOMPARE(model.rowCount(), 0);
+    QCOMPARE(removeSpy.count(), 1);
+}
+
+void NotificationsSmokeTest::modelDataChangedOnReplace()
+{
+    auto server = makeServer();
+    NotificationModel model;
+    QAbstractItemModelTester tester(&model);
+    model.setServer(server.get());
+    const uint id = server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("before"), QString(), {}, {}, 0);
+
+    QSignalSpy dataSpy(&model, &QAbstractListModel::dataChanged);
+    QSignalSpy insertSpy(&model, &QAbstractListModel::rowsInserted);
+    QSignalSpy removeSpy(&model, &QAbstractListModel::rowsRemoved);
+
+    server->Notify(QStringLiteral("app"), id, QString(), QStringLiteral("after"), QString(), {}, {}, 0);
+
+    QCOMPARE(model.rowCount(), 1); // replace, not insert
+    QCOMPARE(insertSpy.count(), 0);
+    QCOMPARE(removeSpy.count(), 0);
+    QCOMPARE(dataSpy.count(), 1);
+    QCOMPARE(model.data(model.index(0), NotificationModel::SummaryRole).toString(), QStringLiteral("after"));
+}
+
+void NotificationsSmokeTest::modelRoleNamesPinned()
+{
+    NotificationModel model;
+    const QHash<int, QByteArray> roles = model.roleNames();
+    QCOMPARE(roles.value(NotificationModel::NotificationRole), QByteArray("notification"));
+    QCOMPARE(roles.value(NotificationModel::IdRole), QByteArray("id"));
+    QCOMPARE(roles.value(NotificationModel::SummaryRole), QByteArray("summary"));
+    QCOMPARE(roles.value(NotificationModel::ImageRole), QByteArray("image"));
+    QCOMPARE(roles.value(NotificationModel::TimestampRole), QByteArray("timestamp"));
+    // Enum is contiguous from Qt::UserRole + 1.
+    QCOMPARE(static_cast<int>(NotificationModel::NotificationRole), static_cast<int>(Qt::UserRole) + 1);
+}
+
+void NotificationsSmokeTest::modelClearsWhenServerDestroyed()
+{
+    auto server = makeServer();
+    server->Notify(QStringLiteral("app"), 0, QString(), QStringLiteral("x"), QString(), {}, {}, 0);
+
+    NotificationModel model;
+    QAbstractItemModelTester tester(&model);
+    model.setServer(server.get());
+    QCOMPARE(model.rowCount(), 1);
+
+    // Destroying the server (its owner) must reset the model rather than dangle.
+    server.reset();
+    QCOMPARE(model.rowCount(), 0);
+    QVERIFY(model.server() == nullptr);
 }
 
 QTEST_GUILESS_MAIN(NotificationsSmokeTest)

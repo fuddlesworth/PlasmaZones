@@ -4,6 +4,7 @@
 #include <PhosphorServiceNotifications/QmlRegistration.h>
 
 #include <PhosphorServiceNotifications/Notification.h>
+#include <PhosphorServiceNotifications/NotificationModel.h>
 #include <PhosphorServiceNotifications/NotificationServer.h>
 
 #include <QQmlEngine>
@@ -32,10 +33,14 @@ void registerQmlTypes()
         // discourages singletons holding mutable global state).
         qmlRegisterType<NotificationServer>(kModule, kModuleVersionMajor, kModuleVersionMinor, "NotificationServer");
 
+        // List model over a server's live notifications. Instantiable in QML
+        // (bind its `server` property); a plain type, not a singleton.
+        qmlRegisterType<NotificationModel>(kModule, kModuleVersionMajor, kModuleVersionMinor, "NotificationModel");
+
         // Pointer-receivable type. Exposed as a Q_PROPERTY / signal arg / model
         // role from the server, never constructed in QML; registering it as
         // uncreatable makes its metatype (and the Urgency enum) known so QML can
-        // read its properties. NotificationModel joins this in milestone 5.
+        // read its properties.
         qmlRegisterUncreatableType<Notification>(
             kModule, kModuleVersionMajor, kModuleVersionMinor, "Notification",
             QStringLiteral("Notification is owned by NotificationServer; bind via the server or model"));

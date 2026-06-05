@@ -83,12 +83,14 @@ set(phosphorservicenotifications_public_HDRS
     include/PhosphorServiceNotifications/QmlRegistration.h
     include/PhosphorServiceNotifications/NotificationServer.h
     include/PhosphorServiceNotifications/Notification.h
+    include/PhosphorServiceNotifications/NotificationModel.h
 )
 
 set(phosphorservicenotifications_SRCS
     src/qmlregistration.cpp
     src/notificationserver.cpp
     src/notification.cpp
+    src/notificationmodel.cpp
 )
 
 add_library(PhosphorServiceNotifications SHARED
