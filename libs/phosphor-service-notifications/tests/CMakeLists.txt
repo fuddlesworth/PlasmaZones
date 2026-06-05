@@ -24,3 +24,8 @@ endfunction()
 # signal) against a server built on a private peer bus, so it never touches the
 # real org.freedesktop.Notifications name on the developer's session.
 _phosphorservicenotifications_test(test_phosphorservicenotifications_smoke test_smoke.cpp)
+
+# QML facade test: a real QQmlEngine imports the module and proves the
+# imperative registration yields a usable facade (NotificationModel instantiates
+# and binds, the Notification.Urgency enum resolves, model.count is reactive).
+_phosphorservicenotifications_test(test_phosphorservicenotifications_qmlfacade test_qmlfacade.cpp)
