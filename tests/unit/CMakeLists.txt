@@ -462,6 +462,22 @@ add_executable(test_shader_include_resolver ui/test_shader_include_resolver.cpp)
 target_link_libraries(test_shader_include_resolver PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
 add_test(NAME test_shader_include_resolver COMMAND test_shader_include_resolver)
 
+# Pins the T1.4 entry-point harness: main()/entry-function detection
+# (comment-stripped, definition-not-call) and composeEntryPoint dispatch
+# (author main() wins, else wrap the first matching entry, else pass through).
+add_executable(test_shader_entry_point ui/test_shader_entry_point.cpp)
+target_link_libraries(test_shader_entry_point PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_shader_entry_point PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_shader_entry_point COMMAND test_shader_entry_point)
+
+# End-to-end: an entry-only zone shader (author writes only pzZone/pzImage)
+# assembles through the harness scaffold and bakes against the real zone UBO,
+# and a traditional main() pack is passed through unchanged (T1.4 scope B).
+add_executable(test_zone_entry_scaffold ui/test_zone_entry_scaffold.cpp)
+target_link_libraries(test_zone_entry_scaffold PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate plasmazones_rendering PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_zone_entry_scaffold PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_zone_entry_scaffold COMMAND test_zone_entry_scaffold)
+
 # Pins buildParamPreamble's generated `#define pz_<id> <accessor>` block:
 # declaration-order auto-slotting (must match the lane the runtime uploads to),
 # independent scalar/color/image pools, and skip-don't-break on bad input.

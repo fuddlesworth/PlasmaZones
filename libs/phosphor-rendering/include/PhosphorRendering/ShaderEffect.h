@@ -5,6 +5,8 @@
 
 #include <PhosphorRendering/phosphorrendering_export.h>
 
+#include <PhosphorShaders/ShaderEntryPoint.h>
+
 #include <QColor>
 #include <QImage>
 #include <QMutex>
@@ -609,6 +611,15 @@ public:
         return m_paramPreamble;
     }
 
+    // ── Entry-point scaffold (T1.4: harness-generated `main()`) ────────
+
+    /** Install the entry-point scaffold forwarded to the render node: when the
+     *  fragment source defines no `main()`, the node prepends @p prologue and
+     *  appends the generated `main()` of the first @p candidates entry function
+     *  the source defines. Empty/empty (the default) disables assembly. Forces a
+     *  reload so the new scaffold takes; folded into the node's bake-cache key. */
+    void setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates);
+
     // ── Status ───────────────────────────────────────────────────────
 
     Status status() const
@@ -737,6 +748,8 @@ private:
     QVariantMap m_shaderParams;
     QStringList m_shaderIncludePaths;
     QString m_paramPreamble; ///< Generated `#define pz_<id> ...` block (T1.1); empty = none.
+    QString m_entryPrologue; ///< T1.4 entry-point prologue forwarded to the node; empty = none.
+    QList<PhosphorShaders::EntryCandidate> m_entryCandidates; ///< T1.4 entry candidates; empty = no assembly.
 
     // QPointer because the source item is owned by the QML scene, not
     // the ShaderEffect — a torn-down source must auto-null rather than

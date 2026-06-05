@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "zoneshaderitem.h"
+#include "zoneentryscaffold.h"
 #include "zoneshadernoderhi.h"
 
 #include <PhosphorRendering/ZoneShaderCommon.h>
@@ -374,6 +375,13 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             }
 
             node->setShaderIncludePaths(shaderIncludePaths());
+            // T1.4: install the zone entry-point scaffold so a pack authored as
+            // just `vec4 pzZone(ZoneCtx)` / `pzImage(vec2)` (no main()) is
+            // assembled — prologue prepended, generated main() appended — before
+            // include expansion. A traditional pack with its own main() is left
+            // untouched. Must match the warm-bake scaffold (daemon.cpp) so the
+            // bake-cache key agrees.
+            node->setEntryScaffold(zoneEntryPrologue(), zoneEntryCandidates());
             qCDebug(PlasmaZones::lcOverlay)
                 << "Shader include paths:" << shaderIncludePaths() << "vertPath:" << vertPath;
 

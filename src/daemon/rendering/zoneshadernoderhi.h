@@ -32,10 +32,17 @@ namespace PlasmaZones {
  *                      fragment `#version`; forwarded verbatim to the rendering-library
  *                      warm bake so the warm entry's cache key matches the live load.
  *                      Empty (the default, e.g. zone shaders pre-T1.1) is a no-op.
+ * @param entryPrologue   T1.4 entry-point prologue, and
+ * @param entryCandidates T1.4 entry functions + generated main(), both forwarded to the
+ *                        rendering-library warm bake. MUST match what ZoneShaderItem
+ *                        installs via setEntryScaffold so warm + live agree on the
+ *                        assembled source and the bake-cache key. Empty = no assembly.
  * @return success and error message (e.g. from QShaderBaker) for UI reporting
  */
 PLASMAZONES_RENDERING_EXPORT PhosphorRendering::WarmShaderBakeResult
 warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath,
-                            const QStringList& includePaths = {}, const QString& paramPreamble = {});
+                            const QStringList& includePaths = {}, const QString& paramPreamble = {},
+                            const QString& entryPrologue = {},
+                            const QList<PhosphorShaders::EntryCandidate>& entryCandidates = {});
 
 } // namespace PlasmaZones

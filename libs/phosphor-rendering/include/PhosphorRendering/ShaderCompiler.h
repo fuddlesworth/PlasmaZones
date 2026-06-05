@@ -57,6 +57,24 @@ public:
     static QString loadAndExpand(const QString& path, const QStringList& includePaths, QString* outError = nullptr,
                                  QStringList* outIncludedPaths = nullptr);
 
+    /// Expand #include directives in already-read @p source, without touching
+    /// the filesystem for the top-level text. Shares its search-path policy
+    /// with `loadAndExpand` (`currentFileDir` searched first, then
+    /// `includePaths`), so a caller that must transform the raw source before
+    /// expansion — e.g. the T1.4 entry-point harness, which prepends a
+    /// `#version`/include scaffold to an entry-only pack — gets byte-identical
+    /// expansion to the load-from-path path.
+    /// @param source          Raw (already-read) GLSL, possibly harness-assembled
+    /// @param currentFileDir  Directory of the top-level shader, searched first
+    /// @param includePaths    Additional `#include` search directories
+    /// @param outError         If non-null, set on error
+    /// @param outIncludedPaths If non-null, appended with each included header's
+    ///                         canonical path (same fingerprint contract as
+    ///                         `loadAndExpand`)
+    /// @return Expanded GLSL source, or empty string on error
+    static QString expandSource(const QString& source, const QString& currentFileDir, const QStringList& includePaths,
+                                QString* outError = nullptr, QStringList* outIncludedPaths = nullptr);
+
     /// Clear the in-memory compilation cache (e.g. on shader hot-reload).
     ///
     /// Clears both the source-hash BakeCache AND the filename+mtime cache in

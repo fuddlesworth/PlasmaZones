@@ -40,6 +40,7 @@
 #include "unifiedlayoutcontroller.h"
 #include "modetracker.h"
 #include "shortcutmanager.h"
+#include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -592,10 +593,21 @@ bool Daemon::init()
             // Snapshot now (registry can be mutated on the GUI thread; we're about
             // to hop onto the bake thread).
             const QStringList includePaths = reg->searchPaths();
-            watcher->setFuture(QtConcurrent::run(
-                &m_shaderBakePool, [vertPath = info.vertexShaderPath, fragPath = info.sourcePath, includePaths]() {
-                    return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths);
-                }));
+            // T1.4: warm-bake with the SAME entry-point scaffold ZoneShaderItem
+            // installs at runtime, so an entry-only zone pack's warm entry keys
+            // identically to its live load (the scaffold is part of the cache
+            // key). A traditional pack assembles to itself, so this is inert for
+            // every shipped pack. paramPreamble stays empty — zone-side T1.1 is
+            // not wired yet.
+            const QString entryPrologue = zoneEntryPrologue();
+            const QList<PhosphorShaders::EntryCandidate> entryCandidates = zoneEntryCandidates();
+            watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
+                                                 [vertPath = info.vertexShaderPath, fragPath = info.sourcePath,
+                                                  includePaths, entryPrologue, entryCandidates]() {
+                                                     return warmShaderBakeCacheForPaths(vertPath, fragPath,
+                                                                                        includePaths, QString(),
+                                                                                        entryPrologue, entryCandidates);
+                                                 }));
         };
     connect(m_shaderRegistry.get(), &ShaderRegistry::shadersChanged, this, [this, scheduleWarmForShader]() {
         const QList<ShaderRegistry::ShaderInfo> shaders = m_shaderRegistry->availableShaders();

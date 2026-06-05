@@ -7,6 +7,7 @@
 
 #include <PhosphorShaders/BaseUniforms.h>
 #include <PhosphorShaders/IUniformExtension.h>
+#include <PhosphorShaders/ShaderEntryPoint.h>
 
 #include <QColor>
 #include <QImage>
@@ -254,6 +255,19 @@ public:
     /// touching the `.frag` mtime) still invalidates the cache.
     void setParamPreamble(const QString& preamble);
 
+    // ── Entry-point scaffold (T1.4: harness-generated `main()`) ────────
+    /// Install the entry-point scaffold for the fragment stage. When set and
+    /// the loaded fragment source does NOT define `main()`, `loadFragmentShader`
+    /// assembles `prologue + source` and appends the generated `main()` of the
+    /// first @p candidates entry function the source defines (via
+    /// `PhosphorShaders::composeEntryPoint`), BEFORE include expansion — so the
+    /// prologue's `#include` is resolved. A source that defines its own `main()`
+    /// is left untouched (every bundled pack today). The scaffold is folded into
+    /// the bake-cache key, and MUST match what the warm-bake applies for the
+    /// same shader. Empty prologue + empty candidates (the default, e.g. the
+    /// animation path) disables assembly entirely — a strict no-op.
+    void setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates);
+
     /// Normalize wrap mode string to "clamp", "repeat", or "mirror" (static
     /// helper, safe to call from any thread — operates on its arguments only).
     /// Unknown / empty inputs fall back to "clamp" — that fallback is
@@ -343,6 +357,13 @@ private:
     /// Spliced after `#version` into the fragment source at load time and
     /// fingerprinted into the bake-cache key. Empty = no-op.
     QString m_paramPreamble;
+
+    // ── Entry-point scaffold (T1.4) ────────────────────────────────────
+    /// Prologue prepended (and candidate `main()` appended) to an entry-only
+    /// fragment source before expansion; fingerprinted into the bake-cache key.
+    /// Empty prologue + empty candidates = assembly disabled.
+    QString m_entryPrologue;
+    QList<PhosphorShaders::EntryCandidate> m_entryCandidates;
 
     // ── RHI Core Resources ─────────────────────────────────────────────
     std::unique_ptr<QRhiBuffer> m_vbo;
@@ -560,11 +581,18 @@ struct WarmShaderBakeResult
  *                      (which is fingerprinted on the preamble) — a mismatch
  *                      would let this warm entry serve the wrong SPIR-V to the
  *                      live load. Empty (the default) is a no-op splice.
+ * @param entryPrologue   T1.4 entry-point prologue (`#version`/include/in-out)
+ *                        prepended to an entry-only fragment source before
+ *                        expansion. Empty (default) disables assembly.
+ * @param entryCandidates T1.4 entry functions + their generated `main()`,
+ *                        applied when the fragment defines no `main()`. MUST
+ *                        match what `ShaderNodeRhi::loadFragmentShader` uses for
+ *                        the same shader so warm + live agree on key and source.
  * @return success and error message for UI reporting
  */
-PHOSPHORRENDERING_EXPORT WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath,
-                                                                          const QString& fragmentPath,
-                                                                          const QStringList& includePaths = {},
-                                                                          const QString& paramPreamble = {});
+PHOSPHORRENDERING_EXPORT WarmShaderBakeResult warmShaderBakeCacheForPaths(
+    const QString& vertexPath, const QString& fragmentPath, const QStringList& includePaths = {},
+    const QString& paramPreamble = {}, const QString& entryPrologue = {},
+    const QList<PhosphorShaders::EntryCandidate>& entryCandidates = {});
 
 } // namespace PhosphorRendering
