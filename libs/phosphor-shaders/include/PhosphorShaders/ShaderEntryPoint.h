@@ -7,6 +7,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 namespace PhosphorShaders {
 
@@ -32,6 +33,15 @@ struct EntryCandidate
     /// is appended verbatim after the author's body, so the entry function and
     /// all referenced symbols are already in scope.
     QString generatedMain;
+
+    /// Additional function names that must ALSO be defined for this candidate to
+    /// match — for direction-dispatched animation entries, where `pzIn` (the
+    /// trigger) is only valid paired with `pzOut`. Empty for single-entry
+    /// candidates (every zone candidate), so the common `{functionName,
+    /// generatedMain}` aggregate init leaves it empty. All must be present, else
+    /// the candidate is skipped (a partial pair falls through to the
+    /// missing-`main()` compiler error rather than a dangling call).
+    QStringList alsoRequires;
 
     bool operator==(const EntryCandidate&) const = default;
 };
@@ -73,6 +83,15 @@ PHOSPHORSHADERS_EXPORT bool definesFunction(const QString& expandedSource, const
 /// include.
 PHOSPHORSHADERS_EXPORT QString composeEntryPoint(const QString& expandedSource,
                                                  const QList<EntryCandidate>& candidates);
+
+/// Convenience wrapper for the full assembly: when @p candidates is empty or
+/// @p raw already defines `main()`, returns @p raw unchanged; otherwise returns
+/// `composeEntryPoint(prologue + raw, candidates)`. This is the single assembly
+/// entry point shared by the daemon bake layer and the kwin-effect path so both
+/// produce the identical pre-expansion source for an entry-only pack. Apply it
+/// to RAW (pre-expansion) source so the prologue's `#include` is then resolved.
+PHOSPHORSHADERS_EXPORT QString assembleEntryPoint(const QString& raw, const QString& prologue,
+                                                  const QList<EntryCandidate>& candidates);
 
 /// Strip GLSL line (`//…`) and block (`/* … */`) comments from @p source,
 /// preserving newlines inside block comments so line numbers are unchanged.

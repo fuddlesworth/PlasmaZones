@@ -493,6 +493,14 @@ target_link_libraries(test_animation_shader_preamble_bake PRIVATE Qt6::Test Qt6:
 target_compile_definitions(test_animation_shader_preamble_bake PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_animation_shader_preamble_bake COMMAND test_animation_shader_preamble_bake)
 
+# End-to-end: an entry-only animation shader (author writes only pzTransition,
+# or pzIn+pzOut) assembles through the harness scaffold and bakes against the
+# real animation UBO; lone pzIn falls through; traditional main() passes (T1.5).
+add_executable(test_animation_entry_scaffold ui/test_animation_entry_scaffold.cpp)
+target_link_libraries(test_animation_entry_scaffold PRIVATE Qt6::Test Qt6::Core Qt6::GuiPrivate Qt6::ShaderToolsPrivate PhosphorAnimation::PhosphorAnimation PhosphorRendering::PhosphorRendering PhosphorShaders::PhosphorShaders)
+target_compile_definitions(test_animation_entry_scaffold PRIVATE "PLASMAZONES_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+add_test(NAME test_animation_entry_scaffold COMMAND test_animation_entry_scaffold)
+
 # Cross-checks that every animation shader's `#define <paramId>
 # customParams[N].xyzw` (or customColors[N]) line agrees with the
 # allocation order an in-order walk of metadata.json's `parameters[]`

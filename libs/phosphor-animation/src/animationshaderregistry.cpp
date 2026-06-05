@@ -683,4 +683,46 @@ QString AnimationShaderRegistry::paramPreamble(const AnimationShaderEffect& effe
     return PhosphorShaders::buildParamPreamble(params);
 }
 
+QString AnimationShaderRegistry::animationEntryPrologue()
+{
+    // `#version` first; the animation-uniforms include declares the UBO (both
+    // runtime branches) plus the T1.5 direction helpers (legProgress /
+    // pz_reversed) and surfaceColor; then the vertex texcoord in and the
+    // fragColor out an entry-only pack no longer declares by hand.
+    return QStringLiteral(
+        "#version 450\n"
+        "#include <animation_uniforms.glsl>\n"
+        "layout(location = 0) in vec2 vTexCoord;\n"
+        "layout(location = 0) out vec4 fragColor;\n");
+}
+
+QList<PhosphorShaders::EntryCandidate> AnimationShaderRegistry::animationEntryCandidates()
+{
+    // Symmetric: one function, `t` is raw iTime (the runtime still flips it on
+    // reverse legs, so the shader auto-mirrors with no direction code).
+    static const QString transitionMain = QStringLiteral(
+        "void main() {\n"
+        "    fragColor = pzTransition(vTexCoord, iTime);\n"
+        "}\n");
+    // Asymmetric: the harness un-flips iTime (legProgress → forward 0→1) and
+    // dispatches by direction, so the author never touches iIsReversed/iTime
+    // and the `== 1` footgun is gone.
+    static const QString inOutMain = QStringLiteral(
+        "void main() {\n"
+        "    float pz_t = legProgress();\n"
+        "    fragColor = pz_reversed ? pzOut(vTexCoord, pz_t) : pzIn(vTexCoord, pz_t);\n"
+        "}\n");
+
+    PhosphorShaders::EntryCandidate transition;
+    transition.functionName = QStringLiteral("pzTransition");
+    transition.generatedMain = transitionMain;
+
+    PhosphorShaders::EntryCandidate inOut;
+    inOut.functionName = QStringLiteral("pzIn");
+    inOut.generatedMain = inOutMain;
+    inOut.alsoRequires = {QStringLiteral("pzOut")};
+
+    return {transition, inOut};
+}
+
 } // namespace PhosphorAnimationShaders

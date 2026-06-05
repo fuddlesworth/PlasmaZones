@@ -9,6 +9,8 @@
 #include <PhosphorFsLoader/MetadataPackRegistryBase.h>
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
 
+#include <PhosphorShaders/ShaderEntryPoint.h>
+
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -144,6 +146,25 @@ public:
     /// `#version` line (via `PhosphorShaders::spliceAfterVersion`). Returns an
     /// empty string when the effect declares no parameters.
     static QString paramPreamble(const AnimationShaderEffect& effect);
+
+    /// The T1.4/T1.5 entry-point prologue for animation shaders: `#version`,
+    /// the `animation_uniforms.glsl` include (uniforms + `legProgress()` /
+    /// `pz_reversed` / `surfaceColor()`), and the `vTexCoord` in / `fragColor`
+    /// out. Prepended to an entry-only pack before include expansion; identical
+    /// on both runtimes (the include's `#ifdef PLASMAZONES_KWIN` branch handles
+    /// the binding difference).
+    static QString animationEntryPrologue();
+
+    /// The direction-dispatched entry candidates (T1.5), in priority order:
+    ///   • `vec4 pzTransition(vec2 uv, float t)` — symmetric; the harness keeps
+    ///     the runtime's `iTime` flip so it auto-mirrors (`t` is raw `iTime`).
+    ///   • `vec4 pzIn(vec2,float)` + `vec4 pzOut(vec2,float)` — asymmetric; the
+    ///     harness applies `legProgress()` (so `t` is always forward 0→1) and
+    ///     calls the right one by `pz_reversed`. Requires BOTH to be defined.
+    /// A pack defining its own `main()` is passed through. Install via
+    /// `ShaderEffect::setEntryScaffold` (daemon) and apply via
+    /// `PhosphorShaders::assembleEntryPoint` (kwin) so both runtimes agree.
+    static QList<PhosphorShaders::EntryCandidate> animationEntryCandidates();
 
 Q_SIGNALS:
     void effectsChanged();

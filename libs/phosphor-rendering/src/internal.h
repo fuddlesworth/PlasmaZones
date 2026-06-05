@@ -35,10 +35,7 @@ void clearFilenameShaderCache();
 inline QString applyEntryAssembly(const QString& raw, const QString& prologue,
                                   const QList<PhosphorShaders::EntryCandidate>& candidates)
 {
-    if (candidates.isEmpty() || PhosphorShaders::definesMain(raw)) {
-        return raw;
-    }
-    return PhosphorShaders::composeEntryPoint(prologue + raw, candidates);
+    return PhosphorShaders::assembleEntryPoint(raw, prologue, candidates);
 }
 
 /// Fingerprint the entry scaffold for the bake-cache key. Empty when no

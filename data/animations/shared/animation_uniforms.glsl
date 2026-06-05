@@ -355,4 +355,23 @@ vec4 surfaceColor(vec2 uv) {
 #endif
 }
 
+// ─── Direction helpers (T1.5) ──────────────────────────────────────────
+// A transition plays forward (in: window.open / snapIn / show) or reverse
+// (out: window.close / snapOut / hide). The runtime exposes that as
+// `iIsReversed` (1 on reverse legs) and by flipping `iTime` (0→1 in, 1→0
+// out) so symmetric shaders auto-mirror. Both names below resolve in the
+// daemon UBO and the kwin default-block branch, so a shader uses them
+// identically on either runtime.
+
+// Direction as a clean boolean — replaces the `iIsReversed == 1` exact-
+// equality test (branching on `!= 0` was the documented footgun).
+#define pz_reversed (iIsReversed == 1)
+
+// Un-flipped, always-forward 0→1 leg progress. 24 of the bundled shaders
+// hand-roll exactly this `(iIsReversed == 1) ? (1.0 - iTime) : iTime` to
+// recover direction-independent progress; call this instead.
+float legProgress() {
+    return pz_reversed ? (1.0 - iTime) : iTime;
+}
+
 #endif // PLASMAZONES_ANIMATION_UNIFORMS_GLSL

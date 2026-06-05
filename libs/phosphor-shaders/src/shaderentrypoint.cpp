@@ -74,28 +74,52 @@ QString composeEntryPoint(const QString& expandedSource, const QList<EntryCandid
     }
     // Strip once; every candidate probe reads the same comment-free source.
     const QString stripped = stripGlslComments(expandedSource);
+    const auto definesIn = [&stripped](const QString& name) {
+        if (name.isEmpty()) {
+            return false;
+        }
+        const QString pattern =
+            QStringLiteral("\\b") + QRegularExpression::escape(name) + QStringLiteral("\\s*\\([^)]*\\)\\s*\\{");
+        return QRegularExpression(pattern).match(stripped).hasMatch();
+    };
     for (const EntryCandidate& cand : candidates) {
-        if (cand.functionName.isEmpty()) {
+        if (!definesIn(cand.functionName)) {
             continue;
         }
-        const QString pattern = QStringLiteral("\\b") + QRegularExpression::escape(cand.functionName)
-            + QStringLiteral("\\s*\\([^)]*\\)\\s*\\{");
-        if (QRegularExpression(pattern).match(stripped).hasMatch()) {
-            QString out = expandedSource;
-            if (!out.endsWith(QLatin1Char('\n'))) {
-                out.append(QLatin1Char('\n'));
+        // A direction-dispatched pair (pzIn requires pzOut) only matches when
+        // every required companion is also defined — a lone pzIn falls through.
+        bool allPresent = true;
+        for (const QString& req : cand.alsoRequires) {
+            if (!definesIn(req)) {
+                allPresent = false;
+                break;
             }
-            out.append(cand.generatedMain);
-            if (!out.endsWith(QLatin1Char('\n'))) {
-                out.append(QLatin1Char('\n'));
-            }
-            return out;
         }
+        if (!allPresent) {
+            continue;
+        }
+        QString out = expandedSource;
+        if (!out.endsWith(QLatin1Char('\n'))) {
+            out.append(QLatin1Char('\n'));
+        }
+        out.append(cand.generatedMain);
+        if (!out.endsWith(QLatin1Char('\n'))) {
+            out.append(QLatin1Char('\n'));
+        }
+        return out;
     }
     // No main(), no recognised entry — return unchanged; the compiler's
     // missing-main() error (mapped via the resolver's #line legend) is the
     // right diagnostic, not a silent rewrite.
     return expandedSource;
+}
+
+QString assembleEntryPoint(const QString& raw, const QString& prologue, const QList<EntryCandidate>& candidates)
+{
+    if (candidates.isEmpty() || definesMain(raw)) {
+        return raw;
+    }
+    return composeEntryPoint(prologue + raw, candidates);
 }
 
 } // namespace PhosphorShaders

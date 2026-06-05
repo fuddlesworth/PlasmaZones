@@ -679,6 +679,13 @@ bool Daemon::init()
             // wrong SPIR-V. Computed on the GUI thread (reads `info`) and
             // captured by value into the bake-thread lambda.
             const QString paramPreamble = PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(info);
+            // T1.5: warm-bake with the same entry-point scaffold SurfaceAnimator
+            // installs at runtime, so an entry-only animation pack's warm entry
+            // keys identically to its live load. Inert for every traditional
+            // pack (which assembles to itself).
+            const QString entryPrologue = PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryPrologue();
+            const QList<PhosphorShaders::EntryCandidate> entryCandidates =
+                PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates();
             auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
             connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
                     [watcher, effectId]() {
@@ -688,10 +695,13 @@ bool Daemon::init()
                         }
                         watcher->deleteLater();
                     });
-            watcher->setFuture(QtConcurrent::run(
-                &m_shaderBakePool, [vertPath, fragPath = info.fragmentShaderPath, includePaths, paramPreamble]() {
-                    return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths, paramPreamble);
-                }));
+            watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
+                                                 [vertPath, fragPath = info.fragmentShaderPath, includePaths,
+                                                  paramPreamble, entryPrologue, entryCandidates]() {
+                                                     return warmShaderBakeCacheForPaths(vertPath, fragPath,
+                                                                                        includePaths, paramPreamble,
+                                                                                        entryPrologue, entryCandidates);
+                                                 }));
         };
         connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
                 this, [this, scheduleWarmForAnimEffect]() {

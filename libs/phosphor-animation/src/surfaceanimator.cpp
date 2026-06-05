@@ -487,6 +487,13 @@ void applyEffectStaticConfig(PhosphorRendering::ShaderEffect* shaderItem,
     // no parameters — a no-op splice, so legacy packs that hand-write their own
     // `#define`s are unaffected (distinct `pz_`-prefixed names, no collision).
     shaderItem->setParamPreamble(PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(effect));
+    // T1.5: install the animation entry-point scaffold so a pack authored as
+    // pzTransition (symmetric) or pzIn/pzOut (asymmetric) — no main(), no
+    // direction code — is assembled before expansion. A traditional main() pack
+    // is left untouched. Must match the kwin-effect + warm-bake scaffold so the
+    // bake-cache key agrees across paths.
+    shaderItem->setEntryScaffold(PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryPrologue(),
+                                 PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates());
     if (!effect.vertexShaderPath.isEmpty()) {
         shaderItem->setVertexShaderUrl(QUrl::fromLocalFile(effect.vertexShaderPath));
     }
