@@ -695,7 +695,9 @@ void WindowTrackingService::onLayoutChanged()
     PhosphorZones::Layout* newLayout = m_layoutManager->activeLayout();
 
     // Before removing stale assignments, capture (window, zonePosition) for resnap-to-new-layout.
-    // When user presses the shortcut, we map zone N -> zone N (with cycling when layout has fewer zones).
+    // The resnap maps a window's primary zone N -> zone N in the new layout; a window whose
+    // position exceeds the new layout's zone count is restored to its pre-tile geometry (see
+    // SnapEngine::calculateResnapFromPreviousLayout).
     // Include BOTH m_windowZoneAssignments (tracked) AND m_pendingRestoreQueues (session-restored
     // windows that KWin placed in zones before we got windowSnapped - e.g. after login).
     //
