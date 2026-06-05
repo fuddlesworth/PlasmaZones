@@ -27,3 +27,12 @@ _phosphorservicepolkit_test(test_phosphorservicepolkit_smoke test_smoke.cpp)
 # imperative registration yields a usable facade (PolkitAgent instantiates and
 # binds; the AuthRequest-typed activeRequest property is readable).
 _phosphorservicepolkit_test(test_phosphorservicepolkit_qmlfacade test_qmlfacade.cpp)
+
+# Decode unit test: drives the internal Details/Identity -> Qt-types decode with
+# real polkit-qt values. It links PolkitQt6-1::Core directly (the lib links it
+# PRIVATE, so it is not transitive) and includes the lib's src/ for the internal
+# polkitdecode.h header.
+find_package(PolkitQt6-1 REQUIRED)
+_phosphorservicepolkit_test(test_phosphorservicepolkit_decode test_decode.cpp)
+target_link_libraries(test_phosphorservicepolkit_decode PRIVATE PolkitQt6-1::Core)
+target_include_directories(test_phosphorservicepolkit_decode PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)

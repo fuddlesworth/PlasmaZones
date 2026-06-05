@@ -5,6 +5,8 @@
 
 #include <PhosphorServicePolkit/AuthRequest.h>
 
+#include "polkitdecode.h"
+
 #include <polkitqt1-agent-listener.h>
 #include <polkitqt1-agent-session.h>
 #include <polkitqt1-details.h>
@@ -20,24 +22,6 @@ namespace {
 constexpr auto kDefaultObjectPath = "/org/phosphor/PolicyKit1/AuthenticationAgent";
 
 Q_LOGGING_CATEGORY(lcPolkitAgent, "phosphor.service.polkit")
-
-QVariantMap detailsToMap(const PolkitQt1::Details& details)
-{
-    QVariantMap map;
-    const QStringList keys = details.keys();
-    for (const QString& key : keys)
-        map.insert(key, details.lookup(key));
-    return map;
-}
-
-QStringList identityNames(const PolkitQt1::Identity::List& identities)
-{
-    QStringList names;
-    names.reserve(identities.size());
-    for (const PolkitQt1::Identity& identity : identities)
-        names << identity.toString();
-    return names;
-}
 } // namespace
 
 namespace PhosphorServicePolkit {
@@ -248,8 +232,8 @@ void ListenerImpl::initiateAuthentication(const QString& actionId, const QString
     if (d->request)
         m_facade->cancel();
 
-    auto* request = new AuthRequest(actionId, message, iconName, detailsToMap(details), cookie,
-                                    identityNames(identities), m_facade);
+    auto* request = new AuthRequest(actionId, message, iconName, detail::detailsToMap(details), cookie,
+                                    detail::identityNames(identities), m_facade);
     d->request = request;
     d->identities = identities;
     d->result = result;

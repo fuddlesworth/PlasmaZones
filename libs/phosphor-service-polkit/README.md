@@ -60,5 +60,6 @@ milestone-1 commit), 3 (the `initiateAuthentication` → `AuthRequest` decode,
 surfaced as the active request), and 4 (the `Agent::Session` PAM conversation:
 `authenticate()` / `respond()` / `cancel()` driving the prompt → answer →
 completed flow), 5 (the QML facade, verified by a real QQmlEngine load test),
-and 6 (the `examples/phosphor-service-polkit-cli` standalone-agent demo) landed;
-milestones 7-8 (tests and README finalisation) follow per the plan.
+6 (the `examples/phosphor-service-polkit-cli` standalone-agent demo), and 7 (the
+decode unit test over real polkit-qt `Details` / `Identity` values) landed;
+milestone 8 (README finalisation) follows per the plan.
