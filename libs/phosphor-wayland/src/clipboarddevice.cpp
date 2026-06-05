@@ -357,8 +357,24 @@ void ClipboardDevice::Private::handleFinished(void* data, struct zwlr_data_contr
     auto* self = static_cast<Private*>(data);
     if (!self)
         return;
+
+    // Capture the MIME types of any reads still in flight before teardown drops
+    // them. We must honour the receive() contract (exactly one dataReceived per
+    // receive) even on invalidation, or a consumer that serializes reads (the
+    // history model) would wait forever for a reply that never comes.
+    QStringList unfinishedReads;
+    unfinishedReads.reserve(static_cast<int>(self->reads.size()));
+    for (const auto& ctx : self->reads)
+        unfinishedReads.append(ctx->mimeType);
+
+    // Teardown first, so these failure emits — and any read the consumer issues
+    // in response — see a torn-down device (no current offer) and resolve
+    // immediately rather than touching the proxy we just destroyed.
     self->teardownDevice();
+
     Q_EMIT self->owner->selectionChanged(QStringList());
+    for (const QString& mimeType : unfinishedReads)
+        Q_EMIT self->owner->dataReceived(mimeType, QByteArray());
 }
 
 void ClipboardDevice::Private::handlePrimarySelection(void*, struct zwlr_data_control_device_v1*,
