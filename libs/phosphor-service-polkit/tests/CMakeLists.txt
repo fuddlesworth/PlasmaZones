@@ -22,3 +22,8 @@ endfunction()
 # the default object path, and inert construction / registration against a
 # bogus session so no real polkitd registration can occur).
 _phosphorservicepolkit_test(test_phosphorservicepolkit_smoke test_smoke.cpp)
+
+# QML facade test: a real QQmlEngine imports the module and proves the
+# imperative registration yields a usable facade (PolkitAgent instantiates and
+# binds; the AuthRequest-typed activeRequest property is readable).
+_phosphorservicepolkit_test(test_phosphorservicepolkit_qmlfacade test_qmlfacade.cpp)

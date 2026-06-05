@@ -59,5 +59,6 @@ registration plumbing; the listener-registration work folded into the
 milestone-1 commit), 3 (the `initiateAuthentication` → `AuthRequest` decode,
 surfaced as the active request), and 4 (the `Agent::Session` PAM conversation:
 `authenticate()` / `respond()` / `cancel()` driving the prompt → answer →
-completed flow) landed; milestones 5-8 (the QML facade, the CLI agent demo,
-tests, and README finalisation) follow per the plan.
+completed flow), and 5 (the QML facade, verified by a real QQmlEngine load test)
+landed; milestones 6-8 (the CLI agent demo, tests, and README finalisation)
+follow per the plan.
