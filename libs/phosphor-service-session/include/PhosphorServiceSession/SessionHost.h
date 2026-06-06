@@ -27,14 +27,32 @@ namespace PhosphorServiceSession {
  * The `(connection, service)` are injectable so the whole surface is testable
  * against a fake logind Manager with no real system bus and no daemon.
  *
- * The capability, action, inhibitor, and signal surface is filled in across
- * milestones 2-5; this is the skeleton (construction + the logind connection).
+ * The action, inhibitor, and signal surface is filled in across milestones 3-5;
+ * this milestone adds the capability queries.
  */
 class PHOSPHORSERVICESESSION_EXPORT SessionHost : public QObject
 {
     Q_OBJECT
 
 public:
+    /// logind capability state, parsed from the `Can*` query strings.
+    enum class Availability {
+        Unknown, ///< logind unreachable, or the query errored / has not returned yet.
+        Yes, ///< permitted.
+        No, ///< not permitted (hardware or configuration does not support it).
+        NotApplicable, ///< logind `"na"`: not available (e.g. hibernate with no swap).
+        Challenge, ///< permitted but needs polkit authorization.
+    };
+    Q_ENUM(Availability)
+
+    Q_PROPERTY(Availability canPowerOff READ canPowerOff NOTIFY capabilitiesChanged)
+    Q_PROPERTY(Availability canReboot READ canReboot NOTIFY capabilitiesChanged)
+    Q_PROPERTY(Availability canHalt READ canHalt NOTIFY capabilitiesChanged)
+    Q_PROPERTY(Availability canSuspend READ canSuspend NOTIFY capabilitiesChanged)
+    Q_PROPERTY(Availability canHibernate READ canHibernate NOTIFY capabilitiesChanged)
+    Q_PROPERTY(Availability canHybridSleep READ canHybridSleep NOTIFY capabilitiesChanged)
+    Q_PROPERTY(Availability canSuspendThenHibernate READ canSuspendThenHibernate NOTIFY capabilitiesChanged)
+
     /// Production wiring: the system bus and `org.freedesktop.login1`.
     explicit SessionHost(QObject* parent = nullptr);
 
@@ -44,6 +62,24 @@ public:
     SessionHost(QDBusConnection connection, QString service, QObject* parent = nullptr);
 
     ~SessionHost() override;
+
+    [[nodiscard]] Availability canPowerOff() const;
+    [[nodiscard]] Availability canReboot() const;
+    [[nodiscard]] Availability canHalt() const;
+    [[nodiscard]] Availability canSuspend() const;
+    [[nodiscard]] Availability canHibernate() const;
+    [[nodiscard]] Availability canHybridSleep() const;
+    [[nodiscard]] Availability canSuspendThenHibernate() const;
+
+    /// Re-read every capability from logind. Called once at construction and
+    /// exposed so the shell can refresh before opening a power menu, since the
+    /// answers move with inhibitor locks, lid state, and swap availability.
+    Q_INVOKABLE void refreshCapabilities();
+
+Q_SIGNALS:
+    /// Emitted whenever any capability value actually changes (each async
+    /// `Can*` reply that differs from the cached value fires this once).
+    void capabilitiesChanged();
 
 private:
     Q_DISABLE_COPY_MOVE(SessionHost)
