@@ -252,7 +252,9 @@ public:
             Q_EMIT owner->aboutToSleep();
             sleepTimer.start(kSleepLockTimeoutMs);
         } else {
-            // Resumed: re-arm the delay inhibitor for the next sleep.
+            // Resumed: re-arm the delay inhibitor for the next sleep. logind
+            // pairs every PrepareForSleep(true) with a (false) on resume, so the
+            // inhibitor is re-held before the next suspend edge.
             sleepTimer.stop();
             takeSleepInhibitor();
         }

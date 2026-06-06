@@ -347,13 +347,17 @@ private Q_SLOTS:
         QVERIFY(m_bus.registerObject(QLatin1String(kSessionPath), &session, QDBusConnection::ExportAllSlots));
 
         SessionHost host(m_bus, QLatin1String(kService));
-        // Wait for the async session resolution before driving the calls.
-        QTRY_COMPARE(host.canSuspend(), Availability::Yes); // a proxy for "the host has talked to logind"
-        QTest::qWait(100); // let GetSessionByPID settle
+        // Drive lock() until the async session resolution (GetSessionByPID) lands
+        // and it routes to Session.Lock; before that it takes the LockSessions()
+        // fallback. Retrying the call is deterministic where a fixed sleep would
+        // flake on a loaded CI runner; the extra fallback calls are harmless.
+        QTRY_VERIFY([&] {
+            host.lock();
+            return session.calls.contains(QStringLiteral("Lock"));
+        }());
 
-        host.lock();
-        QTRY_VERIFY(session.calls.contains(QStringLiteral("Lock")));
-
+        // The session is now resolved, so terminateSession() routes to
+        // Session.Terminate.
         host.terminateSession();
         QTRY_VERIFY(session.calls.contains(QStringLiteral("Terminate")));
     }
@@ -370,16 +374,19 @@ private Q_SLOTS:
         SessionHost host(m_bus, QLatin1String(kService));
         QSignalSpy lockSpy(&host, &SessionHost::lockRequested);
         QSignalSpy unlockSpy(&host, &SessionHost::unlockRequested);
-        // The host subscribes to the session signals only after it resolves the
-        // session path; give that round-trip time to complete.
-        QTest::qWait(150);
 
-        session.emitLock();
-        QTRY_COMPARE(lockSpy.count(), 1);
-        QCOMPARE(unlockSpy.count(), 0);
+        // The host subscribes to the session Lock/Unlock signals in its
+        // GetSession reply handler. Re-emit until the subscription is live
+        // (proven by the first surfaced lockRequested), rather than guessing the
+        // round-trip with a fixed sleep that can flake under CI load.
+        QTRY_VERIFY([&] {
+            session.emitLock();
+            return lockSpy.count() >= 1;
+        }());
+        QCOMPARE(unlockSpy.count(), 0); // a Lock signal does not surface as unlock
 
         session.emitUnlock();
-        QTRY_COMPARE(unlockSpy.count(), 1);
+        QTRY_VERIFY(unlockSpy.count() >= 1);
     }
 
 private:

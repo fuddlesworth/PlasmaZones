@@ -27,8 +27,10 @@ namespace PhosphorServiceSession {
  * The `(connection, service)` are injectable so the whole surface is testable
  * against a fake logind Manager with no real system bus and no daemon.
  *
- * The action, inhibitor, and signal surface is filled in across milestones 3-5;
- * this milestone adds the capability queries.
+ * Beyond the capability queries it issues the capability-gated session / power
+ * actions, holds the logind delay (`sleep`) and block (handle-keys) inhibitors,
+ * runs the `PrepareForSleep` lock-before-sleep handshake, and surfaces the
+ * session `Lock` / `Unlock` signals.
  */
 class PHOSPHORSERVICESESSION_EXPORT SessionHost : public QObject
 {

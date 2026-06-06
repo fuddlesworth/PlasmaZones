@@ -57,8 +57,8 @@ QML power menu, plus the lock-before-sleep handshake wired against
 them):
 
 ```qml
-import Phosphor.Service.Lock
-import Phosphor.Service.Session
+import Phosphor.Service.Lock 1.0
+import Phosphor.Service.Session 1.0
 
 SessionHost {
     id: session
