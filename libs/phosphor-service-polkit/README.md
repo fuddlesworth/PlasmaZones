@@ -20,7 +20,7 @@ authentication dialog.
   each PAM prompt) and drive the `polkit-qt6` `Agent::Session` that answers it.
 - Pass the user's response straight through to PAM without retaining it.
 
-The authentication dialog itself is a Phase 3 / 4 consumer of this library.
+The authentication dialog itself is a future shell consumer of this library.
 
 ## Key types
 
@@ -107,17 +107,17 @@ pkexec true
 
 ## Status
 
-Phase 2.6: shipped. The `PolkitAgent` registers as the session's authentication
+Shipped. The `PolkitAgent` registers as the session's authentication
 agent (explicit, inert when another agent owns the session), decodes polkit's
 `initiateAuthentication` into a typed `AuthRequest` (action / message / icon /
 details / identities), and drives the `polkit-qt6` `Agent::Session` PAM
 conversation: `authenticate()` starts it, the PAM prompt surfaces on
 `AuthRequest`, `respond()` answers it straight to PAM without retaining the
 secret, and `completed` / `cancel` resolve polkit's result exactly once. The
-`examples/phosphor-service-polkit-cli` standalone-agent demo covers the Phase-2
-gate (run as the agent, log requests, answer prompts) and exercises the live
+`examples/phosphor-service-polkit-cli` standalone-agent demo runs as the agent,
+logs requests, answers prompts, and exercises the live
 path against `pkexec`. Three test binaries pin the deterministic surface with no
 `polkitd`: the C++ smoke harness (inert construction, registration-fail, the
 active-request / authenticate / respond / cancel guards), the QML-engine facade
 load test, and the decode unit test over real polkit-qt `Details` / `Identity`
-values. The authentication dialog UI is a Phase 3 / 4 consumer.
+values. The authentication dialog UI is a future shell consumer.

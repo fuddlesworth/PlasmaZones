@@ -19,7 +19,7 @@ history as a model and a shell renders the picker.
 - Never read or keep a sensitive selection (password-manager hints).
 - Re-apply a history entry to the clipboard on request.
 
-The clipboard-manager UI itself is a Phase 3 / 4 consumer of this library.
+The clipboard-manager UI itself is a future shell consumer of this library.
 
 ## Key types
 
@@ -109,7 +109,7 @@ phosphor-service-clipboard-cli copy 2
 
 ## Status
 
-Phase 2.8: shipped. `ClipboardService` watches the session clipboard through
+Shipped. `ClipboardService` watches the session clipboard through
 `PhosphorWayland::ClipboardDevice` (`wlr-data-control`), de-duplicates and caps a
 history (default 100 entries, most-recent first), persists it as a JSON index +
 SHA-256 content blobs under `~/.local/share/phosphor-clipboard`, and re-applies an
@@ -122,4 +122,4 @@ the history-model unit test (preferred-MIME selection, dedup move-to-front, cap
 eviction, sensitive drop, preview generation), and the store unit test
 (text / binary round-trip, sensitive exclusion, orphan-blob pruning,
 corrupt-index recovery). Image thumbnail rendering, primary-selection history,
-and the clipboard-manager UI are Phase 3 / 4 consumers.
+and the clipboard-manager UI are future shell consumers.

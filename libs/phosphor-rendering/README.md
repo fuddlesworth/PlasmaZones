@@ -47,25 +47,35 @@ directly.
 
 ## Typical use
 
-In QML:
+This library does not ship a QML module. A consumer registers
+`ShaderEffect` (and any subclass) with `qmlRegisterType()` under its own
+module URI, then instantiates it in QML:
+
+```cpp
+qmlRegisterType<PhosphorRendering::ShaderEffect>("MyApp.Shaders", 1, 0, "ShaderEffect");
+```
 
 ```qml
-import PhosphorRendering 1.0
+import MyApp.Shaders 1.0
 
 ShaderEffect {
     anchors.fill: parent
-    fragmentShader: "qrc:/shaders/neon-city/effect.frag"
+    shaderSource: "qrc:/shaders/neon-city/effect.frag"
     bufferShaderPaths: [
         "qrc:/shaders/neon-city/buffer.frag"
     ]
 
-    customParams: [0.7, 1.0, 0.35, 0.0]   // packed into UBO
-    customColors: ["#3B82F6", "#A855F7"]
-
-    // Optional: a uniform extension feeds per-zone data into the UBO tail
-    uniformExtension: ZoneUniformExtension { zones: view.zones }
+    // Numbered vec4 / color slots packed into the UBO (customParams1..8,
+    // customColor1..16):
+    customParams1: Qt.vector4d(0.7, 1.0, 0.35, 0.0)
+    customColor1: "#3B82F6"
+    customColor2: "#A855F7"
 }
 ```
+
+A `setUniformExtension()` method (C++ side) attaches an
+`IUniformExtension` such as `ZoneUniformExtension` to feed per-zone data
+into the UBO tail.
 
 ## Design notes
 

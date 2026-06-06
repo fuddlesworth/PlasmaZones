@@ -57,7 +57,7 @@ through [`phosphor-fsloader`](../phosphor-fsloader/README.md).
 | `PhosphorAnimation::RetargetPolicy`           | Mid-flight retarget behaviour: PreserveVelocity / ResetVelocity / PreservePosition |
 | `PhosphorAnimation::SnapPolicy`               | Free helpers deciding whether a transition merits an animation |
 | `PhosphorAnimation::StaggerTimer`             | Schedules animation starts across a group of windows |
-| `PhosphorAnimation::SurfaceAnimator`          | `ISurfaceAnimator` impl that wires both runtimes into [`phosphor-layer`](../phosphor-layer/README.md) |
+| `PhosphorAnimationLayer::SurfaceAnimator`     | `ISurfaceAnimator` impl that wires both runtimes into [`phosphor-layer`](../phosphor-layer/README.md) |
 
 ### Shader-transition runtime
 
@@ -76,22 +76,26 @@ Animate a window rect with a profile:
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/QtQuickClock.h>
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/ProfileLoader.h>
 
 using namespace PhosphorAnimation;
 
 QtQuickClock clock(window);
+
+// CurveLoader populates the curve registry first, then ProfileLoader
+// scans profile files into the profile registry.
 PhosphorProfileRegistry registry;
-registry.addSearchPath(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
-registry.refresh();
+ProfileLoader loader(registry, curveRegistry);
+loader.loadFromDirectory(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
 
 AnimatedValue<QRectF> geometry(initialRect);
 
 MotionSpec<QRectF> spec{
-    .profile        = registry.profileFor(QStringLiteral("editor.snapIn")),
+    .profile        = registry.resolveWithInheritance(QStringLiteral("editor.snapIn")),
     .clock          = &clock,
     .retargetPolicy = RetargetPolicy::PreserveVelocity,
 };
-geometry.start(targetRect, spec);
+geometry.start(initialRect, targetRect, spec);
 
 // In paint:
 QRectF current = geometry.value();
@@ -110,7 +114,7 @@ shaders.addSearchPath(systemDir);
 shaders.addSearchPath(userDir);
 shaders.refresh();
 
-ShaderProfile sp = shaderProfileTree.profileFor(QStringLiteral("window.open"));
+ShaderProfile sp = shaderProfileTree.resolve(QStringLiteral("window.open"));
 QString effectId    = sp.effectId.value_or(QStringLiteral("dissolve"));
 QVariantMap params  = sp.parameters.value_or(QVariantMap{});
 ```

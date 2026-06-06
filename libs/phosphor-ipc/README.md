@@ -13,9 +13,8 @@
 Modern Wayland shells (DMS, Noctalia, Quickshell) all ship a typed
 CLI: a single socket, JSON-shaped requests, schema-described
 targets. `phosphor-ipc` is Phosphor's equivalent. It sits **alongside**
-the existing D-Bus adaptors. Service libraries in Phase 2 register
-both an IPC target and (where appropriate) a D-Bus method for each
-callable.
+the existing D-Bus adaptors. Service libraries register both an IPC
+target and (where appropriate) a D-Bus method for each callable.
 
 The library owns:
 
@@ -232,7 +231,3 @@ phosphorctl subscribe count.countChanged   # optional: same events on stdout
 - `examples/phosphor-ipc-demo/`: acceptance harness. Three
   `IpcTarget` instances (greet / count / set-value) exercise the
   full call / list / schema / subscribe wire surface.
-- `docs/phosphor-shell-design/04-implementation-plan.md` Phase 1.4:
-  this library's roadmap entry.
-- `docs/phosphor-shell-design/03-component-map.md#typed-ipc--phosphorctl`:
-  original design discussion.

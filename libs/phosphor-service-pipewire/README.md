@@ -83,4 +83,4 @@ The CLI in `examples/phosphor-service-pipewire-cli/` is the canonical C++ usage 
 
 ## Status
 
-Phase 2.1: **shipped** on `feat/phase-2.1-pipewire-service`. Milestones 1 (skeleton + CMake plumbing), 2 (`PipeWireConnection` lifecycle), 3 (registry observer + `PwNode`), 4 (sink / source / stream models), 5 (volume + mute write path), 6 (default-sink / -source via WirePlumber metadata), 7 (QML registration + `PipeWireHost` singleton), 8 (CLI acceptance harness), 9 (smoke + role-pinning tests), and 10 (this README) have all landed. See `docs/phosphor-shell-design/04-implementation-plan.md` § 2.1 for the milestone narrative and U1-U6 resolutions.
+Shipped. The `PipeWireConnection` lifecycle, the registry observer and `PwNode`, the sink / source / stream models, the volume + mute write path, default-sink / -source switching via WirePlumber metadata, QML registration with the `PipeWireHost` singleton, the CLI acceptance harness, and the smoke + role-pinning tests are all in place.

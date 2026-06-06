@@ -86,4 +86,4 @@ Repeater {
 
 ## Status
 
-Phase 2.0: shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings and the last of the umbrella tenants; the umbrella is gone, no backwards-compat shim (per `feedback_no_legacy_shims`). Namespace `PhosphorServices::StatusNotifier*` → `PhosphorServiceSni::StatusNotifier*`, QML module `Phosphor.Services` → `Phosphor.Service.Sni`. See `docs/phosphor-shell-design/04-implementation-plan.md` § 2.0 for the extraction rationale.
+Shipped. Extracted from the original `phosphor-services` umbrella as one of four per-domain siblings and the last of the umbrella tenants; the umbrella is gone, no backwards-compat shim (per `feedback_no_legacy_shims`). Namespace `PhosphorServices::StatusNotifier*` → `PhosphorServiceSni::StatusNotifier*`, QML module `Phosphor.Services` → `Phosphor.Service.Sni`.

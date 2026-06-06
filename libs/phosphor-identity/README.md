@@ -32,7 +32,7 @@ The three identity formats it owns:
 |------|---------|
 | `PhosphorIdentity::WindowId`        | Helpers for the canonical `appId|instanceId` window-id format |
 | `PhosphorIdentity::ScreenId`        | EDID parsing + screen-id construction; cached across TUs |
-| `PhosphorIdentity::VirtualScreenId` | `<physicalId>/vs:<index>` build / parse / detect helpers |
+| `PhosphorIdentity::VirtualScreenId` | `<physicalId>/vs:<index>` make / parse / detect helpers |
 
 ## Typical use
 
@@ -43,15 +43,15 @@ The three identity formats it owns:
 using namespace PhosphorIdentity;
 
 // Build the wire format from its parts
-QString id = WindowId::build(QStringLiteral("firefox"),
-                             QStringLiteral("Navigator"));
+QString id = WindowId::buildCompositeId(QStringLiteral("firefox"),
+                                        QStringLiteral("Navigator"));
 
 // Parse back out
 QString app  = WindowId::extractAppId(id);       // "firefox"
 QString inst = WindowId::extractInstanceId(id);  // "Navigator"
 
 // Virtual screens
-QString vs = VirtualScreenId::build(physicalId, /*index*/ 1);
+QString vs = VirtualScreenId::make(physicalId, /*index*/ 1);
 if (VirtualScreenId::isVirtual(screenId)) {
     QString phys = VirtualScreenId::extractPhysicalId(screenId);
 }

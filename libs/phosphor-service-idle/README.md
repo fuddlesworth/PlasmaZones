@@ -107,7 +107,7 @@ phosphor-service-idle-cli --stage dim:5 --inhibit-for 8
 
 ## Status
 
-Phase 2.7: shipped. `IdleService` watches the session through a configurable
+Shipped. `IdleService` watches the session through a configurable
 multi-stage timeout ladder built on `PhosphorWayland::IdleNotifier`
 (`ext-idle-notify-v1`): `stages` configure the ladder, `currentStage` /
 `currentStageName` / `idle` report the live position, and `idled(stage)` /
@@ -119,5 +119,5 @@ surface with no compositor: the smoke harness (registration idempotency, inert
 construction), the facade test (stage round trip + sort, inhibition toggle), the
 QML-engine load test, the stage state machine (advance / reset / reconfigure /
 pause), and the inhibition ref-count. The idle-action policy (dim, lock, display
-power) is a Phase 3 / 4 shell consumer; suspend / power coupling is Phase 2.10
-(session / logind).
+power) is a future shell consumer; suspend / power coupling lives in the session
+service (session / logind).

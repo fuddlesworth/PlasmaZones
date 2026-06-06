@@ -33,17 +33,17 @@ once per UI seam.
   phosphor-fsloader) watches the plugin root with a debounced
   rescan. Added plugin directories load; removed directories
   unregister. In-place `.so` replacement (writing new bytes to the
-  same path) is NOT honoured in Phase 1.3 because POSIX `dlopen`
+  same path) is NOT honoured today because POSIX `dlopen`
   refcounts loads by path. Reloading the same path returns the
   prior mapping. Plugin authors iterating in development rename the
   plugin directory or restart the process. Removed plugins keep
   their `.so` mapping pinned for the loader's lifetime so widgets
   the old factory created keep working until they destruct
-  naturally; Phase 5 will add a versioned-path scheme + refcounted
-  safe-unload alongside the sandbox.
-- **Capabilities are advisory in Phase 1.3.** Each factory declares a
-  `capabilities()` list (also mirrored into the plugin manifest); the
-  enforcement layer lands in Phase 5.
+  naturally; a versioned-path scheme plus refcounted safe-unload
+  is a future addition alongside the sandbox.
+- **Capabilities are advisory for now.** Each factory declares a
+  `capabilities()` list (also mirrored into the plugin manifest); an
+  enforcement layer is a future addition.
 
 ## Key types
 
@@ -53,10 +53,10 @@ once per UI seam.
 | `PhosphorRegistry::RegistryNotifier` | QObject signal carrier the template owns. The template itself can't be Q_OBJECT; signals route through this. Reached via `registry.notifier()`. |
 | `PhosphorRegistry::IFactoryBase` | Common base for the five interface families. Declares `id()`, `displayName()`, `capabilities()`. |
 | `PhosphorRegistry::IBarWidgetFactory` | Factory for one top-bar widget (clock, workspaces, tray, etc.). Adds `createWidget(QQmlEngine*, QObject*)`. |
-| `PhosphorRegistry::IControlCenterTileFactory` | Factory for one tile inside the Control Center popout. Adds `createTile(QQmlEngine*, QObject*)`. **No consumer in Phase 1.3**, surface lands in Phase 4.4. |
-| `PhosphorRegistry::ILauncherProviderFactory` | Factory for a launcher query provider (apps, calculator, etc.). Adds `createProvider(QObject*)`. **No consumer in Phase 1.3**, surface lands in Phase 4.2. |
-| `PhosphorRegistry::IOSDFactory` | Factory for an on-screen display (volume / mic / brightness). Adds `createOSD(QQmlEngine*, QObject*)`. **No consumer in Phase 1.3**, surface lands in Phase 3.3. |
-| `PhosphorRegistry::IDesktopWidgetFactory` | Factory for a desktop card / widget. Adds `createWidget(QQmlEngine*, QObject*)`. **No consumer in Phase 1.3**, surface lands in Phase 4.4 / 5. |
+| `PhosphorRegistry::IControlCenterTileFactory` | Factory for one tile inside the Control Center popout. Adds `createTile(QQmlEngine*, QObject*)`. **No consumer yet**; reserved for a future control-center surface. |
+| `PhosphorRegistry::ILauncherProviderFactory` | Factory for a launcher query provider (apps, calculator, etc.). Adds `createProvider(QObject*)`. **No consumer yet**; reserved for a future launcher surface. |
+| `PhosphorRegistry::IOSDFactory` | Factory for an on-screen display (volume / mic / brightness). Adds `createOSD(QQmlEngine*, QObject*)`. **No consumer yet**; reserved for a future OSD surface. |
+| `PhosphorRegistry::IDesktopWidgetFactory` | Factory for a desktop card / widget. Adds `createWidget(QQmlEngine*, QObject*)`. **No consumer yet**; reserved for a future desktop-widget surface. |
 | `PhosphorRegistry::Manifest` | Plain-old-data mirror of `manifest.json`. `Manifest::parse` reads the file; `parseObject` exists for tests. Rejects ABI mismatch, missing fields, id / directory mismatch. |
 | `PhosphorRegistry::PluginLoader` | Scans a plugin root, loads each plugin's `.so` + manifest, registers in a `Registry<IBarWidgetFactory>`. Hot-reloads on filesystem change. |
 
@@ -224,11 +224,11 @@ loader enforces this so on-disk layout and registry keys stay aligned.
   world-writable, the same StrictModes discipline OpenSSH and sudo
   apply to files they trust: a permissive mode would let another local
   process overwrite the code the shell is about to run. Signature /
-  origin verification is reserved for Phase 5's sandbox.
-- **Unload is registry-drop only in Phase 1.3.** Removing a plugin from
+  origin verification is reserved for a future sandbox.
+- **Unload is registry-drop only.** Removing a plugin from
   disk unregisters its factory from the registry but pins the `QLibrary`
   mapping for the loader's lifetime. Widgets the now-gone plugin
-  produced keep working until they destruct naturally. Phase 5's
+  produced keep working until they destruct naturally. A future
   sandbox revisits this with refcounted safe-unload.
 - **ABI mismatch rejected at load.** Manifests declaring `"abi"` other
   than `PhosphorRegistry::PluginAbiVersion` (currently `1`) are refused
@@ -237,7 +237,7 @@ loader enforces this so on-disk layout and registry keys stay aligned.
   or the manifest schema.
 - **Capabilities are advisory.** The `capabilities()` list ships in
   every factory and every manifest, but the loader does not enforce
-  them in Phase 1.3. Phase 5's sandbox uses the same metadata slot.
+  them yet. A future sandbox uses the same metadata slot.
 
 ## Dependencies
 
@@ -255,5 +255,3 @@ loader enforces this so on-disk layout and registry keys stay aligned.
   hot-reload.
 - `libs/phosphor-layout-api/ILayoutSourceFactory`: the pre-existing
   registry pattern this library generalises.
-- `docs/phosphor-shell-design/04-implementation-plan.md` Phase 1.3:
-  this library's roadmap entry.

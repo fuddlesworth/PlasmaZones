@@ -110,15 +110,14 @@ Repeater {
 
 ## Status
 
-Phase 2.4: shipped. The sysfs read path with live `QFileSystemWatcher` updates
+Shipped. The sysfs read path with live `QFileSystemWatcher` updates
 (`BrightnessDevice`), the logind write path (`setBrightness` / `setPercentage`
 via `Session.SetBrightness`), enumeration of display + `kbd_backlight` devices
 with the indicator-LED exclusion (`BrightnessHost`), the `QAbstractListModel`
 (`BrightnessDeviceModel`), the optional external-monitor DDC/CI source
 (`ExternalDisplay` devices via a `libddcutil` worker thread), and the
 `phosphorctl`-style CLI demo (`examples/phosphor-service-brightness-cli`: list,
-get, set) covering the Phase-2 gate caps (list devices, get/set brightness) all
-landed. The smoke harness pins enumeration, the `kbd_backlight` filter,
+get, set) covering the core capabilities (list devices, get/set brightness). The smoke harness pins enumeration, the `kbd_backlight` filter,
 percentage math, divide-by-zero safety, live watcher updates, model role names
 plus its async add / remove and host-destroyed reset, the logind write path for
 both the `backlight` and `leds` subsystems, and the `ExternalDisplay`

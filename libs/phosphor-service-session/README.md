@@ -115,11 +115,11 @@ phosphor-service-session-cli suspend
   by default, so an action that needs authorization (a `Challenge` capability)
   prompts through the in-session polkit agent (`phosphor-service-polkit`) for a
   native experience. The CLI sets `interactive=false` (no agent in a dev shell).
-- **Complementary to `phosphor-service-lock`, not overlapping.** 2.9 authenticates
-  and owns the `ext-session-lock-v1` surface; 2.10 owns the logind edge. The
-  shell wires `aboutToSleep` / `lockRequested` to the lock service and the lock
-  service's `locked` back to `allowSleep()`. Neither library depends on the
-  other.
+- **Complementary to `phosphor-service-lock`, not overlapping.** The lock service
+  authenticates and owns the `ext-session-lock-v1` surface; this service owns the
+  logind edge. The shell wires `aboutToSleep` / `lockRequested` to the lock
+  service and the lock service's `locked` back to `allowSleep()`. Neither library
+  depends on the other.
 - **A single active host, not a model.** Like `phosphor-service-lock` /
   `phosphor-service-polkit` / `phosphor-service-idle`, the session is a single
   host with cached state, not a list model. No `ObjectManager` (logind's Manager
@@ -133,12 +133,12 @@ phosphor-service-session-cli suspend
 - A running logind (`org.freedesktop.login1`) on the system bus for the live
   path; the library loads inert without it (capabilities `Unknown`, actions
   no-op with a warning, inhibitors not taken).
-- `phosphor-service-lock` (2.9) and `phosphor-service-polkit` (2.6) are
+- `phosphor-service-lock` and `phosphor-service-polkit` are
   collaborators wired in the shell, not link dependencies.
 
 ## Status
 
-Phase 2.10: shipped. `SessionHost` reads the seven logind capabilities into an
+Shipped. `SessionHost` reads the seven logind capabilities into an
 `Availability` enum, issues the capability-gated session / power actions with the
 `interactive` flag, takes the delay-on-`sleep` and block-on-keys inhibitors, runs
 the `PrepareForSleep` lock-before-sleep handshake (`aboutToSleep` →
@@ -152,4 +152,4 @@ parsing, action routing with the interactive flag, capability-gated refusal,
 inhibitor what/mode, the `PrepareForSleep` handshake over the bus, and
 lock / terminate / signal surfacing). The shell wires the handshake to
 `phosphor-service-lock` in `SessionLockCoordinator.qml`; the lock surface itself
-is the Phase 4 lock screen. This closes Phase 2.
+is the shell's lock screen.

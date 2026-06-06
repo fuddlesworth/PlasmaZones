@@ -19,8 +19,8 @@ public types are clean Qt/QML types with no Wayland or PAM types leaking out.
 - Release the lock once authentication succeeds.
 
 The lock *surfaces* (the per-output graphics shown while the session is locked)
-are a shell concern wired in a later phase; this service owns authentication and
-the lock lifecycle, not rendering.
+are a shell concern wired up by a future shell consumer; this service owns
+authentication and the lock lifecycle, not rendering.
 
 ## Key types
 
@@ -44,7 +44,7 @@ int main(int argc, char** argv)
 }
 ```
 
-QML lock screen (a later-phase lock surface drives the service):
+QML lock screen (a shell lock surface drives the service):
 
 ```qml
 import Phosphor.Service.Lock 1.0
@@ -100,8 +100,9 @@ phosphor-service-lock-cli supported
   single state, exposed as a `State` enum rather than a list model.
 - **Lock surfaces are deferred.** A real lock screen must create an
   `ext_session_lock_surface_v1` per output before the compositor presents the
-  locked frame; that rendering layer is a shell concern for a later phase. Until
-  then the compositor decides, per its own policy, when to confirm the lock.
+  locked frame; that rendering layer is a shell concern owned by a future
+  consumer. Until then the compositor decides, per its own policy, when to
+  confirm the lock.
 
 ## Dependencies
 
@@ -116,7 +117,7 @@ phosphor-service-lock-cli supported
 
 ## Status
 
-Phase 2.9: shipped. `LockService` authenticates the session user through
+Shipped. `LockService` authenticates the session user through
 `PamAuthenticator` (PAM, off the GUI thread, configurable service, default
 `login`) and coordinates the lock state with the compositor through
 `PhosphorWayland::SessionLock` (`ext-session-lock-v1`): `Unlocked → Locking →
@@ -128,4 +129,4 @@ or valid credentials: the smoke harness (registration idempotency, inert
 construction), the QML-engine load test, the PAM authenticator test (configured
 service, fast-fail, the concurrency guard, real-PAM rejection of a nonexistent
 user), and the state-machine test (the full lock policy on fakes). The per-output
-lock surfaces and the lock-screen UI are a Phase 4 consumer of this library.
+lock surfaces and the lock-screen UI are a future shell consumer of this library.

@@ -23,7 +23,7 @@ notifications and surfaces them as Qt + QML types for a shell to render.
   expose the live set through a `NotificationModel`.
 
 Toasts, the notification center, per-app rules, and markup rendering are
-Phase 3.4 / 4.3 consumers of this library, not part of it.
+future shell consumers of this library, not part of it.
 
 ## Key types
 
@@ -85,11 +85,11 @@ ListView {
   `Qt::Gui` use, scoped to `QImage`; the raw hint map stays on `Notification`
   for advanced bindings. The `image` property / model role is a `QImage`, so a
   QML delegate that wants to paint it needs a `QQuickImageProvider` keyed off the
-  notification id (the Phase 3.4 toast supplies one); it is not directly an
+  notification id (a shell toast supplies one); it is not directly an
   `Image.source`.
 - **Markup stays raw.** `body` markup is stored, never rendered; `GetCapabilities`
   advertises `body` / `actions` / `icon-static` / `persistence` but not
-  `body-markup` until a renderer exists (Phase 4.3).
+  `body-markup` until a renderer exists.
 - **Dependency injection for tests.** `NotificationServer` takes an injectable
   `(QDBusConnection, serviceName)`, so the ingest path runs over a private peer
   bus with no real session daemon and no name conflict. The `image-data` decode,
@@ -104,7 +104,7 @@ ListView {
 
 ## Status
 
-Phase 2.5: shipped. The name-owning server with the generated
+Shipped. The name-owning server with the generated
 `org.freedesktop.Notifications` adaptor and opt-in `--replace` takeover
 (`NotificationServer`), `Notify` ingestion with the full hint decode including
 the `image-data` `(iiibiiay)` → `QImage` path (`Notification`), per-urgency
@@ -112,12 +112,12 @@ expiry timers, the unified close lifecycle (expired / dismissed / closed-by-call
 reason codes), `invokeAction` + `ActivationToken` and `dismissNotification`, the
 `QAbstractListModel` over the live set (`NotificationModel`), and the
 `phosphorctl`-style CLI demo (`examples/phosphor-service-notifications-cli`:
-watch, send, close, info) covering the Phase-2 gate (run as the daemon, log
-received notifications) all landed. Three test binaries pin the contract
+watch, send, close, info, running as the daemon and logging received
+notifications) all landed. Three test binaries pin the contract
 deterministically over a private peer bus with no session daemon: the direct-call
 smoke harness (id allocation + `replaces_id`, hint decode, expiry / dismiss /
 action lifecycle, model roles + add / replace / close under
 `QAbstractItemModelTester`), the QML-engine facade load test, and the
 peer-to-peer wire test (real marshalling, including the `image-data` struct
 decode and its oversized-input rejection). UI consumers (toast, notification
-center) are Phase 3.4 / 4.3.
+center) are future shell consumers.

@@ -51,7 +51,7 @@ The lib owns:
 | Type | Purpose |
 |------|---------|
 | `PhosphorContext::ContextHandle`         | Frozen `(screenId, virtualDesktop, activity, mode)` snapshot passed to gate calls. |
-| `PhosphorContext::DisabledReason`        | Why a context is disabled — `Monitor`, `Desktop`, `Activity`, or `NotDisabled`. |
+| `PhosphorContext::DisabledReason`        | Why a context is disabled: `MonitorDisabled`, `DesktopDisabled`, `ActivityDisabled`, or `NotDisabled`. |
 | `PhosphorContext::IContextResolver`      | The façade: `handleFor()`, `globalHandle()`, `handleForMode()`, `handleForPersisted()`, `disabledReason()`, `isLocked()`, `isGated()`. |
 | `PhosphorContext::ContextResolver`       | Concrete `IContextResolver` over the three adapter interfaces. |
 | `PhosphorContext::IWorkspaceState`       | Adapter: "what desktop / activity is the user on?" |

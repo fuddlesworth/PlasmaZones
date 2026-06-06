@@ -67,7 +67,7 @@ auto* snap = new SnapEngine(layoutRegistry,
                             zoneDetector,
                             virtualDesktopManager,
                             /*parent*/ daemon);
-snap->setSettings(snapSettingsAdaptor);
+snap->setEngineSettings(snapSettingsAdaptor);
 snap->setNavigationStateProvider(windowTrackingAdaptor);
 snap->setZoneAdjacencyResolver(zoneDetectionAdaptor);
 

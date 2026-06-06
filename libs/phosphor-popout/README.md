@@ -168,6 +168,3 @@ constructor. Field assignment uses regular property syntax.
 
 - `libs/phosphor-layer/`. The policy layer over `wlr-layer-shell`
   that the default transport will consume.
-- `docs/phosphor-shell-design/03-component-map.md`. The section
-  "PopoutService, central popout coordinator" describes the design
-  context this library implements.
