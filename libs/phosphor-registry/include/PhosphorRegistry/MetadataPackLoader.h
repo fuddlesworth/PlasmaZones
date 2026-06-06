@@ -97,6 +97,26 @@ public:
     // source files a pack references.
     using PerEntryWatchPaths = std::function<QStringList(const Factory&)>;
 
+    // Optional. Files watched at the search-directory level rather than
+    // per pack — e.g. shared GLSL includes (common.glsl) every pack pulls
+    // in. An edit fires a rescan + the committed hook (so consumers
+    // re-read content) but produces no per-entry registry change, since
+    // it belongs to no single pack.
+    using PerDirectoryWatchPaths = std::function<QStringList(const QString& searchPath)>;
+
+    // Optional. Return true to skip a subdirectory during the scan — e.g.
+    // a "shared" includes dir or a "none" sentinel that is not a pack.
+    using PerSubdirSkip = std::function<bool(const QString& subdirName)>;
+
+    // Optional. Fired once after every committed rescan (after the
+    // registry reconcile), whether or not any per-entry change occurred.
+    // The coarse "the catalogue was rescanned" hook a domain facade
+    // bridges to its own contentsChanged / shadersChanged signal, so
+    // consumers re-read content (re-bake a shader) even when the change
+    // was a pack's source file or a shared include — neither of which
+    // alters a pack's parsed metadata and so fires no per-entry signal.
+    using CommittedCallback = std::function<void()>;
+
     // @p registry must outlive the loader. @p parser is required (a null
     // parser would silently skip every pack). @p logCat is stored by
     // reference and must outlive the loader (a Q_LOGGING_CATEGORY static
@@ -134,6 +154,26 @@ public:
         m_strategy->setPerEntryWatchPaths([fn = std::move(fn)](const Entry& e) -> QStringList {
             return (fn && e.factory) ? fn(*e.factory) : QStringList{};
         });
+    }
+
+    // Watch shared / directory-level files (passthrough to the strategy).
+    void setPerDirectoryWatchPaths(PerDirectoryWatchPaths fn)
+    {
+        m_strategy->setPerDirectoryWatchPaths(std::move(fn));
+    }
+
+    // Skip non-pack subdirectories during the scan (passthrough).
+    void setPerSubdirSkip(PerSubdirSkip fn)
+    {
+        m_strategy->setPerSubdirSkip(std::move(fn));
+    }
+
+    // Set the coarse post-commit hook. Fires after reconcile on every
+    // committed rescan. Set before the first scan so the initial commit
+    // is observed.
+    void setOnCommitted(CommittedCallback fn)
+    {
+        m_onCommitted = std::move(fn);
     }
 
     // Add search directories. Mirrors MetadataPackRegistryBase: a single
@@ -206,6 +246,9 @@ private:
         };
         return std::make_unique<PhosphorFsLoader::MetadataPackScanStrategy<Entry>>(std::move(wrappedParser), [this]() {
             reconcile();
+            if (m_onCommitted) {
+                m_onCommitted(); // coarse post-commit hook (after per-entry reconcile)
+            }
         });
     }
 
@@ -245,6 +288,7 @@ private:
     // is not a QObject (its notifier is).
     Registry<Factory>* m_registry = nullptr;
     SignatureContrib m_sigContrib;
+    CommittedCallback m_onCommitted;
     QString m_userPath;
     // Last committed per-id content fingerprint, for minimal reconcile.
     QHash<QString, QByteArray> m_fingerprints;

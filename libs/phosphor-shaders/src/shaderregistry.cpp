@@ -6,9 +6,9 @@
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include "shaderutils.h"
 
-#include <PhosphorFsLoader/MetadataPackScanStrategy.h>
-
 #include <QColor>
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -380,66 +380,102 @@ bool shaderSubdirSkip(const QString& subdirName)
     return subdirName == QLatin1String("none") || subdirName == QLatin1String("shared");
 }
 
-// No `setSignatureContrib` is wired below — the strategy auto-fingerprints
-// every distinct file `shaderEntryWatchPaths` and `shaderTopLevelWatchPaths`
-// return (path|size|mtime|), which already covers every shader source
-// reachable through the `*.frag/*.vert/*.glsl/*.json` globs: the per-pack
-// frag/vert/buffer shaders, the per-pack auxiliary `helpers.glsl`, AND
-// the top-level shared includes (`common.glsl`, `audio.glsl`, the default
-// `zone.vert`, …). An edit to any of them shifts the signature and fires
-// `OnCommit`. A bespoke `SignatureContrib` would be redundant.
+// Per-entry content signature: the path|size|mtime of every file that
+// defines a pack — its metadata.json plus frag/vert/buffer shaders. Drives
+// MetadataPackLoader's per-entry reconcile so an edit to a pack's metadata
+// OR its shader sources re-registers THAT pack (fresh ShaderInfo) while
+// leaving unedited siblings untouched. Edits to SHARED includes
+// (common.glsl, audio.glsl, the default zone.vert) belong to no single
+// pack — they reach the loader's coarse onCommitted hook via the
+// per-directory watch set (shaderTopLevelWatchPaths) and re-emit
+// shadersChanged without per-pack churn.
+void shaderContentSignature(QCryptographicHash& hasher, const ShaderRegistry::ShaderInfo& info)
+{
+    const auto mixFile = [&hasher](const QString& path) {
+        if (path.isEmpty()) {
+            return;
+        }
+        const QFileInfo fi(path);
+        hasher.addData(path.toUtf8());
+        hasher.addData(QByteArray::number(fi.size()));
+        hasher.addData(QByteArray::number(fi.lastModified().toMSecsSinceEpoch()));
+    };
+    // metadata.json sits in the same directory as the frag source.
+    if (!info.sourcePath.isEmpty()) {
+        mixFile(QFileInfo(info.sourcePath).absolutePath() + QStringLiteral("/metadata.json"));
+    }
+    mixFile(info.sourcePath);
+    mixFile(info.vertexShaderPath);
+    for (const QString& buf : info.bufferShaderPaths) {
+        mixFile(buf);
+    }
+}
 
 } // namespace
 
-/// Build + configure the scan strategy and hand ownership to the caller
-/// as the upcasted base type (`IScanStrategy`) — the consumer of this
-/// helper is `MetadataPackRegistryBase`'s ctor, which doesn't see the
-/// `Payload` template parameter. The subclass recovers the typed pointer
-/// via `static_cast<ScanStrategy*>(strategy())` from its mem-init list.
-///
-/// Lifted out of the ctor so the base can take the unique_ptr in a
-/// single-phase init while the subclass still applies all the
-/// schema-specific setters. The OnCommit lambda captures @p self only
-/// as a pointer — by the time the lambda fires, the subclass ctor has
-/// finished and Q_EMIT dispatches through the full ShaderRegistry vtable.
-///
-/// Note: a most-derived ctor (e.g. `PlasmaZones::ShaderRegistry`) may call
-/// `addSearchPaths` from its own body, which triggers a synchronous rescan
-/// and fires `OnCommit` → `Q_EMIT self->shadersChanged()` while that
-/// most-derived ctor is still on the stack. Harmless — no external code
-/// can have `connect`-ed to the signal yet, since the constructed object
-/// hasn't been returned to anyone — but worth knowing if a future
-/// in-tree subclass adds slot wiring during construction.
-std::unique_ptr<PhosphorFsLoader::IScanStrategy> ShaderRegistry::buildScanStrategy(ShaderRegistry* self)
-{
-    auto strategy = std::make_unique<ScanStrategy>(parseShader, [self]() {
-        Q_EMIT self->shadersChanged();
-    });
-    strategy->setPerEntryWatchPaths(shaderEntryWatchPaths);
-    strategy->setPerDirectoryWatchPaths(shaderTopLevelWatchPaths);
-    strategy->setPerSubdirSkip(shaderSubdirSkip);
-    strategy->setLoggingCategory(lcShaderRegistry());
-    return strategy;
-}
-
 ShaderRegistry::ShaderRegistry(QObject* parent)
-    : MetadataPackRegistryBase(lcShaderRegistry(), buildScanStrategy(this), parent)
-    , m_typedStrategy(static_cast<ScanStrategy*>(strategy()))
+    : QObject(parent)
+    , m_loader(std::make_unique<PhosphorRegistry::MetadataPackLoader<ShaderPack>>(
+          &m_registry,
+          // Parser: reuse the existing metadata→ShaderInfo parse, then wrap
+          // the result in a ShaderPack for the registry.
+          [](const QString& subdir, const QJsonObject& root, bool isUser) -> std::shared_ptr<ShaderPack> {
+              std::optional<ShaderInfo> info = parseShader(subdir, root, isUser);
+              return info ? std::make_shared<ShaderPack>(std::move(*info)) : nullptr;
+          },
+          lcShaderRegistry()))
 {
-    // The static_cast above is safe by construction (`buildScanStrategy`
-    // is the only path that populates the base's strategy slot, and it
-    // always produces a `ScanStrategy`). Pin that invariant in debug
-    // builds via dynamic_cast so a future refactor that diverts the
-    // strategy slot fails loudly instead of silently UB-ing on lookup.
-    Q_ASSERT_X(dynamic_cast<ScanStrategy*>(strategy()) != nullptr, "ShaderRegistry",
-               "buildScanStrategy must return a MetadataPackScanStrategy<ShaderInfo>");
+    // Watch each pack's frag/vert/buffer sources (per-entry) + the shared
+    // top-level includes (per-directory); skip the "none"/"shared" sentinel
+    // subdirs. The per-entry content signature drives the reconcile so a
+    // metadata- or source-edited pack re-registers with fresh info; the
+    // coarse onCommitted hook re-emits shadersChanged on any committed
+    // rescan (incl. shared-include edits), matching the legacy registry's
+    // single shadersChanged-on-any-change contract.
+    m_loader->setPerEntryWatchPaths([](const ShaderPack& p) {
+        return shaderEntryWatchPaths(p.info());
+    });
+    m_loader->setPerDirectoryWatchPaths(shaderTopLevelWatchPaths);
+    m_loader->setPerSubdirSkip(shaderSubdirSkip);
+    m_loader->setSignatureContrib([](QCryptographicHash& hasher, const ShaderPack& p) {
+        shaderContentSignature(hasher, p.info());
+    });
+    // Q_EMIT through `this`: a most-derived ctor (PlasmaZones::ShaderRegistry)
+    // may call addSearchPaths from its own body, firing this while still on
+    // the stack — harmless, nothing has connected yet.
+    m_loader->setOnCommitted([this]() {
+        Q_EMIT shadersChanged();
+    });
 }
 
 ShaderRegistry::~ShaderRegistry() = default;
 
-void ShaderRegistry::onUserPathChanged(const QString& path)
+// ── Search paths (forwarded to the loader) ───────────────────────────────
+
+void ShaderRegistry::addSearchPath(const QString& path, PhosphorFsLoader::LiveReload liveReload)
 {
-    m_typedStrategy->setUserPath(path);
+    m_loader->addSearchPath(path, liveReload);
+}
+
+void ShaderRegistry::addSearchPaths(const QStringList& paths, PhosphorFsLoader::LiveReload liveReload,
+                                    PhosphorFsLoader::RegistrationOrder order)
+{
+    m_loader->addSearchPaths(paths, liveReload, order);
+}
+
+QStringList ShaderRegistry::searchPaths() const
+{
+    return m_loader->searchPaths();
+}
+
+void ShaderRegistry::setUserPath(const QString& path)
+{
+    m_loader->setUserPath(path);
+}
+
+void ShaderRegistry::refresh()
+{
+    m_loader->refresh();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -477,9 +513,17 @@ void ShaderRegistry::reportShaderBakeFinished(const QString& shaderId, bool succ
 
 QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 {
-    // Strategy returns a sorted-by-id snapshot — single source of truth
-    // for QHash-randomisation-stable output across process launches.
-    return m_typedStrategy->packs();
+    // Registry iteration is QHash order; sort by id for output stable
+    // across process launches (the legacy strategy returned sorted).
+    QList<ShaderInfo> result;
+    result.reserve(m_registry.size());
+    m_registry.forEach([&result](const std::shared_ptr<ShaderPack>& pack) {
+        result.append(pack->info());
+    });
+    std::sort(result.begin(), result.end(), [](const ShaderInfo& a, const ShaderInfo& b) {
+        return a.id < b.id;
+    });
+    return result;
 }
 
 QVariantList ShaderRegistry::availableShadersVariant() const
@@ -495,23 +539,26 @@ QVariantList ShaderRegistry::availableShadersVariant() const
 
 ShaderRegistry::ShaderInfo ShaderRegistry::shader(const QString& id) const
 {
-    return m_typedStrategy->pack(id);
+    const auto pack = m_registry.factory(id);
+    return pack ? pack->info() : ShaderInfo{};
 }
 
 QVariantMap ShaderRegistry::shaderInfo(const QString& id) const
 {
-    if (!m_typedStrategy->contains(id)) {
+    const auto pack = m_registry.factory(id);
+    if (!pack) {
         return QVariantMap();
     }
-    return shaderInfoToVariantMap(m_typedStrategy->pack(id));
+    return shaderInfoToVariantMap(pack->info());
 }
 
 QUrl ShaderRegistry::shaderUrl(const QString& id) const
 {
-    if (isNoneShader(id) || !m_typedStrategy->contains(id)) {
+    if (isNoneShader(id)) {
         return QUrl();
     }
-    return m_typedStrategy->pack(id).shaderUrl;
+    const auto pack = m_registry.factory(id);
+    return pack ? pack->info().shaderUrl : QUrl();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

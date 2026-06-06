@@ -46,6 +46,14 @@ if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
     find_package(PhosphorFsLoader 0.1.0 REQUIRED)
 endif()
 
+# PhosphorRegistry — generic id-keyed storage + notify (Registry<T>) and
+# the content-pack loader (MetadataPackLoader<T>) that ShaderRegistry now
+# composes for shader-pack storage + scan. Publicly exposed via
+# ShaderRegistry.h (ShaderPack : IFactoryBase + the Registry/loader members).
+if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
+    find_package(PhosphorRegistry 0.1.0 REQUIRED)
+endif()
+
 if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
     include(GNUInstallDirs)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
@@ -126,6 +134,13 @@ target_link_libraries(PhosphorShaders
     PUBLIC
         Qt6::Core
         Qt6::Gui
+        # PhosphorRegistry is publicly exposed via ShaderRegistry's
+        # ShaderPack : IFactoryBase + the Registry<ShaderPack> /
+        # MetadataPackLoader<ShaderPack> members. It PUBLIC-links
+        # PhosphorFsLoader, so the LiveReload/RegistrationOrder enums in
+        # ShaderRegistry's search-path API arrive transitively; the
+        # explicit fsloader link below is kept for clarity.
+        PhosphorRegistry::PhosphorRegistry
         # PhosphorFsLoader is publicly exposed via ShaderRegistry's
         # `LiveReload` parameter — consumers including
         # `<PhosphorShaders/ShaderRegistry.h>` need its headers on

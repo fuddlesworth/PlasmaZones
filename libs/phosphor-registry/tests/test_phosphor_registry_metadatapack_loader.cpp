@@ -209,6 +209,39 @@ private Q_SLOTS:
         QCOMPARE(f->value(), 2);
         QVERIFY(f->isUser());
     }
+
+    // The coarse onCommitted hook fires once per committed rescan (not on
+    // a no-change refresh); a skipped subdir name is never registered.
+    void testOnCommittedAndSubdirSkip()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        writePack(dir.path(), "alpha", "alpha", "Alpha", 1);
+        writePack(dir.path(), "shared", "shared", "Shared", 9); // should be skipped
+
+        Reg reg;
+        auto loader = makeLoader(&reg);
+        int committed = 0;
+        loader->setOnCommitted([&] {
+            ++committed;
+        });
+        loader->setPerSubdirSkip([](const QString& name) {
+            return name == QLatin1String("shared");
+        });
+
+        loader->addSearchPaths({dir.path()}, PhosphorFsLoader::LiveReload::Off);
+        QVERIFY(committed >= 1); // initial commit observed
+        QVERIFY(reg.factory(QStringLiteral("alpha")) != nullptr);
+        QVERIFY(reg.factory(QStringLiteral("shared")) == nullptr); // subdir skipped
+
+        const int before = committed;
+        loader->refresh(); // no on-disk change → no commit
+        QCOMPARE(committed, before);
+
+        writePack(dir.path(), "beta", "beta", "Beta", 2);
+        loader->refresh(); // change → commit fires
+        QVERIFY(committed > before);
+    }
 };
 
 QTEST_MAIN(TestMetadataPackLoader)
