@@ -31,8 +31,8 @@ layout(location = 0) out vec4 fragColor;
  *   [2].y = fillOpacity     — zone fill alpha
  *
  * Colors:
- *   customColors[0] = hue center  (default: steel blue #4488cc)
- *   customColors[1] = shape tint  (default: warm white #fffff2)
+ *   pz_hueCenter = hue center  (default: steel blue #4488cc)
+ *   pz_shapeTint = shape tint  (default: warm white #fffff2)
  */
 
 // ─── Mosaic noise (prefixed to avoid common.glsl collision) ──────
@@ -90,22 +90,22 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderWidth  = max(params.y, 2.5);
 
     // Parameters with defaults
-    float gridDensity   = customParams[0].x >= 0.0 ? customParams[0].x : 64.0;
-    float edgeSoftness  = customParams[0].y >= 0.0 ? customParams[0].y : 0.18;
-    float gridLineW     = customParams[0].z >= 0.0 ? customParams[0].z : 0.75;
-    float posterLevels  = customParams[0].w >= 0.0 ? customParams[0].w : 8.0;
+    float gridDensity   = pz_gridDensity >= 0.0 ? pz_gridDensity : 64.0;
+    float edgeSoftness  = pz_edgeSoftness >= 0.0 ? pz_edgeSoftness : 0.18;
+    float gridLineW     = pz_gridLineWeight >= 0.0 ? pz_gridLineWeight : 0.75;
+    float posterLevels  = pz_posterize >= 0.0 ? pz_posterize : 8.0;
     posterLevels = max(posterLevels, 1.0);
-    float shapeChance   = customParams[1].x >= 0.0 ? customParams[1].x : 0.62;
-    float shapeSize     = customParams[1].y >= 0.0 ? customParams[1].y : 0.26;
-    float sparkleChance = customParams[1].z >= 0.0 ? customParams[1].z : 0.04;
-    float speed         = customParams[1].w >= 0.0 ? customParams[1].w : 1.25;
-    float reactivity    = customParams[2].x >= 0.0 ? customParams[2].x : 1.0;
-    float fillOpacity   = customParams[2].y >= 0.0 ? customParams[2].y : 0.9;
+    float shapeChance   = pz_shapeChance >= 0.0 ? pz_shapeChance : 0.62;
+    float shapeSize     = pz_shapeSize >= 0.0 ? pz_shapeSize : 0.26;
+    float sparkleChance = pz_sparkleChance >= 0.0 ? pz_sparkleChance : 0.04;
+    float speed         = pz_speed >= 0.0 ? pz_speed : 1.25;
+    float reactivity    = pz_reactivity >= 0.0 ? pz_reactivity : 1.0;
+    float fillOpacity   = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.9;
 
     // Colors — fallbacks match the original ShaderToy palette
     // hueCenter: #4099BF ≈ HSL hue 0.55 (cyan-blue, matching the original 0.55 center)
-    vec3 hueCenter = colorWithFallback(customColors[0].rgb, vec3(0.251, 0.6, 0.749));
-    vec3 shapeTint = colorWithFallback(customColors[1].rgb, vec3(1.0, 1.0, 0.949));
+    vec3 hueCenter = colorWithFallback(pz_hueCenter.rgb, vec3(0.251, 0.6, 0.749));
+    vec3 shapeTint = colorWithFallback(pz_shapeTint.rgb, vec3(1.0, 1.0, 0.949));
 
     // ── Highlighted vs dormant ──────────────────────────────
     float vitality = isHighlighted ? 1.0 : 0.3;
@@ -169,7 +169,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             : 0.0;
 
         // Tile pop: treble causes individual tiles to briefly flash
-        float popFreq = customParams[3].y >= 0.0 ? customParams[3].y : 4.0;
+        float popFreq = pz_popFrequency >= 0.0 ? pz_popFrequency : 4.0;
         float popHash = mosaicHash(cellId + floor(t * popFreq) * 0.1);
         float popActive = smoothstep(0.5, 0.8, treble)
                         * step(popHash, treble * 0.6)
@@ -252,7 +252,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             float sparkBright = 1.0 - smoothstep(0.02, 0.2, sd);
             // Sparkle intensity tracks pop + ripple (spatial, not uniform)
             float sparkIntensity = 0.7 + audioPop * 0.6 + audioRipple * 0.3;
-            vec3 sparkleCol = colorWithFallback(customColors[3].rgb, vec3(1.0, 0.95, 0.8));
+            vec3 sparkleCol = colorWithFallback(pz_sparkleColor.rgb, vec3(1.0, 0.95, 0.8));
             col += sparkleCol * sparkBright * sparkIntensity;
         }
 
@@ -360,15 +360,15 @@ vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
     vec4 labels = texture(uZoneLabels, uv);
 
     // Colors — match renderZone palette
-    vec3 hueCenter = colorWithFallback(customColors[0].rgb, vec3(0.251, 0.6, 0.749));
-    vec3 shapeTint = colorWithFallback(customColors[1].rgb, vec3(1.0, 1.0, 0.949));
-    float posterLevels = customParams[0].w >= 0.0 ? customParams[0].w : 8.0;
+    vec3 hueCenter = colorWithFallback(pz_hueCenter.rgb, vec3(0.251, 0.6, 0.749));
+    vec3 shapeTint = colorWithFallback(pz_shapeTint.rgb, vec3(1.0, 1.0, 0.949));
+    float posterLevels = pz_posterize >= 0.0 ? pz_posterize : 8.0;
     posterLevels = max(posterLevels, 1.0);
-    float reactivity = customParams[2].x >= 0.0 ? customParams[2].x : 1.0;
+    float reactivity = pz_reactivity >= 0.0 ? pz_reactivity : 1.0;
 
-    float labelGlowSpread = customParams[2].z >= 0.0 ? customParams[2].z : 2.0;
-    float labelBright = customParams[2].w >= 0.0 ? customParams[2].w : 0.7;
-    float labelAudioMul = customParams[3].x >= 0.0 ? customParams[3].x : 1.0;
+    float labelGlowSpread = pz_leadSpread >= 0.0 ? pz_leadSpread : 2.0;
+    float labelBright = pz_tileIntensity >= 0.0 ? pz_tileIntensity : 0.7;
+    float labelAudioMul = pz_shockReact >= 0.0 ? pz_shockReact : 1.0;
 
     // Gaussian halo for smooth beveled "lead" border
     float halo = 0.0;
@@ -383,7 +383,7 @@ vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
 
     // Lead border: dark metallic with shockwave shimmer
     if (leadBorder > 0.01) {
-        vec3 leadBaseCol = colorWithFallback(customColors[2].rgb, vec3(0.25, 0.22, 0.2));
+        vec3 leadBaseCol = colorWithFallback(pz_leadColor.rgb, vec3(0.25, 0.22, 0.2));
         vec3 leadCol = leadBaseCol;
         // Approximate audio modulation for label context (shockwave + ripple)
         float shimmer = hasAudio ? bass * 0.6 * labelAudioMul : 0.0;
@@ -433,7 +433,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[3].z > 0.5)
+    if (pz_showLabels > 0.5)
         color = compositeMosaicLabels(color, fragCoord, bass, mids, treble, overall, hasAudio);
     fragColor = clampFragColor(color);
 }

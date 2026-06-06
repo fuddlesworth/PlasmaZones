@@ -475,6 +475,19 @@ public:
     Q_INVOKABLE QVariantMap getShaderInfo(const QString& shaderId) const;
 
     /**
+     * Build the generated `#define pz_<id> ...` preamble (T1.1) for a shader, so
+     * the editor's live preview compiles a pack that reads parameters by name.
+     * Mirrors what the daemon overlay splices via ShaderRegistry::paramPreamble;
+     * the per-param `slot` comes from the same D-Bus shaderInfo the daemon's
+     * registry produced (auto-assigned), so the preview's preamble and its
+     * translateShaderParams uploads agree on every lane. Empty if the shader
+     * declares no parameters.
+     * @param shaderId Shader ID to query
+     * @return The preamble block, spliced after the shader's #version at load.
+     */
+    Q_INVOKABLE QString shaderParamPreamble(const QString& shaderId) const;
+
+    /**
      * @brief Build a labels texture (zone numbers) for shader preview
      * @param zones PhosphorZones::Zone data from zonesForShaderPreview()
      * @param width Texture width in pixels

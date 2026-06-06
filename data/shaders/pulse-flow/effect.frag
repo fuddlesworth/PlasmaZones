@@ -22,10 +22,10 @@ layout(location = 0) out vec4 fragColor;
 
 // ─── Parameters ─────────────────────────────────────────────────────────────
 
-float getAudioReact()   { return customParams[1].z >= 0.0 ? customParams[1].z : 1.0; }
-float getFillOpacity()  { return customParams[2].x >= 0.0 ? customParams[2].x : 0.85; }
-float getZoneTint()     { return customParams[2].y >= 0.0 ? customParams[2].y : 0.15; }
-float getGlowRadius()   { return customParams[2].z >= 0.0 ? customParams[2].z : 8.0; }
+float getAudioReact()   { return pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0; }
+float getFillOpacity()  { return pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85; }
+float getZoneTint()     { return pz_zoneTint >= 0.0 ? pz_zoneTint : 0.15; }
+float getGlowRadius()   { return pz_glowRadius >= 0.0 ? pz_glowRadius : 8.0; }
 
 // ─── Color palette ──────────────────────────────────────────────────────────
 // 2-color gradient: hot glow → cool trail, driven by heat (freshness).
@@ -188,10 +188,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 // Labels rendered as hot energy traces with flowing pulse halo, chromatic heat
 // shift, bass-reactive brightness, and treble spark discharge along outlines.
 
-float getLabelGlowSpread() { return customParams[3].x >= 0.0 ? customParams[3].x : 3.5; }
-float getLabelBrightness() { return customParams[3].y >= 0.0 ? customParams[3].y : 1.5; }
-float getLabelAudioReact() { return customParams[3].z >= 0.0 ? customParams[3].z : 1.0; }
-float getLabelChromaStr()  { return customParams[3].w >= 0.0 ? customParams[3].w : 1.5; }
+float getLabelGlowSpread() { return pz_labelGlowSpread >= 0.0 ? pz_labelGlowSpread : 3.5; }
+float getLabelBrightness() { return pz_labelBrightness >= 0.0 ? pz_labelBrightness : 1.5; }
+float getLabelAudioReact() { return pz_labelAudioReact >= 0.0 ? pz_labelAudioReact : 1.0; }
+float getLabelChromaStr()  { return pz_labelChromaStr >= 0.0 ? pz_labelChromaStr : 1.5; }
 
 vec4 compositePulseLabels(vec4 color, vec2 fragCoord,
                           vec3 glowCol, vec3 trailCol,
@@ -295,8 +295,8 @@ void main() {
         return;
     }
 
-    vec3 glowCol  = colorWithFallback(customColors[0].rgb, vec3(1.0, 0.6, 0.2));
-    vec3 trailCol = colorWithFallback(customColors[1].rgb, vec3(0.4, 0.2, 0.8));
+    vec3 glowCol  = colorWithFallback(pz_glowColor.rgb, vec3(1.0, 0.6, 0.2));
+    vec3 trailCol = colorWithFallback(pz_trailColor.rgb, vec3(0.4, 0.2, 0.8));
 
     bool  hasAudio = iAudioSpectrumSize > 0;
     float bass   = getBassSoft();
@@ -314,7 +314,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[1].w > 0.5) {
+    if (pz_showLabels > 0.5) {
         color = compositePulseLabels(color, fragCoord, glowCol, trailCol,
                                      bass, mids, treble, hasAudio);
     }

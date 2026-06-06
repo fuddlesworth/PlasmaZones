@@ -16,6 +16,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QUrl>
 #include <QUuid>
 
@@ -205,6 +206,48 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
 
         if (!param.id.isEmpty()) {
             info.parameters.append(param);
+        }
+    }
+
+    // Automatic slot assignment (T1.1): a parameter that omits `slot` is packed
+    // into the next free lane of its pool in declaration order — float/int/bool
+    // → 0..31, color → 0..15, image → 0..3 — so authors no longer hand-number
+    // slots (the `pz_<id>` preamble and the upload both derive from this same
+    // slot). Explicit slots are reserved first, so a pack may mix the two; the
+    // migrated zone packs drop slots entirely, becoming pure declaration order.
+    // A collision (two explicit params on one lane) is left as-is for the
+    // validator (T1.2) to flag, not silently reshuffled.
+    {
+        auto poolOf = [](const QString& type) -> int { // 0 = scalar, 1 = color, 2 = image
+            if (type == QLatin1String("color")) {
+                return 1;
+            }
+            if (type == QLatin1String("image")) {
+                return 2;
+            }
+            return 0;
+        };
+        QSet<int> usedScalar, usedColor, usedImage;
+        for (const ShaderRegistry::ParameterInfo& p : std::as_const(info.parameters)) {
+            if (p.slot < 0) {
+                continue;
+            }
+            (poolOf(p.type) == 1 ? usedColor : poolOf(p.type) == 2 ? usedImage : usedScalar).insert(p.slot);
+        }
+        int nextScalar = 0, nextColor = 0, nextImage = 0;
+        for (ShaderRegistry::ParameterInfo& p : info.parameters) {
+            if (p.slot >= 0) {
+                continue;
+            }
+            const int pool = poolOf(p.type);
+            QSet<int>& used = (pool == 1 ? usedColor : pool == 2 ? usedImage : usedScalar);
+            int& next = (pool == 1 ? nextColor : pool == 2 ? nextImage : nextScalar);
+            while (used.contains(next)) {
+                ++next;
+            }
+            p.slot = next;
+            used.insert(next);
+            ++next;
         }
     }
 

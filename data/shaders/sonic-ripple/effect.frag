@@ -29,9 +29,9 @@
  *   [1].w = fillOpacity      — zone fill alpha
  *
  * Colors:
- *   customColors[0] = primary (default: cyan)
- *   customColors[1] = accent  (default: pink)
- *   customColors[2] = bass    (default: orange)
+ *   pz_primaryColor = primary (default: cyan)
+ *   pz_accentColor = accent  (default: pink)
+ *   pz_bassColor = bass    (default: orange)
  */
 
 
@@ -46,18 +46,18 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderWidth  = max(params.y, 2.5);
 
     // Parameters with defaults
-    float reactivity    = customParams[0].x >= 0.0 ? customParams[0].x : 1.5;
-    float ringCount     = customParams[0].y >= 0.0 ? customParams[0].y : 24.0;
-    float ringSpeed     = customParams[0].w >= 0.0 ? customParams[0].w : 1.0;
-    float rotSpeed      = customParams[1].x >= 0.0 ? customParams[1].x : 0.15;
-    float idleAnim      = customParams[1].y >= 0.0 ? customParams[1].y : 1.0;
-    float glowIntensity = customParams[1].z >= 0.0 ? customParams[1].z : 2.0;
-    float fillOpacity   = customParams[1].w >= 0.0 ? customParams[1].w : 0.88;
+    float reactivity    = pz_reactivity >= 0.0 ? pz_reactivity : 1.5;
+    float ringCount     = pz_ringCount >= 0.0 ? pz_ringCount : 24.0;
+    float ringSpeed     = pz_ringSpeed >= 0.0 ? pz_ringSpeed : 1.0;
+    float rotSpeed      = pz_rotationSpeed >= 0.0 ? pz_rotationSpeed : 0.15;
+    float idleAnim      = pz_idleAnimation >= 0.0 ? pz_idleAnimation : 1.0;
+    float glowIntensity = pz_glowIntensity >= 0.0 ? pz_glowIntensity : 2.0;
+    float fillOpacity   = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.88;
 
     // Colors
-    vec3 primary  = colorWithFallback(customColors[0].rgb, vec3(0.0, 0.8, 1.0));
-    vec3 accent   = colorWithFallback(customColors[1].rgb, vec3(1.0, 0.2, 0.6));
-    vec3 bassCol  = colorWithFallback(customColors[2].rgb, vec3(1.0, 0.4, 0.0));
+    vec3 primary  = colorWithFallback(pz_primaryColor.rgb, vec3(0.0, 0.8, 1.0));
+    vec3 accent   = colorWithFallback(pz_accentColor.rgb, vec3(1.0, 0.2, 0.6));
+    vec3 bassCol  = colorWithFallback(pz_bassColor.rgb, vec3(1.0, 0.4, 0.0));
 
     // ── Highlighted vs dormant ──────────────────────────────
     // Highlighted zones are fully alive; non-highlighted are subdued/dormant.
@@ -196,7 +196,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Audio drives the warp intensity, color, and flow speed.
 
         // Nebula UV — flows at its own pace without bass-driven warping
-        float nebScale = customParams[3].x >= 0.0 ? customParams[3].x : 8.0;
+        float nebScale = pz_nebulaScale >= 0.0 ? pz_nebulaScale : 8.0;
         vec2 nebUV = globalUV * (nebScale / 3.2);
 
         // Multi-octave noise for the nebula pattern
@@ -323,14 +323,14 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.rgb += primary * innerGlow;
 
         // ── Zone label: Resonance Lens ───────────────────────
-        if (customParams[3].y > 0.5) {
+        if (pz_showLabels > 0.5) {
             vec2 labelUv = fragCoord / max(iResolution, vec2(0.001));
             vec2 texel = 1.0 / max(iResolution, vec2(1.0));
             vec4 labelSample = texture(uZoneLabels, labelUv);
             float labelAlpha = labelSample.a;
-            float labelGlowSpread = customParams[2].x >= 0.0 ? customParams[2].x : 3.0;
-            float labelBrightness = customParams[2].y >= 0.0 ? customParams[2].y : 2.0;
-            float labelAudioMul = customParams[2].z >= 0.0 ? customParams[2].z : 1.0;
+            float labelGlowSpread = pz_resonanceSpread >= 0.0 ? pz_resonanceSpread : 3.0;
+            float labelBrightness = pz_ringIntensity >= 0.0 ? pz_ringIntensity : 2.0;
+            float labelAudioMul = pz_waveReact >= 0.0 ? pz_waveReact : 1.0;
 
             // Gaussian halo for ring emission zone
             float halo = 0.0;

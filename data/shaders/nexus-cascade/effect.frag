@@ -22,12 +22,12 @@ layout(location = 0) out vec4 fragColor;
 
 // ─── Parameters ───────────────────────────────────────────────────
 
-float getChromaStrength() { return customParams[3].x >= 0.0 ? customParams[3].x : 4.0; }
-float getFillOpacity()    { return customParams[3].y >= 0.0 ? customParams[3].y : 0.92; }
-float getChannelMix()     { return customParams[3].z >= 0.0 ? customParams[3].z : 0.5; }
-float getZoneFillTint()  { return customParams[3].w >= 0.0 ? customParams[3].w : 0.0; }
-float getAudioReact()    { return customParams[0].z >= 0.0 ? customParams[0].z : 1.0; }
-float getBassChromaMul() { return customParams[2].w >= 0.0 ? customParams[2].w : 3.0; }
+float getChromaStrength() { return pz_chromaStrength >= 0.0 ? pz_chromaStrength : 4.0; }
+float getFillOpacity()    { return pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.92; }
+float getChannelMix()     { return pz_channelMix >= 0.0 ? pz_channelMix : 0.5; }
+float getZoneFillTint()  { return pz_zoneFillTint >= 0.0 ? pz_zoneFillTint : 0.0; }
+float getAudioReact()    { return pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0; }
+float getBassChromaMul() { return pz_bassChromaMultiplier >= 0.0 ? pz_bassChromaMultiplier : 3.0; }
 
 
 vec4 sampleNexus(vec2 fragCoord, vec2 uv, float chroma) {
@@ -232,10 +232,10 @@ vec4 compositeNexusLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    float labelGlowSpread = customParams[4].x >= 0.0 ? customParams[4].x : 3.0;
-    float labelBrightness = customParams[4].y >= 0.0 ? customParams[4].y : 2.0;
-    float labelAudioReact = customParams[4].z >= 0.0 ? customParams[4].z : 1.0;
-    float signalSpeed     = customParams[4].w >= 0.0 ? customParams[4].w : 6.0;
+    float labelGlowSpread = pz_traceSpread >= 0.0 ? pz_traceSpread : 3.0;
+    float labelBrightness = pz_signalBright >= 0.0 ? pz_signalBright : 2.0;
+    float labelAudioReact = pz_chromaReact >= 0.0 ? pz_chromaReact : 1.0;
+    float signalSpeed     = pz_signalSpeed >= 0.0 ? pz_signalSpeed : 6.0;
 
     // Chromatic aberration direction rotates over time
     float caAngle = iTime * 0.7;
@@ -262,7 +262,7 @@ vec4 compositeNexusLabels(vec4 color, vec2 fragCoord,
     if (outline > 0.01) {
         float angle = atan(uv.y - 0.5, uv.x - 0.5);
         float signal = smoothstep(0.8, 1.0, sin(angle * 12.0 - iTime * signalSpeed));
-        vec3 traceCol = colorWithFallback(customColors[0].rgb, vec3(0.5, 0.6, 1.0));
+        vec3 traceCol = colorWithFallback(pz_color1.rgb, vec3(0.5, 0.6, 1.0));
         float traceBright = outline * (0.3 + signal * 0.7) * (hasAudio ? 1.0 + treble * labelAudioReact : 1.0);
         color.rgb += traceCol * traceBright;
         color.a = max(color.a, outline * 0.5);
@@ -305,7 +305,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[5].x > 0.5)
+    if (pz_showLabels > 0.5)
         color = compositeNexusLabels(color, fragCoord, bass, treble, hasAudio);
     fragColor = clampFragColor(color);
 }

@@ -17,25 +17,25 @@ layout(location = 0) out vec4 fragColor;
 
 // ─── Parameters ─────────────────────────────────────────────────────────────
 
-float getIconScale()     { return customParams[0].x >= 0.0 ? customParams[0].x : 0.7; }
-float getStrokeWidth()   { return customParams[0].y >= 0.0 ? customParams[0].y : 0.012; }
-float getGlowIntensity() { return customParams[0].z >= 0.0 ? customParams[0].z : 0.8; }
-float getPulseSpeed()    { return customParams[0].w >= 0.0 ? customParams[0].w : 1.0; }
+float getIconScale()     { return pz_iconScale >= 0.0 ? pz_iconScale : 0.7; }
+float getStrokeWidth()   { return pz_strokeWidth >= 0.0 ? pz_strokeWidth : 0.012; }
+float getGlowIntensity() { return pz_glowIntensity >= 0.0 ? pz_glowIntensity : 0.8; }
+float getPulseSpeed()    { return pz_pulseSpeed >= 0.0 ? pz_pulseSpeed : 1.0; }
 
-float getGradientSpeed() { return customParams[1].x >= 0.0 ? customParams[1].x : 0.3; }
-float getSparkRate()     { return customParams[1].y >= 0.0 ? customParams[1].y : 0.6; }
-float getAmbientGlow()   { return customParams[1].z >= 0.0 ? customParams[1].z : 0.15; }
-float getAudioReact()    { return customParams[1].w >= 0.0 ? customParams[1].w : 1.0; }
+float getGradientSpeed() { return pz_gradientSpeed >= 0.0 ? pz_gradientSpeed : 0.3; }
+float getSparkRate()     { return pz_sparkRate >= 0.0 ? pz_sparkRate : 0.6; }
+float getAmbientGlow()   { return pz_ambientGlow >= 0.0 ? pz_ambientGlow : 0.15; }
+float getAudioReact()    { return pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0; }
 
-float getFillOpacity()   { return customParams[2].x >= 0.0 ? customParams[2].x : 0.85; }
-float getBloomStr()      { return customParams[2].y >= 0.0 ? customParams[2].y : 0.4; }
+float getFillOpacity()   { return pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85; }
+float getBloomStr()      { return pz_bloomStrength >= 0.0 ? pz_bloomStrength : 0.4; }
 
-float getLabelGlowSpread() { return customParams[2].z >= 0.0 ? customParams[2].z : 3.0; }
-float getLabelBrightness() { return customParams[2].w >= 0.0 ? customParams[2].w : 2.0; }
+float getLabelGlowSpread() { return pz_labelGlowSpread >= 0.0 ? pz_labelGlowSpread : 3.0; }
+float getLabelBrightness() { return pz_labelBrightness >= 0.0 ? pz_labelBrightness : 2.0; }
 
-float getBackgroundStr() { return customParams[3].y >= 0.0 ? customParams[3].y : 0.12; }
-float getVeinStr()       { return customParams[3].z >= 0.0 ? customParams[3].z : 0.07; }
-float getZoneTint()      { return customParams[3].w >= 0.0 ? customParams[3].w : 0.15; }
+float getBackgroundStr() { return pz_backgroundIntensity >= 0.0 ? pz_backgroundIntensity : 0.12; }
+float getVeinStr()       { return pz_veinIntensity >= 0.0 ? pz_veinIntensity : 0.07; }
+float getZoneTint()      { return pz_zoneTint >= 0.0 ? pz_zoneTint : 0.15; }
 
 // ─── Icon geometry ──────────────────────────────────────────────────────────
 // SVG icon rects: centered at origin, normalized by /480. Y-down matches vFragCoord.
@@ -530,10 +530,10 @@ void main() {
         return;
     }
 
-    vec3 cyanCol   = colorWithFallback(customColors[0].rgb, vec3(0.133, 0.827, 0.933));
-    vec3 blueCol   = colorWithFallback(customColors[1].rgb, vec3(0.231, 0.510, 0.965));
-    vec3 purpleCol = colorWithFallback(customColors[2].rgb, vec3(0.659, 0.333, 0.969));
-    vec3 roseCol   = colorWithFallback(customColors[3].rgb, vec3(0.957, 0.247, 0.369));
+    vec3 cyanCol   = colorWithFallback(pz_cyanColor.rgb, vec3(0.133, 0.827, 0.933));
+    vec3 blueCol   = colorWithFallback(pz_blueColor.rgb, vec3(0.231, 0.510, 0.965));
+    vec3 purpleCol = colorWithFallback(pz_purpleColor.rgb, vec3(0.659, 0.333, 0.969));
+    vec3 roseCol   = colorWithFallback(pz_roseColor.rgb, vec3(0.957, 0.247, 0.369));
 
     bool  hasAudio = iAudioSpectrumSize > 0;
     float bass   = getBassSoft();
@@ -550,7 +550,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    if (customParams[3].x > 0.5)
+    if (pz_showLabels > 0.5)
         color = compositeSigilLabels(color, fragCoord, cyanCol, purpleCol,
                                      bass, mids, treble, hasAudio);
 

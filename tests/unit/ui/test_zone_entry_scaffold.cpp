@@ -14,11 +14,16 @@
 
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTest>
 
 class TestZoneEntryScaffold : public QObject
@@ -132,15 +137,35 @@ private Q_SLOTS:
         QFile f(fragPath);
         QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(fragPath));
         const QString raw = QString::fromUtf8(f.readAll());
-        const QString assembled = PlasmaZones::assembleZoneEntrySource(raw);
 
+        // Build the param preamble from the pack's metadata, exactly as the
+        // runtime does — so a pack migrated to pz_<id> names finds its defines.
+        // Parse metadata.json's parameters[] into a ShaderInfo (id/type/slot) and
+        // run the production ShaderRegistry::paramPreamble.
+        PhosphorShaders::ShaderRegistry::ShaderInfo info;
+        QFile metaFile(QFileInfo(fragPath).absolutePath() + QStringLiteral("/metadata.json"));
+        if (metaFile.open(QIODevice::ReadOnly)) {
+            const QJsonObject root = QJsonDocument::fromJson(metaFile.readAll()).object();
+            for (const QJsonValue& pv : root.value(QStringLiteral("parameters")).toArray()) {
+                const QJsonObject po = pv.toObject();
+                PhosphorShaders::ShaderRegistry::ParameterInfo pi;
+                pi.id = po.value(QStringLiteral("id")).toString();
+                pi.type = po.value(QStringLiteral("type")).toString();
+                pi.slot = po.value(QStringLiteral("slot")).toInt(-1);
+                info.parameters.append(pi);
+            }
+        }
+        const QString preamble = PhosphorShaders::ShaderRegistry::paramPreamble(info);
+
+        const QString assembled = PlasmaZones::assembleZoneEntrySource(raw);
         const QStringList includePaths = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders/shared"),
                                           QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders")};
         QString err;
-        const QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+        QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
             assembled, QFileInfo(fragPath).absolutePath(), includePaths, &err);
         QVERIFY2(!expanded.isEmpty(),
                  qPrintable(QStringLiteral("expand failed: ") + fragPath + QStringLiteral(" — ") + err));
+        expanded = PhosphorShaders::spliceAfterVersion(expanded, preamble);
 
         const auto result = PhosphorRendering::ShaderCompiler::compile(expanded.toUtf8(), QShader::FragmentStage);
         QVERIFY2(result.success,
