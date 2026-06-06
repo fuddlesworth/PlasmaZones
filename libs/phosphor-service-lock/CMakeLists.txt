@@ -65,8 +65,11 @@ set(phosphorservicelock_public_HDRS
 set(phosphorservicelock_SRCS
     src/qmlregistration.cpp
     src/lockservice.cpp
+    src/lockstatemachine.cpp
     src/iauthenticator.cpp
     src/pamauthenticator.cpp
+    src/isessionlock.cpp
+    src/waylandsessionlock.cpp
 )
 
 add_library(PhosphorServiceLock SHARED
