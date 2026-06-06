@@ -37,7 +37,7 @@
 #include <QMutexLocker>
 
 #include "../core/logging.h"
-#include "p_qml_i18n.h"
+#include "phosphor_qml_i18n.h"
 #include "vulkan_support.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -52,8 +52,8 @@
 #include <PhosphorLayer/defaults/DefaultScreenProvider.h>
 #include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
 #include <QQuickItem>
-#include "overlayservice/p_roles.h"
-#include "overlayservice/p_slot_keys.h"
+#include "overlayservice/phosphor_roles.h"
+#include "overlayservice/phosphor_slot_keys.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -78,27 +78,27 @@ QQuickItem* slotItemOrNull(const OverlayService::PerScreenOverlayState& state, c
 
 QQuickItem* OverlayService::PerScreenOverlayState::osdSlot() const
 {
-    return slotItemOrNull(*this, PSlotKeys::Osd());
+    return slotItemOrNull(*this, PhosphorSlotKeys::Osd());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::snapAssistSlot() const
 {
-    return slotItemOrNull(*this, PSlotKeys::SnapAssist());
+    return slotItemOrNull(*this, PhosphorSlotKeys::SnapAssist());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::layoutPickerSlot() const
 {
-    return slotItemOrNull(*this, PSlotKeys::LayoutPicker());
+    return slotItemOrNull(*this, PhosphorSlotKeys::LayoutPicker());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::zoneSelectorSlot() const
 {
-    return slotItemOrNull(*this, PSlotKeys::ZoneSelector());
+    return slotItemOrNull(*this, PhosphorSlotKeys::ZoneSelector());
 }
 
 QQuickItem* OverlayService::PerScreenOverlayState::mainOverlaySlot() const
 {
-    return slotItemOrNull(*this, PSlotKeys::MainOverlay());
+    return slotItemOrNull(*this, PhosphorSlotKeys::MainOverlay());
 }
 
 // Per-role SurfaceAnimator config builders + setupSurfaceAnimator +
@@ -179,7 +179,7 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
         .surfaceFactory = m_surfaceFactory.get(),
         .engineConfigurator =
             [this](QQmlEngine& engine) {
-                auto* localizedContext = new PLocalizedContext(&engine);
+                auto* localizedContext = new PhosphorLocalizedContext(&engine);
                 engine.rootContext()->setContextObject(localizedContext);
                 engine.rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
@@ -248,8 +248,8 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
     // itself. The remaining callbacks (factory + post/pre-create) need
     // m_surfaceManager to exist, so they're registered here.
     m_shellHost->setSurfaceFactory([this](const QString& screenId, QScreen* physScreen) -> PhosphorLayer::Surface* {
-        const auto role =
-            PRoles::makePerInstanceRole(PRoles::PassiveShell, screenId, m_surfaceManager->nextScopeGeneration());
+        const auto role = PhosphorRoles::makePerInstanceRole(PhosphorRoles::PassiveShell, screenId,
+                                                             m_surfaceManager->nextScopeGeneration());
         auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/PassiveOverlayShell.qml")),
                                                physScreen, "passive shell", screenId);
         if (!surface) {

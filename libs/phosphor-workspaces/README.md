@@ -9,7 +9,7 @@
 ## Responsibility
 
 Tracks the active virtual desktop and current Activity, with change
-signals on switch. Independent of the PlasmaZones daemon — consumers
+signals on switch. Independent of the Phosphor daemon: consumers
 that need workspace awareness link this library directly.
 
 ## Key types

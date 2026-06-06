@@ -262,7 +262,7 @@ QQC2.ItemDelegate {
             property var modelData: trailingModelData
 
             sourceComponent: rowItem.trailingDelegate
-            // Trailing widgets (e.g. PlasmaZones' snapping/tiling
+            // Trailing widgets (e.g. Phosphor's snapping/tiling
             // Switch + dirty badge) are suppressed in compact mode —
             // there's no horizontal room and the row reads as
             // icon-only. Consumers that need a compact-mode trailing

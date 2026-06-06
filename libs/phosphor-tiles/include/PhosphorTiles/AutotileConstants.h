@@ -14,7 +14,7 @@
  *
  * This header owns the JSON keys and numeric defaults that the tiling
  * algorithm primitives need to be self-contained.  It intentionally has
- * NO dependency on PlasmaZones config or core layers, so it can move
+ * NO dependency on Phosphor config or core layers, so it can move
  * cleanly into the future libs/phosphor-tiles library without dragging
  * cross-layer headers along.
  *

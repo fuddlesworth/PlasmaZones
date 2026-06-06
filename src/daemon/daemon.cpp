@@ -66,7 +66,7 @@
 
 #include <PhosphorContext/ContextResolver.h>
 #include "../core/utils.h"
-#include "../p_i18n.h"
+#include "../phosphor_i18n.h"
 #include "../config/configdefaults.h"
 #include "../config/settingsconfigstore.h"
 #include <PhosphorScreens/DBusScreenAdaptor.h>
@@ -1672,8 +1672,8 @@ void Daemon::warnCompositorBridgeMissing()
 
     if (!effectInstalled) {
         emitBridgeMissingWarning(
-            PI18n::tr("The PlasmaZones KWin effect plugin is not installed where KWin can find it. "
-                      "Reinstall PlasmaZones."));
+            PhosphorI18n::tr("The PlasmaZones KWin effect plugin is not installed where KWin can find it. "
+                             "Reinstall PlasmaZones."));
         return;
     }
     if (effectKWinVersion.isEmpty()) {
@@ -1711,7 +1711,7 @@ void Daemon::warnCompositorBridgeMissing()
                     if (match.hasMatch()) {
                         const QString runningKWinVersion = match.captured(1);
                         if (runningKWinVersion != effectKWinVersion) {
-                            diagnosis = PI18n::tr(
+                            diagnosis = PhosphorI18n::tr(
                                             "The PlasmaZones KWin effect was built for KWin %1 but "
                                             "KWin %2 is running, so KWin will not load it. Rebuild and "
                                             "reinstall PlasmaZones against the running KWin. On NixOS, "
@@ -1740,7 +1740,7 @@ void Daemon::emitBridgeMissingWarning(const QString& diagnosis)
     }
 
     const QString body = diagnosis.isEmpty()
-        ? PI18n::tr(
+        ? PhosphorI18n::tr(
               "The PlasmaZones KWin effect has not registered with the daemon, so window "
               "dragging and shortcuts will not work. Make sure it is enabled in System "
               "Settings > Desktop Effects, then restart the Plasma session.")
@@ -1759,7 +1759,7 @@ void Daemon::emitBridgeMissingWarning(const QString& diagnosis)
     notify << QStringLiteral("PlasmaZones") // app_name
            << 0u // replaces_id
            << QStringLiteral("plasmazones") // app_icon
-           << PI18n::tr("PlasmaZones: window manager integration inactive") // summary
+           << PhosphorI18n::tr("PlasmaZones: window manager integration inactive") // summary
            << body // body
            << QStringList() // actions
            << QVariantMap() // hints

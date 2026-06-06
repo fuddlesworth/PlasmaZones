@@ -32,7 +32,7 @@ class IWallpaperProvider;
 ///
 /// Composition roots own a per-process instance and register search
 /// paths explicitly — there is no library-level singleton. Tests
-/// construct a per-fixture registry; downstream consumers (PlasmaZones
+/// construct a per-fixture registry; downstream consumers (Phosphor
 /// shell, future plugin compositors) instantiate their own.
 ///
 /// Search-path management (`addSearchPath`, `addSearchPaths`,
@@ -143,7 +143,7 @@ public:
 
     /// Parse a pack directory's `metadata.json` into a ShaderInfo using the SAME
     /// parser the live registry uses (T1.1 auto-slot assignment included), so an
-    /// offline validator (`plasmazones-shader-validate`) and the daemon agree on
+    /// offline validator (`phosphor-shader-validate`) and the daemon agree on
     /// what a pack is. Returns an invalid ShaderInfo and sets @p error on a
     /// missing/unreadable file or non-object JSON root. Does NOT verify that the
     /// frag/buffer files exist on disk — that's a validator lint, not a parse

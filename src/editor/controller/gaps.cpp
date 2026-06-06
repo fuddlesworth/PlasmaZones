@@ -21,7 +21,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 
-#include "p_i18n.h"
+#include "phosphor_i18n.h"
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
@@ -329,7 +329,7 @@ void EditorController::clearOuterGapOverride()
 
     // Snapshot current state for undo, then push a macro command that resets all gap overrides.
     // Uses beginMacro/endMacro so the entire clear is one undo step.
-    m_undoController->beginMacro(PI18n::tr("Clear Edge Gap Override", "@action"));
+    m_undoController->beginMacro(PhosphorI18n::tr("Clear Edge Gap Override", "@action"));
     if (m_outerGap != -1) {
         m_undoController->push(
             new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap, m_outerGap, -1));

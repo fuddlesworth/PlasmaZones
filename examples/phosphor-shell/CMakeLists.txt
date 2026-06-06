@@ -22,6 +22,10 @@ cmake_minimum_required(VERSION 3.16)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Quick Qml)
 
+if(COMMAND qt_policy)
+    qt_policy(SET QTP0001 NEW)
+endif()
+
 # qt_add_qml_module's metatype generation walks AUTOMOC-produced
 # json files. Without AUTOMOC the call fails inside qt6_extract_metatypes
 # even for a pure-QML module that ships no C++ types — the macro emits
@@ -63,6 +67,7 @@ qt_add_qml_module(phosphor_shell_example
         MprisPlayerState.qml
         MprisWidget.qml
         TrayMenuPopup.qml
+        SessionLockCoordinator.qml
     RESOURCES
         shaders/frosted_glass.frag
         shaders/gradient.frag

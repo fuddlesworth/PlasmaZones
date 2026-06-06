@@ -9,7 +9,7 @@
 // detector interface without pulling ISettings / IOverlayService /
 // ILayoutManager. Prerequisite for moving ZoneDetector + this interface
 // into a standalone phosphor-zones library without dragging the rest of
-// PZ's service interfaces along.
+// Phosphor's service interfaces along.
 
 #include <phosphorzones_export.h>
 

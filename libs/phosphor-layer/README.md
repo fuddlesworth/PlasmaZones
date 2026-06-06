@@ -83,7 +83,10 @@ using namespace PhosphorLayer;
 
 auto transport = std::make_unique<PhosphorWaylandTransport>();
 auto screens   = std::make_unique<DefaultScreenProvider>();
-SurfaceFactory factory(transport.get(), engineProvider, screens.get(), animator);
+SurfaceFactory factory(SurfaceFactory::Deps{.transport = transport.get(),
+                                            .screens = screens.get(),
+                                            .engineProvider = engineProvider,
+                                            .animator = animator});
 
 SurfaceConfig cfg;
 // Role is a plain value type. Construct one directly or use a recipe from
@@ -95,11 +98,11 @@ cfg.role       = Role{Layer::Overlay,
                       KeyboardInteractivity::None,
                       QMargins(),
                       QStringLiteral("zone-outline")};
-cfg.screenId   = "output-1";
-cfg.qmlSource  = QUrl(QStringLiteral("qrc:/overlays/ZoneOutline.qml"));
+cfg.screen     = targetScreen;  // QScreen*; nullptr resolves to the provider's primary()
+cfg.contentUrl = QUrl(QStringLiteral("qrc:/overlays/ZoneOutline.qml"));
 cfg.contextProperties.insert(QStringLiteral("zones"), QVariant::fromValue(zoneList));
 
-Surface *s = factory.create(cfg, /*parent*/ this);
+Surface *s = factory.create(std::move(cfg), /*parent*/ this);
 s->show();
 // Later:
 s->hide();

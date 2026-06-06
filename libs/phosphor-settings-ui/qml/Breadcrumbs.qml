@@ -13,7 +13,7 @@ import org.phosphor.settings.ui
  * Walks parentId links upward from the current page; each segment but
  * the last is clickable and navigates to that ancestor.
  *
- * Visual model matches the legacy PlasmaZones chrome: plain Labels at
+ * Visual model matches the legacy Phosphor chrome: plain Labels at
  * 0.5 opacity by default, fading to 0.8 + an underline on hover for
  * clickable segments. Separator is a `›` (U+203A) Label between
  * segments, not an icon — keeps the trail lightweight and theme-

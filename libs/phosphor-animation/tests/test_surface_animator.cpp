@@ -192,9 +192,9 @@ private Q_SLOTS:
         QVERIFY(defaultResolved.showScaleProfile.isEmpty());
     }
 
-    /// Regression: PlasmaZones registers configs against base-role scope
-    /// prefixes (e.g. "plasmazones-layout-osd") but the actual surfaces
-    /// carry per-instance derived prefixes ("plasmazones-layout-osd-{id}-{gen}")
+    /// Regression: Phosphor registers configs against base-role scope
+    /// prefixes (e.g. "phosphor-layout-osd") but the actual surfaces
+    /// carry per-instance derived prefixes ("phosphor-layout-osd-{id}-{gen}")
     /// for compositor scope uniqueness. Lookup must match by longest
     /// registered prefix with a '-' boundary, not by exact equality.
     void per_role_config_prefix_match()
@@ -207,34 +207,32 @@ private Q_SLOTS:
         SurfaceAnimator::Config refinement;
         refinement.showProfile = QStringLiteral("refinement.show");
         anim.registerConfigForRole(
-            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-layout-osd")), base);
+            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("phosphor-layout-osd")), base);
         anim.registerConfigForRole(
-            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-layout-picker")), sibling);
+            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("phosphor-layout-picker")), sibling);
         // Longer key under same prefix family — should beat "base" for
         // surfaces scoped to its sub-tree.
         anim.registerConfigForRole(
-            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-layout-osd-locked")),
-            refinement);
+            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("phosphor-layout-osd-locked")), refinement);
 
         // Per-instance scope: matches the base via prefix + '-' boundary.
-        auto perInstance =
-            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-layout-osd-DP-1-3"));
+        auto perInstance = PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("phosphor-layout-osd-DP-1-3"));
         QCOMPARE(anim.configForRole(perInstance).showProfile, QStringLiteral("base.show"));
 
         // Sibling prefix must NOT match the base — boundary check guards
         // against accidental cross-pollination.
         auto sibInstance =
-            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-layout-picker-DP-1-3"));
+            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("phosphor-layout-picker-DP-1-3"));
         QCOMPARE(anim.configForRole(sibInstance).showProfile, QStringLiteral("sibling.show"));
 
         // Longest-match wins: a surface scoped under the "locked" sub-tree
         // resolves to the more-specific config.
         auto lockedInstance =
-            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-layout-osd-locked-DP-1-3"));
+            PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("phosphor-layout-osd-locked-DP-1-3"));
         QCOMPARE(anim.configForRole(lockedInstance).showProfile, QStringLiteral("refinement.show"));
 
         // Exact-match still works (registered key == surface prefix).
-        auto exactInstance = PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-layout-osd"));
+        auto exactInstance = PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("phosphor-layout-osd"));
         QCOMPARE(anim.configForRole(exactInstance).showProfile, QStringLiteral("base.show"));
 
         // Completely unrelated prefix → default.

@@ -76,7 +76,7 @@ ComboBox {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                 propagateComposedEvents: true
-                onPressed: function(mouse) {
+                onPressed: function (mouse) {
                     // Map the ComboBox button rect into catcher-local coords
                     // (catcher fills Overlay.overlay, so these match the mouse
                     // event's coordinate system).
@@ -91,9 +91,7 @@ ComboBox {
                     mouse.accepted = onCombo;
                 }
             }
-
         }
-
     }
 
     popup: T.Popup {
@@ -153,9 +151,7 @@ ComboBox {
             currentIndex: root.highlightedIndex
             highlightMoveDuration: 0
 
-            ScrollBar.vertical: ScrollBar {
-            }
-
+            ScrollBar.vertical: ScrollBar {}
         }
 
         background: Rectangle {
@@ -164,7 +160,6 @@ ComboBox {
             border.width: 1
             radius: Kirigami.Units.smallSpacing
         }
-
     }
 
     delegate: ItemDelegate {
@@ -186,7 +181,5 @@ ComboBox {
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
         }
-
     }
-
 }

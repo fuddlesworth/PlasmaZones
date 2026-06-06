@@ -17,7 +17,7 @@ import org.plasmazones.common as QFZCommon
  *
  * Phase 5: surface lifecycle + show/hide animations are driven entirely
  * by PhosphorAnimationLayer::SurfaceAnimator (registered for
- * PRoles::LayoutPicker with `osd.show` / `osd.pop` / `osd.hide`
+ * PhosphorRoles::LayoutPicker with `osd.show` / `osd.pop` / `osd.hide`
  * profiles). PhosphorLayer::Surface handles `Qt.WindowTransparentForInput`
  * on the underlying QWindow during the hide cycle, and OverlayService::
  * showLayoutPicker / hideLayoutPicker drive `Surface::show()` /

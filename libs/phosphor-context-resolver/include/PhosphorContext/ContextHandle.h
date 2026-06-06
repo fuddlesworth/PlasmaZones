@@ -50,7 +50,7 @@ struct ContextHandle
     QString screenId;
 
     /// The virtual desktop the user is currently on (1-based; 0 means
-    /// "all desktops" / pinned in the PlasmaZones taxonomy).
+    /// "all desktops" / pinned in the Phosphor taxonomy).
     int virtualDesktop = 0;
 
     /// The current activity uuid. Empty when no activity manager is wired

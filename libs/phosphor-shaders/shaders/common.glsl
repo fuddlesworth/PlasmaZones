@@ -23,8 +23,8 @@ layout(std140, binding = 0) uniform ShaderUniforms {
     float iTimeDelta;
     int iFrame;
     vec2 iResolution;
-    int appField0;          // consumer-defined (e.g. PlasmaZones: zoneCount)
-    int appField1;          // consumer-defined (e.g. PlasmaZones: highlightedCount)
+    int appField0;          // consumer-defined (e.g. Phosphor: zoneCount)
+    int appField1;          // consumer-defined (e.g. Phosphor: highlightedCount)
     vec4 iMouse;        // xy = pixels, zw = normalized (0-1), Qt Y-down (Y=0 at top)
     vec4 iDate;         // xyzw = year, month, day, seconds since midnight
     vec4 customParams[8];

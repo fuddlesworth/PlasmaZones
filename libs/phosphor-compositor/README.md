@@ -3,18 +3,18 @@
 
 # phosphor-compositor
 
-> Compositor-plugin SDK for PlasmaZones. Provides the interface contract,
+> Compositor-plugin SDK for Phosphor. Provides the interface contract,
 > D-Bus client, and shared utilities a compositor plugin needs to give its
 > users zone-based window management.
 
 ## Responsibility
 
-PlasmaZones splits into a **daemon** (owns placement logic, zones, layouts,
+Phosphor splits into a **daemon** (owns placement logic, zones, layouts,
 settings) and a **compositor plugin** (observes windows, applies geometry,
 renders overlays). This library is the plugin side of that split.
 
 A compositor plugin links `PhosphorCompositor`, implements
-`ICompositorBridge` (22 methods mapping native window handles to the
+`ICompositorBridge` (23 methods mapping native window handles to the
 daemon's vocabulary), wires handler interfaces for callbacks, and lets
 `DaemonClient` manage all D-Bus communication. The plugin never touches
 placement logic directly — the daemon decides *where*, the plugin applies
@@ -29,11 +29,11 @@ placement logic directly — the daemon decides *where*, the plugin applies
 | `IDragHandler` | Callback interface for drag start/move/end/policy-change |
 | `IGeometryHandler` | Callback interface for geometry apply, batch operations, raise/activate |
 | `ILifecycleHandler` | Callback interface for window open/close/activate/float-change |
-| `AutotileState` | Per-screen border-state tracking + pure helper functions |
+| `BorderState` + `AutotileStateHelpers` | Per-screen border-state value type plus pure helper functions |
 | `FloatingCache` | Compositor-side mirror of daemon float state |
 | `SnapAssistFilter` | Snap-assist candidate building via bridge |
 | `TriggerParser` | Modifier/button activation matching from config |
-| `DebouncedAction` | Generic debounce utility for screen-change coalescing |
+| `DebouncedScreenAction` | Debounce utility for screen-change coalescing |
 | `GeometryHelpers` | Fractional-scaling-safe rounding |
 
 ## Typical use

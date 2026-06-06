@@ -34,7 +34,10 @@ This library owns:
   emphasis state machine (hover, active drag target, just-snapped flash).
 - **Assignment value type:** `AssignmentEntry` and `LayoutAssignmentKey`
   carry the `(screenId, desktop, activity)` keys that `LayoutRegistry`
-  stores assignments under and that the config backend roundtrips.
+  stores assignments under. The single source of truth for every
+  per-context assignment is the injected
+  `PhosphorWindowRule::WindowRuleStore`: each assignment is a context-only
+  rule and the cascade is the evaluator's descending-priority walk.
 
 `LayoutRegistry` is the *concrete* counterpart to `IZoneLayoutRegistry`.
 The interface exists so consumers that only enumerate or look up layouts
@@ -92,7 +95,7 @@ if (z) {
   `LayoutRegistry` per process and inject it into every consumer. Tests
   build their own per-fixture instance.
 - **Quick-layout slots and screen-assignment CRUD live on the consumer.**
-  The PlasmaZones daemon owns the user-facing surface (D-Bus methods,
+  The Phosphor daemon owns the user-facing surface (D-Bus methods,
   quick-layout 1-9, etc.); this library exposes the data the daemon
   drives that surface from.
 
@@ -101,7 +104,7 @@ if (z) {
 - `QtCore`, `QtGui`
 - [`phosphor-layout-api`](../phosphor-layout-api/README.md) — `ILayoutSource` and registry contracts
 - [`phosphor-geometry`](../phosphor-geometry/README.md) — zone clamping, overlap resolution, rect-to-JSON helpers
-- [`phosphor-config`](../phosphor-config/README.md) — `IBackend` for assignment persistence
+- [`phosphor-windowrule`](../phosphor-windowrule/README.md) — `WindowRuleStore` + `RuleEvaluator`, the assignment authority (the `LayoutRegistry` ctor takes a `WindowRuleStore*`)
 - [`phosphor-identity`](../phosphor-identity/README.md) — window IDs for assignments (private link)
 - [`phosphor-screens`](../phosphor-screens/README.md) — screen-id normalisation (private link)
 

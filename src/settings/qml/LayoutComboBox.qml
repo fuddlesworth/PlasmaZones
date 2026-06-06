@@ -73,7 +73,6 @@ ComboBox {
         for (let i = 0; i < layouts.length; i++) {
             if (layouts[i].id === layoutId)
                 return layouts[i];
-
         }
         return null;
     }
@@ -134,7 +133,7 @@ ComboBox {
             }
             // Sort: manual (category 0) before dynamic (category 1),
             // alphabetical within each group.
-            layoutItems.sort(function(a, b) {
+            layoutItems.sort(function (a, b) {
                 if (a.category !== b.category)
                     return a.category - b.category;
 
@@ -181,7 +180,6 @@ ComboBox {
             // For "Default" entry, also check which layout it resolves to
             if (old.isDefaultOption && ((old.layout ? old.layout.id : "") !== (nw.layout ? nw.layout.id : "")))
                 return false;
-
         }
         return true;
     }
@@ -200,11 +198,11 @@ ComboBox {
             // Model didn't change visually, but currentLayoutId may have
             // changed while the rebuild was coalesced — always re-sync.
             updateSelection();
-            return ;
+            return;
         }
         if (popup && popup.visible) {
             _rebuildPending = true;
-            return ;
+            return;
         }
         model = items;
         updateSelection();
@@ -225,11 +223,11 @@ ComboBox {
             for (let i = 0; i < model.length; i++) {
                 if (model[i].value === currentLayoutId) {
                     currentIndex = i;
-                    return ;
+                    return;
                 }
             }
             currentIndex = -1;
-            return ;
+            return;
         }
         currentIndex = showNoneOption ? 0 : -1;
     }
@@ -256,11 +254,11 @@ ComboBox {
         _rebuildScheduled = false;
         let items = _buildItems();
         if (_modelMatchesItems(items))
-            return ;
+            return;
 
         if (popup && popup.visible) {
             _rebuildPending = true;
-            return ;
+            return;
         }
         model = items;
         // Defer selection sync until sibling bindings (currentLayoutId) settle.
@@ -314,16 +312,14 @@ ComboBox {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                 propagateComposedEvents: true
-                onPressed: function(mouse) {
+                onPressed: function (mouse) {
                     const rootPos = root.mapToItem(catcher, 0, 0);
                     const onCombo = mouse.x >= rootPos.x && mouse.y >= rootPos.y && mouse.x < rootPos.x + root.width && mouse.y < rootPos.y + root.height;
                     pop.close();
                     mouse.accepted = onCombo;
                 }
             }
-
         }
-
     }
 
     // ── Custom popup ────────────────────────────────────────────────────
@@ -383,9 +379,7 @@ ComboBox {
             currentIndex: root.highlightedIndex
             highlightMoveDuration: 0
 
-            ScrollBar.vertical: ScrollBar {
-            }
-
+            ScrollBar.vertical: ScrollBar {}
         }
 
         background: Rectangle {
@@ -394,7 +388,6 @@ ComboBox {
             border.width: 1
             radius: Kirigami.Units.smallSpacing
         }
-
     }
 
     // Custom delegate with optional layout preview and category badge
@@ -458,7 +451,6 @@ ComboBox {
                     showZoneNumbers: false
                     minZoneSize: 2
                 }
-
             }
 
             // "None" placeholder - only shown when no default layout is configured
@@ -479,7 +471,6 @@ ComboBox {
                     color: Kirigami.Theme.textColor
                     opacity: highlighted ? 0.6 : 0.4
                 }
-
             }
 
             ColumnLayout {
@@ -510,7 +501,6 @@ ComboBox {
                     PZCommon.AspectRatioBadge {
                         aspectRatioClass: (modelData.layout && modelData.layout.aspectRatioClass) || "any"
                     }
-
                 }
 
                 Label {
@@ -534,11 +524,7 @@ ComboBox {
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
-
             }
-
         }
-
     }
-
 }

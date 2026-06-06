@@ -49,7 +49,7 @@ PHOSPHORANIMATION_EXPORT extern const QString WindowLayoutSwitch;
 // (fill-preview, drag-resize-preview). NOT triggered by runtime
 // window snapping — window-snap animations are KWin's
 // compositor-level domain. These paths only fire inside the
-// PlasmaZones layout editor.
+// Phosphor layout editor.
 PHOSPHORANIMATION_EXPORT extern const QString Editor;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapOut;

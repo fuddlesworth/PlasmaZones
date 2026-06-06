@@ -28,37 +28,44 @@ ColumnLayout {
     // controller doesn't need to know about. Order matches AddRuleSheet's
     // pre-wizard convention: context-based subjects first (the "where" axis),
     // then window-based (the "what" axis).
-    readonly property var _subjects: [{
-        "id": "monitor",
-        "label": i18n("Monitor"),
-        "description": i18n("Assign a layout or engine to a monitor context."),
-        "icon": "video-display"
-    }, {
-        "id": "desktop",
-        "label": i18n("Desktop"),
-        "description": i18n("Assign a layout or engine to a virtual desktop."),
-        "icon": "preferences-desktop-virtual"
-    }, {
-        "id": "activity",
-        "label": i18n("Activity"),
-        "description": i18n("Assign a layout or engine to a Plasma activity."),
-        "icon": "activities"
-    }, {
-        "id": "application",
-        "label": i18n("Application"),
-        "description": i18n("Float, exclude or tweak windows of a specific app."),
-        "icon": "application-x-executable"
-    }, {
-        "id": "animation",
-        "label": i18n("Animation"),
-        "description": i18n("Override duration, curve or shader for an animation event."),
-        "icon": "media-playback-start"
-    }, {
-        "id": "custom",
-        "label": i18n("Custom"),
-        "description": i18n("Build a composite AND / OR / NOT match expression."),
-        "icon": "configure"
-    }]
+    readonly property var _subjects: [
+        {
+            "id": "monitor",
+            "label": i18n("Monitor"),
+            "description": i18n("Assign a layout or engine to a monitor context."),
+            "icon": "video-display"
+        },
+        {
+            "id": "desktop",
+            "label": i18n("Desktop"),
+            "description": i18n("Assign a layout or engine to a virtual desktop."),
+            "icon": "preferences-desktop-virtual"
+        },
+        {
+            "id": "activity",
+            "label": i18n("Activity"),
+            "description": i18n("Assign a layout or engine to a Plasma activity."),
+            "icon": "activities"
+        },
+        {
+            "id": "application",
+            "label": i18n("Application"),
+            "description": i18n("Float, exclude or tweak windows of a specific app."),
+            "icon": "application-x-executable"
+        },
+        {
+            "id": "animation",
+            "label": i18n("Animation"),
+            "description": i18n("Override duration, curve or shader for an animation event."),
+            "icon": "media-playback-start"
+        },
+        {
+            "id": "custom",
+            "label": i18n("Custom"),
+            "description": i18n("Build a composite AND / OR / NOT match expression."),
+            "icon": "configure"
+        }
+    ]
     readonly property int _tileHeight: Kirigami.Units.gridUnit * 9
 
     /// Emitted with the freshly-stamped rule JSON when a tile is activated.
@@ -108,9 +115,7 @@ ColumnLayout {
                 tileHeight: root._tileHeight
                 onActivated: root._chooseTemplate(modelData.id)
             }
-
         }
-
     }
 
     Kirigami.Separator {
@@ -146,9 +151,6 @@ ColumnLayout {
                 tileHeight: root._tileHeight
                 onActivated: root._chooseSubject(modelData.id)
             }
-
         }
-
     }
-
 }

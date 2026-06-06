@@ -5,7 +5,7 @@
 
 #include "constants.h"
 #include "interfaces.h"
-#include "p_i18n.h"
+#include "phosphor_i18n.h"
 #include "utils.h"
 
 #include <PhosphorLayoutApi/AspectRatioClass.h>
@@ -47,23 +47,23 @@ void setAspectRatioSection(LayoutPreview& preview)
     preview.sectionKey = ScreenClassification::toString(cls);
     switch (cls) {
     case AspectRatioClass::Any:
-        preview.sectionLabel = PI18n::tr("All Monitors");
+        preview.sectionLabel = PhosphorI18n::tr("All Monitors");
         preview.sectionOrder = 0;
         break;
     case AspectRatioClass::Standard:
-        preview.sectionLabel = PI18n::tr("Standard (16:9)");
+        preview.sectionLabel = PhosphorI18n::tr("Standard (16:9)");
         preview.sectionOrder = 1;
         break;
     case AspectRatioClass::Ultrawide:
-        preview.sectionLabel = PI18n::tr("Ultrawide (21:9)");
+        preview.sectionLabel = PhosphorI18n::tr("Ultrawide (21:9)");
         preview.sectionOrder = 2;
         break;
     case AspectRatioClass::SuperUltrawide:
-        preview.sectionLabel = PI18n::tr("Super-Ultrawide (32:9)");
+        preview.sectionLabel = PhosphorI18n::tr("Super-Ultrawide (32:9)");
         preview.sectionOrder = 3;
         break;
     case AspectRatioClass::Portrait:
-        preview.sectionLabel = PI18n::tr("Portrait (9:16)");
+        preview.sectionLabel = PhosphorI18n::tr("Portrait (9:16)");
         preview.sectionOrder = 4;
         break;
     }

@@ -11,8 +11,10 @@
 
 #pragma once
 
+#include <PhosphorWayland/ClipboardDevice.h>
 #include <PhosphorWayland/CompositorLost.h>
 #include <PhosphorWayland/IdleNotifier.h>
 #include <PhosphorWayland/LayerSurface.h>
+#include <PhosphorWayland/SessionLock.h>
 #include <PhosphorWayland/SinglePixelBuffer.h>
 #include <PhosphorWayland/ToplevelDrag.h>

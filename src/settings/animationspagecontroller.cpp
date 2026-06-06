@@ -7,7 +7,7 @@
 #include "../core/animationshadersupportedpaths.h"
 #include "../core/isettings.h"
 #include "../core/logging.h"
-#include "../p_i18n.h"
+#include "../phosphor_i18n.h"
 #include "animationpresetlibrary.h"
 #include "animations_controller_detail.h"
 #include "dbusutils.h"
@@ -258,7 +258,7 @@ void AnimationsPageController::apply()
     // to the per-mutator guards added in pass 36 (setOverride etc.)
     // and to WindowRuleController::m_asyncCommitInFlight.
     if (m_asyncRevertInFlight) {
-        Q_EMIT applyResult(false, PI18n::tr("Cannot save while a discard is in progress."));
+        Q_EMIT applyResult(false, PhosphorI18n::tr("Cannot save while a discard is in progress."));
         return;
     }
     commitPending();
@@ -405,7 +405,7 @@ void AnimationsPageController::asyncRevertPending()
         // truncated some files on disk, producing inconsistent state.
         // Surface a quick failure so the framework's discard counter
         // ticks down and the user knows to retry.
-        Q_EMIT discardResult(false, PI18n::tr("Discard already in flight."));
+        Q_EMIT discardResult(false, PhosphorI18n::tr("Discard already in flight."));
         return;
     }
     if (!hasPendingChanges()) {
@@ -477,7 +477,8 @@ void AnimationsPageController::asyncRevertPending()
             // re-opens together with the flag clear.
             const QString errorMsg = result.retained.isEmpty()
                 ? QString()
-                : PI18n::tr("Failed to restore %1 profile file(s); they remain pending.").arg(result.retained.size());
+                : PhosphorI18n::tr("Failed to restore %1 profile file(s); they remain pending.")
+                      .arg(result.retained.size());
             Q_EMIT discardResult(result.retained.isEmpty(), errorMsg);
             m_asyncRevertInFlight = false;
         },
@@ -611,7 +612,7 @@ bool AnimationsPageController::addUserPreset(const QString& name, const QVariant
     // `discarding`; this guard protects programmatic callers.
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "addUserPreset: blocked during discard";
-        Q_EMIT toastRequested(PI18n::tr("Cannot modify presets while a discard is in progress."));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
         return false;
     }
     return m_presets && m_presets->addUserPreset(name, profileJson);
@@ -621,7 +622,7 @@ bool AnimationsPageController::removeUserPreset(const QString& name)
 {
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "removeUserPreset: blocked during discard";
-        Q_EMIT toastRequested(PI18n::tr("Cannot modify presets while a discard is in progress."));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
         return false;
     }
     return m_presets && m_presets->removeUserPreset(name);
@@ -638,7 +639,7 @@ bool AnimationsPageController::applyMotionSet(const QString& name)
 {
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "applyMotionSet: blocked during discard";
-        Q_EMIT toastRequested(PI18n::tr("Cannot modify presets while a discard is in progress."));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
         return false;
     }
     return m_motionSets && m_motionSets->applyMotionSet(name);
@@ -648,7 +649,7 @@ bool AnimationsPageController::saveCurrentAsMotionSet(const QString& name, const
 {
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "saveCurrentAsMotionSet: blocked during discard";
-        Q_EMIT toastRequested(PI18n::tr("Cannot modify presets while a discard is in progress."));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
         return false;
     }
     return m_motionSets && m_motionSets->saveCurrentAsMotionSet(name, description);
@@ -658,7 +659,7 @@ bool AnimationsPageController::removeMotionSet(const QString& name)
 {
     if (m_asyncRevertInFlight) {
         qCWarning(lcConfig) << "removeMotionSet: blocked during discard";
-        Q_EMIT toastRequested(PI18n::tr("Cannot modify presets while a discard is in progress."));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Cannot modify presets while a discard is in progress."));
         return false;
     }
     return m_motionSets && m_motionSets->removeMotionSet(name);

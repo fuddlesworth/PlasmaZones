@@ -26,7 +26,7 @@
 #include <PhosphorZones/LayoutComputeService.h>
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../p_i18n.h"
+#include "../phosphor_i18n.h"
 #include "dbusutils.h"
 #include "pageadapter.h"
 #include "settingsstagingdomain.h"

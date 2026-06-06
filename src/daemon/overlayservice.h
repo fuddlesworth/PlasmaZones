@@ -954,7 +954,7 @@ private:
         // Required.
         QUrl qmlUrl = {}; ///< QML file (Window-rooted - PZ's overlay QML convention)
         QScreen* screen = nullptr; ///< target screen (physical; virtual-screen positioning is the caller's job)
-        PhosphorLayer::Role role = {}; ///< protocol-level preset (see p_roles.h)
+        PhosphorLayer::Role role = {}; ///< protocol-level preset (see phosphor_roles.h)
         const char* windowType = ""; ///< debug/telemetry label
 
         // Optional - explicit `= {}` suppresses GCC's
@@ -996,7 +996,7 @@ private:
      *
      * Common pattern for ensurePassiveShellFor (and the LayoutPicker
      * surface in snapassist.cpp): (1) caller builds a per-instance
-     * scope-prefixed Role via @ref PRoles::makePerInstanceRole,
+     * scope-prefixed Role via @ref PhosphorRoles::makePerInstanceRole,
      * (2) this helper calls createLayerSurface with keepMappedOnHide=true,
      * (3) string-connects the QML-side `dismissRequested()` signal to
      * `Surface::hide()` so the auto-dismiss timer (or backdrop click for
@@ -1008,7 +1008,7 @@ private:
      * window pointers into PerScreenOverlayState.
      *
      * @param role           Fully-formed per-instance role (use
-     *                       PRoles::makePerInstanceRole to build).
+     *                       PhosphorRoles::makePerInstanceRole to build).
      * @param qmlUrl         QML file to load.
      * @param physScreen     Target physical screen.
      * @param windowType     Debug/telemetry label.

@@ -66,9 +66,10 @@ don't carry their own copies and the daemon wires them up once.
 
 ## Dependencies
 
-- `QtCore`
-- [`phosphor-geometry`](../phosphor-geometry/README.md)
-- [`phosphor-identity`](../phosphor-identity/README.md)
+- `Qt6::Core`
+- [`phosphor-geometry`](../phosphor-geometry/README.md) (public)
+- `PhosphorProtocol::Types` (public)
+- [`phosphor-identity`](../phosphor-identity/README.md) (private)
 
 ## See also
 

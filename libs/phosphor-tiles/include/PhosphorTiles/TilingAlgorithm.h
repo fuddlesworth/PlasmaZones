@@ -292,7 +292,7 @@ public:
     /**
      * @brief Whether this scripted algorithm was loaded from a user directory
      *
-     * System-installed scripts (shipped with PlasmaZones) return false.
+     * System-installed scripts (shipped with Phosphor) return false.
      * User-created scripts in ~/.local/share/plasmazones/algorithms/ return true.
      * Non-scripted algorithms always return false.
      *

@@ -12,7 +12,7 @@
 #
 # Depends on Qt6 Core+Gui (Gui for QImage in the wallpaper cache) and
 # PhosphorFsLoader for WatchedDirectorySet. No QML facade today —
-# downstream PlasmaZones code exposes ShaderRegistry to QML via
+# downstream Phosphor code exposes ShaderRegistry to QML via
 # context properties, so this lib stays C++-only. A `Phosphor.Shaders`
 # QML module can be added (alongside `QML_ELEMENT` annotations on the
 # C++ types) when an out-of-tree consumer needs `import Phosphor.Shaders`

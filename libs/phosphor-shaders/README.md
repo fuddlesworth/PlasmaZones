@@ -22,7 +22,7 @@ Consumed by
 UBO, calls `IUniformExtension::write()` for the remainder),
 [`phosphor-animation`](../phosphor-animation/README.md) (whose
 `AnimationShaderRegistry` reuses `MetadataPackRegistryBase`), and the
-PlasmaZones overlay (hosts `ShaderEffect` items in QML).
+Phosphor overlay (hosts `ShaderEffect` items in QML).
 
 ## Key types
 

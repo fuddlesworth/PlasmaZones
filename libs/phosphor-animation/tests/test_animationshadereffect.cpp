@@ -34,7 +34,7 @@ private Q_SLOTS:
         original.id = QStringLiteral("slide");
         original.name = QStringLiteral("Slide");
         original.description = QStringLiteral("Slide transition");
-        original.author = QStringLiteral("PlasmaZones");
+        original.author = QStringLiteral("Phosphor");
         original.version = QStringLiteral("1.0");
         original.category = QStringLiteral("Geometric");
         original.fragmentShaderPath = QStringLiteral("effect.frag");

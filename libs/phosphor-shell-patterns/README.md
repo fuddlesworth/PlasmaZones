@@ -6,7 +6,7 @@
 > UI-pattern recipes on top of `PhosphorLayer::Role`. The axis-2
 > vocabulary between wlr-layer-shell wire primitives (axis 1, in
 > phosphor-layer) and consumer-side application roles (axis 3, e.g.
-> PZ's `PRoles`).
+> Phosphor's `PhosphorRoles`).
 
 ## Responsibility
 

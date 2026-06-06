@@ -1,0 +1,6 @@
+{
+    "id": "no-entry-plugin",
+    "displayName": "Fake Plugin (no entry point)",
+    "abi": @PHOSPHOR_PLUGIN_ABI_VERSION@,
+    "capabilities": ["bar.widget"]
+}

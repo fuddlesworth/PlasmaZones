@@ -20,7 +20,7 @@ namespace {
 /// Stored as a static const QString rather than a raw C-string so the
 /// id-string is constructed once at first-use rather than rebuilt on
 /// every defaultAlgorithmId() call. Library is self-contained — no
-/// PlasmaZones config-layer dependency. Application config layers may
+/// Phosphor config-layer dependency. Application config layers may
 /// surface their own user-facing default (which today happens to also
 /// be "bsp"); the two are intentionally independent.
 const QString& recommendedDefaultAlgorithmId()

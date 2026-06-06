@@ -10,7 +10,7 @@ import org.phosphor.animation
  * Snap Assist content body — Aero-Snap-style window picker rendered as
  * an Item inside the unified PassiveOverlayShell.
  *
- * Pre-shell (PRoles::SnapAssist surface): a standalone Window with
+ * Pre-shell (PhosphorRoles::SnapAssist surface): a standalone Window with
  * `KeyboardInteractivity::Exclusive` that received Escape via QML
  * `Shortcut`. Post-shell: an Item slot in the per-screen passive shell
  * (`KeyboardInteractivity::None`); Escape is routed via the daemon's

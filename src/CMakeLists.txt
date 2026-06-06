@@ -18,7 +18,7 @@ add_subdirectory(shared)
 
 # Core library sources
 set(plasmazones_core_SRCS
-    p_qml_i18n.h
+    phosphor_qml_i18n.h
     core/constants.h
     core/logging.h
     core/logging.cpp
@@ -155,7 +155,7 @@ set(plasmazones_core_SRCS
 # Create core library
 add_library(plasmazones_core SHARED ${plasmazones_core_SRCS})
 
-target_sources(plasmazones_core PRIVATE p_qml_i18n.cpp)
+target_sources(plasmazones_core PRIVATE phosphor_qml_i18n.cpp)
 
 # Generate export header
 generate_export_header(plasmazones_core
@@ -166,9 +166,13 @@ generate_export_header(plasmazones_core
 # Layer-shell: implementation moved to PhosphorWayland library.
 # The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
+
+# All four TUs below are excluded from unity build:
+#   configdefaults.cpp — Settings PCH includes that conflict with unity macros
+#   drag.cpp / drag_protocol.cpp / drop.cpp — forward-declaration conflicts
+#     with the d-bus-adaptor-generated extern declarations across these TUs
 set_source_files_properties(
     config/configdefaults.cpp
-    # Exclude from unity build to avoid forward-declaration conflicts
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
@@ -222,9 +226,10 @@ target_link_libraries(plasmazones_core
 # PhosphorShortcuts: plasmazones_core uses ONLY the Integration::IAdhocRegistrar header
 # (consumed by WindowDragAdaptor); the daemon links the shared library
 # binary (see target_link_libraries(plasmazonesd ...) below). Wire the
-# headers via INTERFACE-only include - pulls no .so dependency into
-# editor / settings builds that link plasmazones_core but never touch
-# shortcuts.
+# headers via PRIVATE include — consumer-time only — so the header path
+# is available when plasmazones_core's own translation units compile
+# but is NOT re-exported to downstream targets that link
+# plasmazones_core (editor / settings) and never touch shortcuts.
 target_include_directories(plasmazones_core SYSTEM PRIVATE
     $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/libs/phosphor-shortcuts/include>
 )
@@ -349,11 +354,11 @@ target_include_directories(plasmazones_rendering
         $<INSTALL_INTERFACE:include/plasmazones>
 )
 
-# Versioned SONAME — mirrors plasmazones_core above. Without VERSION /
+# Versioned SONAME: mirrors plasmazones_core above. Without VERSION /
 # SOVERSION the library installs as a bare libplasmazones_rendering.so
 # with no SONAME; dpkg-shlibdeps then can't derive a package dependency
 # from it ("can't extract name and version from library name"). Every
-# other shipped library is versioned — keep this one consistent.
+# other shipped library is versioned: keep this one consistent.
 set_target_properties(plasmazones_rendering PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION 1
@@ -451,7 +456,7 @@ target_link_libraries(plasmazonesd
         # in daemon/contextresolverwiring.{h,cpp}) and lets D-Bus adaptors
         # + OverlayService borrow it via `Daemon::contextResolver()`.
         PhosphorContextResolver::PhosphorContextResolver
-        # Daemon is headless — runs under QGuiApplication. No Qt6::Widgets
+        # Daemon is headless: runs under QGuiApplication. No Qt6::Widgets
         # link: it was unused and pulled QtWidgets + xcb deps into a binary
         # that never instantiates a QWidget.
         Qt6::Quick
@@ -535,11 +540,12 @@ configure_file(
 # ═══════════════════════════════════════════════════════════════════════════════
 # Phosphor Shell (opt-in via -DBUILD_PHOSPHOR_SHELL=ON at the top level)
 # ═══════════════════════════════════════════════════════════════════════════════
-# Gated alongside libs/phosphor-shell and libs/phosphor-services in the
-# root CMakeLists.txt — without the flag those library targets don't
-# exist, so the binary wouldn't link anyway. Wrapping the whole block
-# also keeps `install(TARGETS phosphor-shell …)` from running when the
-# target is absent.
+# Gated alongside libs/phosphor-shell and the gated phosphor-service-*
+# group (see the add_subdirectory block in the root CMakeLists.txt for
+# the authoritative list). Without the flag those library targets
+# don't exist, so the binary wouldn't link anyway. Wrapping the whole block also keeps
+# `install(TARGETS phosphor-shell …)` from running when the target
+# is absent.
 
 if(BUILD_PHOSPHOR_SHELL)
     add_executable(phosphor-shell shell/main.cpp)
@@ -547,11 +553,24 @@ if(BUILD_PHOSPHOR_SHELL)
     target_link_libraries(phosphor-shell
         PRIVATE
             PhosphorShell::PhosphorShell
-            PhosphorServices::PhosphorServices
+            PhosphorServiceIconTheme::PhosphorServiceIconTheme
+            PhosphorServiceSni::PhosphorServiceSni
+            PhosphorServiceUPower::PhosphorServiceUPower
+            PhosphorServiceMpris::PhosphorServiceMpris
+            PhosphorServicePipeWire::PhosphorServicePipeWire
+            PhosphorServiceNetwork::PhosphorServiceNetwork
+            PhosphorServiceBluetooth::PhosphorServiceBluetooth
+            PhosphorServiceBrightness::PhosphorServiceBrightness
+            PhosphorServiceNotifications::PhosphorServiceNotifications
+            PhosphorServicePolkit::PhosphorServicePolkit
+            PhosphorServiceIdle::PhosphorServiceIdle
+            PhosphorServiceClipboard::PhosphorServiceClipboard
+            PhosphorServiceLock::PhosphorServiceLock
+            PhosphorServiceSession::PhosphorServiceSession
             PhosphorLayer::PhosphorLayer
             PhosphorWayland::PhosphorWayland
             PhosphorRendering::PhosphorRendering
-            # Linked from examples/phosphor-shell — bakes the default shell.qml
+            # Linked from examples/phosphor-shell: bakes the default shell.qml
             # tree into the binary as a qt-qml-module resource. Two effects:
             # (1) qmlcachegen / qmlsc run at build time (faster cold start,
             # typed bindings compile to C++); (2) when no user config exists
@@ -623,10 +642,10 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/DeleteZoneCommand.h
     editor/undo/commands/UpdateZoneGeometryCommand.cpp
     editor/undo/commands/UpdateZoneGeometryCommand.h
-        editor/undo/commands/UpdateZoneNameCommand.cpp
-        editor/undo/commands/UpdateZoneNameCommand.h
-        editor/undo/commands/UpdateZoneNumberCommand.cpp
-        editor/undo/commands/UpdateZoneNumberCommand.h
+    editor/undo/commands/UpdateZoneNameCommand.cpp
+    editor/undo/commands/UpdateZoneNameCommand.h
+    editor/undo/commands/UpdateZoneNumberCommand.cpp
+    editor/undo/commands/UpdateZoneNumberCommand.h
     editor/undo/commands/UpdateZoneAppearanceCommand.cpp
     editor/undo/commands/UpdateZoneAppearanceCommand.h
     editor/undo/commands/DuplicateZoneCommand.cpp
@@ -743,7 +762,7 @@ target_link_libraries(plasmazones-editor
         PhosphorAnimation::PhosphorAnimation  # motion runtime + QML module
         PhosphorAnimationQmlplugin  # Generated by qt_add_qml_module (STATIC)
         PhosphorAudio::PhosphorAudio  # audio spectrum provider (CAVA)
-        # Editor runs under QGuiApplication — no QWidget usage anywhere in
+        # Editor runs under QGuiApplication: no QWidget usage anywhere in
         # src/editor, so the Widgets link was dead (pulled QtWidgets + xcb
         # for nothing). Same cleanup applied to the daemon above.
         Qt6::Quick
@@ -816,7 +835,7 @@ install(FILES
     DESTINATION ${KDE_INSTALL_DBUSSERVICEDIR}
 )
 
-# AppStream metainfo — so Discover / GNOME Software / KDE store list the
+# AppStream metainfo: so Discover / GNOME Software / KDE store list the
 # editor + settings apps with summary, screenshots, and content rating.
 # Validated by `appstreamcli validate <file>` if `appstream` is installed.
 install(FILES

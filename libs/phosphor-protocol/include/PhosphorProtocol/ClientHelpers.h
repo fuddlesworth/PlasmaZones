@@ -23,7 +23,7 @@ namespace PhosphorProtocol {
 PHOSPHORPROTOCOL_EXPORT const QLoggingCategory& lcPhosphorProtocol();
 
 /**
- * @brief A PhosphorDBus::Client bound to the PlasmaZones daemon.
+ * @brief A PhosphorDBus::Client bound to the Phosphor daemon.
  *
  * Returned by value — `Client` is a cheap handle, so this is not a singleton
  * and holds no shared global state. It binds the canonical
@@ -31,7 +31,7 @@ PHOSPHORPROTOCOL_EXPORT const QLoggingCategory& lcPhosphorProtocol();
  * call failures logged under `lcPhosphorProtocol()`.
  *
  * Generic, service-agnostic D-Bus plumbing lives in PhosphorDBus; this is the
- * thin PlasmaZones-specific binding on top.
+ * thin Phosphor-specific binding on top.
  */
 inline PhosphorDBus::Client daemonClient()
 {
@@ -42,7 +42,7 @@ inline PhosphorDBus::Client daemonClient()
 /**
  * @brief Daemon-bound convenience wrappers around PhosphorDBus::Client.
  *
- * These talk to the canonical PlasmaZones daemon. Code that needs to address
+ * These talk to the canonical Phosphor daemon. Code that needs to address
  * a different service should construct its own PhosphorDBus::Client.
  */
 namespace ClientHelpers {

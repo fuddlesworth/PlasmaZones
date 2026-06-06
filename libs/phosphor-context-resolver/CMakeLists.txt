@@ -3,7 +3,7 @@
 #
 # PhosphorContextResolver — frozen-snapshot effective-value + gate cascade.
 #
-# Wraps the four interlocking sources every PlasmaZones consumer currently
+# Wraps the four interlocking sources every Phosphor consumer currently
 # stitches by hand (mode router + virtual-desktop + activity + disable/lock
 # settings) into a single `ContextHandle` snapshot + `IContextResolver`
 # façade. The open-coded `(modeFor(screenId) → currentDesktop()
@@ -46,7 +46,7 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
 
 # PhosphorZones supplies AssignmentEntry::Mode which the resolver's public
 # headers surface (every gate query takes a Mode). PUBLIC because the type
-# leaks through the API. Found via the in-tree subdirectory in PZ builds;
+# leaks through the API. Found via the in-tree subdirectory in Phosphor builds;
 # falls back to find_package when this library is consumed standalone.
 if(NOT TARGET PhosphorZones::PhosphorZones)
     find_package(PhosphorZones CONFIG REQUIRED)

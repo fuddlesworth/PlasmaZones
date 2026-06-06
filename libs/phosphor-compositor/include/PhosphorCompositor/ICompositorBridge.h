@@ -126,7 +126,7 @@ public:
     // Window Filtering
     // ═══════════════════════════════════════════════════════════════════
 
-    /// Should this window be managed by PlasmaZones at all?
+    /// Should this window be managed by Phosphor at all?
     virtual bool shouldHandleWindow(WindowHandle w) const = 0;
 
     /// Is this window eligible for autotile (stricter than shouldHandle)?

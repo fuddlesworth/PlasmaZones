@@ -1,0 +1,250 @@
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" font-family="Inter, system-ui, sans-serif">
+  <defs>
+    <linearGradient id="wp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1730"/>
+      <stop offset=".55" stop-color="#070F22"/>
+      <stop offset="1" stop-color="#050916"/>
+    </linearGradient>
+    <filter id="blur" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="60"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#wp)"/>
+  <g opacity=".4" filter="url(#blur)">
+    <circle cx="200" cy="200" r="200" fill="#3B82F6"/>
+    <circle cx="1080" cy="540" r="240" fill="#A855F7"/>
+  </g>
+
+  <!-- ─── Connected-corner: Bar + center Dashboard popout ─── -->
+  <path d="
+    M 38 24
+    H 1242 A 14 14 0 0 1 1256 38
+    V 54 A 14 14 0 0 1 1242 68
+    H 1034 A 14 14 0 0 0 1020 82
+    V 606 A 14 14 0 0 1 1006 620
+    H 274 A 14 14 0 0 1 260 606
+    V 82 A 14 14 0 0 0 246 68
+    H 38 A 14 14 0 0 1 24 54
+    V 38 A 14 14 0 0 1 38 24
+    Z" fill="#0B1730" stroke="#1E293B"/>
+
+  <g font-size="12" fill="#E6EDFF">
+    <g transform="translate(44 38)">
+      <rect x="0" y="0" width="22" height="14" rx="7" fill="#3B82F6"/>
+      <circle cx="36" cy="7" r="4" fill="#101A36" stroke="#1E293B"/>
+      <circle cx="56" cy="7" r="4" fill="#101A36" stroke="#1E293B"/>
+      <text x="80" y="11" font-size="12">kate · design.md</text>
+    </g>
+    <!-- Active clock, pulses since it's the source -->
+    <g transform="translate(640 46)" text-anchor="middle">
+      <rect x="-60" y="-12" width="120" height="20" rx="10" fill="#3B82F6">
+        <animate attributeName="opacity" values="1;0.78;1" dur="2.4s" repeatCount="indefinite"/>
+      </rect>
+      <text fill="#F0F9FF" font-size="12" font-weight="600" font-variant-numeric="tabular-nums">14:32 · Sun 24</text>
+    </g>
+    <g transform="translate(1240 46)" text-anchor="end" font-size="11" font-variant-numeric="tabular-nums">
+      <text fill="#E6EDFF">82</text>
+      <text x="-32" fill="#94A3B8">·</text>
+      <text x="-50" fill="#E6EDFF">62</text>
+    </g>
+  </g>
+
+  <g transform="translate(282 92)" font-size="11">
+    <g>
+      <g>
+        <rect width="90" height="28" rx="14" fill="#3B82F6"/>
+        <text x="45" y="18" text-anchor="middle" fill="#F0F9FF" font-weight="600">Overview</text>
+      </g>
+      <g transform="translate(96 0)">
+        <rect width="90" height="28" rx="14" fill="#101A36" stroke="#1E293B"/>
+        <text x="45" y="18" text-anchor="middle" fill="#E6EDFF">Wallpaper</text>
+      </g>
+      <g transform="translate(192 0)">
+        <rect width="90" height="28" rx="14" fill="#101A36" stroke="#1E293B"/>
+        <text x="45" y="18" text-anchor="middle" fill="#E6EDFF">Weather</text>
+      </g>
+      <g transform="translate(288 0)">
+        <rect width="90" height="28" rx="14" fill="#101A36" stroke="#1E293B"/>
+        <text x="45" y="18" text-anchor="middle" fill="#E6EDFF">Media</text>
+      </g>
+    </g>
+
+    <g transform="translate(0 44)">
+      <!-- Calendar card -->
+      <g>
+        <rect width="232" height="244" rx="20" fill="#070F22" stroke="#1E293B"/>
+        <g transform="translate(20 24)" fill="#E6EDFF">
+          <text font-size="12" font-weight="600">May 2026</text>
+          <text x="192" font-size="11" fill="#94A3B8" text-anchor="end">›</text>
+        </g>
+        <g transform="translate(20 50)" font-size="10" fill="#94A3B8" text-anchor="middle" font-variant-numeric="tabular-nums">
+          <g><text x="13">S</text><text x="40">M</text><text x="67">T</text><text x="94">W</text><text x="121">T</text><text x="148">F</text><text x="175">S</text></g>
+          <g transform="translate(0 18)" fill="#E6EDFF"><text x="13">26</text><text x="40">27</text><text x="67">28</text><text x="94">29</text><text x="121">30</text><text x="148">1</text><text x="175">2</text></g>
+          <g transform="translate(0 36)" fill="#E6EDFF"><text x="13">3</text><text x="40">4</text><text x="67">5</text><text x="94">6</text><text x="121">7</text><text x="148">8</text><text x="175">9</text></g>
+          <g transform="translate(0 54)" fill="#E6EDFF"><text x="13">10</text><text x="40">11</text><text x="67">12</text><text x="94">13</text><text x="121">14</text><text x="148">15</text><text x="175">16</text></g>
+          <g transform="translate(0 72)" fill="#E6EDFF"><text x="13">17</text><text x="40">18</text><text x="67">19</text><text x="94">20</text><text x="121">21</text><text x="148">22</text><text x="175">23</text></g>
+          <g transform="translate(0 90)">
+            <circle cx="13" cy="-3" r="9" fill="#3B82F6"/>
+            <text x="13" fill="#F0F9FF">24</text>
+            <text x="40" fill="#E6EDFF">25</text><text x="67" fill="#E6EDFF">26</text><text x="94" fill="#E6EDFF">27</text><text x="121" fill="#E6EDFF">28</text><text x="148" fill="#E6EDFF">29</text><text x="175" fill="#E6EDFF">30</text>
+          </g>
+          <g transform="translate(0 108)" fill="#94A3B8"><text x="13">31</text><text x="40">1</text><text x="67">2</text><text x="94">3</text><text x="121">4</text><text x="148">5</text><text x="175">6</text></g>
+        </g>
+        <g transform="translate(20 188)" font-size="10" fill="#94A3B8">
+          <text>UPCOMING</text>
+          <text y="14" fill="#E6EDFF" font-size="11">10:00 · Standup</text>
+          <text y="30" fill="#E6EDFF" font-size="11">16:00 · PR review</text>
+        </g>
+      </g>
+
+      <!-- Weather card -->
+      <g transform="translate(242 0)">
+        <rect width="232" height="116" rx="20" fill="#070F22" stroke="#1E293B"/>
+        <g transform="translate(20 26)">
+          <text fill="#94A3B8" font-size="10">PORTLAND, OR</text>
+          <text fill="#E6EDFF" font-size="34" font-weight="200" y="36">14°</text>
+          <text x="90" y="22" fill="#E6EDFF" font-size="11">Partly cloudy</text>
+          <text x="90" y="38" fill="#94A3B8" font-size="10">H 18°  L 9°</text>
+          <text x="90" y="54" fill="#94A3B8" font-size="10">UV 4 · 12 mph NW</text>
+        </g>
+        <circle cx="200" cy="32" r="10" fill="#FBBF24"/>
+      </g>
+
+      <!-- System metrics card with animated bars -->
+      <g transform="translate(242 126)">
+        <rect width="232" height="118" rx="20" fill="#070F22" stroke="#1E293B"/>
+        <g transform="translate(20 24)" font-size="11" fill="#E6EDFF">
+          <text fill="#94A3B8" font-size="10">SYSTEM</text>
+          <g transform="translate(0 16)">
+            <text>CPU</text>
+            <rect x="38" y="-7" width="130" height="6" rx="3" fill="#1E293B"/>
+            <rect x="38" y="-7" width="49" height="6" rx="3" fill="#3B82F6">
+              <animate attributeName="width" values="49;58;42;49" dur="3.2s" repeatCount="indefinite"/>
+            </rect>
+            <text x="178" y="0" text-anchor="end" font-size="10" fill="#94A3B8">38%</text>
+          </g>
+          <g transform="translate(0 32)">
+            <text>RAM</text>
+            <rect x="38" y="-7" width="130" height="6" rx="3" fill="#1E293B"/>
+            <rect x="38" y="-7" width="88" height="6" rx="3" fill="#A855F7"/>
+            <text x="178" y="0" text-anchor="end" font-size="10" fill="#94A3B8">68%</text>
+          </g>
+          <g transform="translate(0 48)">
+            <text>GPU</text>
+            <rect x="38" y="-7" width="130" height="6" rx="3" fill="#1E293B"/>
+            <rect x="38" y="-7" width="33" height="6" rx="3" fill="#10B981">
+              <animate attributeName="width" values="33;52;28;33" dur="4s" repeatCount="indefinite"/>
+            </rect>
+            <text x="178" y="0" text-anchor="end" font-size="10" fill="#94A3B8">25%</text>
+          </g>
+          <g transform="translate(0 64)">
+            <text>Temp</text>
+            <rect x="38" y="-7" width="130" height="6" rx="3" fill="#1E293B"/>
+            <rect x="38" y="-7" width="65" height="6" rx="3" fill="#FBBF24"/>
+            <text x="178" y="0" text-anchor="end" font-size="10" fill="#94A3B8">52°C</text>
+          </g>
+        </g>
+      </g>
+
+      <!-- Media card -->
+      <g transform="translate(484 0)">
+        <rect width="232" height="244" rx="20" fill="#070F22" stroke="#1E293B"/>
+        <rect x="20" y="20" width="192" height="120" rx="14" fill="#A855F7"/>
+        <text x="116" y="84" text-anchor="middle" fill="#0B1730" font-size="10" opacity=".5">album art</text>
+        <text x="20" y="164" fill="#E6EDFF" font-size="13" font-weight="600">Massage Situation</text>
+        <text x="20" y="180" fill="#94A3B8" font-size="11">Flying Lotus · Cosmogramma</text>
+        <g transform="translate(20 198)">
+          <rect width="192" height="4" rx="2" fill="#1E293B"/>
+          <rect width="100" height="4" rx="2" fill="#3B82F6">
+            <animate attributeName="width" values="100;120;100" dur="10s" repeatCount="indefinite"/>
+          </rect>
+        </g>
+        <g transform="translate(74 220)">
+          <path d="M -34 -6 L -44 0 L -34 6 Z" fill="#E6EDFF"/>
+          <circle cx="0" cy="0" r="14" fill="#3B82F6"/>
+          <rect x="-5" y="-7" width="3" height="14" fill="#0B1730"/>
+          <rect x="2" y="-7" width="3" height="14" fill="#0B1730"/>
+          <path d="M 34 -6 L 44 0 L 34 6 Z" fill="#E6EDFF"/>
+        </g>
+      </g>
+
+      <!-- Shortcuts -->
+      <g transform="translate(0 258)">
+        <rect width="716" height="240" rx="20" fill="#070F22" stroke="#1E293B"/>
+        <text x="20" y="30" fill="#94A3B8" font-size="10">SHORTCUTS</text>
+        <g transform="translate(20 44)" font-size="11" fill="#E6EDFF">
+          <g><rect width="106" height="40" rx="12" fill="#101A36" stroke="#1E293B"/><text x="53" y="25" text-anchor="middle">Launcher</text></g>
+          <g transform="translate(114 0)"><rect width="106" height="40" rx="12" fill="#101A36" stroke="#1E293B"/><text x="53" y="25" text-anchor="middle">Screenshot</text></g>
+          <g transform="translate(228 0)"><rect width="106" height="40" rx="12" fill="#101A36" stroke="#1E293B"/><text x="53" y="25" text-anchor="middle">Color picker</text></g>
+          <g transform="translate(342 0)"><rect width="106" height="40" rx="12" fill="#101A36" stroke="#1E293B"/><text x="53" y="25" text-anchor="middle">Notepad</text></g>
+          <g transform="translate(456 0)"><rect width="106" height="40" rx="12" fill="#101A36" stroke="#1E293B"/><text x="53" y="25" text-anchor="middle">Clipboard</text></g>
+          <g transform="translate(570 0)"><rect width="124" height="40" rx="12" fill="#101A36" stroke="#1E293B"/><text x="62" y="25" text-anchor="middle">Cheatsheet</text></g>
+        </g>
+        <text x="20" y="128" fill="#94A3B8" font-size="10">RECENT APPS</text>
+        <g transform="translate(20 142)">
+          <rect width="40" height="40" rx="10" fill="#A855F7"/>
+          <rect x="48" width="40" height="40" rx="10" fill="#3B82F6"/>
+          <rect x="96" width="40" height="40" rx="10" fill="#10B981"/>
+          <rect x="144" width="40" height="40" rx="10" fill="#F43F5E"/>
+          <rect x="192" width="40" height="40" rx="10" fill="#22D3EE"/>
+          <rect x="240" width="40" height="40" rx="10" fill="#FBBF24"/>
+        </g>
+        <text x="20" y="216" fill="#94A3B8" font-size="10">DesktopWidget plugins register here</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Inverted corner highlights -->
+  <circle cx="260" cy="68" r="9" fill="none" stroke="#22D3EE" stroke-width="1.5">
+    <animate attributeName="r" values="9;14;9" dur="2.2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.45;1" dur="2.2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="1020" cy="68" r="9" fill="none" stroke="#22D3EE" stroke-width="1.5">
+    <animate attributeName="r" values="9;14;9" dur="2.2s" begin="1.1s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="1;0.45;1" dur="2.2s" begin="1.1s" repeatCount="indefinite"/>
+  </circle>
+
+  <g font-size="11">
+    <g transform="translate(40 200)">
+      <rect width="200" height="92" rx="8" fill="#070F22" stroke="#3B82F6"/>
+      <text x="14" y="22" font-weight="600" fill="#3B82F6">Dash via center pocket</text>
+      <text x="14" y="38" fill="#94A3B8">Click the clock to summon.</text>
+      <text x="14" y="52" fill="#94A3B8">Bar grows downward with two</text>
+      <text x="14" y="66" fill="#94A3B8">inverted corners. Popout fills</text>
+      <text x="14" y="80" fill="#94A3B8">the cavity as one Shape.</text>
+    </g>
+    <g transform="translate(40 320)">
+      <rect width="200" height="92" rx="8" fill="#070F22" stroke="#A855F7"/>
+      <text x="14" y="22" font-weight="600" fill="#A855F7">Optional surface</text>
+      <text x="14" y="38" fill="#94A3B8">DMS ships both Dash + CC.</text>
+      <text x="14" y="52" fill="#94A3B8">We recommend deferring this</text>
+      <text x="14" y="66" fill="#94A3B8">to M5, start with one</text>
+      <text x="14" y="80" fill="#94A3B8">expanding Control Center.</text>
+    </g>
+
+    <g transform="translate(1040 200)">
+      <rect width="200" height="76" rx="8" fill="#070F22" stroke="#22D3EE"/>
+      <text x="14" y="22" font-weight="600" fill="#22D3EE">Tabbed view</text>
+      <text x="14" y="38" fill="#94A3B8">Overview / Wallpaper / Weather</text>
+      <text x="14" y="52" fill="#94A3B8">/ Media, tabs share the same</text>
+      <text x="14" y="66" fill="#94A3B8">PopoutHost frame.</text>
+    </g>
+    <g transform="translate(1040 300)">
+      <rect width="200" height="76" rx="8" fill="#070F22" stroke="#3B82F6"/>
+      <text x="14" y="22" font-weight="600" fill="#3B82F6">Card widgets reused</text>
+      <text x="14" y="38" fill="#94A3B8">Calendar / Weather / Media</text>
+      <text x="14" y="52" fill="#94A3B8">/ Metrics, same Card components</text>
+      <text x="14" y="66" fill="#94A3B8">live in Control Center too.</text>
+    </g>
+  </g>
+
+  <text x="640" y="680" text-anchor="middle" fill="#E6EDFF" font-size="14" font-weight="600">
+    Phosphor, Dashboard (optional surface, M5 · default theme)
+  </text>
+  <text x="640" y="698" text-anchor="middle" fill="#94A3B8" font-size="11">
+    Same connected‑corner pattern, summoned from the center clock pocket
+  </text>
+</svg>

@@ -27,7 +27,7 @@ Kirigami.PromptDialog {
 
     /// Emitted when the user picks "Discard changes". The host (the editor
     /// sheet or wizard) listens for this and closes itself.
-    signal discardConfirmed()
+    signal discardConfirmed
 
     title: i18nc("@title:window", "Discard unsaved changes?")
     subtitle: i18n("Your edits to this window rule will be lost. Discard them?")

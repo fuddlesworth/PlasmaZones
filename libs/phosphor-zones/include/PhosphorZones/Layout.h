@@ -476,7 +476,7 @@ Q_SIGNALS:
 public:
     /// Recalculate every zone's absolute geometry against @p screenGeometry.
     ///
-    /// The PlasmaZones application enforces its own "only LayoutComputeService
+    /// The Phosphor application enforces its own "only LayoutComputeService
     /// calls this" coalescing discipline via its type system — that
     /// restriction is an application-layer concern, not a library one, so
     /// the method is public here.  Direct callers bypass the service's

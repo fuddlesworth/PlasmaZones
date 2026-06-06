@@ -29,8 +29,9 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 ## License
 - SPDX headers on ALL files: `// SPDX-FileCopyrightText: 2026 fuddlesworth`
 - License identifier depends on the tree:
-  - **App / daemon / editor / settings / KCM / tests** (`src/**`, `kcm/**`, `kwin/**`, `tests/**`): `GPL-3.0-or-later`
-  - **Reusable libraries** (`libs/phosphor-*/**`): `LGPL-2.1-or-later`
+  - **App / daemon / editor / settings / KCM / examples / top-level tests** (`src/**`, `kcm/**`, `kwin/**`, `examples/**`, top-level `tests/**`): `GPL-3.0-or-later`
+  - **Reusable libraries, including their own tests** (`libs/phosphor-*/**`, which subsumes `libs/phosphor-*/tests/**`): `LGPL-2.1-or-later`
+  - A library's own `tests/` follow the library (LGPL), NOT the top-level GPL `tests/**` rule: test code that links and ships inside an LGPL lib must not taint that lib's build tree with GPL. The GPL `tests/**` rule means only the top-level app test tree.
   - Rationale: the shell is GPL; libraries are LGPL so third-party plugins / tools can link them without inheriting GPL. Never "fix" a lib header to GPL-3 without understanding the split.
 - `#pragma once` for C++ headers
 
@@ -74,8 +75,8 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Wayland only (custom layer-shell QPA plugin for overlays); XWayland windows handled within Wayland session
 
 ## i18n
-- C++: `PI18n::tr()` — NEVER `KLocalizedString`/`i18n()`/`i18nc()` in C++
-- QML: `i18n()` / `i18nc()` (via `PLocalizedContext`)
+- C++: `PhosphorI18n::tr()` — NEVER `KLocalizedString`/`i18n()`/`i18nc()` in C++
+- QML: `i18n()` / `i18nc()` (via `PhosphorLocalizedContext`)
 - Extract: `cmake --build build --target update-ts`
 
 ## Settings

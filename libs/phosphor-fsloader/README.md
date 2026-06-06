@@ -71,18 +71,19 @@ A profile loader sink (flat `*.json` mode):
 using namespace PhosphorFsLoader;
 
 class CurveLoaderSink : public IDirectoryLoaderSink {
-    std::optional<ParsedEntry> parseFile(const QString& path) override {
+    std::optional<ParsedEntry> parseFile(const QString& filePath) override {
         // parse one curve file; nothing registry-side here.
     }
-    void commitBatch(const QList<ParsedEntry>& all,
-                     const QStringList& removed) override {
+    void commitBatch(const QStringList& removedKeys,
+                     const QList<ParsedEntry>& currentEntries) override {
         // single mutation point; emit one reloadAll() signal here.
     }
 };
 
-DirectoryLoader loader({systemDir, userDir}, DirectoryWatchPolicy::On);
-loader.setSink(new CurveLoaderSink{...});
-loader.rescan();
+CurveLoaderSink sink{...};
+DirectoryLoader loader(sink);  // sink is borrowed for the loader's lifetime
+loader.loadFromDirectories({systemDir, userDir}, LiveReload::On);
+loader.requestRescan();
 ```
 
 A metadata-pack registry (used by shader / animation-shader registries):
@@ -91,7 +92,7 @@ A metadata-pack registry (used by shader / animation-shader registries):
 class MyPackRegistry : public PhosphorFsLoader::MetadataPackRegistryBase {
 public:
     MyPackRegistry()
-        : MetadataPackRegistryBase(makeStrategy()) {}
+        : MetadataPackRegistryBase(myLogCategory(), makeStrategy()) {}
     // … expose payload-typed lookups
 };
 // Composition root then wires:
@@ -102,10 +103,10 @@ registry.refresh();
 
 ## Design notes
 
-- **Watcher is opt-in.** `DirectoryWatchPolicy::On` installs a
+- **Watcher is opt-in.** `LiveReload::On` installs a
   `QFileSystemWatcher` on every scanned directory (or its parent, if
   the target doesn't exist yet, so fresh installs that create the
-  user-data dir later still pick up edits without a restart). `Off`
+  user-data dir later still pick up edits without a restart). `LiveReload::Off`
   disables it for tests.
 - **`commitBatch` is the one mutation point.** The sink only touches
   its target registry inside `commitBatch`, so bulk signals (e.g. a

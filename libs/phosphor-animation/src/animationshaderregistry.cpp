@@ -35,7 +35,7 @@ Q_LOGGING_CATEGORY(lcRegistry, "phosphoranimationshaders.registry")
 /// when it contains traversal segments. Empty input returns true (the
 /// caller decides whether to skip empty paths separately).
 ///
-/// PlasmaZones is Linux/Wayland only; lexical comparison is case-
+/// Phosphor is Linux/Wayland only; lexical comparison is case-
 /// sensitive which matches Linux filesystem semantics. Splits on
 /// BOTH `/` and `\` as defence-in-depth against Windows-style
 /// traversal strings (`..\evil`) that QDir::cleanPath leaves untouched

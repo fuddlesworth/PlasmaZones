@@ -15,7 +15,7 @@
 
 ## Responsibility
 
-Every gating site in the PlasmaZones stack used to inline the same
+Every gating site in the Phosphor stack used to inline the same
 five-call cascade: read the screen's mode, read the current virtual
 desktop, read the current activity, ask the disable list whether that
 tuple is off, ask the lock store whether that tuple is locked. Each
@@ -51,7 +51,7 @@ The lib owns:
 | Type | Purpose |
 |------|---------|
 | `PhosphorContext::ContextHandle`         | Frozen `(screenId, virtualDesktop, activity, mode)` snapshot passed to gate calls. |
-| `PhosphorContext::DisabledReason`        | Why a context is disabled — `Monitor`, `Desktop`, `Activity`, or `NotDisabled`. |
+| `PhosphorContext::DisabledReason`        | Why a context is disabled: `MonitorDisabled`, `DesktopDisabled`, `ActivityDisabled`, or `NotDisabled`. |
 | `PhosphorContext::IContextResolver`      | The façade: `handleFor()`, `globalHandle()`, `handleForMode()`, `handleForPersisted()`, `disabledReason()`, `isLocked()`, `isGated()`. |
 | `PhosphorContext::ContextResolver`       | Concrete `IContextResolver` over the three adapter interfaces. |
 | `PhosphorContext::IWorkspaceState`       | Adapter: "what desktop / activity is the user on?" |

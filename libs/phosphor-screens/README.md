@@ -23,8 +23,9 @@ pure-compute consumers:
 
 | CMake target | Links | Linked by |
 |--------------|-------|-----------|
-| `PhosphorScreens::Core`            | `Qt6::Core` + `Qt6::Gui` | Domain libraries (zones, snap/tile engines, placement) that need topology + identity but never touch the bus. |
-| `PhosphorScreens::PhosphorScreens` | `::Core` + `Qt6::DBus` + `PhosphorProtocol::Types` | The daemon and anything that needs the D-Bus surface (`DBusScreenAdaptor`, `PlasmaPanelSource`, `ScreenResolver`). |
+| `PhosphorScreens::Core`            | `Qt6::Core` + `Qt6::Gui` | Domain libraries (zones, snap/tile engines, placement) that need POD topology types + identity but never touch the bus or the live manager. |
+| `PhosphorScreens::Runtime`         | `::Core` + `Qt6::Core` + `Qt6::Gui` (+ `PhosphorWayland` privately) | Consumers that need the live `ScreenManager` (physical-screen tracking via Wayland). |
+| `PhosphorScreens::PhosphorScreens` | `::Runtime` + `Qt6::DBus` + `PhosphorProtocol::Types` | The daemon and anything that needs the D-Bus surface (`DBusScreenAdaptor`, `PlasmaPanelSource`, `ScreenResolver`). |
 
 ## Key types
 
@@ -54,12 +55,16 @@ pure-compute consumers:
   pass user strings through verbatim.
 - **The D-Bus surface is a separate target.** `DBusScreenAdaptor`, the
   Plasma panel source, and the resolver live in `PhosphorScreens`; the
-  topology core lives in `PhosphorScreens::Core`. A snap or tiling engine
-  links `::Core` and never pulls QtDBus in to reason about screens.
+  live `ScreenManager` lives in `PhosphorScreens::Runtime`; the POD
+  topology types live in `PhosphorScreens::Core`. A snap or tiling
+  engine links `::Core` and never pulls QtDBus in to reason about
+  screens.
 
 ## Dependencies
 
 - `PhosphorScreens::Core` — `QtCore`, `QtGui`
+- `PhosphorScreens::Runtime` — additionally `phosphor-wayland` (private)
+  for the live `ScreenManager`
 - `PhosphorScreens` — additionally `QtDBus` and `PhosphorProtocol::Types`
   (for the `org.plasmazones.Screen` service constants)
 - [`phosphor-identity`](../phosphor-identity/README.md) — `VirtualScreenId` format helpers

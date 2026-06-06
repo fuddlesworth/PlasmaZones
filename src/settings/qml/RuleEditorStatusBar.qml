@@ -74,5 +74,4 @@ ColumnLayout {
             return i18n("This rule would never fire:") + "\n" + lines.join("\n");
         }
     }
-
 }

@@ -11,7 +11,7 @@ namespace PhosphorAnimationShaders {
 
 /// Cross-runtime named-uniform contract for **animation/transition shaders**.
 ///
-/// PlasmaZones has two distinct shader registries:
+/// Phosphor has two distinct shader registries:
 ///
 ///   1. **Animation/transition shaders** — `AnimationShaderRegistry`,
 ///      sourced from `data/animations/*/`. Short-lived transitions
@@ -33,7 +33,7 @@ namespace PhosphorAnimationShaders {
 ///     events (`window.open`, `window.move`, `window.snapIn`, …).
 ///
 ///   • **Daemon (overlay-surface) execution** — `SurfaceAnimator::runLeg`
-///     in the PlasmaZones daemon. Uses Qt RHI via
+///     in the Phosphor daemon. Uses Qt RHI via
 ///     `PhosphorRendering::ShaderEffect` → `ShaderNodeRhi`. Animates
 ///     daemon-owned overlay surfaces (snap-assist popup, OSD
 ///     notification, layout-picker, zone-selector show/hide).

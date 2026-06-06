@@ -90,7 +90,7 @@ Rectangle {
      */
     function selectLayout(layoutId) {
         if (root.locked)
-            return ;
+            return;
 
         activeLayoutId = layoutId;
         layoutSelected(layoutId);
@@ -127,7 +127,6 @@ Rectangle {
     function show() {
         if (selectorState === "hidden")
             setState("near");
-
     }
 
     /**
@@ -211,9 +210,7 @@ Rectangle {
                 durationOverride: constants.animationDuration
                 profile: "popup"
             }
-
         }
-
     }
 
     // Header label when expanded
@@ -235,9 +232,7 @@ Rectangle {
                 durationOverride: constants.animationDuration
                 profile: "popup"
             }
-
         }
-
     }
 
     // Layout previews container
@@ -293,7 +288,7 @@ Rectangle {
                     }
                     onHovered: {
                         if (root.locked)
-                            return ;
+                            return;
 
                         root.hoveredLayoutId = layoutId;
                         root.layoutHovered(layoutId);
@@ -301,14 +296,10 @@ Rectangle {
                     onUnhovered: {
                         if (root.hoveredLayoutId === layoutId)
                             root.hoveredLayoutId = "";
-
                     }
                 }
-
             }
-
         }
-
     }
 
     // Mouse area to expand when hovering
@@ -320,13 +311,12 @@ Rectangle {
         onEntered: {
             if (root.selectorState === "near")
                 root.setState("expanded");
-
         }
         onExited: {
             // Delay collapse to allow selecting layouts
             collapseTimer.restart();
         }
-        onPressed: function(mouse) {
+        onPressed: function (mouse) {
             mouse.accepted = false; // Let child items handle clicks
         }
     }
@@ -345,7 +335,6 @@ Rectangle {
         onTriggered: {
             if (root.selectorState === "expanded" && !isMouseOver())
                 root.setState("near");
-
         }
     }
 
@@ -363,7 +352,6 @@ Rectangle {
             durationOverride: constants.animationDuration
             profile: "popup"
         }
-
     }
 
     // Smooth slide animation. durationOverride preserves the original
@@ -373,7 +361,5 @@ Rectangle {
             durationOverride: root.selectorState === "expanded" ? constants.expandedAnimationDuration : constants.animationDuration
             profile: "popup"
         }
-
     }
-
 }

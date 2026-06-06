@@ -4,7 +4,7 @@
 #include "generalpagecontroller.h"
 
 #include "../core/isettings.h"
-#include "../p_i18n.h"
+#include "../phosphor_i18n.h"
 
 namespace PlasmaZones {
 
@@ -13,7 +13,7 @@ GeneralPageController::GeneralPageController(ISettings& settings, QObject* paren
 {
     // Translate rendering backend display names once at construction.
     for (const auto& name : ConfigDefaults::renderingBackendDisplayNames()) {
-        m_renderingBackendDisplayNames.append(PI18n::tr(name.toUtf8().constData()));
+        m_renderingBackendDisplayNames.append(PhosphorI18n::tr(name.toUtf8().constData()));
     }
 
     // Snapshot current backend so the QML "restart required" message

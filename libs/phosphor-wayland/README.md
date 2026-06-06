@@ -68,14 +68,17 @@ int main(int argc, char** argv) {
     QGuiApplication app(argc, argv);
 
     using namespace PhosphorWayland;
-    auto* surface = new LayerSurface();
+    // Attach a LayerSurface to a QWindow BEFORE the first show(). The
+    // surface drives the QPA plugin via dynamic properties on the window.
+    QWindow window;
+    auto* surface = LayerSurface::get(&window);   // factory; never `new LayerSurface`
     surface->setLayer(LayerSurface::LayerOverlay);
     surface->setAnchors(LayerSurface::AnchorAll);
     surface->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityOnDemand);
     surface->setScope(QStringLiteral("zone-overlay"));
     surface->setScreen(QGuiApplication::primaryScreen());
     surface->setMargins(QMargins(8, 8, 8, 8));
-    // … attach a QQuickWindow to it via the QPA plugin's property contract
+    window.show();
     return app.exec();
 }
 ```

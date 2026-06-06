@@ -12,7 +12,7 @@
 namespace PhosphorContext {
 
 /**
- * @brief The single resolver façade every PlasmaZones consumer goes through
+ * @brief The single resolver façade every Phosphor consumer goes through
  *        for "what does this screen look like RIGHT NOW under the disable /
  *        lock / mode cascade?"
  *

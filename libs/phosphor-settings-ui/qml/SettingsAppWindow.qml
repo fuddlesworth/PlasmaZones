@@ -52,7 +52,7 @@ Kirigami.ApplicationWindow {
     property alias closeDialog: discardDialog
     /** Auto-collapses the sidebar to an icon-only rail when the window
      *  is too narrow to comfortably show labels. Threshold is 50
-     *  grid units, matching the legacy PlasmaZones chrome. Consumers
+     *  grid units, matching the legacy Phosphor chrome. Consumers
      *  can override this binding (e.g. for tests or to force a
      *  collapsed rail) by reassigning the property. */
     property bool sidebarCompact: width < Kirigami.Units.gridUnit * 50
@@ -102,7 +102,7 @@ Kirigami.ApplicationWindow {
     // Default geometry sized in gridUnits so HiDPI displays (gridUnit ~24-36)
     // scale the window proportionally — staying above the compact-rail
     // threshold (50 gridUnits) at every DPI. At 1× DPR (gridUnit ~18)
-    // this is ~1206×792, matching the legacy PlasmaZones default; at
+    // this is ~1206×792, matching the legacy Phosphor default; at
     // HiDPI it grows to keep the same visual weight. Consumers can
     // override.
     width: Kirigami.Units.gridUnit * 67
