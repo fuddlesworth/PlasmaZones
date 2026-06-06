@@ -757,6 +757,15 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-lock-cli)
 endif()
 
+# phosphor-service-session-cli. Acceptance harness for the
+# phosphor-service-session library (Phase 2.10). Drives the logind session
+# capabilities + actions (status / lock / logout / suspend / ... / power-off).
+# Gated like the lib: when BUILD_PHOSPHOR_SHELL is OFF the lib target does not
+# exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-session-cli)
+endif()
+
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo
 # that exercises the PluginLoader + hot-reload path. The third
 # (CPU-meter) widget builds as a separate .so + manifest.json and
