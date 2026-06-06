@@ -68,7 +68,7 @@ struct ScreenManagerConfig
  *     by every PhosphorScreens client)
  *
  * NOT a singleton — the lib never owns process-global state. Consumers
- * that need a process-wide ScreenManager (the PlasmaZones daemon does)
+ * that need a process-wide ScreenManager (the Phosphor daemon does)
  * provide their own thin service-locator outside this class.
  */
 class PHOSPHORSCREENSRUNTIME_EXPORT ScreenManager : public QObject

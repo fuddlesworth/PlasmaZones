@@ -3,7 +3,7 @@
 
 # PhosphorWindowRule
 
-The unified window/context rule engine for PlasmaZones — one composable
+The unified window/context rule engine for Phosphor: one composable
 match-expression language, one pluggable action set, one serialization
 format, and one evaluation pipeline with a match cache.
 

@@ -39,7 +39,7 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
 
 # PhosphorProtocol::Types provides WindowTypeEnum.h, which WindowQuery includes
 # and surfaces through its public API. PUBLIC because the type leaks through
-# the header. Found via add_subdirectory in PZ in-tree builds; falls back to
+# the header. Found via add_subdirectory in Phosphor in-tree builds; falls back to
 # find_package when this library is consumed standalone.
 if(NOT TARGET PhosphorProtocol::Types)
     find_package(PhosphorProtocol CONFIG REQUIRED)

@@ -5,7 +5,7 @@
 #
 # Owns the composite window-id wire format (`appId|internalUuid`) plus the
 # string utilities that parse, build, and pattern-match it.  Used by every
-# PlasmaZones component that needs to refer to a window stably across
+# Phosphor component that needs to refer to a window stably across
 # process boundaries:
 #
 #   • The KWin effect (separate process) constructs ids from

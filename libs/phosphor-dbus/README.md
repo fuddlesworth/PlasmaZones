@@ -14,7 +14,7 @@ adaptor that marshals a custom struct risks a runtime "demarshalling
 function failed" crash if it forgets a streaming operator.
 
 `phosphor-dbus` owns that generic plumbing. It knows nothing about
-Phosphor, PlasmaZones, or any particular service — project-specific
+Phosphor or any particular service. Project-specific
 service names and wire types belong one layer up (see
 [`phosphor-protocol`](../phosphor-protocol/README.md)). Any Qt app, shell
 plugin, or tool can reuse this library directly with its own endpoints.
@@ -84,6 +84,6 @@ static_assert(PhosphorDBus::HasDBusStreaming<MyEntry>::value,
 
 ## See also
 
-- [`phosphor-protocol`](../phosphor-protocol/README.md) — the PlasmaZones
+- [`phosphor-protocol`](../phosphor-protocol/README.md) — the Phosphor
   contract layer: builds on `Client` and `HasDBusStreaming` with the
   `org.plasmazones` service constants and wire types.

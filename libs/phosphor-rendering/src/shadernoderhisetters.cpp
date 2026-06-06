@@ -158,7 +158,7 @@ void ShaderNodeRhi::setAppField0(int value)
     m_baseUniforms.appField0 = value;
     m_uniformsDirty = true;
     // Use the granular K_APP_FIELDS region (8 bytes) instead of the full
-    // scene header (~512 bytes). PlasmaZones updates these on every hover.
+    // scene header (~512 bytes). Phosphor updates these on every hover.
     m_appFieldsDirty = true;
 }
 

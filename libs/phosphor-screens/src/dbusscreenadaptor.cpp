@@ -30,7 +30,7 @@
 namespace PhosphorScreens {
 
 namespace {
-// JSON key constants matching the existing PlasmaZones wire format so
+// JSON key constants matching the existing Phosphor wire format so
 // the KCM / settings app continue to deserialise what the adaptor sends.
 // Promoted to lib-internal constants here (vs. the daemon's JsonKeys::*)
 // so the lib is self-contained.

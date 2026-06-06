@@ -15,7 +15,7 @@
 
 ## Responsibility
 
-Every gating site in the PlasmaZones stack used to inline the same
+Every gating site in the Phosphor stack used to inline the same
 five-call cascade: read the screen's mode, read the current virtual
 desktop, read the current activity, ask the disable list whether that
 tuple is off, ask the lock store whether that tuple is locked. Each

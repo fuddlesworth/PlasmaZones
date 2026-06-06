@@ -1341,7 +1341,7 @@ public:
     /// surface roles via withScopePrefix("base-{screenId}") and
     /// register configs against the unsuffixed base, so a bare find()
     /// would always miss. Match boundary is '-' or end-of-string so
-    /// "plasmazones-layout" doesn't collide with "plasmazones-layout-
+    /// "phosphor-layout" doesn't collide with "phosphor-layout-
     /// picker-..." when both are registered.
     Config configFor(const PhosphorLayer::Role& role) const
     {

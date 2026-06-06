@@ -95,7 +95,7 @@ if (z) {
   `LayoutRegistry` per process and inject it into every consumer. Tests
   build their own per-fixture instance.
 - **Quick-layout slots and screen-assignment CRUD live on the consumer.**
-  The PlasmaZones daemon owns the user-facing surface (D-Bus methods,
+  The Phosphor daemon owns the user-facing surface (D-Bus methods,
   quick-layout 1-9, etc.); this library exposes the data the daemon
   drives that surface from.
 

@@ -6,7 +6,7 @@
 // mutate topology; the contract is that its store backend enforces the
 // same cap and validation rules ScreenManager's Config does. A divergence
 // used to exist (daemon cap vs. settings cap), and this test exists so
-// regressions surface at the lib level rather than inside the PlasmaZones
+// regressions surface at the lib level rather than inside the Phosphor
 // daemon's integration paths.
 
 #include <PhosphorIdentity/VirtualScreenId.h>

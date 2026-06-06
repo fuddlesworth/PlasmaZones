@@ -10,7 +10,7 @@
 
 ## Responsibility
 
-The PlasmaZones daemon dispatches every window-lifecycle and shortcut
+The Phosphor daemon dispatches every window-lifecycle and shortcut
 event through `PhosphorEngine::IPlacementEngine` so it doesn't have
 to branch on the current placement mode. `phosphor-snap-engine` is the
 manual-mode implementation: when a screen has a zone layout active,

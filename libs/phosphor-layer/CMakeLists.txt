@@ -132,7 +132,7 @@ target_include_directories(PhosphorLayer
 
 # C++20 as a PUBLIC feature: CMAKE_CXX_STANDARD is only set by the
 # `if(NOT PROJECT_VERSION)` block above, i.e. only when PhosphorLayer is the
-# top-level project. When built as a subdirectory of PlasmaZones (or any
+# top-level project. When built as a subdirectory of Phosphor (or any
 # other parent), consumers inherit whatever standard the parent set. Declare
 # the requirement on the target so find_package(PhosphorLayer) consumers get
 # the right compile-feature propagation regardless of build configuration.

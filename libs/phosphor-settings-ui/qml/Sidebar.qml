@@ -39,11 +39,11 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  * Slots for consumers:
  *
  *   - `trailingDelegate`: Component instantiated next to each row's
- *     title (between label and drill chevron). Used by PlasmaZones for
+ *     title (between label and drill chevron). Used by Phosphor for
  *     the snapping/tiling Switch + dirty badge.
  *   - `footerContent`: Component instantiated at the very bottom of
  *     the sidebar, OUTSIDE the scroll area. Stays visible across
- *     drill / scroll. Used by PlasmaZones for the persistent daemon
+ *     drill / scroll. Used by Phosphor for the persistent daemon
  *     status + enable/disable toggle.
  */
 ColumnLayout {
@@ -190,7 +190,7 @@ ColumnLayout {
         //     model contract because the consumer's trailingDelegate
         //     must read them to render badges / active stripes
         //     correctly. Renaming any of these is a BREAKING change
-        //     for downstream consumers (PlasmaZones Main.qml etc.).
+        //     for downstream consumers (Phosphor Main.qml etc.).
         if (root.searchText.length === 0) {
             const out = [];
             // Flat seen-set tracks every visited page id (parent AND

@@ -14,7 +14,7 @@
 #     ISettings implementation against phosphor-config.
 #   - phosphor-shortcuts owns global-shortcut backends. Not included here.
 #
-# Built standalone or as a subdirectory of PlasmaZones (or any consumer).
+# Built standalone or as a subdirectory of Phosphor (or any consumer).
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -123,7 +123,7 @@ set(phosphorsettingsui_SRCS
 # (split source between targets, or a single-target install path).
 
 # Suppress -Wmissing-include-dirs for Qt-managed AUTOMOC scratch dirs.
-# KDECompilerSettings (in the PlasmaZones parent build) enables the
+# KDECompilerSettings (in the Phosphor parent build) enables the
 # warning globally, and qt_add_qml_module adds `<target>_autogen/include`
 # to every generated sub-target's -I list (qmltyperegistration, resource
 # init, qmlplugin). Those sub-targets carry no Q_OBJECT, so AUTOMOC
@@ -224,7 +224,7 @@ target_compile_definitions(PhosphorSettingsUi PRIVATE
 #     `${KDE_INSTALL_QMLDIR}/org/phosphor/settings/ui/`).
 #
 # A SHARED variant has not landed yet because every current consumer of
-# this library is in-tree (PlasmaZones settings app + the minimal example
+# this library is in-tree (Phosphor settings app + the minimal example
 # in this directory). When the first out-of-tree consumer appears, copy
 # the phosphor-animation Shared pattern verbatim.
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -320,7 +320,7 @@ set_target_properties(PhosphorSettingsUiQml PROPERTIES
 # ═══════════════════════════════════════════════════════════════════════════════
 #
 # The STATIC PhosphorSettingsUiQml target above is fine for in-tree
-# consumers (PlasmaZones + examples/minimal) — they link it directly
+# consumers (Phosphor + examples/minimal) — they link it directly
 # and Qt's plugin registration runs at link time. Out-of-tree
 # consumers using `find_package(PhosphorSettingsUi)` get the C++
 # target via the export set, but cannot consume STATIC QML modules:

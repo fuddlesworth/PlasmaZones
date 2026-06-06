@@ -9,7 +9,7 @@
 # QWindow. Shader-domain headers live in the sibling
 # `phosphor-shaders` library.
 #
-# Can be built standalone or as a subdirectory of PlasmaZones.
+# Can be built standalone or as a subdirectory of Phosphor.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -253,7 +253,7 @@ target_include_directories(PhosphorWayland
 
 # C++20 as a PUBLIC target feature: CMAKE_CXX_STANDARD is only set by the
 # `if(NOT PROJECT_VERSION)` block above — i.e. only when PhosphorWayland is
-# the top-level project. When built as a subdirectory of PlasmaZones (or
+# the top-level project. When built as a subdirectory of Phosphor (or
 # any other parent) consumers inherit whatever standard the parent picked.
 # Declare the requirement on the target so find_package(PhosphorWayland)
 # consumers get the right compile-feature propagation regardless of build

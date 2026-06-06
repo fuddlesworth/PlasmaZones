@@ -4,7 +4,7 @@
 # PhosphorShellPatterns: UI-pattern recipes built on PhosphorLayer::Role.
 #
 # Axis-2 vocabulary between protocol primitives (PhosphorLayer) and
-# consumer-side application roles (e.g. PzRoles in the PlasmaZones
+# consumer-side application roles (e.g. PhosphorRoles in the Phosphor
 # daemon). Lets any Phosphor shell compose its public roles from named
 # patterns (Wallpaper, Hud, Modal, Floating, Panel(Edge), Toast(Corner))
 # without having to know the wlr-layer-shell wire details.

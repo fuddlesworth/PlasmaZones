@@ -9,7 +9,7 @@
 
 ## Responsibility
 
-PlasmaZones already ships several hand-rolled registries
+Phosphor already ships several hand-rolled registries
 (`phosphor-layout-api/ILayoutSourceFactory`, `phosphor-tiles/AlgorithmRegistry`,
 `phosphor-shaders/ShaderRegistry`, `phosphor-animation/AnimationShaderRegistry`).
 Each one was designed independently for its own domain. `phosphor-registry`

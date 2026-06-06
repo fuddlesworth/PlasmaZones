@@ -22,7 +22,7 @@ function withAlpha(baseColor, alpha) {
 // "highlightTintActive(color)" instead of "withAlpha(color, 0.12)"
 // where the 0.12 carries semantic meaning the literal doesn't.
 //
-// Values match the tints the legacy PlasmaZones chrome shipped — a
+// Values match the tints the legacy Phosphor chrome shipped — a
 // future visual-tweak pass can adjust them in one place.
 var ACTIVE_TINT_ALPHA = 0.12;   // Active-row highlight background
 var HOVER_TINT_ALPHA = 0.06;    // Hover background

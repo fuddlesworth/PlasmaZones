@@ -24,7 +24,7 @@ import "ThemeHelpers.js" as ThemeHelpers
  *      icon + "Unsaved changes" label and two action buttons:
  *      Discard (flat — opens a confirm prompt before throwing away
  *      edits) and Save (highlighted — calls controller.applyAll()).
- *      Matches the legacy PlasmaZones footer 1:1.
+ *      Matches the legacy Phosphor footer 1:1.
  */
 ColumnLayout {
     id: root
@@ -41,7 +41,7 @@ ColumnLayout {
     // rather than inheriting whatever role-set the parent page used
     // (View, Selection, Complementary, etc.). `inherit: false` stops
     // a darker parent surface from dragging the footer into a
-    // mismatched tint. Matches the legacy PlasmaZones chrome's
+    // mismatched tint. Matches the legacy Phosphor chrome's
     // footer notification surface.
     Kirigami.Theme.colorSet: Kirigami.Theme.Window
     Kirigami.Theme.inherit: false

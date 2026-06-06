@@ -50,7 +50,7 @@ inline constexpr QLatin1String MotionProfileTree("motionProfileTree");
 inline constexpr QLatin1String AnimationShaderSearchPaths("animationShaderSearchPaths");
 }
 
-/// Single-instance app identities. Each PlasmaZones sub-process (settings,
+/// Single-instance app identities. Each Phosphor sub-process (settings,
 /// editor) advertises its own service name and a small controller object so
 /// the launcher can detect "already running" without scanning the bus.
 namespace Apps {
@@ -72,7 +72,7 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 // and reject if below their minimum. The version is a simple integer string
 // ("1", "2", …) to keep comparison trivial.
 //
-//   v1: original protocol (PlasmaZones v3.0–v3.x)
+//   v1: original protocol (Phosphor v3.0–v3.x)
 //   v2: split dragStopped + snapAssistReady signal (Phase C);
 //       WindowGeometryEntry gained `screenId` (a(siiiis)) so the compositor
 //       can seed its tracked-screen cache from the daemon's authoritative

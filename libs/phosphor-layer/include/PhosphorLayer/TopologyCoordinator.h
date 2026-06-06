@@ -41,7 +41,7 @@ struct TopologyConfig
  * the former should respond to topology changes.
  *
  * @note **Status (v0.1):** not yet used by the reference consumer
- * (PlasmaZones OverlayService, which wires screen signals directly to
+ * (Phosphor OverlayService, which wires screen signals directly to
  * QGuiApplication because it also responds to a custom
  * virtualScreensChanged signal not yet modelled here). The coordinator's
  * public API and debounce contract are tested, but real-world behaviour

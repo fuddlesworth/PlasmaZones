@@ -54,7 +54,7 @@ Q_SIGNALS:
 /**
  * @brief Source-of-truth interface for the available QScreen set.
  *
- * Abstracted so PlasmaZones can inject a virtual-screen-aware provider
+ * Abstracted so Phosphor can inject a virtual-screen-aware provider
  * (where one physical QScreen may host several logical "screens") while
  * a standalone consumer uses the default QGuiApplication-backed one.
  */

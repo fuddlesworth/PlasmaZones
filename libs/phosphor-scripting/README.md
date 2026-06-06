@@ -10,7 +10,7 @@
 
 ## Responsibility
 
-PlasmaZones runs user-authored scripts (today: tiling algorithms; later: other
+Phosphor runs user-authored scripts (today: tiling algorithms; later: other
 shell surfaces). This library owns the **embedding** of Luau so each domain
 binding can stay small: marshal its params into `QVariant`, call a script, read
 the result back. It deliberately knows nothing about what the scripts compute.

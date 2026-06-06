@@ -3,13 +3,13 @@
 
 # phosphor-compositor
 
-> Compositor-plugin SDK for PlasmaZones. Provides the interface contract,
+> Compositor-plugin SDK for Phosphor. Provides the interface contract,
 > D-Bus client, and shared utilities a compositor plugin needs to give its
 > users zone-based window management.
 
 ## Responsibility
 
-PlasmaZones splits into a **daemon** (owns placement logic, zones, layouts,
+Phosphor splits into a **daemon** (owns placement logic, zones, layouts,
 settings) and a **compositor plugin** (observes windows, applies geometry,
 renders overlays). This library is the plugin side of that split.
 

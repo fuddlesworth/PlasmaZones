@@ -405,7 +405,7 @@ bool PaletteStore::loadFromFile(const QString& path)
     // both sides so case-insensitive mounts (HFS+ bind-mount,
     // exFAT, NTFS surfaced through ntfs-3g, FAT32 USB sticks,
     // SMB/CIFS shares) treat the same logical file under different
-    // capitalisations as equal. PlasmaZones is Linux/Wayland-only,
+    // capitalisations as equal. Phosphor is Linux/Wayland-only,
     // but case-insensitive filesystems do appear on Linux hosts
     // (removable media, network shares, Windows interop mounts)
     // and the watcher must not churn when a path arrives differing

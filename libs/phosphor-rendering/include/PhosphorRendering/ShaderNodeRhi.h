@@ -49,8 +49,8 @@ constexpr int kMaxCustomColors = 16;
 // runtime. Binding 1 is the one "free-in-the-gap" slot; 13..31 are free as
 // well.
 //
-// PlasmaZones uses binding 1 for its zone-labels texture by convention.
-// Other consumers that interoperate with PlasmaZones should pick from
+// Phosphor uses binding 1 for its zone-labels texture by convention.
+// Other consumers that interoperate with Phosphor should pick from
 // 13..kMaxConsumerBinding to avoid a per-instance overwrite.
 constexpr int kFirstFreeConsumerBinding = 1; ///< First slot usable via setExtraBinding()
 /// Highest portable SRB binding. 31 matches Qt RHI's minimum guarantee
@@ -76,7 +76,7 @@ constexpr bool isConsumerBinding(int binding) noexcept
 /**
  * @brief QSGRenderNode for fullscreen-quad shader rendering via Qt RHI (Vulkan / OpenGL)
  *
- * Generalized render node extracted from PlasmaZones' ZoneShaderNodeRhi.
+ * Generalized render node extracted from Phosphor's ZoneShaderNodeRhi.
  * Manages a Shadertoy-compatible UBO (BaseUniforms), multipass buffer system,
  * texture bindings (audio, user, wallpaper, depth), and shader baking.
  *

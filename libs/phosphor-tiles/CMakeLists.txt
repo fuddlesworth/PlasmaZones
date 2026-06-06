@@ -44,7 +44,7 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
 
 # PhosphorLayoutApi provides the LayoutPreview / ILayoutSource contract that
 # this library implements via AutotileLayoutSource. Found via add_subdirectory
-# in PZ in-tree builds; falls back to find_package when this library is
+# in Phosphor in-tree builds; falls back to find_package when this library is
 # consumed standalone.
 if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)

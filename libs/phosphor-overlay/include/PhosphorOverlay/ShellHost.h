@@ -51,7 +51,7 @@ namespace PhosphorOverlay {
 /// Either case made the longest-prefix match silently miss and the
 /// surface fell back to the library's empty default config.
 ///
-/// @param base       Named base role (e.g. PassiveShell pattern in PZ).
+/// @param base       Named base role (e.g. PassiveShell pattern in Phosphor).
 /// @param screenId   Effective screen id (physical or virtual).
 /// @param generation Monotonic per-process counter, e.g. from
 ///                   @c PhosphorSurfaces::SurfaceManager::nextScopeGeneration().
@@ -153,7 +153,7 @@ public:
     /// (which lives on different keys).
     ///
     /// @p anyInputGrabbing - true when at least one modal slot
-    /// (consumer-defined; PZ today: snap-assist + layout picker) wants
+    /// (consumer-defined; Phosphor today: snap-assist + layout picker) wants
     /// pointer input. When false the shell's QQuickWindow is flagged
     /// Qt::WindowTransparentForInput so background windows stay
     /// interactable beneath non-modal slots (OSDs, main overlay, zone

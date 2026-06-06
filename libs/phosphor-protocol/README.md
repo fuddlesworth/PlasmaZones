@@ -3,7 +3,7 @@
 
 # phosphor-protocol
 
-> The PlasmaZones D-Bus contract: service names, wire types, and the
+> The Phosphor D-Bus contract: service names, wire types, and the
 > daemon client.
 
 ## Responsibility
@@ -76,7 +76,7 @@ and the `HasDBusStreaming` `static_assert` guard.
 - **The daemon client is a thin binding.** `daemonClient()` returns a
   `PhosphorDBus::Client` by value, pre-bound to `org.plasmazones` on the
   session bus. The generic call mechanics live in `phosphor-dbus`; this
-  library only supplies the PlasmaZones endpoint. No singleton.
+  library only supplies the Phosphor endpoint. No singleton.
 - **Build-time marshaller check.** Add a struct to a `*Types.h` and
   forget its `operator<<` / `>>` in the matching `*Marshalling.h`, and the
   `HasDBusStreaming` `static_assert` fails the build instead of crashing

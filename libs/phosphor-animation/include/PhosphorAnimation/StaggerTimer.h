@@ -55,7 +55,7 @@ namespace PhosphorAnimation {
  *   - (c) the lambda uses a `QPointer<T>` weak capture and checks it
  *         before use.
  *
- * In PlasmaZones today all callers satisfy (b) — they capture
+ * In Phosphor today all callers satisfy (b): they capture
  * subsystems owned by the compositor effect which is itself @p parent.
  */
 PHOSPHORANIMATION_EXPORT void applyStaggeredOrImmediate(QObject* parent, int count, SequenceMode sequenceMode,

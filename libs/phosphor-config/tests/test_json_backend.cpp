@@ -15,7 +15,7 @@
 namespace PhosphorConfig::tests {
 
 /// Resolver that captures every group name routing through it — exercises
-/// the IGroupPathResolver plug-in hook without pulling in PlasmaZones.
+/// the IGroupPathResolver plug-in hook without pulling in Phosphor.
 class CapturingResolver : public IGroupPathResolver
 {
 public:

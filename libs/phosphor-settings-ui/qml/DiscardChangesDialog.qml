@@ -15,7 +15,7 @@ import org.kde.kirigami as Kirigami
  *   - 3-action (`applyAvailable: true`): adds an Apply button which
  *     emits `applyConfirmed()` — for apps whose preferred answer to
  *     "you have unsaved changes" is to commit them, not throw them
- *     away (matches the legacy PlasmaZones Apply / Discard / Cancel
+ *     away (matches the legacy Phosphor Apply / Discard / Cancel
  *     prompt).
  *
  * Stateless — caller is responsible for tracking whether changes

@@ -23,7 +23,7 @@ namespace PhosphorShortcutsIntegration {
  * *implement* to plug their own glue into that machinery. The library provides no
  * implementation of IAdhocRegistrar — each consumer wires its own
  * "shortcut manager" object to the underlying Registry, with whatever
- * bind-flow + flush ordering its app needs (the PlasmaZones
+ * bind-flow + flush ordering its app needs (the Phosphor
  * implementation, for example, queues adhoc registrations that arrive
  * during the initial settings-driven batch and drains them once the
  * Portal BindShortcuts Response lands).
