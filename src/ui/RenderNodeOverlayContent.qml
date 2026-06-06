@@ -16,6 +16,7 @@ Item {
     id: root
 
     property url shaderSource
+    property string paramPreamble: ""
     property string bufferShaderPath: ""
     property var bufferShaderPaths: []
     property bool bufferFeedback: false
@@ -26,8 +27,7 @@ Item {
     property int highlightedCount: 0
     property string highlightedZoneId: ""
     property var highlightedZoneIds: []
-    property var shaderParams: ({
-    })
+    property var shaderParams: ({})
     property int zoneDataVersion: 0
     property real iTime: 0
     property real iTimeDelta: 0
@@ -70,7 +70,6 @@ Item {
             var h = (z.height !== undefined) ? z.height : 0;
             if (mouse.x >= x && mouse.x < x + w && mouse.y >= y && mouse.y < y + h)
                 return i;
-
         }
         return -1;
     }
@@ -103,6 +102,7 @@ Item {
             id: shaderConfig
 
             property url shaderSource: root.shaderSource
+            property string paramPreamble: root.paramPreamble
             property string bufferShaderPath: root.bufferShaderPath
             property var bufferShaderPaths: root.bufferShaderPaths
             property bool bufferFeedback: root.bufferFeedback
@@ -132,11 +132,10 @@ Item {
             anchors.fill: parent
             visible: root.shaderSource.toString() !== "" && status !== ZoneShaderItem.Error
             config: shaderConfig
-            onShaderError: function(log) {
+            onShaderError: function (log) {
                 console.error("RenderNodeOverlayContent: Shader error:", log);
                 if (typeof overlayService !== "undefined")
                     overlayService.onShaderError(log);
-
             }
         }
 
@@ -171,7 +170,6 @@ Item {
                 borderWidth: (modelData.useCustomColors && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth
                 borderRadius: (modelData.useCustomColors && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius
             }
-
         }
 
         Rectangle {
@@ -195,9 +193,6 @@ Item {
                 wrapMode: Text.WordWrap
                 width: parent.width - Kirigami.Units.gridUnit * 2
             }
-
         }
-
     }
-
 }

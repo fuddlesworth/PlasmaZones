@@ -1219,6 +1219,7 @@ void ShaderEffect::setParamPreamble(const QString& preamble)
         return;
     }
     m_paramPreamble = preamble;
+    Q_EMIT paramPreambleChanged();
     // Same reload requirement as setShaderIncludePaths: the preamble is spliced
     // inside the node's loadFragmentShader and the expanded+spliced source is
     // cached, so a pure re-bake would carry the OLD defines. Force a full

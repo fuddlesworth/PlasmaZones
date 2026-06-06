@@ -9,10 +9,12 @@
 // skip-don't-break behaviour for bad input.
 
 #include <PhosphorShaders/ShaderParamPreamble.h>
+#include <PhosphorShaders/ShaderRegistry.h>
 
 #include <QTest>
 
 using PhosphorShaders::PreambleParam;
+using PhosphorShaders::ShaderRegistry;
 
 class TestShaderParamPreamble : public QObject
 {
@@ -153,6 +155,40 @@ private Q_SLOTS:
         const QString block = QStringLiteral("#define pz_x customParams[0].x\n");
         const QString out = PhosphorShaders::spliceAfterVersion(src, block);
         QVERIFY(out.startsWith(block));
+    }
+
+    // Zone-side T1.1: ShaderRegistry::paramPreamble maps each declared param's
+    // EXPLICIT slot to the SAME GLSL accessor ParameterInfo::uniformName() /
+    // translateParamsToUniforms upload to — scalar slot N → customParams[N/4].
+    // <xyzw>, color slot N → customColors[N], image slot N → uTexture<N>. Pin the
+    // mapping so a migrated zone pack's pz_<id> can never drift off the lane the
+    // value lands in.
+    void testZoneParamPreambleLaneMatch()
+    {
+        ShaderRegistry::ShaderInfo info;
+        ShaderRegistry::ParameterInfo speed;
+        speed.id = QStringLiteral("speed");
+        speed.type = QStringLiteral("float");
+        speed.slot = 21; // 21/4 = 5, 21%4 = 1 → customParams[5].y
+        ShaderRegistry::ParameterInfo tint;
+        tint.id = QStringLiteral("tint");
+        tint.type = QStringLiteral("color");
+        tint.slot = 2; // → customColors[2]
+        ShaderRegistry::ParameterInfo logo;
+        logo.id = QStringLiteral("logo");
+        logo.type = QStringLiteral("image");
+        logo.slot = 1; // → uTexture1
+        info.parameters = {speed, tint, logo};
+
+        const QString out = ShaderRegistry::paramPreamble(info);
+        QVERIFY2(out.contains(QStringLiteral("#define pz_speed customParams[5].y")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("#define pz_tint customColors[2]")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("#define pz_logo uTexture1")), qPrintable(out));
+
+        // The scalar/color accessors must denote the SAME UBO lane the runtime
+        // uploads to (uniformName is the 1-based wire key for that lane).
+        QCOMPARE(speed.uniformName(), QStringLiteral("customParams6_y")); // customParams[5].y
+        QCOMPARE(tint.uniformName(), QStringLiteral("customColor3")); // customColors[2]
     }
 };
 

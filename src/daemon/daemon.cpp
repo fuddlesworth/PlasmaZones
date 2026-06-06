@@ -593,19 +593,19 @@ bool Daemon::init()
             // Snapshot now (registry can be mutated on the GUI thread; we're about
             // to hop onto the bake thread).
             const QStringList includePaths = reg->searchPaths();
-            // T1.4: warm-bake with the SAME entry-point scaffold ZoneShaderItem
-            // installs at runtime, so an entry-only zone pack's warm entry keys
-            // identically to its live load (the scaffold is part of the cache
-            // key). A traditional pack assembles to itself, so this is inert for
-            // every shipped pack. paramPreamble stays empty — zone-side T1.1 is
-            // not wired yet.
+            // T1.4 + T1.1: warm-bake with the SAME entry-point scaffold AND the
+            // SAME generated param preamble ZoneShaderItem installs at runtime,
+            // so a zone pack's warm entry keys identically to its live load (both
+            // are folded into the bake-cache key). Computed on the GUI thread
+            // (reads `info`) and captured by value into the bake-thread lambda.
             const QString entryPrologue = zoneEntryPrologue();
             const QList<PhosphorShaders::EntryCandidate> entryCandidates = zoneEntryCandidates();
+            const QString paramPreamble = ShaderRegistry::paramPreamble(info);
             watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
                                                  [vertPath = info.vertexShaderPath, fragPath = info.sourcePath,
-                                                  includePaths, entryPrologue, entryCandidates]() {
+                                                  includePaths, paramPreamble, entryPrologue, entryCandidates]() {
                                                      return warmShaderBakeCacheForPaths(vertPath, fragPath,
-                                                                                        includePaths, QString(),
+                                                                                        includePaths, paramPreamble,
                                                                                         entryPrologue, entryCandidates);
                                                  }));
         };

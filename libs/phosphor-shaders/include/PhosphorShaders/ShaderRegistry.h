@@ -127,6 +127,20 @@ public:
     bool validateParams(const QString& id, const QVariantMap& params) const;
     QVariantMap validateAndCoerceParams(const QString& id, const QVariantMap& params) const;
     Q_INVOKABLE QVariantMap translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const;
+
+    /// Build the generated `#define pz_<id> <glsl-accessor>` preamble (T1.1) for
+    /// @p info's declared parameters, so a zone shader author reads a parameter
+    /// by name (`pz_borderRadius`) instead of hand-decoding a
+    /// `customParams[N].xyzw` lane. Each param's explicit `slot` drives the
+    /// accessor exactly as `ParameterInfo::uniformName()` /
+    /// `translateParamsToUniforms` derive the upload target — scalar slot N →
+    /// `customParams[N/4].<xyzw>`, color slot N → `customColors[N]`, image slot
+    /// N → `uTexture<N>` — so the macro a shader reads resolves to the same UBO
+    /// lane the value is uploaded to. The daemon overlay splices the result
+    /// after the shader's `#version` (via `PhosphorShaders::spliceAfterVersion`).
+    /// Empty when the shader declares no parameters.
+    static QString paramPreamble(const ShaderInfo& info);
+
     Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
     Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
     Q_INVOKABLE QVariantList shaderPresetsVariant(const QString& shaderId) const;

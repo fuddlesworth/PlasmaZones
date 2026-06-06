@@ -90,6 +90,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
     Q_PROPERTY(QUrl vertexShaderUrl READ vertexShaderUrl WRITE setVertexShaderUrl NOTIFY vertexShaderUrlChanged FINAL)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
+    Q_PROPERTY(QString paramPreamble READ paramPreamble WRITE setParamPreamble NOTIFY paramPreambleChanged)
     Q_PROPERTY(QQuickItem* sourceItem READ sourceItem WRITE setSourceItem NOTIFY sourceItemChanged FINAL)
 
     // ── Multipass ────────────────────────────────────────────────────
@@ -647,6 +648,7 @@ Q_SIGNALS:
     void shaderSourceChanged();
     void vertexShaderUrlChanged();
     void shaderParamsChanged();
+    void paramPreambleChanged();
     void sourceItemChanged();
     void bufferShaderPathChanged();
     void bufferShaderPathsChanged();

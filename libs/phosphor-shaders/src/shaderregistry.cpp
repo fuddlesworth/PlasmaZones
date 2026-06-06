@@ -3,6 +3,7 @@
 
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorShaders/IWallpaperProvider.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 #include "shaderutils.h"
 
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
@@ -925,6 +926,33 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
     }
 
     return result;
+}
+
+QString ShaderRegistry::paramPreamble(const ShaderInfo& info)
+{
+    // Map each declared parameter to a PreambleParam carrying its EXPLICIT slot
+    // (zone packs always slot explicitly via metadata `slot`). buildParamPreamble
+    // turns each into `#define pz_<id> <glsl-accessor>` using the same
+    // slot→accessor rule ParameterInfo::uniformName()/translateParamsToUniforms
+    // upload to: color → customColors[slot], image → uTexture<slot>, everything
+    // else → customParams[slot/4].<xyzw>. So pz_<id> reads exactly the lane the
+    // value lands in.
+    QList<PreambleParam> params;
+    params.reserve(info.parameters.size());
+    for (const ParameterInfo& p : info.parameters) {
+        PreambleParam entry;
+        entry.id = p.id;
+        if (p.type == QLatin1String("color")) {
+            entry.pool = PreambleParam::Pool::Color;
+        } else if (p.type == QLatin1String("image")) {
+            entry.pool = PreambleParam::Pool::Image;
+        } else {
+            entry.pool = PreambleParam::Pool::Scalar;
+        }
+        entry.explicitSlot = p.slot;
+        params.append(entry);
+    }
+    return buildParamPreamble(params);
 }
 
 } // namespace PhosphorShaders

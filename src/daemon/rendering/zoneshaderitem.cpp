@@ -382,6 +382,12 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             // untouched. Must match the warm-bake scaffold (daemon.cpp) so the
             // bake-cache key agrees.
             node->setEntryScaffold(zoneEntryPrologue(), zoneEntryCandidates());
+            // T1.1 (zone): push the generated `#define pz_<id> ...` preamble
+            // (set on this item via the paramPreamble Q_PROPERTY by the overlay)
+            // so loadFragmentShader splices it and keys the bake cache on it.
+            // Empty when the pack declares no params, or for a pack not yet
+            // migrated to pz_ names — a no-op either way.
+            node->setParamPreamble(paramPreamble());
             qCDebug(PlasmaZones::lcOverlay)
                 << "Shader include paths:" << shaderIncludePaths() << "vertPath:" << vertPath;
 
