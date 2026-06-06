@@ -639,6 +639,14 @@ install(FILES ${_plasmazones_light_icons}
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
 
+# Example demos and CLI acceptance harnesses are not part of the installed
+# product. The Nix flake builds from a source tree with examples/ stripped
+# (flake.nix removes ./examples from the fileset), so only descend into the
+# example subdirectories when the directory is actually present. A normal git
+# checkout always has it, so this guard is a no-op there; it nests over the
+# inner BUILD_PHOSPHOR_SHELL gates below.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples")
+
 # phosphor-theme example apps. These are the lib's acceptance harness.
 # They consume only the phosphor-theme lib, so they build whenever the
 # lib builds. Gating them behind BUILD_PHOSPHOR_SHELL would force a
@@ -800,6 +808,8 @@ if(BUILD_PHOSPHOR_SHELL)
             PATTERN "*.glsl"
     )
 endif()
+
+endif() # examples/ present (Nix strips it; see the guard above)
 
 # Custom uninstall target that cleans up directories properly
 configure_file(
