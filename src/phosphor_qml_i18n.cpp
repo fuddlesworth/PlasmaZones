@@ -1,16 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "p_qml_i18n.h"
+#include "phosphor_qml_i18n.h"
 #include <QCoreApplication>
 
-PLocalizedContext::PLocalizedContext(QObject* parent)
+PhosphorLocalizedContext::PhosphorLocalizedContext(QObject* parent)
     : QObject(parent)
 {
 }
 
-QString PLocalizedContext::substituteArgs(QString text, const QVariant& a1, const QVariant& a2, const QVariant& a3,
-                                          const QVariant& a4, const QVariant& a5)
+QString PhosphorLocalizedContext::substituteArgs(QString text, const QVariant& a1, const QVariant& a2,
+                                                 const QVariant& a3, const QVariant& a4, const QVariant& a5)
 {
     // Use multi-arg QString::arg() to prevent double-substitution when
     // argument values themselves contain %N markers. Sequential .arg()
@@ -31,22 +31,23 @@ QString PLocalizedContext::substituteArgs(QString text, const QVariant& a1, cons
     return text;
 }
 
-QString PLocalizedContext::i18n(const QString& text, const QVariant& a1, const QVariant& a2, const QVariant& a3,
-                                const QVariant& a4, const QVariant& a5) const
+QString PhosphorLocalizedContext::i18n(const QString& text, const QVariant& a1, const QVariant& a2, const QVariant& a3,
+                                       const QVariant& a4, const QVariant& a5) const
 {
     QString result = QCoreApplication::translate("plasmazones", text.toUtf8().constData());
     return substituteArgs(result, a1, a2, a3, a4, a5);
 }
 
-QString PLocalizedContext::i18nc(const QString& context, const QString& text, const QVariant& a1, const QVariant& a2,
-                                 const QVariant& a3, const QVariant& a4, const QVariant& a5) const
+QString PhosphorLocalizedContext::i18nc(const QString& context, const QString& text, const QVariant& a1,
+                                        const QVariant& a2, const QVariant& a3, const QVariant& a4,
+                                        const QVariant& a5) const
 {
     QString result =
         QCoreApplication::translate("plasmazones", text.toUtf8().constData(), context.toUtf8().constData());
     return substituteArgs(result, a1, a2, a3, a4, a5);
 }
 
-QString PLocalizedContext::i18np(const QString& singular, const QString& plural, int n) const
+QString PhosphorLocalizedContext::i18np(const QString& singular, const QString& plural, int n) const
 {
     // Qt numerus translation only works with loaded .ts files.
     // Without them, translate() always returns the singular with %n replaced.
@@ -62,7 +63,8 @@ QString PLocalizedContext::i18np(const QString& singular, const QString& plural,
     return result;
 }
 
-QString PLocalizedContext::i18ncp(const QString& context, const QString& singular, const QString& plural, int n) const
+QString PhosphorLocalizedContext::i18ncp(const QString& context, const QString& singular, const QString& plural,
+                                         int n) const
 {
     const QString& form = (n == 1) ? singular : plural;
     QString result =

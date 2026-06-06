@@ -18,7 +18,7 @@ namespace PlasmaZones {
 /// protocol-level configuration (layer, anchors, keyboard, exclusive
 /// zone, scope prefix) it wants. Built on top of the
 /// @ref PhosphorShellPatterns axis-2 UI-pattern vocabulary.
-namespace PRoles {
+namespace PhosphorRoles {
 
 /// Zone overlay: the full-screen layer that paints zone rectangles and
 /// hosts the snap-assist/zone-selector slots. Hud pattern (Overlay layer,
@@ -129,7 +129,7 @@ inline const PhosphorLayer::Role ShaderPreview =
 /// Either case made the longest-prefix match silently miss and the
 /// surface fell back to the library's empty default config.
 ///
-/// @param base       Named base role (e.g. PRoles::Osd).
+/// @param base       Named base role (e.g. PhosphorRoles::Osd).
 /// @param screenId   Effective screen id (physical or virtual).
 /// @param generation Monotonic per-process counter, e.g. from
 ///                   `SurfaceManager::nextScopeGeneration()`.
@@ -140,11 +140,11 @@ inline const PhosphorLayer::Role ShaderPreview =
     // scope-prefix-construction policy lives in the lib so any consumer
     // (not just PZ) gets the same SurfaceAnimator longest-prefix lookup
     // guarantee. PZ keeps this thin wrapper because every existing call
-    // site uses the PRoles:: namespace; the wrapper is the migration
+    // site uses the PhosphorRoles:: namespace; the wrapper is the migration
     // bridge, not a fork.
     return PhosphorOverlay::makePerInstanceRole(base, screenId, generation);
 }
 
-} // namespace PRoles
+} // namespace PhosphorRoles
 
 } // namespace PlasmaZones

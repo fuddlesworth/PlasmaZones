@@ -12,7 +12,7 @@ import org.plasmazones.common as QFZCommon
  * ZoneSelectorWindow.qml, hosted inside the unified
  * PassiveOverlayShell's zoneSelector slot.
  *
- * Shell migration: the per-VS PRoles::ZoneSelector wl_surface is
+ * Shell migration: the per-VS PhosphorRoles::ZoneSelector wl_surface is
  * replaced by an Item slot inside the per-screen passive shell.
  * Per-VS positioning is handled by the C++ side sizing the slot's
  * `width` / `height` to match the VS rect; anchors live on the slot

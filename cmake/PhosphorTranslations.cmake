@@ -5,7 +5,7 @@
 #
 # Daemon and editor use Qt Linguist (.ts/.qm).  lupdate scans source files
 # directly - i18n()/i18nc() are backed by Q_DECLARE_TR_FUNCTIONS(plasmazones)
-# in pz_i18n.h, so lupdate recognizes them as tr() calls.
+# in phosphor_i18n.h, so lupdate recognizes them as tr() calls.
 #
 #   make update-ts   - run lupdate to refresh .ts from source
 #   make (default)   - compiles translations/*/*.ts → .qm
@@ -68,7 +68,7 @@ file(GLOB TRANSLATION_TS_FILES "${CMAKE_SOURCE_DIR}/translations/plasmazones_*.t
 list(FILTER TRANSLATION_TS_FILES EXCLUDE REGEX "plasmazones_en\\.ts$")
 
 # --- update-ts target: lupdate scans source directly ---
-# PzI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) - lupdate
+# PhosphorI18n::tr() uses Q_DECLARE_TR_FUNCTIONS(plasmazones) - lupdate
 # recognizes tr() natively.  No custom scripts or intermediate files.
 if(Qt6LinguistTools_FOUND)
     # All .ts files to update (en template + per-language)

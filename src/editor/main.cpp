@@ -30,8 +30,8 @@
 #include <QQuickWindow>
 #include <QObject>
 
-#include "p_i18n.h"
-#include "p_qml_i18n.h"
+#include "phosphor_i18n.h"
+#include "phosphor_qml_i18n.h"
 #include <QtQml/qqml.h>
 
 using namespace PlasmaZones;
@@ -133,17 +133,17 @@ int main(int argc, char* argv[])
 
     // Command line options
     QCommandLineParser parser;
-    parser.setApplicationDescription(PI18n::tr("Visual layout editor for PlasmaZones"));
+    parser.setApplicationDescription(PhosphorI18n::tr("Visual layout editor for PlasmaZones"));
     parser.addHelpOption();
     parser.addVersionOption();
 
     QCommandLineOption layoutIdOption(QStringList{QStringLiteral("l"), QStringLiteral("layout")},
-                                      PI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
+                                      PhosphorI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
     QCommandLineOption screenOption(QStringList{QStringLiteral("s"), QStringLiteral("screen")},
-                                    PI18n::tr("Target screen name"), QStringLiteral("name"));
+                                    PhosphorI18n::tr("Target screen name"), QStringLiteral("name"));
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},
-                                       PI18n::tr("Create new layout"));
-    QCommandLineOption previewOption(QStringLiteral("preview"), PI18n::tr("Open in read-only preview mode"));
+                                       PhosphorI18n::tr("Create new layout"));
+    QCommandLineOption previewOption(QStringLiteral("preview"), PhosphorI18n::tr("Open in read-only preview mode"));
 
     parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
     parser.process(app);
@@ -253,7 +253,7 @@ int main(int argc, char* argv[])
     QQmlApplicationEngine engine;
 
     // Set up i18n for QML (makes i18n() available in QML)
-    auto* localizedContext = new PLocalizedContext(&engine);
+    auto* localizedContext = new PhosphorLocalizedContext(&engine);
     engine.rootContext()->setContextObject(localizedContext);
 
     // Expose controller to QML

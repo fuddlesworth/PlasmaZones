@@ -6,7 +6,7 @@
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
-#include "../p_i18n.h"
+#include "../phosphor_i18n.h"
 
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -321,13 +321,13 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     // silently ignores, leaving the user with a success toast for an algorithm
     // that never appears. Reject up front with a clear message instead.
     if (source.suffix().compare(QLatin1String("luau"), Qt::CaseInsensitive) != 0) {
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Only Luau algorithm files (.luau) can be imported."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Only Luau algorithm files (.luau) can be imported."));
         return false;
     }
     static const QRegularExpression validBaseName(QStringLiteral("^[A-Za-z0-9_-]+$"));
     if (!validBaseName.match(source.completeBaseName()).hasMatch()) {
         Q_EMIT algorithmOperationFailed(
-            PI18n::tr("Algorithm file names may contain only letters, digits, hyphens, and underscores."));
+            PhosphorI18n::tr("Algorithm file names may contain only letters, digits, hyphens, and underscores."));
         return false;
     }
 
@@ -352,7 +352,7 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
         destPath = findUniqueAlgorithmPath(destDir, source.completeBaseName());
         if (destPath.isEmpty()) {
             Q_EMIT algorithmOperationFailed(
-                PI18n::tr("Too many algorithms share this name. Remove some and try again."));
+                PhosphorI18n::tr("Too many algorithms share this name. Remove some and try again."));
             return false;
         }
     }
@@ -360,7 +360,7 @@ bool AlgorithmService::importAlgorithm(const QString& filePath)
     if (!QFile::copy(filePath, destPath)) {
         // Report failure — the QML caller treats a false return as a silent no-op.
         Q_EMIT algorithmOperationFailed(
-            PI18n::tr("Could not copy the algorithm file. Check available disk space and permissions."));
+            PhosphorI18n::tr("Could not copy the algorithm file. Check available disk space and permissions."));
         return false;
     }
     // The loader's QFileSystemWatcher picks up the new file and refreshes the list.
@@ -424,8 +424,8 @@ void AlgorithmService::watchForAlgorithmRegistration(const QString& expectedId)
         m_algorithmWatchers.erase(it);
         qCWarning(PlasmaZones::lcCore) << "Algorithm registration timed out for:" << expectedId;
         Q_EMIT algorithmOperationFailed(
-            PI18n::tr("Algorithm was created but not picked up by the registry. "
-                      "Try refreshing or restarting the application."));
+            PhosphorI18n::tr("Algorithm was created but not picked up by the registry. "
+                             "Try refreshing or restarting the application."));
     });
 }
 
@@ -485,7 +485,7 @@ void AlgorithmService::openLayoutFile(const QString& layoutId)
 bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
 {
     if (algorithmId.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Cannot delete algorithm — no algorithm selected."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot delete algorithm — no algorithm selected."));
         return false;
     }
 
@@ -493,14 +493,14 @@ bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->isUserScript()) {
         qCWarning(PlasmaZones::lcCore) << "Cannot delete algorithm — not a user script:" << algorithmId;
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Only user-created algorithms can be deleted."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Only user-created algorithms can be deleted."));
         return false;
     }
 
     const QString filePath = scriptedFilePath(algorithmId);
     if (filePath.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Algorithm file not found for:" << algorithmId;
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Algorithm file not found."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Algorithm file not found."));
         return false;
     }
 
@@ -514,8 +514,8 @@ bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
         qCWarning(PlasmaZones::lcCore) << "Refusing to delete non-user algorithm file:" << filePath
                                        << "userDir=" << rawUserDir << "canonical=" << canonicalPath;
         Q_EMIT algorithmOperationFailed(
-            rawUserDir.isEmpty() ? PI18n::tr("Cannot delete — user algorithms directory does not exist.")
-                                 : PI18n::tr("Cannot delete — file is outside the user algorithms directory."));
+            rawUserDir.isEmpty() ? PhosphorI18n::tr("Cannot delete — user algorithms directory does not exist.")
+                                 : PhosphorI18n::tr("Cannot delete — file is outside the user algorithms directory."));
         return false;
     }
 
@@ -528,7 +528,7 @@ bool AlgorithmService::deleteAlgorithm(const QString& algorithmId)
     const bool ok = QFile::remove(canonicalPath);
     if (!ok) {
         qCWarning(PlasmaZones::lcCore) << "Failed to delete algorithm file:" << canonicalPath;
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Could not delete algorithm file. Check file permissions."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not delete algorithm file. Check file permissions."));
     }
     // QFileSystemWatcher will pick up the deletion and trigger a refresh
     return ok;
@@ -538,14 +538,14 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
 {
     const QString sourcePath = scriptedFilePath(algorithmId);
     if (sourcePath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Cannot duplicate — algorithm file not found."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot duplicate — algorithm file not found."));
         return false;
     }
 
     auto* registry = m_registry;
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo) {
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Cannot duplicate — algorithm is no longer registered."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot duplicate — algorithm is no longer registered."));
         return false;
     }
 
@@ -560,22 +560,22 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     if (destPath.isEmpty()) {
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for duplicate:" << baseName;
         Q_EMIT algorithmOperationFailed(
-            PI18n::tr("Could not duplicate algorithm — too many copies exist. "
-                      "Please rename or delete existing copies."));
+            PhosphorI18n::tr("Could not duplicate algorithm — too many copies exist. "
+                             "Please rename or delete existing copies."));
         return false;
     }
 
     // Canonicalize source path to follow symlinks and ensure we read the actual file
     const QString canonicalSource = QFileInfo(sourcePath).canonicalFilePath();
     if (canonicalSource.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Cannot duplicate — could not resolve algorithm file path."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot duplicate — could not resolve algorithm file path."));
         return false;
     }
 
     // Read source, update metadata, write copy
     QFile sourceFile(canonicalSource);
     if (!sourceFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Could not read source algorithm file."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not read source algorithm file."));
         return false;
     }
     QString content = QString::fromUtf8(sourceFile.readAll());
@@ -608,8 +608,8 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
                                        << "(nameMatch=" << nameMatch.hasMatch() << "idMatch=" << idMatch.hasMatch()
                                        << ")";
         Q_EMIT algorithmOperationFailed(
-            PI18n::tr("Could not duplicate algorithm — its metadata format is not recognised. "
-                      "Expected `name = \"...\"` and `id = \"...\"` on separate lines."));
+            PhosphorI18n::tr("Could not duplicate algorithm — its metadata format is not recognised. "
+                             "Expected `name = \"...\"` and `id = \"...\"` on separate lines."));
         return false;
     }
     content.replace(nameMatch.capturedStart(), nameMatch.capturedLength(),
@@ -619,7 +619,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     const QRegularExpressionMatch idMatch2 = idRe.match(content);
     if (!idMatch2.hasMatch()) {
         qCWarning(PlasmaZones::lcCore) << "duplicateAlgorithm: id match disappeared after name replacement";
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Could not duplicate algorithm — metadata rewrite failed."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not duplicate algorithm — metadata rewrite failed."));
         return false;
     }
     content.replace(idMatch2.capturedStart(), idMatch2.capturedLength(),
@@ -629,7 +629,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
     if (!destFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to write duplicate algorithm file:" << destPath;
         Q_EMIT algorithmOperationFailed(
-            PI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
+            PhosphorI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
         return false;
     }
     const QByteArray encoded = content.toUtf8();
@@ -640,7 +640,7 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
                                        << "written=" << written << "expected=" << encoded.size();
         QFile::remove(destPath);
         Q_EMIT algorithmOperationFailed(
-            PI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
+            PhosphorI18n::tr("Could not write duplicate algorithm file. Check disk space and permissions."));
         return false;
     }
 
@@ -652,13 +652,13 @@ bool AlgorithmService::duplicateAlgorithm(const QString& algorithmId)
 bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString& destPath)
 {
     if (destPath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PI18n::tr("No export destination specified."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("No export destination specified."));
         return false;
     }
 
     const QString sourcePath = scriptedFilePath(algorithmId);
     if (sourcePath.isEmpty()) {
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Cannot export — algorithm file not found."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Cannot export — algorithm file not found."));
         return false;
     }
 
@@ -673,14 +673,14 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
     QFile::remove(backupPath);
 
     if (!QFile::copy(sourcePath, tmpPath)) {
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Could not copy algorithm file for export."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not copy algorithm file for export."));
         return false;
     }
 
     const bool destExisted = QFile::exists(destPath);
     if (destExisted && !QFile::rename(destPath, backupPath)) {
         QFile::remove(tmpPath);
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Could not replace existing file at export destination."));
+        Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not replace existing file at export destination."));
         return false;
     }
 
@@ -692,7 +692,7 @@ bool AlgorithmService::exportAlgorithm(const QString& algorithmId, const QString
                 QFile::rename(backupPath, destPath);
             }
             QFile::remove(tmpPath);
-            Q_EMIT algorithmOperationFailed(PI18n::tr("Could not write to export destination."));
+            Q_EMIT algorithmOperationFailed(PhosphorI18n::tr("Could not write to export destination."));
             return false;
         }
         if (!QFile::remove(tmpPath)) {
@@ -736,8 +736,8 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         qCWarning(PlasmaZones::lcCore) << "Could not find unique filename for algorithm:" << filename
                                        << "— all 999 slots exhausted";
         Q_EMIT algorithmOperationFailed(
-            PI18n::tr("Could not create algorithm — too many files with the same name. "
-                      "Please rename or delete existing algorithms."));
+            PhosphorI18n::tr("Could not create algorithm — too many files with the same name. "
+                             "Please rename or delete existing algorithms."));
         return QString();
     }
     // Update filename to match the final path (may have -N suffix)
@@ -798,7 +798,8 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     QFile outFile(destPath);
     if (!outFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qCWarning(PlasmaZones::lcCore) << "Failed to write algorithm file:" << destPath;
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Could not write algorithm file. Check disk space and permissions."));
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("Could not write algorithm file. Check disk space and permissions."));
         return QString();
     }
     const QByteArray encoded = content.toUtf8();
@@ -808,7 +809,8 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
         qCWarning(PlasmaZones::lcCore) << "Failed to write algorithm content:" << destPath << "written=" << written
                                        << "expected=" << encoded.size();
         QFile::remove(destPath);
-        Q_EMIT algorithmOperationFailed(PI18n::tr("Could not write algorithm file. Check disk space and permissions."));
+        Q_EMIT algorithmOperationFailed(
+            PhosphorI18n::tr("Could not write algorithm file. Check disk space and permissions."));
         return QString();
     }
 

@@ -18,7 +18,7 @@ add_subdirectory(shared)
 
 # Core library sources
 set(plasmazones_core_SRCS
-    p_qml_i18n.h
+    phosphor_qml_i18n.h
     core/constants.h
     core/logging.h
     core/logging.cpp
@@ -155,7 +155,7 @@ set(plasmazones_core_SRCS
 # Create core library
 add_library(plasmazones_core SHARED ${plasmazones_core_SRCS})
 
-target_sources(plasmazones_core PRIVATE p_qml_i18n.cpp)
+target_sources(plasmazones_core PRIVATE phosphor_qml_i18n.cpp)
 
 # Generate export header
 generate_export_header(plasmazones_core

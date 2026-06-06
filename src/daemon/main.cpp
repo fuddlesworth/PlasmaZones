@@ -8,7 +8,7 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/translationloader.h"
-#include "p_i18n.h"
+#include "phosphor_i18n.h"
 #include "rendering/zoneshaderitem.h"
 #include "version.h"
 #include "vulkan_support.h"
@@ -203,20 +203,21 @@ int main(int argc, char* argv[])
 
     // Command line options
     QCommandLineParser parser;
-    parser.setApplicationDescription(PI18n::tr("Window tiling and zone management"));
+    parser.setApplicationDescription(PhosphorI18n::tr("Window tiling and zone management"));
     parser.addHelpOption();
     parser.addVersionOption();
 
     QCommandLineOption replaceOption(QStringList{QStringLiteral("r"), QStringLiteral("replace")},
-                                     PI18n::tr("Replace existing daemon instance"));
+                                     PhosphorI18n::tr("Replace existing daemon instance"));
     parser.addOption(replaceOption);
 
     QCommandLineOption debugOption(QStringList{QStringLiteral("d"), QStringLiteral("debug")},
-                                   PI18n::tr("Enable debug logging for all PlasmaZones categories"));
+                                   PhosphorI18n::tr("Enable debug logging for all PlasmaZones categories"));
     parser.addOption(debugOption);
 
     QCommandLineOption logFileOption(QStringList{QStringLiteral("l"), QStringLiteral("log-file")},
-                                     PI18n::tr("Write log output to <file> instead of stderr"), PI18n::tr("file"));
+                                     PhosphorI18n::tr("Write log output to <file> instead of stderr"),
+                                     PhosphorI18n::tr("file"));
     parser.addOption(logFileOption);
 
     parser.process(app);

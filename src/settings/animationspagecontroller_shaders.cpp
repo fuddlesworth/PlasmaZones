@@ -23,7 +23,7 @@
 #include "../core/isettings.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../p_i18n.h"
+#include "../phosphor_i18n.h"
 #include "animationfileutils.h"
 #include "animations_controller_detail.h"
 #include "shaderpackinstaller.h"
@@ -146,7 +146,7 @@ void AnimationsPageController::openUserShaderDirectory()
         // reason via the chrome toast so the user knows to look at the
         // file manager / disk permissions.
         qCWarning(lcConfig) << "openUserShaderDirectory: mkpath failed for" << dir;
-        Q_EMIT toastRequested(PI18n::tr("Could not create the user shader directory."));
+        Q_EMIT toastRequested(PhosphorI18n::tr("Could not create the user shader directory."));
         return;
     }
     QDesktopServices::openUrl(QUrl::fromLocalFile(dir));

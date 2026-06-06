@@ -92,17 +92,17 @@ library doesn't yet need.
 `examples/phosphor-registry-demo/Main.qml`.
 
 **Finding:** CLAUDE.md mandates `i18n()` / `i18nc()` via
-`PzLocalizedContext` for QML. The phosphor-ipc demo uses `qsTr(...)` at
+`PhosphorLocalizedContext` for QML. The phosphor-ipc demo uses `qsTr(...)` at
 six call sites, matching the convention already established by the two
 peer demos.
 
 **Why deferred:** the divergence is fleet-wide, not PR-local. Migrating
 just the ipc demo would leave the other two demos inconsistent. Should be
-one follow-up PR that wires `PzLocalizedContext` into every
+one follow-up PR that wires `PhosphorLocalizedContext` into every
 `examples/*-demo/main.cpp` and switches every demo at once.
 
 **Change shape:**
-- Add `PzLocalizedContext` to each demo's `main.cpp` (single
+- Add `PhosphorLocalizedContext` to each demo's `main.cpp` (single
   `engine.rootContext()->setContextObject(...)`).
 - `grep -rl qsTr examples/` → switch to `i18n` / `i18nc` per file.
 - Add the demos' `.qml` files to `lupdate` if not already covered.

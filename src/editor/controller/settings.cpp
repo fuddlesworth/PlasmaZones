@@ -8,7 +8,7 @@
 #include "../../core/logging.h"
 #include "../helpers/SettingsDbusQueries.h"
 
-#include "p_i18n.h"
+#include "phosphor_i18n.h"
 #include "../../config/configdefaults.h"
 #include "../../config/configmigration.h"
 #include "../../config/configbackends.h"
@@ -25,7 +25,7 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
 
     // Check maximum length
     if (name.length() > 100) {
-        return PI18n::tr("Zone name cannot exceed 100 characters");
+        return PhosphorI18n::tr("Zone name cannot exceed 100 characters");
     }
 
     // Check for invalid characters (allow alphanumeric, spaces, hyphens, underscores)
@@ -34,7 +34,7 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
     QRegularExpression invalidChars(QStringLiteral("[<>\"'\\\\]"));
     QRegularExpressionMatch match = invalidChars.match(name);
     if (match.hasMatch()) {
-        return PI18n::tr("Zone name contains invalid characters: < > \" ' \\");
+        return PhosphorI18n::tr("Zone name contains invalid characters: < > \" ' \\");
     }
 
     // Check for duplicate names (excluding the current zone)
@@ -46,7 +46,7 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
             if (otherZoneId != zoneId) {
                 QString otherName = zone.value(QStringLiteral("name")).toString();
                 if (otherName == name) {
-                    return PI18n::tr("A zone with this name already exists");
+                    return PhosphorI18n::tr("A zone with this name already exists");
                 }
             }
         }
@@ -65,10 +65,10 @@ QString EditorController::validateZoneNumber(const QString& zoneId, int number)
 {
     // Check range
     if (number < 1) {
-        return PI18n::tr("Zone number must be at least 1");
+        return PhosphorI18n::tr("Zone number must be at least 1");
     }
     if (number > 99) {
-        return PI18n::tr("Zone number cannot exceed 99");
+        return PhosphorI18n::tr("Zone number cannot exceed 99");
     }
 
     // Check for duplicate numbers
@@ -88,7 +88,7 @@ QString EditorController::validateZoneNumber(const QString& zoneId, int number)
 
         int otherNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
         if (otherNumber == number) {
-            return PI18n::tr("Zone number %1 is already in use").arg(number);
+            return PhosphorI18n::tr("Zone number %1 is already in use").arg(number);
         }
     }
 

@@ -4,7 +4,7 @@
 #include "shaderpackinstaller.h"
 
 #include "../core/logging.h"
-#include "../p_i18n.h"
+#include "../phosphor_i18n.h"
 
 #include <QAtomicInteger>
 #include <QCoreApplication>
@@ -297,24 +297,24 @@ QString errorMessage(Result r)
 {
     // User-facing strings — these reach the chrome toast via
     // toastRequested() when the install button surfaces the failure, so
-    // route through PI18n::tr for the user's locale.
+    // route through PhosphorI18n::tr for the user's locale.
     switch (r) {
     case Result::Success:
-        return PI18n::tr("Shader pack installed.");
+        return PhosphorI18n::tr("Shader pack installed.");
     case Result::InvalidSource:
-        return PI18n::tr("The dropped path is not a valid shader pack directory.");
+        return PhosphorI18n::tr("The dropped path is not a valid shader pack directory.");
     case Result::MissingMetadata:
-        return PI18n::tr("The shader pack is missing metadata.json (or it is a symlink).");
+        return PhosphorI18n::tr("The shader pack is missing metadata.json (or it is a symlink).");
     case Result::InvalidUserDir:
-        return PI18n::tr("The user shader directory could not be created.");
+        return PhosphorI18n::tr("The user shader directory could not be created.");
     case Result::DestinationExists:
-        return PI18n::tr("A shader pack with this name is already installed.");
+        return PhosphorI18n::tr("A shader pack with this name is already installed.");
     case Result::PackTooLarge:
-        return PI18n::tr("The shader pack exceeds the maximum allowed size or file count.");
+        return PhosphorI18n::tr("The shader pack exceeds the maximum allowed size or file count.");
     case Result::CopyFailed:
-        return PI18n::tr("Copying the shader pack failed; the partial install was rolled back.");
+        return PhosphorI18n::tr("Copying the shader pack failed; the partial install was rolled back.");
     }
-    return PI18n::tr("Unknown shader pack installer error.");
+    return PhosphorI18n::tr("Unknown shader pack installer error.");
 }
 
 } // namespace PlasmaZones::ShaderPackInstaller

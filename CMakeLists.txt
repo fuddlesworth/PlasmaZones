@@ -217,7 +217,7 @@ include(KDEClangFormat)
 # `*` (anything except `/`). GLOB_RECURSE with a plain `*.cpp` pattern
 # already recurses into subdirectories, so the recursive form is what
 # we want; using `**/*.cpp` would require an intermediate path segment
-# and silently drop files directly under each root (e.g. src/pz_qml_i18n.cpp,
+# and silently drop files directly under each root (e.g. src/phosphor_qml_i18n.cpp,
 # any top-level kwin-effect/.cpp).
 file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/src/*.cpp

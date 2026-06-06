@@ -3,20 +3,20 @@
 
 // Portable i18n for C++ sources.
 //
-// Provides PI18n::tr() backed by QCoreApplication::translate() with
+// Provides PhosphorI18n::tr() backed by QCoreApplication::translate() with
 // "plasmazones" as the translation context.  lupdate recognizes
 // Q_DECLARE_TR_FUNCTIONS and tr() natively — no custom extraction
 // scripts or function aliases needed.
 //
-// QML files continue to use i18n()/i18nc() via PLocalizedContext
-// (see p_qml_i18n.h).
+// QML files continue to use i18n()/i18nc() via PhosphorLocalizedContext
+// (see phosphor_qml_i18n.h).
 
 #pragma once
 
 #include <QCoreApplication>
 #include <QString>
 
-class PI18n
+class PhosphorI18n
 {
     Q_DECLARE_TR_FUNCTIONS(plasmazones)
 };

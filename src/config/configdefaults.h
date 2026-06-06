@@ -698,7 +698,7 @@ public:
         // QT_TRANSLATE_NOOP marks the display names for lupdate
         // extraction under the project's "plasmazones" context while
         // keeping the literal as the runtime value — GeneralPageController
-        // resolves the translated form via PI18n::tr() at display time.
+        // resolves the translated form via PhosphorI18n::tr() at display time.
         // Without the macro, lupdate wouldn't see the source strings
         // and the .ts catalog would never carry the translations.
         static const QList<RenderingBackendEntry> entries = {
@@ -721,7 +721,7 @@ public:
     }
 
     // Untranslated display names — use for translation source only.
-    // SettingsController translates these via PI18n::tr() at runtime.
+    // SettingsController translates these via PhosphorI18n::tr() at runtime.
     static QStringList renderingBackendDisplayNames()
     {
         QStringList names;

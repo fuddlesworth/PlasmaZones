@@ -14,7 +14,7 @@
 #include "../../core/utils.h"
 #include "../../core/shaderregistry.h"
 #include "../rendering/zonelabeltexturebuilder.h"
-#include "p_roles.h"
+#include "phosphor_roles.h"
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
@@ -511,13 +511,13 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     // Unique-per-instance scope to avoid compositor-side rate limiting when the
     // editor rapidly opens/closes the Shader Settings dialog. Routes through
     // makePerInstanceRole so the per-instance prefix is guaranteed by
-    // construction to start with PRoles::ShaderPreview's base - even though
+    // construction to start with PhosphorRoles::ShaderPreview's base - even though
     // the SurfaceAnimator deliberately doesn't register a config for this
     // role (editor-controlled imperative show/hide), keeping construction
     // uniform across every per-instance role keeps a future migration cheap.
     const QString scopeId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
-    const auto role =
-        PRoles::makePerInstanceRole(PRoles::ShaderPreview, scopeId, m_surfaceManager->nextScopeGeneration());
+    const auto role = PhosphorRoles::makePerInstanceRole(PhosphorRoles::ShaderPreview, scopeId,
+                                                         m_surfaceManager->nextScopeGeneration());
 
     auto* surface = createLayerSurface({.qmlUrl = QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")),
                                         .screen = screen,

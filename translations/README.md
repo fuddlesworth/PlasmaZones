@@ -1,8 +1,8 @@
 # Translations
 
 PlasmaZones uses Qt Linguist for all internationalization (daemon,
-editor, and KCM).  C++ code calls `PI18n::tr()`; QML code calls
-`i18n()` via `PLocalizedContext`.
+editor, and KCM).  C++ code calls `PhosphorI18n::tr()`; QML code calls
+`i18n()` via `PhosphorLocalizedContext`.
 
 ## File layout
 

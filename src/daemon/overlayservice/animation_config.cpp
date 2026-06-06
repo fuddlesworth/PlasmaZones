@@ -20,7 +20,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include "p_roles.h"
+#include "phosphor_roles.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -275,7 +275,7 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // and therefore fall back to the empty default (no shader effect, the
     // library-default 150 ms OutCubic motion):
     //   - ZoneOverlay (zone overlay rendering): routes through the
-    //     animator (overlay.cpp passes PRoles::ZoneOverlay to
+    //     animator (overlay.cpp passes PhosphorRoles::ZoneOverlay to
     //     beginShow/beginHide on the passive-shell slot) but the default
     //     motion is the intended visual; no shader leg is configured.
     //   - ShaderPreview (editor preview window): shown via direct
@@ -320,9 +320,9 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // unified PassiveShell (one per screen, scoped
     // `plasmazones-passive-shell-{screenId}-{gen}`); OSD content rides
     // a slot inside it via `PassiveOverlayShell.qml`'s Loader. The
-    // animator config registered here is keyed on PRoles::Osd's scope
+    // animator config registered here is keyed on PhosphorRoles::Osd's scope
     // prefix (`plasmazones-osd`). Lookups go through the role-override
-    // path on beginShow / beginHide (osd.cpp passes PRoles::Osd as the
+    // path on beginShow / beginHide (osd.cpp passes PhosphorRoles::Osd as the
     // override role), not through the longest-prefix surface lookup, so
     // the passive-shell surface scope does not collide with this config.
     //
@@ -369,10 +369,10 @@ void OverlayService::applyShaderProfilesToAnimator(const PAS::ShaderProfileTree&
     // hides and per-role config registration; the daemon retains the
     // SHAPE of each config (curves, durations, shader paths) via the
     // build*Config helpers above.
-    m_shellHost->registerConfigForRole(PRoles::Osd, buildOsdConfig(tree));
-    m_shellHost->registerConfigForRole(PRoles::LayoutPicker, buildLayoutPickerConfig(tree));
-    m_shellHost->registerConfigForRole(PRoles::ZoneSelector, buildZoneSelectorConfig(tree));
-    m_shellHost->registerConfigForRole(PRoles::SnapAssist, buildSnapAssistConfig(tree));
+    m_shellHost->registerConfigForRole(PhosphorRoles::Osd, buildOsdConfig(tree));
+    m_shellHost->registerConfigForRole(PhosphorRoles::LayoutPicker, buildLayoutPickerConfig(tree));
+    m_shellHost->registerConfigForRole(PhosphorRoles::ZoneSelector, buildZoneSelectorConfig(tree));
+    m_shellHost->registerConfigForRole(PhosphorRoles::SnapAssist, buildSnapAssistConfig(tree));
 }
 
 } // namespace PlasmaZones

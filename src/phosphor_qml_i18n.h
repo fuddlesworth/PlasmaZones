@@ -14,11 +14,11 @@
 #include <QVariant>
 #include "plasmazones_export.h"
 
-class PLASMAZONES_EXPORT PLocalizedContext : public QObject
+class PLASMAZONES_EXPORT PhosphorLocalizedContext : public QObject
 {
     Q_OBJECT
 public:
-    explicit PLocalizedContext(QObject* parent = nullptr);
+    explicit PhosphorLocalizedContext(QObject* parent = nullptr);
 
     // i18n("text") and i18n("text %1", arg1, ..., arg5)
     Q_INVOKABLE QString i18n(const QString& text, const QVariant& a1 = QVariant(), const QVariant& a2 = QVariant(),
