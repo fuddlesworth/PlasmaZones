@@ -90,7 +90,8 @@ Key code paths this design touches:
     uniform-key map handed to the renderer.
 - **Include expansion:** `libs/phosphor-shaders/src/shaderincluderesolver.cpp`
   - `expandIncludes()` (`:122`) recursively inlines `#include <common.glsl>` etc.
-    from the search paths, **concatenating without `#line` directives**.
+    from the search paths. *(Originally concatenated without `#line` directives;
+    T1.3 added the `#line` emission that maps diagnostics to the author's file.)*
 - **Compilation (headless, CPU):** `libs/phosphor-rendering/src/shadercompiler.cpp`
   - `compileFromFile(path, includePaths)` (`:170`) → `loadAndExpand()` →
     `compile()` → `QShaderBaker` (glslang). Returns `{ QShader, success, error }`.

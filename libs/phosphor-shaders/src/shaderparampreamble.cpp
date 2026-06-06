@@ -6,6 +6,7 @@
 #include <PhosphorShaders/CustomParamsKey.h>
 
 #include <QRegularExpression>
+#include <QSet>
 
 namespace PhosphorShaders {
 
@@ -51,9 +52,33 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
         return {};
     }
 
+    // Two-pass slot assignment mirroring parseShaderMetadata's auto-slot: reserve
+    // every explicit slot first, then fill omitted ones into the next free lane of
+    // their pool in declaration order, skipping reserved slots — so the generated
+    // pz_<id> lane numbering stays byte-identical to the registry's upload numbering
+    // even for a pack that mixes explicit and auto slots in one pool.
+    QSet<int> usedScalar, usedColor, usedImage;
+    for (const PreambleParam& p : params) {
+        if (!isValidParamId(p.id) || p.explicitSlot < 0) {
+            continue;
+        }
+        (p.pool == PreambleParam::Pool::Color       ? usedColor
+             : p.pool == PreambleParam::Pool::Image ? usedImage
+                                                    : usedScalar)
+            .insert(p.explicitSlot);
+    }
     int scalarNext = 0;
     int colorNext = 0;
     int imageNext = 0;
+    const auto nextFree = [](QSet<int>& used, int& next) {
+        while (used.contains(next)) {
+            ++next;
+        }
+        const int slot = next;
+        used.insert(next);
+        ++next;
+        return slot;
+    };
 
     QString out = QStringLiteral("// ---- generated parameter accessors (do not edit) ----\n");
     for (const PreambleParam& p : params) {
@@ -65,17 +90,17 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
         QString accessor;
         switch (p.pool) {
         case PreambleParam::Pool::Scalar: {
-            const int slot = p.explicitSlot >= 0 ? p.explicitSlot : scalarNext++;
+            const int slot = p.explicitSlot >= 0 ? p.explicitSlot : nextFree(usedScalar, scalarNext);
             accessor = CustomParams::glslAccessor(slot);
             break;
         }
         case PreambleParam::Pool::Color: {
-            const int slot = p.explicitSlot >= 0 ? p.explicitSlot : colorNext++;
+            const int slot = p.explicitSlot >= 0 ? p.explicitSlot : nextFree(usedColor, colorNext);
             accessor = CustomColors::glslAccessor(slot);
             break;
         }
         case PreambleParam::Pool::Image: {
-            const int slot = p.explicitSlot >= 0 ? p.explicitSlot : imageNext++;
+            const int slot = p.explicitSlot >= 0 ? p.explicitSlot : nextFree(usedImage, imageNext);
             accessor = imageAccessor(slot);
             break;
         }

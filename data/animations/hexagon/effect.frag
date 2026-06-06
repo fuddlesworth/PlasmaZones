@@ -63,7 +63,7 @@ vec4 getHexagons(vec2 p) {
 
 vec4 pzTransition(vec2 uv, float t)
 {
-    float visibility = clamp(t, 0.0, 1.0);
+    float visibility = clamp(iTime, 0.0, 1.0);
     float progress   = 1.0 - visibility;
 
     // Per-pixel noise jitter so tiles stagger their transitions.

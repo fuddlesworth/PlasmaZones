@@ -437,6 +437,12 @@ QVariantMap AnimationShaderRegistry::translateAnimationParams(const AnimationSha
     QStringList droppedColorParams;
     QStringList droppedFloatParams;
     for (const auto& param : effect.parameters) {
+        // Skip ids the pz_<id> preamble (buildParamPreamble via paramPreamble)
+        // rejects, so this upload-lane numbering stays identical to the define
+        // numbering — a rejected param consumes no lane on either side.
+        if (!PhosphorShaders::isValidParamId(param.id)) {
+            continue;
+        }
         const QString& type = param.type;
         if (type == QLatin1String("color")) {
             if (colorSlot >= AnimationShaderContract::kMaxCustomColors) {

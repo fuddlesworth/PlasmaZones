@@ -6,9 +6,9 @@
 // no #version / include / in-out / main() — must assemble through the harness
 // scaffold, expand its generated `#include <common.glsl>`, and bake against the
 // real zone UBO. This pins that the generated dispatch (ZoneCtx fill, the loop,
-// blendOver/clampFragColor) and the prologue compile, BEFORE the assembler is
-// threaded into the live bake layer. Also pins that a traditional main() pack is
-// passed through untouched.
+// blendOver/clampFragColor) and the prologue compile — the same assembler the
+// live bake layer applies (ZoneShaderItem::updatePaintNode → setEntryScaffold).
+// Also pins that a traditional main() pack is passed through untouched.
 
 #include "../../../src/daemon/rendering/zoneentryscaffold.h"
 

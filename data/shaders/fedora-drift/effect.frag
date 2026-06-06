@@ -494,48 +494,40 @@ vec4 renderFedoraZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
 
-    // ── Read customParams slots (must match metadata.json) ──────
-    // Slots 0-3: pz_speedyzw
+    // ── Parameters (pz_<id> from metadata.json, sentinel-default fallbacks) ──────
     float speed         = pz_speed >= 0.0 ? pz_speed : 0.12;
     float flowSpeed     = pz_flowSpeed >= 0.0 ? pz_flowSpeed : 0.25;
     float noiseScale    = pz_noiseScale >= 0.0 ? pz_noiseScale : 3.5;
     int octaves         = int(pz_octaves >= 0.0 ? pz_octaves : 6.0);
 
-    // Slots 4-7: pz_gridScaleyzw
     float gridScale     = pz_gridScale >= 0.0 ? pz_gridScale : 4.0;
     float gridStrength  = pz_gridStrength >= 0.0 ? pz_gridStrength : 0.3;
     float brightness    = pz_brightness >= 0.0 ? pz_brightness : 0.8;
     float contrast      = pz_contrast >= 0.0 ? pz_contrast : 0.9;
 
-    // Slots 8-11: pz_fillOpacityyzw
     float fillOpacity       = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85;
     float borderGlow        = pz_borderGlow >= 0.0 ? pz_borderGlow : 0.35;
     float edgeFadeStart     = pz_edgeFadeStart >= 0.0 ? pz_edgeFadeStart : 30.0;
     float borderBrightness  = pz_borderBrightness >= 0.0 ? pz_borderBrightness : 1.4;
 
-    // Slots 12-15: pz_audioReactivityyzw
     float audioReact    = pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0;
     float particleStr   = pz_particleStrength >= 0.0 ? pz_particleStrength : 0.5;
     float innerGlowStr  = pz_innerGlowStrength >= 0.0 ? pz_innerGlowStrength : 0.45;
     float sparkleStr    = pz_sparkleIntensity >= 0.0 ? pz_sparkleIntensity : 2.0;
 
-    // Slot 19: pz_fbmRotation
     float fbmRot        = pz_fbmRotation >= 0.0 ? pz_fbmRotation : 0.6;
 
-    // Slots 20-23: pz_flowDirectionyzw
     float flowDirection = pz_flowDirection >= 0.0 ? pz_flowDirection : 0.3;
     float logoScale     = pz_logoScale >= 0.0 ? pz_logoScale : 0.5;
     float logoIntensity = pz_logoIntensity >= 0.0 ? pz_logoIntensity : 0.85;
     float logoPulse     = pz_logoPulse >= 0.0 ? pz_logoPulse : 0.8;
 
-    // Slots 24-28: pz_logoCountyzw + pz_flowCenterY
     int   logoCount     = clamp(int(pz_logoCount >= 0.0 ? pz_logoCount : 4.0), 1, 8);
     float logoSizeMin   = pz_logoSizeMin >= 0.0 ? pz_logoSizeMin : 0.4;
     float logoSizeMax   = pz_logoSizeMax >= 0.0 ? pz_logoSizeMax : 1.0;
     float flowCenterX   = pz_flowCenterX >= -1.5 ? pz_flowCenterX : 0.5;
     float flowCenterY   = pz_flowCenterY >= -1.5 ? pz_flowCenterY : 0.5;
 
-    // Slot 30: pz_logoSpin, Slot 31: pz_idleStrength
     float logoSpin      = pz_logoSpin >= 0.0 ? pz_logoSpin : 0.15;
     float idleStrength  = pz_idleStrength >= 0.0 ? pz_idleStrength : 0.5;
 
@@ -963,7 +955,6 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    // Slot 29 (showLabels): pz_showLabels
     if (pz_showLabels > 0.5) {
         color = compositeFedoraLabels(color, fragCoord, bass, mids, treble, hasAudio);
     }

@@ -81,6 +81,29 @@ private Q_SLOTS:
         QVERIFY2(out.contains(QStringLiteral("#define pz_opacity customParams[2].x")), qPrintable(out));
     }
 
+    // Mixed explicit + auto in one pool: the explicit slot is RESERVED first, so
+    // the auto params skip it — matching parseShaderMetadata's two-pass auto-slot,
+    // so a mixed pack's pz_<id> defines and its upload lanes can't drift apart.
+    void testMixedExplicitAutoSlotsReserve()
+    {
+        const QString out = PhosphorShaders::buildParamPreamble(
+            {scalar(QStringLiteral("pinned"), 0), scalar(QStringLiteral("a")), scalar(QStringLiteral("b"))});
+        QVERIFY2(out.contains(QStringLiteral("#define pz_pinned customParams[0].x")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("#define pz_a customParams[0].y")), qPrintable(out)); // slot 1, skips 0
+        QVERIFY2(out.contains(QStringLiteral("#define pz_b customParams[0].z")), qPrintable(out)); // slot 2
+    }
+
+    // A skipped invalid-id param consumes NO lane — a following valid param keeps
+    // the next sequential slot (matches parseShaderMetadata's invalid-id skip, so
+    // the two auto-numberings stay identical).
+    void testInvalidIdConsumesNoLane()
+    {
+        const QString out = PhosphorShaders::buildParamPreamble(
+            {scalar(QStringLiteral("first")), scalar(QStringLiteral("has space")), scalar(QStringLiteral("second"))});
+        QVERIFY2(out.contains(QStringLiteral("#define pz_first customParams[0].x")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("#define pz_second customParams[0].y")), qPrintable(out)); // slot 1, not 2
+    }
+
     // A bad identifier or out-of-range slot is skipped with a comment, never a
     // broken #define — the block must always compile.
     void testInvalidInputsAreSkippedNotBroken()

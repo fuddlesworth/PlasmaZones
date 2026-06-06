@@ -136,7 +136,7 @@ vec4 pzTransition(vec2 uv, float t)
     // sparkles fade in and out rather than translating across the
     // window.
     vec2 fineUV     = pixelUV / CELL_FINE;
-    vec2 fineOffset = vec2(t * 1.4, t * -0.9);
+    vec2 fineOffset = vec2(iTime * 1.4, iTime * -0.9);
     float nFine     = simplex2D(fineUV + fineOffset);
     float sFine     = max(1.0 / max(1.0 - nFine, 0.001) - 1.0, 0.0);
     sFine = sFine * sFine;
@@ -145,7 +145,7 @@ vec4 pzTransition(vec2 uv, float t)
     // feel between the fine sparkles. Slower offset so the cloud
     // breathes rather than sparkles.
     vec2 medUV     = pixelUV / CELL_MED;
-    vec2 medOffset = vec2(t * 0.5, t * 0.3);
+    vec2 medOffset = vec2(iTime * 0.5, iTime * 0.3);
     float nMed     = simplex2D(medUV + medOffset + 17.31);
     float sMed     = max(1.0 / max(1.0 - nMed, 0.001) - 1.0, 0.0);
     sMed = sMed * sMed;
