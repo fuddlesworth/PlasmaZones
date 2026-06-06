@@ -313,6 +313,36 @@ This section is the post-implementation record of the shape that landed on `feat
 
 ---
 
+### 2.2: `phosphor-service-network` *(shipped)*
+
+Post-implementation record of the shape that landed in `libs/phosphor-service-network/`. Backend is pure D-Bus `org.freedesktop.NetworkManager` on the **system bus** via `phosphor-dbus` (the `libnm` native backend sketched in the §2.1 table was not needed; the raw wire contract covers the gate caps directly). Namespace `PhosphorServiceNetwork`, export macro `PHOSPHORSERVICENETWORK_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Network 1.0`. `BUILD_PHOSPHOR_SHELL`-gated, registered from `src/shell/main.cpp` alongside the sibling services.
+
+Shape matches 2.3 bluetooth (the other system-bus, `org.freedesktop`-namespace, host-plus-models D-Bus service): a `NetworkHost` owning the manager state and a device set, with `QAbstractListModel` views layered on top. Async-only via `PhosphorDBus::Client` (no blocking call on the GUI thread).
+
+**What shipped**
+
+- **`NetworkHost`** owns the manager lifecycle: bootstraps via `Properties.GetAll` + `GetDevices`, tracks `connectivity`, `primaryConnectionType`, `networkingEnabled`, the writable `wirelessEnabled` radio toggle, and `deviceCount`; exposes `scanWifi()`, `activateConnection()` (a saved profile) and `connectToAccessPoint()` (NM `AddAndActivateConnection` for open or WPA-PSK networks); emits signals on device add/remove. Loads inert without a daemon (empty device list, `UnknownConnectivity`).
+- **`NetworkDevice` / `NetworkDeviceModel`** — one `org.freedesktop.NetworkManager.Device` each (`interfaceName`, `deviceType`, `state`, `managed`) and a model over the host's devices.
+- **`AccessPoint` / `AccessPointModel`** — scanned Wi-Fi APs for a bound device (`ssid`, `strength`, `frequency`, `bssid`, `security`, `secured`), with derived security labels.
+- **`NetworkConnection` / `NetworkConnectionModel`** — the saved-profile (`Settings.Connection`) list (`id`, `uuid`, `connectionType`), self-bootstrapping.
+- **CLI demo** `examples/phosphor-service-network-cli` (`status`, `list-devices`, `list-connections`, `list-aps`, `scan`, `connect`), covering the Phase-2 gate caps: list connections, scan wifi, connect to AP.
+
+**Design decisions taken**
+
+- **No optimistic writes.** `setWirelessEnabled` issues `Properties.Set` and lets NetworkManager echo the change back through `PropertiesChanged`; the cached value (and its NOTIFY) flips only once the radio actually toggled, so the property never lies about daemon state.
+- **Sparse wire enums mapped value-by-value.** `DeviceType` (gaps, jumps to `Wireguard=29`) and `DeviceState` (multiples of ten) are translated explicitly; an unrecognised raw value surfaces as `Unknown` / `UnknownState` rather than casting to an undeclared enumerator. `Connectivity` is contiguous 0..4 and clamped.
+- **Path containment.** Device add/remove rejects any object path outside `/org/freedesktop/NetworkManager/Devices/` at the boundary, so a misbehaving daemon cannot spin up a `NetworkDevice` on a nonsense path.
+
+**Dependencies**
+
+- Qt6 ≥ 6.6 Core / Qml / DBus.
+- `phosphor-dbus` (PRIVATE link) for the async `Client` call/subscription helper.
+- A running `org.freedesktop.NetworkManager` on the system bus for the live path; the lib loads inert without it.
+
+**Tests / follow-up.** `tests/test_smoke.cpp` pins the public contract (role names, enum wire constants, lifecycle) deterministically with no daemon. Live D-Bus integration tests against a fake NetworkManager fixture (the fake-logind pattern used by 2.9 / 2.10) are a tracked follow-up; the smoke harness is the floor today.
+
+---
+
 ### 2.3: `phosphor-service-bluetooth` *(shipped)*
 
 Shipped on `feat/phase-2.3-bluetooth-service` (milestones 0-9), in the shape of the §2.1 narrative. Backend is pure D-Bus `org.bluez` on the **system bus** via `phosphor-dbus`, with no `libbluetooth` / QtConnectivity dependency (keeps the wire contract direct; unlike 2.2 there is no optional native backend). Namespace `PhosphorServiceBluetooth`, export macro `PHOSPHORSERVICEBLUETOOTH_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Bluetooth 1.0`.
