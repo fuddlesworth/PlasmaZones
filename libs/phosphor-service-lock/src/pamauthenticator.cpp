@@ -125,9 +125,13 @@ PamResult runPamTransaction(const QString& service, const QString& username, QBy
     const int acctRet = (authRet == PAM_SUCCESS) ? pam_acct_mgmt(handle, 0) : authRet;
 
     const bool success = (authRet == PAM_SUCCESS && acctRet == PAM_SUCCESS);
-    const QString reason = success ? QString() : pamError(handle, authRet != PAM_SUCCESS ? authRet : acctRet);
+    const int terminalRet = authRet != PAM_SUCCESS ? authRet : acctRet;
+    const QString reason = success ? QString() : pamError(handle, terminalRet);
 
-    pam_end(handle, success ? PAM_SUCCESS : authRet);
+    // pam_end's status should reflect the actual terminal result so modules'
+    // cleanup sees the real outcome (an acct_mgmt failure after a successful
+    // authenticate must not be reported as PAM_SUCCESS).
+    pam_end(handle, terminalRet);
     wipe(password);
     return {success, reason};
 }
@@ -181,7 +185,7 @@ void PamAuthenticator::authenticate(const QString& username, const QString& pass
     const QString service = d->service;
     QByteArray pw = password.toUtf8();
     // The worker captures only value copies (service, user, and the moved-in
-    // password buffer) — never `this` — so destroying the authenticator
+    // password buffer), never `this`, so destroying the authenticator
     // mid-transaction cannot dangle: the watcher disconnects and the detached
     // task finishes harmlessly. The password buffer is moved through to
     // runPamTransaction, which is its sole owner and wipes it.

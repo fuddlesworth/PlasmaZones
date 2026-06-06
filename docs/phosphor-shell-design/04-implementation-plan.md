@@ -724,9 +724,9 @@ Third **Wayland-client** service lib (after 2.7 idle and 2.8 clipboard), and the
 **Decisions taken up front.**
 
 - **Foundation client in phosphor-wayland, policy in the service.** The raw `ext-session-lock-v1` client is a `phosphor-wayland` primitive (like `ClipboardDevice`); the service is the PAM + state-machine layer over it, linked PRIVATE so no Wayland types leak from the public surface.
-- **Authenticate off the GUI thread.** PAM is blocking (faildelay, network modules); the transaction runs on the thread pool and the result is delivered on the GUI thread. The authenticator sits behind an `IAuthenticator` seam, so the lock policy is unit-tested with a fake — no real PAM, no valid credentials.
+- **Authenticate off the GUI thread.** PAM is blocking (faildelay, network modules); the transaction runs on the thread pool and the result is delivered on the GUI thread. The authenticator sits behind an `IAuthenticator` seam, so the lock policy is unit-tested with a fake: no real PAM, no valid credentials.
 - **Single state, not a model.** The lock is one active state (a `State` enum), the single-active shape of 2.6 / 2.7, not the list-model shape of 2.5 / 2.8.
-- **Lock surfaces are a later phase.** The per-output `ext_session_lock_surface_v1` graphics shown while locked need rendering / output enumeration; that is shell work (Phase 4). This lib owns authentication and the lock lifecycle, not rendering — so the CLI exposes `authenticate` (the gate criterion) and a `supported` check, not an interactive screen-lock that would blank the outputs with no visible prompt.
+- **Lock surfaces are a later phase.** The per-output `ext_session_lock_surface_v1` graphics shown while locked need rendering / output enumeration; that is shell work (Phase 4). This lib owns authentication and the lock lifecycle, not rendering, so the CLI exposes `authenticate` (the gate criterion) and a `supported` check, not an interactive screen-lock that would blank the outputs with no visible prompt.
 
 **Milestones (as landed).**
 

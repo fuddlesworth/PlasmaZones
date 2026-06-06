@@ -24,7 +24,7 @@ namespace {
 
 // QCOMPARE on the scoped Q_ENUM State would instantiate
 // QMetaEnum::fromType<LockService::State>, which needs LockService's metaobject
-// — not linked into this seam-only test. Compare the underlying values instead.
+// (not linked into this seam-only test). Compare the underlying values instead.
 int n(State s)
 {
     return static_cast<int>(s);
@@ -105,6 +105,8 @@ private Q_SLOTS:
     void successfulAuthUnlocks();
     void failedAuthReturnsToLocked();
     void compositorEndWhileLockedUnlocks();
+    void compositorEndWhileAuthenticatingUnlocks();
+    void staleAuthResultAfterResetIsIgnored();
     void concurrentAuthenticateIgnored();
 };
 
@@ -244,10 +246,55 @@ void LockStateMachineTest::concurrentAuthenticateIgnored()
     QCOMPARE(n(machine.state()), n(State::Authenticating));
     QCOMPARE(auth.calls, 1);
 
-    // A second attempt while one is outstanding must not start another.
+    QSignalSpy stateSpy(&machine, &LockStateMachine::stateChanged);
+    // A second attempt while one is outstanding must not start another, nor emit
+    // a spurious state change.
     machine.authenticate(QStringLiteral("second"));
     QCOMPARE(auth.calls, 1);
     QCOMPARE(n(machine.state()), n(State::Authenticating));
+    QCOMPARE(stateSpy.count(), 0);
+}
+
+void LockStateMachineTest::compositorEndWhileAuthenticatingUnlocks()
+{
+    FakeSessionLock lock;
+    FakeAuthenticator auth;
+    LockStateMachine machine(&lock, &auth, QStringLiteral("testuser"));
+
+    machine.requestLock();
+    lock.grant();
+    machine.authenticate(QStringLiteral("pw"));
+    QCOMPARE(n(machine.state()), n(State::Authenticating));
+
+    // The compositor ends the lock mid-authentication (its own recovery path):
+    // the session returns to Unlocked even with an attempt outstanding.
+    lock.end();
+    QCOMPARE(n(machine.state()), n(State::Unlocked));
+    QCOMPARE(lock.unlockCalls, 0); // finished() tore the lock down; we don't unlock_and_destroy
+}
+
+void LockStateMachineTest::staleAuthResultAfterResetIsIgnored()
+{
+    FakeSessionLock lock;
+    FakeAuthenticator auth;
+    LockStateMachine machine(&lock, &auth, QStringLiteral("testuser"));
+    QSignalSpy unlockedSpy(&machine, &LockStateMachine::unlocked);
+
+    machine.requestLock();
+    lock.grant();
+    machine.authenticate(QStringLiteral("pw"));
+    QCOMPARE(n(machine.state()), n(State::Authenticating));
+
+    // The compositor ends the lock first, resetting to Unlocked.
+    lock.end();
+    QCOMPARE(n(machine.state()), n(State::Unlocked));
+
+    // A now-stale success from the in-flight attempt must NOT unlock a session
+    // that is already unlocked: the Authenticating guard drops it.
+    auth.resolveSuccess();
+    QCOMPARE(n(machine.state()), n(State::Unlocked));
+    QCOMPARE(lock.unlockCalls, 0);
+    QCOMPARE(unlockedSpy.count(), 0);
 }
 
 QTEST_GUILESS_MAIN(LockStateMachineTest)

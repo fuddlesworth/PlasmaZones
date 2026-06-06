@@ -22,7 +22,7 @@ namespace PhosphorWayland {
  * session). On a successful authentication the owner calls `unlockAndDestroy()`.
  *
  * This is the foundation primitive a lock service composes; it carries no
- * authentication, no UI, and — deliberately — no lock *surfaces*. Per the
+ * authentication, no UI, and (deliberately) no lock *surfaces*. Per the
  * protocol a real lock screen must create an `ext_session_lock_surface_v1` for
  * every output before the compositor presents the locked frame and sends
  * `locked()`; that rendering layer is a shell concern wired in a later phase.
@@ -32,7 +32,7 @@ namespace PhosphorWayland {
  * Security guarantee (from the protocol): if the client dies while the session
  * is locked, the compositor must NOT unlock. Accordingly this object never
  * destroys a lock for which `locked()` was received without going through
- * `unlockAndDestroy()` — a bare destroy in that state is a protocol error and
+ * `unlockAndDestroy()`: a bare destroy in that state is a protocol error and
  * would also defeat the guarantee.
  *
  * Construct one per process. Threading: every method MUST be called from the

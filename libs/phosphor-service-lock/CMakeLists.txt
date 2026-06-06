@@ -41,8 +41,8 @@ if(NOT TARGET PhosphorWayland::PhosphorWayland)
     find_package(PhosphorWayland REQUIRED)
 endif()
 
-# PAM: the authentication backend. Linked PRIVATE — security/pam_appl.h and the
-# PAM handle never appear in the public headers (the IAuthenticator seam hides
+# PAM: the authentication backend. Linked PRIVATE (security/pam_appl.h and the
+# PAM handle never appear in the public headers; the IAuthenticator seam hides
 # them). PAM ships no CMake/pkg-config module, so locate it directly.
 find_path(PAM_INCLUDE_DIR NAMES security/pam_appl.h)
 find_library(PAM_LIBRARY NAMES pam)

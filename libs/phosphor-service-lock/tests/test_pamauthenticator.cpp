@@ -21,6 +21,7 @@ class PamAuthenticatorTest : public QObject
 private Q_SLOTS:
     void exposesConfiguredService();
     void emptyUsernameFailsImmediately();
+    void emptyPasswordStillReachesPam();
     void busyRejectsConcurrentCall();
     void nonexistentUserIsRejected();
 };
@@ -46,6 +47,21 @@ void PamAuthenticatorTest::emptyUsernameFailsImmediately()
     QCOMPARE(okSpy.count(), 0);
 }
 
+void PamAuthenticatorTest::emptyPasswordStillReachesPam()
+{
+    PamAuthenticator auth;
+    QSignalSpy okSpy(&auth, &IAuthenticator::succeeded);
+    QSignalSpy failSpy(&auth, &IAuthenticator::failed);
+
+    // A non-empty username with an empty password is NOT short-circuited (only an
+    // empty username is): it reaches the real PAM stack and is rejected there.
+    auth.authenticate(QStringLiteral("phosphor-no-such-user-1c4e"), QString());
+    QVERIFY(failSpy.wait(20000));
+    QCOMPARE(okSpy.count(), 0);
+    QCOMPARE(failSpy.count(), 1);
+    QVERIFY(!failSpy.at(0).at(0).toString().isEmpty());
+}
+
 void PamAuthenticatorTest::busyRejectsConcurrentCall()
 {
     PamAuthenticator auth;
@@ -55,10 +71,13 @@ void PamAuthenticatorTest::busyRejectsConcurrentCall()
     // before it completes, must fail fast rather than run two PAM stacks at once.
     const QString user = QStringLiteral("phosphor-no-such-user-2f1a9c");
     auth.authenticate(user, QStringLiteral("x"));
-    auth.authenticate(user, QStringLiteral("y"));
 
-    // The synchronous "already in progress" rejection is the first failure seen.
-    QVERIFY(failSpy.count() >= 1);
+    // The second call is rejected synchronously (the worker is still running, held
+    // by PAM's faildelay), so exactly one new failure appears immediately and it
+    // carries the in-progress reason.
+    QCOMPARE(failSpy.count(), 0);
+    auth.authenticate(user, QStringLiteral("y"));
+    QCOMPARE(failSpy.count(), 1);
     QCOMPARE(failSpy.at(0).at(0).toString(), QStringLiteral("authentication already in progress"));
 
     // Drain the async result of the first call so the watcher is idle at teardown.
