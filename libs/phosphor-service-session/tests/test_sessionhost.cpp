@@ -21,7 +21,10 @@
 using namespace PhosphorServiceSession;
 
 namespace {
-constexpr auto kService = "org.phosphor.test.Logind";
+// Unique to this suite: a different executable (e.g. the brightness smoke test)
+// may register its own fake logind on the shared session bus, so a generic name
+// would collide under `ctest -j` and make one suite QSKIP its whole body.
+constexpr auto kService = "org.phosphor.test.session.Logind";
 constexpr auto kManagerPath = "/org/freedesktop/login1";
 constexpr auto kSessionPath = "/org/phosphor/test/session1";
 

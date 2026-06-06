@@ -23,16 +23,18 @@ private Q_SLOTS:
         registerQmlTypes();
     }
 
-    // Constructing the host with no live logind must not crash or block: the
-    // service loads inert.
+    // Constructing the host must not crash or block. The default (production)
+    // ctor talks to the real system-bus logind: on a host with no logind it is
+    // fully inert, and on a host with one it briefly takes and releases the real
+    // inhibitors during the object's lifetime (harmless, released on destruction)
+    // -- either way construction must not crash. The DI ctor against the session
+    // bus with a bogus service name is unconditionally inert (no Manager bound).
     void constructsInertWithoutLogind()
     {
         SessionHost production;
         Q_UNUSED(production)
 
-        // The DI ctor against the session bus is the fake-logind test seam; with
-        // no Manager bound it is equally inert.
-        SessionHost injected(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1"));
+        SessionHost injected(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1.invalid.test"));
         Q_UNUSED(injected)
     }
 
@@ -81,7 +83,7 @@ private Q_SLOTS:
     // on, with no logind dependency, so it works even when logind is absent.
     void logoutEmitsRequest()
     {
-        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1"));
+        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1.invalid.test"));
         QSignalSpy spy(&host, &SessionHost::logoutRequested);
         host.logout();
         QCOMPARE(spy.count(), 1);
@@ -91,7 +93,7 @@ private Q_SLOTS:
     // agent) and emits interactiveChanged only on an actual flip.
     void interactiveDefaultsTrueAndIsEdgeTriggered()
     {
-        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1"));
+        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1.invalid.test"));
         QCOMPARE(host.interactive(), true);
         QSignalSpy spy(&host, &SessionHost::interactiveChanged);
         host.setInteractive(true);
@@ -135,7 +137,7 @@ private Q_SLOTS:
     // slots directly. The shell routes lockRequested() to 2.9's lock surface.
     void sessionLockSignalsSurface()
     {
-        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1"));
+        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1.invalid.test"));
         QSignalSpy lockSpy(&host, &SessionHost::lockRequested);
         QSignalSpy unlockSpy(&host, &SessionHost::unlockRequested);
 
