@@ -463,6 +463,7 @@ if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(libs/phosphor-service-idle)          # Wayland idle monitoring + inhibition (Phase 2.7)
     add_subdirectory(libs/phosphor-service-clipboard)     # Wayland clipboard history (data-control) (Phase 2.8)
     add_subdirectory(libs/phosphor-service-lock)          # PAM auth + ext-session-lock-v1 coordination (Phase 2.9)
+    add_subdirectory(libs/phosphor-service-session)       # logind session/power actions + inhibitors (Phase 2.10)
 endif()
 
 # Source directories
@@ -754,6 +755,15 @@ endif()
 # exist, so the CLI can't link.
 if(BUILD_PHOSPHOR_SHELL)
     add_subdirectory(examples/phosphor-service-lock-cli)
+endif()
+
+# phosphor-service-session-cli. Acceptance harness for the
+# phosphor-service-session library (Phase 2.10). Drives the logind session
+# capabilities + actions (status / lock / logout / suspend / ... / power-off).
+# Gated like the lib: when BUILD_PHOSPHOR_SHELL is OFF the lib target does not
+# exist, so the CLI can't link.
+if(BUILD_PHOSPHOR_SHELL)
+    add_subdirectory(examples/phosphor-service-session-cli)
 endif()
 
 # phosphor-registry-plugin-demo. Sibling of phosphor-registry-demo

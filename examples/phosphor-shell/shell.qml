@@ -288,6 +288,15 @@ Item {
         id: battery
     }
 
+    // Lock-before-sleep integration lives in SessionLockCoordinator.qml (wiring
+    // SessionHost (2.10) + LockService (2.9)). It is deliberately NOT instantiated
+    // in this minimal example: constructing SessionHost takes a logind block
+    // inhibitor on the power / suspend / hibernate / lid keys, so mounting it
+    // without the Phase 4 lock screen would grab those keys from logind with
+    // nothing to handle them. The real shell mounts the coordinator once the lock
+    // surface exists; the component still builds here (it is in the module's
+    // QML_FILES) so the wiring stays type-checked.
+
     FileView {
         id: hostnameFile
 

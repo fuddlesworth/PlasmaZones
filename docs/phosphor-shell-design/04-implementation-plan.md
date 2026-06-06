@@ -764,6 +764,98 @@ Third **Wayland-client** service lib (after 2.7 idle and 2.8 clipboard), and the
 
 ---
 
+### 2.10: `phosphor-service-session` *(shipped)*
+
+Shipped on `feat/phase-2.10-session-service` (milestones 1-10), in the shape described below. Namespace `PhosphorServiceSession`, export macro `PHOSPHORSERVICESESSION_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Session 1.0`. The shell wires the lock-before-sleep handshake to 2.9 in `examples/phosphor-shell/SessionLockCoordinator.qml`. Three test binaries (smoke, QML facade, fake-logind behaviour) pin the surface; the CLI drives it live (verified: `status` reports the `yes` / `challenge` / `na` capability forms).
+
+The last Phase 2 service lib, and a deliberate step beyond a thin logind action-wrapper into a real **session manager**, because we own the compositor and the session rather than running as a plugin inside someone else's. It surfaces the system session/power actions (lock, logout, suspend, hibernate, hybrid-sleep, suspend-then-hibernate, reboot, power-off, halt) over `org.freedesktop.login1.Manager`, each gated by its capability query (`CanSuspend` and siblings) read up front; it manages logind **inhibitor locks** so the shell can lock before the machine sleeps and can own the power / suspend / hibernate / lid keys; and it surfaces logind's session and sleep signals. Table effort revised **S-M** (the action surface is S; the inhibitor + sleep-lock handshake is the M).
+
+This is the second pure D-Bus system-bus service after 2.2 / 2.3, closest in shape to 2.4 brightness, which already talks to the same `org.freedesktop.login1.Manager` object. It needs no `ObjectManager` (logind's Manager is a single fixed object at a well-known path; capabilities are method calls, not a managed-object tree), so it consumes only `phosphor-dbus::Client`.
+
+**Why this is more than a `systemctl` shim (parity rationale).** Quickshell exposes UPower and `WlSessionLock` but no first-class logind power or inhibitor service; Quickshell configs (Noctalia and the like) build their power menus from `Io.Process` (`systemctl …`) and have no inhibitor integration at all. The visible consequence is a class of bugs where the session fails to lock when sleep is initiated externally (lid close, `systemctl suspend`, an idle daemon): the config can only lock when it is the one initiating sleep, so it races the lock surface and the machine sleeps unlocked or the lock screen crashes on resume (noctalia-shell issues #2569 / #1066 / #2036 / #1481). A plugin shell cannot fix this cleanly. We can, because we own the session: a logind delay inhibitor on `sleep` lets us raise 2.9's lock surface and confirm it up *before* releasing the inhibitor and letting suspend proceed. Owning the power / lid keys via a logind block inhibitor (the way KDE / GNOME do) is the same kind of leverage. Those two inhibitor patterns are the reason 2.10 is a session manager, not a wrapper.
+
+**Relationship to 2.9 (lock), and the sleep-lock handshake.** These are complementary and stay independent; the shell composition root wires them (matching the DI / no-singletons direction, no coordinator god-object). 2.9 `phosphor-service-lock` owns authentication (PAM) and the `ext-session-lock-v1` surface. 2.10 owns the logind edge: capabilities, actions, inhibitors, and the `PrepareForSleep` signal. The race-free lock-before-sleep flow:
+
+1. At startup 2.10 takes a **delay** inhibitor on `what=sleep` (and a **block** inhibitor on the handle-keys, see below).
+2. logind announces an impending suspend with `PrepareForSleep(true)`; 2.10, still holding the delay lock, emits `aboutToSleep()`.
+3. The shell calls `LockService.lock()` (2.9); when `LockService` reports `locked`, the shell calls `SessionHost.allowSleep()`.
+4. `allowSleep()` drops the delay inhibitor, so the machine suspends with the lock surface already up. On resume (`PrepareForSleep(false)`) the lock is already present: no race, no crash.
+
+A bounded timeout guards step 3 (see Risks) so a missing or slow lock never wedges suspend.
+
+**What already exists (foundation tier).**
+
+- `phosphor-dbus::Client` is the system-bus call primitive (`asyncCall` / `syncCall` / `fireAndForget`), already used by 2.4 brightness against `org.freedesktop.login1.Manager`.
+- 2.4 brightness already resolves the caller's active session via `Manager.GetSession` / `GetSessionByPID` and writes to the per-session `org.freedesktop.login1.Session` interface. The `GetSessionByPID` resolution is the precedent for the per-session `Session.Lock` path.
+- `src/daemon/overlayservice.cpp` already subscribes to logind's `Manager.PrepareForSleep` signal, the precedent for the signal-subscription path that the sleep-lock handshake builds on.
+- 2.6 `phosphor-service-polkit` provides an in-session polkit agent, so an action that needs authorization can prompt through our own agent (see the `interactive=true` decision).
+
+**What the service adds.**
+
+- **A `SessionHost` facade** (the single-active shape of 2.4 / 2.6 / 2.7 / 2.9, not a list model). Reads the capability queries up front and exposes each as a `Q_PROPERTY` of an `Availability` enum; exposes the actions as `Q_INVOKABLE` slots; manages the inhibitor locks; and surfaces logind's signals (`prepareForSleep(bool)`, `aboutToSleep()`, `lockRequested()`, `unlockRequested()`).
+- **An `Availability` enum** (`Yes`, `No`, `NotApplicable`, `Challenge`, `Unknown`) parsed from logind's `"yes"` / `"no"` / `"na"` / `"challenge"` capability strings. `Challenge` means the action is permitted but needs polkit authorization, so the UI can present it as available-with-confirmation. `Unknown` is the inert value when logind is unreachable.
+- **logind inhibitor management.** A **delay** inhibitor on `sleep` for the lock-before-suspend handshake above, and a **block** inhibitor on `handle-power-key:handle-suspend-key:handle-hibernate-key:handle-lid-switch` so the shell, not logind's defaults, decides what those keys do. The `Inhibit` method returns a unix fd; holding the fd holds the lock, closing it releases it. The fd lifetime is owned by `SessionHost` (released on teardown) so a leak cannot leave the machine permanently unable to sleep.
+- **A `logout()` / end-session action.** For our own session the clean path is a graceful compositor exit (close clients, end the Wayland session), so `logout()` emits `logoutRequested()` for the shell / compositor to handle; `terminateSession()` exposes the resolved session's logind `Session.Terminate` fallback for contexts where nothing owns the graceful path.
+- **Capability-gated actions.** Each action method early-returns with a warning when its capability is not `Yes` or `Challenge`, so a misbehaving caller cannot fire an unsupported action; the QML also binds button enablement to the same property.
+
+**Decisions taken up front.**
+
+- **Capabilities are methods, cached as properties.** logind exposes `CanPowerOff` and siblings as `Manager` methods returning a string, not as `org.freedesktop.DBus.Properties`. `SessionHost` calls them asynchronously at construction, caches the parsed `Availability`, exposes each as a read-only `Q_PROPERTY` with a single `capabilitiesChanged` notify, and offers `refreshCapabilities()` for the shell to re-read before opening a power menu (caps move with inhibitors, lid state, swap availability).
+- **`interactive = true` on host actions, `false` in the CLI.** Because we ship an in-session polkit agent (2.6), `interactive=true` lets logind route any required authorization (a `Challenge` capability) through *our* agent, giving the native integrated prompt a full desktop expects. The 2.4 brightness default of `false` was correct only because it is a headless CLI tool. The session CLI keeps `false` for the same reason (no agent in a dev shell); the QML host defaults to `true`.
+- **The shell owns the power / lid keys via the block inhibitor**, not via `logind.conf`. Taking the block inhibitor at startup overrides logind's default key handling for this session without editing system config, and releasing it (or exiting) cleanly restores the default. This is the KDE / GNOME pattern.
+- **The sleep-lock wiring lives in the shell composition root**, not in either service. 2.9 and 2.10 expose the hooks (`aboutToSleep()` + `allowSleep()` on 2.10, `lock()` + `locked` on 2.9) and the shell connects them. Keeps both libs independent and testable in isolation.
+- **DI-friendly construction**, mirroring 2.4 brightness: a test ctor `SessionHost(QDBusConnection, QString service, QObject*)` plus a production ctor `SessionHost(QObject* = nullptr)` defaulting to `systemBus()` and `org.freedesktop.login1`. The fake-logind unit tests inject a session-bus Manager, no real logind required.
+- **`lock()` targets the caller's own session** via `XDG_SESSION_ID` / `Manager.GetSession` (falling back to `GetSessionByPID` when `XDG_SESSION_ID` is unset) then the per-session `Session.Lock` (the brightness session-resolution precedent), falling back to `Manager.LockSessions()` when session resolution fails. This keeps the default scoped to this session rather than locking every seat.
+
+**Milestones**
+
+1. **Skeleton + CMake plumbing (S, ~1 day).** `libs/phosphor-service-session/` mirroring the 2.4 brightness shape (`CMakeLists.txt`, `PhosphorServiceSessionConfig.cmake.in`, `include/PhosphorServiceSession/`, `src/`, `tests/`). PUBLIC Qt6 Core / Qml / DBus, PRIVATE `PhosphorDBus`. Imperative `qmlregistration.cpp`, `std::call_once`-guarded, called from `src/shell/main.cpp` alongside the existing services. `BUILD_PHOSPHOR_SHELL`-gated in the root and `src/` CMakeLists.
+2. **Capability queries + `Availability` enum (S, ~1 day).** `SessionHost` issues the async `Can*` calls (`CanPowerOff`, `CanReboot`, `CanHalt`, `CanSuspend`, `CanHibernate`, `CanHybridSleep`, `CanSuspendThenHibernate`), parses the result strings into `Availability` (`Q_ENUM`), exposes one read-only `Q_PROPERTY` per capability with a shared `capabilitiesChanged` notify, plus `refreshCapabilities()`. Loads inert (all `Unknown`) when logind is absent.
+3. **Action methods incl. logout (S, ~1 day).** `Q_INVOKABLE` `lock()`, `suspend()`, `hibernate()`, `hybridSleep()`, `suspendThenHibernate()`, `reboot()`, `powerOff()`, `halt()` (`fireAndForget` `Manager` calls with `interactive=true`, refused with a warning when the matching capability is not actionable), plus `logout()` (emits `logoutRequested()`) and `terminateSession()` (the resolved session's logind `Session.Terminate` fallback). `lock()` follows the `XDG_SESSION_ID` / `GetSession` (then `GetSessionByPID`) resolution to `Session.Lock`, with a `LockSessions()` fallback.
+4. **logind inhibitors + sleep-lock handshake (M, ~3-4 days).** Take the **delay** inhibitor on `sleep` and the **block** inhibitor on `handle-power-key:handle-suspend-key:handle-hibernate-key:handle-lid-switch` (each via `Manager.Inhibit`, holding the returned `QDBusUnixFileDescriptor`). Subscribe to `Manager.PrepareForSleep(b)`; on `true`, emit `aboutToSleep()` while holding the delay lock; expose `allowSleep()` to drop it; re-take the delay lock after resume. Bounded release timeout so a missing/slow `allowSleep()` never wedges suspend. fd lifetimes owned by `SessionHost`, released on teardown.
+5. **Session Lock / Unlock signal surfacing (S, ~half day).** Subscribe to the resolved session's `Lock` / `Unlock` signals; surface `lockRequested()` / `unlockRequested()` so a hardware lock key routed through logind reaches 2.9 via the shell.
+6. **QML registration + facade (S, ~half day).** `Phosphor.Service.Session 1.0` exposes `SessionHost` (`qmlRegisterType`, not a singleton, per the no-singletons direction) and the `Availability` enum. Idempotent via `std::call_once`.
+7. **CLI demo (S-M, ~1-2 days).** `examples/phosphor-service-session-cli/`: `status` (prints each capability), `lock`, `logout`, `suspend`, `hibernate`, `hybrid-sleep`, `suspend-then-hibernate`, `reboot`, `power-off`, `halt`, each with a pre-flight capability check (refuse with exit 1 when unavailable). `QCoreApplication`, sysexits codes (`0` / `1` / `64`), `interactive=false`, event-loop pump for the async capability read (the brightness CLI `pump` pattern). `BUILD_PHOSPHOR_SHELL`-gated, no install rule.
+8. **Tests (M, ~2 days).** Smoke + capability parsing + action routing + inhibitor/handshake against a fake logind `Manager` (a `Q_CLASSINFO("D-Bus Interface", "org.freedesktop.login1.Manager")` object on the session bus, injected through the DI ctor, the 2.4 `test_smoke` fixture pattern): inert-without-logind, `Availability` string parsing (`yes` / `no` / `na` / `challenge` / garbage to `Unknown`), each action routes the correct `Manager` method with the expected `interactive` flag, capability-gated refusal, the `Inhibit` calls request the right `what`/`mode` and hold the fd, the `PrepareForSleep(true) → aboutToSleep → allowSleep → fd released` sequence (and the timeout fallback), and `Lock`/`Unlock` surfacing.
+9. **Shell integration wiring (S, ~half day).** In the shell composition root (`examples/phosphor-shell/SessionLockCoordinator.qml`; `src/shell/main.cpp` only registers the QML types), connect `SessionHost.aboutToSleep → LockService.lock()` and `LockService.locked → SessionHost.allowSleep()`, and connect `lockRequested → LockService.lock()`. 2.9 and 2.10 stay independent libs; only the shell knows both. This is the Phase 2 gate for 2.10 (the handshake works end to end on a live compositor).
+10. **README + Status (S, ~half day).** Sibling convention (SPDX, summary, Responsibility, Key types, Typical use, Design notes, Dependencies, Status). Status leads with `Phase 2.10: shipped.` on gate pass, closing Phase 2.
+
+**Total effort:** S-M (≈ 1-1.5 weeks solo). The action + capability surface is mechanical given the 2.4 brightness template; the inhibitor fd management and the `PrepareForSleep` handshake (milestone 4) are the genuinely new work and most of the wall-clock.
+
+**Dependencies**
+
+- `phosphor-dbus` (PRIVATE link) for `Client`, the signal subscription, and the `Inhibit` fd call.
+- Qt6 ≥ 6.6 Core / Qml / DBus. The CLI links Core only.
+- 2.9 `phosphor-service-lock` and 2.6 `phosphor-service-polkit` are *consumers / collaborators*, wired in the shell, not link dependencies of this lib (it surfaces signals; the shell connects them).
+- A running logind (`org.freedesktop.login1`) on the system bus for the live path; the lib loads inert without it (capabilities `Unknown`, actions no-op with a warning, inhibitors not taken).
+- A compositor entry point for the graceful `logout()` path; absent one, `terminateSession()` is the logind fallback.
+- No `ObjectManager` (single fixed Manager object).
+
+**Risks**
+
+- **Suspend race (the headline win, must be done right).** The delay inhibitor closes the race only if `allowSleep()` fires within logind's `InhibitDelayMaxSec` (default 5s); past that, logind suspends regardless. Mitigate: raise the lock surface fast, and have our own release timeout shorter than `InhibitDelayMaxSec` that drops the delay lock and lets suspend proceed even if the lock confirmation is slow (locked-late is still better than not-suspending).
+- **Inhibitor fd leaks.** A held `Manager.Inhibit` fd that is never closed leaves the machine unable to sleep or makes a key dead. `SessionHost` owns every fd via `QDBusUnixFileDescriptor` and releases them on teardown and on `allowSleep()`; tests assert the release.
+- **Power / lid key ownership conflicts.** If another inhibitor or a `logind.conf` override also claims the keys, behaviour is order-dependent. Take the block inhibitor early, document that `logind.conf` `HandlePowerKey` etc. should stay at defaults (we override via the inhibitor, not config), and log when `Inhibit` is refused.
+- **Privileged actions and polkit.** `PowerOff` / `Reboot` / `Hibernate` may be polkit-gated. With `interactive=true` and our 2.6 agent the prompt surfaces natively; if no agent is registered logind returns an authorization error, which the host surfaces rather than swallows. The `Challenge` capability flags this up front.
+- **Capability staleness.** Capabilities move with inhibitor locks, lid state, and swap availability. Read at construction and on `refreshCapabilities()`; the shell refreshes before opening the power menu.
+- **CI without logind.** Smoke tests inject a fake `Manager` on the session bus; the inert path constructs with no service bound and must not crash, take inhibitors, or block teardown (the 2.4 brightness pattern).
+
+**Unknowns to resolve before / during implementation**
+
+| # | Question | Leaning |
+|---|----------|---------|
+| U1 | `lock()` target: the caller's own session (`XDG_SESSION_ID` / `GetSession`, then `GetSessionByPID`, then `Session.Lock`) or all sessions (`Manager.LockSessions`)? | Own session by default, fall back to `LockSessions()` if session resolution fails. |
+| U2 | `interactive` flag on actions. | `true` on the QML host (auth routes through our 2.6 polkit agent for a native prompt), `false` in the CLI (no agent in a dev shell). |
+| U3 | Surface `Halt` (`CanHalt` / `Halt`) alongside `PowerOff`? | Yes, include it (cheap, completes the action set) with a CLI `halt` subcommand. |
+| U4 | logind `Inhibit`. | **In scope, the defining feature:** a delay inhibitor on `sleep` for lock-before-suspend, and a block inhibitor on `handle-power-key:handle-suspend-key:handle-hibernate-key:handle-lid-switch` for shell key ownership. |
+| U5 | `logout()` mechanism. | Emit `logoutRequested()` for a graceful compositor exit; expose `terminateSession()` (the resolved session's logind `Session.Terminate`) as the fallback. Final choice waits on the compositor's session-exit entry point. |
+| U6 | Which keys to own via the block inhibitor, and is the lid key always taken (desktops have no lid)? | Take power / suspend / hibernate keys always; take the lid key when a lid switch is present (or make the set configurable, default all four). |
+| U7 | Where the sleep-lock wiring lives. | Shell composition root (services stay independent), with the bounded-timeout safeguard from Risks. |
+
+**Out of scope for 2.10.** The power-menu / session UI and its confirmation dialogs (Phase 3 / 4), multi-seat / multi-session switching and user/seat enumeration models, and any logind action beyond the session / power set above. The Wayland idle side (`zwp-idle-inhibit`, blocking screen blanking while a video plays, and idle-timeout to dim / lock) stays in 2.7 idle; 2.10 owns only the **logind** inhibitors (system sleep delay and power / lid key ownership). The service issues the requests, manages the inhibitors, and surfaces the capabilities and signals; the shell renders the menu and the confirms.
+
+---
+
 ## Phase 3: UI primitives + first visible examples
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
@@ -840,7 +932,7 @@ Visible win: bar feels alive and distinct.
 | Deliverable                                                                                | Effort  |
 |--------------------------------------------------------------------------------------------|---------|
 | `qml/Phosphor/Launcher/Launcher.qml` (Spotlight skin first; Connected + Standalone later) | L       |
-| Providers: `AppsProvider` (.desktop), `CalculatorProvider`, `WindowsProvider` (foreign-toplevel from `phosphor-compositor`), `CommandProvider`, `EmojiProvider`, `ClipboardProvider` (Phase 2.10) | L |
+| Providers: `AppsProvider` (.desktop), `CalculatorProvider`, `WindowsProvider` (foreign-toplevel from `phosphor-compositor`), `CommandProvider`, `EmojiProvider`, `ClipboardProvider` (Phase 2.8) | L |
 | Fuzzy match, port `fzf` scoring to C++                                                   | S       |
 
 ### 4.3: Notification center (M2)
@@ -906,7 +998,7 @@ Lower priority, deferred until 4 ships. Open scope.
 | Dock                                                  | M      | Optional                                                                               |
 | Color picker (Hyprpicker-style)                       | S      | Tool                                                                                   |
 | Screenshot tool                                       | M      | Tool, region/window/screen via screencopy                                             |
-| Clipboard manager UI                                  | M      | Service exists Phase 2.10; UI is the polish                                            |
+| Clipboard manager UI                                  | M      | Service exists Phase 2.8; UI is the polish                                             |
 | Keybinds cheatsheet                                   | S      | Reads from compositor shortcut registry                                                |
 | Notepad widget                                        | S      |                                                                                        |
 | Process list                                          | M      |                                                                                        |

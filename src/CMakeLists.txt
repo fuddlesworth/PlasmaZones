@@ -564,6 +564,7 @@ if(BUILD_PHOSPHOR_SHELL)
             PhosphorServiceIdle::PhosphorServiceIdle
             PhosphorServiceClipboard::PhosphorServiceClipboard
             PhosphorServiceLock::PhosphorServiceLock
+            PhosphorServiceSession::PhosphorServiceSession
             PhosphorLayer::PhosphorLayer
             PhosphorWayland::PhosphorWayland
             PhosphorRendering::PhosphorRendering

@@ -67,6 +67,7 @@ qt_add_qml_module(phosphor_shell_example
         MprisPlayerState.qml
         MprisWidget.qml
         TrayMenuPopup.qml
+        SessionLockCoordinator.qml
     RESOURCES
         shaders/frosted_glass.frag
         shaders/gradient.frag
