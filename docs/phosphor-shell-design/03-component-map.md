@@ -17,8 +17,8 @@ src/phosphor-shell/                        # The shell process (currently exampl
         Tokens.qml                         # radius/spacing/font/elevation (singleton)
         Motion.qml                         # M3 emphasized/standard/expressive durations + curves
         StateLayer.qml                     # M3 hover/pressed state overlay primitive
-      Widgets/                             # Reusable atoms (Pz* prefix)
-        PzButton.qml  PzSlider.qml  PzCard.qml  PzRipple.qml  PzTextField.qml
+      Widgets/                             # Reusable atoms (Phosphor* prefix)
+        PhosphorButton.qml  PhosphorSlider.qml  PhosphorCard.qml  PhosphorRipple.qml  PhosphorTextField.qml
         ElevationShadow.qml  ConnectedCorner.qml  ConnectedShape.qml
       Bar/
         BarCanvas.qml                      # Connected-corner geometry

@@ -178,7 +178,7 @@
       <rect width="260" height="60" rx="8" fill="#070F22" stroke="#22D3EE"/>
       <text x="14" y="22" font-weight="600" fill="#22D3EE">Grouped by app · rich text</text>
       <text x="14" y="38" fill="#94A3B8">markdown2html port. Actions are</text>
-      <text x="14" y="52" fill="#94A3B8">first‑class Pz buttons, not generic.</text>
+      <text x="14" y="52" fill="#94A3B8">first‑class Phosphor buttons, not generic.</text>
     </g>
   </g>
 

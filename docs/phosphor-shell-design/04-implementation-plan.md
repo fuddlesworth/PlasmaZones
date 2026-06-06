@@ -32,7 +32,7 @@ This is the **execution playbook** for the gaps inventoried in `02-gap-analysis.
 |-------|-----------------------------------------------|------------|-------------------------------------------------------------------------------|
 | 1     | Foundation libraries (no real UI)             | 4-6 weeks  | CLI tools, kitchen-sink demos. No shell users yet.                            |
 | 2     | Service libraries                             | 8-12 weeks | `phosphorctl` can drive audio/net/bt/brightness/idle/notifications/mpris/tray/polkit/clipboard. Headless. |
-| 3     | UI primitives + first visible examples        | 4-6 weeks  | Pz* widgets, bar canvas, OSD/toast frameworks, ConnectedCorner, all runnable in toy windows. |
+| 3     | UI primitives + first visible examples        | 4-6 weeks  | Phosphor* widgets, bar canvas, OSD/toast frameworks, ConnectedCorner, all runnable in toy windows. |
 | 4     | Surface implementations                       | 12-20 weeks| Daily-drivable shell: bar, launcher, notifications, control center, lockscreen, power menu. |
 | 5     | Polish + ecosystem                            | open       | Matugen template fan-out, plugin browser, dashboard, dock, color picker, screenshot, clipboard manager, settings app. |
 
@@ -890,11 +890,11 @@ A bounded timeout guards step 3 (see Risks) so a missing or slow lock never wedg
 
 **Goal:** end-user-visible building blocks that we'll glue together in Phase 4. Each is a runnable demo, not a real shell surface yet.
 
-### 3.1: `Pz*` atom library
+### 3.1: `Phosphor*` atom library
 
 | Deliverable                                                                  | Notes                                                                            |
 |------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| `qml/Phosphor/Widgets/` (or `libs/phosphor-shell-widgets/qml/`)              | `PzButton`, `PzSlider`, `PzTextField`, `PzCard`, `PzRipple`, `PzPill`, `ElevationShadow`, `StateLayer`, `Motion`-aware transitions |
+| `qml/Phosphor/Widgets/` (or `libs/phosphor-shell-widgets/qml/`)              | `PhosphorButton`, `PhosphorSlider`, `PhosphorTextField`, `PhosphorCard`, `PhosphorRipple`, `PhosphorPill`, `ElevationShadow`, `StateLayer`, `Motion`-aware transitions |
 | `examples/phosphor-widgets-kitchen-sink/`                                    | One window listing every atom in every state (default / hover / pressed / focused / disabled). Theme-switch button at top. |
 
 **Acceptance:** every atom respects the theme tokens; states use M3 state-layer opacities; ripple uses Motion timing.
@@ -1068,7 +1068,7 @@ Lower priority, deferred until 4 ships. Open scope.
 
 - **Phase 1** (4-6 wks): theme, popout, registry, ipc, perscreen, all with example apps. **No shell users yet.**
 - **Phase 2** (8-12 wks): 10 new service libs (plus 4 extracted from the `phosphor-services` umbrella in 2.0), each driven by a CLI demo via `phosphorctl`. **Still no shell UI.**
-- **Phase 3** (4-6 wks): Pz* atoms, BarCanvas, OSD, Toast, toy windows demonstrating each. **First visible Phosphor pixels.**
+- **Phase 3** (4-6 wks): Phosphor* atoms, BarCanvas, OSD, Toast, toy windows demonstrating each. **First visible Phosphor pixels.**
 - **Phase 4** (12-20 wks): the real shell, bar, launcher, notifications, control center, lockscreen, power menu, wallpaper, theme browser. **Daily-drivable.**
 - **Phase 5** (open): matugen fan-out, plugin browser, dashboard, all the smaller surfaces.
 
