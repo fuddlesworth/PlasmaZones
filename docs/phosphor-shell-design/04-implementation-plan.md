@@ -764,7 +764,9 @@ Third **Wayland-client** service lib (after 2.7 idle and 2.8 clipboard), and the
 
 ---
 
-### 2.10: `phosphor-service-session` *(planned)*
+### 2.10: `phosphor-service-session` *(shipped)*
+
+Shipped on `feat/phase-2.10-session-service` (milestones 1-10), in the shape described below. Namespace `PhosphorServiceSession`, export macro `PHOSPHORSERVICESESSION_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Session 1.0`. The shell wires the lock-before-sleep handshake to 2.9 in `examples/phosphor-shell/SessionLockCoordinator.qml`. Three test binaries (smoke, QML facade, fake-logind behaviour) pin the surface; the CLI drives it live (verified: `status` reports the `yes` / `challenge` / `na` capability forms).
 
 The last Phase 2 service lib, and a deliberate step beyond a thin logind action-wrapper into a real **session manager**, because we own the compositor and the session rather than running as a plugin inside someone else's. It surfaces the system session/power actions (lock, logout, suspend, hibernate, hybrid-sleep, suspend-then-hibernate, reboot, power-off, halt) over `org.freedesktop.login1.Manager`, each gated by its capability query (`CanSuspend` and siblings) read up front; it manages logind **inhibitor locks** so the shell can lock before the machine sleeps and can own the power / suspend / hibernate / lid keys; and it surfaces logind's session and sleep signals. Namespace `PhosphorServiceSession`, export macro `PHOSPHORSERVICESESSION_EXPORT`, LGPL-2.1-or-later, QML URI `Phosphor.Service.Session 1.0`. Table effort revised **S-M** (the action surface is S; the inhibitor + sleep-lock handshake is the M).
 
