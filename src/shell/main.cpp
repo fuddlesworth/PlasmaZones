@@ -12,6 +12,7 @@
 #include <PhosphorServiceNotifications/QmlRegistration.h>
 #include <PhosphorServicePipeWire/QmlRegistration.h>
 #include <PhosphorServicePolkit/QmlRegistration.h>
+#include <PhosphorServiceSession/QmlRegistration.h>
 #include <PhosphorServiceSni/QmlRegistration.h>
 #include <PhosphorServiceUPower/QmlRegistration.h>
 #include <PhosphorShell/ShellEngine.h>
@@ -121,6 +122,7 @@ int main(int argc, char* argv[])
     PhosphorServiceIdle::registerQmlTypes();
     PhosphorServiceClipboard::registerQmlTypes();
     PhosphorServiceLock::registerQmlTypes();
+    PhosphorServiceSession::registerQmlTypes();
 
     auto screenProvider = std::make_unique<PhosphorLayer::DefaultScreenProvider>();
     auto transport = std::make_unique<PhosphorLayer::PhosphorWaylandTransport>();
