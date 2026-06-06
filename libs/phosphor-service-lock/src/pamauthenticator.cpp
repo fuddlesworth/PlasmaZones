@@ -119,6 +119,9 @@ PamResult runPamTransaction(const QString& service, const QString& username, QBy
         return {false, reason};
     }
 
+    // This is an unlock (verify-only): the session and its credentials already
+    // exist, so the transaction deliberately runs pam_authenticate + pam_acct_mgmt
+    // and omits pam_setcred / pam_open_session, which belong to fresh login flows.
     const int authRet = pam_authenticate(handle, 0);
     // Even with correct credentials the account may be unusable (expired,
     // locked, password-change required); gate success on acct_mgmt too.
