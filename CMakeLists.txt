@@ -250,7 +250,7 @@ endif()
 #
 # Daemon and editor use Qt Linguist (.ts/.qm).  lupdate scans source files
 # directly - i18n()/i18nc() are backed by Q_DECLARE_TR_FUNCTIONS(plasmazones)
-# in pz_i18n.h, so lupdate recognizes them as tr() calls.
+# in p_i18n.h, so lupdate recognizes them as tr() calls.
 #
 #   make update-ts   - run lupdate to refresh .ts from source
 #   make (default)   - compiles translations/*/*.ts → .qm

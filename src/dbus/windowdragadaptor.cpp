@@ -6,7 +6,7 @@
 #include <QKeySequence>
 #include <QScreen>
 #include <cmath>
-#include "pz_i18n.h"
+#include "p_i18n.h"
 #include "../config/configdefaults.h"
 #include <PhosphorShortcuts/IAdhocRegistrar.h>
 #include "windowtrackingadaptor.h"

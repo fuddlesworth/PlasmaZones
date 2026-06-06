@@ -4,7 +4,7 @@
 #include "UpdateFixedGeometryCommand.h"
 #include "../../services/ZoneManager.h"
 #include "../../../core/constants.h"
-#include "pz_i18n.h"
+#include "p_i18n.h"
 
 using namespace PlasmaZones;
 

@@ -6,7 +6,7 @@
 // A `luau-analyze` equivalent for GLSL packs: it parses metadata.json with the
 // SAME parser the daemon uses (ShaderRegistry::parsePackMetadata, T1.1 auto-slot
 // included), reproduces the runtime's GLSL assembly (entry scaffold + generated
-// pz_<id> preamble + include expansion), and bakes every stage through headless
+// p_<id> preamble + include expansion), and bakes every stage through headless
 // glslang (QShaderBaker, CPU-only — no GPU, no Wayland, no compositor). It is the
 // CI gate for the bundled set and a pre-commit-friendly tool for pack authors.
 //
@@ -57,7 +57,7 @@ QString poolName(const QString& type)
     return QStringLiteral("scalar");
 }
 
-// Cheap Levenshtein for the "did you mean" hint on an undeclared pz_ symbol.
+// Cheap Levenshtein for the "did you mean" hint on an undeclared p_ symbol.
 int editDistance(const QString& a, const QString& b)
 {
     const int n = a.size();
@@ -77,14 +77,14 @@ int editDistance(const QString& a, const QString& b)
     return prev[m];
 }
 
-// If the glslang diagnostic names an undeclared `pz_<x>` and a declared param is
+// If the glslang diagnostic names an undeclared `p_<x>` and a declared param is
 // a near match, surface the suggestion — the friction T1.2 exists to remove.
 void appendDidYouMean(QTextStream& out, const QString& diagnostic, const ShaderRegistry::ShaderInfo& info)
 {
-    static const QRegularExpression re(QStringLiteral("'(pz_[A-Za-z0-9_]+)' : undeclared identifier"));
+    static const QRegularExpression re(QStringLiteral("'(p_[A-Za-z0-9_]+)' : undeclared identifier"));
     QStringList declared;
     for (const ShaderRegistry::ParameterInfo& p : info.parameters) {
-        declared << QStringLiteral("pz_") + p.id;
+        declared << QStringLiteral("p_") + p.id;
     }
     auto it = re.globalMatch(diagnostic);
     while (it.hasNext()) {
@@ -121,7 +121,7 @@ int compileStage(QTextStream& out, const QString& label, const QString& path, QS
     }
     const QString raw = QString::fromUtf8(f.readAll());
 
-    // effect.frag goes through the entry scaffold (which may wrap a pzZone/pzImage
+    // effect.frag goes through the entry scaffold (which may wrap a pZone/pImage
     // body in a generated main()); buffer passes and the vertex shader carry their
     // own main() and are not scaffolded — matching ZoneShaderItem's live load.
     const QString assembled = useScaffold ? PlasmaZones::assembleZoneEntrySource(raw) : raw;
@@ -133,7 +133,7 @@ int compileStage(QTextStream& out, const QString& label, const QString& path, QS
         out << "  " << label.leftJustified(14) << "ERROR\n    include expansion failed: " << err << "\n";
         return 1;
     }
-    // The pz_<id> preamble is spliced only into the scaffolded main fragment, the
+    // The p_<id> preamble is spliced only into the scaffolded main fragment, the
     // single stage that reads parameters by name.
     if (useScaffold && !preamble.isEmpty()) {
         expanded = PhosphorShaders::spliceAfterVersion(expanded, preamble);
@@ -183,12 +183,12 @@ int validatePack(const QString& packDir, QTextStream& out)
         if (!kValidParamTypes.contains(p.type)) {
             lints << QStringLiteral("unknown param type '%1' for '%2'").arg(p.type, p.id);
         }
-        // An id that isn't a valid GLSL identifier gets no pz_ define and no lane
+        // An id that isn't a valid GLSL identifier gets no p_ define and no lane
         // (parseShaderMetadata leaves its slot at -1) — surface the real fault, and
         // skip the collision check so two such params don't false-collide on "-1".
         if (!PhosphorShaders::isValidParamId(p.id)) {
-            lints << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no pz_ define)")
-                         .arg(p.id);
+            lints
+                << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no p_ define)").arg(p.id);
             continue;
         }
         const QString laneKey = poolName(p.type) + QStringLiteral("#") + QString::number(p.slot);

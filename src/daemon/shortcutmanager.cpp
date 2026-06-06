@@ -6,7 +6,7 @@
 #include "../config/configdefaults.h"
 #include "../config/settings.h"
 #include "../core/logging.h"
-#include "pz_i18n.h"
+#include "p_i18n.h"
 
 #include <PhosphorShortcuts/Factory.h>
 #include <PhosphorShortcuts/IBackend.h>

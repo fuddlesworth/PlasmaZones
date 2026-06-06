@@ -81,7 +81,7 @@ const float SHARD_LAYERS = 5.0;
 // reach zero, mirroring BMW's effective 2-tiles-across-window default.
 const float kShardTilesAcrossAnchor = 2.0;
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
   // Per-window pseudo-random seed offset for the shard atlas sampling.
   // BMW pulls a fresh `Math.random()` pair per leg; PlasmaZones has no
   // per-leg random uniform, so we derive a deterministic offset from
@@ -95,9 +95,9 @@ vec4 pzTransition(vec2 uv, float t) {
   vec2 surfaceHash = hash22(iSurfaceScreenPos.xy + vec2(11.31, 17.71));
 
   // Defence-in-depth on the divisor: metadata declares min 0.2, but a
-  // host that bypasses validation could push pz_uShardScale to zero and
+  // host that bypasses validation could push p_uShardScale to zero and
   // turn the shard-atlas UV math below into NaN.
-  float shardScaleSafe = max(pz_uShardScale, 1e-3);
+  float shardScaleSafe = max(p_uShardScale, 1e-3);
 
   vec4 oColor = vec4(0.0);
 
@@ -118,7 +118,7 @@ vec4 pzTransition(vec2 uv, float t) {
     coords -= uEpicenter;
 
     // Scale each layer a bit differently.
-    coords /= mix(1.0, 1.0 + pz_uBlowForce * (i + 2.0) / SHARD_LAYERS, progress);
+    coords /= mix(1.0, 1.0 + p_uBlowForce * (i + 2.0) / SHARD_LAYERS, progress);
 
     // Rotate each layer a bit differently.
     float rotation = (mod(i, 2.0) - 0.5) * 0.2 * progress;
@@ -127,7 +127,7 @@ vec4 pzTransition(vec2 uv, float t) {
 
     // Move down each layer a bit.
     float gravity =
-      (uForOpening ? -1.0 : 1.0) * pz_uGravity * 0.1 * (i + 1.0) * progress * progress;
+      (uForOpening ? -1.0 : 1.0) * p_uGravity * 0.1 * (i + 1.0) * progress * progress;
     coords += vec2(0.0, gravity);
 
     // Restore correct position.

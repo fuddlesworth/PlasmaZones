@@ -5,7 +5,7 @@
 #include "CommandId.h"
 #include "../../EditorController.h"
 
-#include "pz_i18n.h"
+#include "p_i18n.h"
 
 namespace PlasmaZones {
 

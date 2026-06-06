@@ -18,7 +18,7 @@ add_subdirectory(shared)
 
 # Core library sources
 set(plasmazones_core_SRCS
-    pz_qml_i18n.h
+    p_qml_i18n.h
     core/constants.h
     core/logging.h
     core/logging.cpp
@@ -155,7 +155,7 @@ set(plasmazones_core_SRCS
 # Create core library
 add_library(plasmazones_core SHARED ${plasmazones_core_SRCS})
 
-target_sources(plasmazones_core PRIVATE pz_qml_i18n.cpp)
+target_sources(plasmazones_core PRIVATE p_qml_i18n.cpp)
 
 # Generate export header
 generate_export_header(plasmazones_core
@@ -757,7 +757,7 @@ target_link_libraries(plasmazones-editor PRIVATE Qt6::GuiPrivate Qt6::ShaderTool
 install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 
 # T1.2 — offline shader-pack validator. Parses metadata.json with the daemon's
-# parser, reproduces the runtime GLSL assembly (entry scaffold + pz_<id> preamble
+# parser, reproduces the runtime GLSL assembly (entry scaffold + p_<id> preamble
 # + includes) and bakes every stage through headless glslang (QShaderBaker — CPU
 # only, no GPU/Wayland). The CI gate for the bundled set; pre-commit-friendly for
 # pack authors. Links plasmazones_rendering for the zone entry scaffold.

@@ -37,7 +37,7 @@ float sf_intensity(float t) {
     return min(1.0, 1.2 * (1.0 - tp) - 0.1);
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
@@ -47,14 +47,14 @@ vec4 pzTransition(vec2 uv, float t) {
     // fraction of the screen this surface covers, so cell pixel size
     // stays constant across popup vs. maximized windows. Matches niri's
     // reference on full-screen (multiplier = 1.0 there).
-    vec2 cellsAcross = vec2(pz_pixelGrid) * max(iAnchorSize, vec2(1.0))
+    vec2 cellsAcross = vec2(p_pixelGrid) * max(iAnchorSize, vec2(1.0))
                                        / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 uvStatic = floor(uv * cellsAcross) / cellsAcross;
     // Gate the procedural static by the captured card alpha so it cannot
     // paint the rounded-corner / transparent margin opaque. Without this
     // the sf_static() opacity-1 vec4 wins through the mix() below and
     // emits opaque RGB outside the visible card silhouette.
-    vec4 staticColor = sf_static(uvStatic, p, pz_staticBrightness) * win.a;
+    vec4 staticColor = sf_static(uvStatic, p, p_staticBrightness) * win.a;
     float staticThresh = sf_intensity(p);
     float staticMix = step(sf_rnd(uvStatic), staticThresh);
 

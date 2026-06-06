@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "pz_qml_i18n.h"
+#include "p_qml_i18n.h"
 #include <QCoreApplication>
 
 PzLocalizedContext::PzLocalizedContext(QObject* parent)

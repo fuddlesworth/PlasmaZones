@@ -8,7 +8,7 @@
 #include "../../core/logging.h"
 #include "../helpers/SettingsDbusQueries.h"
 
-#include "pz_i18n.h"
+#include "p_i18n.h"
 #include "../../config/configdefaults.h"
 #include "../../config/configmigration.h"
 #include "../../config/configbackends.h"

@@ -20,7 +20,7 @@
 #include "settingscontroller.h"
 
 #include "../config/configdefaults.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 #include "pageadapter.h"
 #include "settingsstagingdomain.h"
 

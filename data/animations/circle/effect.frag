@@ -26,23 +26,23 @@
 // and main(). noise.glsl (surfaceSeed) is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// pz_smoothness / pz_centerJitter (customParams[0].xy) are generated from
+// p_smoothness / p_centerJitter (customParams[0].xy) are generated from
 // metadata.json — no hand-written slot #defines.
 
-// Symmetric: a single pzTransition. `t` is the leg's iTime, which the runtime
+// Symmetric: a single pTransition. `t` is the leg's iTime, which the runtime
 // flips on the close leg (1→0), so the niri OPEN body auto-mirrors on close
 // with no direction code.
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
     float seed = surfaceSeed();
 
     float SQRT_2 = 1.414213562;
 
-    vec2 center = vec2(0.5 + (seed - 0.5) * pz_centerJitter, 0.5 + (seed * 0.7 - 0.35) * pz_centerJitter);
+    vec2 center = vec2(0.5 + (seed - 0.5) * p_centerJitter, 0.5 + (seed * 0.7 - 0.35) * p_centerJitter);
 
     float dist = SQRT_2 * distance(center, uv);
-    float m = smoothstep(-pz_smoothness, 0.0, dist - p * (1.0 + pz_smoothness));
+    float m = smoothstep(-p_smoothness, 0.0, dist - p * (1.0 + p_smoothness));
     float reveal = 1.0 - m;
 
     vec4 color = surfaceColor(uv);

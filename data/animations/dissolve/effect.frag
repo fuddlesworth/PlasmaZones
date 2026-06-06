@@ -14,12 +14,12 @@
 
 #include <noise.glsl>
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     // UV from the vertex stage; gl_FragCoord/iResolution overshoots [0,1]
     // by DPR on high-DPI displays.
-    float cellSize = max(pz_grain, 0.01);
-    // `pz_grain` means cell edge as a fraction of the screen — the
+    float cellSize = max(p_grain, 0.01);
+    // `p_grain` means cell edge as a fraction of the screen — the
     // iAnchorSize / iSurfaceScreenPos.zw factor converts "fraction of
     // the screen" into "fraction of the surface" so cell pixel size
     // stays constant across popup vs. maximized windows. Floors guard
@@ -33,7 +33,7 @@ vec4 pzTransition(vec2 uv, float t)
     // a soft window so each cell flips from "hidden" to "shown" at a
     // different threshold — that's the dissolve effect.
     float visibility = clamp(t, 0.0, 1.0);
-    float soft = max(pz_softness, 0.001);
+    float soft = max(p_softness, 0.001);
     float gate = smoothstep(visibility - soft, visibility + soft, noise);
 
     // Sample the captured surface and gate it on the per-cell noise.

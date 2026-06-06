@@ -5,7 +5,7 @@
 
 #include "../config/configdefaults.h"
 #include "../core/isettings.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <QFile>
 #include <QFileInfo>

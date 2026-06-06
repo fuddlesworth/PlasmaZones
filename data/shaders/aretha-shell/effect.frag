@@ -13,30 +13,30 @@
 // PARAMETERS  (customParams slots 0-21, customColors slots 0-7)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-float getSpeed()           { return pz_speed >= 0.0 ? pz_speed : 0.08; }
-float getGradeIntensity()  { return pz_gradeIntensity >= 0.0 ? pz_gradeIntensity : 0.25; }
-float getGradeSaturation() { return pz_gradeSaturation >= 0.0 ? pz_gradeSaturation : 1.08; }
-float getShimmerIntensity(){ return pz_shimmerIntensity >= 0.0 ? pz_shimmerIntensity : 0.02; }
-float getHexPixelSize()    { return pz_hexPixelSize >= 0.0 ? pz_hexPixelSize : 35.0; }
-float getHexLineThickness(){ return pz_hexLineThickness >= 0.0 ? pz_hexLineThickness : 0.05; }
-float getHexOpacity()      { return pz_hexOpacity >= 0.0 ? pz_hexOpacity : 0.18; }
-float getHexPulseSpeed()   { return pz_hexPulseSpeed >= 0.0 ? pz_hexPulseSpeed : 1.5; }
-float getHexScanSpeed()    { return pz_hexScanSpeed >= 0.0 ? pz_hexScanSpeed : 1.0; }
-float getStreamColumns()   { return pz_streamColumns >= 0.0 ? pz_streamColumns : 35.0; }
-float getStreamOpacity()   { return pz_streamOpacity >= 0.0 ? pz_streamOpacity : 0.15; }
-float getStreamSpeed()     { return pz_streamSpeed >= 0.0 ? pz_streamSpeed : 0.8; }
-float getTrailLength()     { return pz_trailLength >= 0.0 ? pz_trailLength : 0.20; }
-float getAudioSensitivity(){ return pz_audioSensitivity >= 0.0 ? pz_audioSensitivity : 1.0; }
-float getFillOpacity()     { return pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.95; }
-float getDataSurgeIntensity() { return pz_dataSurgeIntensity >= 0.0 ? pz_dataSurgeIntensity : 1.0; }
+float getSpeed()           { return p_speed >= 0.0 ? p_speed : 0.08; }
+float getGradeIntensity()  { return p_gradeIntensity >= 0.0 ? p_gradeIntensity : 0.25; }
+float getGradeSaturation() { return p_gradeSaturation >= 0.0 ? p_gradeSaturation : 1.08; }
+float getShimmerIntensity(){ return p_shimmerIntensity >= 0.0 ? p_shimmerIntensity : 0.02; }
+float getHexPixelSize()    { return p_hexPixelSize >= 0.0 ? p_hexPixelSize : 35.0; }
+float getHexLineThickness(){ return p_hexLineThickness >= 0.0 ? p_hexLineThickness : 0.05; }
+float getHexOpacity()      { return p_hexOpacity >= 0.0 ? p_hexOpacity : 0.18; }
+float getHexPulseSpeed()   { return p_hexPulseSpeed >= 0.0 ? p_hexPulseSpeed : 1.5; }
+float getHexScanSpeed()    { return p_hexScanSpeed >= 0.0 ? p_hexScanSpeed : 1.0; }
+float getStreamColumns()   { return p_streamColumns >= 0.0 ? p_streamColumns : 35.0; }
+float getStreamOpacity()   { return p_streamOpacity >= 0.0 ? p_streamOpacity : 0.15; }
+float getStreamSpeed()     { return p_streamSpeed >= 0.0 ? p_streamSpeed : 0.8; }
+float getTrailLength()     { return p_trailLength >= 0.0 ? p_trailLength : 0.20; }
+float getAudioSensitivity(){ return p_audioSensitivity >= 0.0 ? p_audioSensitivity : 1.0; }
+float getFillOpacity()     { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.95; }
+float getDataSurgeIntensity() { return p_dataSurgeIntensity >= 0.0 ? p_dataSurgeIntensity : 1.0; }
 
 // Tri-Hex parameters (customParams[4] and customParams[5])
-float getTriLineThickness() { return pz_triLineThickness >= 0.0 ? pz_triLineThickness : 0.03; }
-float getTriLineOpacity()   { return pz_triLineOpacity >= 0.0 ? pz_triLineOpacity : 0.25; }
-float getTriFillOpacity()   { return pz_triFillOpacity >= 0.0 ? pz_triFillOpacity : 0.12; }
-float getTriPulseSpeed()    { return pz_triPulseSpeed >= 0.0 ? pz_triPulseSpeed : 2.0;  }
-float getTriRotSpeed()      { return pz_triRotSpeed >= 0.0 ? pz_triRotSpeed : 0.4;  }
-float getTriColorMix()      { return pz_triColorMix >= 0.0 ? pz_triColorMix : 0.5;  }
+float getTriLineThickness() { return p_triLineThickness >= 0.0 ? p_triLineThickness : 0.03; }
+float getTriLineOpacity()   { return p_triLineOpacity >= 0.0 ? p_triLineOpacity : 0.25; }
+float getTriFillOpacity()   { return p_triFillOpacity >= 0.0 ? p_triFillOpacity : 0.12; }
+float getTriPulseSpeed()    { return p_triPulseSpeed >= 0.0 ? p_triPulseSpeed : 2.0;  }
+float getTriRotSpeed()      { return p_triRotSpeed >= 0.0 ? p_triRotSpeed : 0.4;  }
+float getTriColorMix()      { return p_triColorMix >= 0.0 ? p_triColorMix : 0.5;  }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COLORS
@@ -50,19 +50,19 @@ const vec3 gradeMid       = vec3(0.000, 0.620, 0.741);
 const vec3 gradeHighlight = vec3(0.333, 0.667, 1.000);
 
 vec3 getBackgroundColor() {
-    vec3 bg = pz_backgroundColor.rgb;
+    vec3 bg = p_backgroundColor.rgb;
     return length(bg) > 0.01 ? bg : arethaBg;
 }
 
-vec3 getArethaCyan()   { vec3 c = pz_arethaCyan.rgb; return length(c) > 0.01 ? c : vec3(0.333, 0.667, 1.000); }
-vec3 getArethaPink()   { vec3 c = pz_arethaPink.rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.333, 0.498); }
-vec3 getArethaTeal()   { vec3 c = pz_arethaTeal.rgb; return length(c) > 0.01 ? c : vec3(0.000, 0.620, 0.741); }
-vec3 getArethaPurple() { vec3 c = pz_arethaPurple.rgb; return length(c) > 0.01 ? c : vec3(0.333, 0.333, 1.000); }
+vec3 getArethaCyan()   { vec3 c = p_arethaCyan.rgb; return length(c) > 0.01 ? c : vec3(0.333, 0.667, 1.000); }
+vec3 getArethaPink()   { vec3 c = p_arethaPink.rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.333, 0.498); }
+vec3 getArethaTeal()   { vec3 c = p_arethaTeal.rgb; return length(c) > 0.01 ? c : vec3(0.000, 0.620, 0.741); }
+vec3 getArethaPurple() { vec3 c = p_arethaPurple.rgb; return length(c) > 0.01 ? c : vec3(0.333, 0.333, 1.000); }
 
 // Tri-Hex colors (warm accents to contrast with cool hex grid)
-vec3 getTriColor1()    { vec3 c = pz_triColor1.rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.200, 0.550); }  // #ff3388 hot pink
-vec3 getTriColor2()    { vec3 c = pz_triColor2.rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.450, 0.300); }  // #ff734d warm coral
-vec3 getTriLineColor() { vec3 c = pz_triLineColor.rgb; return length(c) > 0.01 ? c : vec3(0.900, 0.150, 0.700); }  // #e626b3 vivid magenta
+vec3 getTriColor1()    { vec3 c = p_triColor1.rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.200, 0.550); }  // #ff3388 hot pink
+vec3 getTriColor2()    { vec3 c = p_triColor2.rgb; return length(c) > 0.01 ? c : vec3(1.000, 0.450, 0.300); }  // #ff734d warm coral
+vec3 getTriLineColor() { vec3 c = p_triLineColor.rgb; return length(c) > 0.01 ? c : vec3(0.900, 0.150, 0.700); }  // #e626b3 vivid magenta
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UTILITIES
@@ -706,10 +706,10 @@ vec4 compositeArethaLabels(vec4 color, vec2 fragCoord,
     vec3 arethaPink = getArethaPink();
     vec3 arethaTeal = getArethaTeal();
 
-    float labelGlowSpread = pz_glitchSpread >= 0.0 ? pz_glitchSpread : 2.5;
-    float labelBrightness = pz_scanlineBright >= 0.0 ? pz_scanlineBright : 2.0;
-    float labelAudioReact = pz_surgeReact >= 0.0 ? pz_surgeReact : 1.0;
-    float glitchFreq = pz_glitchFrequency >= 0.0 ? pz_glitchFrequency : 0.5;
+    float labelGlowSpread = p_glitchSpread >= 0.0 ? p_glitchSpread : 2.5;
+    float labelBrightness = p_scanlineBright >= 0.0 ? p_scanlineBright : 2.0;
+    float labelAudioReact = p_surgeReact >= 0.0 ? p_surgeReact : 1.0;
+    float glitchFreq = p_glitchFrequency >= 0.0 ? p_glitchFrequency : 0.5;
 
     // Gaussian halo for smooth glitch outline
     float halo = 0.0;
@@ -765,7 +765,7 @@ vec4 compositeArethaLabels(vec4 color, vec2 fragCoord,
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -807,7 +807,7 @@ vec4 pzImage(vec2 fragCoord) {
         }
     }
 
-    if (pz_showLabels > 0.5)
+    if (p_showLabels > 0.5)
         color = compositeArethaLabels(color, fragCoord, bass, treble, hasAudio);
     return color;
 }

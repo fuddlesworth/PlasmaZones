@@ -712,7 +712,7 @@ private:
     /// show/hide toggling.
     QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_primingFrameConnections;
     /// Per-surface destroyed-signal Connection. Replaces the earlier
-    /// `pz_primingDestroyedConnected` Qt dynamic property gate which
+    /// `p_primingDestroyedConnected` Qt dynamic property gate which
     /// leaked across OverlayService instances (test fixtures, daemon
     /// hot-restart) - a fresh service that re-encountered the same
     /// Surface* would skip wiring its own cleanup. Per-instance
@@ -954,7 +954,7 @@ private:
         // Required.
         QUrl qmlUrl = {}; ///< QML file (Window-rooted - PZ's overlay QML convention)
         QScreen* screen = nullptr; ///< target screen (physical; virtual-screen positioning is the caller's job)
-        PhosphorLayer::Role role = {}; ///< protocol-level preset (see pz_roles.h)
+        PhosphorLayer::Role role = {}; ///< protocol-level preset (see p_roles.h)
         const char* windowType = ""; ///< debug/telemetry label
 
         // Optional - explicit `= {}` suppresses GCC's

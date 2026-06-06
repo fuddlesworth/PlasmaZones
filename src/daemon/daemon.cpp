@@ -66,7 +66,7 @@
 
 #include <PhosphorContext/ContextResolver.h>
 #include "../core/utils.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 #include "../config/configdefaults.h"
 #include "../config/settingsconfigstore.h"
 #include <PhosphorScreens/DBusScreenAdaptor.h>

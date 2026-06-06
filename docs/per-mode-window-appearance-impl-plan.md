@@ -27,7 +27,7 @@ current code, so nothing is missed during implementation.
   `autotileBorderColor`, `autotileInactiveBorderColor`, `autotileUseSystemBorderColors`.
   Chain: `configdefaults.h` (defaults/bounds) → `configkeys.h` (group/key accessors) →
   `isettings.h` (virtuals + NOTIFY) → `settings.{h,cpp}` (Q_PROPERTY/getter/setter via
-  `PZ_STORE_*` macros; `applyAutotileBorderSystemColor()` accent helper) →
+  `P_STORE_*` macros; `applyAutotileBorderSystemColor()` accent helper) →
   `settingsadaptor.cpp` (`REGISTER_*_SETTING` — D-Bus by-name, how the effect reads them).
 - **Settings UI:** `TilingAppearanceController` (thin `PhosphorSettingsUi::PageController`,
   CONSTANT bounds only) + `TilingAppearancePage.qml` (Colors / Decorations / Borders cards,
@@ -106,7 +106,7 @@ Move the zone-overlay sub-groups `Snapping.Appearance.*` → `Snapping.Zones.*` 
      `…OpacityGroup`, `…BorderGroup`, `…LabelsGroup` → `Snapping.Zones.{Opacity,Border,Labels}`.
    - Add `v3*`-prefixed **legacy** group accessors returning the OLD `Snapping.Appearance.*`
      paths (the established `v1*`/`v3*` pattern — used only by the migration for readability).
-2. `src/config/settings.cpp` / `settings.h`: update every zone getter/setter `PZ_STORE_*` macro
+2. `src/config/settings.cpp` / `settings.h`: update every zone getter/setter `P_STORE_*` macro
    call to use the renamed `snappingZones*Group` accessors. (Getter/setter C++ names unchanged.)
 3. `src/config/configmigration.cpp`: inside `migrateV3ToV4`, after the existing exclusions/
    assignments transform, move each `Snapping.Appearance.<sub>` object to
@@ -180,7 +180,7 @@ full add-a-setting chain mirroring `autotile*`.
    `hideTitleBarsKey`/`showBorderKey`).
 2. `configdefaults.h`: default + bounds accessors (mirror `autotile*` defaults).
 3. `isettings.h`: 7 virtuals + NOTIFY signals.
-4. `settings.{h,cpp}`: Q_PROPERTY/getter/setter/member via `PZ_STORE_*`;
+4. `settings.{h,cpp}`: Q_PROPERTY/getter/setter/member via `P_STORE_*`;
    `applySnapWindowBorderSystemColor()` accent helper; load/save/reset.
 5. `settingsadaptor.cpp`: `REGISTER_*_SETTING` entries (D-Bus by-name).
 6. `tests/unit/helpers/StubSettings.h`: add the 7 overrides.

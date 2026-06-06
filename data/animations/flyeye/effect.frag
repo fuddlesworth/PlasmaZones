@@ -19,12 +19,12 @@
 
 #include <noise.glsl>
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
 
     float inv = 1.0 - p;
-    vec2 disp = pz_displacement * vec2(cos(pz_facetFrequency * uv.x), sin(pz_facetFrequency * uv.y));
+    vec2 disp = p_displacement * vec2(cos(p_facetFrequency * uv.x), sin(p_facetFrequency * uv.y));
     vec2 sample_uv = uv + inv * disp;
 
     // boundaryMask (see noise.glsl) crops samples outside [0, 1] —

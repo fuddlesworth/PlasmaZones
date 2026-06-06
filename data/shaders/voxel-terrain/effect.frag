@@ -8,7 +8,7 @@
 // borders, labels, inner edge glow, outer glow, depth-of-field, and vignette.
 //
 // The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
-// the vTexCoord/vFragCoord ins, the fragColor out, and the pzImage entry-point
+// the vTexCoord/vFragCoord ins, the fragColor out, and the pImage entry-point
 // dispatch. audio/multipass/depth includes are pack-specific, so they stay here.
 #include <audio.glsl>
 #include <multipass.glsl>
@@ -23,17 +23,17 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderRadius = max(params.x, 6.0);
     float borderWidth  = max(params.y, 2.5);
 
-    float reactivity   = pz_reactivity >= 0.0 ? pz_reactivity : 1.5;
-    float edgeGlow     = pz_edgeGlow >= 0.0 ? pz_edgeGlow : 1.5;
-    float fillOpacity  = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.92;
-    float bassImpact   = pz_bassImpact >= 0.0 ? pz_bassImpact : 2.0;
-    float idleSpeed    = pz_idleSpeed >= 0.0 ? pz_idleSpeed : 1.0;
-    float dofStrength  = pz_dofStrength >= 0.0 ? pz_dofStrength : 0.5;
+    float reactivity   = p_reactivity >= 0.0 ? p_reactivity : 1.5;
+    float edgeGlow     = p_edgeGlow >= 0.0 ? p_edgeGlow : 1.5;
+    float fillOpacity  = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.92;
+    float bassImpact   = p_bassImpact >= 0.0 ? p_bassImpact : 2.0;
+    float idleSpeed    = p_idleSpeed >= 0.0 ? p_idleSpeed : 1.0;
+    float dofStrength  = p_dofStrength >= 0.0 ? p_dofStrength : 0.5;
 
-    vec3 primary   = colorWithFallback(pz_primaryColor.rgb, vec3(0.06, 0.08, 0.18));
-    vec3 accent    = colorWithFallback(pz_accentColor.rgb, vec3(0.0, 0.83, 1.0));
-    vec3 bassCol   = colorWithFallback(pz_bassColor.rgb, vec3(0.9, 0.0, 0.67));
-    vec3 wireColor = colorWithFallback(pz_gridColor.rgb, vec3(0.6, 0.7, 0.9));
+    vec3 primary   = colorWithFallback(p_primaryColor.rgb, vec3(0.06, 0.08, 0.18));
+    vec3 accent    = colorWithFallback(p_accentColor.rgb, vec3(0.0, 0.83, 1.0));
+    vec3 bassCol   = colorWithFallback(p_bassColor.rgb, vec3(0.9, 0.0, 0.67));
+    vec3 wireColor = colorWithFallback(p_gridColor.rgb, vec3(0.6, 0.7, 0.9));
 
     float energy = hasAudio ? overall * reactivity : 0.0;
 
@@ -137,7 +137,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.rgb += primary * innerGlow;
 
         // Zone labels — holographic voxel HUD style
-        if (pz_showLabels > 0.5) {
+        if (p_showLabels > 0.5) {
             vec2 labelUv = fragCoord / max(iResolution, vec2(0.001));
             vec2 texel = 1.0 / max(iResolution, vec2(1.0));
             vec4 labelSample = texture(uZoneLabels, labelUv);
@@ -268,7 +268,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
 // ─── Main ───────────────────────────────────────────────────────────
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {

@@ -27,7 +27,7 @@ QString imageAccessor(int slot)
 
 } // namespace
 
-/// A parameter id must be a valid GLSL identifier *body* — the `pz_` prefix
+/// A parameter id must be a valid GLSL identifier *body* — the `p_` prefix
 /// guarantees a valid leading character, so a leading digit in the id is fine,
 /// but anything outside `[A-Za-z0-9_]` (or an empty id) would produce a broken
 /// `#define` token and is rejected.
@@ -55,7 +55,7 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
     // Two-pass slot assignment mirroring parseShaderMetadata's auto-slot: reserve
     // every explicit slot first, then fill omitted ones into the next free lane of
     // their pool in declaration order, skipping reserved slots — so the generated
-    // pz_<id> lane numbering stays byte-identical to the registry's upload numbering
+    // p_<id> lane numbering stays byte-identical to the registry's upload numbering
     // even for a pack that mixes explicit and auto slots in one pool.
     QSet<int> usedScalar, usedColor, usedImage;
     for (const PreambleParam& p : params) {
@@ -110,7 +110,7 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
             out += QStringLiteral("// pz: skipped \"") + p.id + QStringLiteral("\" (slot out of range)\n");
             continue;
         }
-        out += QStringLiteral("#define pz_") + p.id + QLatin1Char(' ') + accessor + QLatin1Char('\n');
+        out += QStringLiteral("#define p_") + p.id + QLatin1Char(' ') + accessor + QLatin1Char('\n');
     }
     out += QStringLiteral("// -----------------------------------------------------\n");
     return out;

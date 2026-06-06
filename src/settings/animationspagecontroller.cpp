@@ -7,7 +7,7 @@
 #include "../core/animationshadersupportedpaths.h"
 #include "../core/isettings.h"
 #include "../core/logging.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 #include "animationpresetlibrary.h"
 #include "animations_controller_detail.h"
 #include "dbusutils.h"

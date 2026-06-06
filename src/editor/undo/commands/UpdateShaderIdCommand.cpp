@@ -3,7 +3,7 @@
 
 #include "UpdateShaderIdCommand.h"
 
-#include "pz_i18n.h"
+#include "p_i18n.h"
 
 #include "../../EditorController.h"
 #include "CommandId.h"

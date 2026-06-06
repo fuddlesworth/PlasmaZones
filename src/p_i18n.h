@@ -9,7 +9,7 @@
 // scripts or function aliases needed.
 //
 // QML files continue to use i18n()/i18nc() via PzLocalizedContext
-// (see pz_qml_i18n.h).
+// (see p_qml_i18n.h).
 
 #pragma once
 

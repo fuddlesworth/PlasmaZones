@@ -14,7 +14,7 @@
 #include "../../core/utils.h"
 #include "../../core/shaderregistry.h"
 #include "../rendering/zonelabeltexturebuilder.h"
-#include "pz_roles.h"
+#include "p_roles.h"
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>

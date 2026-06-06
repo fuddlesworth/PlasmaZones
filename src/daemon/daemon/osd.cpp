@@ -29,7 +29,7 @@
 #include <QDBusPendingCall>
 #include <QScreen>
 #include <QTimer>
-#include "pz_i18n.h"
+#include "p_i18n.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {

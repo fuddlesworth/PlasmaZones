@@ -18,51 +18,51 @@
  */
 
 // The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
-// the vTexCoord/vFragCoord ins, the fragColor out, and the pzImage entry-point
+// the vTexCoord/vFragCoord ins, the fragColor out, and the pImage entry-point
 // dispatch. audio.glsl is pack-specific, so it stays here.
 #include <audio.glsl>
 
 // ─── Parameter helpers ─────────────────────────────────────────────
 
-float pSpeed()           { return pz_speed >= 0.0 ? pz_speed : 0.08; }
-float pFlowSpeed()       { return pz_flowSpeed >= 0.0 ? pz_flowSpeed : 0.15; }
-float pNoiseScale()      { return pz_noiseScale >= 0.0 ? pz_noiseScale : 3.5;  }
-float pWindDirection()   { return pz_windDirection >= 0.0 ? pz_windDirection : 0.3;  }
-float pBrightness()      { return pz_brightness >= 0.0 ? pz_brightness : 0.7;  }
-float pContrast()        { return pz_contrast >= 0.0 ? pz_contrast : 0.9;  }
+float pSpeed()           { return p_speed >= 0.0 ? p_speed : 0.08; }
+float pFlowSpeed()       { return p_flowSpeed >= 0.0 ? p_flowSpeed : 0.15; }
+float pNoiseScale()      { return p_noiseScale >= 0.0 ? p_noiseScale : 3.5;  }
+float pWindDirection()   { return p_windDirection >= 0.0 ? p_windDirection : 0.3;  }
+float pBrightness()      { return p_brightness >= 0.0 ? p_brightness : 0.7;  }
+float pContrast()        { return p_contrast >= 0.0 ? p_contrast : 0.9;  }
 // slot 6 reserved
-float pInnerGlowStr()    { return pz_innerGlowStrength >= 0.0 ? pz_innerGlowStrength : 0.4;  }
-float pFillOpacity()     { return pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85; }
-float pBorderGlow()      { return pz_borderGlow >= 0.0 ? pz_borderGlow : 0.35; }
-float pEdgeFadeStart()   { return pz_edgeFadeStart >= 0.0 ? pz_edgeFadeStart : 30.0; }
-float pBorderBrightness(){ return pz_borderBrightness >= 0.0 ? pz_borderBrightness : 1.4;  }
-float pAudioReactivity() { return pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0;  }
-float pParticleStrength(){ return pz_particleStrength >= 0.0 ? pz_particleStrength : 0.5;  }
-float pDustDevilStr()    { return pz_dustDevilStrength >= 0.0 ? pz_dustDevilStrength : 0.4;  }
-float pErosionStrength() { return pz_erosionStrength >= 0.0 ? pz_erosionStrength : 0.3;  }
-float pLabelGlowSpread() { return pz_labelGlowSpread >= 0.0 ? pz_labelGlowSpread : 3.0;  }
-float pLabelBrightness() { return pz_labelBrightness >= 0.0 ? pz_labelBrightness : 2.5;  }
-float pLabelAudioReact() { return pz_labelAudioReact >= 0.0 ? pz_labelAudioReact : 1.0;  }
+float pInnerGlowStr()    { return p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.4;  }
+float pFillOpacity()     { return p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85; }
+float pBorderGlow()      { return p_borderGlow >= 0.0 ? p_borderGlow : 0.35; }
+float pEdgeFadeStart()   { return p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0; }
+float pBorderBrightness(){ return p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;  }
+float pAudioReactivity() { return p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;  }
+float pParticleStrength(){ return p_particleStrength >= 0.0 ? p_particleStrength : 0.5;  }
+float pDustDevilStr()    { return p_dustDevilStrength >= 0.0 ? p_dustDevilStrength : 0.4;  }
+float pErosionStrength() { return p_erosionStrength >= 0.0 ? p_erosionStrength : 0.3;  }
+float pLabelGlowSpread() { return p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0;  }
+float pLabelBrightness() { return p_labelBrightness >= 0.0 ? p_labelBrightness : 2.5;  }
+float pLabelAudioReact() { return p_labelAudioReact >= 0.0 ? p_labelAudioReact : 1.0;  }
 float pLabelChroma()     { return customParams[4].w >= 0.0 ? customParams[4].w : 0.5;  }
-float pLogoScale()       { return pz_logoScale >= 0.0 ? pz_logoScale : 0.35; }
-float pLogoIntensity()   { return pz_logoIntensity >= 0.0 ? pz_logoIntensity : 0.8;  }
-float pLogoPulse()       { return pz_logoPulse >= 0.0 ? pz_logoPulse : 0.8;  }
-float pLogoCount()       { return pz_logoCount >= 0.0 ? pz_logoCount : 3.0;  }
-float pLogoSizeMin()     { return pz_logoSizeMin >= 0.0 ? pz_logoSizeMin : 0.4;  }
-float pLogoSizeMax()     { return pz_logoSizeMax >= 0.0 ? pz_logoSizeMax : 1.0;  }
-float pLogoSpin()        { return pz_logoSpin >= 0.0 ? pz_logoSpin : 0.3;  }
-float pIdleStrength()    { return pz_idleStrength >= 0.0 ? pz_idleStrength : 0.6;  }
+float pLogoScale()       { return p_logoScale >= 0.0 ? p_logoScale : 0.35; }
+float pLogoIntensity()   { return p_logoIntensity >= 0.0 ? p_logoIntensity : 0.8;  }
+float pLogoPulse()       { return p_logoPulse >= 0.0 ? p_logoPulse : 0.8;  }
+float pLogoCount()       { return p_logoCount >= 0.0 ? p_logoCount : 3.0;  }
+float pLogoSizeMin()     { return p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;  }
+float pLogoSizeMax()     { return p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;  }
+float pLogoSpin()        { return p_logoSpin >= 0.0 ? p_logoSpin : 0.3;  }
+float pIdleStrength()    { return p_idleStrength >= 0.0 ? p_idleStrength : 0.6;  }
 float pFlowCenterX()     { return customParams[7].x >= -1.5 ? customParams[7].x : 0.4; }
-float pShowLabels()      { return pz_showLabels >= 0.0 ? pz_showLabels : 1.0;  }
+float pShowLabels()      { return p_showLabels >= 0.0 ? p_showLabels : 1.0;  }
 float pFlowCenterY()     { return customParams[7].z >= -1.5 ? customParams[7].z : 0.5; }
-float pSparkleIntensity(){ return pz_sparkleIntensity >= 0.0 ? pz_sparkleIntensity : 2.0;  }
+float pSparkleIntensity(){ return p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;  }
 
 // ─── Palette ───────────────────────────────────────────────────────
 
-vec3 colPrimary()   { return colorWithFallback(pz_primaryColor.rgb, vec3(0.102, 0.227, 0.290)); }
-vec3 colSecondary() { return colorWithFallback(pz_secondaryColor.rgb, vec3(0.769, 0.584, 0.416)); }
-vec3 colAccent()    { return colorWithFallback(pz_accentColor.rgb, vec3(0.208, 0.725, 0.671)); }
-vec3 colGlow()      { return colorWithFallback(pz_glowColor.rgb, vec3(0.451, 0.729, 0.145)); }
+vec3 colPrimary()   { return colorWithFallback(p_primaryColor.rgb, vec3(0.102, 0.227, 0.290)); }
+vec3 colSecondary() { return colorWithFallback(p_secondaryColor.rgb, vec3(0.769, 0.584, 0.416)); }
+vec3 colAccent()    { return colorWithFallback(p_accentColor.rgb, vec3(0.208, 0.725, 0.671)); }
+vec3 colGlow()      { return colorWithFallback(p_glowColor.rgb, vec3(0.451, 0.729, 0.145)); }
 
 // ─── Rotation matrix ───────────────────────────────────────────────
 
@@ -922,7 +922,7 @@ vec4 compositeTumbleweedLabels(vec4 color, vec2 fragCoord,
 
 // ─── Main ──────────────────────────────────────────────────────────
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {

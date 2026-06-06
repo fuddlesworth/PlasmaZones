@@ -26,11 +26,11 @@
 
 #include <noise.glsl>
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
 
-    vec2 impact = vec2(pz_impactX, pz_impactY);
+    vec2 impact = vec2(p_impactX, p_impactY);
     vec2 c = uv - impact;
     // Aspect-correct horizontal distance so `length(c)` is pixel-isotropic
     // (the impact point reads as a true circle, not an ellipse). Use
@@ -44,11 +44,11 @@ vec4 pzTransition(vec2 uv, float t) {
     // ellipticity scaling with shadow padding.
     c.x *= iResolution.x / max(iResolution.y, 0.0001);
     float d = length(c);
-    float front = p * pz_frontSpeed;
+    float front = p * p_frontSpeed;
     float ring1 = sin((d - front) * 80.0) * exp(-abs(d - front) * 6.0);
     float ring2 = sin((d - front + 0.08) * 80.0) * exp(-abs(d - front + 0.08) * 8.0) * 0.6;
     float ring3 = sin((d - front + 0.16) * 80.0) * exp(-abs(d - front + 0.16) * 10.0) * 0.4;
-    float ripple = (ring1 + ring2 + ring3) * pz_rippleStrength * (1.0 - p * 0.5);
+    float ripple = (ring1 + ring2 + ring3) * p_rippleStrength * (1.0 - p * 0.5);
     vec2 dir = (d > 0.001) ? normalize(c) : vec2(0.0);
     vec2 distorted = uv + dir * ripple;
 

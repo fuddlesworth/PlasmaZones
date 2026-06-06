@@ -5,7 +5,7 @@
 
 #include "windowrulemodel.h"
 
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <PhosphorProtocol/WindowTypeEnum.h>
 #include <PhosphorWindowRule/MatchTypes.h>

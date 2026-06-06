@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "updatechecker.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 #include "version.h"
 #include <QNetworkReply>
 #include <QJsonDocument>

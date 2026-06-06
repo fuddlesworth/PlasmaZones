@@ -243,7 +243,7 @@ public:
     // ── Include Paths ──────────────────────────────────────────────────
     void setShaderIncludePaths(const QStringList& paths);
 
-    // ── Parameter preamble (T1.1: generated `#define pz_<id> ...`) ─────
+    // ── Parameter preamble (T1.1: generated `#define p_<id> ...`) ─────
     /// Set the generated named-parameter preamble that is spliced after the
     /// fragment shader's `#version` line at load time (via
     /// `PhosphorShaders::spliceAfterVersion`), so authors read a parameter by
@@ -353,7 +353,7 @@ private:
     // ── Shader Include Paths ───────────────────────────────────────────
     QStringList m_shaderIncludePaths;
 
-    // ── Parameter preamble (generated `#define pz_<id> ...`) ───────────
+    // ── Parameter preamble (generated `#define p_<id> ...`) ───────────
     /// Spliced after `#version` into the fragment source at load time and
     /// fingerprinted into the bake-cache key. Empty = no-op.
     QString m_paramPreamble;
@@ -574,7 +574,7 @@ struct WarmShaderBakeResult
  * @param vertexPath    Path to the vertex shader file
  * @param fragmentPath  Path to the fragment shader file
  * @param includePaths  Directories to search for #include directives
- * @param paramPreamble Generated `#define pz_<id> ...` block spliced after the
+ * @param paramPreamble Generated `#define p_<id> ...` block spliced after the
  *                      fragment shader's `#version` (T1.1). MUST match what the
  *                      live `ShaderNodeRhi::loadFragmentShader` splices for the
  *                      same effect, since both compute the same bake-cache key

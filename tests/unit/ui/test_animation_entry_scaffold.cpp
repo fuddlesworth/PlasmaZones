@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // End-to-end proof for T1.5 on the animation side: an entry-only transition
-// shader — the author writes ONLY `pzTransition` (symmetric) or `pzIn`+`pzOut`
+// shader — the author writes ONLY `pTransition` (symmetric) or `pIn`+`pOut`
 // (asymmetric), no #version / include / in-out / main() and no direction code —
 // assembles through the harness scaffold, expands `#include
 // <animation_uniforms.glsl>`, and bakes against the real animation UBO. Pins
-// that the generated direction dispatch (legProgress / pz_reversed) and the
-// prologue compile, that a half-defined pair (pzIn without pzOut) does NOT get a
+// that the generated direction dispatch (legProgress / p_reversed) and the
+// prologue compile, that a half-defined pair (pIn without pOut) does NOT get a
 // dangling-call main, and that a traditional main() pack is passed through.
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
@@ -55,37 +55,37 @@ private Q_SLOTS:
     {
         // The whole author file: one symmetric entry, `t` is raw iTime.
         const QString body = QStringLiteral(
-            "vec4 pzTransition(vec2 uv, float t) {\n"
+            "vec4 pTransition(vec2 uv, float t) {\n"
             "    return surfaceColor(uv) * smoothstep(0.0, 1.0, t);\n"
             "}\n");
         QString err;
         QVERIFY2(bakeBody(body, &err), qPrintable(err));
-        // Generated main calls pzTransition with raw iTime (no legProgress un-flip).
+        // Generated main calls pTransition with raw iTime (no legProgress un-flip).
         const QString assembled = assemble(body);
-        QVERIFY2(assembled.contains(QStringLiteral("pzTransition(vTexCoord, iTime)")), qPrintable(assembled));
+        QVERIFY2(assembled.contains(QStringLiteral("pTransition(vTexCoord, iTime)")), qPrintable(assembled));
     }
 
     void testAsymmetricPzInPzOutBakes()
     {
         // Two entries; the harness dispatches by direction and feeds forward 0→1 t.
         const QString body = QStringLiteral(
-            "vec4 pzIn(vec2 uv, float t)  { return surfaceColor(uv) * t; }\n"
-            "vec4 pzOut(vec2 uv, float t) { return surfaceColor(uv) * (1.0 - t); }\n");
+            "vec4 pIn(vec2 uv, float t)  { return surfaceColor(uv) * t; }\n"
+            "vec4 pOut(vec2 uv, float t) { return surfaceColor(uv) * (1.0 - t); }\n");
         QString err;
         QVERIFY2(bakeBody(body, &err), qPrintable(err));
         const QString assembled = assemble(body);
-        // The generated main un-flips via legProgress and dispatches on pz_reversed.
+        // The generated main un-flips via legProgress and dispatches on p_reversed.
         QVERIFY2(assembled.contains(QStringLiteral("legProgress()")), qPrintable(assembled));
-        QVERIFY2(assembled.contains(QStringLiteral("pz_reversed ? pzOut(vTexCoord")), qPrintable(assembled));
+        QVERIFY2(assembled.contains(QStringLiteral("p_reversed ? pOut(vTexCoord")), qPrintable(assembled));
     }
 
     void testLonePzInFallsThrough()
     {
-        // pzIn without its pzOut companion must NOT generate a main that calls
-        // the missing pzOut — the candidate is skipped, so no dispatch is added.
-        const QString body = QStringLiteral("vec4 pzIn(vec2 uv, float t) { return surfaceColor(uv) * t; }\n");
+        // pIn without its pOut companion must NOT generate a main that calls
+        // the missing pOut — the candidate is skipped, so no dispatch is added.
+        const QString body = QStringLiteral("vec4 pIn(vec2 uv, float t) { return surfaceColor(uv) * t; }\n");
         const QString assembled = assemble(body);
-        QVERIFY2(!assembled.contains(QStringLiteral("pz_reversed ? pzOut")), qPrintable(assembled));
+        QVERIFY2(!assembled.contains(QStringLiteral("p_reversed ? pOut")), qPrintable(assembled));
         QVERIFY2(!assembled.contains(QStringLiteral("void main()")), qPrintable(assembled));
     }
 

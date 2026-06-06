@@ -32,7 +32,7 @@ private:
     QTemporaryDir m_tmp;
     static QString scriptPath(const QString& name)
     {
-        return QStringLiteral(PZ_LUAU_TEST_DIR "/data/") + name;
+        return QStringLiteral(P_LUAU_TEST_DIR "/data/") + name;
     }
 
 private Q_SLOTS:

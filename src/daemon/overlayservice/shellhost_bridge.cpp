@@ -16,8 +16,8 @@
 #include "../overlayservice.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "pz_roles.h"
-#include "pz_slot_keys.h"
+#include "p_roles.h"
+#include "p_slot_keys.h"
 
 #include <PhosphorOverlay/ShellHost.h>
 
@@ -81,7 +81,7 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     // Helper: enforce the "non-null shell pointer ⇒ live surface"
     // contract on either failure-return path by nulling any stale
     // cached pointer (a previous successful ensure may have wired
-    // pzState.shell to a ShellState whose fields have since been
+    // pState.shell to a ShellState whose fields have since been
     // zeroed by destroyShell). Callers gate on shell->shellSurface()
     // today, but keeping the cache true to the contract removes a
     // class of latent bugs.
@@ -118,9 +118,9 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     if (auto* window = shellState->shellWindow()) {
         window->setFlag(Qt::WindowTransparentForInput, true);
     }
-    auto& pzState = m_screenStates[effectiveId];
-    pzState.shell = shellState;
-    return &pzState;
+    auto& pState = m_screenStates[effectiveId];
+    pState.shell = shellState;
+    return &pState;
 }
 
 void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState)

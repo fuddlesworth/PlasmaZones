@@ -21,7 +21,7 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 
-#include "pz_i18n.h"
+#include "p_i18n.h"
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>

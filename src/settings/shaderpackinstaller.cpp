@@ -4,7 +4,7 @@
 #include "shaderpackinstaller.h"
 
 #include "../core/logging.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <QAtomicInteger>
 #include <QCoreApplication>

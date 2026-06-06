@@ -30,8 +30,8 @@
 #include <QQuickWindow>
 #include <QObject>
 
-#include "pz_i18n.h"
-#include "pz_qml_i18n.h"
+#include "p_i18n.h"
+#include "p_qml_i18n.h"
 #include <QtQml/qqml.h>
 
 using namespace PlasmaZones;

@@ -14,7 +14,7 @@
 #include "../../daemon/rendering/zonelabeltexturebuilder.h"
 #include <PhosphorAudio/CavaSpectrumProvider.h>
 
-#include "pz_i18n.h"
+#include "p_i18n.h"
 #include <QColor>
 #include <QDir>
 #include <QFile>
@@ -498,7 +498,7 @@ QString EditorController::shaderParamPreamble(const QString& shaderId) const
     // Reconstruct the parameter declarations from the D-Bus shaderInfo (which
     // carries each param's id/type/slot as the daemon's registry resolved them)
     // and run the same generator the daemon overlay uses, so the preview's
-    // `pz_<id>` defines land on the exact lanes translateShaderParams uploads to.
+    // `p_<id>` defines land on the exact lanes translateShaderParams uploads to.
     const QVariantMap info = getShaderInfo(shaderId);
     ShaderRegistry::ShaderInfo si;
     const QVariantList params = info.value(QStringLiteral("parameters")).toList();

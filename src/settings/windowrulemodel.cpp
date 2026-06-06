@@ -3,7 +3,7 @@
 
 #include "windowrulemodel.h"
 
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <PhosphorWindowRule/ContextRuleBridge.h>
 #include <PhosphorWindowRule/MatchTypes.h>

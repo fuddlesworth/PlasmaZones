@@ -4,7 +4,7 @@
 #include "kzonesimporter.h"
 
 #include "dbusutils.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <PhosphorZones/ZoneJsonKeys.h>
 
@@ -126,17 +126,17 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
         const QJsonObject kzLayout = layoutVal.toObject();
 
         // Build PlasmaZones layout JSON.
-        QJsonObject pzLayout;
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
+        QJsonObject pLayout;
+        pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
+        pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
             kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported Layout"));
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Description)] = QStringLiteral("Imported from KZones");
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers)] = true;
+        pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Description)] = QStringLiteral("Imported from KZones");
+        pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
+        pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers)] = true;
 
         const int padding = kzLayout[QStringLiteral("padding")].toInt(0);
         if (padding > 0) {
-            pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding)] = padding;
+            pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding)] = padding;
         }
 
         // Convert zones — skip layouts with no zones.
@@ -145,7 +145,7 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
             continue;
         }
 
-        QJsonArray pzZones;
+        QJsonArray pZones;
         QJsonArray appRules;
 
         for (int i = 0; i < kzZones.size(); ++i) {
@@ -163,21 +163,21 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
             }
 
             // Use contiguous numbering (skipped zones don't leave gaps).
-            const int zoneNum = pzZones.size() + 1;
+            const int zoneNum = pZones.size() + 1;
 
-            QJsonObject pzZone;
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
+            QJsonObject pZone;
+            pZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
+            pZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
+            pZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
 
             QJsonObject relGeo;
             relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = x;
             relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = y;
             relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] = w;
             relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] = h;
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::RelativeGeometry)] = relGeo;
+            pZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::RelativeGeometry)] = relGeo;
 
-            pzZones.append(pzZone);
+            pZones.append(pZone);
 
             // Collect per-zone applications into layout-level appRules.
             const QJsonArray apps = kzZone[QStringLiteral("applications")].toArray();
@@ -193,13 +193,13 @@ ImportResult importLayouts(const QJsonArray& kzonesArray)
             }
         }
 
-        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Zones)] = pzZones;
+        pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Zones)] = pZones;
         if (!appRules.isEmpty()) {
-            pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::AppRules)] = appRules;
+            pLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::AppRules)] = appRules;
         }
 
         // Send to daemon via createLayoutFromJson D-Bus method.
-        const QString layoutJson = QString::fromUtf8(QJsonDocument(pzLayout).toJson(QJsonDocument::Compact));
+        const QString layoutJson = QString::fromUtf8(QJsonDocument(pLayout).toJson(QJsonDocument::Compact));
         const QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                           QStringLiteral("createLayoutFromJson"), {layoutJson});
 

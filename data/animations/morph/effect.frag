@@ -13,12 +13,12 @@
 
 #include <noise.glsl>
 
-// `pz_warpStrength` / `pz_warpFrequency` are generated from metadata.json
+// `p_warpStrength` / `p_warpFrequency` are generated from metadata.json
 // (the customParams[0] sub-slots) by the harness.
 
 #include <anchor_remap.glsl>
 
-vec4 pzTransition(vec2 uv, float t)
+vec4 pTransition(vec2 uv, float t)
 {
     vec2 anchorUv = anchorRemap(uv);
 
@@ -27,8 +27,8 @@ vec4 pzTransition(vec2 uv, float t)
     // hide a "warp peak then settle" feel.
     float visibility = clamp(iTime, 0.0, 1.0);
     float envelope = sin(visibility * 3.14159);
-    float strength = pz_warpStrength * envelope;
-    float freq = max(pz_warpFrequency, 1.0);
+    float strength = p_warpStrength * envelope;
+    float freq = max(p_warpFrequency, 1.0);
 
     vec2 warp = vec2(
         sin(anchorUv.y * freq * 6.28318 + iTime * 6.28318) * strength,

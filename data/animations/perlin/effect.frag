@@ -21,7 +21,7 @@
 // rewritten to `texture` (GLSL 4.50 core) inline.
 
 // metadata.json declaration order → customParams[0] sub-slots:
-// pz_noiseScale (customParams[0].x), pz_edgeSoftness (customParams[0].y).
+// p_noiseScale (customParams[0].x), p_edgeSoftness (customParams[0].y).
 
 // File-scope helpers kept verbatim from niri's source rather than
 // substituted with `<noise.glsl>`'s `hash22` / `simplex2D`. Niri's
@@ -54,7 +54,7 @@ float perlin_noise(in vec2 st) {
         (d - b) * u.x * u.y;
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float pr = clamp(iTime, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
@@ -64,12 +64,12 @@ vec4 pzTransition(vec2 uv, float t) {
     // the fraction of the screen this surface covers, so noise blob
     // pixel size stays constant across popup vs. maximized windows.
     // Matches niri's reference on full-screen (multiplier = 1.0 there).
-    vec2 perScreenScale = pz_noiseScale * max(iAnchorSize, vec2(1.0))
+    vec2 perScreenScale = p_noiseScale * max(iAnchorSize, vec2(1.0))
                                      / max(iSurfaceScreenPos.zw, vec2(1.0));
     float n = perlin_noise(uv * perScreenScale);
-    float p = mix(-pz_edgeSoftness, 1.0 + pz_edgeSoftness, pr);
-    float lower = p - pz_edgeSoftness;
-    float higher = p + pz_edgeSoftness;
+    float p = mix(-p_edgeSoftness, 1.0 + p_edgeSoftness, pr);
+    float lower = p - p_edgeSoftness;
+    float higher = p + p_edgeSoftness;
     float q = smoothstep(lower, higher, n);
     float reveal = 1.0 - q;
 

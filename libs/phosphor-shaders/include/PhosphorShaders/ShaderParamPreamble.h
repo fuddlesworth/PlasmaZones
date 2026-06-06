@@ -12,8 +12,8 @@ namespace PhosphorShaders {
 
 /// One declared shader parameter, in metadata declaration order, as fed to
 /// `buildParamPreamble`. The generator turns a list of these into the
-/// `#define pz_<id> <glsl-accessor>` block both shader runtimes inject so an
-/// author reads a parameter by name (`pz_speed`) instead of hand-decoding a
+/// `#define p_<id> <glsl-accessor>` block both shader runtimes inject so an
+/// author reads a parameter by name (`p_speed`) instead of hand-decoding a
 /// `customParams[N].xyzw` lane.
 struct PreambleParam
 {
@@ -36,12 +36,12 @@ struct PreambleParam
     /// Explicit slot from metadata, or -1 to auto-assign by declaration order
     /// within the parameter's pool. Overlay (zone) packs currently carry
     /// explicit slots; animation packs always auto-assign. The resolved slot
-    /// MUST match the slot the runtime uploads the value to, or `pz_<id>`
+    /// MUST match the slot the runtime uploads the value to, or `p_<id>`
     /// reads the wrong lane — callers pass whichever the runtime uses.
     int explicitSlot = -1;
 };
 
-/// Build the generated `#define pz_<id> <glsl-accessor>` preamble for a
+/// Build the generated `#define p_<id> <glsl-accessor>` preamble for a
 /// shader's declared parameters.
 ///
 /// Auto-numbers each pool independently in declaration order for params whose
@@ -57,7 +57,7 @@ struct PreambleParam
 PHOSPHORSHADERS_EXPORT QString buildParamPreamble(const QList<PreambleParam>& params);
 
 /// True if @p id is a valid GLSL identifier *body* (`[A-Za-z0-9_]`, non-empty) —
-/// the `pz_` prefix supplies the leading character, so a leading digit is fine.
+/// the `p_` prefix supplies the leading character, so a leading digit is fine.
 /// Shared so the metadata parser's auto-slot assignment skips exactly the same
 /// params `buildParamPreamble` skips, keeping the two lane-numberings identical.
 PHOSPHORSHADERS_EXPORT bool isValidParamId(const QString& id);

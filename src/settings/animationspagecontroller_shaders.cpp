@@ -23,7 +23,7 @@
 #include "../core/isettings.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 #include "animationfileutils.h"
 #include "animations_controller_detail.h"
 #include "shaderpackinstaller.h"

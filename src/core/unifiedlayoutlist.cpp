@@ -5,7 +5,7 @@
 
 #include "constants.h"
 #include "interfaces.h"
-#include "pz_i18n.h"
+#include "p_i18n.h"
 #include "utils.h"
 
 #include <PhosphorLayoutApi/AspectRatioClass.h>

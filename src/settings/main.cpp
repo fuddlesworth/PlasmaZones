@@ -9,8 +9,8 @@
 #include "settingscontroller.h"
 #include "settingslaunchcontroller.h"
 #include "version.h"
-#include "pz_i18n.h"
-#include "pz_qml_i18n.h"
+#include "p_i18n.h"
+#include "p_qml_i18n.h"
 
 #include "../core/constants.h"
 #include <PhosphorProtocol/ServiceConstants.h>

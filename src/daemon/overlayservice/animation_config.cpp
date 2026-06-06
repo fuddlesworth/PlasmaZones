@@ -20,7 +20,7 @@
 
 #include "internal.h"
 #include "../overlayservice.h"
-#include "pz_roles.h"
+#include "p_roles.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>

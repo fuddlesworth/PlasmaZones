@@ -27,7 +27,7 @@
  * against the registered configs so a future change to either side
  * trips the test.
  *
- * Construction policy (centralized in pz_roles.h):
+ * Construction policy (centralized in p_roles.h):
  *   `<base.scopePrefix>-<screenId>-<generation>`
  *   where base is one of PzRoles::{Osd, ZoneSelector,
  *   SnapAssist, LayoutPicker}.
@@ -39,7 +39,7 @@
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorLayer/Role.h>
 
-#include "../../../src/daemon/overlayservice/pz_roles.h"
+#include "../../../src/daemon/overlayservice/p_roles.h"
 
 using namespace PlasmaZones;
 namespace PAL = PhosphorAnimationLayer;
@@ -149,7 +149,7 @@ private Q_SLOTS:
     /// (`plasmazones-{family}-...`) can prefix-match. Catches a future
     /// rename of any PzRoles literal that the daemon's create paths
     /// don't also pick up.
-    void pz_role_base_scope_prefixes_match_production_families()
+    void p_role_base_scope_prefixes_match_production_families()
     {
         QCOMPARE(PzRoles::Osd.scopePrefix, QStringLiteral("plasmazones-osd"));
         QCOMPARE(PzRoles::ZoneSelector.scopePrefix, QStringLiteral("plasmazones-zone-selector"));

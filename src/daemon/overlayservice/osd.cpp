@@ -18,8 +18,8 @@
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
-#include "pz_roles.h"
-#include "pz_slot_keys.h"
+#include "p_roles.h"
+#include "p_slot_keys.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 #include <PhosphorAnimation/SurfaceAnimator.h>

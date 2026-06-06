@@ -37,7 +37,7 @@
 #include <QMutexLocker>
 
 #include "../core/logging.h"
-#include "pz_qml_i18n.h"
+#include "p_qml_i18n.h"
 #include "vulkan_support.h"
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
@@ -52,8 +52,8 @@
 #include <PhosphorLayer/defaults/DefaultScreenProvider.h>
 #include <PhosphorLayer/defaults/PhosphorWaylandTransport.h>
 #include <QQuickItem>
-#include "overlayservice/pz_roles.h"
-#include "overlayservice/pz_slot_keys.h"
+#include "overlayservice/p_roles.h"
+#include "overlayservice/p_slot_keys.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {

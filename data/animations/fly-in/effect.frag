@@ -39,7 +39,7 @@
 #include <noise.glsl>
 #include <anchor_remap.glsl>
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // Clamp: bouncy easing curves can drive iTime past [0, 1], and a
     // reverse leg flipping 1→0 can dip negative on overshoot.
     t = clamp(t, 0.0, 1.0);

@@ -70,7 +70,7 @@ Kirigami.Dialog {
     // Cached shader metadata (static per shader — avoid D-Bus call on every param change)
     property var cachedShaderInfoForPreview: null
     property string cachedShaderInfoId: ""
-    // The generated pz_<id> preamble depends only on shaderId, not params — cache
+    // The generated p_<id> preamble depends only on shaderId, not params — cache
     // it with the shader info so it isn't recomputed (a D-Bus shaderInfo round-trip)
     // on every param edit.
     property string cachedShaderParamPreamble: ""

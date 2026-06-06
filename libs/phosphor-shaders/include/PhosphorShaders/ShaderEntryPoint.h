@@ -18,12 +18,12 @@ namespace PhosphorShaders {
 /// The candidate list is ordered: `composeEntryPoint` appends the
 /// `generatedMain` of the FIRST candidate whose `functionName` the source
 /// defines. The wrapper text is shader-system-specific (zone packs dispatch a
-/// per-zone loop calling `pzZone`; animation packs call `pzTransition` /
-/// `pzIn` / `pzOut`), so each system supplies its own candidates while the
+/// per-zone loop calling `pZone`; animation packs call `pTransition` /
+/// `pIn` / `pOut`), so each system supplies its own candidates while the
 /// detection + composition mechanism here stays runtime-agnostic.
 struct EntryCandidate
 {
-    /// Name of the entry function the author defines, e.g. `"pzZone"`.
+    /// Name of the entry function the author defines, e.g. `"pZone"`.
     QString functionName;
 
     /// The complete `void main() { ... }` the harness appends when
@@ -35,8 +35,8 @@ struct EntryCandidate
     QString generatedMain;
 
     /// Additional function names that must ALSO be defined for this candidate to
-    /// match — for direction-dispatched animation entries, where `pzIn` (the
-    /// trigger) is only valid paired with `pzOut`. Empty for single-entry
+    /// match — for direction-dispatched animation entries, where `pIn` (the
+    /// trigger) is only valid paired with `pOut`. Empty for single-entry
     /// candidates (every zone candidate), so the common `{functionName,
     /// generatedMain}` aggregate init leaves it empty. All must be present, else
     /// the candidate is skipped (a partial pair falls through to the
@@ -58,7 +58,7 @@ PHOSPHORSHADERS_EXPORT bool definesMain(const QString& expandedSource);
 /// True if @p expandedSource defines a function named @p functionName.
 ///
 /// Matches a definition — `<name> ( <params> ) {` — not a call: the trailing
-/// `{` distinguishes `vec4 pzZone(ZoneCtx z) { … }` from `return pzZone(z);`.
+/// `{` distinguishes `vec4 pZone(ZoneCtx z) { … }` from `return pZone(z);`.
 /// Comments are stripped first. @p functionName is matched as a whole word.
 /// Parameter lists spanning multiple lines are handled.
 PHOSPHORSHADERS_EXPORT bool definesFunction(const QString& expandedSource, const QString& functionName);
@@ -91,7 +91,7 @@ PHOSPHORSHADERS_EXPORT QString composeEntryPoint(const QString& expandedSource,
 /// produce the identical pre-expansion source for an entry-only pack. Apply it
 /// to RAW (pre-expansion) source so the prologue's `#include` is then resolved.
 /// Entry-function detection therefore sees only the author's inline body — by
-/// convention the entry function (pzZone/pzImage/pzTransition, or a hand-written
+/// convention the entry function (pZone/pImage/pTransition, or a hand-written
 /// main()) is authored directly, never pulled from an `#include` — which is why
 /// this wraps RAW rather than the expanded source `composeEntryPoint` expects.
 PHOSPHORSHADERS_EXPORT QString assembleEntryPoint(const QString& raw, const QString& prologue,

@@ -17,7 +17,7 @@
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 #include "dbusutils.h"
 #include "kzonesimporter.h"
 

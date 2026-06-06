@@ -16,7 +16,7 @@
 #include "../../core/utils.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 
-#include "pz_i18n.h"
+#include "p_i18n.h"
 #include <memory>
 #include <QDBusMessage>
 #include <QGuiApplication>

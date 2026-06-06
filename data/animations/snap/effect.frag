@@ -9,7 +9,7 @@
 // Niri's snap ships asymmetric close.glsl/open.glsl — close blows
 // pixels OUT toward `target = vec2(1.0, 0.0)` driven by `p` (loop
 // progresses 0→1), open snaps pixels BACK FROM target driven by
-// `rp = 1.0 - p` (loop progresses 1→0). This is a pzIn/pzOut pair: the
+// `rp = 1.0 - p` (loop progresses 1→0). This is a pIn/pOut pair: the
 // harness feeds forward 0→1 `t` to both legs (so each branch's niri `p`
 // is just `t`) and dispatches the matching body by leg direction
 // (`windowFadingIn`).
@@ -24,9 +24,9 @@
 // and main(). noise.glsl is pack-specific, so it stays here.
 #include <noise.glsl>
 
-// pz_targetX / pz_targetY / pz_layerSpread / pz_layerStagger
+// p_targetX / p_targetY / p_layerSpread / p_layerStagger
 // (customParams[0].xyzw) are generated from metadata.json. Both legs share
-// the same params. `pz_layerSpread` controls the per-layer x-jitter range
+// the same params. `p_layerSpread` controls the per-layer x-jitter range
 // (default 0.16 reproduces niri's `-0.08 + lh * 0.16`, y scaled to half for
 // niri's 2:1 x:y ratio). The 10-iteration loop bound stays a literal — GLSL
 // requires a constant for-loop bound and the matching `floor(... * num_layers)`
@@ -46,11 +46,11 @@ vec4 snapBody(vec2 uv, float t, bool windowFadingIn) {
         float pixel_layer = floor(niriHash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
 
         vec4 inner = vec4(0.0);
-        vec2 target = vec2(pz_targetX, pz_targetY);
+        vec2 target = vec2(p_targetX, p_targetY);
 
         for (int i = 0; i < 10; i++) {
             float layer = float(i);
-            float layer_delay = layer * pz_layerStagger;
+            float layer_delay = layer * p_layerStagger;
             float layer_p = clamp((p - layer_delay) / (1.0 - layer_delay * 0.5), 0.0, 1.0);
 
             float tt = layer_p * layer_p;
@@ -58,7 +58,7 @@ vec4 snapBody(vec2 uv, float t, bool windowFadingIn) {
             float layer_alpha = 1.0 - smoothstep(0.3, 0.85, layer_p);
 
             float lh = niriHash(vec2(layer + 0.5, seed));
-            vec2 layer_target = target + vec2((-0.5 + lh) * pz_layerSpread, (-0.5 + lh) * pz_layerSpread * 0.5);
+            vec2 layer_target = target + vec2((-0.5 + lh) * p_layerSpread, (-0.5 + lh) * p_layerSpread * 0.5);
 
             float converge = tt * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
@@ -86,11 +86,11 @@ vec4 snapBody(vec2 uv, float t, bool windowFadingIn) {
         float pixel_layer = floor(niriHash(floor(uv * max(iAnchorSize, vec2(1.0))) + seed) * num_layers);
 
         vec4 inner = vec4(0.0);
-        vec2 target = vec2(pz_targetX, pz_targetY);
+        vec2 target = vec2(p_targetX, p_targetY);
 
         for (int i = 0; i < 10; i++) {
             float layer = float(i);
-            float layer_delay = layer * pz_layerStagger;
+            float layer_delay = layer * p_layerStagger;
             float layer_p = clamp((rp - layer_delay) / (1.0 - layer_delay * 0.5), 0.0, 1.0);
 
             float tt = layer_p * layer_p;
@@ -98,7 +98,7 @@ vec4 snapBody(vec2 uv, float t, bool windowFadingIn) {
             float layer_alpha = 1.0 - smoothstep(0.3, 0.85, layer_p);
 
             float lh = niriHash(vec2(layer + 0.5, seed));
-            vec2 layer_target = target + vec2((-0.5 + lh) * pz_layerSpread, (-0.5 + lh) * pz_layerSpread * 0.5);
+            vec2 layer_target = target + vec2((-0.5 + lh) * p_layerSpread, (-0.5 + lh) * p_layerSpread * 0.5);
 
             float converge = tt * 0.92;
             vec2 sample_uv = (uv - layer_target * converge) / (1.0 - converge);
@@ -120,5 +120,5 @@ vec4 snapBody(vec2 uv, float t, bool windowFadingIn) {
     return result;
 }
 
-vec4 pzIn(vec2 uv, float t)  { return snapBody(uv, t, true);  }
-vec4 pzOut(vec2 uv, float t) { return snapBody(uv, t, false); }
+vec4 pIn(vec2 uv, float t)  { return snapBody(uv, t, true);  }
+vec4 pOut(vec2 uv, float t) { return snapBody(uv, t, false); }

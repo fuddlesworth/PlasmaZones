@@ -481,42 +481,42 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
 
-    float speed         = pz_speed >= 0.0 ? pz_speed : 0.12;
-    float flowSpeed     = pz_flowSpeed >= 0.0 ? pz_flowSpeed : 0.25;
-    float noiseScale    = pz_noiseScale >= 0.0 ? pz_noiseScale : 3.5;
-    int octaves         = int(pz_octaves >= 0.0 ? pz_octaves : 6.0);
+    float speed         = p_speed >= 0.0 ? p_speed : 0.12;
+    float flowSpeed     = p_flowSpeed >= 0.0 ? p_flowSpeed : 0.25;
+    float noiseScale    = p_noiseScale >= 0.0 ? p_noiseScale : 3.5;
+    int octaves         = int(p_octaves >= 0.0 ? p_octaves : 6.0);
 
-    float gridScale     = pz_gridScale >= 0.0 ? pz_gridScale : 4.0;
-    float gridStrength  = pz_gridStrength >= 0.0 ? pz_gridStrength : 0.3;
-    float brightness    = pz_brightness >= 0.0 ? pz_brightness : 0.8;
-    float contrast      = pz_contrast >= 0.0 ? pz_contrast : 0.9;
+    float gridScale     = p_gridScale >= 0.0 ? p_gridScale : 4.0;
+    float gridStrength  = p_gridStrength >= 0.0 ? p_gridStrength : 0.3;
+    float brightness    = p_brightness >= 0.0 ? p_brightness : 0.8;
+    float contrast      = p_contrast >= 0.0 ? p_contrast : 0.9;
 
-    float fillOpacity       = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85;
-    float borderGlow        = pz_borderGlow >= 0.0 ? pz_borderGlow : 0.35;
-    float edgeFadeStart     = pz_edgeFadeStart >= 0.0 ? pz_edgeFadeStart : 30.0;
-    float borderBrightness  = pz_borderBrightness >= 0.0 ? pz_borderBrightness : 1.4;
+    float fillOpacity       = p_fillOpacity >= 0.0 ? p_fillOpacity : 0.85;
+    float borderGlow        = p_borderGlow >= 0.0 ? p_borderGlow : 0.35;
+    float edgeFadeStart     = p_edgeFadeStart >= 0.0 ? p_edgeFadeStart : 30.0;
+    float borderBrightness  = p_borderBrightness >= 0.0 ? p_borderBrightness : 1.4;
 
-    float audioReact    = pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0;
-    float particleStr   = pz_particleStrength >= 0.0 ? pz_particleStrength : 0.5;
-    float innerGlowStr  = pz_innerGlowStrength >= 0.0 ? pz_innerGlowStrength : 0.45;
-    float sparkleStr    = pz_sparkleIntensity >= 0.0 ? pz_sparkleIntensity : 2.0;
+    float audioReact    = p_audioReactivity >= 0.0 ? p_audioReactivity : 1.0;
+    float particleStr   = p_particleStrength >= 0.0 ? p_particleStrength : 0.5;
+    float innerGlowStr  = p_innerGlowStrength >= 0.0 ? p_innerGlowStrength : 0.45;
+    float sparkleStr    = p_sparkleIntensity >= 0.0 ? p_sparkleIntensity : 2.0;
 
-    float fbmRot        = pz_fbmRotation >= 0.0 ? pz_fbmRotation : 0.6;
-    float flowDirection = pz_flowDirection >= 0.0 ? pz_flowDirection : 0.3;
+    float fbmRot        = p_fbmRotation >= 0.0 ? p_fbmRotation : 0.6;
+    float flowDirection = p_flowDirection >= 0.0 ? p_flowDirection : 0.3;
 
-    float logoScale     = pz_logoScale >= 0.0 ? pz_logoScale : 0.55;
-    float logoIntensity = pz_logoIntensity >= 0.0 ? pz_logoIntensity : 0.85;
-    float logoPulse     = pz_logoPulse >= 0.0 ? pz_logoPulse : 0.8;
+    float logoScale     = p_logoScale >= 0.0 ? p_logoScale : 0.55;
+    float logoIntensity = p_logoIntensity >= 0.0 ? p_logoIntensity : 0.85;
+    float logoPulse     = p_logoPulse >= 0.0 ? p_logoPulse : 0.8;
 
-    int   logoCount     = clamp(int(pz_logoCount >= 0.0 ? pz_logoCount : 4.0), 1, 8);
-    float logoSizeMin   = pz_logoSizeMin >= 0.0 ? pz_logoSizeMin : 0.4;
-    float logoSizeMax   = pz_logoSizeMax >= 0.0 ? pz_logoSizeMax : 1.0;
+    int   logoCount     = clamp(int(p_logoCount >= 0.0 ? p_logoCount : 4.0), 1, 8);
+    float logoSizeMin   = p_logoSizeMin >= 0.0 ? p_logoSizeMin : 0.4;
+    float logoSizeMax   = p_logoSizeMax >= 0.0 ? p_logoSizeMax : 1.0;
 
-    float flowCenterX   = pz_flowCenterX >= -1.5 ? pz_flowCenterX : 0.5;
-    float flowCenterY   = pz_flowCenterY >= -1.5 ? pz_flowCenterY : 0.5;
+    float flowCenterX   = p_flowCenterX >= -1.5 ? p_flowCenterX : 0.5;
+    float flowCenterY   = p_flowCenterY >= -1.5 ? p_flowCenterY : 0.5;
 
-    float gearSpin      = pz_gearSpin >= 0.0 ? pz_gearSpin : 0.15;
-    float idleStrength  = pz_idleStrength >= 0.0 ? pz_idleStrength : 0.5;
+    float gearSpin      = p_gearSpin >= 0.0 ? p_gearSpin : 0.15;
+    float idleStrength  = p_idleStrength >= 0.0 ? p_idleStrength : 0.5;
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -530,10 +530,10 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float time = iTime;
 
     // KDE Neon brand palette
-    vec3 palPrimary   = colorWithFallback(pz_primaryColor.rgb, vec3(0.102, 0.737, 0.612));
-    vec3 palSecondary = colorWithFallback(pz_secondaryColor.rgb, vec3(0.161, 0.502, 0.725));
-    vec3 palAccent    = colorWithFallback(pz_accentColor.rgb, vec3(0.239, 0.859, 0.761));
-    vec3 palGlow      = colorWithFallback(pz_glowColor.rgb, vec3(0.878, 1.0, 0.969));
+    vec3 palPrimary   = colorWithFallback(p_primaryColor.rgb, vec3(0.102, 0.737, 0.612));
+    vec3 palSecondary = colorWithFallback(p_secondaryColor.rgb, vec3(0.161, 0.502, 0.725));
+    vec3 palAccent    = colorWithFallback(p_accentColor.rgb, vec3(0.239, 0.859, 0.761));
+    vec3 palGlow      = colorWithFallback(p_glowColor.rgb, vec3(0.878, 1.0, 0.969));
 
     float vitality = isHighlighted ? 1.0 : 0.3;
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(time * 0.8 * PI)) * idleStrength;
@@ -861,14 +861,14 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    vec3 palPrimary   = colorWithFallback(pz_primaryColor.rgb, vec3(0.102, 0.737, 0.612));
-    vec3 palSecondary = colorWithFallback(pz_secondaryColor.rgb, vec3(0.161, 0.502, 0.725));
-    vec3 palAccent    = colorWithFallback(pz_accentColor.rgb, vec3(0.239, 0.859, 0.761));
-    vec3 palGlow      = colorWithFallback(pz_glowColor.rgb, vec3(0.878, 1.0, 0.969));
+    vec3 palPrimary   = colorWithFallback(p_primaryColor.rgb, vec3(0.102, 0.737, 0.612));
+    vec3 palSecondary = colorWithFallback(p_secondaryColor.rgb, vec3(0.161, 0.502, 0.725));
+    vec3 palAccent    = colorWithFallback(p_accentColor.rgb, vec3(0.239, 0.859, 0.761));
+    vec3 palGlow      = colorWithFallback(p_glowColor.rgb, vec3(0.878, 1.0, 0.969));
 
-    float labelGlowSpread = pz_labelGlowSpread >= 0.0 ? pz_labelGlowSpread : 3.0;
-    float labelBrightness = pz_labelBrightness >= 0.0 ? pz_labelBrightness : 2.5;
-    float labelAudioReact = pz_labelAudioReact >= 0.0 ? pz_labelAudioReact : 1.0;
+    float labelGlowSpread = p_labelGlowSpread >= 0.0 ? p_labelGlowSpread : 3.0;
+    float labelBrightness = p_labelBrightness >= 0.0 ? p_labelBrightness : 2.5;
+    float labelAudioReact = p_labelAudioReact >= 0.0 ? p_labelAudioReact : 1.0;
 
     float time = iTime;
 
@@ -1010,7 +1010,7 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
     return color;
 }
 
-vec4 pzImage(vec2 fragCoord) {
+vec4 pImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -1033,7 +1033,7 @@ vec4 pzImage(vec2 fragCoord) {
         color = blendOver(color, zoneColor);
     }
 
-    if (pz_showLabels > 0.5) {
+    if (p_showLabels > 0.5) {
         color = compositeNeonLabels(color, fragCoord, bass, treble, hasAudio);
     }
     return color;

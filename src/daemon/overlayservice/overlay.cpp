@@ -5,7 +5,7 @@
 #include "../overlayservice.h"
 #include "qml_property_names.h"
 #include "../../core/logging.h"
-#include "pz_slot_keys.h"
+#include "p_slot_keys.h"
 #include <PhosphorOverlay/ShellHost.h>
 #include <PhosphorSurfaces/SurfaceManager.h>
 #include <PhosphorZones/Layout.h>
@@ -27,7 +27,7 @@
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
-#include "pz_roles.h"
+#include "p_roles.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {

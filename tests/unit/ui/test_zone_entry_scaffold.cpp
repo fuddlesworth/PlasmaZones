@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // End-to-end proof for T1.4 scope B on the zone side: an entry-only fragment
-// shader — the author writes ONLY `vec4 pzZone(ZoneCtx)` / `vec4 pzImage(vec2)`,
+// shader — the author writes ONLY `vec4 pZone(ZoneCtx)` / `vec4 pImage(vec2)`,
 // no #version / include / in-out / main() — must assemble through the harness
 // scaffold, expand its generated `#include <common.glsl>`, and bake against the
 // real zone UBO. This pins that the generated dispatch (ZoneCtx fill, the loop,
@@ -57,7 +57,7 @@ private Q_SLOTS:
     {
         // The whole author file — no #version, include, in/out, or main().
         const QString body = QStringLiteral(
-            "vec4 pzZone(ZoneCtx z) {\n"
+            "vec4 pZone(ZoneCtx z) {\n"
             "    vec4 c = z.fillColor;\n"
             "    if (z.isHighlighted) c.rgb *= 1.5;\n"
             "    // continuous-field globals stay readable:\n"
@@ -71,7 +71,7 @@ private Q_SLOTS:
     void testEntryOnlyPzImageAssemblesAndBakes()
     {
         const QString body = QStringLiteral(
-            "vec4 pzImage(vec2 fragCoord) {\n"
+            "vec4 pImage(vec2 fragCoord) {\n"
             "    vec2 uv = fragCoord / iResolution;\n"
             "    return vec4(uv, 0.5 + 0.5 * sin(iTime), 1.0);\n"
             "}\n");
@@ -96,7 +96,7 @@ private Q_SLOTS:
     {
         // Sanity: an entry-only body must actually change (scaffold added),
         // otherwise the bake above would be testing nothing.
-        const QString body = QStringLiteral("vec4 pzZone(ZoneCtx z) { return z.fillColor; }\n");
+        const QString body = QStringLiteral("vec4 pZone(ZoneCtx z) { return z.fillColor; }\n");
         const QString assembled = PlasmaZones::assembleZoneEntrySource(body);
         QVERIFY(assembled != body);
         QVERIFY2(assembled.startsWith(QStringLiteral("#version 450")), qPrintable(assembled));
@@ -105,7 +105,7 @@ private Q_SLOTS:
 
     // Every bundled zone pack's effect.frag must bake through the same assembly
     // the runtime applies (read raw → assembleZoneEntrySource → expand →
-    // compile): traditional main() packs pass through, migrated pzZone packs get
+    // compile): traditional main() packs pass through, migrated pZone packs get
     // wrapped. This is the regression net for migrating packs to the entry API.
     void testEveryBundledZoneFragBakes_data()
     {
@@ -139,7 +139,7 @@ private Q_SLOTS:
         const QString raw = QString::fromUtf8(f.readAll());
 
         // Build the param preamble from the pack's metadata, exactly as the
-        // runtime does — so a pack migrated to pz_<id> names finds its defines.
+        // runtime does — so a pack migrated to p_<id> names finds its defines.
         // Parse metadata.json's parameters[] into a ShaderInfo (id/type/slot) and
         // run the production ShaderRegistry::paramPreamble.
         PhosphorShaders::ShaderRegistry::ShaderInfo info;

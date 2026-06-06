@@ -8,7 +8,7 @@
 #include "windowruletemplates.h"
 
 #include "../core/logging.h"
-#include "../pz_i18n.h"
+#include "../p_i18n.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>

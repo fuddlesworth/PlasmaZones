@@ -599,11 +599,11 @@ public:
         return m_shaderIncludePaths;
     }
 
-    // ── Parameter preamble (T1.1: generated `#define pz_<id> ...`) ─────
+    // ── Parameter preamble (T1.1: generated `#define p_<id> ...`) ─────
 
     /** Set the generated named-parameter preamble spliced after `#version`
      *  into the fragment source at load time, so authors read a parameter by
-     *  name (`pz_speed`) instead of a `customParams[N].xyzw` lane. Empty (the
+     *  name (`p_speed`) instead of a `customParams[N].xyzw` lane. Empty (the
      *  default) is a no-op. Forwarded to the render node and folded into its
      *  bake-cache key; a change forces a reload so the new defines take. */
     void setParamPreamble(const QString& preamble);
@@ -749,7 +749,7 @@ private:
     QUrl m_vertexShaderUrl;
     QVariantMap m_shaderParams;
     QStringList m_shaderIncludePaths;
-    QString m_paramPreamble; ///< Generated `#define pz_<id> ...` block (T1.1); empty = none.
+    QString m_paramPreamble; ///< Generated `#define p_<id> ...` block (T1.1); empty = none.
     QString m_entryPrologue; ///< T1.4 entry-point prologue forwarded to the node; empty = none.
     QList<PhosphorShaders::EntryCandidate> m_entryCandidates; ///< T1.4 entry candidates; empty = no assembly.
 

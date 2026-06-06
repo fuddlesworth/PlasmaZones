@@ -23,7 +23,7 @@ vec2 vs_hash2(vec2 p) {
                            dot(p, vec2(269.5, 183.3)))) * 43758.5453);
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(iTime, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
@@ -33,7 +33,7 @@ vec4 pzTransition(vec2 uv, float t) {
     // fraction of the screen this surface covers, so shard pixel size
     // stays constant across popup vs. maximized windows. Matches niri's
     // reference on full-screen (multiplier = 1.0 there).
-    vec2 scale = vec2(pz_cellDensity) * max(iAnchorSize, vec2(1.0))
+    vec2 scale = vec2(p_cellDensity) * max(iAnchorSize, vec2(1.0))
                                    / max(iSurfaceScreenPos.zw, vec2(1.0));
     vec2 q = uv * scale;
     vec2 g = floor(q);
@@ -49,8 +49,8 @@ vec4 pzTransition(vec2 uv, float t) {
         }
     }
     float seed = vs_hash2(cell).x;
-    float shard_p = smoothstep(seed * 0.5, seed * 0.5 + pz_revealSpread, p);
-    float reveal = smoothstep(0.0, pz_shardSoftness, shard_p);
+    float shard_p = smoothstep(seed * 0.5, seed * 0.5 + p_revealSpread, p);
+    float reveal = smoothstep(0.0, p_shardSoftness, shard_p);
 
     return win * reveal;
 }

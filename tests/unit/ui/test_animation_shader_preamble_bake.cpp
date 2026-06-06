@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // End-to-end proof for T1.1 on the animation side: for every built-in
-// animation shader, generate its `#define pz_<id> ...` preamble from
+// animation shader, generate its `#define p_<id> ...` preamble from
 // metadata.json (via the production AnimationShaderRegistry::paramPreamble),
 // splice it after #version into the include-expanded source, and bake the
 // result through ShaderCompiler. This pins that the GENERATED accessors
@@ -10,7 +10,7 @@
 // catching any naming, slot, or UBO-mismatch regression across all packs
 // before the preamble is wired into the live runtimes.
 //
-// Also asserts the pz_<id> macro for at least one known param resolves to the
+// Also asserts the p_<id> macro for at least one known param resolves to the
 // SAME lane the runtime's translateAnimationParams uploads to, so a future
 // allocation drift between the two can't pass silently.
 
@@ -83,7 +83,7 @@ private Q_SLOTS:
 
         // Mirror the runtime fragment-load pipeline exactly (loadFragmentShader):
         // read raw → apply the T1.4/T1.5 entry assembly (so an entry-only pack
-        // authored as pzTransition / pzIn+pzOut bakes, and a traditional main()
+        // authored as pTransition / pIn+pOut bakes, and a traditional main()
         // pack passes through) → expand includes → splice the param preamble →
         // compile. This bakes EVERY pack the way both runtimes do.
         QFile frag(eff.fragmentShaderPath);
@@ -121,7 +121,7 @@ private Q_SLOTS:
         QVERIFY(eff.isValid());
 
         const QString preamble = AnimationShaderRegistry::paramPreamble(eff);
-        QVERIFY2(preamble.contains(QStringLiteral("#define pz_bounces customParams[0].x")), qPrintable(preamble));
+        QVERIFY2(preamble.contains(QStringLiteral("#define p_bounces customParams[0].x")), qPrintable(preamble));
 
         // Runtime uploads "bounces" to the customParams1_x key — the 1-based
         // uniform-key form of the same 0-based customParams[0].x lane.

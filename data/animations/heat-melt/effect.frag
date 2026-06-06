@@ -43,12 +43,12 @@ float hm_snoise(vec2 v) {
     return 130.0 * dot(m, g);
 }
 
-vec4 pzTransition(vec2 uv, float t) {
+vec4 pTransition(vec2 uv, float t) {
     // ── niri OPEN body (handles both legs via runtime iTime flip) ──
     float p = clamp(t, 0.0, 1.0);
     vec4 win = surfaceColor(uv);
 
-    vec2 center = vec2(pz_meltOriginX, pz_meltOriginY);
+    vec2 center = vec2(p_meltOriginX, p_meltOriginY);
     // `meltNoiseScale` means "noise cycles across the screen WIDTH":
     // multiplying by iAnchorSize.x/iSurfaceScreenPos.z scales the cycle
     // count to the fraction of the screen this surface covers, so
@@ -56,9 +56,9 @@ vec4 pzTransition(vec2 uv, float t) {
     // maximized windows. Matches niri's reference on full-screen
     // (multiplier = 1.0 there). Floor guards against the pre-first-
     // frame iSurfaceScreenPos = (0,0,0,0) state.
-    float perScreenScaleX = pz_meltNoiseScale * max(iAnchorSize.x, 1.0)
+    float perScreenScaleX = p_meltNoiseScale * max(iAnchorSize.x, 1.0)
                                            / max(iSurfaceScreenPos.z, 1.0);
-    float dist = distance(center, uv) - p * exp(hm_snoise(vec2(uv.x * perScreenScaleX, 0.0)) * pz_meltAggressiveness);
+    float dist = distance(center, uv) - p * exp(hm_snoise(vec2(uv.x * perScreenScaleX, 0.0)) * p_meltAggressiveness);
     float r = p - hm_rand(vec2(uv.x, 0.1));
     float reveal = (dist <= r) ? 1.0 : (p * p * p);
 
