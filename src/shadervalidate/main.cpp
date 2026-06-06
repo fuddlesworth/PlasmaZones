@@ -265,11 +265,17 @@ int main(int argc, char** argv)
     QTextStream errStream(stderr);
 
     QStringList args;
+    bool quiet = false; // --quiet/-q: print only failing packs (clean pre-commit output)
     for (int i = 1; i < argc; ++i) {
-        args << QString::fromLocal8Bit(argv[i]);
+        const QString a = QString::fromLocal8Bit(argv[i]);
+        if (a == QLatin1String("--quiet") || a == QLatin1String("-q")) {
+            quiet = true;
+        } else {
+            args << a;
+        }
     }
     if (args.isEmpty()) {
-        errStream << "usage: plasmazones-shader-validate <pack-dir-or-root> [...]\n";
+        errStream << "usage: plasmazones-shader-validate [--quiet] <pack-dir-or-root> [...]\n";
         return 2;
     }
 
@@ -303,10 +309,17 @@ int main(int argc, char** argv)
     int totalErrors = 0;
     int failedPacks = 0;
     for (const QString& pack : packs) {
-        const int e = validatePack(pack, out);
+        QString report;
+        QTextStream reportStream(&report);
+        const int e = validatePack(pack, reportStream);
+        reportStream.flush();
         totalErrors += e;
         if (e > 0) {
             ++failedPacks;
+        }
+        // In quiet mode only failing packs are printed — the rest is summarized.
+        if (!quiet || e > 0) {
+            out << report;
         }
     }
     out.flush();
