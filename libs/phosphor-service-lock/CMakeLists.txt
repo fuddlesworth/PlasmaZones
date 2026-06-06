@@ -28,16 +28,26 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# Core / Qml: the QObject + QML surface. PhosphorWayland is the backend; it is
-# PRIVATE because the foundation SessionLock client is used inside the .cpp and
-# never appears in the public headers, so consumers neither include nor link
-# phosphor-wayland.
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml)
+# Core / Qml: the QObject + QML surface. Concurrent runs the blocking PAM
+# transaction off the GUI thread. PhosphorWayland is the backend; it is PRIVATE
+# because the foundation SessionLock client is used inside the .cpp and never
+# appears in the public headers, so consumers neither include nor link
+# phosphor-wayland. Concurrent and PAM are likewise private.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Qml Concurrent)
 
 # phosphor-wayland is an in-tree sibling under BUILD_PHOSPHOR_SHELL; only
 # find_package it when building this lib stand-alone.
 if(NOT TARGET PhosphorWayland::PhosphorWayland)
     find_package(PhosphorWayland REQUIRED)
+endif()
+
+# PAM: the authentication backend. Linked PRIVATE — security/pam_appl.h and the
+# PAM handle never appear in the public headers (the IAuthenticator seam hides
+# them). PAM ships no CMake/pkg-config module, so locate it directly.
+find_path(PAM_INCLUDE_DIR NAMES security/pam_appl.h)
+find_library(PAM_LIBRARY NAMES pam)
+if(NOT PAM_INCLUDE_DIR OR NOT PAM_LIBRARY)
+    message(FATAL_ERROR "phosphor-service-lock requires PAM (libpam + security/pam_appl.h)")
 endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -55,6 +65,8 @@ set(phosphorservicelock_public_HDRS
 set(phosphorservicelock_SRCS
     src/qmlregistration.cpp
     src/lockservice.cpp
+    src/iauthenticator.cpp
+    src/pamauthenticator.cpp
 )
 
 add_library(PhosphorServiceLock SHARED
@@ -90,8 +102,12 @@ target_link_libraries(PhosphorServiceLock
         Qt6::Core
         Qt6::Qml
     PRIVATE
+        Qt6::Concurrent
         PhosphorWayland::PhosphorWayland
+        ${PAM_LIBRARY}
 )
+
+target_include_directories(PhosphorServiceLock PRIVATE ${PAM_INCLUDE_DIR})
 
 set_target_properties(PhosphorServiceLock PROPERTIES
     VERSION ${PHOSPHORSERVICELOCK_VERSION}
