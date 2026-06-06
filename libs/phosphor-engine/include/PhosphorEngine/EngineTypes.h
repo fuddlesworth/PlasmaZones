@@ -65,7 +65,6 @@ struct ResnapEntry
 {
     QString windowId;
     int zonePosition = 0;
-    QList<int> allZonePositions;
     QString screenId;
     int virtualDesktop = 0;
 };
