@@ -1,18 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Plasma Sigil — PlasmaZones icon as animated energy sigil.
 // Five SVG icon rects rendered via SDF with gradient energy flow, racing
 // perimeter pulses, energy bridge connections, and audio reactivity.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl>, the vTexCoord/vFragCoord ins,
+// the fragColor out, and the pzImage() dispatch. audio.glsl is pack-specific.
 #include <audio.glsl>
 
 // ─── Parameters ─────────────────────────────────────────────────────────────
@@ -521,13 +515,11 @@ vec4 compositeSigilLabels(vec4 color, vec2 fragCoord,
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     vec3 cyanCol   = colorWithFallback(pz_cyanColor.rgb, vec3(0.133, 0.827, 0.933));
@@ -554,5 +546,5 @@ void main() {
         color = compositeSigilLabels(color, fragCoord, cyanCol, purpleCol,
                                      bass, mids, treble, hasAudio);
 
-    fragColor = clampFragColor(color);
+    return color;
 }

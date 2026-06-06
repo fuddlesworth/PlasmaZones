@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 /*
  * COSMIC FLOW - Fragment Shader
  *
@@ -15,14 +13,13 @@
  * inner edge glow with bevel, and organic audio reactivity (FBM contrast
  * deepening, palette phase rotation, vein widening — no UV warping or
  * shockwave clichés).
+ *
+ * The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+ * the vTexCoord/vFragCoord ins, and the fragColor out. audio.glsl is
+ * pack-specific, so it stays here. A whole-frame label composite runs after
+ * the per-zone loop, so this is a pzImage entry point.
  */
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 
@@ -325,13 +322,11 @@ vec4 compositeCosmicLabels(vec4 color, vec2 fragCoord,
     return color;
 }
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     // Audio analysis (computed once for all zones)
@@ -354,5 +349,5 @@ void main() {
     if (pz_showLabels > 0.5)
         color = compositeCosmicLabels(color, fragCoord, bass, treble, hasAudio);
 
-    fragColor = clampFragColor(color);
+    return color;
 }

@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 /*
@@ -307,7 +299,7 @@ vec4 renderNeonVenomZone(
     return vec4(col, alpha);
 }
 
-void main() {
+vec4 pzImage(vec2 fragCoord) {
     // ─── Read parameters ────────────────────────────────────────────
     float veinScale      = pz_veinScale;
     float veinSpeed      = pz_veinSpeed;
@@ -353,7 +345,7 @@ void main() {
         bool highlighted = params.z > 0.5;
 
         vec4 zone = renderNeonVenomZone(
-            vFragCoord, rect, fillColor, borderCol, params, highlighted,
+            fragCoord, rect, fillColor, borderCol, params, highlighted,
             veinScale, veinSpeed, veinSharpness, veinWarp,
             poolIntensity, bubbleCount, bubbleSpeed,
             fillOpacity, glowStr, mistDensity,
@@ -369,7 +361,7 @@ void main() {
 
     // ─── Labels: Venomous Bioluminescent Tubes ─────────────────────
     if (showLabels) {
-        vec2 luv = labelsUv(vFragCoord);
+        vec2 luv = labelsUv(fragCoord);
         vec2 texelSize = 1.0 / max(iResolution, vec2(1.0));
         vec4 labels = texture(uZoneLabels, luv);
         float spread = labelSpread * pxScale();
@@ -461,7 +453,7 @@ void main() {
         // ── Label text body: venomous bioluminescent tubes ───────────
         if (labels.a > 0.01) {
             // Color sweep: venom green ↔ acid purple cycling through each character
-            float venomWave = sin(vFragCoord.x * 0.15 - t * 3.0 + vFragCoord.y * 0.08) * 0.5 + 0.5;
+            float venomWave = sin(fragCoord.x * 0.15 - t * 3.0 + fragCoord.y * 0.08) * 0.5 + 0.5;
             vec3 tubeColor = mix(venomCol, acidCol, venomWave * 0.4);
             // Add glow highlight at peaks
             tubeColor = mix(tubeColor, glowCol, pow(venomWave, 3.0) * 0.3);
@@ -484,7 +476,7 @@ void main() {
 
             // Treble: acid corrosion flashes across text
             if (hasAudio && treble > 0.1) {
-                float corrode = step(0.82, fract(vFragCoord.y * 0.12 + t * 6.0));
+                float corrode = step(0.82, fract(fragCoord.y * 0.12 + t * 6.0));
                 textCol = mix(textCol, acidCol * labelBright * 1.8, corrode * trebleMod * 0.5);
             }
 
@@ -496,5 +488,5 @@ void main() {
         }
     }
 
-    fragColor = clampFragColor(result);
+    return result;
 }

@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 /*
  * TUMBLEWEED DRIFT — openSUSE Tumbleweed branded zone overlay
  *
@@ -19,12 +17,9 @@
  *   Treble = sparkle + edge discharge + particle twinkle + scan acceleration
  */
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, the fragColor out, and the pzImage entry-point
+// dispatch. audio.glsl is pack-specific, so it stays here.
 #include <audio.glsl>
 
 // ─── Parameter helpers ─────────────────────────────────────────────
@@ -927,13 +922,11 @@ vec4 compositeTumbleweedLabels(vec4 color, vec2 fragCoord,
 
 // ─── Main ──────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -969,5 +962,5 @@ void main() {
     if (pShowLabels() > 0.5)
         color = compositeTumbleweedLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
-    fragColor = clampFragColor(color);
+    return color;
 }

@@ -1,20 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Voxel Terrain — Image Pass (compositing, zones, borders, labels, DOF)
 //
 // Reads the full-screen 3D scene from iChannel0 (buffer pass) and the
 // depth buffer from uDepthBuffer (binding 12). Composites per-zone with
 // borders, labels, inner edge glow, outer glow, depth-of-field, and vignette.
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+//
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, the fragColor out, and the pzImage entry-point
+// dispatch. audio/multipass/depth includes are pack-specific, so they stay here.
 #include <audio.glsl>
 #include <multipass.glsl>
 #include <depth.glsl>
@@ -273,13 +268,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
 // ─── Main ───────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -306,5 +299,5 @@ void main() {
     float vig = 0.5 + 0.5 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.1);
     color.rgb *= vig;
 
-    fragColor = clampFragColor(color);
+    return color;
 }

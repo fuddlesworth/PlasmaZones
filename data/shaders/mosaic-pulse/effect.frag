@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 /*
@@ -407,13 +399,11 @@ vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
 
 // ─── Main ───────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -435,5 +425,5 @@ void main() {
 
     if (pz_showLabels > 0.5)
         color = compositeMosaicLabels(color, fragCoord, bass, mids, treble, overall, hasAudio);
-    fragColor = clampFragColor(color);
+    return color;
 }

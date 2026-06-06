@@ -1,20 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Liquid Canvas -- Final composite pass
 // Pass 0: flow field (displacement map) -> iChannel0
 // Pass 1: texture with flow distortion   -> iChannel1
 // Pass 2: bloom + edge glow              -> iChannel2
 // This pass: zone masking, borders, iridescence, vitality, labels.
+//
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, and the fragColor out. multipass.glsl and
+// audio.glsl are pack-specific, so they stay here. A whole-frame label
+// composite runs after the per-zone loop, so this is a pzImage entry point.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <multipass.glsl>
 #include <audio.glsl>
 
@@ -262,13 +259,11 @@ vec4 compositeCanvasLabels(vec4 color, vec2 fragCoord,
 }
 
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -289,5 +284,5 @@ void main() {
 
     if (pz_showLabels > 0.5)
         color = compositeCanvasLabels(color, fragCoord, bass, treble, hasAudio);
-    fragColor = clampFragColor(color);
+    return color;
 }

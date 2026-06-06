@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 /*
  * OPENSUSE DRIFT - Fragment Shader (Iridescent Chameleon Skin)
  *
@@ -22,12 +20,8 @@
  *           + nanocrystal prism bursts
  */
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl>, the vTexCoord/vFragCoord ins,
+// the fragColor out, and the pzImage() dispatch. audio.glsl is pack-specific.
 #include <audio.glsl>
 
 // ── openSUSE official palette (Chameleon design system) ──────
@@ -1125,13 +1119,11 @@ vec4 compositeSuseLabels(vec4 color, vec2 fragCoord,
 }
 
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -1153,5 +1145,5 @@ void main() {
     if (showLabelsVal < 0.0 || showLabelsVal > 0.5)
         color = compositeSuseLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
-    fragColor = clampFragColor(color);
+    return color;
 }

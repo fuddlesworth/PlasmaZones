@@ -1,20 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Neon City — Image Pass (compositing, zones, borders, labels, DOF)
 //
 // Reads the full-screen 3D cityscape from iChannel0 (buffer pass) and the
 // depth buffer from uDepthBuffer. Composites per-zone with rounded borders,
 // holographic labels, inner edge glow, outer glow, DOF, and a vignette.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 #include <multipass.glsl>
 #include <depth.glsl>
@@ -347,13 +339,11 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
 
 // ─── Main ───────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -378,5 +368,5 @@ void main() {
     float vig = 0.5 + 0.5 * pow(16.0 * q.x * q.y * (1.0 - q.x) * (1.0 - q.y), 0.1);
     color.rgb *= vig;
 
-    fragColor = clampFragColor(color);
+    return color;
 }

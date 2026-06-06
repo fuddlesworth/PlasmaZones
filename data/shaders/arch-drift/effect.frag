@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 /*
  * ARCH DRIFT - Fragment Shader (Mountain Ridge Topography — Multi-Instance)
  *
@@ -20,12 +18,6 @@
  *   Treble = grid cell flashes, edge sparks, contour sharpen
  */
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 
@@ -1061,11 +1053,10 @@ vec4 compositeArchLabels(vec4 color, vec2 fragCoord,
 //  ENTRY POINT
 // =================================================================
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
-    if (zoneCount == 0) { fragColor = vec4(0.0); return; }
+    if (zoneCount == 0) { return vec4(0.0); }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
     float bass    = getBassSoft();
@@ -1084,5 +1075,5 @@ void main() {
 
     if (pz_showLabels > 0.5)
         color = compositeArchLabels(color, fragCoord, bass, mids, treble, hasAudio);
-    fragColor = clampFragColor(color);
+    return color;
 }

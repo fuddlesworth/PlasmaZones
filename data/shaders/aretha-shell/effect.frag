@@ -1,19 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Aretha Shell — Ghost in the Shell / Aretha Dark Layered Shader
 // Ported from Ghostty shader: ~/.config/ghostty/shaders/aretha_shell.glsl
 // Original: MonoBall-inspired three-layer composite (Color Grade + Hex Grid + Data Streams)
 // PlasmaZones enhancements: audio reactivity, bidirectional streams, IDS scan lines
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 
@@ -773,13 +765,11 @@ vec4 compositeArethaLabels(vec4 color, vec2 fragCoord,
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     // Audio analysis (computed once for all zones)
@@ -819,5 +809,5 @@ void main() {
 
     if (pz_showLabels > 0.5)
         color = compositeArethaLabels(color, fragCoord, bass, treble, hasAudio);
-    fragColor = clampFragColor(color);
+    return color;
 }

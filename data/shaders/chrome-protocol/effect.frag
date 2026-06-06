@@ -1,14 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <audio.glsl>
 
 // CHROME PROTOCOL — 3D Stacked Targeting Array
@@ -826,7 +818,7 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 // Main — render the scene once in screen-space, then loop zones for chrome
 // ──
 
-void main() {
+vec4 pzImage(vec2 fragCoord) {
     bool hasAudio = iAudioSpectrumSize > 0;
     float bass    = getBassSoft();
     float mids    = getMidsSoft();
@@ -939,5 +931,5 @@ void main() {
         }
     }
 
-    fragColor = clampFragColor(result);
+    return result;
 }

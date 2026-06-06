@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Pulse Flow — Effect pass (final composite)
 //
 // Lightweight composite with full audio reactivity. Direct buffer color mapping
@@ -11,12 +9,9 @@
 //
 // Per-zone cost: ~3 texture reads + palette math (vs 34+ in ember-trace).
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl>, the vTexCoord/vFragCoord ins,
+// the fragColor out, and the pzImage() dispatch. multipass.glsl + audio.glsl
+// are pack-specific.
 #include <multipass.glsl>
 #include <audio.glsl>
 
@@ -287,12 +282,9 @@ vec4 compositePulseLabels(vec4 color, vec2 fragCoord,
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
-
+vec4 pzImage(vec2 fragCoord) {
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     vec3 glowCol  = colorWithFallback(pz_glowColor.rgb, vec3(1.0, 0.6, 0.2));
@@ -319,5 +311,5 @@ void main() {
                                      bass, mids, treble, hasAudio);
     }
 
-    fragColor = clampFragColor(color);
+    return color;
 }

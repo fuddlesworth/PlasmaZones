@@ -1,20 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 // Nexus Cascade — Multi-pass multi-channel zone overlay
 // Pass 0: plasma base → iChannel0
 // Pass 1: distorted + scanline layer → iChannel1
 // Pass 2: bloom combine → iChannel2
 // This pass: zone mask, chromatic blend, labels.
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
 #include <multipass.glsl>
 #include <audio.glsl>
 
@@ -280,13 +272,11 @@ vec4 compositeNexusLabels(vec4 color, vec2 fragCoord,
     return color;
 }
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     // Audio analysis (computed once for all zones)
@@ -307,5 +297,5 @@ void main() {
 
     if (pz_showLabels > 0.5)
         color = compositeNexusLabels(color, fragCoord, bass, treble, hasAudio);
-    fragColor = clampFragColor(color);
+    return color;
 }
