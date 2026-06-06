@@ -7,45 +7,64 @@
 
 #include <QHash>
 #include <QList>
+#include <QMutex>
 #include <QString>
 #include <QtGlobal> // qWarning, qPrintable
 
 #include <memory>
 #include <type_traits>
-#include <utility> // std::forward
+#include <utility> // std::move
 
 namespace PhosphorRegistry {
 
-// Generic, instance-per-composition-root registry of factories keyed
-// by their id(). One instance per UI seam (the shell typically owns
-// five: bar widgets, control-center tiles, launcher providers, OSDs,
-// desktop widgets).
+// Generic, instance-per-composition-root registry of factories keyed by
+// their id() — the single id-keyed storage + change-notify primitive every
+// registry in the tree composes, so storage, lookup, ownership, threading,
+// and change signals are uniform instead of hand-rolled per registry.
 //
-// Not UI-only: the entry type need not be a widget factory. Any type
-// deriving IFactoryBase (id/displayName, capabilities optional) works,
-// so the domain registries — shader packs, animation effects, tiling
-// algorithms, layout sources — also compose Registry<T> for storage +
-// id lookup + change notification, populated by PluginLoader (.so packs)
-// or MetadataPackLoader<T> (content packs scanned from disk) rather than
-// by hand-rolled QHash maps.
+// Used by the shell's five UI seams (bar widgets, control-center tiles,
+// launcher providers, OSDs, desktop widgets) AND by the domain registries
+// (shader packs, animation effects, tiling algorithms, layout sources,
+// easing curves). Entries are populated explicitly (UI built-ins, the curve
+// built-ins), by PluginLoader (.so packs), or by MetadataPackLoader<T>
+// (content packs scanned from disk).
 //
-// Lifetime / threading
-//   - Owned by the composition root. Not a singleton; tests can build
-//     their own Registry locally and tear down cleanly.
-//   - Single-threaded. The Registry must be constructed and used on
-//     one thread (typically the GUI thread). RegistryNotifier inherits
-//     that thread affinity; consumers connecting to its signals get
-//     Qt::AutoConnection semantics relative to whatever thread they
-//     hand the Registry off to.
+// ## Thread safety
 //
-// Signals
-//   - factoryRegistered / factoryUnregistered fire on the
-//     RegistryNotifier this Registry owns (accessible via notifier()).
-//     The id is the signal payload; consumers look up the concrete
-//     factory via factory(id) when they need it.
+// Thread-safe: an internal QMutex guards the store, so registration,
+// unregistration, and lookup may run on any thread (e.g. a worker thread
+// loading a curve concurrently with a GUI-thread lookup). The mutex is
+// uncontended on the common single-threaded GUI path, so the cost there is
+// negligible. Change signals are emitted via the RegistryNotifier AFTER the
+// lock is released, so a slot may safely call back into the registry; the
+// notifier QObject keeps the thread affinity of whoever created the Registry,
+// and cross-thread emissions reach consumers via queued connections.
 //
-// Header-only by design (no .cpp). The template body is small and
-// must be instantiable from any consuming translation unit.
+// ## Duplicate id policy
+//
+// registerFactory rejects a duplicate id by default (first-registration
+// wins — the contract PluginLoader relies on for plugin id collisions).
+// Pass DuplicatePolicy::Replace to overwrite an existing entry instead
+// (the curve / algorithm registries replace a prior registration); a replace
+// fires factoryUnregistered(old) then factoryRegistered(new).
+//
+// ## Owner tags
+//
+// A factory may be registered under an owner tag so a subsystem that
+// contributes several factories can drop all of them in one call
+// (unregisterByOwner) — e.g. a plugin or a user-JSON loader retiring its
+// whole contribution. Untagged registrations (the empty tag) are the default
+// and are never matched by unregisterByOwner.
+//
+// Header-only by design (no .cpp). The template body must be instantiable
+// from any consuming translation unit.
+
+// Behaviour when registerFactory hits an id that is already registered.
+enum class DuplicatePolicy {
+    Reject, ///< Keep the existing entry, log + return false (default).
+    Replace, ///< Overwrite; fire factoryUnregistered(old) + factoryRegistered(new).
+};
+
 template<typename Factory>
 class Registry
 {
@@ -58,80 +77,129 @@ public:
 
     Q_DISABLE_COPY_MOVE(Registry)
 
-    // Add factory to the registry under factory->id(). Rejected with
-    // a no-op + qWarning if a factory with the same id is already
-    // registered (first-registration wins; the rejection prevents
-    // accidental override and matches the documented contract). The
-    // caller retains ownership semantics via std::shared_ptr: the
-    // registry holds one ref, surfaces and other consumers can hold
-    // additional refs through factory() / forEach().
-    void registerFactory(std::shared_ptr<Factory> factory)
+    // Add @p factory under factory->id(). Returns true on success. A null
+    // factory or empty id is rejected (false + qWarning). A duplicate id is
+    // rejected by default (false + qWarning); pass DuplicatePolicy::Replace
+    // to overwrite it instead. @p ownerTag groups the entry for
+    // unregisterByOwner (empty = untagged, the default). The registry holds
+    // one shared_ptr ref; consumers can hold more via factory() / forEach().
+    bool registerFactory(std::shared_ptr<Factory> factory, const QString& ownerTag = QString(),
+                         DuplicatePolicy policy = DuplicatePolicy::Reject)
     {
         if (!factory) {
             qWarning("PhosphorRegistry::Registry::registerFactory: null factory ignored");
-            return;
+            return false;
         }
         const QString id = factory->id();
         if (id.isEmpty()) {
             qWarning("PhosphorRegistry::Registry::registerFactory: factory %p with empty id ignored",
                      static_cast<const void*>(factory.get()));
-            return;
+            return false;
         }
-        if (m_factories.contains(id)) {
-            qWarning("PhosphorRegistry::Registry::registerFactory: duplicate id '%s' ignored", qPrintable(id));
-            return;
+        bool replaced = false;
+        {
+            QMutexLocker locker(&m_mutex);
+            if (m_entries.contains(id)) {
+                if (policy == DuplicatePolicy::Reject) {
+                    qWarning("PhosphorRegistry::Registry::registerFactory: duplicate id '%s' ignored", qPrintable(id));
+                    return false;
+                }
+                replaced = true;
+            }
+            m_entries.insert(id, Entry{std::move(factory), ownerTag});
         }
-        m_factories.insert(id, std::move(factory));
-        m_notifier.notifyRegistered(id);
-    }
-
-    // Remove the factory at id, if any. No-op (silent) if id is
-    // unknown — the unregistered signal is not fired in that case
-    // (it would lie about state never having existed). Existing
-    // shared_ptr refs held by surfaces stay valid; the registry just
-    // drops its own ref.
-    void unregisterFactory(const QString& id)
-    {
-        if (m_factories.remove(id) > 0) {
+        // Signals fire outside the lock so a slot may re-enter the registry.
+        if (replaced) {
             m_notifier.notifyUnregistered(id);
         }
+        m_notifier.notifyRegistered(id);
+        return true;
     }
 
-    // Lookup. Returns the registered factory or a null shared_ptr if
-    // id is unknown. The factory remains alive as long as the
-    // registry holds it (call unregisterFactory to drop).
+    // Remove the factory at @p id. Returns true if one was removed. No-op
+    // (returns false, no signal) if id is unknown. Existing shared_ptr refs
+    // held by consumers stay valid; the registry just drops its own ref.
+    bool unregisterFactory(const QString& id)
+    {
+        {
+            QMutexLocker locker(&m_mutex);
+            if (m_entries.remove(id) == 0) {
+                return false;
+            }
+        }
+        m_notifier.notifyUnregistered(id);
+        return true;
+    }
+
+    // Remove every factory registered under @p ownerTag. Returns the count
+    // removed. An empty tag matches nothing (untagged entries are never bulk-
+    // removable — that would wipe the whole registry by accident); returns 0.
+    int unregisterByOwner(const QString& ownerTag)
+    {
+        if (ownerTag.isEmpty()) {
+            qWarning("PhosphorRegistry::Registry::unregisterByOwner: empty owner tag matches nothing, ignored");
+            return 0;
+        }
+        QList<QString> removedIds;
+        {
+            QMutexLocker locker(&m_mutex);
+            for (auto it = m_entries.cbegin(); it != m_entries.cend(); ++it) {
+                if (it.value().ownerTag == ownerTag) {
+                    removedIds.append(it.key());
+                }
+            }
+            for (const QString& id : std::as_const(removedIds)) {
+                m_entries.remove(id);
+            }
+        }
+        for (const QString& id : std::as_const(removedIds)) {
+            m_notifier.notifyUnregistered(id);
+        }
+        return static_cast<int>(removedIds.size());
+    }
+
+    // Lookup. Returns the registered factory or a null shared_ptr if @p id is
+    // unknown. The returned shared_ptr keeps the factory alive even if it is
+    // unregistered concurrently.
     [[nodiscard]] std::shared_ptr<Factory> factory(const QString& id) const
     {
-        return m_factories.value(id);
+        QMutexLocker locker(&m_mutex);
+        const auto it = m_entries.constFind(id);
+        return it == m_entries.cend() ? std::shared_ptr<Factory>() : it.value().factory;
     }
 
-    // Snapshot of currently-registered ids. Iteration order is
-    // QHash's hash order — not registration order. Consumers that
-    // need a stable display order must sort the result themselves.
+    // Snapshot of currently-registered ids. Iteration order is QHash's hash
+    // order — not registration order. Consumers that need a stable display
+    // order must sort the result themselves.
     [[nodiscard]] QList<QString> ids() const
     {
-        return m_factories.keys();
+        QMutexLocker locker(&m_mutex);
+        return m_entries.keys();
     }
 
-    // Functional iteration. Visits each registered factory exactly
-    // once. The visitor must not mutate the registry (register /
-    // unregister inside the loop is undefined behaviour — same as
-    // any QHash iteration contract). Templated to avoid the
-    // std::function type-erasure + allocation overhead on the bar
-    // repaint hot path; the visitor is called as
-    // `visitor(const std::shared_ptr<Factory>&)`.
+    // Functional iteration over a SNAPSHOT taken under the lock: the visitor
+    // is called as `visitor(const std::shared_ptr<Factory>&)` for each
+    // factory, outside the lock. Mutating the registry from the visitor is
+    // therefore safe (it affects the next iteration, not this snapshot).
     template<typename Visitor>
     void forEach(Visitor&& visitor) const
     {
-        for (const auto& entry : m_factories) {
-            std::forward<Visitor>(visitor)(entry);
+        QList<std::shared_ptr<Factory>> snapshot;
+        {
+            QMutexLocker locker(&m_mutex);
+            snapshot.reserve(m_entries.size());
+            for (const Entry& entry : m_entries) {
+                snapshot.append(entry.factory);
+            }
+        }
+        for (const std::shared_ptr<Factory>& factory : std::as_const(snapshot)) {
+            visitor(factory);
         }
     }
 
-    // Access the signal carrier. Survives for the registry's
-    // lifetime; consumers connect signal-slot during composition
-    // root setup and rely on Qt's connection auto-disconnect when
-    // either end is destroyed.
+    // Access the signal carrier. Survives for the registry's lifetime;
+    // consumers connect during composition-root setup and rely on Qt's
+    // connection auto-disconnect when either end is destroyed.
     [[nodiscard]] RegistryNotifier* notifier()
     {
         return &m_notifier;
@@ -144,21 +212,29 @@ public:
     // True if no factories are currently registered.
     [[nodiscard]] bool isEmpty() const
     {
-        return m_factories.isEmpty();
+        QMutexLocker locker(&m_mutex);
+        return m_entries.isEmpty();
     }
 
     // Number of currently-registered factories.
     [[nodiscard]] qsizetype size() const
     {
-        return m_factories.size();
+        QMutexLocker locker(&m_mutex);
+        return m_entries.size();
     }
 
 private:
-    QHash<QString, std::shared_ptr<Factory>> m_factories;
-    // Owned by value; default-constructed parentless. The Registry's
-    // public notifier() returns a pointer so consumers can connect,
-    // but ownership stays inside the Registry — same lifetime, same
-    // thread.
+    struct Entry
+    {
+        std::shared_ptr<Factory> factory;
+        QString ownerTag;
+    };
+
+    mutable QMutex m_mutex;
+    QHash<QString, Entry> m_entries;
+    // Owned by value; default-constructed parentless. notifier() hands out a
+    // pointer so consumers can connect, but ownership stays inside the
+    // Registry. Signals are emitted outside m_mutex (see registerFactory).
     RegistryNotifier m_notifier;
 };
 

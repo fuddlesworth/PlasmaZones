@@ -33,6 +33,8 @@ private Q_SLOTS:
     void empty_reportsState();
     void size_tracksCount();
     void signals_fireInRegistrationOrder();
+    void replacePolicy_overwritesAndSignals();
+    void ownerTag_bulkUnregister();
 };
 
 void TestRegistry::register_addsFactoryAndFiresSignal()
@@ -197,6 +199,56 @@ void TestRegistry::signals_fireInRegistrationOrder()
     QCOMPARE(unregSpy.count(), 2);
     QCOMPARE(unregSpy.at(0).at(0).toString(), QStringLiteral("a"));
     QCOMPARE(unregSpy.at(1).at(0).toString(), QStringLiteral("b"));
+}
+
+// DuplicatePolicy::Replace overwrites an existing entry (and fires
+// unregister(old) + register(new)); the default still rejects.
+void TestRegistry::replacePolicy_overwritesAndSignals()
+{
+    Registry<IBarWidgetFactory> reg;
+    QSignalSpy regSpy(reg.notifier(), &RegistryNotifier::factoryRegistered);
+    QSignalSpy unregSpy(reg.notifier(), &RegistryNotifier::factoryUnregistered);
+
+    QVERIFY(reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("V1"))));
+    // Default reject: second registration is a no-op, returns false.
+    QVERIFY(
+        !reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("V2"))));
+    QCOMPARE(reg.factory(QStringLiteral("clock"))->displayName(), QStringLiteral("V1"));
+
+    // Replace: overwrite, fires unregister(old) + register(new).
+    QVERIFY(reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("clock"), QStringLiteral("V3")),
+                                QString(), DuplicatePolicy::Replace));
+    QCOMPARE(reg.factory(QStringLiteral("clock"))->displayName(), QStringLiteral("V3"));
+    QCOMPARE(reg.size(), 1);
+    QCOMPARE(regSpy.count(), 2); // V1 + V3
+    QCOMPARE(unregSpy.count(), 1); // the replaced V1
+}
+
+// unregisterByOwner drops every entry sharing a tag and nothing else;
+// an empty tag matches nothing.
+void TestRegistry::ownerTag_bulkUnregister()
+{
+    Registry<IBarWidgetFactory> reg;
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("a"), QStringLiteral("A")),
+                        QStringLiteral("plugin-x"));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("b"), QStringLiteral("B")),
+                        QStringLiteral("plugin-x"));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("c"), QStringLiteral("C")),
+                        QStringLiteral("plugin-y"));
+    reg.registerFactory(std::make_shared<FakeBarWidgetFactory>(QStringLiteral("d"), QStringLiteral("D"))); // untagged
+
+    QSignalSpy unregSpy(reg.notifier(), &RegistryNotifier::factoryUnregistered);
+
+    QCOMPARE(reg.unregisterByOwner(QString()), 0); // empty tag matches nothing
+    QCOMPARE(reg.size(), 4);
+
+    QCOMPARE(reg.unregisterByOwner(QStringLiteral("plugin-x")), 2);
+    QCOMPARE(reg.size(), 2);
+    QVERIFY(reg.factory(QStringLiteral("a")) == nullptr);
+    QVERIFY(reg.factory(QStringLiteral("b")) == nullptr);
+    QVERIFY(reg.factory(QStringLiteral("c")) != nullptr); // plugin-y untouched
+    QVERIFY(reg.factory(QStringLiteral("d")) != nullptr); // untagged untouched
+    QCOMPARE(unregSpy.count(), 2);
 }
 
 QTEST_MAIN(TestRegistry)
