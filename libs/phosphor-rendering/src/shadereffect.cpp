@@ -1213,6 +1213,45 @@ void ShaderEffect::setUseDepthBuffer(bool use)
 // Shader Include Paths
 // ============================================================================
 
+void ShaderEffect::setParamPreamble(const QString& preamble)
+{
+    if (m_paramPreamble == preamble) {
+        return;
+    }
+    m_paramPreamble = preamble;
+    Q_EMIT paramPreambleChanged();
+    // Same reload requirement as setShaderIncludePaths: the preamble is spliced
+    // inside the node's loadFragmentShader and the expanded+spliced source is
+    // cached, so a pure re-bake would carry the OLD defines. Force a full
+    // reload (not just a dirty flag) so the node re-splices. Inlined rather
+    // than calling reloadShader() to keep a statusChanged binding from looping
+    // back through this setter.
+    if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
+        setStatus(Status::Loading);
+    }
+    m_shaderDirty = true;
+    update();
+}
+
+void ShaderEffect::setEntryScaffold(const QString& prologue, const QList<PhosphorShaders::EntryCandidate>& candidates)
+{
+    if (m_entryPrologue == prologue && m_entryCandidates == candidates) {
+        return;
+    }
+    m_entryPrologue = prologue;
+    m_entryCandidates = candidates;
+    // Same reload requirement as setParamPreamble: the scaffold is applied
+    // inside the node's loadFragmentShader and the assembled+expanded source is
+    // cached, so a pure re-bake would carry the OLD scaffold. Force a full
+    // reload; inlined (not reloadShader()) to keep a statusChanged binding from
+    // looping back through this setter.
+    if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
+        setStatus(Status::Loading);
+    }
+    m_shaderDirty = true;
+    update();
+}
+
 void ShaderEffect::setShaderIncludePaths(const QStringList& paths)
 {
     if (m_shaderIncludePaths == paths) {
@@ -1446,6 +1485,13 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
 
             if (!fragPath.isEmpty()) {
                 node->setShaderIncludePaths(m_shaderIncludePaths);
+                // Push the generated named-param preamble (T1.1) before the
+                // load so loadFragmentShader splices it and keys the bake cache
+                // on it. Empty (the default / zone-shader path) is a no-op.
+                node->setParamPreamble(m_paramPreamble);
+                // Push the T1.4 entry-point scaffold so an entry-only fragment
+                // is assembled before expansion. Empty (animation path) no-op.
+                node->setEntryScaffold(m_entryPrologue, m_entryCandidates);
                 bool vertLoaded = false;
                 if (m_vertexShaderUrl.isValid() && !m_vertexShaderUrl.isEmpty()) {
                     const QString vertPath = localPathFromShaderUrl(m_vertexShaderUrl);

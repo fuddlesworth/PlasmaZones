@@ -143,7 +143,12 @@ QString ShaderCompiler::loadAndExpand(const QString& path, const QStringList& in
 
     const QString raw = QTextStream(&file).readAll();
     const QString currentFileDir = QFileInfo(path).absolutePath();
+    return expandSource(raw, currentFileDir, includePaths, outError, outIncludedPaths);
+}
 
+QString ShaderCompiler::expandSource(const QString& source, const QString& currentFileDir,
+                                     const QStringList& includePaths, QString* outError, QStringList* outIncludedPaths)
+{
     // Build include search paths: current file dir first, then caller-provided paths
     QStringList searchPaths;
     searchPaths.append(currentFileDir);
@@ -153,7 +158,7 @@ QString ShaderCompiler::loadAndExpand(const QString& path, const QStringList& in
     }
 
     QString err;
-    const QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(raw, currentFileDir, searchPaths,
+    const QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(source, currentFileDir, searchPaths,
                                                                                     &err, outIncludedPaths);
     if (!err.isEmpty()) {
         if (outError)

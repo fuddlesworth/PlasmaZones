@@ -3,6 +3,7 @@
 
 #include <PhosphorShaders/ShaderRegistry.h>
 #include <PhosphorShaders/IWallpaperProvider.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 #include "shaderutils.h"
 
 #include <PhosphorFsLoader/MetadataPackScanStrategy.h>
@@ -15,6 +16,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QUrl>
 #include <QUuid>
 
@@ -204,6 +206,70 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
 
         if (!param.id.isEmpty()) {
             info.parameters.append(param);
+        }
+    }
+
+    // Automatic slot assignment (T1.1): a parameter that omits `slot` is packed
+    // into the next free lane of its pool in declaration order — float/int/bool
+    // → 0..31, color → 0..15, image → 0..3 — so authors no longer hand-number
+    // slots (the `pz_<id>` preamble and the upload both derive from this same
+    // slot). Explicit slots are reserved first, so a pack may mix the two; the
+    // migrated zone packs drop slots entirely, becoming pure declaration order.
+    // A collision (two explicit params on one lane) is left as-is for the
+    // validator (T1.2) to flag, not silently reshuffled.
+    {
+        // An id that isn't a valid GLSL identifier can't get a pz_<id> define
+        // (buildParamPreamble skips it), so it must claim no lane either: force its
+        // slot to -1 (overriding any explicit metadata slot) so it reserves
+        // nothing, auto-fills to nothing, AND uploads nothing — uniformName()
+        // returns "" for slot < 0, so translateParamsToUniforms drops it. Without
+        // this, an invalid-id param with an explicit slot would still upload to
+        // that lane while a valid auto-slot param (the lane was never reserved)
+        // collides onto it.
+        for (ShaderRegistry::ParameterInfo& p : info.parameters) {
+            if (!isValidParamId(p.id)) {
+                p.slot = -1;
+            }
+        }
+        auto poolOf = [](const QString& type) -> int { // 0 = scalar, 1 = color, 2 = image
+            if (type == QLatin1String("color")) {
+                return 1;
+            }
+            if (type == QLatin1String("image")) {
+                return 2;
+            }
+            return 0;
+        };
+        QSet<int> usedScalar, usedColor, usedImage;
+        for (const ShaderRegistry::ParameterInfo& p : std::as_const(info.parameters)) {
+            // Reserve only slots that buildParamPreamble also honors — an invalid
+            // id is skipped on both sides, so the two reservation passes stay
+            // byte-identical (not just the auto-fill passes).
+            if (p.slot < 0 || !isValidParamId(p.id)) {
+                continue;
+            }
+            (poolOf(p.type) == 1 ? usedColor : poolOf(p.type) == 2 ? usedImage : usedScalar).insert(p.slot);
+        }
+        int nextScalar = 0, nextColor = 0, nextImage = 0;
+        for (ShaderRegistry::ParameterInfo& p : info.parameters) {
+            if (p.slot >= 0) {
+                continue;
+            }
+            // Skip ids buildParamPreamble would reject (invalid GLSL identifier),
+            // so this upload-lane numbering stays byte-identical to the pz_<id>
+            // define numbering — a rejected param gets no define and no lane.
+            if (!isValidParamId(p.id)) {
+                continue;
+            }
+            const int pool = poolOf(p.type);
+            QSet<int>& used = (pool == 1 ? usedColor : pool == 2 ? usedImage : usedScalar);
+            int& next = (pool == 1 ? nextColor : pool == 2 ? nextImage : nextScalar);
+            while (used.contains(next)) {
+                ++next;
+            }
+            p.slot = next;
+            used.insert(next);
+            ++next;
         }
     }
 
@@ -925,6 +991,67 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
     }
 
     return result;
+}
+
+QString ShaderRegistry::paramPreamble(const ShaderInfo& info)
+{
+    // By the time this runs, parseShaderMetadata has resolved every VALID-id
+    // parameter's slot to >= 0 — an explicit metadata `slot`, or one auto-assigned
+    // by declaration order when omitted (most migrated packs drop `slot`); an
+    // invalid-id param keeps slot -1 and is skipped identically by buildParamPreamble
+    // (no define) and translateParamsToUniforms (no upload). So each emitted
+    // PreambleParam carries a concrete explicit slot (buildParamPreamble's
+    // auto-numbering isn't exercised on this zone path). buildParamPreamble turns
+    // each into `#define pz_<id> <glsl-accessor>` using the same slot→accessor rule
+    // ParameterInfo::uniformName()/translateParamsToUniforms upload to: color →
+    // customColors[slot], image → uTexture<slot>, else → customParams[slot/4].
+    // <xyzw>. So pz_<id> reads exactly the lane the value lands in.
+    QList<PreambleParam> params;
+    params.reserve(info.parameters.size());
+    for (const ParameterInfo& p : info.parameters) {
+        PreambleParam entry;
+        entry.id = p.id;
+        if (p.type == QLatin1String("color")) {
+            entry.pool = PreambleParam::Pool::Color;
+        } else if (p.type == QLatin1String("image")) {
+            entry.pool = PreambleParam::Pool::Image;
+        } else {
+            entry.pool = PreambleParam::Pool::Scalar;
+        }
+        entry.explicitSlot = p.slot;
+        params.append(entry);
+    }
+    return buildParamPreamble(params);
+}
+
+ShaderRegistry::ShaderInfo ShaderRegistry::parsePackMetadata(const QString& packDir, QString* error)
+{
+    const QString metaPath = QDir(packDir).filePath(QStringLiteral("metadata.json"));
+    QFile file(metaPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (error) {
+            *error = QStringLiteral("cannot open %1").arg(metaPath);
+        }
+        return {};
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        if (error) {
+            *error = QStringLiteral("invalid JSON: %1").arg(parseError.errorString());
+        }
+        return {};
+    }
+    if (!doc.isObject()) {
+        if (error) {
+            *error = QStringLiteral("metadata root is not a JSON object");
+        }
+        return {};
+    }
+    // parseShaderMetadata lives in this TU's anonymous namespace; it sets
+    // sourcePath / vertexShaderPath / bufferShaderPaths from packDir and applies
+    // the same auto-slot assignment the live scan does.
+    return parseShaderMetadata(packDir, doc.object());
 }
 
 } // namespace PhosphorShaders

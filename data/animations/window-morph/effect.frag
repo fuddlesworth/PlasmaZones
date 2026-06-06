@@ -25,13 +25,6 @@
 // frame's sub-rect within the new expanded texture — maps card-space uv into
 // it correctly, exactly as it does for the live uTexture0.
 
-#version 450
-
-#include <animation_uniforms.glsl>
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 0) out vec4 fragColor;
-
 #ifdef PLASMAZONES_KWIN
 // Geometry-morph endpoints (logical-screen px, x/y/w/h) + old-content
 // snapshot. Default-block uniforms pushed by the kwin-effect paint pipeline.
@@ -53,39 +46,38 @@ vec4 oldColor(vec2 uv) {
 }
 #endif
 
-void main() {
+vec4 pzTransition(vec2 uv, float t) {
 #ifdef PLASMAZONES_KWIN
-    float t = clamp(iTime, 0.0, 1.0);
+    t = clamp(t, 0.0, 1.0);
 
     // Fragment's global logical-screen position. Reconstruct from the OUTPUT
     // origin (iSurfaceScreenPos.xy is the window origin; subtracting the
     // window's in-output offset iAnchorPosInFbo yields the output's top-left).
     vec2 outputOrigin = iSurfaceScreenPos.xy - iAnchorPosInFbo;
-    vec2 screenPx = outputOrigin + vTexCoord * max(iResolution, vec2(1.0));
+    vec2 screenPx = outputOrigin + uv * max(iResolution, vec2(1.0));
 
     // Interpolated rect (old -> new), then normalise the fragment into it.
     vec4 rect = mix(iFromRect, iToRect, t);
-    vec2 uv = (screenPx - rect.xy) / max(rect.zw, vec2(1.0));
+    vec2 ruv = (screenPx - rect.xy) / max(rect.zw, vec2(1.0));
 
     // Outside the morphing rect: nothing to draw. Small feather to avoid a
     // hard edge as the rect sweeps.
-    vec2 fw = max(fwidth(uv), vec2(1.0e-4));
-    vec2 edge = min(smoothstep(vec2(0.0), fw, uv), smoothstep(vec2(0.0), fw, 1.0 - uv));
+    vec2 fw = max(fwidth(ruv), vec2(1.0e-4));
+    vec2 edge = min(smoothstep(vec2(0.0), fw, ruv), smoothstep(vec2(0.0), fw, 1.0 - ruv));
     float mask = edge.x * edge.y;
     if (mask <= 0.0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
-    vec4 oldC = oldColor(uv);            // captured old content, native aspect
-    vec4 newC = surfaceColor(uv);        // live new content, native aspect
+    vec4 oldC = oldColor(ruv);           // captured old content, native aspect
+    vec4 newC = surfaceColor(ruv);       // live new content, native aspect
 
     // Cross-fade old -> new across the morph. Inputs are premultiplied
     // (KWin FBO storage); a straight mix of premultiplied colours is correct.
-    fragColor = mix(oldC, newC, t) * mask;
+    return mix(oldC, newC, t) * mask;
 #else
     // Daemon path: morph is compositor-only. Render the surface unchanged so
     // the shader bakes for the daemon target and is harmless if ever run.
-    fragColor = surfaceColor(anchorRemap(vTexCoord));
+    return surfaceColor(anchorRemap(uv));
 #endif
 }

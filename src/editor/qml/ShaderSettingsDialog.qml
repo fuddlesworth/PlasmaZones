@@ -36,10 +36,8 @@ Kirigami.Dialog {
     // ═══════════════════════════════════════════════════════════════════════
     // PENDING STATE (buffered until Apply is clicked)
     // ═══════════════════════════════════════════════════════════════════════
-    property var pendingParams: ({
-    })
-    property var lockedParams: ({
-    })
+    property var pendingParams: ({})
+    property var lockedParams: ({})
     property string pendingShaderId: ""
     // Prevent preview updates after dialog closed (avoids race with debounce timer)
     property bool previewAllowed: true
@@ -61,7 +59,6 @@ Kirigami.Dialog {
         for (var i = 0; i < shaders.length; i++) {
             if (shaders[i] && shaders[i].id === pendingShaderId)
                 return shaders[i];
-
         }
         return null;
     }
@@ -73,6 +70,10 @@ Kirigami.Dialog {
     // Cached shader metadata (static per shader — avoid D-Bus call on every param change)
     property var cachedShaderInfoForPreview: null
     property string cachedShaderInfoId: ""
+    // The generated pz_<id> preamble depends only on shaderId, not params — cache
+    // it with the shader info so it isn't recomputed (a D-Bus shaderInfo round-trip)
+    // on every param edit.
+    property string cachedShaderParamPreamble: ""
     // Animation state for local preview (bound directly, not via config object)
     property real previewITime: 0
     property real previewLastTime: 0
@@ -86,7 +87,6 @@ Kirigami.Dialog {
         // destroys the ZoneShaderItem and releases all RHI resources cleanly.
         if (editorController)
             editorController.stopAudioCapture();
-
     }
 
     function restoreShaderPreview() {
@@ -96,28 +96,28 @@ Kirigami.Dialog {
     function updateLocalShaderPreview() {
         if (!previewAllowed) {
             root.hideShaderPreview();
-            return ;
+            return;
         }
         if (!editorController || !root.hasShaderEffect || root.pendingShaderId === root.noneShaderId) {
             root.hideShaderPreview();
-            return ;
+            return;
         }
         if (!previewContainer.visible || previewBackground.width <= 0 || previewBackground.height <= 0)
-            return ;
+            return;
 
         var w = Math.max(1, Math.floor(previewBackground.width));
         var h = Math.max(1, Math.floor(previewBackground.height));
         var zones = editorController.zonesForShaderPreview(w, h);
-        var params = editorController.translateShaderParams(root.pendingShaderId, root.pendingParams || {
-        });
+        var params = editorController.translateShaderParams(root.pendingShaderId, root.pendingParams || {});
         if (root.cachedShaderInfoId !== root.pendingShaderId) {
             root.cachedShaderInfoForPreview = editorController.getShaderInfo(root.pendingShaderId);
+            root.cachedShaderParamPreamble = editorController.shaderParamPreamble(root.pendingShaderId);
             root.cachedShaderInfoId = root.pendingShaderId;
         }
         var info = root.cachedShaderInfoForPreview;
         if (!info || !info.shaderUrl) {
             root.hideShaderPreview();
-            return ;
+            return;
         }
         var labelsImg = editorController.buildLabelsTexture(zones, w, h);
         var useWallpaper = info.wallpaper || false;
@@ -126,6 +126,7 @@ Kirigami.Dialog {
         var shaderUrl = info.shaderUrl || "";
         previewShaderConfig = {
             "shaderUrl": shaderUrl,
+            "paramPreamble": root.cachedShaderParamPreamble,
             "bufferShaderPaths": (bsPaths.length > 0) ? Array.from(bsPaths) : (info.bufferShaderPath ? [info.bufferShaderPath] : []),
             "bufferFeedback": info.bufferFeedback || false,
             "bufferScale": info.bufferScale !== undefined ? info.bufferScale : 1,
@@ -148,7 +149,6 @@ Kirigami.Dialog {
             previewAnimationTimer.start();
             if (editorController)
                 editorController.startAudioCapture();
-
         }
     }
 
@@ -157,7 +157,7 @@ Kirigami.Dialog {
     // ═══════════════════════════════════════════════════════════════════════
     function initializePendingState() {
         if (!editorController)
-            return ;
+            return;
 
         // Set `pendingShaderId` first — that fires `onPendingShaderIdChanged`
         // which calls `initializePendingParamsForShader()` and overwrites
@@ -165,19 +165,15 @@ Kirigami.Dialog {
         // `pendingParams` from the LIVE controller params, which is the
         // last-write-wins result and what the user expects on open.
         pendingShaderId = editorController.currentShaderId || "";
-        pendingParams = Object.assign({
-        }, editorController.currentShaderParams || {
-        });
-        lockedParams = {
-        };
+        pendingParams = Object.assign({}, editorController.currentShaderParams || {});
+        lockedParams = {};
     }
 
     function initializePendingParamsForShader() {
         var params = getShaderParamsById(pendingShaderId);
         if (!params || params.length === 0) {
-            pendingParams = {
-            };
-            return ;
+            pendingParams = {};
+            return;
         }
         pendingParams = extractDefaults(params);
     }
@@ -193,15 +189,12 @@ Kirigami.Dialog {
         for (var i = 0; i < shaders.length; i++) {
             if (shaders[i] && shaders[i].id === shaderId)
                 return shaders[i].parameters || [];
-
         }
         return [];
     }
 
     function setPendingParam(paramId, value) {
-        var next = Object.assign({
-        }, pendingParams || {
-        });
+        var next = Object.assign({}, pendingParams || {});
         next[paramId] = value;
         pendingParams = next;
     }
@@ -216,44 +209,40 @@ Kirigami.Dialog {
 
     function applyChanges() {
         if (!editorController)
-            return ;
+            return;
 
         if (pendingShaderId !== editorController.currentShaderId) {
             // Shader switched: atomic undo of ID + params (single Ctrl+Z).
             // Switching INTO the None shader strips the param map — the
             // None shader has no schema, so carrying the previous shader's
             // params would persist a stale map the daemon couldn't validate.
-            var nextParams = (pendingShaderId === noneShaderId) ? ({
-            }) : pendingParams;
+            var nextParams = (pendingShaderId === noneShaderId) ? ({}) : pendingParams;
             editorController.switchShader(pendingShaderId, nextParams);
         } else {
-            var currentParams = editorController.currentShaderParams || {
-            };
+            var currentParams = editorController.currentShaderParams || {};
             for (var paramId in pendingParams) {
                 if (pendingParams[paramId] !== currentParams[paramId])
                     editorController.setShaderParameter(paramId, pendingParams[paramId]);
-
             }
         }
     }
 
     function resetToDefaults() {
         if (!editorController)
-            return ;
+            return;
 
         pendingParams = extractDefaults(shaderParams);
     }
 
     function randomizeParameters() {
         if (!editorController || shaderParams.length === 0)
-            return ;
+            return;
 
         pendingParams = paramEditor.computeRandomized();
     }
 
     function extractDefaults(params) {
-        var defaults = {
-        };
+        var defaults = {};
         if (!params)
             return defaults;
 
@@ -261,7 +250,6 @@ Kirigami.Dialog {
             var param = params[i];
             if (param && param.id !== undefined && param.default !== undefined)
                 defaults[param.id] = param.default;
-
         }
         return defaults;
     }
@@ -292,15 +280,13 @@ Kirigami.Dialog {
         for (var i = 0; i < shaders.length; i++) {
             if (shaders[i])
                 arr.push(shaders[i]);
-
         }
-        arr.sort(function(a, b) {
+        arr.sort(function (a, b) {
             return String(a.name || "").localeCompare(String(b.name || ""));
         });
         for (var j = 0; j < arr.length; j++) {
             if (arr[j].id && arr[j].id !== noneShaderId)
                 return arr[j].id;
-
         }
         return noneShaderId;
     }
@@ -320,7 +306,6 @@ Kirigami.Dialog {
             var dir = editorController.shaderPresetDirectory();
             if (dir && dir.length > 0)
                 dialog.currentFolder = Qt.resolvedUrl("file://" + dir);
-
         }
     }
 
@@ -338,7 +323,7 @@ Kirigami.Dialog {
     }
     onAppActiveChanged: {
         if (!root.visible || !root.hasShaderEffect)
-            return ;
+            return;
 
         if (appActive) {
             if (root.previewShaderConfig) {
@@ -346,7 +331,6 @@ Kirigami.Dialog {
                 previewAnimationTimer.start();
                 if (editorController)
                     editorController.startAudioCapture();
-
             }
         } else {
             previewAnimationTimer.stop();
@@ -357,14 +341,14 @@ Kirigami.Dialog {
         debouncePreviewUpdate.stop();
         root.hideShaderPreview();
         cachedShaderInfoForPreview = null;
+        cachedShaderParamPreamble = "";
         cachedShaderInfoId = "";
     }
     onPendingShaderIdChanged: {
         if (visible)
             initializePendingParamsForShader();
 
-        lockedParams = {
-        };
+        lockedParams = {};
         debouncePreviewUpdate.restart();
     }
     onPendingParamsChanged: debouncePreviewUpdate.restart()
@@ -437,7 +421,6 @@ Kirigami.Dialog {
                         if (checked) {
                             if (root.pendingShaderId === root.noneShaderId)
                                 root.pendingShaderId = root.firstEffectId();
-
                         } else {
                             root.pendingShaderId = root.noneShaderId;
                         }
@@ -452,7 +435,7 @@ Kirigami.Dialog {
                     currentShaderId: root.pendingShaderId
                     noneShaderId: root.noneShaderId
                     placeholderText: i18nc("@action:button", "Select shader…")
-                    onShaderSelected: function(id) {
+                    onShaderSelected: function (id) {
                         // Hide preview before the switch so RHI resources
                         // are released cleanly before the new shader spins
                         // up. NVIDIA EGL 595.x corrupts the heap on
@@ -467,7 +450,6 @@ Kirigami.Dialog {
                         root.pendingShaderId = id;
                     }
                 }
-
             }
 
             // ── Shader description / metadata ─────────────────────────
@@ -526,7 +508,6 @@ Kirigami.Dialog {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     font.italic: true
                 }
-
             }
 
             Kirigami.Separator {
@@ -547,20 +528,20 @@ Kirigami.Dialog {
                 enableRandomize: true
                 enableGroups: true
                 enableImage: true
-                onValueChanged: function(id, value) {
+                onValueChanged: function (id, value) {
                     root.setPendingParam(id, value);
                 }
-                onLockToggled: function(id, locked) {
+                onLockToggled: function (id, locked) {
                     root.setParamLocked(id, locked);
                 }
-                onLockAllRequested: function(lock) {
+                onLockAllRequested: function (lock) {
                     root.toggleAllLocks(lock);
                 }
                 onRandomizeRequested: root.randomizeParameters()
-                onRequestColorPicker: function(id, name, current) {
+                onRequestColorPicker: function (id, name, current) {
                     root.openColorDialog(id, name, current);
                 }
-                onRequestImagePicker: function(id) {
+                onRequestImagePicker: function (id) {
                     root.openImageDialog(id);
                 }
 
@@ -598,10 +579,10 @@ Kirigami.Dialog {
                                     var info = root.currentShaderInfo;
                                     return (info && info.presets) ? info.presets : [];
                                 }
-                                onObjectAdded: function(index, object) {
+                                onObjectAdded: function (index, object) {
                                     metadataPresetMenu.insertItem(index, object);
                                 }
-                                onObjectRemoved: function(index, object) {
+                                onObjectRemoved: function (index, object) {
                                     metadataPresetMenu.removeItem(object);
                                 }
 
@@ -626,38 +607,30 @@ Kirigami.Dialog {
                                         // shader.
                                         var presetName = modelData.name;
                                         var shaderIdAtClick = root.pendingShaderId;
-                                        Qt.callLater(function() {
+                                        Qt.callLater(function () {
                                             metadataPresetMenu.visible = false;
                                             if (!editorController)
-                                                return ;
+                                                return;
 
                                             // Bail if the shader changed between click
                                             // and apply — better a no-op than a wrong-shader apply.
                                             if (root.pendingShaderId !== shaderIdAtClick)
-                                                return ;
+                                                return;
 
                                             var preset = editorController.presetParams(shaderIdAtClick, presetName);
                                             if (preset && Object.keys(preset).length > 0)
                                                 root.pendingParams = preset;
-
                                         });
                                     }
                                 }
-
                             }
 
-                            enter: Transition {
-                            }
+                            enter: Transition {}
 
-                            exit: Transition {
-                            }
-
+                            exit: Transition {}
                         }
-
                     }
-
                 }
-
             }
 
             // ── Disabled state message ────────────────────────────────
@@ -740,9 +713,7 @@ Kirigami.Dialog {
                         root.close();
                     }
                 }
-
             }
-
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -767,8 +738,7 @@ Kirigami.Dialog {
 
                 id: previewBackground
 
-                readonly property var cfg: root.previewShaderConfig || ({
-                })
+                readonly property var cfg: root.previewShaderConfig || ({})
                 property point previewMouse: Qt.point(-1, -1)
                 readonly property int previewHoveredZone: {
                     var mouse = previewBackground.previewMouse;
@@ -784,7 +754,6 @@ Kirigami.Dialog {
                         var zh = (z.height !== undefined) ? z.height : 0;
                         if (mouse.x >= zx && mouse.x < zx + zw && mouse.y >= zy && mouse.y < zy + zh)
                             return i;
-
                     }
                     return -1;
                 }
@@ -803,12 +772,10 @@ Kirigami.Dialog {
                     onPointChanged: {
                         if (previewHover.hovered)
                             previewBackground.previewMouse = Qt.point(previewHover.point.position.x, previewHover.point.position.y);
-
                     }
                     onHoveredChanged: {
                         if (!previewHover.hovered)
                             previewBackground.previewMouse = Qt.point(-1, -1);
-
                     }
                 }
 
@@ -827,6 +794,7 @@ Kirigami.Dialog {
                         layer.enabled: shaderSource.toString() !== ""
                         layer.textureMirroring: ShaderEffectSource.NoMirroring
                         shaderSource: previewBackground.cfg.shaderUrl || ""
+                        paramPreamble: previewBackground.cfg.paramPreamble || ""
                         bufferShaderPaths: previewBackground.cfg.bufferShaderPaths || []
                         bufferFeedback: previewBackground.cfg.bufferFeedback || false
                         bufferScale: previewBackground.cfg.bufferScale !== undefined ? previewBackground.cfg.bufferScale : 1
@@ -836,8 +804,7 @@ Kirigami.Dialog {
                         bufferFilters: previewBackground.cfg.bufferFilters || []
                         useDepthBuffer: previewBackground.cfg.useDepthBuffer || false
                         zones: previewBackground.cfg.zones || []
-                        shaderParams: previewBackground.cfg.shaderParams || ({
-                        })
+                        shaderParams: previewBackground.cfg.shaderParams || ({})
                         useWallpaper: previewBackground.cfg.useWallpaper || false
                         iTime: root.previewITime
                         iTimeDelta: root.previewTimeDelta
@@ -847,7 +814,6 @@ Kirigami.Dialog {
                         hoveredZoneIndex: previewBackground.previewHoveredZone
                         audioSpectrum: editorController ? editorController.audioSpectrum : []
                     }
-
                 }
 
                 Binding {
@@ -885,7 +851,6 @@ Kirigami.Dialog {
                         wrapMode: Text.WordWrap
                         width: parent.width - Kirigami.Units.gridUnit * 2
                     }
-
                 }
 
                 Label {
@@ -894,11 +859,8 @@ Kirigami.Dialog {
                     text: i18nc("@info:placeholder", "Loading preview…")
                     opacity: 0.5
                 }
-
             }
-
         }
-
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -914,7 +876,6 @@ Kirigami.Dialog {
         onAccepted: {
             if (paramId)
                 root.setPendingParam(paramId, selectedColor.toString());
-
         }
     }
 
@@ -952,7 +913,7 @@ Kirigami.Dialog {
         defaultSuffix: "json"
         onAccepted: {
             if (!editorController)
-                return ;
+                return;
 
             var path = filePathFromUrl(selectedFile);
             if (!path.toLowerCase().endsWith(".json"))
@@ -966,11 +927,9 @@ Kirigami.Dialog {
                 presetName = fileName.substring(0, dotIndex);
             else
                 presetName = fileName;
-            var ok = editorController.saveShaderPreset(path, root.pendingShaderId, root.pendingParams || {
-            }, presetName);
+            var ok = editorController.saveShaderPreset(path, root.pendingShaderId, root.pendingParams || {}, presetName);
             if (ok)
                 root.presetErrorMessage = "";
-
         }
     }
 
@@ -982,17 +941,15 @@ Kirigami.Dialog {
         fileMode: FileDialog.OpenFile
         onAccepted: {
             if (!editorController)
-                return ;
+                return;
 
             var path = filePathFromUrl(selectedFile);
             var result = editorController.loadShaderPreset(path);
             if (result && result.shaderId) {
                 root.pendingShaderId = result.shaderId;
-                root.pendingParams = result.shaderParams || {
-                };
+                root.pendingParams = result.shaderParams || {};
                 root.presetErrorMessage = "";
             }
         }
     }
-
 }

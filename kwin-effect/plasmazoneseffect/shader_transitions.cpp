@@ -18,7 +18,9 @@
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorWindowRule/ExclusionRules.h>
 #include <PhosphorWindowRule/RuleAction.h>
 #include <PhosphorWindowRule/WindowRule.h>
@@ -673,12 +675,33 @@ bool PlasmaZonesEffect::beginShaderTransition(KWin::EffectWindow* window,
         }
         QString includeError;
         const QString currentDir = QFileInfo(eff.fragmentShaderPath).absolutePath();
-        const QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
-            rawSource, currentDir, animIncludePaths, &includeError);
+        // T1.5: assemble an entry-only animation pack (pzTransition / pzIn+pzOut,
+        // no main()) into a full translation unit BEFORE expansion — identical to
+        // the daemon's loadFragmentShader — so the prologue's `#include` resolves
+        // and the generated main() dispatches by direction. A traditional main()
+        // pack is returned unchanged. Same prologue + candidates the daemon uses,
+        // so both runtimes compile the same source.
+        const QString assembledSource = PhosphorShaders::assembleEntryPoint(
+            rawSource, PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryPrologue(),
+            PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates());
+        QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(assembledSource, currentDir,
+                                                                                  animIncludePaths, &includeError);
         if (expanded.isEmpty()) {
             qCWarning(lcEffect) << "Failed to expand shader includes for" << effectId << ":" << includeError;
             return false;
         }
+
+        // T1.1: splice the generated named-param preamble (`#define pz_<id> ...`)
+        // after `#version`, identically to the daemon's loadFragmentShader. The
+        // accessors it emits (`customParams[N].xyzw`, `customColors[N]`,
+        // `uTexture<N>`) are declared in BOTH branches of animation_uniforms.glsl
+        // — including the PLASMAZONES_KWIN default-block branch injected below —
+        // so the same preamble compiles on this GL path and the daemon RHI path.
+        // Done before injectKwinDefineAfterVersion so the KWIN define still lands
+        // first after `#version`; the preamble's defines are pure text macros,
+        // expanded only where used (after the UBO include), so ordering is safe.
+        expanded = PhosphorShaders::spliceAfterVersion(
+            expanded, PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(eff));
 
         // Selects the default-block branch in `animation_uniforms.glsl`.
         // KWin's `KWin::GLShader` API addresses default-block uniforms only

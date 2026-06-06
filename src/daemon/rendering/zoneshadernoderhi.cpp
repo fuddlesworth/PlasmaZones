@@ -49,7 +49,9 @@ inline QStringList expandShaderIncludePaths(const QStringList& inputPaths)
 namespace PlasmaZones {
 
 PhosphorRendering::WarmShaderBakeResult
-warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath, const QStringList& includePaths)
+warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath, const QStringList& includePaths,
+                            const QString& paramPreamble, const QString& entryPrologue,
+                            const QList<PhosphorShaders::EntryCandidate>& entryCandidates)
 {
     if (vertexPath.isEmpty() || fragmentPath.isEmpty()) {
         PhosphorRendering::WarmShaderBakeResult result;
@@ -59,7 +61,8 @@ warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPa
 
     const QStringList expandedPaths = expandShaderIncludePaths(includePaths);
 
-    return PhosphorRendering::warmShaderBakeCacheForPaths(vertexPath, fragmentPath, expandedPaths);
+    return PhosphorRendering::warmShaderBakeCacheForPaths(vertexPath, fragmentPath, expandedPaths, paramPreamble,
+                                                          entryPrologue, entryCandidates);
 }
 
 } // namespace PlasmaZones

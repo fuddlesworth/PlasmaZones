@@ -490,6 +490,29 @@ QVariantMap EditorController::getShaderInfo(const QString& shaderId) const
     return ShaderDbusQueries::queryShaderInfo(shaderId);
 }
 
+QString EditorController::shaderParamPreamble(const QString& shaderId) const
+{
+    if (ShaderRegistry::isNoneShader(shaderId)) {
+        return QString();
+    }
+    // Reconstruct the parameter declarations from the D-Bus shaderInfo (which
+    // carries each param's id/type/slot as the daemon's registry resolved them)
+    // and run the same generator the daemon overlay uses, so the preview's
+    // `pz_<id>` defines land on the exact lanes translateShaderParams uploads to.
+    const QVariantMap info = getShaderInfo(shaderId);
+    ShaderRegistry::ShaderInfo si;
+    const QVariantList params = info.value(QStringLiteral("parameters")).toList();
+    for (const QVariant& pv : params) {
+        const QVariantMap pm = pv.toMap();
+        ShaderRegistry::ParameterInfo pi;
+        pi.id = pm.value(QStringLiteral("id")).toString();
+        pi.type = pm.value(QStringLiteral("type")).toString();
+        pi.slot = pm.value(QStringLiteral("slot"), -1).toInt();
+        si.parameters.append(pi);
+    }
+    return ShaderRegistry::paramPreamble(si);
+}
+
 QImage EditorController::buildLabelsTexture(const QVariantList& zones, int width, int height) const
 {
     if (zones.isEmpty() || width <= 0 || height <= 0) {

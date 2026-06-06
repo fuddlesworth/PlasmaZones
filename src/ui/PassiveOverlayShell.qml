@@ -644,6 +644,7 @@ Window {
         property bool loaded: false
         // Shader-mode properties.
         property url shaderSource
+        property string paramPreamble: ""
         property string bufferShaderPath: ""
         property var bufferShaderPaths: []
         property bool bufferFeedback: false
@@ -740,6 +741,7 @@ Window {
 
             RenderNodeOverlayContent {
                 shaderSource: mainOverlaySlot.shaderSource
+                paramPreamble: mainOverlaySlot.paramPreamble
                 bufferShaderPath: mainOverlaySlot.bufferShaderPath
                 bufferShaderPaths: mainOverlaySlot.bufferShaderPaths
                 bufferFeedback: mainOverlaySlot.bufferFeedback

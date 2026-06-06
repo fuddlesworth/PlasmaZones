@@ -1,8 +1,6 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
 /*
  * OPENSUSE DRIFT - Fragment Shader (Iridescent Chameleon Skin)
  *
@@ -22,12 +20,8 @@
  *           + nanocrystal prism bursts
  */
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl>, the vTexCoord/vFragCoord ins,
+// the fragColor out, and the pzImage() dispatch. audio.glsl is pack-specific.
 #include <audio.glsl>
 
 // ── openSUSE official palette (Chameleon design system) ──────
@@ -334,42 +328,42 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderWidth  = max(params.y, 2.0);
 
     // ── Parameter reads ────────────────────────────────────────
-    float speed         = customParams[0].x >= 0.0 ? customParams[0].x : 0.08;
-    float flowSpeed     = customParams[0].y >= 0.0 ? customParams[0].y : 0.15;
-    float noiseScale    = customParams[0].z >= 0.0 ? customParams[0].z : 3.5;
-    float scaleSize     = customParams[0].w >= 0.0 ? customParams[0].w : 6.0;
+    float speed         = pz_speed >= 0.0 ? pz_speed : 0.08;
+    float flowSpeed     = pz_flowSpeed >= 0.0 ? pz_flowSpeed : 0.15;
+    float noiseScale    = pz_noiseScale >= 0.0 ? pz_noiseScale : 3.5;
+    float scaleSize     = pz_scaleSize >= 0.0 ? pz_scaleSize : 6.0;
 
-    float gridScale     = customParams[1].x >= 0.0 ? customParams[1].x : 0.3;
-    float iridescence   = customParams[1].y >= 0.0 ? customParams[1].y : 0.6;
-    float brightness    = customParams[1].z >= 0.0 ? customParams[1].z : 0.75;
-    float turingStr     = customParams[1].w >= 0.0 ? customParams[1].w : 0.3;
+    float gridScale     = pz_gridScale >= 0.0 ? pz_gridScale : 0.3;
+    float iridescence   = pz_iridescence >= 0.0 ? pz_iridescence : 0.6;
+    float brightness    = pz_brightness >= 0.0 ? pz_brightness : 0.75;
+    float turingStr     = pz_turingStrength >= 0.0 ? pz_turingStrength : 0.3;
 
-    float fillOpacity       = customParams[2].x >= 0.0 ? customParams[2].x : 0.85;
-    float borderGlow        = customParams[2].y >= 0.0 ? customParams[2].y : 0.35;
-    float edgeFadeStart     = customParams[2].z >= 0.0 ? customParams[2].z : 30.0;
-    float borderBrightness  = customParams[2].w >= 0.0 ? customParams[2].w : 1.4;
+    float fillOpacity       = pz_fillOpacity >= 0.0 ? pz_fillOpacity : 0.85;
+    float borderGlow        = pz_borderGlow >= 0.0 ? pz_borderGlow : 0.35;
+    float edgeFadeStart     = pz_edgeFadeStart >= 0.0 ? pz_edgeFadeStart : 30.0;
+    float borderBrightness  = pz_borderBrightness >= 0.0 ? pz_borderBrightness : 1.4;
 
-    float audioReact    = customParams[3].x >= 0.0 ? customParams[3].x : 1.0;
-    float particleStr   = customParams[3].y >= 0.0 ? customParams[3].y : 0.4;
-    float innerGlowStr  = customParams[3].z >= 0.0 ? customParams[3].z : 0.45;
+    float audioReact    = pz_audioReactivity >= 0.0 ? pz_audioReactivity : 1.0;
+    float particleStr   = pz_particleStrength >= 0.0 ? pz_particleStrength : 0.4;
+    float innerGlowStr  = pz_innerGlowStrength >= 0.0 ? pz_innerGlowStrength : 0.45;
 
-    float flowDirection = customParams[5].x >= 0.0 ? customParams[5].x : 0.3;
-    float logoScale     = customParams[5].y >= 0.0 ? customParams[5].y : 0.45;
-    float logoIntensity = customParams[5].z >= 0.0 ? customParams[5].z : 0.8;
-    float logoPulse     = customParams[5].w >= 0.0 ? customParams[5].w : 0.8;
+    float flowDirection = pz_flowDirection >= 0.0 ? pz_flowDirection : 0.3;
+    float logoScale     = pz_logoScale >= 0.0 ? pz_logoScale : 0.45;
+    float logoIntensity = pz_logoIntensity >= 0.0 ? pz_logoIntensity : 0.8;
+    float logoPulse     = pz_logoPulse >= 0.0 ? pz_logoPulse : 0.8;
 
-    int   logoCount     = clamp(int(customParams[6].x >= 0.0 ? customParams[6].x : 3.0), 1, 8);
-    float logoSizeMin   = customParams[6].y >= 0.0 ? customParams[6].y : 0.4;
-    float logoSizeMax   = customParams[6].z >= 0.0 ? customParams[6].z : 1.0;
+    int   logoCount     = clamp(int(pz_logoCount >= 0.0 ? pz_logoCount : 3.0), 1, 8);
+    float logoSizeMin   = pz_logoSizeMin >= 0.0 ? pz_logoSizeMin : 0.4;
+    float logoSizeMax   = pz_logoSizeMax >= 0.0 ? pz_logoSizeMax : 1.0;
 
-    float logoSpin      = customParams[7].z >= 0.0 ? customParams[7].z : 0.15;
-    float idleStr       = customParams[7].w >= 0.0 ? customParams[7].w : 0.6;
+    float logoSpin      = pz_logoSpin >= 0.0 ? pz_logoSpin : 0.15;
+    float idleStr       = pz_idleStrength >= 0.0 ? pz_idleStrength : 0.6;
 
     // ── Chameleon biology effects ────────────────────────────────
-    float chromatophoreStr = customParams[3].w >= 0.0 ? customParams[3].w : 0.6;
-    float tailPulseStr  = customParams[4].w >= 0.0 ? customParams[4].w : 0.7;
-    float camoStr       = customParams[6].w >= 0.0 ? customParams[6].w : 0.25;
-    float eyeBeamStr    = customParams[7].x >= 0.0 ? customParams[7].x : 0.5;
+    float chromatophoreStr = pz_chromatophoreStrength >= 0.0 ? pz_chromatophoreStrength : 0.6;
+    float tailPulseStr  = pz_tailPulseStrength >= 0.0 ? pz_tailPulseStrength : 0.7;
+    float camoStr       = pz_camouflageShimmer >= 0.0 ? pz_camouflageShimmer : 0.25;
+    float eyeBeamStr    = pz_eyeBeamStrength >= 0.0 ? pz_eyeBeamStrength : 0.5;
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -382,10 +376,10 @@ vec4 renderSuseZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;
 
-    vec3 palPrimary   = colorWithFallback(customColors[0].rgb, SUSE_TEAL);
-    vec3 palSecondary = colorWithFallback(customColors[1].rgb, SUSE_GREEN);
-    vec3 palAccent    = colorWithFallback(customColors[2].rgb, SUSE_TURQ);
-    vec3 palGlow      = colorWithFallback(customColors[3].rgb, SUSE_GLOW);
+    vec3 palPrimary   = colorWithFallback(pz_primaryColor.rgb, SUSE_TEAL);
+    vec3 palSecondary = colorWithFallback(pz_secondaryColor.rgb, SUSE_GREEN);
+    vec3 palAccent    = colorWithFallback(pz_accentColor.rgb, SUSE_TURQ);
+    vec3 palGlow      = colorWithFallback(pz_glowColor.rgb, SUSE_GLOW);
 
     float vitality = isHighlighted ? 1.0 : 0.3;
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * timeSin(0.8 * PI)) * idleStr;
@@ -994,15 +988,15 @@ vec4 compositeSuseLabels(vec4 color, vec2 fragCoord,
     vec2 px = 1.0 / max(iResolution, vec2(1.0));
     vec4 labels = texture(uZoneLabels, uv);
 
-    vec3 palPrimary   = colorWithFallback(customColors[0].rgb, SUSE_TEAL);
-    vec3 palSecondary = colorWithFallback(customColors[1].rgb, SUSE_GREEN);
-    vec3 palAccent    = colorWithFallback(customColors[2].rgb, SUSE_TURQ);
-    vec3 palGlow      = colorWithFallback(customColors[3].rgb, SUSE_GLOW);
+    vec3 palPrimary   = colorWithFallback(pz_primaryColor.rgb, SUSE_TEAL);
+    vec3 palSecondary = colorWithFallback(pz_secondaryColor.rgb, SUSE_GREEN);
+    vec3 palAccent    = colorWithFallback(pz_accentColor.rgb, SUSE_TURQ);
+    vec3 palGlow      = colorWithFallback(pz_glowColor.rgb, SUSE_GLOW);
 
-    float labelGlowSpread = customParams[4].x >= 0.0 ? customParams[4].x : 3.0;
-    float labelBrightness = customParams[4].y >= 0.0 ? customParams[4].y : 2.5;
-    float labelAudioReact = customParams[4].z >= 0.0 ? customParams[4].z : 1.0;
-    float iridescence     = customParams[1].y >= 0.0 ? customParams[1].y : 0.6;
+    float labelGlowSpread = pz_labelGlowSpread >= 0.0 ? pz_labelGlowSpread : 3.0;
+    float labelBrightness = pz_labelBrightness >= 0.0 ? pz_labelBrightness : 2.5;
+    float labelAudioReact = pz_labelAudioReact >= 0.0 ? pz_labelAudioReact : 1.0;
+    float iridescence     = pz_iridescence >= 0.0 ? pz_iridescence : 0.6;
 
     float bassR = hasAudio ? bass * labelAudioReact : 0.0;
     float midsR = hasAudio ? mids * labelAudioReact : 0.0;
@@ -1125,13 +1119,11 @@ vec4 compositeSuseLabels(vec4 color, vec2 fragCoord,
 }
 
 
-void main() {
-    vec2 fragCoord = vFragCoord;
+vec4 pzImage(vec2 fragCoord) {
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
+        return vec4(0.0);
     }
 
     bool  hasAudio = iAudioSpectrumSize > 0;
@@ -1149,9 +1141,9 @@ void main() {
     }
 
     // showLabels guard: default ON (unset = -1, which is < 0)
-    float showLabelsVal = customParams[7].y;
+    float showLabelsVal = pz_showLabels;
     if (showLabelsVal < 0.0 || showLabelsVal > 0.5)
         color = compositeSuseLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
-    fragColor = clampFragColor(color);
+    return color;
 }

@@ -226,6 +226,11 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     writeQmlProperty(window, QStringLiteral("bufferFilters"), QVariant::fromValue(info.bufferFilters));
     writeQmlProperty(window, QStringLiteral("useDepthBuffer"), info.useDepthBuffer);
     writeQmlProperty(window, QStringLiteral("shaderParams"), QVariant::fromValue(params));
+    // T1.1 (zone): the generated `#define pz_<id> ...` preamble so packs read
+    // params by name. Set before shaderSource (written LAST below, which
+    // triggers the load) so the node splices it on first bake. Empty for packs
+    // that declare no params.
+    writeQmlProperty(window, QStringLiteral("paramPreamble"), ShaderRegistry::paramPreamble(info));
     // Desktop wallpaper subscription
     writeQmlProperty(window, QStringLiteral("useWallpaper"), info.useWallpaper);
     if (info.useWallpaper) {

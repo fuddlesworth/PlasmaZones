@@ -40,6 +40,7 @@
 #include "unifiedlayoutcontroller.h"
 #include "modetracker.h"
 #include "shortcutmanager.h"
+#include "rendering/zoneentryscaffold.h"
 #include "rendering/zoneshadernoderhi.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -592,10 +593,21 @@ bool Daemon::init()
             // Snapshot now (registry can be mutated on the GUI thread; we're about
             // to hop onto the bake thread).
             const QStringList includePaths = reg->searchPaths();
-            watcher->setFuture(QtConcurrent::run(
-                &m_shaderBakePool, [vertPath = info.vertexShaderPath, fragPath = info.sourcePath, includePaths]() {
-                    return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths);
-                }));
+            // T1.4 + T1.1: warm-bake with the SAME entry-point scaffold AND the
+            // SAME generated param preamble ZoneShaderItem installs at runtime,
+            // so a zone pack's warm entry keys identically to its live load (both
+            // are folded into the bake-cache key). Computed on the GUI thread
+            // (reads `info`) and captured by value into the bake-thread lambda.
+            const QString entryPrologue = zoneEntryPrologue();
+            const QList<PhosphorShaders::EntryCandidate> entryCandidates = zoneEntryCandidates();
+            const QString paramPreamble = ShaderRegistry::paramPreamble(info);
+            watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
+                                                 [vertPath = info.vertexShaderPath, fragPath = info.sourcePath,
+                                                  includePaths, paramPreamble, entryPrologue, entryCandidates]() {
+                                                     return warmShaderBakeCacheForPaths(vertPath, fragPath,
+                                                                                        includePaths, paramPreamble,
+                                                                                        entryPrologue, entryCandidates);
+                                                 }));
         };
     connect(m_shaderRegistry.get(), &ShaderRegistry::shadersChanged, this, [this, scheduleWarmForShader]() {
         const QList<ShaderRegistry::ShaderInfo> shaders = m_shaderRegistry->availableShaders();
@@ -660,6 +672,20 @@ bool Daemon::init()
                 return;
             }
             const QString effectId = info.id;
+            // T1.1: warm-bake with the SAME generated preamble SurfaceAnimator
+            // splices at runtime, so the warm entry's cache key (fingerprinted
+            // on the preamble) matches the live load — otherwise the live bake
+            // would miss this entry, or worse, a key collision would serve the
+            // wrong SPIR-V. Computed on the GUI thread (reads `info`) and
+            // captured by value into the bake-thread lambda.
+            const QString paramPreamble = PhosphorAnimationShaders::AnimationShaderRegistry::paramPreamble(info);
+            // T1.5: warm-bake with the same entry-point scaffold SurfaceAnimator
+            // installs at runtime, so an entry-only animation pack's warm entry
+            // keys identically to its live load. Inert for every traditional
+            // pack (which assembles to itself).
+            const QString entryPrologue = PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryPrologue();
+            const QList<PhosphorShaders::EntryCandidate> entryCandidates =
+                PhosphorAnimationShaders::AnimationShaderRegistry::animationEntryCandidates();
             auto* watcher = new QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>(this);
             connect(watcher, &QFutureWatcher<PhosphorRendering::WarmShaderBakeResult>::finished, this,
                     [watcher, effectId]() {
@@ -669,10 +695,13 @@ bool Daemon::init()
                         }
                         watcher->deleteLater();
                     });
-            watcher->setFuture(
-                QtConcurrent::run(&m_shaderBakePool, [vertPath, fragPath = info.fragmentShaderPath, includePaths]() {
-                    return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths);
-                }));
+            watcher->setFuture(QtConcurrent::run(&m_shaderBakePool,
+                                                 [vertPath, fragPath = info.fragmentShaderPath, includePaths,
+                                                  paramPreamble, entryPrologue, entryCandidates]() {
+                                                     return warmShaderBakeCacheForPaths(vertPath, fragPath,
+                                                                                        includePaths, paramPreamble,
+                                                                                        entryPrologue, entryCandidates);
+                                                 }));
         };
         connect(m_animationShaderRegistry.get(), &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged,
                 this, [this, scheduleWarmForAnimEffect]() {

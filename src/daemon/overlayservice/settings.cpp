@@ -255,6 +255,19 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
         // into one refresh.
         QTimer::singleShot(16, this, [this]() {
             m_refreshCoalescePending = false;
+            // A layout shaderId edit can flip a screen between rectangle and
+            // shader overlay modes (none↔shader). refreshVisibleWindows alone
+            // can't apply that flip: updateOverlayWindow's shader-apply branch
+            // is gated on the slot's CURRENT useShader mode, so a newly-enabled
+            // shader is skipped and the overlay keeps drawing rectangles until
+            // a hide/show (or daemon restart) rebuilds the slot. Run the
+            // type-mismatch recreate first — a no-op when no flip is needed —
+            // mirroring the enableShaderEffects setting path so live edits take
+            // effect immediately. Only meaningful while visible; a hidden
+            // overlay rebuilds with the correct type on its next show.
+            if (m_visible) {
+                recreateOverlayWindowsOnTypeMismatch();
+            }
             refreshVisibleWindows();
         });
     });

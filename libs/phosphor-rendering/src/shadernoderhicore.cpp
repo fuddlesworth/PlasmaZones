@@ -4,6 +4,7 @@
 #include "internal.h"
 
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QFile>
 #include <QFileInfo>
@@ -12,6 +13,7 @@
 #include <QMutexLocker>
 #include <QQuickWindow>
 #include <QStandardPaths>
+#include <QTextStream>
 #include <QtMath>
 #include <cstring>
 
@@ -92,7 +94,8 @@ static QByteArray includeFingerprint(QStringList paths)
 }
 
 static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QByteArray& vertIncludeFp,
-                                 const QString& fragPath, qint64 fragMtime, const QByteArray& fragIncludeFp)
+                                 const QString& fragPath, qint64 fragMtime, const QByteArray& fragIncludeFp,
+                                 const QString& paramPreamble, const QByteArray& entryFp)
 {
     QByteArray key = vertPath.toUtf8();
     key.append(kShaderCacheKeyDelim);
@@ -105,6 +108,22 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
     key.append(QByteArray::number(fragMtime));
     key.append(kShaderCacheKeyDelim);
     key.append(fragIncludeFp);
+    key.append(kShaderCacheKeyDelim);
+    // T1.1: the generated named-param preamble is spliced into the fragment
+    // source before baking, so it is part of the compiled SPIR-V and MUST be
+    // part of the key. Without this, a metadata param edit (which rewrites the
+    // preamble but leaves the .frag mtime untouched) would serve stale SPIR-V,
+    // and the live load + warm-bake could disagree on the spliced source while
+    // colliding on the same key. The preamble is small (a handful of #defines)
+    // so appending it verbatim — mirroring how includeFingerprint appends raw
+    // paths — keeps the key honest without a hashing round-trip.
+    key.append(paramPreamble.toUtf8());
+    key.append(kShaderCacheKeyDelim);
+    // T1.4: the entry-point scaffold (prologue + generated main()) is assembled
+    // into the fragment source before baking, so — like the preamble — it is
+    // part of the SPIR-V and must be part of the key. Empty for the
+    // animation / traditional path, so the key is unchanged there.
+    key.append(entryFp);
     return key;
 }
 
@@ -404,8 +423,9 @@ void ShaderNodeRhi::prepare()
 
         const QByteArray vertIncludeFp = includeFingerprint(m_vertexIncludedPaths);
         const QByteArray fragIncludeFp = includeFingerprint(m_fragmentIncludedPaths);
-        const QByteArray cacheKey =
-            shaderCacheKey(m_vertexPath, m_vertexMtime, vertIncludeFp, m_fragmentPath, m_fragmentMtime, fragIncludeFp);
+        const QByteArray entryFp = entryScaffoldFingerprint(m_entryPrologue, m_entryCandidates);
+        const QByteArray cacheKey = shaderCacheKey(m_vertexPath, m_vertexMtime, vertIncludeFp, m_fragmentPath,
+                                                   m_fragmentMtime, fragIncludeFp, m_paramPreamble, entryFp);
         if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
             QMutexLocker lock(&filenameShaderCacheMutex());
             auto& cache = filenameShaderCache();
@@ -761,7 +781,9 @@ void ShaderNodeRhi::releaseResources()
 }
 
 WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath,
-                                                 const QStringList& includePaths)
+                                                 const QStringList& includePaths, const QString& paramPreamble,
+                                                 const QString& entryPrologue,
+                                                 const QList<PhosphorShaders::EntryCandidate>& entryCandidates)
 {
     WarmShaderBakeResult result;
     if (vertexPath.isEmpty() || fragmentPath.isEmpty()) {
@@ -782,11 +804,31 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
         result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load vertex shader") : err;
         return result;
     }
-    const QString fragSource = ShaderCompiler::loadAndExpand(fragmentPath, includePaths, &err, &fragIncludedPaths);
+    // Fragment: read raw, apply the T1.4 entry-point assembly, THEN expand —
+    // identical to the live `loadFragmentShader`, so warm + live produce the
+    // same pre-expansion source (and key) for an entry-only pack. For a
+    // traditional pack (or the animation path with no scaffold) this is the
+    // exact equivalent of the old `loadAndExpand(fragmentPath)`.
+    QString fragRaw;
+    {
+        QFile fragFile(fragmentPath);
+        if (!fragFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            result.errorMessage = QStringLiteral("Failed to open: ") + fragmentPath;
+            return result;
+        }
+        fragRaw = QTextStream(&fragFile).readAll();
+    }
+    const QString fragAssembled = applyEntryAssembly(fragRaw, entryPrologue, entryCandidates);
+    QString fragSource = ShaderCompiler::expandSource(fragAssembled, QFileInfo(fragmentPath).absolutePath(),
+                                                      includePaths, &err, &fragIncludedPaths);
     if (fragSource.isEmpty()) {
         result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load fragment shader") : err;
         return result;
     }
+    // Splice the same fragment-stage preamble the live `loadFragmentShader`
+    // path applies (T1.1), so the SPIR-V this warm entry caches is byte-for-byte
+    // what the live load would produce for the same key. Empty = no-op.
+    fragSource = PhosphorShaders::spliceAfterVersion(fragSource, paramPreamble);
 
     auto vertResult = ShaderCompiler::compile(vertSource.toUtf8(), QShader::VertexStage);
     if (!vertResult.shader.isValid()) {
@@ -809,7 +851,9 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     // first frame and erasing the warm-bake's purpose.
     const QByteArray vertIncludeFp = includeFingerprint(vertIncludedPaths);
     const QByteArray fragIncludeFp = includeFingerprint(fragIncludedPaths);
-    const QByteArray key = shaderCacheKey(vertexPath, vertMtime, vertIncludeFp, fragmentPath, fragMtime, fragIncludeFp);
+    const QByteArray entryFp = entryScaffoldFingerprint(entryPrologue, entryCandidates);
+    const QByteArray key = shaderCacheKey(vertexPath, vertMtime, vertIncludeFp, fragmentPath, fragMtime, fragIncludeFp,
+                                          paramPreamble, entryFp);
     QMutexLocker lock(&filenameShaderCacheMutex());
     auto& cache = filenameShaderCache();
     if (cache.size() >= kShaderCacheMaxSize) {
