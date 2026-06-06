@@ -100,6 +100,31 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
         QCOMPARE(host.interactive(), false);
     }
+
+    // The lock-before-sleep handshake signal logic, driven without a real
+    // logind by invoking the PrepareForSleep delivery slot directly: a
+    // before-sleep edge emits prepareForSleep(true) AND aboutToSleep (the shell
+    // locks here, while the delay inhibitor is notionally held); the resume edge
+    // emits prepareForSleep(false) but no further aboutToSleep. allowSleep()
+    // completes the handshake without crashing even when no fd is held.
+    void prepareForSleepDrivesHandshake()
+    {
+        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1"));
+        QSignalSpy prep(&host, &SessionHost::prepareForSleep);
+        QSignalSpy about(&host, &SessionHost::aboutToSleep);
+
+        QVERIFY(QMetaObject::invokeMethod(&host, "onPrepareForSleep", Qt::DirectConnection, Q_ARG(bool, true)));
+        QCOMPARE(prep.count(), 1);
+        QCOMPARE(prep.takeFirst().at(0).toBool(), true);
+        QCOMPARE(about.count(), 1);
+
+        host.allowSleep();
+
+        QVERIFY(QMetaObject::invokeMethod(&host, "onPrepareForSleep", Qt::DirectConnection, Q_ARG(bool, false)));
+        QCOMPARE(prep.count(), 1);
+        QCOMPARE(prep.takeFirst().at(0).toBool(), false);
+        QCOMPARE(about.count(), 1); // no new aboutToSleep on resume
+    }
 };
 
 QTEST_GUILESS_MAIN(SmokeTest)

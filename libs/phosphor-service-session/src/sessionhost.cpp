@@ -10,7 +10,9 @@
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusUnixFileDescriptor>
 #include <QLoggingCategory>
+#include <QTimer>
 
 #include <utility>
 
@@ -20,6 +22,12 @@ namespace {
 constexpr auto kManagerPath = "/org/freedesktop/login1";
 constexpr auto kManagerIface = "org.freedesktop.login1.Manager";
 constexpr auto kSessionIface = "org.freedesktop.login1.Session";
+
+// Safety bound for the lock-before-sleep handshake: if the shell does not
+// confirm the lock (call allowSleep()) within this window we release the delay
+// inhibitor ourselves. Kept conservatively under logind's default
+// InhibitDelayMaxSec (5s) so we always release before logind force-suspends.
+constexpr int kSleepLockTimeoutMs = 4000;
 } // namespace
 
 namespace PhosphorServiceSession {
@@ -70,6 +78,15 @@ public:
     Availability canHibernate = Availability::Unknown;
     Availability canHybridSleep = Availability::Unknown;
     Availability canSuspendThenHibernate = Availability::Unknown;
+
+    // Inhibitor fds: the delay lock on "sleep" (released across the
+    // lock-before-sleep handshake and re-taken on resume) and the block lock on
+    // the handle-* keys (held for the host's lifetime). Each QDBusUnixFileDescriptor
+    // owns a dup of the fd and closes it when cleared or destroyed, so teardown
+    // releases both inhibitors automatically.
+    QDBusUnixFileDescriptor sleepInhibitor;
+    QDBusUnixFileDescriptor keyInhibitor;
+    QTimer sleepTimer; // bounded lock-before-sleep release safety
 
     // Issue one async Manager.Can* call per capability and fold each reply into
     // the cached value, emitting capabilitiesChanged only on an actual change.
@@ -160,6 +177,79 @@ public:
         manager.fireAndForget(owner, QLatin1String(kManagerIface), QLatin1String(method), {interactive},
                               QLatin1String(label));
     }
+
+    // Take one logind inhibitor and keep its fd alive in @p slot. The reply
+    // holds a dup'd fd; copying it into the member keeps the inhibitor active
+    // until the member is cleared (allowSleep / re-take) or destroyed.
+    void inhibit(const QString& what, const QString& mode, QDBusUnixFileDescriptor Private::* slot, const QString& why)
+    {
+        if (!bus.isConnected())
+            return;
+        PhosphorDBus::Client manager(bus, service, QLatin1String(kManagerPath), &lcSessionHost());
+        const QDBusPendingCall pending = manager.asyncCall(QLatin1String(kManagerIface), QStringLiteral("Inhibit"),
+                                                           {what, QStringLiteral("Phosphor Shell"), why, mode});
+        auto* watcher = new QDBusPendingCallWatcher(pending, owner);
+        QObject::connect(
+            watcher, &QDBusPendingCallWatcher::finished, owner, [this, slot, what](QDBusPendingCallWatcher* call) {
+                call->deleteLater();
+                const QDBusPendingReply<QDBusUnixFileDescriptor> reply = *call;
+                if (reply.isError()) {
+                    qCWarning(lcSessionHost) << "logind Inhibit failed for" << what << ":" << reply.error().message();
+                    return;
+                }
+                this->*slot = reply.value();
+            });
+    }
+
+    // A delay lock on "sleep" so we can lock the session before suspend; it is
+    // released across the handshake and re-taken on resume.
+    void takeSleepInhibitor()
+    {
+        inhibit(QStringLiteral("sleep"), QStringLiteral("delay"), &Private::sleepInhibitor,
+                QStringLiteral("lock the session before the system sleeps"));
+    }
+
+    // A block lock on the handle-* keys so the shell, not logind's defaults,
+    // decides what the power / suspend / hibernate / lid keys do. Held for the
+    // host's lifetime.
+    void takeKeyInhibitor()
+    {
+        inhibit(QStringLiteral("handle-power-key:handle-suspend-key:handle-hibernate-key:handle-lid-switch"),
+                QStringLiteral("block"), &Private::keyInhibitor,
+                QStringLiteral("the shell handles the power, suspend, hibernate, and lid keys"));
+    }
+
+    void subscribePrepareForSleep()
+    {
+        if (!bus.isConnected())
+            return;
+        bus.connect(service, QLatin1String(kManagerPath), QLatin1String(kManagerIface),
+                    QStringLiteral("PrepareForSleep"), owner, SLOT(onPrepareForSleep(bool)));
+    }
+
+    void handlePrepareForSleep(bool beforeSleep)
+    {
+        Q_EMIT owner->prepareForSleep(beforeSleep);
+        if (beforeSleep) {
+            // We hold the delay inhibitor, so logind is waiting on us. Ask the
+            // shell to lock and arm the safety timeout: if the shell never calls
+            // allowSleep() we release anyway, so a missing lock cannot wedge the
+            // suspend past logind's InhibitDelayMaxSec.
+            Q_EMIT owner->aboutToSleep();
+            sleepTimer.start(kSleepLockTimeoutMs);
+        } else {
+            // Resumed: re-arm the delay inhibitor for the next sleep.
+            sleepTimer.stop();
+            takeSleepInhibitor();
+        }
+    }
+
+    void allowSleep()
+    {
+        sleepTimer.stop();
+        // Closing the fd releases the delay inhibitor, letting suspend proceed.
+        sleepInhibitor = QDBusUnixFileDescriptor();
+    }
 };
 
 SessionHost::SessionHost(QObject* parent)
@@ -172,8 +262,20 @@ SessionHost::SessionHost(QDBusConnection connection, QString service, QObject* p
     , d(std::make_unique<Private>(std::move(connection), std::move(service)))
 {
     d->owner = this;
+
+    // The safety timeout that completes the lock-before-sleep handshake if the
+    // shell never confirms the lock.
+    d->sleepTimer.setSingleShot(true);
+    connect(&d->sleepTimer, &QTimer::timeout, this, [this] {
+        qCWarning(lcSessionHost) << "lock-before-sleep confirmation timed out; releasing the sleep inhibitor";
+        d->allowSleep();
+    });
+
     d->refresh();
     d->resolveSession();
+    d->takeKeyInhibitor();
+    d->takeSleepInhibitor();
+    d->subscribePrepareForSleep();
 }
 
 SessionHost::~SessionHost() = default;
@@ -301,6 +403,16 @@ void SessionHost::powerOff()
 void SessionHost::halt()
 {
     d->powerAction("Halt", d->canHalt, "Halt");
+}
+
+void SessionHost::allowSleep()
+{
+    d->allowSleep();
+}
+
+void SessionHost::onPrepareForSleep(bool beforeSleep)
+{
+    d->handlePrepareForSleep(beforeSleep);
 }
 
 } // namespace PhosphorServiceSession

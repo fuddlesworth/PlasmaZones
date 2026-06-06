@@ -108,6 +108,12 @@ public:
     Q_INVOKABLE void powerOff();
     Q_INVOKABLE void halt();
 
+    /// Drop the sleep delay-inhibitor so a pending suspend proceeds. The shell
+    /// calls this once the lock surface (2.9) is confirmed up, completing the
+    /// lock-before-sleep handshake. A safety timeout drops it anyway if the
+    /// shell never confirms, so a missing lock cannot wedge suspend.
+    Q_INVOKABLE void allowSleep();
+
 Q_SIGNALS:
     /// Emitted whenever any capability value actually changes (each async
     /// `Can*` reply that differs from the cached value fires this once).
@@ -117,6 +123,19 @@ Q_SIGNALS:
     /// gracefully (close clients, save state) rather than via a blunt logind
     /// terminate.
     void logoutRequested();
+
+    /// Raw logind PrepareForSleep passthrough: @p beforeSleep is true just
+    /// before the system sleeps and false just after it resumes.
+    void prepareForSleep(bool beforeSleep);
+
+    /// Emitted on PrepareForSleep(true) while the delay inhibitor is held: the
+    /// shell should lock now, then call allowSleep() once the surface is up.
+    void aboutToSleep();
+
+private Q_SLOTS:
+    // logind PrepareForSleep delivery point (QtDBus signal subscription needs a
+    // string-named slot, so this is not a lambda).
+    void onPrepareForSleep(bool beforeSleep);
 
 private:
     Q_DISABLE_COPY_MOVE(SessionHost)
