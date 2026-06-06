@@ -288,6 +288,13 @@ Item {
         id: battery
     }
 
+    // Lock-before-sleep integration: instantiates the lock (2.9) and session
+    // (2.10) services and wires the handshake. Inert without a compositor +
+    // logind; the lock surface itself lands with the Phase 4 lock screen.
+    SessionLockCoordinator {
+        id: sessionLockCoordinator
+    }
+
     FileView {
         id: hostnameFile
 
