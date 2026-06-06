@@ -11,6 +11,9 @@
 #include <PhosphorShaders/ShaderParamPreamble.h>
 #include <PhosphorShaders/ShaderRegistry.h>
 
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <QTest>
 
 using PhosphorShaders::PreambleParam;
@@ -169,6 +172,37 @@ private Q_SLOTS:
             PhosphorShaders::spliceAfterVersion(src, QStringLiteral("#define pz_x customParams[0].x\n"));
         // #version is line 3, so the author's next line is renumbered to 4.
         QVERIFY2(out.contains(QStringLiteral("#line 4 0")), qPrintable(out));
+    }
+
+    // A param whose id isn't a valid GLSL identifier must claim NO lane even when
+    // it carries an explicit slot — parseShaderMetadata forces it to slot -1, so it
+    // gets no define and no upload. Otherwise it would upload to its explicit lane
+    // while a valid auto-slot param (the lane was never reserved) collides onto it.
+    void testInvalidIdWithExplicitSlotClaimsNoLane()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QByteArray meta =
+            R"({"name":"t","parameters":[{"id":"a-b","type":"float","slot":0},{"id":"good","type":"float"}]})";
+        QFile f(QDir(tmp.path()).filePath(QStringLiteral("metadata.json")));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(meta);
+        f.close();
+
+        const ShaderRegistry::ShaderInfo info = ShaderRegistry::parsePackMetadata(tmp.path());
+        int badSlot = -99, goodSlot = -99;
+        for (const ShaderRegistry::ParameterInfo& p : info.parameters) {
+            if (p.id == QLatin1String("a-b")) {
+                badSlot = p.slot;
+            } else if (p.id == QLatin1String("good")) {
+                goodSlot = p.slot;
+            }
+        }
+        QCOMPARE(badSlot, -1); // invalid id → no lane (overrides the explicit slot 0)
+        QCOMPARE(goodSlot, 0); // valid id takes lane 0 uncontested
+        const QString out = ShaderRegistry::paramPreamble(info);
+        QVERIFY2(out.contains(QStringLiteral("#define pz_good customParams[0].x")), qPrintable(out));
+        QVERIFY2(!out.contains(QStringLiteral("#define pz_a")), qPrintable(out));
     }
 
     // No #version: best-effort prepend rather than dropping the block.

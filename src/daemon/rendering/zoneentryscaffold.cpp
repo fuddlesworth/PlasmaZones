@@ -60,15 +60,12 @@ QList<PhosphorShaders::EntryCandidate> zoneEntryCandidates()
 
 QString assembleZoneEntrySource(const QString& rawFragmentSource)
 {
-    // A pack that ships its own main() is authored the traditional way (it
-    // already carries #version, includes, and in/out) — leave it byte-for-byte.
-    if (PhosphorShaders::definesMain(rawFragmentSource)) {
-        return rawFragmentSource;
-    }
-    // Entry-only: supply the scaffold, then let composeEntryPoint append the
-    // main() for whichever entry function the body defines (or pass through to
-    // a clean missing-main() error if none).
-    return PhosphorShaders::composeEntryPoint(zoneEntryPrologue() + rawFragmentSource, zoneEntryCandidates());
+    // Delegate to the shared library assembler so the zone path can't drift from
+    // the rendering/kwin-effect paths: a pack that ships its own main() passes
+    // through byte-for-byte; an entry-only pack gets the prologue + the generated
+    // main() for whichever candidate (pzZone/pzImage) its body defines. The zone
+    // candidate list is never empty, so this is exactly the old open-coded form.
+    return PhosphorShaders::assembleEntryPoint(rawFragmentSource, zoneEntryPrologue(), zoneEntryCandidates());
 }
 
 } // namespace PlasmaZones

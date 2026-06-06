@@ -218,6 +218,19 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
     // A collision (two explicit params on one lane) is left as-is for the
     // validator (T1.2) to flag, not silently reshuffled.
     {
+        // An id that isn't a valid GLSL identifier can't get a pz_<id> define
+        // (buildParamPreamble skips it), so it must claim no lane either: force its
+        // slot to -1 (overriding any explicit metadata slot) so it reserves
+        // nothing, auto-fills to nothing, AND uploads nothing — uniformName()
+        // returns "" for slot < 0, so translateParamsToUniforms drops it. Without
+        // this, an invalid-id param with an explicit slot would still upload to
+        // that lane while a valid auto-slot param (the lane was never reserved)
+        // collides onto it.
+        for (ShaderRegistry::ParameterInfo& p : info.parameters) {
+            if (!isValidParamId(p.id)) {
+                p.slot = -1;
+            }
+        }
         auto poolOf = [](const QString& type) -> int { // 0 = scalar, 1 = color, 2 = image
             if (type == QLatin1String("color")) {
                 return 1;
@@ -982,9 +995,11 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
 
 QString ShaderRegistry::paramPreamble(const ShaderInfo& info)
 {
-    // By the time this runs, parseShaderMetadata has resolved every parameter's
-    // slot to >= 0 — an explicit metadata `slot`, or one auto-assigned by
-    // declaration order when omitted (most migrated packs drop `slot`) — so each
+    // By the time this runs, parseShaderMetadata has resolved every VALID-id
+    // parameter's slot to >= 0 — an explicit metadata `slot`, or one auto-assigned
+    // by declaration order when omitted (most migrated packs drop `slot`); an
+    // invalid-id param keeps slot -1 and is skipped identically by buildParamPreamble
+    // (no define) and translateParamsToUniforms (no upload). So each emitted
     // PreambleParam carries a concrete explicit slot (buildParamPreamble's
     // auto-numbering isn't exercised on this zone path). buildParamPreamble turns
     // each into `#define pz_<id> <glsl-accessor>` using the same slot→accessor rule
