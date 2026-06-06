@@ -87,10 +87,10 @@ public:
     [[nodiscard]] bool interactive() const;
     void setInteractive(bool interactive);
 
-    /// Lock this session (resolved via `GetSessionByPID` / `XDG_SESSION_ID`):
-    /// logind emits its `Lock` signal, which the shell routes to the lock
-    /// surface (2.9). Falls back to `Manager.LockSessions()` when this session
-    /// cannot be resolved.
+    /// Lock this session (resolved via `XDG_SESSION_ID` / `GetSession`, falling
+    /// back to `GetSessionByPID`): logind emits its `Lock` signal, which the
+    /// shell routes to the lock surface (2.9). Falls back to
+    /// `Manager.LockSessions()` when this session cannot be resolved.
     Q_INVOKABLE void lock();
 
     /// End this session. Emits logoutRequested() so the shell / compositor can

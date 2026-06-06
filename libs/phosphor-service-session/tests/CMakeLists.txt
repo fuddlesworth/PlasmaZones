@@ -19,8 +19,8 @@ function(_phosphorservicesession_test target source)
 endfunction()
 
 # Smoke test: QML registration idempotency and inert construction without a
-# live logind. The capability / action / inhibitor coverage lands alongside
-# those milestones.
+# live logind. The capability / action / inhibitor coverage lives in the
+# fake-logind behaviour test below.
 _phosphorservicesession_test(test_phosphorservicesession_smoke test_smoke.cpp)
 
 # QML facade: a real QQmlEngine imports Phosphor.Service.Session 1.0,

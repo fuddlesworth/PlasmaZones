@@ -101,29 +101,33 @@ private Q_SLOTS:
         QCOMPARE(host.interactive(), false);
     }
 
-    // The lock-before-sleep handshake signal logic, driven without a real
-    // logind by invoking the PrepareForSleep delivery slot directly: a
-    // before-sleep edge emits prepareForSleep(true) AND aboutToSleep (the shell
-    // locks here, while the delay inhibitor is notionally held); the resume edge
-    // emits prepareForSleep(false) but no further aboutToSleep. allowSleep()
-    // completes the handshake without crashing even when no fd is held.
+    // The lock-before-sleep handshake signal logic on an inert host (no logind
+    // bound, so no delay inhibitor is held), driven by invoking the
+    // PrepareForSleep delivery slot directly. A before-sleep edge passes through
+    // as prepareForSleep(true) but does NOT raise aboutToSleep: with no inhibitor
+    // held logind is not blocked on us, so there is nothing to hand off to the
+    // lock surface and arming a handshake would promise a guarantee we cannot
+    // keep. The resume edge passes through as prepareForSleep(false). allowSleep()
+    // is a safe no-op with no fd held. (The held-inhibitor handshake, including
+    // aboutToSleep + the fd release, is covered against a fake logind in
+    // test_sessionhost.)
     void prepareForSleepDrivesHandshake()
     {
-        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1"));
+        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1.invalid.test"));
         QSignalSpy prep(&host, &SessionHost::prepareForSleep);
         QSignalSpy about(&host, &SessionHost::aboutToSleep);
 
         QVERIFY(QMetaObject::invokeMethod(&host, "onPrepareForSleep", Qt::DirectConnection, Q_ARG(bool, true)));
         QCOMPARE(prep.count(), 1);
         QCOMPARE(prep.takeFirst().at(0).toBool(), true);
-        QCOMPARE(about.count(), 1);
+        QCOMPARE(about.count(), 0); // no inhibitor held -> no handshake
 
-        host.allowSleep();
+        host.allowSleep(); // safe no-op with nothing held
 
         QVERIFY(QMetaObject::invokeMethod(&host, "onPrepareForSleep", Qt::DirectConnection, Q_ARG(bool, false)));
         QCOMPARE(prep.count(), 1);
         QCOMPARE(prep.takeFirst().at(0).toBool(), false);
-        QCOMPARE(about.count(), 1); // no new aboutToSleep on resume
+        QCOMPARE(about.count(), 0);
     }
 
     // A logind session Lock / Unlock signal surfaces as lockRequested() /

@@ -20,6 +20,8 @@
 #include <QTextStream>
 #include <QTimer>
 
+#include <functional>
+
 using namespace PhosphorServiceSession;
 
 namespace {
@@ -29,8 +31,9 @@ constexpr int kOk = 0;
 constexpr int kFailure = 1;
 constexpr int kUsage = 64;
 
-// Let the async capability + session-path lookups settle before reading them.
-// logind answers on the local system bus quickly; this is a comfortable margin.
+// Ceiling for the async capability + session-path lookups. logind answers on the
+// local system bus quickly; we return as soon as the answers land (see
+// pumpUntil) and only wait this long if the bus is slow or silent.
 constexpr int kSettleMs = 1200;
 // Flush window after a fire-and-forget action so the call reaches logind before
 // the process exits.
@@ -41,6 +44,34 @@ void pump(int ms)
     QEventLoop loop;
     QTimer::singleShot(ms, &loop, &QEventLoop::quit);
     loop.exec();
+}
+
+// Pump the event loop until @p done() is satisfied or @p ceilingMs elapses,
+// whichever comes first. Driving the settle off the capability replies (rather
+// than a fixed sleep) returns immediately on a fast bus while the ceiling still
+// bounds a slow or silent logind.
+void pumpUntil(SessionHost& host, int ceilingMs, const std::function<bool()>& done)
+{
+    if (done())
+        return;
+    QEventLoop loop;
+    QTimer ceiling;
+    ceiling.setSingleShot(true);
+    QObject::connect(&ceiling, &QTimer::timeout, &loop, &QEventLoop::quit);
+    ceiling.start(ceilingMs);
+    QObject::connect(&host, &SessionHost::capabilitiesChanged, &loop, [&] {
+        if (done())
+            loop.quit();
+    });
+    loop.exec();
+}
+
+bool capabilitiesResolved(const SessionHost& host)
+{
+    using A = SessionHost::Availability;
+    return host.canPowerOff() != A::Unknown && host.canReboot() != A::Unknown && host.canHalt() != A::Unknown
+        && host.canSuspend() != A::Unknown && host.canHibernate() != A::Unknown && host.canHybridSleep() != A::Unknown
+        && host.canSuspendThenHibernate() != A::Unknown;
 }
 
 QString availabilityName(SessionHost::Availability availability)
@@ -104,6 +135,13 @@ int main(int argc, char** argv)
 
     const QString command = (argc > 1) ? QString::fromLocal8Bit(argv[1]) : QStringLiteral("status");
 
+    if (argc > 2) {
+        err << "unexpected extra arguments after '" << command << "'\n\n";
+        err.flush();
+        printUsage(out);
+        return kUsage;
+    }
+
     if (command == QLatin1String("-h") || command == QLatin1String("--help") || command == QLatin1String("help")) {
         printUsage(out);
         return kOk;
@@ -115,7 +153,13 @@ int main(int argc, char** argv)
     host.setInteractive(false);
 
     // Let the capability + session-path lookups resolve before acting on them.
-    pump(kSettleMs);
+    // Returns as soon as logind has answered every Can* query, bounded by
+    // kSettleMs. (The session-path lookup has no signal to wait on; it is issued
+    // alongside the capability calls and has resolved by the time they all have,
+    // and lock() falls back to LockSessions() if it has not.)
+    pumpUntil(host, kSettleMs, [&] {
+        return capabilitiesResolved(host);
+    });
 
     if (command == QLatin1String("status")) {
         printStatus(out, host);

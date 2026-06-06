@@ -8,10 +8,18 @@
 //
 // SessionHost's QML (default) constructor talks to the live system-bus logind,
 // so the capability values are environment-dependent and the destructive power
-// actions (suspend / powerOff / reboot / ...) are deliberately NOT invoked here
-// — they would act on the host running the test. Only logout(), a pure signal
-// with no logind call, is driven. The action-routing and handshake logic is
-// covered deterministically against a fake logind Manager in the M8 tests.
+// actions (suspend / powerOff / reboot / ...) are deliberately NOT invoked here:
+// they would act on the host running the test. Only logout(), a pure signal with
+// no logind call, is driven. The action-routing and handshake logic is covered
+// deterministically against a fake logind Manager in the M8 tests.
+//
+// Side effect to be aware of: when a live logind is present, simply constructing
+// the SessionHost (which this test does, via the QML default ctor) takes the
+// real delay (sleep) and block (handle-power/suspend/hibernate/lid keys)
+// inhibitors for the lifetime of the object, i.e. the test briefly owns those
+// keys. They are released on destruction. This is unavoidable with the default
+// ctor; the fake-logind M8 tests inject a bogus service and so take no real
+// inhibitors.
 
 #include <PhosphorServiceSession/QmlRegistration.h>
 #include <PhosphorServiceSession/SessionHost.h>

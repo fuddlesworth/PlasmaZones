@@ -28,14 +28,49 @@ constexpr auto kSessionPath = "/org/phosphor/test/session1";
 using Availability = SessionHost::Availability;
 } // namespace
 
+// Base for the fake D-Bus objects: unregisters its own object path in the
+// destructor, while the object is still alive (before ~QObject), so a stack-local
+// fake cannot leave QtDBus holding a dangling pointer between end-of-scope and
+// the test's cleanup().
+class FakeDBusObject : public QObject
+{
+public:
+    ~FakeDBusObject() override
+    {
+        if (!m_path.isEmpty())
+            m_connection.unregisterObject(m_path);
+    }
+
+    void boundTo(const QDBusConnection& connection, const QString& path)
+    {
+        m_connection = connection;
+        m_path = path;
+    }
+
+private:
+    QDBusConnection m_connection = QDBusConnection::sessionBus();
+    QString m_path;
+};
+
 // Fake logind Manager: configurable capability strings, recorded actions /
 // inhibitor requests, and an emittable PrepareForSleep signal.
-class FakeManager : public QObject
+class FakeManager : public FakeDBusObject
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.freedesktop.login1.Manager")
 
 public:
+    ~FakeManager() override
+    {
+        if (sleepInhibitorReadEnd >= 0)
+            ::close(sleepInhibitorReadEnd);
+    }
+
+    // Read end of the pipe whose write end was handed to the host as the sleep
+    // delay inhibitor. -1 until the host has taken that inhibitor; once the host
+    // releases (closes) the write end, this read end reports EOF.
+    int sleepInhibitorReadEnd = -1;
+
     QString powerOff = QStringLiteral("yes");
     QString reboot = QStringLiteral("yes");
     QString halt = QStringLiteral("challenge");
@@ -128,8 +163,24 @@ public Q_SLOTS:
     QDBusUnixFileDescriptor Inhibit(const QString& what, const QString&, const QString&, const QString& mode)
     {
         inhibits.append({what, mode});
-        // Return a real fd so the host's QDBusUnixFileDescriptor holds a valid
-        // handle; /dev/null is harmless and always present.
+        // For the sleep delay inhibitor, hand the host the write end of a pipe so
+        // the test can observe the host releasing it: closing the host's dup
+        // makes the retained read end report EOF. Other inhibitors get an inert
+        // fd (/dev/null), which is harmless and always present.
+        if (what.contains(QLatin1String("sleep")) && mode == QLatin1String("delay")) {
+            int fds[2];
+            if (::pipe(fds) == 0) {
+                ::fcntl(fds[0], F_SETFD, FD_CLOEXEC);
+                ::fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+                ::fcntl(fds[0], F_SETFL, O_NONBLOCK); // read end never blocks fdAtEof()
+                if (sleepInhibitorReadEnd >= 0)
+                    ::close(sleepInhibitorReadEnd); // a re-take replaces the prior pipe
+                sleepInhibitorReadEnd = fds[0];
+                QDBusUnixFileDescriptor wrapped(fds[1]); // dups the write end
+                ::close(fds[1]);
+                return wrapped;
+            }
+        }
         const int fd = ::open("/dev/null", O_RDONLY);
         QDBusUnixFileDescriptor wrapped(fd); // dups
         if (fd >= 0)
@@ -149,7 +200,7 @@ private:
 };
 
 // Fake Session exposing the Lock / Unlock / Terminate methods we call.
-class FakeSessionMethods : public QObject
+class FakeSessionMethods : public FakeDBusObject
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.freedesktop.login1.Session")
@@ -175,7 +226,7 @@ public Q_SLOTS:
 // Fake Session exposing the Lock / Unlock signals logind sends to request a
 // lock. (A separate class from FakeSessionMethods: a single QObject cannot carry
 // both a Lock slot and a Lock signal.)
-class FakeSessionSignals : public QObject
+class FakeSessionSignals : public FakeDBusObject
 {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.freedesktop.login1.Session")
@@ -211,8 +262,9 @@ private Q_SLOTS:
 
     void cleanup()
     {
-        m_bus.unregisterObject(QLatin1String(kManagerPath));
-        m_bus.unregisterObject(QLatin1String(kSessionPath));
+        // The fakes unregister their own object paths in their destructors (which
+        // run at end-of-test scope, while the objects are still alive), so here
+        // we only need to drop the well-known service name.
         m_bus.unregisterService(QLatin1String(kService));
     }
 
@@ -257,6 +309,39 @@ private Q_SLOTS:
         host.setInteractive(false);
         host.suspend();
         QTRY_VERIFY(manager.actions.contains(QStringLiteral("Suspend(0)")));
+    }
+
+    // Every power action routes to its matching Manager method when actionable,
+    // guarding against a copy-paste error in any one method name / label in the
+    // SessionHost action table.
+    void everyActionRoutesToItsManagerMethod()
+    {
+        FakeManager manager;
+        manager.powerOff = QStringLiteral("yes");
+        manager.reboot = QStringLiteral("yes");
+        manager.halt = QStringLiteral("yes");
+        manager.suspend = QStringLiteral("yes");
+        manager.hibernate = QStringLiteral("yes");
+        manager.hybridSleep = QStringLiteral("yes");
+        manager.suspendThenHibernate = QStringLiteral("yes");
+        registerManager(manager);
+
+        SessionHost host(m_bus, QLatin1String(kService));
+        QTRY_COMPARE(host.canSuspendThenHibernate(), Availability::Yes);
+
+        host.powerOff();
+        host.reboot();
+        host.halt();
+        host.suspend();
+        host.hibernate();
+        host.hybridSleep();
+        host.suspendThenHibernate();
+
+        for (const QString& method :
+             {QStringLiteral("PowerOff"), QStringLiteral("Reboot"), QStringLiteral("Halt"), QStringLiteral("Suspend"),
+              QStringLiteral("Hibernate"), QStringLiteral("HybridSleep"), QStringLiteral("SuspendThenHibernate")}) {
+            QTRY_VERIFY(manager.actions.contains(method + QStringLiteral("(1)")));
+        }
     }
 
     // A challenge capability is actionable (permitted, may need auth); the call
@@ -314,7 +399,8 @@ private Q_SLOTS:
 
     // A logind PrepareForSleep(true) over the bus drives the handshake:
     // prepareForSleep(true) AND aboutToSleep fire; the resume edge fires
-    // prepareForSleep(false) with no further aboutToSleep.
+    // prepareForSleep(false) with no further aboutToSleep, and re-arms the delay
+    // inhibitor so the next suspend edge is still guarded.
     void prepareForSleepDrivesHandshakeOverBus()
     {
         FakeManager manager;
@@ -324,17 +410,54 @@ private Q_SLOTS:
         QSignalSpy prep(&host, &SessionHost::prepareForSleep);
         QSignalSpy about(&host, &SessionHost::aboutToSleep);
 
-        manager.emitPrepareForSleep(true);
-        QTRY_COMPARE(about.count(), 1);
-        QCOMPARE(prep.count(), 1);
-        QCOMPARE(prep.takeFirst().at(0).toBool(), true);
+        // The handshake runs only while the host holds the sleep delay inhibitor
+        // (taken asynchronously at construction). Re-emit PrepareForSleep(true)
+        // until aboutToSleep surfaces rather than racing the async Inhibit reply
+        // with a fixed sleep; once the inhibitor is held, aboutToSleep fires.
+        QTRY_VERIFY([&] {
+            manager.emitPrepareForSleep(true);
+            return about.count() >= 1;
+        }());
+        QVERIFY(prep.count() >= 1);
+        QVERIFY(prep.first().at(0).toBool()); // the first edge was before-sleep
 
+        const int sleepDelayBefore = countInhibits(manager, QStringLiteral("sleep"), QStringLiteral("delay"));
+        const int aboutAfterSleep = about.count();
+        prep.clear();
         host.allowSleep();
 
         manager.emitPrepareForSleep(false);
-        QTRY_COMPARE(prep.count(), 1);
-        QCOMPARE(prep.takeFirst().at(0).toBool(), false);
-        QCOMPARE(about.count(), 1); // no new aboutToSleep on resume
+        // The resume edge passes through as prepareForSleep(false)...
+        QTRY_VERIFY(!prep.isEmpty() && !prep.last().at(0).toBool());
+        QCOMPARE(about.count(), aboutAfterSleep); // ...with no new aboutToSleep...
+        // ...and the host re-arms the delay inhibitor for the next suspend edge.
+        QTRY_VERIFY(countInhibits(manager, QStringLiteral("sleep"), QStringLiteral("delay")) > sleepDelayBefore);
+    }
+
+    // The core lock-before-sleep guarantee: allowSleep() must actually release
+    // the sleep delay inhibitor (close its fd). The fake hands the host the write
+    // end of a pipe; releasing it closes the host's dup, which the retained read
+    // end observes as EOF. Without the release logind would suspend only after
+    // its InhibitDelayMaxSec timeout, defeating the handshake.
+    void sleepInhibitorReleasedOnAllowSleep()
+    {
+        FakeManager manager;
+        registerManager(manager);
+
+        SessionHost host(m_bus, QLatin1String(kService));
+        QSignalSpy about(&host, &SessionHost::aboutToSleep);
+
+        // aboutToSleep fires only while the host holds the sleep inhibitor, so it
+        // doubles as proof the host has taken (and is holding) the pipe write end.
+        QTRY_VERIFY([&] {
+            manager.emitPrepareForSleep(true);
+            return about.count() >= 1;
+        }());
+        QVERIFY(manager.sleepInhibitorReadEnd >= 0);
+        QVERIFY(!fdAtEof(manager.sleepInhibitorReadEnd)); // still held: not yet EOF
+
+        host.allowSleep();
+        QTRY_VERIFY(fdAtEof(manager.sleepInhibitorReadEnd)); // released: write end closed
     }
 
     // lock() resolves this session and calls Session.Lock; terminateSession()
@@ -345,12 +468,14 @@ private Q_SLOTS:
         registerManager(manager);
         FakeSessionMethods session;
         QVERIFY(m_bus.registerObject(QLatin1String(kSessionPath), &session, QDBusConnection::ExportAllSlots));
+        session.boundTo(m_bus, QLatin1String(kSessionPath));
 
         SessionHost host(m_bus, QLatin1String(kService));
-        // Drive lock() until the async session resolution (GetSessionByPID) lands
-        // and it routes to Session.Lock; before that it takes the LockSessions()
-        // fallback. Retrying the call is deterministic where a fixed sleep would
-        // flake on a loaded CI runner; the extra fallback calls are harmless.
+        // Drive lock() until the async session resolution (GetSession /
+        // GetSessionByPID) lands and it routes to Session.Lock; before that it
+        // takes the LockSessions() fallback. Retrying the call is deterministic
+        // where a fixed sleep would flake on a loaded CI runner; the extra
+        // fallback calls are harmless.
         QTRY_VERIFY([&] {
             host.lock();
             return session.calls.contains(QStringLiteral("Lock"));
@@ -362,6 +487,39 @@ private Q_SLOTS:
         QTRY_VERIFY(session.calls.contains(QStringLiteral("Terminate")));
     }
 
+    // terminateSession() must refuse (no-op) while this session is unresolved:
+    // firing the resolved session's Terminate is destructive, so an empty session
+    // path must never fall through to a blind terminate. Called before the async
+    // GetSession / GetSessionByPID resolution can land (no event-loop spin), so
+    // the path is still empty.
+    void terminateRefusedWhenSessionUnresolved()
+    {
+        FakeManager manager;
+        registerManager(manager);
+        FakeSessionMethods session;
+        QVERIFY(m_bus.registerObject(QLatin1String(kSessionPath), &session, QDBusConnection::ExportAllSlots));
+        session.boundTo(m_bus, QLatin1String(kSessionPath));
+
+        SessionHost host(m_bus, QLatin1String(kService));
+        host.terminateSession(); // session path not yet resolved -> must refuse
+        QTest::qWait(100); // give any (erroneously-issued) Terminate time to arrive
+        QVERIFY(!session.calls.contains(QStringLiteral("Terminate")));
+    }
+
+    // lock() falls back to Manager.LockSessions() when this session has not been
+    // resolved yet (called before the async GetSession / GetSessionByPID reply
+    // lands, so the session path is still empty). The only positive coverage of
+    // the fallback.
+    void lockFallsBackToLockSessionsWhenUnresolved()
+    {
+        FakeManager manager;
+        registerManager(manager);
+
+        SessionHost host(m_bus, QLatin1String(kService));
+        host.lock(); // session path not yet resolved -> LockSessions() fallback
+        QTRY_VERIFY(manager.lockSessionsCalled);
+    }
+
     // A logind Session Lock / Unlock signal surfaces as lockRequested() /
     // unlockRequested() over the real bus subscription.
     void sessionSignalsSurfaceOverBus()
@@ -370,6 +528,7 @@ private Q_SLOTS:
         registerManager(manager);
         FakeSessionSignals session;
         QVERIFY(m_bus.registerObject(QLatin1String(kSessionPath), &session, QDBusConnection::ExportAllSignals));
+        session.boundTo(m_bus, QLatin1String(kSessionPath));
 
         SessionHost host(m_bus, QLatin1String(kService));
         QSignalSpy lockSpy(&host, &SessionHost::lockRequested);
@@ -394,6 +553,27 @@ private:
     {
         QVERIFY(m_bus.registerObject(QLatin1String(kManagerPath), &manager,
                                      QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals));
+        manager.boundTo(m_bus, QLatin1String(kManagerPath));
+    }
+
+    // Count the inhibitor requests the host issued matching @p whatContains / @p mode.
+    static int countInhibits(const FakeManager& manager, const QString& whatContains, const QString& mode)
+    {
+        int n = 0;
+        for (const auto& inhibit : manager.inhibits) {
+            if (inhibit.first.contains(whatContains) && inhibit.second == mode)
+                ++n;
+        }
+        return n;
+    }
+
+    // True once every write end of the pipe behind @p fd is closed (read returns
+    // EOF). The read end is O_NONBLOCK, so this never blocks while the write end
+    // is still open (read returns -1/EAGAIN, i.e. not EOF).
+    static bool fdAtEof(int fd)
+    {
+        char buf;
+        return ::read(fd, &buf, sizeof(buf)) == 0;
     }
 
     QDBusConnection m_bus = QDBusConnection::sessionBus();

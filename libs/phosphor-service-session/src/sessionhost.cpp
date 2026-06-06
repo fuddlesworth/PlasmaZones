@@ -168,10 +168,12 @@ public:
     {
         if (!bus.isConnected() || sessionPath.isEmpty())
             return;
-        bus.connect(service, sessionPath, QLatin1String(kSessionIface), QStringLiteral("Lock"), owner,
-                    SLOT(onSessionLock()));
-        bus.connect(service, sessionPath, QLatin1String(kSessionIface), QStringLiteral("Unlock"), owner,
-                    SLOT(onSessionUnlock()));
+        if (!bus.connect(service, sessionPath, QLatin1String(kSessionIface), QStringLiteral("Lock"), owner,
+                         SLOT(onSessionLock())))
+            qCWarning(lcSessionHost) << "failed to subscribe to the logind session Lock signal at" << sessionPath;
+        if (!bus.connect(service, sessionPath, QLatin1String(kSessionIface), QStringLiteral("Unlock"), owner,
+                         SLOT(onSessionUnlock())))
+            qCWarning(lcSessionHost) << "failed to subscribe to the logind session Unlock signal at" << sessionPath;
     }
 
     // Issue a capability-gated logind Manager action. A no-op (with a warning)
@@ -211,7 +213,16 @@ public:
                     qCWarning(lcSessionHost) << "logind Inhibit failed for" << what << ":" << reply.error().message();
                     return;
                 }
-                this->*slot = reply.value();
+                const QDBusUnixFileDescriptor fd = reply.value();
+                if (!fd.isValid()) {
+                    // A "successful" reply carrying an invalid fd (a restricted or
+                    // misbehaving logind) would store an inert inhibitor that the
+                    // handshake later treats as held. Refuse it.
+                    qCWarning(lcSessionHost)
+                        << "logind Inhibit returned an invalid fd for" << what << "; the inhibitor is not held";
+                    return;
+                }
+                this->*slot = fd;
             });
     }
 
@@ -237,14 +248,28 @@ public:
     {
         if (!bus.isConnected())
             return;
-        bus.connect(service, QLatin1String(kManagerPath), QLatin1String(kManagerIface),
-                    QStringLiteral("PrepareForSleep"), owner, SLOT(onPrepareForSleep(bool)));
+        if (!bus.connect(service, QLatin1String(kManagerPath), QLatin1String(kManagerIface),
+                         QStringLiteral("PrepareForSleep"), owner, SLOT(onPrepareForSleep(bool))))
+            qCWarning(lcSessionHost)
+                << "failed to subscribe to logind PrepareForSleep; the lock-before-sleep handshake will not run";
     }
 
     void handlePrepareForSleep(bool beforeSleep)
     {
         Q_EMIT owner->prepareForSleep(beforeSleep);
         if (beforeSleep) {
+            // The lock-before-sleep handshake only holds while we actually hold
+            // the delay inhibitor: only then is logind blocked waiting on us. If
+            // a fast suspend -> resume -> suspend cycle outran the async re-take
+            // (the resume Inhibit reply has not landed yet) we are not holding
+            // it, so logind is NOT waiting; skip the handshake rather than emit
+            // aboutToSleep() and arm a timer for an inhibitor we do not have,
+            // which would promise a lock guarantee we cannot keep.
+            if (!sleepInhibitor.isValid()) {
+                qCWarning(lcSessionHost)
+                    << "PrepareForSleep without a held sleep inhibitor; skipping the lock-before-sleep handshake";
+                return;
+            }
             // We hold the delay inhibitor, so logind is waiting on us. Ask the
             // shell to lock and arm the safety timeout: if the shell never calls
             // allowSleep() we release anyway, so a missing lock cannot wedge the
@@ -253,10 +278,12 @@ public:
             sleepTimer.start(kSleepLockTimeoutMs);
         } else {
             // Resumed: re-arm the delay inhibitor for the next sleep. logind
-            // pairs every PrepareForSleep(true) with a (false) on resume, so the
-            // inhibitor is re-held before the next suspend edge.
+            // pairs every PrepareForSleep(true) with a (false) on resume; guard
+            // against a stray/duplicate resume edge re-issuing Inhibit while one
+            // is still held.
             sleepTimer.stop();
-            takeSleepInhibitor();
+            if (!sleepInhibitor.isValid())
+                takeSleepInhibitor();
         }
     }
 

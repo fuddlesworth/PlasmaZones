@@ -36,6 +36,15 @@ QtObject {
         // The system is about to sleep and logind is holding on our delay
         // inhibitor: lock now, before the machine suspends.
         function onAboutToSleep(): void {
+            // If the session is already locked (a manual lock, or a prior suspend
+            // that left it locked), the lock surface is already up: release the
+            // inhibitor immediately so suspend proceeds. Relying on a lock state
+            // transition here would never fire (lock() is a no-op when already
+            // locked) and would stall suspend until the library's safety timeout.
+            if (coordinator.lock.locked) {
+                coordinator.session.allowSleep();
+                return;
+            }
             coordinator.lock.lock();
         }
     }
