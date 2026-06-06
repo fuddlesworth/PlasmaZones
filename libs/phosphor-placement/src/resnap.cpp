@@ -91,16 +91,6 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
         entry.zonePosition = position;
         entry.screenId = screenId;
         entry.virtualDesktop = virtualDesktop;
-
-        // Multi-zone: collect all positions
-        if (zoneIds.size() > 1) {
-            for (const QString& zid : zoneIds) {
-                int p = globalZoneIdToPosition.value(zid, 0);
-                if (p > 0)
-                    entry.allZonePositions.append(p);
-            }
-        }
-
         newBuffer.append(entry);
     };
 
