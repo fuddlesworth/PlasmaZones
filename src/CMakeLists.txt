@@ -756,6 +756,30 @@ target_link_libraries(plasmazones-editor PRIVATE Qt6::GuiPrivate Qt6::ShaderTool
 
 install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 
+# T1.2 — offline shader-pack validator. Parses metadata.json with the daemon's
+# parser, reproduces the runtime GLSL assembly (entry scaffold + pz_<id> preamble
+# + includes) and bakes every stage through headless glslang (QShaderBaker — CPU
+# only, no GPU/Wayland). The CI gate for the bundled set; pre-commit-friendly for
+# pack authors. Links plasmazones_rendering for the zone entry scaffold.
+add_executable(plasmazones-shader-validate shadervalidate/main.cpp)
+target_link_libraries(plasmazones-shader-validate
+    PRIVATE
+        plasmazones_rendering
+        PhosphorRendering::PhosphorRendering
+        PhosphorShaders::PhosphorShaders
+        Qt6::Core
+        Qt6::GuiPrivate
+        Qt6::ShaderToolsPrivate
+)
+install(TARGETS plasmazones-shader-validate DESTINATION ${KDE_INSTALL_BINDIR})
+
+# CI gate: every bundled zone pack must parse + bake clean. Headless glslang, so
+# this runs in CI with no GPU/Wayland — exactly like luau-analyze for algorithms.
+if(BUILD_TESTING)
+    add_test(NAME shader_validate_bundled
+             COMMAND plasmazones-shader-validate ${PROJECT_SOURCE_DIR}/data/shaders)
+endif()
+
 # Standalone settings app (no KDE Frameworks required)
 add_subdirectory(settings)
 

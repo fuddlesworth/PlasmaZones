@@ -998,4 +998,34 @@ QString ShaderRegistry::paramPreamble(const ShaderInfo& info)
     return buildParamPreamble(params);
 }
 
+ShaderRegistry::ShaderInfo ShaderRegistry::parsePackMetadata(const QString& packDir, QString* error)
+{
+    const QString metaPath = QDir(packDir).filePath(QStringLiteral("metadata.json"));
+    QFile file(metaPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (error) {
+            *error = QStringLiteral("cannot open %1").arg(metaPath);
+        }
+        return {};
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        if (error) {
+            *error = QStringLiteral("invalid JSON: %1").arg(parseError.errorString());
+        }
+        return {};
+    }
+    if (!doc.isObject()) {
+        if (error) {
+            *error = QStringLiteral("metadata root is not a JSON object");
+        }
+        return {};
+    }
+    // parseShaderMetadata lives in this TU's anonymous namespace; it sets
+    // sourcePath / vertexShaderPath / bufferShaderPaths from packDir and applies
+    // the same auto-slot assignment the live scan does.
+    return parseShaderMetadata(packDir, doc.object());
+}
+
 } // namespace PhosphorShaders

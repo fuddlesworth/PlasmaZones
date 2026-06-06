@@ -141,6 +141,15 @@ public:
     /// Empty when the shader declares no parameters.
     static QString paramPreamble(const ShaderInfo& info);
 
+    /// Parse a pack directory's `metadata.json` into a ShaderInfo using the SAME
+    /// parser the live registry uses (T1.1 auto-slot assignment included), so an
+    /// offline validator (`plasmazones-shader-validate`) and the daemon agree on
+    /// what a pack is. Returns an invalid ShaderInfo and sets @p error on a
+    /// missing/unreadable file or non-object JSON root. Does NOT verify that the
+    /// frag/buffer files exist on disk — that's a validator lint, not a parse
+    /// failure — so `sourcePath`/`bufferShaderPaths` are returned as declared.
+    static ShaderInfo parsePackMetadata(const QString& packDir, QString* error = nullptr);
+
     Q_INVOKABLE QVariantMap presetParams(const QString& shaderId, const QString& presetName) const;
     Q_INVOKABLE QStringList shaderPresetNames(const QString& shaderId) const;
     Q_INVOKABLE QVariantList shaderPresetsVariant(const QString& shaderId) const;
