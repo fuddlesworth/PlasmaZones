@@ -341,6 +341,7 @@ Kirigami.Dialog {
         debouncePreviewUpdate.stop();
         root.hideShaderPreview();
         cachedShaderInfoForPreview = null;
+        cachedShaderParamPreamble = "";
         cachedShaderInfoId = "";
     }
     onPendingShaderIdChanged: {

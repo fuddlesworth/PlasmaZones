@@ -229,7 +229,10 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
         };
         QSet<int> usedScalar, usedColor, usedImage;
         for (const ShaderRegistry::ParameterInfo& p : std::as_const(info.parameters)) {
-            if (p.slot < 0) {
+            // Reserve only slots that buildParamPreamble also honors — an invalid
+            // id is skipped on both sides, so the two reservation passes stay
+            // byte-identical (not just the auto-fill passes).
+            if (p.slot < 0 || !isValidParamId(p.id)) {
                 continue;
             }
             (poolOf(p.type) == 1 ? usedColor : poolOf(p.type) == 2 ? usedImage : usedScalar).insert(p.slot);

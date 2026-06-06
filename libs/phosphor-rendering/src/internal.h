@@ -55,6 +55,12 @@ inline QByteArray entryScaffoldFingerprint(const QString& prologue,
         fp.append(c.functionName.toUtf8());
         fp.append('\x1f');
         fp.append(c.generatedMain.toUtf8());
+        // alsoRequires gates which candidate composeEntryPoint selects, so two
+        // scaffolds differing only there assemble differently — fold it in too.
+        for (const QString& req : c.alsoRequires) {
+            fp.append('\x1e');
+            fp.append(req.toUtf8());
+        }
     }
     return fp;
 }

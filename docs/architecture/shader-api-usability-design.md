@@ -132,11 +132,12 @@ trips people repeatedly.
 
 ### D2 — No pre-load validation, and runtime errors are unmapped
 
-A malformed shader is only discovered when `QShaderBaker` runs at render time.
-There is no `luau-analyze` equivalent. And because `expandIncludes()` concatenates
-includes without `#line` directives, glslang's reported line numbers point into
-the *expanded* blob, not the author's `effect.frag` — so even when an error does
-surface it is hard to locate.
+*(Pre-work state — addressed by T1.2/T1.3.)* A malformed shader was only
+discovered when `QShaderBaker` ran at render time. There was no `luau-analyze`
+equivalent. And because `expandIncludes()` concatenated includes without `#line`
+directives, glslang's reported line numbers pointed into the *expanded* blob, not
+the author's `effect.frag` — so even when an error did surface it was hard to
+locate.
 
 ### D3 — No editor tooling
 

@@ -537,7 +537,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
 
-    // -- Read customParams slots (must match metadata.json) ------
+    // -- Parameters (pz_<id> from metadata.json, sentinel-default fallbacks) ------
     float speed         = pz_speed >= 0.0 ? pz_speed : 0.08;
     float flowSpeed     = pz_flowSpeed >= 0.0 ? pz_flowSpeed : 0.15;
     float noiseScale    = pz_noiseScale >= 0.0 ? pz_noiseScale : 3.5;
