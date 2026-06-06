@@ -1,12 +1,12 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
 -- Spread-specific minimum width fraction (below this, windows are too narrow)
 local SpreadMinFraction = 0.3
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Spread",
         id = "spread",
@@ -25,8 +25,8 @@ return phosphor_luau.algorithm {
         local count = ctx.windowCount
         if count <= 0 then return {} end
         local area = ctx.area
-        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
-            return phosphor_luau.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
         local gap = ctx.innerGap
         local minSizes = ctx.minSizes
@@ -45,15 +45,15 @@ return phosphor_luau.algorithm {
             minHeights[#minHeights + 1] = mh
         end
 
-        local slotWidths = phosphor_luau.distributeWithOptionalMins(area.width, count, gap, slotMinWidths)
-        local baseHeight = math.max(phosphor_luau.MIN_ZONE_SIZE, math.floor(area.height * widthFraction))
+        local slotWidths = pluau.distributeWithOptionalMins(area.width, count, gap, slotMinWidths)
+        local baseHeight = math.max(pluau.MIN_ZONE_SIZE, math.floor(area.height * widthFraction))
 
         local zones = {}
         local currentX = area.x
         for i = 1, count do
             local slotW = slotWidths[i]
 
-            local winWidth = math.max(phosphor_luau.MIN_ZONE_SIZE, math.floor(slotW * widthFraction))
+            local winWidth = math.max(pluau.MIN_ZONE_SIZE, math.floor(slotW * widthFraction))
             if minWidths[i] > 0 then winWidth = math.max(winWidth, minWidths[i]) end
             winWidth = math.min(winWidth, slotW)
 

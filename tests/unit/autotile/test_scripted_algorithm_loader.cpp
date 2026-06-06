@@ -26,8 +26,8 @@ using namespace PlasmaZones::TestHelpers;
 static QString validScript(const QString& name)
 {
     return QStringLiteral(
-               "local phosphor_luau = phosphor_luau\n"
-               "return phosphor_luau.algorithm {\n"
+               "local pluau = pluau\n"
+               "return pluau.algorithm {\n"
                "    metadata = { name = \"%1\", description = \"Test algorithm\" },\n"
                "    tile = function(ctx)\n"
                "        return { { x = 0, y = 0, width = 100, height = 100 } }\n"

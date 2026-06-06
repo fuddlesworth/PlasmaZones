@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Zen",
         id = "zen",
@@ -22,22 +22,22 @@ return phosphor_luau.algorithm {
         local count = ctx.windowCount
         if count <= 0 then return {} end
         local area = ctx.area
-        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
-            return phosphor_luau.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
         local gap = ctx.innerGap
 
-        local splitRatio = phosphor_luau.clampSplitRatio(ctx.splitRatio)
+        local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
         local columnWidth = math.floor(area.width * splitRatio)
         columnWidth = math.max(1, columnWidth)
         local offsetX = area.x + math.floor((area.width - columnWidth) / 2)
 
         local totalGaps = (count - 1) * gap
         if totalGaps >= area.height then
-            return phosphor_luau.fillRegion(offsetX, area.y, columnWidth, area.height, count)
+            return pluau.fillRegion(offsetX, area.y, columnWidth, area.height, count)
         end
 
-        local slots = phosphor_luau.distributeEvenly(area.y, area.height, count, gap)
+        local slots = pluau.distributeEvenly(area.y, area.height, count, gap)
         local zones = {}
         for i = 1, #slots do
             zones[i] = { x = offsetX, y = slots[i].pos, width = columnWidth, height = slots[i].size }

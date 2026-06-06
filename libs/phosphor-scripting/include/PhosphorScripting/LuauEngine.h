@@ -24,7 +24,7 @@ class LuauWatchdog;
  * @brief An embedded, sandboxed Luau virtual machine with a QVariant API.
  *
  * Lifecycle: construct → @ref init → @ref runPrelude (zero or more, to install
- * host globals such as a `phosphor_luau` standard library) → @ref sandbox (freeze globals
+ * host globals such as a `pluau` standard library) → @ref sandbox (freeze globals
  * + stdlib) → @ref loadModule (per script). Scripts are then driven via
  * @ref callModule / @ref moduleField.
  *

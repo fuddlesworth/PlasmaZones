@@ -200,14 +200,14 @@ bool LuauTileAlgorithm::loadScript(const QString& filePath)
         return false;
     }
 
-    // Inject + freeze the phosphor_luau standard library before loading the (untrusted) script.
-    QFile preludeFile(QStringLiteral(":/phosphor_luau/phosphor_luau.luau"));
+    // Inject + freeze the pluau standard library before loading the (untrusted) script.
+    QFile preludeFile(QStringLiteral(":/pluau/pluau.luau"));
     if (!preludeFile.open(QIODevice::ReadOnly)) {
-        qCCritical(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: missing bundled phosphor_luau.luau prelude";
+        qCCritical(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: missing bundled pluau.luau prelude";
         return false;
     }
-    if (!m_engine->runPrelude(QStringLiteral("phosphor_luau"), preludeFile.readAll(), &error)) {
-        qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: phosphor_luau prelude failed:" << error;
+    if (!m_engine->runPrelude(QStringLiteral("pluau"), preludeFile.readAll(), &error)) {
+        qCWarning(PhosphorTiles::lcTilesLib) << "LuauTileAlgorithm: pluau prelude failed:" << error;
         return false;
     }
     m_engine->sandbox();

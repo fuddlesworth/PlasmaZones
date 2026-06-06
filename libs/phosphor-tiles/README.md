@@ -3,7 +3,7 @@
 
 # phosphor-tiles
 
-> Tiling algorithms (Luau scripts via the `phosphor_luau` standard library), `TilingState`,
+> Tiling algorithms (Luau scripts via the `pluau` standard library), `TilingState`,
 > the algorithm registry, and the `ILayoutSource` adapter that publishes
 > autotile output to the daemon.
 
@@ -23,11 +23,11 @@ Luau host (sandbox, watchdog, marshalling) lives in
   Luau script. Every layout (binary-split, master-stack, columns, spiral, …)
   ships as a `.luau` script in `data/algorithms/`; there are no hard-coded C++
   geometry algorithms.
-- **`phosphor_luau` standard library.** Scripts are written against `phosphor_luau`, a Luau table of
+- **`pluau` standard library.** Scripts are written against `pluau`, a Luau table of
   geometry primitives (a `Rect` with gap-aware splits, plus ~25 layout/helper
-  functions). It is compiled into the library as a Qt resource (`phosphor_luau.luau`),
+  functions). It is compiled into the library as a Qt resource (`pluau.luau`),
   injected as a **frozen** global before each untrusted script runs, and typed
-  for editors by `phosphor_luau.d.luau`.
+  for editors by `pluau.d.luau`.
 - **Sandbox & limits.** These are provided by `phosphor-scripting`'s
   `LuauEngine` (`luaL_sandbox` read-only globals, a per-engine heap cap, and a
   shared `LuauWatchdog` that aborts runaway scripts at a CPU deadline) — not by
@@ -65,7 +65,7 @@ Luau host (sandbox, watchdog, marshalling) lives in
 | `PhosphorTiles::AutotileLayoutSourceFactory` | Provider factory, registers with `LayoutSourceProviderRegistry` |
 | `PhosphorTiles::AutotilePreviewRender`       | Paint-a-thumbnail helper for the algorithm picker |
 
-The `phosphor_luau` standard library (`src/phosphor_luau/phosphor_luau.luau`) and its type stubs (`src/phosphor_luau/phosphor_luau.d.luau`)
+The `pluau` standard library (`src/pluau/pluau.luau`) and its type stubs (`src/pluau/pluau.d.luau`)
 are the Luau-side API surface; see
 [`docs/architecture/luau-algorithm-authoring.md`](../../docs/architecture/luau-algorithm-authoring.md)
 for the authoring guide.
@@ -99,9 +99,9 @@ A minimal Luau algorithm (e.g. `$XDG_DATA_HOME/<app>/algorithms/vstack.luau`):
 
 ```lua
 -- Single column, each window gets an equal vertical slice.
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Vertical Stack",
         id = "vstack",
@@ -127,7 +127,7 @@ return phosphor_luau.algorithm {
   separation keeps a settings-UI preview from linking the engine just to render
   a thumbnail, and keeps the Luau host reusable beyond tiling.
 - **The sandbox is defensive.** `LuauEngine` freezes the global table and the
-  `phosphor_luau` stdlib (`luaL_sandbox`) before any untrusted script runs — no `io`,
+  `pluau` stdlib (`luaL_sandbox`) before any untrusted script runs — no `io`,
   `os.execute`, filesystem, or network — and bounds both CPU time (the
   watchdog) and heap (the capped allocator).
 - **Algorithms consume positions, not window IDs.** They take a

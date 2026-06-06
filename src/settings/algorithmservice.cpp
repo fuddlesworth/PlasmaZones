@@ -70,7 +70,7 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
 }
 
 /// Build a `metadata = { ... }` Luau table block (4-space indented, as it
-/// appears inside `phosphor_luau.algorithm{ ... }`). Ends with `},` so it drops in ahead
+/// appears inside `pluau.algorithm{ ... }`). Ends with `},` so it drops in ahead
 /// of the tile field.
 QString buildLuauMetadata(const QString& name, const QString& id, bool overlapping, bool masterCount, bool splitRatio,
                           bool memory)
@@ -786,11 +786,11 @@ QString AlgorithmService::createNewAlgorithm(const QString& name, const QString&
     }
 
     if (!foundTemplate) {
-        // Blank scaffold: a self-contained phosphor_luau.algorithm module the user edits.
-        content = header + QStringLiteral("\nlocal phosphor_luau = phosphor_luau\n\nreturn phosphor_luau.algorithm {\n")
-            + metadataBlock + QStringLiteral("\n\n") + QStringLiteral("    tile = function(ctx)\n")
+        // Blank scaffold: a self-contained pluau.algorithm module the user edits.
+        content = header + QStringLiteral("\nlocal pluau = pluau\n\nreturn pluau.algorithm {\n") + metadataBlock
+            + QStringLiteral("\n\n") + QStringLiteral("    tile = function(ctx)\n")
             + QStringLiteral("        if ctx.windowCount <= 0 then return {} end\n")
-            + QStringLiteral("        return phosphor_luau.fillArea(ctx.area, ctx.windowCount)\n")
+            + QStringLiteral("        return pluau.fillArea(ctx.area, ctx.windowCount)\n")
             + QStringLiteral("    end,\n}\n");
     }
 

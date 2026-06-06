@@ -711,8 +711,8 @@ private:
     /// one slot per prime cycle for the surface's lifetime under rapid
     /// show/hide toggling.
     QHash<PhosphorLayer::Surface*, QMetaObject::Connection> m_primingFrameConnections;
-    /// Per-surface destroyed-signal Connection. Replaces the earlier
-    /// `p_primingDestroyedConnected` Qt dynamic property gate which
+    /// Per-surface destroyed-signal Connection. Replaces an earlier
+    /// per-surface Qt dynamic-property gate which
     /// leaked across OverlayService instances (test fixtures, daemon
     /// hot-restart) - a fresh service that re-encountered the same
     /// Surface* would skip wiring its own cleanup. Per-instance

@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Deck",
         id = "deck",
@@ -22,7 +22,7 @@ return phosphor_luau.algorithm {
         -- Overlapping layout — innerGap intentionally ignored (zones overlap by design)
         local count = ctx.windowCount
         if count <= 0 then return {} end
-        local splitRatio = phosphor_luau.clampSplitRatio(ctx.splitRatio)
-        return phosphor_luau.deckLayout(ctx.area, count, splitRatio, false)
+        local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
+        return pluau.deckLayout(ctx.area, count, splitRatio, false)
     end,
 }

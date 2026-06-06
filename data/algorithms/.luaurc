@@ -2,5 +2,5 @@
     "languageMode": "nonstrict",
     "lint": { "*": true },
     "lintErrors": false,
-    "globals": ["phosphor_luau"]
+    "globals": ["pluau"]
 }

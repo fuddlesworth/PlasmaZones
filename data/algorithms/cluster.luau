@@ -1,7 +1,7 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
 -- Even-split fallback (no per-window context). Columns in landscape, rows in portrait.
 local function evenSplit(area, count, gap, portrait)
@@ -9,7 +9,7 @@ local function evenSplit(area, count, gap, portrait)
     local total = portrait and area.height or area.width
     local available = total - gapSpace
     if available <= 0 then
-        return phosphor_luau.fillArea(area, count)
+        return pluau.fillArea(area, count)
     end
     local sliceSize = math.floor(available / count)
     local remainder = available - sliceSize * count
@@ -27,7 +27,7 @@ local function evenSplit(area, count, gap, portrait)
     return zones
 end
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Cluster",
         id = "cluster",
@@ -55,8 +55,8 @@ return phosphor_luau.algorithm {
         local area = ctx.area
         local gap = ctx.innerGap
 
-        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
-            return phosphor_luau.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
 
         local portrait = false
@@ -121,12 +121,12 @@ return phosphor_luau.algorithm {
         local gapSpace = (numClusters > 1) and (numClusters - 1) * gap or 0
         local availablePrimary = primaryTotal - gapSpace
         if availablePrimary <= 0 then
-            return phosphor_luau.fillArea(area, count)
+            return pluau.fillArea(area, count)
         end
 
-        local rawMinPx = math.max(phosphor_luau.MIN_ZONE_SIZE, math.floor(availablePrimary * minClusterRatio))
+        local rawMinPx = math.max(pluau.MIN_ZONE_SIZE, math.floor(availablePrimary * minClusterRatio))
         local minClusterPx = math.min(rawMinPx, math.floor(availablePrimary / numClusters))
-        minClusterPx = math.max(phosphor_luau.MIN_ZONE_SIZE, minClusterPx)
+        minClusterPx = math.max(pluau.MIN_ZONE_SIZE, minClusterPx)
 
         local clusterSizes = {}
         local totalAssigned = 0
@@ -141,7 +141,7 @@ return phosphor_luau.algorithm {
             local scale = availablePrimary / totalAssigned
             totalAssigned = 0
             for ci = 1, numClusters do
-                clusterSizes[ci] = math.max(phosphor_luau.MIN_ZONE_SIZE, math.floor(clusterSizes[ci] * scale))
+                clusterSizes[ci] = math.max(pluau.MIN_ZONE_SIZE, math.floor(clusterSizes[ci] * scale))
                 totalAssigned = totalAssigned + clusterSizes[ci]
             end
             if totalAssigned < availablePrimary then

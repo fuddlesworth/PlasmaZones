@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Dwindle",
         id = "dwindle",
@@ -22,10 +22,10 @@ return phosphor_luau.algorithm {
         local count = ctx.windowCount
         if count <= 0 then return {} end
         local area = ctx.area
-        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
-            return phosphor_luau.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
         -- splitRatio is clamped inside dwindleLayout()
-        return phosphor_luau.dwindleLayout(area, count, ctx.splitRatio, ctx.innerGap, ctx.minSizes)
+        return pluau.dwindleLayout(area, count, ctx.splitRatio, ctx.innerGap, ctx.minSizes)
     end,
 }

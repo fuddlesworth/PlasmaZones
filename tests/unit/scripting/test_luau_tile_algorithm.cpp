@@ -160,7 +160,7 @@ void TestLuauTileAlgorithm::metadataOutOfRangeValuesClamped()
 {
     using namespace PlasmaZones::TestHelpers;
     using namespace AutotileDefaults;
-    // Raw metadata table (bypassing phosphor_luau.algorithm) so the C++ parse + clamp path
+    // Raw metadata table (bypassing pluau.algorithm) so the C++ parse + clamp path
     // sees the out-of-range values directly.
     const QString path = writeTempScript(m_tmp, QStringLiteral("clamp.luau"), QStringLiteral(R"LUA(
         return {
@@ -367,7 +367,7 @@ void TestLuauTileAlgorithm::onWindowRemovedHookRuns()
 {
     using namespace PlasmaZones::TestHelpers;
     // Self-contained module: onWindowAdded increments, onWindowRemoved decrements
-    // a module-local counter; tile() returns `counter` plain rects (no phosphor_luau needed).
+    // a module-local counter; tile() returns `counter` plain rects (no pluau needed).
     const QString path = writeTempScript(m_tmp, QStringLiteral("hooks.luau"), QStringLiteral(R"LUA(
         local n = 0
         return {

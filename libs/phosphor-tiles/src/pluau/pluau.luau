@@ -1,11 +1,11 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: LGPL-2.1-or-later
 --
--- The `phosphor_luau` tiling standard library. Injected as a global by LuauTileAlgorithm
+-- The `pluau` tiling standard library. Injected as a global by LuauTileAlgorithm
 -- before the VM is sandboxed, then frozen.
 --
 -- Two layers:
---   1. A high-level Rect API (split*/columns/rows/join) + phosphor_luau.algorithm{} wrapper
+--   1. A high-level Rect API (split*/columns/rows/join) + pluau.algorithm{} wrapper
 --      for ergonomic NEW authoring (ctx.area arrives as a Rect with methods).
 --   2. Faithful Luau ports of the C++/JS geometry builtins (distributeWithGaps,
 --      distributeWithMinSizes, equalColumnsLayout, fillArea, …) that the bundled
@@ -1003,7 +1003,7 @@ local function algorithm(def)
     return def
 end
 
-phosphor_luau = {
+pluau = {
     -- constants
     MIN_ZONE_SIZE = MIN_ZONE_SIZE,
     MIN_SPLIT = MIN_SPLIT,

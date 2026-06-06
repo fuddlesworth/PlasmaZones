@@ -51,7 +51,7 @@ class TestAnimationEntryScaffold : public QObject
 
 private Q_SLOTS:
 
-    void testSymmetricPzTransitionBakes()
+    void testSymmetricPTransitionBakes()
     {
         // The whole author file: one symmetric entry, `t` is raw iTime.
         const QString body = QStringLiteral(
@@ -65,7 +65,7 @@ private Q_SLOTS:
         QVERIFY2(assembled.contains(QStringLiteral("pTransition(vTexCoord, iTime)")), qPrintable(assembled));
     }
 
-    void testAsymmetricPzInPzOutBakes()
+    void testAsymmetricPInPOutBakes()
     {
         // Two entries; the harness dispatches by direction and feeds forward 0→1 t.
         const QString body = QStringLiteral(
@@ -79,7 +79,7 @@ private Q_SLOTS:
         QVERIFY2(assembled.contains(QStringLiteral("p_reversed ? pOut(vTexCoord")), qPrintable(assembled));
     }
 
-    void testLonePzInFallsThrough()
+    void testLonePInFallsThrough()
     {
         // pIn without its pOut companion must NOT generate a main that calls
         // the missing pOut — the candidate is skipped, so no dispatch is added.

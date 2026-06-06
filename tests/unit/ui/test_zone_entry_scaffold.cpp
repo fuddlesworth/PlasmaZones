@@ -53,7 +53,7 @@ class TestZoneEntryScaffold : public QObject
 
 private Q_SLOTS:
 
-    void testEntryOnlyPzZoneAssemblesAndBakes()
+    void testEntryOnlyPZoneAssemblesAndBakes()
     {
         // The whole author file — no #version, include, in/out, or main().
         const QString body = QStringLiteral(
@@ -68,7 +68,7 @@ private Q_SLOTS:
         QVERIFY2(bakeAssembled(body, &err), qPrintable(err));
     }
 
-    void testEntryOnlyPzImageAssemblesAndBakes()
+    void testEntryOnlyPImageAssemblesAndBakes()
     {
         const QString body = QStringLiteral(
             "vec4 pImage(vec2 fragCoord) {\n"

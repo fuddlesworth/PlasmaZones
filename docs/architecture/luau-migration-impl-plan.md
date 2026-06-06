@@ -44,7 +44,7 @@ Gains a dependency on `phosphor-scripting` and implements only the
 **tiling-specific binding**:
 
 - `LuauTileAlgorithm : TilingAlgorithm` — replaces `ScriptedAlgorithm`.
-- the `phosphor_luau` tiling stdlib in Luau (Rect API + the 25 C++ builtin helpers
+- the `pluau` tiling stdlib in Luau (Rect API + the 25 C++ builtin helpers
   reimplemented) + typed `.d.luau` definitions.
 - `TilingParams` / `TilingState` / `SplitTree` ↔ Lua marshalling.
 
@@ -107,8 +107,8 @@ The `metadata` table replaces *both* the JS `metadata` object and the
 |---|---|---|
 | **0. Foundations** | Vendor Luau @ 0.723; confirm name/ext/format (done); CMake `SYSTEM_LUAU` option | builds from vendored tarball |
 | **1. phosphor-scripting** | New LGPL lib (mirror other phosphor-* CMake/export/install); `LuauEngine`, `LuauWatchdog`, compile/load, marshalling core; unit tests (sandbox/escape probe, watchdog kill, compile-error surfacing, round-trip marshalling) | spike `LuauHost` is now a tested library |
-| **2. Tiling binding** | `phosphor_luau` Luau stdlib (Rect + 25 helpers) + `.d.luau`; `LuauTileAlgorithm` implementing the *full* contract incl. tree/hooks/custom-params; port `test_scripted_algorithm.cpp` | one algorithm runs end-to-end with hooks + memory |
-| **3. Port 25 algorithms** | `data/algorithms/*.js` → `*.luau` using `phosphor_luau`; **golden parity tests** (JS vs Luau zone output across counts/gaps/ratios/min-sizes); `luau-analyze` clean | byte-identical zones for all 25 |
+| **2. Tiling binding** | `pluau` Luau stdlib (Rect + 25 helpers) + `.d.luau`; `LuauTileAlgorithm` implementing the *full* contract incl. tree/hooks/custom-params; port `test_scripted_algorithm.cpp` | one algorithm runs end-to-end with hooks + memory |
+| **3. Port 25 algorithms** | `data/algorithms/*.js` → `*.luau` using `pluau`; **golden parity tests** (JS vs Luau zone output across counts/gaps/ratios/min-sizes); `luau-analyze` clean | byte-identical zones for all 25 |
 | **4. Loader / discovery** | Swap loader backend to create `LuauTileAlgorithm`, discover `.luau`; bytecode-aware hot-reload; install `.luau` | hot-reload works; registry unchanged |
 | **5. Host integration** | Verify daemon (`AutotileEngine`), editor (preview + custom-params UI), settings (algo list) untouched via `TilingAlgorithm`; update editor "new algorithm" template to `.luau` + ship `.d.luau` | end-to-end in real app |
 | **6. Remove JS path** | Delete `scriptedalgorithm*`, `builtins.qrc`, sandbox; drop `Qt6::Qml` from phosphor-tiles if only QJSEngine needed it; update CLAUDE.md/docs | QJSEngine gone |
@@ -134,7 +134,7 @@ The `metadata` table replaces *both* the JS `metadata` object and the
    Luau engines, diff zones) gates the migration. Non-negotiable.
 2. **Split-tree marshalling** (memory-aware `dwindle-memory`) is the hardest
    binding — budget extra care.
-3. **The `phosphor_luau` API must grow to cover all 25** — the spike did only
+3. **The `pluau` API must grow to cover all 25** — the spike did only
    columns/rows/split. Three-column, deck, spiral, paper, dwindle,
    centered-master each stress it. **Min-size handling moves host-side** (a big
    simplification, but needs design).

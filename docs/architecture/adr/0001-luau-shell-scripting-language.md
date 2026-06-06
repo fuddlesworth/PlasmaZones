@@ -59,7 +59,7 @@ and configuration language**.
    owns the Luau host (engine, sandbox, watchdog, compile/load, marshalling
    core) with no tiling knowledge, so future shell surfaces reuse it.
    `libs/phosphor-tiles` depends on it and implements the tiling binding
-   (`LuauTileAlgorithm`, the `phosphor_luau` stdlib + `.d.luau`, params/state/tree
+   (`LuauTileAlgorithm`, the `pluau` stdlib + `.d.luau`, params/state/tree
    marshalling). **Luau is vendored** as a committed source tarball by default
    (opt-in `-DPLASMAZONES_SYSTEM_LUAU=ON`) because it is packaged for only Arch
    and Nix — not Debian, Fedora, or openSUSE — and has no stable ABI.
@@ -96,7 +96,7 @@ Qt6::Core) proved the path end-to-end. **All green:**
   discipline the QJSEngine watchdog requires.
 - **Marshalling cost measured: 57 LOC** (35 in / 22 out) — the honest net-new
   burden replacing free `QJSValue::setProperty`.
-- **Ergonomics:** `master-stack` is **~14 LOC** against a typed `phosphor_luau` Rect API,
+- **Ergonomics:** `master-stack` is **~14 LOC** against a typed `pluau` Rect API,
   versus the JS version delegating to a ~100-line injected helper.
 
 ## Consequences
@@ -139,7 +139,7 @@ branch off `v3.1`, per-phase commits; PRs target `v3.1`). In summary:
    watchdog, compile/load, marshalling core), graduating the spike's `LuauHost`
    into a tested LGPL library.
 3. **Migrate autotiling as the first consumer** — the tiling binding in
-   `phosphor-tiles` (`LuauTileAlgorithm`, `phosphor_luau` stdlib, params/state/tree
+   `phosphor-tiles` (`LuauTileAlgorithm`, `pluau` stdlib, params/state/tree
    marshalling), port the 25 algorithms under a golden parity test, swap the
    loader backend, keep the `TilingAlgorithm` interface stable.
 4. **Remove the QJSEngine scripted path** once parity + tests pass.
@@ -171,9 +171,9 @@ separate future work for actual shell UI surfaces.
 `libs/phosphor-scripting` (LGPL Luau host: engine, `luaL_sandbox`, interrupt
 watchdog, a per-script **heap cap** via a custom capped `lua_Alloc` enforced
 once sandboxed, compile/load, QVariant marshalling), `libs/phosphor-tiles`
-(`LuauTileAlgorithm` + the `phosphor_luau` stdlib), all 25 algorithms ported under a
+(`LuauTileAlgorithm` + the `pluau` stdlib), all 25 algorithms ported under a
 golden-snapshot parity test, the loader swapped to `.luau`, the QJSEngine path
-deleted, and a CI **`luau-analyze` gate** over the bundled algorithms + `phosphor_luau`
+deleted, and a CI **`luau-analyze` gate** over the bundled algorithms + `pluau`
 stdlib. Vendoring landed as a **committed source tarball**
 (`extern/luau-0.723.tar.gz`, extracted at configure time from that local file
 via `file(ARCHIVE_EXTRACT)`) rather than a submodule or the unpacked tree, so source

@@ -26,11 +26,11 @@ class SplitNode;
  * @brief A tiling algorithm backed by a user-provided Luau script.
  *
  * Each instance owns a
- * PhosphorScripting::LuauEngine into which the `phosphor_luau` standard library is injected
+ * PhosphorScripting::LuauEngine into which the `pluau` standard library is injected
  * (and frozen) before the script module is loaded. The script is a Luau chunk
- * that returns a module table, conventionally via `phosphor_luau.algorithm{...}`:
+ * that returns a module table, conventionally via `pluau.algorithm{...}`:
  *
- *     return phosphor_luau.algorithm {
+ *     return pluau.algorithm {
  *         metadata = { id = "columns", name = "Columns" },
  *         tile = function(ctx) return ctx.area:columns(ctx.count, ctx.gap) end,
  *     }

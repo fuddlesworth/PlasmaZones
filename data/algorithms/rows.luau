@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Rows",
         id = "rows",
@@ -21,13 +21,13 @@ return phosphor_luau.algorithm {
         local count = ctx.windowCount
         if count <= 0 then return {} end
         local area = ctx.area
-        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
-            return phosphor_luau.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
         local gap = ctx.innerGap
 
-        local minHeights = phosphor_luau.extractMinHeights(ctx.minSizes, count)
-        local rowHeights = phosphor_luau.distributeWithOptionalMins(area.height, count, gap, minHeights)
+        local minHeights = pluau.extractMinHeights(ctx.minSizes, count)
+        local rowHeights = pluau.distributeWithOptionalMins(area.height, count, gap, minHeights)
 
         local zones = {}
         local currentY = area.y

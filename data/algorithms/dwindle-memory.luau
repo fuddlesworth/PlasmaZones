@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Dwindle (Memory)",
         id = "dwindle-memory",
@@ -26,16 +26,16 @@ return phosphor_luau.algorithm {
         local gap = ctx.innerGap
         local minSizes = ctx.minSizes
 
-        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
-            return phosphor_luau.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
 
         -- Use the persistent split tree when present and matching; otherwise fall
         -- back to stateless dwindle. (minSizes are not applied on the tree path.)
         if ctx.tree and ctx.tree.leafCount == count then
-            return phosphor_luau.applyTreeGeometry(ctx.tree, area, gap)
+            return pluau.applyTreeGeometry(ctx.tree, area, gap)
         end
 
-        return phosphor_luau.dwindleLayout(area, count, ctx.splitRatio, gap, minSizes)
+        return pluau.dwindleLayout(area, count, ctx.splitRatio, gap, minSizes)
     end,
 }

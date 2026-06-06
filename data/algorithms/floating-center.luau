@@ -1,7 +1,7 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
 local function renderPanel(zones, startX, startY, panelW, panelH, count, gap, horizontal)
     if count <= 0 then return end
@@ -12,15 +12,15 @@ local function renderPanel(zones, startX, startY, panelW, panelH, count, gap, ho
         local equalSize = math.max(1, math.floor(totalSize / count))
         local fill
         if horizontal then
-            fill = phosphor_luau.fillRegion(startX, startY, equalSize, panelH, count)
+            fill = pluau.fillRegion(startX, startY, equalSize, panelH, count)
         else
-            fill = phosphor_luau.fillRegion(startX, startY, panelW, equalSize, count)
+            fill = pluau.fillRegion(startX, startY, panelW, equalSize, count)
         end
         for i = 1, #fill do zones[#zones + 1] = fill[i] end
         return
     end
 
-    local slots = phosphor_luau.distributeEvenly(horizontal and startX or startY, totalSize, count, gap)
+    local slots = pluau.distributeEvenly(horizontal and startX or startY, totalSize, count, gap)
     for i = 1, #slots do
         if horizontal then
             zones[#zones + 1] = { x = slots[i].pos, y = startY, width = slots[i].size, height = panelH }
@@ -30,7 +30,7 @@ local function renderPanel(zones, startX, startY, panelW, panelH, count, gap, ho
     end
 end
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Floating Center",
         id = "floating-center",
@@ -53,12 +53,12 @@ return phosphor_luau.algorithm {
         local area = ctx.area
         local gap = ctx.innerGap
 
-        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
-            return phosphor_luau.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
 
         if count == 1 then
-            local splitRatio1 = phosphor_luau.clampSplitRatio(ctx.splitRatio)
+            local splitRatio1 = pluau.clampSplitRatio(ctx.splitRatio)
             local cw = math.floor(area.width * splitRatio1)
             local ch = math.floor(area.height * splitRatio1)
             local cx = area.x + math.floor((area.width - cw) / 2)
@@ -66,7 +66,7 @@ return phosphor_luau.algorithm {
             return { { x = cx, y = cy, width = cw, height = ch } }
         end
 
-        local splitRatio = phosphor_luau.clampSplitRatio(ctx.splitRatio)
+        local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
 
         local centerW = math.floor(area.width * splitRatio)
         local centerH = math.floor(area.height * splitRatio)
@@ -77,7 +77,7 @@ return phosphor_luau.algorithm {
         local centerY = area.y + marginY
 
         if marginX <= gap or marginY <= gap then
-            return phosphor_luau.fillArea(area, count)
+            return pluau.fillArea(area, count)
         end
 
         local zones = {}

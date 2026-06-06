@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Three Column",
         id = "three-column",
@@ -25,11 +25,11 @@ return phosphor_luau.algorithm {
         if count <= 0 then return {} end
         local area = ctx.area
         local gap = ctx.innerGap
-        local splitRatio = phosphor_luau.clampSplitRatio(ctx.splitRatio)
+        local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
         local minSizes = ctx.minSizes
 
-        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
-            return phosphor_luau.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
 
         if count == 1 then
@@ -44,7 +44,7 @@ return phosphor_luau.algorithm {
                 local minMW = (minSizes[1] and minSizes[1].w and minSizes[1].w > 0) and minSizes[1].w or 0
                 local minSW = (#minSizes > 1 and minSizes[2] and minSizes[2].w and minSizes[2].w > 0)
                     and minSizes[2].w or 0
-                local solved = phosphor_luau.solveTwoPart(contentWidth, masterWidth, stackWidth, minMW, minSW)
+                local solved = pluau.solveTwoPart(contentWidth, masterWidth, stackWidth, minMW, minSW)
                 masterWidth = solved.first
                 stackWidth = solved.second
             end
@@ -54,10 +54,10 @@ return phosphor_luau.algorithm {
             }
         end
 
-        if count >= 3 and area.width < 3 * phosphor_luau.MIN_ZONE_SIZE + 2 * gap then
-            return phosphor_luau.equalColumnsLayout(area, count, gap, minSizes)
+        if count >= 3 and area.width < 3 * pluau.MIN_ZONE_SIZE + 2 * gap then
+            return pluau.equalColumnsLayout(area, count, gap, minSizes)
         end
 
-        return phosphor_luau.threeColumnLayout(area, count, gap, splitRatio, 1, minSizes)
+        return pluau.threeColumnLayout(area, count, gap, splitRatio, 1, minSizes)
     end,
 }

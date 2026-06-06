@@ -1,15 +1,15 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
--- Cascade-specific bounds (tighter than phosphor_luau.MIN_SPLIT/phosphor_luau.MAX_SPLIT)
+-- Cascade-specific bounds (tighter than pluau.MIN_SPLIT/pluau.MAX_SPLIT)
 local CascadeMinOffsetRatio = 0.02
 local CascadeMaxOffsetRatio = 0.4
 local CascadeMinOffsetPx = 20
 local CascadeMinWindowPx = 100
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Cascade",
         id = "cascade",
@@ -29,8 +29,8 @@ return phosphor_luau.algorithm {
         if count <= 0 then return {} end
         local area = ctx.area
 
-        if area.width < phosphor_luau.MIN_ZONE_SIZE or area.height < phosphor_luau.MIN_ZONE_SIZE then
-            return phosphor_luau.fillArea(area, count)
+        if area.width < pluau.MIN_ZONE_SIZE or area.height < pluau.MIN_ZONE_SIZE then
+            return pluau.fillArea(area, count)
         end
 
         local offsetRatio = math.max(CascadeMinOffsetRatio, math.min(CascadeMaxOffsetRatio, ctx.splitRatio))
@@ -58,7 +58,7 @@ return phosphor_luau.algorithm {
             local w = winWidth
             local h = winHeight
 
-            local clamped = phosphor_luau.applyPerWindowMinSize(w, h, ctx.minSizes, i)
+            local clamped = pluau.applyPerWindowMinSize(w, h, ctx.minSizes, i)
             w = math.max(1, math.min(clamped.w, area.x + area.width - x))
             h = math.max(1, math.min(clamped.h, area.y + area.height - y))
 

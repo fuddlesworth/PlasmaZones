@@ -1,9 +1,9 @@
 -- SPDX-FileCopyrightText: 2026 fuddlesworth
 -- SPDX-License-Identifier: GPL-3.0-or-later
 
-local phosphor_luau = phosphor_luau
+local pluau = pluau
 
-return phosphor_luau.algorithm {
+return pluau.algorithm {
     metadata = {
         name = "Quadrant Priority",
         id = "quadrant-priority",
@@ -24,9 +24,9 @@ return phosphor_luau.algorithm {
         if count <= 0 then return {} end
         local area = ctx.area
         local gap = ctx.innerGap
-        local splitRatio = phosphor_luau.clampSplitRatio(ctx.splitRatio)
+        local splitRatio = pluau.clampSplitRatio(ctx.splitRatio)
 
         -- ceil/floor distribution, bottom row spans full width, right column = master height
-        return phosphor_luau.lShapeLayout(area, count, gap, splitRatio, "ceil-floor", "full", "master")
+        return pluau.lShapeLayout(area, count, gap, splitRatio, "ceil-floor", "full", "master")
     end,
 }
