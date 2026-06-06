@@ -24,6 +24,11 @@ endfunction()
 # CLI demo as they land.
 _phosphorservicelock_test(test_phosphorservicelock_smoke test_smoke.cpp)
 
+# QML facade test: a real QQmlEngine imports the module and proves the imperative
+# registration yields a usable facade (LockService instantiates, its supported /
+# state / locked surface reads through QML, and the invokables run).
+_phosphorservicelock_test(test_phosphorservicelock_qmlfacade test_qmlfacade.cpp)
+
 # PAM authenticator unit test: links the lib and exercises the public
 # PamAuthenticator's credential-free contract (configured service, fast-fail on
 # bad input, the concurrency guard, and that a nonexistent user is rejected
