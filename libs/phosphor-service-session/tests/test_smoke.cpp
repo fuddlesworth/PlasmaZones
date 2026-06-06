@@ -4,6 +4,7 @@
 #include <PhosphorServiceSession/PhosphorServiceSession.h>
 
 #include <QDBusConnection>
+#include <QSignalSpy>
 #include <QTest>
 
 using namespace PhosphorServiceSession;
@@ -55,6 +56,49 @@ private Q_SLOTS:
         // Unknown, not crash or flip to a real availability.
         QTest::qWait(50);
         QCOMPARE(host.canSuspend(), SessionHost::Availability::Unknown);
+    }
+
+    // Power actions on an inert host (capabilities Unknown) are refused without
+    // crashing: the capability gate blocks them before any call is issued. lock()
+    // with no resolved session takes the LockSessions() fallback, harmless
+    // against a bogus service.
+    void inertActionsAreNoOps()
+    {
+        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1.invalid.test"));
+        host.suspend();
+        host.hibernate();
+        host.hybridSleep();
+        host.suspendThenHibernate();
+        host.reboot();
+        host.powerOff();
+        host.halt();
+        host.lock();
+        host.terminateSession();
+        QTest::qWait(20);
+    }
+
+    // logout() is a pure signal: it emits logoutRequested() for the shell to act
+    // on, with no logind dependency, so it works even when logind is absent.
+    void logoutEmitsRequest()
+    {
+        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1"));
+        QSignalSpy spy(&host, &SessionHost::logoutRequested);
+        host.logout();
+        QCOMPARE(spy.count(), 1);
+    }
+
+    // interactive defaults true (the QML host routes auth through our polkit
+    // agent) and emits interactiveChanged only on an actual flip.
+    void interactiveDefaultsTrueAndIsEdgeTriggered()
+    {
+        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1"));
+        QCOMPARE(host.interactive(), true);
+        QSignalSpy spy(&host, &SessionHost::interactiveChanged);
+        host.setInteractive(true);
+        QCOMPARE(spy.count(), 0);
+        host.setInteractive(false);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(host.interactive(), false);
     }
 };
 

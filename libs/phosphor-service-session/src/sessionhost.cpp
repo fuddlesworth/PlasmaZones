@@ -5,7 +5,9 @@
 
 #include <PhosphorDBus/Client.h>
 
+#include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
@@ -17,6 +19,7 @@ Q_LOGGING_CATEGORY(lcSessionHost, "phosphor.service.session.host")
 namespace {
 constexpr auto kManagerPath = "/org/freedesktop/login1";
 constexpr auto kManagerIface = "org.freedesktop.login1.Manager";
+constexpr auto kSessionIface = "org.freedesktop.login1.Session";
 } // namespace
 
 namespace PhosphorServiceSession {
@@ -50,6 +53,15 @@ public:
     SessionHost* owner = nullptr;
     QDBusConnection bus;
     QString service;
+
+    // Whether action calls pass logind interactive=true (route auth to our
+    // in-session polkit agent). Default true on the host; the CLI flips it off.
+    bool interactive = true;
+
+    // This session's logind object path, resolved asynchronously at
+    // construction. Empty until resolved (or when resolution fails), which makes
+    // lock() fall back to LockSessions() and terminateSession() a no-op.
+    QString sessionPath;
 
     Availability canPowerOff = Availability::Unknown;
     Availability canReboot = Availability::Unknown;
@@ -102,6 +114,52 @@ public:
                              });
         }
     }
+
+    // Resolve this session's logind object path so lock() / terminateSession()
+    // can target it. Prefer the graphical session named by XDG_SESSION_ID;
+    // fall back to the caller's PID. Leaves sessionPath empty (the inert /
+    // fallback path) on error or a disconnected bus.
+    void resolveSession()
+    {
+        if (!bus.isConnected())
+            return;
+
+        PhosphorDBus::Client manager(bus, service, QLatin1String(kManagerPath), &lcSessionHost());
+        const QString xdgSessionId = qEnvironmentVariable("XDG_SESSION_ID");
+        const QDBusPendingCall pending = xdgSessionId.isEmpty()
+            ? manager.asyncCall(QLatin1String(kManagerIface), QStringLiteral("GetSessionByPID"),
+                                {static_cast<uint>(QCoreApplication::applicationPid())})
+            : manager.asyncCall(QLatin1String(kManagerIface), QStringLiteral("GetSession"), {xdgSessionId});
+        auto* watcher = new QDBusPendingCallWatcher(pending, owner);
+        QObject::connect(watcher, &QDBusPendingCallWatcher::finished, owner, [this](QDBusPendingCallWatcher* call) {
+            call->deleteLater();
+            const QDBusPendingReply<QDBusObjectPath> reply = *call;
+            if (reply.isError()) {
+                qCDebug(lcSessionHost) << "logind session lookup failed; lock falls back to all sessions:"
+                                       << reply.error().message();
+                return;
+            }
+            sessionPath = reply.value().path();
+        });
+    }
+
+    // Issue a capability-gated logind Manager action. A no-op (with a warning)
+    // when the capability is not Yes or Challenge, so a misbehaving caller
+    // cannot fire an unsupported action.
+    void powerAction(const char* method, Availability capability, const char* label)
+    {
+        if (capability != Availability::Yes && capability != Availability::Challenge) {
+            qCWarning(lcSessionHost) << label << "refused: logind reports the action is not available";
+            return;
+        }
+        if (!bus.isConnected()) {
+            qCWarning(lcSessionHost) << label << "refused: no logind connection";
+            return;
+        }
+        PhosphorDBus::Client manager(bus, service, QLatin1String(kManagerPath), &lcSessionHost());
+        manager.fireAndForget(owner, QLatin1String(kManagerIface), QLatin1String(method), {interactive},
+                              QLatin1String(label));
+    }
 };
 
 SessionHost::SessionHost(QObject* parent)
@@ -115,6 +173,7 @@ SessionHost::SessionHost(QDBusConnection connection, QString service, QObject* p
 {
     d->owner = this;
     d->refresh();
+    d->resolveSession();
 }
 
 SessionHost::~SessionHost() = default;
@@ -157,6 +216,91 @@ SessionHost::Availability SessionHost::canSuspendThenHibernate() const
 void SessionHost::refreshCapabilities()
 {
     d->refresh();
+}
+
+bool SessionHost::interactive() const
+{
+    return d->interactive;
+}
+
+void SessionHost::setInteractive(bool interactive)
+{
+    if (d->interactive == interactive)
+        return;
+    d->interactive = interactive;
+    Q_EMIT interactiveChanged();
+}
+
+void SessionHost::lock()
+{
+    if (!d->bus.isConnected()) {
+        qCWarning(lcSessionHost) << "lock refused: no logind connection";
+        return;
+    }
+    if (!d->sessionPath.isEmpty()) {
+        PhosphorDBus::Client session(d->bus, d->service, d->sessionPath, &lcSessionHost());
+        session.fireAndForget(this, QLatin1String(kSessionIface), QStringLiteral("Lock"), {}, QStringLiteral("Lock"));
+        return;
+    }
+    // This session is not resolved; lock every session of the user instead.
+    qCDebug(lcSessionHost) << "session path unresolved; locking all sessions";
+    PhosphorDBus::Client manager(d->bus, d->service, QLatin1String(kManagerPath), &lcSessionHost());
+    manager.fireAndForget(this, QLatin1String(kManagerIface), QStringLiteral("LockSessions"), {},
+                          QStringLiteral("LockSessions"));
+}
+
+void SessionHost::logout()
+{
+    // The compositor owns the graceful end-of-session path (close clients, save
+    // state). The shell connects logoutRequested() to its exit; terminateSession()
+    // is the logind fallback for contexts with no graceful owner.
+    Q_EMIT logoutRequested();
+}
+
+void SessionHost::terminateSession()
+{
+    if (!d->bus.isConnected() || d->sessionPath.isEmpty()) {
+        qCWarning(lcSessionHost) << "terminateSession refused: no resolved logind session";
+        return;
+    }
+    PhosphorDBus::Client session(d->bus, d->service, d->sessionPath, &lcSessionHost());
+    session.fireAndForget(this, QLatin1String(kSessionIface), QStringLiteral("Terminate"), {},
+                          QStringLiteral("Terminate"));
+}
+
+void SessionHost::suspend()
+{
+    d->powerAction("Suspend", d->canSuspend, "Suspend");
+}
+
+void SessionHost::hibernate()
+{
+    d->powerAction("Hibernate", d->canHibernate, "Hibernate");
+}
+
+void SessionHost::hybridSleep()
+{
+    d->powerAction("HybridSleep", d->canHybridSleep, "HybridSleep");
+}
+
+void SessionHost::suspendThenHibernate()
+{
+    d->powerAction("SuspendThenHibernate", d->canSuspendThenHibernate, "SuspendThenHibernate");
+}
+
+void SessionHost::reboot()
+{
+    d->powerAction("Reboot", d->canReboot, "Reboot");
+}
+
+void SessionHost::powerOff()
+{
+    d->powerAction("PowerOff", d->canPowerOff, "PowerOff");
+}
+
+void SessionHost::halt()
+{
+    d->powerAction("Halt", d->canHalt, "Halt");
 }
 
 } // namespace PhosphorServiceSession

@@ -53,6 +53,12 @@ public:
     Q_PROPERTY(Availability canHybridSleep READ canHybridSleep NOTIFY capabilitiesChanged)
     Q_PROPERTY(Availability canSuspendThenHibernate READ canSuspendThenHibernate NOTIFY capabilitiesChanged)
 
+    /// Whether action calls pass logind `interactive=true`, routing an action
+    /// that needs authorization to an in-session polkit agent (we ship one in
+    /// 2.6) for a native prompt. Defaults true on the QML host; the CLI sets it
+    /// false (no agent in a dev shell, so logind just returns an auth error).
+    Q_PROPERTY(bool interactive READ interactive WRITE setInteractive NOTIFY interactiveChanged)
+
     /// Production wiring: the system bus and `org.freedesktop.login1`.
     explicit SessionHost(QObject* parent = nullptr);
 
@@ -76,10 +82,41 @@ public:
     /// answers move with inhibitor locks, lid state, and swap availability.
     Q_INVOKABLE void refreshCapabilities();
 
+    [[nodiscard]] bool interactive() const;
+    void setInteractive(bool interactive);
+
+    /// Lock this session (resolved via `GetSessionByPID` / `XDG_SESSION_ID`):
+    /// logind emits its `Lock` signal, which the shell routes to the lock
+    /// surface (2.9). Falls back to `Manager.LockSessions()` when this session
+    /// cannot be resolved.
+    Q_INVOKABLE void lock();
+
+    /// End this session. Emits logoutRequested() so the shell / compositor can
+    /// exit gracefully; terminateSession() is the logind fallback (the resolved
+    /// session's `Terminate`) for contexts with no graceful owner.
+    Q_INVOKABLE void logout();
+    Q_INVOKABLE void terminateSession();
+
+    /// Capability-gated power actions. Each is a no-op (with a warning) when its
+    /// capability is not `Yes` or `Challenge`, and otherwise issues the logind
+    /// `Manager` call with the current `interactive` flag.
+    Q_INVOKABLE void suspend();
+    Q_INVOKABLE void hibernate();
+    Q_INVOKABLE void hybridSleep();
+    Q_INVOKABLE void suspendThenHibernate();
+    Q_INVOKABLE void reboot();
+    Q_INVOKABLE void powerOff();
+    Q_INVOKABLE void halt();
+
 Q_SIGNALS:
     /// Emitted whenever any capability value actually changes (each async
     /// `Can*` reply that differs from the cached value fires this once).
     void capabilitiesChanged();
+    void interactiveChanged();
+    /// Emitted by logout() so the shell / compositor can end the session
+    /// gracefully (close clients, save state) rather than via a blunt logind
+    /// terminate.
+    void logoutRequested();
 
 private:
     Q_DISABLE_COPY_MOVE(SessionHost)
