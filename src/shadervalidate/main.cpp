@@ -183,6 +183,14 @@ int validatePack(const QString& packDir, QTextStream& out)
         if (!kValidParamTypes.contains(p.type)) {
             lints << QStringLiteral("unknown param type '%1' for '%2'").arg(p.type, p.id);
         }
+        // An id that isn't a valid GLSL identifier gets no pz_ define and no lane
+        // (parseShaderMetadata leaves its slot at -1) — surface the real fault, and
+        // skip the collision check so two such params don't false-collide on "-1".
+        if (!PhosphorShaders::isValidParamId(p.id)) {
+            lints << QStringLiteral("invalid parameter id '%1' (not a GLSL identifier; skipped, no pz_ define)")
+                         .arg(p.id);
+            continue;
+        }
         const QString laneKey = poolName(p.type) + QStringLiteral("#") + QString::number(p.slot);
         if (claimedLane.contains(laneKey)) {
             lints << QStringLiteral("slot collision: '%1' and '%2' both map to %3 lane %4")

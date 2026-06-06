@@ -26,7 +26,12 @@ QString tryReadFile(const QString& path, QString* outError)
         }
         return QString();
     }
-    return QTextStream(&file).readAll();
+    // Return a guaranteed non-null result on success (readAll() yields a null
+    // QString for an empty file), so the caller distinguishes a genuine
+    // open-failure (null) from a valid empty include (empty, non-null) WITHOUT
+    // depending on whether an error sink was supplied.
+    const QString content = QTextStream(&file).readAll();
+    return content.isNull() ? QStringLiteral("") : content;
 }
 
 QString expandIncludesRecursive(const QString& source, const QString& currentFileDir, const QStringList& includePaths,
@@ -119,7 +124,11 @@ QString expandIncludesRecursive(const QString& source, const QString& currentFil
         }
 
         QString included = tryReadFile(resolvedPath, outError);
-        if (outError && !outError->isEmpty())
+        // Null = open-failure (the file resolved on disk but couldn't be read).
+        // Guard on the result itself, not on outError, so the failure isn't
+        // swallowed — silently inlining an empty include — when no error sink was
+        // passed (expandIncludes defaults outError to nullptr).
+        if (included.isNull())
             return QString();
 
         QString newCurrentDir = QFileInfo(resolvedPath).absolutePath();

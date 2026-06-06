@@ -127,6 +127,24 @@ private Q_SLOTS:
         QVERIFY(out.isEmpty());
     }
 
+    // An EMPTY but valid include file must inline cleanly (nothing), NOT be
+    // mistaken for a read failure — even with no error sink. readAll() yields a
+    // null QString for an empty file, so the resolver must distinguish that from a
+    // genuine open-failure (which also returns null). Tested with outError=nullptr
+    // to exercise the path where the failure guard can't lean on the error sink.
+    void testEmptyIncludeInlinesCleanly()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        writeFile(tmp.filePath(QStringLiteral("empty.glsl")), QString());
+        const QString source = QStringLiteral("#version 450\n#include \"empty.glsl\"\nvoid main() {}\n");
+        const QString out =
+            PhosphorShaders::ShaderIncludeResolver::expandIncludes(source, tmp.path(), {}, nullptr, nullptr, nullptr);
+        QVERIFY2(!out.isEmpty(), "empty include must not be treated as a failure");
+        QVERIFY2(out.contains(QStringLiteral("void main()")), qPrintable(out));
+        QVERIFY2(out.contains(QStringLiteral("#line 1 1")), qPrintable(out)); // the include was still bracketed
+    }
+
     // Back-compat: the legend out-param is optional; omitting it still expands.
     void testLegendOptional()
     {

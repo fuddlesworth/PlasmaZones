@@ -803,7 +803,8 @@ that closes the cross-app gap.
   failure. *(Animation packs are gated equivalently by
   `test_animation_shader_preamble_bake`; an animation CLI mode is future work.)*
 - glslang errors reference the author's file/line.
-- All 26 zone packs compile unchanged and render identically.
+- All 26 zone packs migrated to the named-param + entry-point API and render
+  identically (25 via pzImage/pzZone; magnetic-field keeps its custom-vertex main()).
 - The animation system meets its own [definition of done](#a4--definition-of-done-animation-system)
   (cross-runtime generation, both-branch validation, `pzTransition`/`pzIn`/`pzOut`,
-  all 53 animation packs unchanged).
+  all 53 animation packs migrated and rendering identically).

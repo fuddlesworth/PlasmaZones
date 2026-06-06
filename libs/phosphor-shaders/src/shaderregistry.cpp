@@ -982,13 +982,15 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
 
 QString ShaderRegistry::paramPreamble(const ShaderInfo& info)
 {
-    // Map each declared parameter to a PreambleParam carrying its EXPLICIT slot
-    // (zone packs always slot explicitly via metadata `slot`). buildParamPreamble
-    // turns each into `#define pz_<id> <glsl-accessor>` using the same
-    // slot→accessor rule ParameterInfo::uniformName()/translateParamsToUniforms
-    // upload to: color → customColors[slot], image → uTexture<slot>, everything
-    // else → customParams[slot/4].<xyzw>. So pz_<id> reads exactly the lane the
-    // value lands in.
+    // By the time this runs, parseShaderMetadata has resolved every parameter's
+    // slot to >= 0 — an explicit metadata `slot`, or one auto-assigned by
+    // declaration order when omitted (most migrated packs drop `slot`) — so each
+    // PreambleParam carries a concrete explicit slot (buildParamPreamble's
+    // auto-numbering isn't exercised on this zone path). buildParamPreamble turns
+    // each into `#define pz_<id> <glsl-accessor>` using the same slot→accessor rule
+    // ParameterInfo::uniformName()/translateParamsToUniforms upload to: color →
+    // customColors[slot], image → uTexture<slot>, else → customParams[slot/4].
+    // <xyzw>. So pz_<id> reads exactly the lane the value lands in.
     QList<PreambleParam> params;
     params.reserve(info.parameters.size());
     for (const ParameterInfo& p : info.parameters) {

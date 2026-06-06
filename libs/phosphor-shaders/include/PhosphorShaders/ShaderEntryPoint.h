@@ -90,6 +90,10 @@ PHOSPHORSHADERS_EXPORT QString composeEntryPoint(const QString& expandedSource,
 /// entry point shared by the daemon bake layer and the kwin-effect path so both
 /// produce the identical pre-expansion source for an entry-only pack. Apply it
 /// to RAW (pre-expansion) source so the prologue's `#include` is then resolved.
+/// Entry-function detection therefore sees only the author's inline body — by
+/// convention the entry function (pzZone/pzImage/pzTransition, or a hand-written
+/// main()) is authored directly, never pulled from an `#include` — which is why
+/// this wraps RAW rather than the expanded source `composeEntryPoint` expects.
 PHOSPHORSHADERS_EXPORT QString assembleEntryPoint(const QString& raw, const QString& prologue,
                                                   const QList<EntryCandidate>& candidates);
 
