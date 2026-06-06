@@ -59,6 +59,12 @@ if(NOT TARGET PhosphorShaders::PhosphorShaders)
     find_package(PhosphorShaders CONFIG REQUIRED)
 endif()
 
+# PhosphorRegistry — AnimationShaderRegistry composes Registry<AnimationPack>
+# + MetadataPackLoader<AnimationPack> (publicly exposed via its header).
+if(NOT TARGET PhosphorRegistry::PhosphorRegistry)
+    find_package(PhosphorRegistry 0.1.0 REQUIRED)
+endif()
+
 # phosphor-layer -- Surface lifecycle (ISurfaceAnimator base).
 if(NOT TARGET PhosphorLayer::PhosphorLayer)
     find_package(PhosphorLayer CONFIG REQUIRED)
@@ -247,6 +253,7 @@ target_link_libraries(PhosphorAnimation
         Qt6::Quick
         Qt6::QuickPrivate
         Qt6::Qml
+        PhosphorRegistry::PhosphorRegistry
         PhosphorFsLoader::PhosphorFsLoader
         PhosphorShaders::PhosphorShaders
         PhosphorLayer::PhosphorLayer

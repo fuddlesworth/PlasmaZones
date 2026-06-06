@@ -409,6 +409,10 @@ void shaderContentSignature(QCryptographicHash& hasher, const ShaderRegistry::Sh
     for (const QString& buf : info.bufferShaderPaths) {
         mixFile(buf);
     }
+    // isUser is set from the user-path classification, NOT from file content —
+    // it can flip (setUserPath after addSearchPaths) with no file change, so
+    // mix it in or the reconcile would keep the stale-classification entry.
+    hasher.addData(info.isUserShader ? "u" : "s");
 }
 
 } // namespace
