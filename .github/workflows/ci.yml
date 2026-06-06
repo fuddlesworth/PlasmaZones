@@ -108,6 +108,13 @@ jobs:
           # shader-render tool tests) launch xvfb-run themselves.
           QT_QPA_PLATFORM: offscreen
         run: |
+          # The container has no session, so XDG_RUNTIME_DIR is unset and Qt
+          # emits a "QStandardPaths: XDG_RUNTIME_DIR not set" warning the first
+          # time QStandardPaths is queried. Tests that capture warnings and
+          # assert none were emitted (e.g. the plugin-loader rejection cases)
+          # would otherwise pick that stray warning up and fail. Give it a
+          # private 0700 dir, as a real session would.
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
           # xvfb is available for tests that explicitly need a Wayland/X
           # surface (offscreen QPA can't host RHI textures).
           # Parallel ctest with $(nproc); xvfb-run wraps when available so
@@ -187,6 +194,10 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
+          # Private XDG_RUNTIME_DIR so Qt's "XDG_RUNTIME_DIR not set" warning
+          # does not pollute tests that assert no warnings (see the default
+          # build job's Test step for the full rationale).
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
           # Same headless pattern as the default build job. Service-lib
           # tests that need a live session/system bus QSKIP when none is
           # present (they are written CI-aware), so no dbus-run-session is
