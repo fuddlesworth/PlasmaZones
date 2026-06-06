@@ -157,7 +157,21 @@ public:
                 return;
             }
             sessionPath = reply.value().path();
+            subscribeSessionSignals();
         });
+    }
+
+    // Subscribe to the resolved session's Lock / Unlock signals so a lock
+    // request routed through logind (loginctl, a hardware lock key, or our own
+    // Session.Lock) reaches the shell. Only possible once sessionPath is known.
+    void subscribeSessionSignals()
+    {
+        if (!bus.isConnected() || sessionPath.isEmpty())
+            return;
+        bus.connect(service, sessionPath, QLatin1String(kSessionIface), QStringLiteral("Lock"), owner,
+                    SLOT(onSessionLock()));
+        bus.connect(service, sessionPath, QLatin1String(kSessionIface), QStringLiteral("Unlock"), owner,
+                    SLOT(onSessionUnlock()));
     }
 
     // Issue a capability-gated logind Manager action. A no-op (with a warning)
@@ -413,6 +427,16 @@ void SessionHost::allowSleep()
 void SessionHost::onPrepareForSleep(bool beforeSleep)
 {
     d->handlePrepareForSleep(beforeSleep);
+}
+
+void SessionHost::onSessionLock()
+{
+    Q_EMIT lockRequested();
+}
+
+void SessionHost::onSessionUnlock()
+{
+    Q_EMIT unlockRequested();
 }
 
 } // namespace PhosphorServiceSession

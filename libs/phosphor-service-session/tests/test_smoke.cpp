@@ -125,6 +125,24 @@ private Q_SLOTS:
         QCOMPARE(prep.takeFirst().at(0).toBool(), false);
         QCOMPARE(about.count(), 1); // no new aboutToSleep on resume
     }
+
+    // A logind session Lock / Unlock signal surfaces as lockRequested() /
+    // unlockRequested(), driven without a real session by invoking the delivery
+    // slots directly. The shell routes lockRequested() to 2.9's lock surface.
+    void sessionLockSignalsSurface()
+    {
+        SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1"));
+        QSignalSpy lockSpy(&host, &SessionHost::lockRequested);
+        QSignalSpy unlockSpy(&host, &SessionHost::unlockRequested);
+
+        QVERIFY(QMetaObject::invokeMethod(&host, "onSessionLock", Qt::DirectConnection));
+        QCOMPARE(lockSpy.count(), 1);
+        QCOMPARE(unlockSpy.count(), 0);
+
+        QVERIFY(QMetaObject::invokeMethod(&host, "onSessionUnlock", Qt::DirectConnection));
+        QCOMPARE(unlockSpy.count(), 1);
+        QCOMPARE(lockSpy.count(), 1);
+    }
 };
 
 QTEST_GUILESS_MAIN(SmokeTest)

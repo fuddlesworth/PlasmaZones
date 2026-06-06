@@ -132,10 +132,18 @@ Q_SIGNALS:
     /// shell should lock now, then call allowSleep() once the surface is up.
     void aboutToSleep();
 
+    /// The logind session was asked to lock / unlock (e.g. `loginctl
+    /// lock-session`, a hardware lock key routed through logind, or our own
+    /// lock()). The shell routes lockRequested() to 2.9's lock surface.
+    void lockRequested();
+    void unlockRequested();
+
 private Q_SLOTS:
-    // logind PrepareForSleep delivery point (QtDBus signal subscription needs a
-    // string-named slot, so this is not a lambda).
+    // logind signal delivery points (QtDBus signal subscription needs
+    // string-named slots, so these are not lambdas).
     void onPrepareForSleep(bool beforeSleep);
+    void onSessionLock();
+    void onSessionUnlock();
 
 private:
     Q_DISABLE_COPY_MOVE(SessionHost)
