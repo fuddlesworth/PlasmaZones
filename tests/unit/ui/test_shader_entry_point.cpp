@@ -10,12 +10,7 @@
 // contract the runtimes depend on.
 
 #include <PhosphorShaders/ShaderEntryPoint.h>
-#include <PhosphorShaders/ShaderIncludeResolver.h>
 
-#include <QDir>
-#include <QDirIterator>
-#include <QFile>
-#include <QFileInfo>
 #include <QTest>
 
 using PhosphorShaders::EntryCandidate;
@@ -139,56 +134,13 @@ private Q_SLOTS:
         QVERIFY(stripped.contains(QLatin1Char('c')));
     }
 
-    // ── Non-regression: every bundled pack keeps its own main() ───────────
-    // T1.4 wrapping is opt-in. Every shipped zone and animation .frag defines
-    // main() today, so composeEntryPoint MUST be a pass-through for all of them
-    // — a fresh entry-only pack is the only thing that should ever get wrapped.
-    // If a future pack drops main() without an entry function, this catches it.
-
-    void testBundledFragShadersDefineMain_data()
-    {
-        QTest::addColumn<QString>("fragPath");
-        const QStringList roots = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders"),
-                                   QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations")};
-        bool any = false;
-        for (const QString& root : roots) {
-            QDirIterator it(root, {QStringLiteral("*.frag")}, QDir::Files, QDirIterator::Subdirectories);
-            while (it.hasNext()) {
-                const QString path = it.next();
-                QTest::newRow(
-                    qPrintable(QFileInfo(path).dir().dirName() + QLatin1Char('/') + QFileInfo(path).fileName()))
-                    << path;
-                any = true;
-            }
-        }
-        if (!any) {
-            QSKIP("no bundled .frag shaders found — running outside source tree");
-        }
-    }
-
-    void testBundledFragShadersDefineMain()
-    {
-        QFETCH(QString, fragPath);
-        QFile f(fragPath);
-        QVERIFY2(f.open(QIODevice::ReadOnly), qPrintable(fragPath));
-        const QString raw = QString::fromUtf8(f.readAll());
-
-        // Expand includes so a main() arriving from a shared header counts too,
-        // exactly as the runtime composition will see it.
-        const QString dir = QFileInfo(fragPath).absolutePath();
-        const QStringList includePaths = {dir + QStringLiteral("/shared"), dir,
-                                          QFileInfo(dir).absolutePath() + QStringLiteral("/shared")};
-        QString err;
-        QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(raw, dir, includePaths, &err);
-        if (expanded.isEmpty()) {
-            expanded = raw; // include resolution is best-effort here; raw still carries main()
-        }
-
-        QVERIFY2(PhosphorShaders::definesMain(expanded),
-                 qPrintable(QStringLiteral("bundled shader lacks a detectable main(): ") + fragPath));
-        // And therefore the harness leaves it byte-identical.
-        QCOMPARE(PhosphorShaders::composeEntryPoint(expanded, zoneCandidates()), expanded);
-    }
+    // (A bundled-pack scan asserting every pack defines main() lived here under
+    // T1.4, when wrapping was purely opt-in. Packs are now being migrated TO the
+    // entry convention, so that premise no longer holds. The real per-pack
+    // assembly+bake invariant is covered more strongly by
+    // test_zone_entry_scaffold (testEveryBundledZoneFragBakes) and
+    // test_animation_shader_preamble_bake, which bake every pack through the full
+    // runtime assembly.)
 };
 
 QTEST_MAIN(TestShaderEntryPoint)

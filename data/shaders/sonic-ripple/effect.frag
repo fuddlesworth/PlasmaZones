@@ -1,14 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 450
-
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) in vec2 vFragCoord;
-
-layout(location = 0) out vec4 fragColor;
-
-#include <common.glsl>
+// The harness supplies #version, <common.glsl> (zone UBO + ZoneCtx + helpers),
+// the vTexCoord/vFragCoord ins, the fragColor out, and the per-zone dispatch
+// main(). audio.glsl is pack-specific, so it stays here.
 #include <audio.glsl>
 
 /*
@@ -443,33 +438,16 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
 // ─── Main ───────────────────────────────────────────────────────
 
-void main() {
-    vec2 fragCoord = vFragCoord;
-    vec4 color = vec4(0.0);
-
-    if (zoneCount == 0) {
-        fragColor = vec4(0.0);
-        return;
-    }
-
-    // Audio analysis (computed once for all zones)
-    bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBassSoft();
-    float mids    = getMidsSoft();
-    float treble  = getTrebleSoft();
-    float overall = getOverallSoft();
-
-    for (int i = 0; i < zoneCount && i < 64; i++) {
-        vec4 rect = zoneRects[i];
-        if (rect.z <= 0.0 || rect.w <= 0.0) continue;
-
-        vec4 zoneColor = renderZone(fragCoord, rect, zoneFillColors[i],
-            zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio);
-
-        color = blendOver(color, zoneColor);
-    }
-
-    // Labels are composited per-zone inside renderZone() — no separate pass needed
-    fragColor = clampFragColor(color);
+// Per-zone body. The harness generates the dispatch — the zoneCount guard, the
+// bounded loop with the degenerate-rect skip, the blendOver accumulate, and the
+// final clampFragColor — and labels are composited per-zone inside renderZone()
+// (no whole-frame pass), so this is a clean pzZone.
+//
+// The audio helpers used to be hoisted once before the loop; here they are read
+// inside pzZone (per zone). They return the same per-frame value for every zone,
+// so the output is identical — just a few extra cheap reads.
+vec4 pzZone(ZoneCtx z) {
+    bool hasAudio = iAudioSpectrumSize > 0;
+    return renderZone(z.fragCoord, z.rect, z.fillColor, z.borderColor, z.params, z.isHighlighted,
+                      getBassSoft(), getMidsSoft(), getTrebleSoft(), getOverallSoft(), hasAudio);
 }

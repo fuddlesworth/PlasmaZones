@@ -9,11 +9,14 @@ QString zoneEntryPrologue()
 {
     // `#version` first (GLSL requires it); the shared include declares ZoneCtx,
     // the zone UBO, and the helpers (blendOver / clampFragColor) the generated
-    // main() relies on; then the fragment in/out the per-pack main() used to
-    // declare by hand. vFragCoord is fed by zone.vert (location 1).
+    // main() relies on; then the fragment ins/out the per-pack main() used to
+    // declare by hand. zone.vert outputs BOTH vTexCoord (location 0, 0..1) and
+    // vFragCoord (location 1, screen pixels); declare both so a pack that reads
+    // either still compiles (an unused in matched to a vertex output is fine).
     return QStringLiteral(
         "#version 450\n"
         "#include <common.glsl>\n"
+        "layout(location = 0) in vec2 vTexCoord;\n"
         "layout(location = 1) in vec2 vFragCoord;\n"
         "layout(location = 0) out vec4 fragColor;\n");
 }

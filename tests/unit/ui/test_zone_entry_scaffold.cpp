@@ -15,6 +15,10 @@
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShaders/ShaderIncludeResolver.h>
 
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
 #include <QTest>
 
 class TestZoneEntryScaffold : public QObject
@@ -92,6 +96,55 @@ private Q_SLOTS:
         QVERIFY(assembled != body);
         QVERIFY2(assembled.startsWith(QStringLiteral("#version 450")), qPrintable(assembled));
         QVERIFY2(assembled.contains(QStringLiteral("void main()")), qPrintable(assembled));
+    }
+
+    // Every bundled zone pack's effect.frag must bake through the same assembly
+    // the runtime applies (read raw → assembleZoneEntrySource → expand →
+    // compile): traditional main() packs pass through, migrated pzZone packs get
+    // wrapped. This is the regression net for migrating packs to the entry API.
+    void testEveryBundledZoneFragBakes_data()
+    {
+        QTest::addColumn<QString>("fragPath");
+        const QString root = QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders");
+        QDir dir(root);
+        if (!dir.exists()) {
+            QSKIP("data/shaders not found — running outside source tree");
+        }
+        bool any = false;
+        for (const QString& sub : dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+            if (sub == QLatin1String("shared") || sub == QLatin1String("none")) {
+                continue;
+            }
+            const QString frag = root + QLatin1Char('/') + sub + QStringLiteral("/effect.frag");
+            if (QFileInfo::exists(frag)) {
+                QTest::newRow(qPrintable(sub)) << frag;
+                any = true;
+            }
+        }
+        if (!any) {
+            QSKIP("no bundled zone shaders found");
+        }
+    }
+
+    void testEveryBundledZoneFragBakes()
+    {
+        QFETCH(QString, fragPath);
+        QFile f(fragPath);
+        QVERIFY2(f.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(fragPath));
+        const QString raw = QString::fromUtf8(f.readAll());
+        const QString assembled = PlasmaZones::assembleZoneEntrySource(raw);
+
+        const QStringList includePaths = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders/shared"),
+                                          QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/shaders")};
+        QString err;
+        const QString expanded = PhosphorShaders::ShaderIncludeResolver::expandIncludes(
+            assembled, QFileInfo(fragPath).absolutePath(), includePaths, &err);
+        QVERIFY2(!expanded.isEmpty(),
+                 qPrintable(QStringLiteral("expand failed: ") + fragPath + QStringLiteral(" — ") + err));
+
+        const auto result = PhosphorRendering::ShaderCompiler::compile(expanded.toUtf8(), QShader::FragmentStage);
+        QVERIFY2(result.success,
+                 qPrintable(QStringLiteral("bake failed: ") + fragPath + QStringLiteral(" — ") + result.error));
     }
 };
 

@@ -16,6 +16,7 @@
 
 #include <PhosphorAnimation/AnimationShaderRegistry.h>
 #include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorShaders/ShaderEntryPoint.h>
 #include <PhosphorShaders/ShaderParamPreamble.h>
 
 #include <QDir>
@@ -80,9 +81,22 @@ private Q_SLOTS:
 
         const QString preamble = AnimationShaderRegistry::paramPreamble(eff);
 
+        // Mirror the runtime fragment-load pipeline exactly (loadFragmentShader):
+        // read raw → apply the T1.4/T1.5 entry assembly (so an entry-only pack
+        // authored as pzTransition / pzIn+pzOut bakes, and a traditional main()
+        // pack passes through) → expand includes → splice the param preamble →
+        // compile. This bakes EVERY pack the way both runtimes do.
+        QFile frag(eff.fragmentShaderPath);
+        QVERIFY2(frag.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(eff.fragmentShaderPath));
+        const QString raw = QString::fromUtf8(frag.readAll());
+        const QString assembled =
+            PhosphorShaders::assembleEntryPoint(raw, AnimationShaderRegistry::animationEntryPrologue(),
+                                                AnimationShaderRegistry::animationEntryCandidates());
+
         const QStringList includePaths = {QStringLiteral(PLASMAZONES_SOURCE_DIR "/data/animations/shared")};
         QString err;
-        QString src = PhosphorRendering::ShaderCompiler::loadAndExpand(eff.fragmentShaderPath, includePaths, &err);
+        QString src = PhosphorRendering::ShaderCompiler::expandSource(
+            assembled, QFileInfo(eff.fragmentShaderPath).absolutePath(), includePaths, &err);
         QVERIFY2(!src.isEmpty(),
                  qPrintable(QStringLiteral("include expand failed: ") + dir + QStringLiteral(" — ") + err));
 
@@ -90,8 +104,7 @@ private Q_SLOTS:
 
         const auto result = PhosphorRendering::ShaderCompiler::compile(src.toUtf8(), QShader::FragmentStage);
         QVERIFY2(result.success,
-                 qPrintable(QStringLiteral("bake with generated preamble failed: ") + dir + QStringLiteral(" — ")
-                            + result.error));
+                 qPrintable(QStringLiteral("bake failed: ") + dir + QStringLiteral(" — ") + result.error));
     }
 
     // The generated macro and the runtime uploader must agree on the lane.
