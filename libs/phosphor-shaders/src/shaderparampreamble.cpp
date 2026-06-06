@@ -16,11 +16,21 @@ namespace {
 /// `iChannel1..3`), so this cap only governs the zone path.
 constexpr int kMaxImageSlots = 4;
 
+QString imageAccessor(int slot)
+{
+    if (slot < 0 || slot >= kMaxImageSlots) {
+        return {};
+    }
+    return QStringLiteral("uTexture") + QString::number(slot);
+}
+
+} // namespace
+
 /// A parameter id must be a valid GLSL identifier *body* — the `pz_` prefix
 /// guarantees a valid leading character, so a leading digit in the id is fine,
 /// but anything outside `[A-Za-z0-9_]` (or an empty id) would produce a broken
 /// `#define` token and is rejected.
-bool isValidIdentifierBody(const QString& id)
+bool isValidParamId(const QString& id)
 {
     if (id.isEmpty()) {
         return false;
@@ -35,16 +45,6 @@ bool isValidIdentifierBody(const QString& id)
     return true;
 }
 
-QString imageAccessor(int slot)
-{
-    if (slot < 0 || slot >= kMaxImageSlots) {
-        return {};
-    }
-    return QStringLiteral("uTexture") + QString::number(slot);
-}
-
-} // namespace
-
 QString buildParamPreamble(const QList<PreambleParam>& params)
 {
     if (params.isEmpty()) {
@@ -57,7 +57,7 @@ QString buildParamPreamble(const QList<PreambleParam>& params)
 
     QString out = QStringLiteral("// ---- generated parameter accessors (do not edit) ----\n");
     for (const PreambleParam& p : params) {
-        if (!isValidIdentifierBody(p.id)) {
+        if (!isValidParamId(p.id)) {
             out += QStringLiteral("// pz: skipped a parameter with an invalid identifier\n");
             continue;
         }

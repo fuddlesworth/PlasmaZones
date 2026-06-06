@@ -43,6 +43,18 @@ QString stripGlslComments(const QString& source)
     return out;
 }
 
+namespace {
+// Whole-word `<name> ( ... ) {` — matches a definition, not a call
+// (`return pzZone(z);`). GLSL params contain no parens, so `[^)]*` safely spans a
+// multi-line parameter list; `\b` stops `pzZone2` matching `pzZone`. Shared by
+// definesFunction and composeEntryPoint so the entry-detection shape can't drift.
+QRegularExpression entryDefinitionRegex(const QString& name)
+{
+    return QRegularExpression(QStringLiteral("\\b") + QRegularExpression::escape(name)
+                              + QStringLiteral("\\s*\\([^)]*\\)\\s*\\{"));
+}
+} // namespace
+
 bool definesMain(const QString& expandedSource)
 {
     // `void main()` or `void main(void)`, K&R or same-line brace. The trailing
@@ -56,14 +68,7 @@ bool definesFunction(const QString& expandedSource, const QString& functionName)
     if (functionName.isEmpty()) {
         return false;
     }
-    // `<name> ( <params> ) {` — the trailing `{` distinguishes a definition
-    // from a call (`return pzZone(z);`). GLSL params contain no parentheses, so
-    // `[^)]*` safely spans a multi-line parameter list. `\b` anchors a
-    // whole-word match so `pzZone2` doesn't match `pzZone`.
-    const QString pattern =
-        QStringLiteral("\\b") + QRegularExpression::escape(functionName) + QStringLiteral("\\s*\\([^)]*\\)\\s*\\{");
-    const QRegularExpression re(pattern);
-    return re.match(stripGlslComments(expandedSource)).hasMatch();
+    return entryDefinitionRegex(functionName).match(stripGlslComments(expandedSource)).hasMatch();
 }
 
 QString composeEntryPoint(const QString& expandedSource, const QList<EntryCandidate>& candidates)
@@ -78,9 +83,7 @@ QString composeEntryPoint(const QString& expandedSource, const QList<EntryCandid
         if (name.isEmpty()) {
             return false;
         }
-        const QString pattern =
-            QStringLiteral("\\b") + QRegularExpression::escape(name) + QStringLiteral("\\s*\\([^)]*\\)\\s*\\{");
-        return QRegularExpression(pattern).match(stripped).hasMatch();
+        return entryDefinitionRegex(name).match(stripped).hasMatch();
     };
     for (const EntryCandidate& cand : candidates) {
         if (!definesIn(cand.functionName)) {

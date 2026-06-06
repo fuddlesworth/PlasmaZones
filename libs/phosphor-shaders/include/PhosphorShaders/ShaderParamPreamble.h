@@ -56,6 +56,12 @@ struct PreambleParam
 /// numbers (see the include resolver's `#line` contract).
 PHOSPHORSHADERS_EXPORT QString buildParamPreamble(const QList<PreambleParam>& params);
 
+/// True if @p id is a valid GLSL identifier *body* (`[A-Za-z0-9_]`, non-empty) —
+/// the `pz_` prefix supplies the leading character, so a leading digit is fine.
+/// Shared so the metadata parser's auto-slot assignment skips exactly the same
+/// params `buildParamPreamble` skips, keeping the two lane-numberings identical.
+PHOSPHORSHADERS_EXPORT bool isValidParamId(const QString& id);
+
 /// Splice @p block into @p source immediately after its `#version` line, then
 /// emit a `#line <n> 0` directive so the author's subsequent lines keep their
 /// original numbers (source string 0) despite the inserted block.

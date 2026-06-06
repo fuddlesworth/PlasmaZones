@@ -239,6 +239,12 @@ ShaderRegistry::ShaderInfo parseShaderMetadata(const QString& shaderDir, const Q
             if (p.slot >= 0) {
                 continue;
             }
+            // Skip ids buildParamPreamble would reject (invalid GLSL identifier),
+            // so this upload-lane numbering stays byte-identical to the pz_<id>
+            // define numbering — a rejected param gets no define and no lane.
+            if (!isValidParamId(p.id)) {
+                continue;
+            }
             const int pool = poolOf(p.type);
             QSet<int>& used = (pool == 1 ? usedColor : pool == 2 ? usedImage : usedScalar);
             int& next = (pool == 1 ? nextColor : pool == 2 ? nextImage : nextScalar);

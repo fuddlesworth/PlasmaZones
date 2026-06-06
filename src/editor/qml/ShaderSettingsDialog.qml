@@ -70,6 +70,10 @@ Kirigami.Dialog {
     // Cached shader metadata (static per shader — avoid D-Bus call on every param change)
     property var cachedShaderInfoForPreview: null
     property string cachedShaderInfoId: ""
+    // The generated pz_<id> preamble depends only on shaderId, not params — cache
+    // it with the shader info so it isn't recomputed (a D-Bus shaderInfo round-trip)
+    // on every param edit.
+    property string cachedShaderParamPreamble: ""
     // Animation state for local preview (bound directly, not via config object)
     property real previewITime: 0
     property real previewLastTime: 0
@@ -107,6 +111,7 @@ Kirigami.Dialog {
         var params = editorController.translateShaderParams(root.pendingShaderId, root.pendingParams || {});
         if (root.cachedShaderInfoId !== root.pendingShaderId) {
             root.cachedShaderInfoForPreview = editorController.getShaderInfo(root.pendingShaderId);
+            root.cachedShaderParamPreamble = editorController.shaderParamPreamble(root.pendingShaderId);
             root.cachedShaderInfoId = root.pendingShaderId;
         }
         var info = root.cachedShaderInfoForPreview;
@@ -121,7 +126,7 @@ Kirigami.Dialog {
         var shaderUrl = info.shaderUrl || "";
         previewShaderConfig = {
             "shaderUrl": shaderUrl,
-            "paramPreamble": editorController.shaderParamPreamble(root.pendingShaderId),
+            "paramPreamble": root.cachedShaderParamPreamble,
             "bufferShaderPaths": (bsPaths.length > 0) ? Array.from(bsPaths) : (info.bufferShaderPath ? [info.bufferShaderPath] : []),
             "bufferFeedback": info.bufferFeedback || false,
             "bufferScale": info.bufferScale !== undefined ? info.bufferScale : 1,

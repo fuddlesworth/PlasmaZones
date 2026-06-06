@@ -15,6 +15,7 @@
             "name": "Audio Reactivity",
             "group": "Audio",
             "type": "float",
+            "slot": 0,
             "default": 1.5,
             "min": 0.5,
             "max": 3.0
@@ -24,6 +25,7 @@
             "name": "Terrain Scale",
             "group": "Geometry",
             "type": "float",
+            "slot": 1,
             "default": 0.1,
             "min": 0.04,
             "max": 0.25
@@ -33,6 +35,7 @@
             "name": "Max Height",
             "group": "Geometry",
             "type": "float",
+            "slot": 2,
             "default": 6.0,
             "min": 2.0,
             "max": 12.0
@@ -42,6 +45,7 @@
             "name": "Edge Glow",
             "group": "Appearance",
             "type": "float",
+            "slot": 3,
             "default": 1.5,
             "min": 0.0,
             "max": 4.0
@@ -51,6 +55,7 @@
             "name": "Camera Height",
             "group": "Camera",
             "type": "float",
+            "slot": 4,
             "default": 8.0,
             "min": 3.0,
             "max": 20.0
@@ -60,6 +65,7 @@
             "name": "Scroll Speed",
             "group": "Camera",
             "type": "float",
+            "slot": 5,
             "default": 2.0,
             "min": 0.5,
             "max": 15.0
@@ -69,6 +75,7 @@
             "name": "Camera Tilt",
             "group": "Camera",
             "type": "float",
+            "slot": 6,
             "default": 0.35,
             "min": 0.0,
             "max": 1.0
@@ -78,6 +85,7 @@
             "name": "Fill Opacity",
             "group": "Appearance",
             "type": "float",
+            "slot": 7,
             "default": 0.92,
             "min": 0.5,
             "max": 1.0
@@ -87,6 +95,7 @@
             "name": "Edge Width",
             "group": "Appearance",
             "type": "float",
+            "slot": 8,
             "default": 0.1,
             "min": 0.02,
             "max": 0.35
@@ -96,6 +105,7 @@
             "name": "Fog Density",
             "group": "Appearance",
             "type": "float",
+            "slot": 9,
             "default": 0.05,
             "min": 0.01,
             "max": 0.2
@@ -105,6 +115,7 @@
             "name": "Bass Impact",
             "group": "Audio",
             "type": "float",
+            "slot": 10,
             "default": 2.0,
             "min": 0.5,
             "max": 4.0
@@ -114,6 +125,7 @@
             "name": "Idle Animation Speed",
             "group": "Animation",
             "type": "float",
+            "slot": 11,
             "default": 1.0,
             "min": 0.0,
             "max": 3.0
@@ -123,6 +135,7 @@
             "name": "Primary Color",
             "group": "Colors",
             "type": "color",
+            "slot": 0,
             "default": "#0f142e"
         },
         {
@@ -130,6 +143,7 @@
             "name": "Accent / Glow Color",
             "group": "Colors",
             "type": "color",
+            "slot": 1,
             "default": "#00d4ff"
         },
         {
@@ -137,6 +151,7 @@
             "name": "Bass Color",
             "group": "Colors",
             "type": "color",
+            "slot": 2,
             "default": "#e600aa"
         },
         {
@@ -144,6 +159,7 @@
             "name": "Grid/Wire Color",
             "group": "Colors",
             "type": "color",
+            "slot": 3,
             "default": "#99b3e6"
         },
         {
@@ -151,6 +167,7 @@
             "name": "Show Labels",
             "group": "Labels",
             "type": "bool",
+            "slot": 12,
             "default": true
         },
         {
@@ -158,6 +175,7 @@
             "name": "Depth of Field",
             "group": "Appearance",
             "type": "float",
+            "slot": 13,
             "default": 0.5,
             "min": 0.0,
             "max": 2.0

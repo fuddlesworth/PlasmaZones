@@ -25,6 +25,9 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QString>
 #include <QStringList>
@@ -189,19 +192,36 @@ int validatePack(const QString& packDir, QTextStream& out)
             claimedLane.insert(laneKey, p.id);
         }
     }
-    // Buffer-pass lints apply only to multipass packs — parseShaderMetadata seeds
-    // a default `buffer.frag` path for every pack, but it's inert unless isMultipass.
+    // Buffer-pass + bufferScale lints check the RAW metadata, not the parsed
+    // ShaderInfo: parseShaderMetadata clamps bufferScale into [0.125, 1.0] and
+    // clears bufferShaderPaths when a declared buffer is missing, so a lint reading
+    // the parsed values would silently pass an author error the runtime hid.
     if (info.isMultipass) {
-        if (info.bufferShaderPaths.isEmpty()) {
-            lints << QStringLiteral("multipass declared but no buffer shaders found");
+        QJsonObject root;
+        QFile metaFile(QDir(packDir).filePath(QStringLiteral("metadata.json")));
+        if (metaFile.open(QIODevice::ReadOnly)) {
+            root = QJsonDocument::fromJson(metaFile.readAll()).object();
         }
-        for (const QString& buf : info.bufferShaderPaths) {
-            if (!QFile::exists(buf)) {
-                lints << QStringLiteral("buffer shader missing: %1").arg(QFileInfo(buf).fileName());
+
+        QStringList bufferNames;
+        const QJsonArray declared = root.value(QLatin1String("bufferShaders")).toArray();
+        for (const QJsonValue& v : declared) {
+            if (!v.toString().isEmpty()) {
+                bufferNames << v.toString();
             }
         }
-        if (info.bufferScale <= 0.0 || info.bufferScale > 8.0) {
-            lints << QStringLiteral("bufferScale out of range (0, 8]: %1").arg(info.bufferScale);
+        if (bufferNames.isEmpty()) {
+            bufferNames << root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
+        }
+        for (const QString& bufName : bufferNames) {
+            if (!QFile::exists(QDir(packDir).filePath(bufName))) {
+                lints << QStringLiteral("multipass buffer shader missing: %1").arg(bufName);
+            }
+        }
+
+        const double rawScale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
+        if (rawScale < 0.125 || rawScale > 1.0) {
+            lints << QStringLiteral("bufferScale out of range [0.125, 1.0]: %1 (clamped at load)").arg(rawScale);
         }
     }
     if (!QFile::exists(info.sourcePath)) {
@@ -227,10 +247,15 @@ int validatePack(const QString& packDir, QTextStream& out)
         errors += compileStage(out, QStringLiteral("effect.frag"), info.sourcePath, QShader::FragmentStage,
                                includePaths, /*useScaffold=*/true, preamble, info);
     }
-    for (const QString& buf : info.bufferShaderPaths) {
-        if (QFile::exists(buf)) {
-            errors += compileStage(out, QFileInfo(buf).fileName(), buf, QShader::FragmentStage, includePaths,
-                                   /*useScaffold=*/false, QString(), info);
+    // Only multipass packs bake buffer passes — parseShaderMetadata seeds a
+    // default buffer.frag path for every pack, but the runtime (bakeBufferShaders)
+    // ignores it unless isMultipass, so the validator must gate identically.
+    if (info.isMultipass) {
+        for (const QString& buf : info.bufferShaderPaths) {
+            if (QFile::exists(buf)) {
+                errors += compileStage(out, QFileInfo(buf).fileName(), buf, QShader::FragmentStage, includePaths,
+                                       /*useScaffold=*/false, QString(), info);
+            }
         }
     }
     // Vertex: per-pack zone.vert if present, else the shared zone.vert the runtime

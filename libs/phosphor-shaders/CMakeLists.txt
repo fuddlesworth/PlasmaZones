@@ -71,7 +71,9 @@ set(phosphorshaders_public_HDRS
 set(phosphorshaders_camelcase_HDRS
     include/PhosphorShaders/IUniformExtension
     include/PhosphorShaders/IWallpaperProvider
+    include/PhosphorShaders/ShaderEntryPoint
     include/PhosphorShaders/ShaderIncludeResolver
+    include/PhosphorShaders/ShaderParamPreamble
     include/PhosphorShaders/ShaderRegistry
 )
 
