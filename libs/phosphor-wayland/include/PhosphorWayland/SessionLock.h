@@ -60,7 +60,10 @@ public:
 
     /// Release the lock after a successful authentication: sends
     /// `unlock_and_destroy` and flushes. Valid only after `locked()` was
-    /// emitted; a no-op otherwise. Emits `lockedChanged()`.
+    /// emitted; a no-op otherwise. Emits `lockedChanged()` but NOT `finished()`:
+    /// `finished()` signals a compositor-driven end of the lock, whereas this is
+    /// the client-driven unlock, so a consumer must model unlock success off this
+    /// call (or `lockedChanged()`), not off `finished()`.
     void unlockAndDestroy();
 
     /// True between `locked()` and `unlockAndDestroy()` (or a compositor-driven

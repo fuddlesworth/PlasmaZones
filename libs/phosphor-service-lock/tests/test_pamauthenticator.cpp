@@ -69,6 +69,10 @@ void PamAuthenticatorTest::busyRejectsConcurrentCall()
 
     // The first call starts a real (bogus-user) transaction; the second, issued
     // before it completes, must fail fast rather than run two PAM stacks at once.
+    // QtConcurrent::run marks the future Running synchronously at setFuture(), so
+    // the busy guard (isRunning()) sees it on the immediately-following second
+    // call regardless of how fast the worker runs; PAM's faildelay only widens
+    // the window further.
     const QString user = QStringLiteral("phosphor-no-such-user-2f1a9c");
     auth.authenticate(user, QStringLiteral("x"));
 

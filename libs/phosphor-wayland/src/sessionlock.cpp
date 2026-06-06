@@ -37,6 +37,8 @@ public:
     static void handleLocked(void* data, struct ext_session_lock_v1*)
     {
         auto* self = static_cast<Private*>(data);
+        // self is null when the listener was severed at teardown; the isLocked
+        // guard drops a spurious repeat (the protocol sends `locked` at most once).
         if (!self || self->isLocked)
             return;
         self->isLocked = true;
