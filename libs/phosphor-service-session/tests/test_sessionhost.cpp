@@ -82,6 +82,7 @@ public:
     QStringList actions; // e.g. "Suspend(1)"
     QList<QPair<QString, QString>> inhibits; // (what, mode)
     bool lockSessionsCalled = false;
+    QString lastResolveMethod; // which resolve call the host used: GetSession / GetSessionByPID
 
     void emitPrepareForSleep(bool beforeSleep)
     {
@@ -120,10 +121,12 @@ public Q_SLOTS:
 
     QDBusObjectPath GetSessionByPID(uint)
     {
+        lastResolveMethod = QStringLiteral("GetSessionByPID");
         return QDBusObjectPath(QLatin1String(kSessionPath));
     }
     QDBusObjectPath GetSession(const QString&)
     {
+        lastResolveMethod = QStringLiteral("GetSession");
         return QDBusObjectPath(QLatin1String(kSessionPath));
     }
 
@@ -251,8 +254,29 @@ class TestSessionHost : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void initTestCase()
+    {
+        // Capture the ambient XDG_SESSION_ID so the per-test pinning below (which
+        // selects the session-resolution branch) can be restored at the end.
+        m_xdgWasSet = qEnvironmentVariableIsSet("XDG_SESSION_ID");
+        m_xdgOriginal = qEnvironmentVariable("XDG_SESSION_ID");
+    }
+
+    void cleanupTestCase()
+    {
+        if (m_xdgWasSet)
+            qputenv("XDG_SESSION_ID", m_xdgOriginal.toLocal8Bit());
+        else
+            qunsetenv("XDG_SESSION_ID");
+    }
+
     void init()
     {
+        // Pin the resolution branch: with XDG_SESSION_ID set, the host resolves
+        // via GetSession deterministically on any host (a bare CI runner has no
+        // XDG_SESSION_ID and would otherwise take the GetSessionByPID branch).
+        // The dedicated GetSessionByPID test unsets this itself.
+        qputenv("XDG_SESSION_ID", "phosphor-test-session");
         m_bus = QDBusConnection::sessionBus();
         if (!m_bus.isConnected())
             QSKIP("no session bus available");
@@ -520,6 +544,31 @@ private Q_SLOTS:
         QTRY_VERIFY(manager.lockSessionsCalled);
     }
 
+    // Resolution prefers GetSession(XDG_SESSION_ID) when the env var is set (init()
+    // sets it), rather than GetSessionByPID. Pins the branch deterministically so
+    // coverage does not depend on the host's ambient XDG_SESSION_ID.
+    void sessionResolvesViaGetSessionWhenXdgSet()
+    {
+        FakeManager manager;
+        registerManager(manager);
+
+        SessionHost host(m_bus, QLatin1String(kService));
+        QTRY_COMPARE(manager.lastResolveMethod, QStringLiteral("GetSession"));
+    }
+
+    // Resolution falls back to GetSessionByPID when XDG_SESSION_ID is unset. The
+    // complementary branch to the test above; together they cover both resolution
+    // paths on any host.
+    void sessionResolvesViaGetSessionByPidWhenXdgUnset()
+    {
+        qunsetenv("XDG_SESSION_ID"); // cleanupTestCase() restores the original
+        FakeManager manager;
+        registerManager(manager);
+
+        SessionHost host(m_bus, QLatin1String(kService));
+        QTRY_COMPARE(manager.lastResolveMethod, QStringLiteral("GetSessionByPID"));
+    }
+
     // A logind Session Lock / Unlock signal surfaces as lockRequested() /
     // unlockRequested() over the real bus subscription.
     void sessionSignalsSurfaceOverBus()
@@ -577,6 +626,8 @@ private:
     }
 
     QDBusConnection m_bus = QDBusConnection::sessionBus();
+    bool m_xdgWasSet = false;
+    QString m_xdgOriginal;
 };
 
 QTEST_GUILESS_MAIN(TestSessionHost)

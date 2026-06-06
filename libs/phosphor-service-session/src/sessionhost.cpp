@@ -163,7 +163,10 @@ public:
 
     // Subscribe to the resolved session's Lock / Unlock signals so a lock
     // request routed through logind (loginctl, a hardware lock key, or our own
-    // Session.Lock) reaches the shell. Only possible once sessionPath is known.
+    // Session.Lock) reaches the shell. Only possible once sessionPath is known,
+    // so a lock requested in the brief startup window before resolution lands
+    // (milliseconds) is not caught; that is an accepted async tradeoff, not a
+    // path we guard, since the subscription inherently needs the resolved path.
     void subscribeSessionSignals()
     {
         if (!bus.isConnected() || sessionPath.isEmpty())

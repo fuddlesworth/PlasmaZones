@@ -111,7 +111,7 @@ private Q_SLOTS:
     // is a safe no-op with no fd held. (The held-inhibitor handshake, including
     // aboutToSleep + the fd release, is covered against a fake logind in
     // test_sessionhost.)
-    void prepareForSleepDrivesHandshake()
+    void prepareForSleepWithoutHeldInhibitorSkipsHandshake()
     {
         SessionHost host(QDBusConnection::sessionBus(), QStringLiteral("org.freedesktop.login1.invalid.test"));
         QSignalSpy prep(&host, &SessionHost::prepareForSleep);

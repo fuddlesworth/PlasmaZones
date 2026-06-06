@@ -11,9 +11,10 @@ Surfaces the system session and power actions over `org.freedesktop.login1` and,
 because we own the compositor and the session, manages the logind inhibitor
 locks that let the shell lock before the machine sleeps and own the power / lid
 keys. It is the logind edge of the shell: capabilities, actions, inhibitors, and
-the session + sleep signals. It has no UI of its own and binds no protocols in
-its public surface (the public types are clean Qt/QML types; the D-Bus work is
-private).
+the session + sleep signals. It has no UI of its own and binds no Wayland
+protocols: the logind D-Bus calls are private to the implementation, and the
+public surface is clean Qt/QML types plus an injectable `QDBusConnection` (the
+test / advanced-wiring seam).
 
 - Read the power capabilities (`CanSuspend` and siblings) up front and keep them
   current.
